@@ -1,0 +1,21 @@
+---
+name: brokkr-dev
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=brokkr
+      - POSTGRES_PASSWORD=brokkr
+      - POSTGRES_DB=brokkr
+    ports:
+      - 5432:5432
+    volumes:
+      - brokkr-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "brokkr"]
+      interval: 1s
+      retries: 60
+    restart: always
+volumes:
+  brokkr-postgres-data:
