@@ -11,6 +11,8 @@ pub use stacks::StacksDAL;
 pub use deployment_objects::DeploymentObjectsDAL;
 pub use agents::AgentsDAL;
 pub use agent_events::AgentEventsDAL;
+#[derive(Clone)
+]
 pub struct DAL {
     pub pool: Pool<ConnectionManager<PgConnection>>,
 }

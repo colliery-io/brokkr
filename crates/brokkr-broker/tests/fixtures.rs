@@ -17,7 +17,7 @@ use brokkr_models::models::NewAgentEvent;
 
 
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("../brokkr-models/migrations");
-
+#[derive(Clone)]
 pub struct TestFixture {
     pub dal: DAL,
 }

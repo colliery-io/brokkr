@@ -3,6 +3,7 @@ use uuid::Uuid;
 use brokkr_models::models::agents::{Agent, NewAgent};
 use brokkr_models::schema::agents;
 use crate::dal::DAL;
+use chrono::Utc;
 
 pub struct AgentsDAL<'a> {
     pub dal: &'a DAL,
@@ -17,15 +18,45 @@ impl<'a> AgentsDAL<'a> {
             .get_result(conn)
     }
 
-    /// Retrieve an agent by its UUID
-    pub fn get(&self, uuid: Uuid) -> Result<Option<Agent>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().unwrap();
-        agents::table
-            .filter(agents::uuid.eq(uuid))
-            .first(conn)
-            .optional()
-    }
+   /// Retrieve an agent by its UUID, excluding soft-deleted agents
+   pub fn get(&self, uuid: Uuid) -> Result<Option<Agent>, diesel::result::Error> {
+    use brokkr_models::schema::agents::dsl::*;
+    let conn = &mut self.dal.pool.get().unwrap();
+    let result = agents
+        .filter(uuid.eq(uuid))
+        .filter(deleted_at.is_null())
+        .first(conn)
+        .optional();
+    
+    println!("Get agent result: {:?}", result);
+    result
+}
 
+    /// Soft delete an agent
+    pub fn soft_delete(&self, uuid: Uuid) -> Result<(), diesel::result::Error> {
+        use brokkr_models::schema::agents::dsl::*;
+        let conn = &mut self.dal.pool.get().unwrap();
+        let now = Utc::now().naive_utc();
+        let result = diesel::update(agents.filter(uuid.eq(uuid)))
+            .set(deleted_at.eq(now))
+            .execute(conn);
+        
+        println!("Soft delete result: {:?}", result);
+        match result {
+            Ok(num_affected) => {
+                if num_affected == 0 {
+                    println!("No rows were updated during soft delete");
+                } else {
+                    println!("{} row(s) were updated during soft delete", num_affected);
+                }
+                Ok(())
+            },
+            Err(e) => {
+                println!("Error during soft delete: {:?}", e);
+                Err(e)
+            }
+        }
+    }
     /// List all agents
     pub fn list(&self) -> Result<Vec<Agent>, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().unwrap();
@@ -40,21 +71,21 @@ impl<'a> AgentsDAL<'a> {
             .get_result(conn)
     }
 
-    /// Soft delete an agent
-    pub fn soft_delete(&self, uuid: Uuid) -> Result<(), diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().unwrap();
-        diesel::update(agents::table.filter(agents::uuid.eq(uuid)))
-            .set(agents::deleted_at.eq(diesel::dsl::now))
-            .execute(conn)
-            .map(|_| ())
-    }
+
 
     /// Update agent's last heartbeat
-    pub fn update_heartbeat(&self, uuid: Uuid) -> Result<(), diesel::result::Error> {
+    pub fn update_heartbeat(&self, uuid: Uuid) -> Result<Agent, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().unwrap();
         diesel::update(agents::table.filter(agents::uuid.eq(uuid)))
             .set(agents::last_heartbeat.eq(diesel::dsl::now))
-            .execute(conn)
-            .map(|_| ())
+            .get_result(conn)
+    }
+
+    /// Update agent's status
+    pub fn update_status(&self, uuid: Uuid, status: &str) -> Result<Agent, diesel::result::Error> {
+        let conn = &mut self.dal.pool.get().unwrap();
+        diesel::update(agents::table.filter(agents::uuid.eq(uuid)))
+            .set(agents::status.eq(status))
+            .get_result(conn)
     }
 }
