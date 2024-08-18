@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use crate::schema::agent_events;
 
-#[derive(Queryable, Selectable, Identifiable, Debug, Clone, Serialize, Deserialize)]
+#[derive(Queryable, Selectable, Identifiable, Debug, Clone, Serialize, Deserialize, AsChangeset)]
 #[diesel(table_name = agent_events)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct AgentEvent {

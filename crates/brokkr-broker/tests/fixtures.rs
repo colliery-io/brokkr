@@ -9,6 +9,10 @@ use uuid::Uuid;
 use brokkr_models::models::NewStack;
 use brokkr_models::models::DeploymentObject;
 use brokkr_models::models::NewDeploymentObject;
+use brokkr_models::models::NewAgent;
+use brokkr_models::models::Agent;
+use brokkr_models::models::AgentEvent;
+use brokkr_models::models::NewAgentEvent;
 
 
 
@@ -51,6 +55,19 @@ impl TestFixture {
         created_stack.id
     }
 
+    pub fn create_test_agent_event(&self, agent_id: Uuid, deployment_object_id: Uuid) -> AgentEvent {
+        let new_agent_event = NewAgentEvent::new(
+            agent_id,
+            deployment_object_id,
+            format!("Test Event {}", Uuid::new_v4()),
+            "success".to_string(),
+            Some("Test event message".to_string()),
+        );
+
+        self.dal.agent_events().create(&new_agent_event)
+            .expect("Failed to create test agent event")
+    }
+
     pub fn create_test_deployment_object(&self, stack_id: Uuid) -> DeploymentObject {
         let new_deployment_object = NewDeploymentObject::new(
             stack_id,
@@ -62,6 +79,18 @@ impl TestFixture {
 
         self.dal.deployment_objects().create(&new_deployment_object)
             .expect("Failed to create deployment object")
+    }
+
+    pub fn create_test_agent(&self) -> Agent {
+        let new_agent = NewAgent::new(
+            format!("Test Agent {}", Uuid::new_v4()),
+            "Test Cluster".to_string(),
+            Some(vec!["test".to_string(), "fixture".to_string()]),
+            Some(vec![("key".to_string(), "value".to_string())]),
+        ).expect("Failed to create NewAgent");
+
+        self.dal.agents().create(&new_agent)
+            .expect("Failed to create test agent")
     }
 
     fn get_next_sequence_id(&self, stack_id: Uuid) -> i64 {
@@ -80,3 +109,5 @@ impl Drop for TestFixture {
         // The test transaction will be automatically rolled back when the connection is dropped
     }
 }
+
+
