@@ -45,8 +45,6 @@ fn test_connection_pool_integration() {
     let test_pool = create_shared_connection_pool(base_url_without_db, &test_db_name, max_size as u32);
     let test_pool = Arc::new(test_pool);
 
-    println!("Created test pool with max_size: {}", max_size);
-
     // Run tests
     {
         let mut test_conn = test_pool.pool.get().expect("Failed to get initial connection from test pool");
@@ -94,8 +92,7 @@ fn test_connection_pool_integration() {
             .collect();
 
         let success_count = results.iter().filter(|(_, r, _)| r.is_ok()).count();
-        println!("Successfully acquired {} out of {} connections", success_count, max_size);
-
+       
         for (i, result, duration) in &results {
             match result {
                 Ok(_) => println!("Connection {} succeeded after {:?}", i, duration),
@@ -122,5 +119,4 @@ fn test_connection_pool_integration() {
         .execute(&mut conn)
         .expect("Failed to drop test database");
 
-    println!("Connection pool integration test completed.");
 }

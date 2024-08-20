@@ -64,7 +64,7 @@ SELECT
     (SELECT uuid FROM agents WHERE name = 'test-agent'),
     uuid,
     'APPLIED',
-    'success'::agent_event_status,
+    'success',
     'Test deployment applied'
 FROM deployment_objects
 WHERE stack_id = (SELECT id FROM temp_stack_id);
