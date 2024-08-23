@@ -19,6 +19,7 @@ impl<'a> AgentsDAL<'a> {
     }
 
    /// Retrieve an agent by its UUID, excluding soft-deleted agents
+   #[allow(unused_variables)]
    pub fn get(&self, uuid: Uuid) -> Result<Option<Agent>, diesel::result::Error> {
     use brokkr_models::schema::agents::dsl::*;
     let conn = &mut self.dal.pool.get().unwrap();
@@ -33,6 +34,7 @@ impl<'a> AgentsDAL<'a> {
 }
 
     /// Soft delete an agent
+    #[allow(unused_variables)]
     pub fn soft_delete(&self, uuid: Uuid) -> Result<(), diesel::result::Error> {
         use brokkr_models::schema::agents::dsl::*;
         let conn = &mut self.dal.pool.get().unwrap();
@@ -59,8 +61,12 @@ impl<'a> AgentsDAL<'a> {
     }
     /// List all agents
     pub fn list(&self) -> Result<Vec<Agent>, diesel::result::Error> {
+        
         let conn = &mut self.dal.pool.get().unwrap();
-        agents::table.load::<Agent>(conn)
+        agents::table
+        .filter(agents::deleted_at.is_null())
+        .select(agents::all_columns)
+        .load::<Agent>(conn)
     }
 
     /// Update an existing agent

@@ -1,6 +1,6 @@
 use brokkr_models::models::agents::NewAgent;
 use crate::fixtures::TestFixture;
-use uuid::Uuid;
+
 
 #[test]
 fn test_create_agent() {

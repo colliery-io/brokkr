@@ -27,6 +27,3 @@ BEFORE UPDATE ON agents
 FOR EACH ROW
 WHEN (OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL)
 EXECUTE FUNCTION soft_delete();
-
-CREATE MATERIALIZED VIEW active_agents AS
-SELECT * FROM agents WHERE deleted_at IS NULL;

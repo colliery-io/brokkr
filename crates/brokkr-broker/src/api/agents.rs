@@ -88,3 +88,5 @@ async fn update_agent_status(
     let updated_agent = dal.agents().update_status(id, &status).unwrap();
     Json(updated_agent)
 }
+
+
