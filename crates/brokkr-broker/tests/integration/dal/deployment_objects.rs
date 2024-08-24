@@ -5,7 +5,7 @@ use crate::fixtures::TestFixture;
 
 #[test]
 fn test_create_deployment_object() {
-    let fixture = TestFixture::create_new_database();
+    let fixture = TestFixture::new();
     let stack_id = fixture.insert_test_stack();
 
     let new_deployment_object = NewDeploymentObject::new(
@@ -28,7 +28,7 @@ fn test_create_deployment_object() {
 
 #[test]
 fn test_get_deployment_object_by_id() {
-    let fixture = TestFixture::create_new_database();
+    let fixture = TestFixture::new();
     let stack_id = fixture.insert_test_stack();
 
     let new_deployment_object = NewDeploymentObject::new(
@@ -51,7 +51,7 @@ fn test_get_deployment_object_by_id() {
 
 #[test]
 fn test_get_deployment_objects_by_stack_id() {
-    let fixture = TestFixture::create_new_database();
+    let fixture = TestFixture::new();
     let stack_id = fixture.insert_test_stack();
 
     let new_deployment_object1 = NewDeploymentObject::new(
@@ -87,7 +87,7 @@ fn test_get_deployment_objects_by_stack_id() {
 
 #[test]
 fn test_update_deployment_object() {
-    let fixture = TestFixture::create_new_database();
+    let fixture = TestFixture::new();
     let stack_id = fixture.insert_test_stack();
     let created_object = fixture.insert_test_deployment_object(stack_id);
 
@@ -111,7 +111,7 @@ fn test_update_deployment_object() {
 
 #[test]
 fn test_soft_delete_deployment_object() {
-    let fixture = TestFixture::create_new_database();
+    let fixture = TestFixture::new();
     let stack_id = fixture.insert_test_stack();
 
     let new_deployment_object = NewDeploymentObject::new(
@@ -137,7 +137,7 @@ fn test_soft_delete_deployment_object() {
 
 #[test]
 fn test_get_active_deployment_objects() {
-    let fixture = TestFixture::create_new_database();
+    let fixture = TestFixture::new();
     let stack_id = fixture.insert_test_stack();
 
     let new_deployment_object1 = NewDeploymentObject::new(

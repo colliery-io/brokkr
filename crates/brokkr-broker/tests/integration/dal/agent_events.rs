@@ -3,7 +3,7 @@ use crate::fixtures::TestFixture;
 
 #[test]
 fn test_create_agent_event() {
-    let fixture = TestFixture::create_new_database();
+    let fixture = TestFixture::new();
     let agent_id = fixture.insert_test_agent();
     let deployment_object_id = fixture.insert_test_deployment_object(fixture.insert_test_stack());
 
@@ -27,7 +27,7 @@ fn test_create_agent_event() {
 
 #[test]
 fn test_get_agent_event() {
-    let fixture = TestFixture::create_new_database();
+    let fixture = TestFixture::new();
     let agent_id = fixture.insert_test_agent();
     let deployment_object_id = fixture.insert_test_deployment_object(fixture.insert_test_stack());
     let created_event = fixture.insert_test_agent_event(agent_id.uuid, deployment_object_id.uuid);
@@ -43,7 +43,7 @@ fn test_get_agent_event() {
 
 #[test]
 fn test_list_agent_events() {
-    let fixture = TestFixture::create_new_database();
+    let fixture = TestFixture::new();
     let agent_id = fixture.insert_test_agent();
     let deployment_object_id = fixture.insert_test_deployment_object(fixture.insert_test_stack());
 
@@ -59,7 +59,7 @@ fn test_list_agent_events() {
 
 #[test]
 fn test_soft_delete_agent_event() {
-    let fixture = TestFixture::create_new_database();
+    let fixture = TestFixture::new();
     let agent_id = fixture.insert_test_agent().uuid;
     let deployment_object_id = fixture.insert_test_deployment_object(fixture.insert_test_stack()).uuid;
     let created_event = fixture.insert_test_agent_event(agent_id, deployment_object_id);

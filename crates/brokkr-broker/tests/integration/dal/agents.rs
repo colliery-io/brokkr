@@ -4,7 +4,7 @@ use crate::fixtures::TestFixture;
 
 #[test]
 fn test_create_agent() {
-    let fixture = TestFixture::create_new_database();
+    let fixture = TestFixture::new();
     let new_agent = NewAgent::new(
         "Test Agent".to_string(),
         "Test Cluster".to_string(),
@@ -23,7 +23,7 @@ fn test_create_agent() {
 
 #[test]
 fn test_get_agent() {
-    let fixture = TestFixture::create_new_database();
+    let fixture = TestFixture::new();
     let created_agent = fixture.insert_test_agent();
 
     let retrieved_agent = fixture.dal.agents().get(created_agent.uuid).unwrap();
@@ -36,7 +36,7 @@ fn test_get_agent() {
 
 #[test]
 fn test_list_agents() {
-    let fixture = TestFixture::create_new_database();
+    let fixture = TestFixture::new();
     fixture.insert_test_agent();
     fixture.insert_test_agent();
 
@@ -48,7 +48,7 @@ fn test_list_agents() {
 
 #[test]
 fn test_update_agent() {
-    let fixture = TestFixture::create_new_database();
+    let fixture = TestFixture::new();
     let mut agent = fixture.insert_test_agent();
 
     agent.name = "Updated Agent".to_string();
@@ -63,7 +63,7 @@ fn test_update_agent() {
 
 #[test]
 fn test_soft_delete_agent() {
-    let fixture = TestFixture::create_new_database();
+    let fixture = TestFixture::new();
     let created_agent = fixture.insert_test_agent();
 
     fixture.dal.agents().soft_delete(created_agent.uuid)
@@ -75,7 +75,7 @@ fn test_soft_delete_agent() {
 
 #[test]
 fn test_update_heartbeat() {
-    let fixture = TestFixture::create_new_database();
+    let fixture = TestFixture::new();
     let created_agent = fixture.insert_test_agent();
 
     let updated_agent = fixture.dal.agents().update_heartbeat(created_agent.uuid)
@@ -87,7 +87,7 @@ fn test_update_heartbeat() {
 
 #[test]
 fn test_update_status() {
-    let fixture = TestFixture::create_new_database();
+    let fixture = TestFixture::new();
     let created_agent = fixture.insert_test_agent();
 
     let updated_agent = fixture.dal.agents().update_status(created_agent.uuid, "active")
