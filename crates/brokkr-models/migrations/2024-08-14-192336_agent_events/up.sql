@@ -32,9 +32,6 @@ FOR EACH ROW
 WHEN (OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL)
 EXECUTE FUNCTION soft_delete();
 
--- Create view for active agent events
-CREATE OR REPLACE VIEW active_agent_events AS
-SELECT * FROM agent_events WHERE deleted_at IS NULL;
 
 -- Function for cascading soft delete (existing)
 CREATE OR REPLACE FUNCTION cascade_soft_delete_agents()

@@ -25,6 +25,3 @@ FOR EACH ROW
 WHEN (OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL)
 EXECUTE FUNCTION soft_delete();
 
-CREATE VIEW active_stacks AS
-SELECT * FROM stacks WHERE deleted_at IS NULL;
-
