@@ -3,6 +3,7 @@ use std::env;
 use std::fs;
 use tempfile::tempdir;
 
+/// Test loading settings from both a file and environment variables
 #[test]
 fn test_settings_from_file_and_env() {
     // Create a temporary directory for our test file
@@ -20,7 +21,7 @@ fn test_settings_from_file_and_env() {
     fs::write(&file_path, test_config).expect("Failed to write test config file");
 
     // Set an environment variable to override a setting
-    env::set_var("VULCAN__LOG__LEVEL", "debug");
+    env::set_var("BROKKR__LOG__LEVEL", "debug");
 
     // Load settings from the test file
     let settings = Settings::new(Some(file_path.to_str().unwrap().to_string()))
@@ -29,17 +30,23 @@ fn test_settings_from_file_and_env() {
     // Assert that settings are loaded correctly from the file
     assert_eq!(
         settings.database.url,
-        "postgres://user:pass@testhost:5432/testdb"
+        "postgres://user:pass@testhost:5432/testdb",
+        "Database URL should match the one specified in the test config file"
     );
 
     // Assert that the environment variable override worked
-    assert_eq!(settings.log.level, "debug");
+    assert_eq!(
+        settings.log.level, 
+        "debug",
+        "Log level should be overridden by the environment variable"
+    );
 
     // Clean up: remove the temporary directory and unset the environment variable
     temp_dir.close().expect("Failed to remove temp dir");
-    env::remove_var("VULCAN__LOG__LEVEL");
+    env::remove_var("BROKKR__LOG__LEVEL");
 }
 
+/// Test loading default settings
 #[test]
 fn test_settings_default() {
     // Test loading default settings
@@ -47,7 +54,12 @@ fn test_settings_default() {
 
     assert_eq!(
         settings.database.url,
-        "postgres://brokkr:brokkr@localhost:5432/brokkr"
+        "postgres://brokkr:brokkr@localhost:5432/brokkr",
+    );
+    
+    assert_eq!(
+        settings.log.level,
+        "debug",
     );
     // Add more assertions for default values as needed
 }
