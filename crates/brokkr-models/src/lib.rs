@@ -30,12 +30,6 @@ pub mod schema;
 ///
 /// This function will panic if it fails to establish a connection to the database.
 ///
-/// # Examples
-///
-/// ```
-/// let database_url = "postgres://username:password@localhost/database_name";
-/// let connection = establish_connection(database_url.to_string());
-/// ```
 pub(crate) fn establish_connection(database_url: String) -> PgConnection {
     PgConnection::establish(&database_url)
         .unwrap_or_else(|_| panic!("Error connecting to {}", database_url))

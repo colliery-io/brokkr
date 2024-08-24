@@ -10,15 +10,11 @@
 //! - `created_at`: DateTime<Utc> - Timestamp when the stack was created
 //! - `updated_at`: DateTime<Utc> - Timestamp when the stack was last updated
 //! - `deleted_at`: Option<DateTime<Utc>> - Timestamp when the stack was soft-deleted (if applicable)
-//! - `name`: String - Name of the stack
+//! - `name`: String - Name of the stack (unique)
 //! - `description`: Option<String> - Optional description of the stack
 //! - `labels`: Option<serde_json::Value> - Optional JSON value containing labels associated with the stack
 //! - `annotations`: Option<serde_json::Value> - Optional JSON value containing annotations for the stack
 //! - `agent_target`: Option<serde_json::Value> - Optional JSON value containing agent targeting information
-//!
-//! The `NewStack` struct is used for creating new stacks and contains the same fields
-//! as `Stack`, except for `id`, `created_at`, `updated_at`, and `deleted_at`, which are
-//! managed by the database.
 
 use chrono::{DateTime, Utc};
 use diesel::prelude::*;
@@ -40,7 +36,7 @@ pub struct Stack {
     pub updated_at: DateTime<Utc>,
     /// Timestamp when the stack was soft-deleted (if applicable)
     pub deleted_at: Option<DateTime<Utc>>,
-    /// Name of the stack
+    /// Name of the stack (unique)
     pub name: String,
     /// Optional description of the stack
     pub description: Option<String>,
@@ -58,7 +54,7 @@ pub struct Stack {
 #[derive(Insertable, Debug, Clone, Serialize, Deserialize)]
 #[diesel(table_name = crate::schema::stacks)]
 pub struct NewStack {
-    /// Name of the stack
+    /// Name of the stack (unique)
     pub name: String,
     /// Optional description of the stack
     pub description: Option<String>,
@@ -71,11 +67,11 @@ pub struct NewStack {
 }
 
 impl NewStack {
-     /// Creates a new `NewStack` instance.
+    /// Creates a new `NewStack` instance.
     ///
     /// # Arguments
     ///
-    /// * `name` - Name of the stack
+    /// * `name` - Name of the stack (must be unique)
     /// * `description` - Optional description of the stack
     /// * `labels` - Optional vector of strings representing labels
     /// * `annotations` - Optional vector of key-value pairs representing annotations
@@ -94,6 +90,11 @@ impl NewStack {
         // Check for empty name
         if name.trim().is_empty() {
             return Err("Name cannot be empty".to_string());
+        }
+
+        // Check name length
+        if name.len() > 255 {
+            return Err("Name cannot exceed 255 characters".to_string());
         }
 
         // Check labels
@@ -127,11 +128,30 @@ impl NewStack {
     }
 }
 
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
 
+    #[test]
+    /// Tests that NewStack creation fails when the name exceeds 255 characters.
+    ///
+    /// This test ensures that the NewStack::new() method properly
+    /// validates the name field length and returns an appropriate error for an overly long name.
+    fn test_new_stack_name_too_long() {
+        let long_name = "a".repeat(256);
+        let result = NewStack::new(
+            long_name,
+            None,
+            None,
+            None,
+            None,
+        );
+        assert!(result.is_err(), "NewStack creation should fail with a name longer than 255 characters");
+        assert_eq!(result.unwrap_err(), "Name cannot exceed 255 characters", "Error message should indicate the name is too long");
+    }
+    
     #[test]
     /// Tests the successful creation of a NewStack with all fields populated.
     ///

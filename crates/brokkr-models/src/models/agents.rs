@@ -10,13 +10,12 @@
 //! - `created_at`: DateTime<Utc> - Timestamp when the agent was created
 //! - `updated_at`: DateTime<Utc> - Timestamp when the agent was last updated
 //! - `deleted_at`: Option<DateTime<Utc>> - Timestamp when the agent was soft-deleted (if applicable)
-//! - `uuid`: Uuid - Secondary UUID for the agent (used for external references)
-//! - `name`: String - Name of the agent
-//! - `cluster_name`: String - Name of the cluster the agent belongs to
+//! - `name`: String - Name of the agent (max 255 characters)
+//! - `cluster_name`: String - Name of the cluster the agent belongs to (max 255 characters)
 //! - `labels`: Option<serde_json::Value> - Optional JSON value containing labels associated with the agent
 //! - `annotations`: Option<serde_json::Value> - Optional JSON value containing annotations for the agent
 //! - `last_heartbeat`: Option<DateTime<Utc>> - Timestamp of the last heartbeat received from the agent
-//! - `status`: String - Current status of the agent
+//! - `status`: String - Current status of the agent (max 50 characters, default 'INACTIVE')
 //!
 //! The `NewAgent` struct is used for creating new agents and contains a subset of the fields
 //! from `Agent`: `name`, `cluster_name`, `labels`, and `annotations`. The other fields are
@@ -42,11 +41,9 @@ pub struct Agent {
     pub updated_at: DateTime<Utc>,
     /// Timestamp when the agent was soft-deleted (if applicable)
     pub deleted_at: Option<DateTime<Utc>>,
-    /// Secondary UUID for the agent (used for external references)
-    pub uuid: Uuid,
-    /// Name of the agent
+    /// Name of the agent (max 255 characters)
     pub name: String,
-    /// Name of the cluster the agent belongs to
+    /// Name of the cluster the agent belongs to (max 255 characters)
     pub cluster_name: String,
     /// Optional JSON value containing labels associated with the agent
     pub labels: Option<serde_json::Value>,
@@ -54,7 +51,7 @@ pub struct Agent {
     pub annotations: Option<serde_json::Value>,
     /// Timestamp of the last heartbeat received from the agent
     pub last_heartbeat: Option<DateTime<Utc>>,
-    /// Current status of the agent
+    /// Current status of the agent (max 50 characters, default 'INACTIVE')
     pub status: String,
 }
 
@@ -64,9 +61,9 @@ pub struct Agent {
 #[derive(Insertable, Debug, Clone, Serialize, Deserialize)]
 #[diesel(table_name = crate::schema::agents)]
 pub struct NewAgent {
-    /// Name of the agent
+    /// Name of the agent (max 255 characters)
     pub name: String,
-    /// Name of the cluster the agent belongs to
+    /// Name of the cluster the agent belongs to (max 255 characters)
     pub cluster_name: String,
     /// Optional JSON value containing labels associated with the agent
     pub labels: Option<serde_json::Value>,
@@ -79,8 +76,8 @@ impl NewAgent {
     ///
     /// # Arguments
     ///
-    /// * `name` - Name of the agent
-    /// * `cluster_name` - Name of the cluster the agent belongs to
+    /// * `name` - Name of the agent (max 255 characters)
+    /// * `cluster_name` - Name of the cluster the agent belongs to (max 255 characters)
     /// * `labels` - Optional vector of strings representing labels
     /// * `annotations` - Optional vector of key-value pairs representing annotations
     ///
@@ -93,12 +90,18 @@ impl NewAgent {
         labels: Option<Vec<String>>,
         annotations: Option<Vec<(String, String)>>,
     ) -> Result<Self, String> {
-        // Check for empty strings
+        // Check for empty strings and length
         if name.trim().is_empty() {
             return Err("Name cannot be empty".to_string());
         }
+        if name.len() > 255 {
+            return Err("Name cannot exceed 255 characters".to_string());
+        }
         if cluster_name.trim().is_empty() {
             return Err("Cluster name cannot be empty".to_string());
+        }
+        if cluster_name.len() > 255 {
+            return Err("Cluster name cannot exceed 255 characters".to_string());
         }
 
         // Check labels
@@ -133,6 +136,7 @@ pub fn labels_to_json(labels: &Option<Vec<String>>) -> Option<serde_json::Value>
 pub fn annotations_to_json(annotations: &Option<Vec<(String, String)>>) -> Option<serde_json::Value> {
     annotations.as_ref().map(|a| serde_json::to_value(a).unwrap())
 }
+
 
 
 #[cfg(test)]
@@ -257,5 +261,33 @@ mod tests {
         );
         assert!(result.is_err(), "NewAgent creation should fail with empty annotation value");
         assert_eq!(result.unwrap_err(), "Annotations cannot contain empty keys or values", "Error message should indicate empty annotation key or value");
+    }
+
+    #[test]
+    /// Tests that NewAgent creation fails when the name exceeds 255 characters.
+    fn test_new_agent_name_too_long() {
+        let long_name = "a".repeat(256);
+        let result = NewAgent::new(
+            long_name,
+            "Test Cluster".to_string(),
+            None,
+            None,
+        );
+        assert!(result.is_err(), "NewAgent creation should fail with a name longer than 255 characters");
+        assert_eq!(result.unwrap_err(), "Name cannot exceed 255 characters", "Error message should indicate the name is too long");
+    }
+
+    #[test]
+    /// Tests that NewAgent creation fails when the cluster name exceeds 255 characters.
+    fn test_new_agent_cluster_name_too_long() {
+        let long_cluster_name = "a".repeat(256);
+        let result = NewAgent::new(
+            "Test Agent".to_string(),
+            long_cluster_name,
+            None,
+            None,
+        );
+        assert!(result.is_err(), "NewAgent creation should fail with a cluster name longer than 255 characters");
+        assert_eq!(result.unwrap_err(), "Cluster name cannot exceed 255 characters", "Error message should indicate the cluster name is too long");
     }
 }

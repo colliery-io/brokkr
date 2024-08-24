@@ -9,11 +9,16 @@ use sha2::{Sha256, Digest};
 /// This struct is used for querying existing deployment objects from the database.
 #[derive(Queryable, Selectable, Identifiable, AsChangeset, Debug, Clone, Serialize, Deserialize)]
 #[diesel(table_name = crate::schema::deployment_objects)]
-#[diesel(primary_key(uuid))]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct DeploymentObject {
     /// Unique identifier for the deployment object
-    pub uuid: Uuid,
+    pub id: Uuid,
+    /// Timestamp when the deployment object was created
+    pub created_at: DateTime<Utc>,
+    /// Timestamp when the deployment object was last updated
+    pub updated_at: DateTime<Utc>,
+    /// Timestamp when the object was soft-deleted (if applicable)
+    pub deleted_at: Option<DateTime<Utc>>,
     /// Sequential identifier for ordering deployment objects
     pub sequence_id: i64,
     /// Identifier of the stack this deployment object belongs to
@@ -22,8 +27,6 @@ pub struct DeploymentObject {
     pub yaml_content: String,
     /// Checksum of the YAML content for integrity verification
     pub yaml_checksum: String,
-    /// Timestamp when the object was soft-deleted (if applicable)
-    pub deleted_at: Option<DateTime<Utc>>,
     /// Timestamp when the deployment object was submitted
     pub submitted_at: DateTime<Utc>,
     /// Flag indicating if this object marks a deletion
@@ -36,16 +39,12 @@ pub struct DeploymentObject {
 #[derive(Insertable, Debug, Clone, Serialize, Deserialize)]
 #[diesel(table_name = crate::schema::deployment_objects)]
 pub struct NewDeploymentObject {
-    /// Unique identifier for the new deployment object
-    pub uuid: Uuid,
     /// Identifier of the stack this deployment object belongs to
     pub stack_id: Uuid,
     /// The YAML content of the deployment object
     pub yaml_content: String,
     /// Checksum of the YAML content for integrity verification
     pub yaml_checksum: String,
-    /// Timestamp when the deployment object was submitted
-    pub submitted_at: DateTime<Utc>,
     /// Flag indicating if this object marks a deletion
     pub is_deletion_marker: bool,
 }
@@ -86,11 +85,9 @@ impl NewDeploymentObject {
         let yaml_checksum = generate_checksum(&yaml_content);
 
         Ok(NewDeploymentObject {
-            uuid: Uuid::new_v4(),
             stack_id,
             yaml_content,
             yaml_checksum,
-            submitted_at: Utc::now(),
             is_deletion_marker,
         })
     }
@@ -125,7 +122,6 @@ mod tests {
         assert_eq!(new_obj.yaml_content, yaml_content, "yaml_content should match the input value");
         assert!(!new_obj.yaml_checksum.is_empty(), "yaml_checksum should not be empty");
         assert_eq!(new_obj.is_deletion_marker, is_deletion_marker, "is_deletion_marker should match the input value");
-        assert!(!new_obj.uuid.is_nil(), "A non-nil UUID should be generated");
     }
 
     #[test]
