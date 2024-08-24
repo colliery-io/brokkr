@@ -1,3 +1,47 @@
+//! # Brokkr Logging Module
+//!
+//! This module provides a custom logging framework for the Brokkr application.
+//!
+//! ## Features
+//! - Thread-safe logging
+//! - Dynamic log level adjustment
+//! - Custom log macros for easy use
+//!
+//! ## Usage
+//!
+//! 1. Initialize the logger:
+//!    ```
+//!    brokkr_logger::init("info").expect("Failed to initialize logger");
+//!    ```
+//!
+//! 2. Use the log macros throughout your code:
+//!    ```
+//!    debug!("This is a debug message");
+//!    info!("This is an info message");
+//!    warn!("This is a warning message");
+//!    error!("This is an error message");
+//!    ```
+//!
+//! 3. Update log level at runtime if needed:
+//!    ```
+//!    brokkr_logger::update_log_level("debug").expect("Failed to update log level");
+//!    ```
+//!
+//! ## Log Levels
+//! 
+//! The available log levels are:
+//! - "off": Turn off all logging
+//! - "error": Log only errors
+//! - "warn": Log warnings and errors
+//! - "info": Log info, warnings, and errors (default)
+//! - "debug": Log debug messages and all above
+//! - "trace": Log trace messages and all above
+//!
+//! ## Thread Safety
+//!
+//! This logger is designed to be thread-safe and can handle concurrent logging
+//! operations and log level changes from multiple threads.
+
 use log::{ LevelFilter, Metadata, Record, SetLoggerError};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use once_cell::sync::OnceCell;
@@ -69,6 +113,28 @@ impl log::Log for BrokkrLogger {
     fn flush(&self) {}
 }
 
+/// Initializes the Brokkr logger with the specified log level.
+///
+/// # Arguments
+///
+/// * `level` - A string slice that holds the desired log level.
+///
+/// # Returns
+///
+/// * `Ok(())` if the logger was successfully initialized.
+/// * `Err(SetLoggerError)` if there was an error setting up the logger.
+///
+/// # Examples
+///
+/// ```
+/// use brokkr_logger;
+///
+/// fn main() {
+///     brokkr_logger::init("info").expect("Failed to initialize logger");
+///     info!("Logger initialized successfully!");
+/// }
+/// ```
+
 pub fn init(level: &str) -> Result<(), SetLoggerError> {
     let level_filter = str_to_level_filter(level);
     
@@ -82,6 +148,34 @@ pub fn init(level: &str) -> Result<(), SetLoggerError> {
     log::set_max_level(level_filter);
     Ok(())
 }
+
+/// Updates the current log level.
+///
+/// # Arguments
+///
+/// * `level` - A string slice that holds the new desired log level.
+///
+/// # Returns
+///
+/// * `Ok(())` if the log level was successfully updated.
+/// * `Err(String)` if there was an error updating the log level.
+///
+/// # Examples
+///
+/// ```
+/// use brokkr_logger;
+///
+/// fn main() {
+///     brokkr_logger::init("info").expect("Failed to initialize logger");
+///     info!("This will be logged");
+///     
+///     brokkr_logger::update_log_level("warn").expect("Failed to update log level");
+///     info!("This will not be logged");
+///     warn!("But this will be logged");
+/// }
+/// ```
+
+
 
 pub fn update_log_level(level: &str) -> Result<(), String> {
     let new_level = str_to_level_filter(level);

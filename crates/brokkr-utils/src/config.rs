@@ -1,4 +1,26 @@
-// Import necessary dependencies
+//! # Brokkr Config Module
+//! This module provides a common configuration framework for our crates.
+//!
+//! # Variable Naming Convention
+//!
+//! Variables in this configuration framework follow these naming conventions:
+//! - Struct fields use snake_case (e.g., `database`, `log_level`)
+//! - Environment variables use SCREAMING_SNAKE_CASE and are prefixed with "BROKKR__" (e.g., `BROKKR__DATABASE__URL`)
+//! - Configuration file keys use snake_case (e.g., `database.url`, `log.level`)
+//!
+//! # Configuration Overriding
+//!
+//! The configuration values are loaded and overridden in the following order (later sources take precedence):
+//!
+//! 1. Default values from the embedded `default.toml` file
+//! 2. Values from an optional external configuration file (if provided)
+//! 3. Environment variables
+//!
+//! To override a configuration value:
+//! - In a configuration file: Use the appropriate key (e.g., `database.url = "new_value"`)
+//! - Using environment variables: Set the variable with the "BROKKR__" prefix and "__" as separators
+//!   (e.g., `BROKKR__DATABASE__URL=new_value`)
+
 use config::{Config, ConfigError, Environment, File};
 use serde::Deserialize;
 
