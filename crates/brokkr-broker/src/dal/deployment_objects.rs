@@ -62,13 +62,13 @@ impl<'a> DeploymentObjectsDAL<'a> {
     /// # Returns
     ///
     /// Returns a QueryResult containing a Vec of DeploymentObjects for the given stack on success, or an error on failure.
-    pub fn get_by_stack_id(&self, stack_id_param: Uuid) -> QueryResult<Vec<DeploymentObject>> {
+    pub fn get_by_stack_id(&self, stack_uuid: Uuid) -> QueryResult<Vec<DeploymentObject>> {
         use brokkr_models::schema::deployment_objects::dsl::*;
 
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
 
         deployment_objects
-            .filter(stack_id.eq(stack_id_param))
+            .filter(stack_id.eq(stack_uuid))
             .order(sequence_id.asc())
             .load(conn)
     }

@@ -24,7 +24,6 @@ pub struct DeploymentObject {
 #[diesel(table_name = crate::schema::deployment_objects)]
 pub struct NewDeploymentObject {
     pub uuid: Uuid,
-    pub sequence_id: i64,
     pub stack_id: Uuid,
     pub yaml_content: String,
     pub yaml_checksum: String,
@@ -37,7 +36,6 @@ impl NewDeploymentObject {
         stack_id: Uuid,
         yaml_content: String,
         yaml_checksum: String,
-        sequence_id: i64,
         is_deletion_marker: bool,
     ) -> Result<Self, String> {
         // Validate stack_id
@@ -60,14 +58,9 @@ impl NewDeploymentObject {
             return Err("YAML checksum cannot be empty".to_string());
         }
 
-        // Validate sequence_id
-        if sequence_id < 0 {
-            return Err("Sequence ID must be non-negative".to_string());
-        }
 
         Ok(NewDeploymentObject {
             uuid: Uuid::new_v4(),
-            sequence_id,
             stack_id,
             yaml_content,
             yaml_checksum,
@@ -86,14 +79,12 @@ mod tests {
         let stack_id = Uuid::new_v4();
         let yaml_content = "key: value\nother_key: other_value".to_string();
         let yaml_checksum = "abcdef123456".to_string();
-        let sequence_id = 1;
         let is_deletion_marker = false;
 
         let result = NewDeploymentObject::new(
             stack_id,
             yaml_content.clone(),
             yaml_checksum.clone(),
-            sequence_id,
             is_deletion_marker,
         );
 
@@ -102,7 +93,6 @@ mod tests {
         assert_eq!(new_obj.stack_id, stack_id);
         assert_eq!(new_obj.yaml_content, yaml_content);
         assert_eq!(new_obj.yaml_checksum, yaml_checksum);
-        assert_eq!(new_obj.sequence_id, sequence_id);
         assert_eq!(new_obj.is_deletion_marker, is_deletion_marker);
         assert!(!new_obj.uuid.is_nil());
     }
@@ -113,7 +103,6 @@ mod tests {
             Uuid::nil(),
             "key: value".to_string(),
             "checksum".to_string(),
-            1,
             false,
         );
         assert!(result.is_err());
@@ -126,7 +115,6 @@ mod tests {
             Uuid::new_v4(),
             "".to_string(),
             "checksum".to_string(),
-            1,
             false,
         );
         assert!(result.is_err());
@@ -139,7 +127,6 @@ mod tests {
             Uuid::new_v4(),
             "invalid yaml content".to_string(),
             "checksum".to_string(),
-            1,
             false,
         );
         assert!(result.is_err());
@@ -152,23 +139,10 @@ mod tests {
             Uuid::new_v4(),
             "key: value".to_string(),
             "".to_string(),
-            1,
             false,
         );
         assert!(result.is_err());
         assert_eq!(result.unwrap_err(), "YAML checksum cannot be empty");
     }
 
-    #[test]
-    fn test_new_deployment_object_negative_sequence_id() {
-        let result = NewDeploymentObject::new(
-            Uuid::new_v4(),
-            "key: value".to_string(),
-            "checksum".to_string(),
-            -1,
-            false,
-        );
-        assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), "Sequence ID must be non-negative");
-    }
 }

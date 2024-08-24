@@ -12,7 +12,6 @@ fn test_create_deployment_object() {
         stack_id,
         "key: value".to_string(),
         "checksum123".to_string(),
-        1,
         false,
     ).expect("Failed to create NewDeploymentObject");
 
@@ -35,7 +34,6 @@ fn test_get_deployment_object_by_id() {
         stack_id,
         "key: value".to_string(),
         "checksum123".to_string(),
-        1,
         false,
     ).expect("Failed to create NewDeploymentObject");
 
@@ -58,7 +56,6 @@ fn test_get_deployment_objects_by_stack_id() {
         stack_id,
         "key1: value1".to_string(),
         "checksum1".to_string(),
-        1,
         false,
     ).expect("Failed to create NewDeploymentObject");
 
@@ -66,7 +63,6 @@ fn test_get_deployment_objects_by_stack_id() {
         stack_id,
         "key2: value2".to_string(),
         "checksum2".to_string(),
-        2,
         false,
     ).expect("Failed to create NewDeploymentObject");
 
@@ -118,7 +114,6 @@ fn test_soft_delete_deployment_object() {
         stack_id,
         "key: value".to_string(),
         "checksum123".to_string(),
-        1,
         false,
     ).expect("Failed to create NewDeploymentObject");
 
@@ -144,7 +139,6 @@ fn test_get_active_deployment_objects() {
         stack_id,
         "key1: value1".to_string(),
         "checksum1".to_string(),
-        1,
         false,
     ).expect("Failed to create NewDeploymentObject");
 
@@ -152,7 +146,6 @@ fn test_get_active_deployment_objects() {
         stack_id,
         "key2: value2".to_string(),
         "checksum2".to_string(),
-        2,
         false,
     ).expect("Failed to create NewDeploymentObject");
 

@@ -114,7 +114,6 @@ impl TestFixture {
             stack_id,
             format!("key: value{}", Uuid::new_v4()),  // Ensure unique content
             format!("checksum{}", Uuid::new_v4()),    // Ensure unique checksum
-            self.get_next_sequence_id(stack_id),
             false,
         ).expect("Failed to create NewDeploymentObject");
 
