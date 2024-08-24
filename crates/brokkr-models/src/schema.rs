@@ -1,12 +1,11 @@
 // @generated automatically by Diesel CLI.
 
 diesel::table! {
-    agent_events (uuid) {
+    agent_events (id) {
         id -> Uuid,
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
         deleted_at -> Nullable<Timestamptz>,
-        uuid -> Uuid,
         agent_id -> Uuid,
         deployment_object_id -> Uuid,
         #[max_length = 50]
@@ -18,12 +17,11 @@ diesel::table! {
 }
 
 diesel::table! {
-    agents (uuid) {
+    agents (id) {
         id -> Uuid,
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
         deleted_at -> Nullable<Timestamptz>,
-        uuid -> Uuid,
         #[max_length = 255]
         name -> Varchar,
         #[max_length = 255]
@@ -37,22 +35,15 @@ diesel::table! {
 }
 
 diesel::table! {
-    base_table (id) {
+    deployment_objects (id) {
         id -> Uuid,
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
         deleted_at -> Nullable<Timestamptz>,
-    }
-}
-
-diesel::table! {
-    deployment_objects (uuid) {
-        uuid -> Uuid,
         sequence_id -> Int8,
         stack_id -> Uuid,
         yaml_content -> Text,
         yaml_checksum -> Text,
-        deleted_at -> Nullable<Timestamptz>,
         submitted_at -> Timestamptz,
         is_deletion_marker -> Bool,
     }
@@ -80,7 +71,6 @@ diesel::joinable!(deployment_objects -> stacks (stack_id));
 diesel::allow_tables_to_appear_in_same_query!(
     agent_events,
     agents,
-    base_table,
     deployment_objects,
     stacks,
 );

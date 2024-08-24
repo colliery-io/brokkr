@@ -3,7 +3,7 @@ import subprocess
 import os
 from utils import docker_up,docker_down,cwd, docker_clean
 
-test = angreal.command_group(name="test", about="commands for testing the"
+test = angreal.command_group(name="tests", about="commands for testing the"
                              " application and library")
 
 

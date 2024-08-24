@@ -13,6 +13,7 @@ chrono = { workspace = true }
 brokkr-utils = { path = "../brokkr-utils" }
 sha2 = { workspace = true }
 diesel-derive-enum = { version = "2.0", features = ["postgres"] }
+serde_yaml = "0.9.34"
 
 
 [dev-dependencies]

@@ -1,9 +1,16 @@
 use brokkr_models::models::stacks::{Stack, NewStack};
 use uuid::Uuid;
+use serde_json::json;
 
 use crate::fixtures::TestFixture;
 
-
+/// Tests the creation of a stack.
+///
+/// This test:
+/// 1. Sets up a test fixture.
+/// 2. Creates a new stack using the NewStack struct with various fields.
+/// 3. Calls the create method of StacksDAL.
+/// 4. Verifies that the created stack matches the input data for all fields.
 #[test]
 fn test_create_stack() {
     let fixture = TestFixture::new();
@@ -25,6 +32,13 @@ fn test_create_stack() {
     assert_eq!(created_stack.agent_target, new_stack.agent_target);
 }
 
+/// Tests retrieving a single stack by its ID.
+///
+/// This test:
+/// 1. Sets up a test fixture.
+/// 2. Creates a new stack.
+/// 3. Retrieves the stack using its ID.
+/// 4. Verifies that the retrieved stack matches the created stack.
 #[test]
 fn test_get_stack_by_id() {
     let fixture = TestFixture::new();
@@ -38,6 +52,12 @@ fn test_get_stack_by_id() {
     assert_eq!(retrieved_stack.name, created_stack.name);
 }
 
+/// Tests the behavior when trying to retrieve a non-existent stack.
+///
+/// This test:
+/// 1. Sets up a test fixture.
+/// 2. Attempts to retrieve a stack with a randomly generated UUID.
+/// 3. Verifies that the operation results in an error.
 #[test]
 fn test_get_stack_by_id_not_found() {
     let fixture = TestFixture::new();
@@ -48,6 +68,13 @@ fn test_get_stack_by_id_not_found() {
     assert!(result.is_err());
 }
 
+/// Tests retrieving all stacks.
+///
+/// This test:
+/// 1. Sets up a test fixture.
+/// 2. Creates two stacks.
+/// 3. Retrieves all stacks.
+/// 4. Verifies that both created stacks are in the retrieved list.
 #[test]
 fn test_get_all_stacks() {
     let fixture = TestFixture::new();
@@ -65,6 +92,12 @@ fn test_get_all_stacks() {
     assert!(all_stacks.iter().any(|s| s.name == "Stack 2"));
 }
 
+/// Tests updating a stack.
+///
+/// This test:
+/// 1. Sets up a test fixture and creates a new stack.
+/// 2. Updates the stack's name and description.
+/// 3. Verifies that the update operation succeeds and the stack's fields are updated correctly.
 #[test]
 fn test_update_stack() {
     let fixture = TestFixture::new();
@@ -82,6 +115,12 @@ fn test_update_stack() {
     assert_eq!(result.description, Some("Updated description".to_string()));
 }
 
+/// Tests the behavior when trying to update a non-existent stack.
+///
+/// This test:
+/// 1. Sets up a test fixture.
+/// 2. Attempts to update a stack with a randomly generated UUID.
+/// 3. Verifies that the operation results in an error.
 #[test]
 fn test_update_non_existent_stack() {
     let fixture = TestFixture::new();
@@ -103,6 +142,13 @@ fn test_update_non_existent_stack() {
     assert!(result.is_err());
 }
 
+/// Tests the soft deletion of a stack.
+///
+/// This test:
+/// 1. Sets up a test fixture and creates a new stack.
+/// 2. Soft deletes the stack.
+/// 3. Verifies that the stack has a deletion timestamp.
+/// 4. Checks that the deleted stack doesn't appear in the list of active stacks.
 #[test]
 fn test_soft_delete_stack() {
     let fixture = TestFixture::new();
@@ -118,6 +164,12 @@ fn test_soft_delete_stack() {
     assert!(!active_stacks.iter().any(|s| s.id == created_stack.id));
 }
 
+/// Tests the behavior when trying to soft delete a non-existent stack.
+///
+/// This test:
+/// 1. Sets up a test fixture.
+/// 2. Attempts to soft delete a stack with a randomly generated UUID.
+/// 3. Verifies that the operation results in an error.
 #[test]
 fn test_soft_delete_non_existent_stack() {
     let fixture = TestFixture::new();
@@ -128,6 +180,14 @@ fn test_soft_delete_non_existent_stack() {
     assert!(result.is_err());
 }
 
+/// Tests retrieving only active (non-deleted) stacks.
+///
+/// This test:
+/// 1. Sets up a test fixture.
+/// 2. Creates two stacks: one active and one to be deleted.
+/// 3. Soft deletes one of the stacks.
+/// 4. Retrieves active stacks.
+/// 5. Verifies that only the non-deleted stack is returned.
 #[test]
 fn test_get_active_stacks() {
     let fixture = TestFixture::new();
@@ -145,4 +205,58 @@ fn test_get_active_stacks() {
     assert_eq!(active_stacks.len(), 1);
     assert_eq!(active_stacks[0].id, created_active.id);
     assert_eq!(active_stacks[0].name, "Active Stack");
+}
+
+/// Tests creating a stack with a duplicate name.
+///
+/// This test:
+/// 1. Sets up a test fixture.
+/// 2. Creates a new stack with a specific name.
+/// 3. Attempts to create another stack with the same name.
+/// 4. Verifies that the second creation attempt results in an error.
+#[test]
+fn test_create_stack_with_duplicate_name() {
+    let fixture = TestFixture::new();
+    
+    let stack_name = "Duplicate Stack Name".to_string();
+    
+    let new_stack1 = NewStack::new(stack_name.clone(), None, None, None, None)
+        .expect("Failed to create NewStack");
+    let new_stack2 = NewStack::new(stack_name.clone(), None, None, None, None)
+        .expect("Failed to create NewStack");
+
+    fixture.dal.stacks().create(&new_stack1).expect("Failed to create first stack");
+
+    let result = fixture.dal.stacks().create(&new_stack2);
+    assert!(result.is_err());
+    // You may want to check for a specific error message or type here
+}
+
+/// Tests updating a stack's agent target.
+///
+/// This test:
+/// 1. Sets up a test fixture.
+/// 2. Creates a new stack with an initial agent target.
+/// 3. Updates the stack with a new agent target.
+/// 4. Verifies that the stack's agent target is correctly updated.
+#[test]
+fn test_update_stack_agent_target() {
+    let fixture = TestFixture::new();
+    
+    let new_stack = NewStack::new(
+        "Test Stack".to_string(),
+        None,
+        None,
+        None,
+        Some(vec!["initial_agent".to_string()]),
+    ).expect("Failed to create NewStack");
+
+    let created_stack = fixture.dal.stacks().create(&new_stack).expect("Failed to create stack");
+
+    let mut updated_stack = created_stack.clone();
+    updated_stack.agent_target = Some(json!["updated_agent".to_string()]);
+
+    let result = fixture.dal.stacks().update(created_stack.id, &updated_stack).expect("Failed to update stack");
+
+    assert_eq!(result.agent_target, Some(json!["updated_agent".to_string()]));
 }

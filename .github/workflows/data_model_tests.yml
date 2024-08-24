@@ -66,5 +66,5 @@ jobs:
       working-directory: ${{ inputs.data-model-path }}
     - name: Run migration tests
       # if: steps.changes.outputs.data_model == 'true'
-      run: angreal test migration
+      run: angreal tests migrations
       working-directory: ${{ inputs.data-model-path }}

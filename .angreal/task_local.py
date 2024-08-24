@@ -1,6 +1,6 @@
 import angreal # type: ignore
-from utils import docker_up,docker_down, docker_clean
-
+from utils import docker_up,docker_down, docker_clean, cwd
+import subprocess
 
 
 local = angreal.command_group(name="local", about="dev commands for"
@@ -41,3 +41,15 @@ def reset(hard=None):
 def clean():
     docker_down()
     docker_clean()
+
+
+@local()
+@angreal.command(name="docs", about="cargo docs")
+def docs():
+
+    subprocess.run(
+        [
+            "cargo doc --open --no-deps --document-private-items"
+        ], cwd=cwd, shell=True
+    )
+    

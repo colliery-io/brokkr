@@ -1,3 +1,4 @@
+//! Data models for our application to interact with
 pub mod stacks;
 pub mod deployment_objects;
 pub mod agents;

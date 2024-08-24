@@ -38,4 +38,4 @@ jobs:
           ${{ runner.os }}-rust-build-
 
     - name: Run unit tests
-      run: angreal test unit
+      run: angreal tests unit
