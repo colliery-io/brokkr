@@ -13,8 +13,12 @@ use dotenv::dotenv;
 use std::env;
 use uuid::Uuid;
 use axum::Router;
+use tower::ServiceExt;
+use hyper::{Request, Method, Body,StatusCode};
+use serde_json::json;
 
-use brokkr_models::models::{NewStack, DeploymentObject, NewDeploymentObject, NewAgent, Agent, AgentEvent, NewAgentEvent};
+
+use brokkr_models::models::{NewStack, Stack, DeploymentObject, NewDeploymentObject, NewAgent, Agent, AgentEvent, NewAgentEvent};
 
 /// Embedded migrations for the test database.
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("../brokkr-models/migrations");
@@ -155,3 +159,64 @@ impl Drop for TestFixture {
         // The test transaction will be automatically rolled back when the connection is dropped
     }
 }
+
+
+pub async fn create_test_agent(app: &axum::Router) -> Agent {
+    let new_agent = NewAgent::new(
+        "Test Agent".to_string(),
+        "Test Cluster".to_string(),
+        Some(vec!["test".to_string()]),
+        Some(vec![("key".to_string(), "value".to_string())]),
+    ).unwrap();
+
+    let create_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/agents")
+                .header("Content-Type", "application/json")
+                .body(Body::from(serde_json::to_string(&new_agent).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(create_response.status(), StatusCode::CREATED);
+
+    let body = hyper::body::to_bytes(create_response.into_body()).await.unwrap();
+    serde_json::from_slice(&body).unwrap()
+}
+
+
+
+pub async fn create_test_stack(app: &axum::Router) -> Stack {
+    let new_stack = NewStack::new(
+        "Test Stack".to_string(),
+        Some("Test Description".to_string()),
+        Some(vec!["test".to_string()]),
+        Some(vec![("key".to_string(), "value".to_string())]),
+        Some(vec!["agent1".to_string()]),
+    ).unwrap();
+
+    let create_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/stacks")
+                .header("Content-Type", "application/json")
+                .body(Body::from(serde_json::to_string(&new_stack).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(create_response.status(), StatusCode::OK);
+
+    let body = hyper::body::to_bytes(create_response.into_body()).await.unwrap();
+    serde_json::from_slice(&body).unwrap()
+}
+
+
+// Helper function to create a test deployment object

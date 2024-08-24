@@ -53,7 +53,7 @@ def copy_to_clipboard(text):
 def get_migrations():
     
     # Find files matching 'up.sql' pattern
-    files = find_files(os.path.join(brokkr_models_dir,'models'), '*')
+    files = find_files(brokkr_models_dir, 'up.sql')
 
     # Concatenate the files' contents
     concatenated_content = concatenate_files(files)

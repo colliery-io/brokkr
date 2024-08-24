@@ -39,7 +39,7 @@ CREATE TEMPORARY TABLE temp_stack_id (id UUID);
 
 -- 1. Create a test stack
 WITH new_stack AS (
-    INSERT INTO stacks (name, description, labels, annotations, agent_target) 
+    INSERT INTO stacks (name, description, labels, annotations, agent_target)
     VALUES ('test-stack', 'A test stack', '{"env": "test"}', '{"version": "1.0"}', '["test-agent"]')
     RETURNING id
 )
@@ -61,8 +61,8 @@ VALUES ('test-agent', 'test-cluster', 'ACTIVE');
 -- 5. Create some test agent events
 INSERT INTO agent_events (agent_id, deployment_object_id, event_type, status, message)
 SELECT 
-    (SELECT uuid FROM agents WHERE name = 'test-agent'),
-    uuid,
+    (SELECT id FROM agents WHERE name = 'test-agent'),
+    id,
     'APPLIED',
     'success',
     'Test deployment applied'
@@ -86,11 +86,11 @@ WHERE stack_id = (SELECT id FROM temp_stack_id) AND is_deletion_marker = TRUE;
 -- 9. Test updating a deployment object (should fail due to prevent_deployment_object_changes trigger)
 DO $$
 DECLARE
-    test_uuid UUID;
+    test_id UUID;
 BEGIN
-    SELECT uuid INTO test_uuid FROM deployment_objects WHERE stack_id = (SELECT id FROM temp_stack_id) LIMIT 1;
+    SELECT id INTO test_id FROM deployment_objects WHERE stack_id = (SELECT id FROM temp_stack_id) LIMIT 1;
     BEGIN
-        UPDATE deployment_objects SET yaml_content = 'updated content' WHERE uuid = test_uuid;
+        UPDATE deployment_objects SET yaml_content = 'updated content' WHERE id = test_id;
         RAISE EXCEPTION 'Expected update to fail, but it succeeded';
     EXCEPTION WHEN others THEN
         RAISE NOTICE 'Update failed as expected: %', SQLERRM;
