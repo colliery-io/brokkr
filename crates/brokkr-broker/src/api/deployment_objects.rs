@@ -50,10 +50,18 @@ async fn update_deployment_object(
     State(state): State<AppState>,
     Path(uuid): Path<Uuid>,
     Json(deployment_object): Json<DeploymentObject>,
-) -> Result<Json<DeploymentObject>, StatusCode> {
-    state.dal.deployment_objects().update(uuid, &deployment_object)
-        .map(Json)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+) -> Result<Json<DeploymentObject>, (StatusCode, String)> {
+    match state.dal.deployment_objects().update(uuid, &deployment_object) {
+        Ok(updated) => Ok(Json(updated)),
+        Err(e) => {
+            if e.to_string().contains("cannot be modified") {
+                Err((StatusCode::BAD_REQUEST, "Deployment objects cannot be modified except for soft deletion or updating deletion markers".to_string()))
+            } else {
+                eprintln!("Error updating deployment object: {:?}", e);
+                Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to update: {:?}", e)))
+            }
+        }
+    }
 }
 
 /// Handler for soft-deleting a deployment object.

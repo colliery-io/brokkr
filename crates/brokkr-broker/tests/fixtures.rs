@@ -190,16 +190,16 @@ pub async fn create_test_agent(app: &axum::Router) -> Agent {
 
 
 
-pub async fn create_test_stack(app: &axum::Router) -> Stack {
-    let new_stack = NewStack::new(
-        "Test Stack".to_string(),
-        Some("Test Description".to_string()),
-        Some(vec!["test".to_string()]),
-        Some(vec![("key".to_string(), "value".to_string())]),
-        Some(vec!["agent1".to_string()]),
-    ).unwrap();
+pub async fn create_test_stack(app: &Router) -> Stack {
+    let new_stack = NewStack {
+        name: "Test Stack".to_string(),
+        description: Some("A test stack".to_string()),
+        labels: None,
+        annotations: None,
+        agent_target: None,
+    };
 
-    let create_response = app
+    let response = app
         .clone()
         .oneshot(
             Request::builder()
@@ -212,9 +212,15 @@ pub async fn create_test_stack(app: &axum::Router) -> Stack {
         .await
         .unwrap();
 
-    assert_eq!(create_response.status(), StatusCode::OK);
+    let status = response.status();
+    let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+    let body_str = String::from_utf8_lossy(&body);
 
-    let body = hyper::body::to_bytes(create_response.into_body()).await.unwrap();
+    println!("Stack creation response status: {}", status);
+    println!("Stack creation response body: {}", body_str);
+
+    assert_eq!(status, StatusCode::OK, "Failed to create stack. Status: {}, Body: {}", status, body_str);
+
     serde_json::from_slice(&body).unwrap()
 }
 
@@ -233,11 +239,10 @@ pub async fn create_test_stack(app: &axum::Router) -> Stack {
 ///
 /// The created DeploymentObject
 pub async fn create_test_deployment_object(app: &Router, stack_id: Uuid) -> DeploymentObject {
-    let new_stack_object =  create_test_stack(app).await;
 
     
     let new_deployment_object = NewDeploymentObject {
-        stack_id: new_stack_object.id,
+        stack_id: stack_id,
         yaml_content: "test: content".to_string(),
         yaml_checksum: "test_checksum".to_string(),
         is_deletion_marker: false,

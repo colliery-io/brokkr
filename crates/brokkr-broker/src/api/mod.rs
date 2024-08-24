@@ -22,7 +22,7 @@ pub fn configure_api_routes(dal: DAL) -> Router {
     Router::new()
         .merge(agents::configure_routes())
         .merge(stacks::configure_routes())
-        // .merge(deployment_objects::configure_routes())
+        .merge(deployment_objects::configure_routes())
         // .merge(agent_events::configure_routes())
         .with_state(app_state)
 }
