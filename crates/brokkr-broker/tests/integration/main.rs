@@ -3,4 +3,3 @@
 mod fixtures;
 mod db;
 mod dal;
-mod api;

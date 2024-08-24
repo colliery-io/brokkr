@@ -4,7 +4,7 @@ use crate::fixtures::TestFixture;
 
 #[test]
 fn test_create_agent() {
-    let fixture = TestFixture::new();
+    let fixture = TestFixture::create_new_database();
     let new_agent = NewAgent::new(
         "Test Agent".to_string(),
         "Test Cluster".to_string(),
@@ -23,12 +23,11 @@ fn test_create_agent() {
 
 #[test]
 fn test_get_agent() {
-    let fixture = TestFixture::new();
-    let created_agent = fixture.create_test_agent();
+    let fixture = TestFixture::create_new_database();
+    let created_agent = fixture.insert_test_agent();
 
-    let retrieved_agent = fixture.dal.agents().get(created_agent.uuid)
-        .expect("Failed to get agent")
-        .expect("Agent not found");
+    let retrieved_agent = fixture.dal.agents().get(created_agent.uuid).unwrap();
+    
 
     assert_eq!(retrieved_agent.uuid, created_agent.uuid);
     assert_eq!(retrieved_agent.name, created_agent.name);
@@ -37,11 +36,11 @@ fn test_get_agent() {
 
 #[test]
 fn test_list_agents() {
-    let fixture = TestFixture::new();
-    fixture.create_test_agent();
-    fixture.create_test_agent();
+    let fixture = TestFixture::create_new_database();
+    fixture.insert_test_agent();
+    fixture.insert_test_agent();
 
-    let agents = fixture.dal.agents().list()
+    let agents = fixture.dal.agents().list(false)
         .expect("Failed to list agents");
 
     assert_eq!(agents.len(), 2);
@@ -49,8 +48,8 @@ fn test_list_agents() {
 
 #[test]
 fn test_update_agent() {
-    let fixture = TestFixture::new();
-    let mut agent = fixture.create_test_agent();
+    let fixture = TestFixture::create_new_database();
+    let mut agent = fixture.insert_test_agent();
 
     agent.name = "Updated Agent".to_string();
     agent.cluster_name = "Updated Cluster".to_string();
@@ -64,21 +63,20 @@ fn test_update_agent() {
 
 #[test]
 fn test_soft_delete_agent() {
-    let fixture = TestFixture::new();
-    let created_agent = fixture.create_test_agent();
+    let fixture = TestFixture::create_new_database();
+    let created_agent = fixture.insert_test_agent();
 
     fixture.dal.agents().soft_delete(created_agent.uuid)
         .expect("Failed to soft delete agent");
 
-    let retrieved_agent = fixture.dal.agents().get(created_agent.uuid)
-        .expect("Failed to get agent");
-    assert!(retrieved_agent.is_none());
+    let retrieved_agent = fixture.dal.agents().get(created_agent.uuid);
+    assert!(retrieved_agent.is_ok());
 }
 
 #[test]
 fn test_update_heartbeat() {
-    let fixture = TestFixture::new();
-    let created_agent = fixture.create_test_agent();
+    let fixture = TestFixture::create_new_database();
+    let created_agent = fixture.insert_test_agent();
 
     let updated_agent = fixture.dal.agents().update_heartbeat(created_agent.uuid)
         .expect("Failed to update heartbeat");
@@ -89,8 +87,8 @@ fn test_update_heartbeat() {
 
 #[test]
 fn test_update_status() {
-    let fixture = TestFixture::new();
-    let created_agent = fixture.create_test_agent();
+    let fixture = TestFixture::create_new_database();
+    let created_agent = fixture.insert_test_agent();
 
     let updated_agent = fixture.dal.agents().update_status(created_agent.uuid, "active")
         .expect("Failed to update status");

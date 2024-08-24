@@ -6,7 +6,7 @@ use crate::fixtures::TestFixture;
 
 #[test]
 fn test_create_stack() {
-    let fixture = TestFixture::new();
+    let fixture = TestFixture::create_new_database();
     
     let new_stack = NewStack::new(
         "Test Stack".to_string(),
@@ -27,7 +27,7 @@ fn test_create_stack() {
 
 #[test]
 fn test_get_stack_by_id() {
-    let fixture = TestFixture::new();
+    let fixture = TestFixture::create_new_database();
     
     let new_stack = NewStack::new("Test Stack".to_string(), None, None, None, None).expect("Failed to create NewStack");
     let created_stack = fixture.dal.stacks().create(&new_stack).expect("Failed to create stack");
@@ -40,7 +40,7 @@ fn test_get_stack_by_id() {
 
 #[test]
 fn test_get_stack_by_id_not_found() {
-    let fixture = TestFixture::new();
+    let fixture = TestFixture::create_new_database();
     
     let non_existent_id = Uuid::new_v4();
     let result = fixture.dal.stacks().get_by_id(non_existent_id);
@@ -50,7 +50,7 @@ fn test_get_stack_by_id_not_found() {
 
 #[test]
 fn test_get_all_stacks() {
-    let fixture = TestFixture::new();
+    let fixture = TestFixture::create_new_database();
 
     let stack1 = NewStack::new("Stack 1".to_string(), None, None, None, None).expect("Failed to create NewStack");
     let stack2 = NewStack::new("Stack 2".to_string(), None, None, None, None).expect("Failed to create NewStack");
@@ -67,7 +67,7 @@ fn test_get_all_stacks() {
 
 #[test]
 fn test_update_stack() {
-    let fixture = TestFixture::new();
+    let fixture = TestFixture::create_new_database();
 
     let new_stack = NewStack::new("Original Stack".to_string(), None, None, None, None).expect("Failed to create NewStack");
     let created_stack = fixture.dal.stacks().create(&new_stack).expect("Failed to create stack");
@@ -84,7 +84,7 @@ fn test_update_stack() {
 
 #[test]
 fn test_update_non_existent_stack() {
-    let fixture = TestFixture::new();
+    let fixture = TestFixture::create_new_database();
 
     let non_existent_id = Uuid::new_v4();
     let dummy_stack = Stack {
@@ -105,7 +105,7 @@ fn test_update_non_existent_stack() {
 
 #[test]
 fn test_soft_delete_stack() {
-    let fixture = TestFixture::new();
+    let fixture = TestFixture::create_new_database();
 
     let new_stack = NewStack::new("To Be Deleted".to_string(), None, None, None, None).expect("Failed to create NewStack");
     let created_stack = fixture.dal.stacks().create(&new_stack).expect("Failed to create stack");
@@ -120,7 +120,7 @@ fn test_soft_delete_stack() {
 
 #[test]
 fn test_soft_delete_non_existent_stack() {
-    let fixture = TestFixture::new();
+    let fixture = TestFixture::create_new_database();
 
     let non_existent_id = Uuid::new_v4();
     let result = fixture.dal.stacks().soft_delete(non_existent_id);
@@ -130,7 +130,7 @@ fn test_soft_delete_non_existent_stack() {
 
 #[test]
 fn test_get_active_stacks() {
-    let fixture = TestFixture::new();
+    let fixture = TestFixture::create_new_database();
 
     let active_stack = NewStack::new("Active Stack".to_string(), None, None, None, None).expect("Failed to create NewStack");
     let to_delete_stack = NewStack::new("To Delete Stack".to_string(), None, None, None, None).expect("Failed to create NewStack");

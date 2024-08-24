@@ -16,6 +16,8 @@ use brokkr_models::models::NewAgentEvent;
 
 
 
+
+
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("../brokkr-models/migrations");
 #[derive(Clone)]
 pub struct TestFixture {
@@ -23,7 +25,7 @@ pub struct TestFixture {
 }
 
 impl TestFixture {
-    pub fn new() -> Self {
+    pub fn create_new_database() -> Self {
         dotenv().ok();
         let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
         
@@ -40,7 +42,7 @@ impl TestFixture {
         TestFixture { dal }
     }
 
-    pub fn create_test_stack(&self) -> Uuid {
+    pub fn insert_test_stack(&self) -> Uuid {
         let new_stack = NewStack::new(
             format!("Test Stack {}", Uuid::new_v4()),  // Ensure unique name
             Some("Test Description".to_string()),
@@ -55,7 +57,7 @@ impl TestFixture {
         created_stack.id
     }
 
-    pub fn create_test_agent_event(&self, agent_id: Uuid, deployment_object_id: Uuid) -> AgentEvent {
+    pub fn insert_test_agent_event(&self, agent_id: Uuid, deployment_object_id: Uuid) -> AgentEvent {
         let new_agent_event = NewAgentEvent::new(
             agent_id,
             deployment_object_id,
@@ -68,7 +70,7 @@ impl TestFixture {
             .expect("Failed to create test agent event")
     }
 
-    pub fn create_test_deployment_object(&self, stack_id: Uuid) -> DeploymentObject {
+    pub fn insert_test_deployment_object(&self, stack_id: Uuid) -> DeploymentObject {
         let new_deployment_object = NewDeploymentObject::new(
             stack_id,
             format!("key: value{}", Uuid::new_v4()),  // Ensure unique content
@@ -81,7 +83,7 @@ impl TestFixture {
             .expect("Failed to create deployment object")
     }
 
-    pub fn create_test_agent(&self) -> Agent {
+    pub fn insert_test_agent(&self) -> Agent {
         let new_agent = NewAgent::new(
             format!("Test Agent {}", Uuid::new_v4()),
             "Test Cluster".to_string(),
@@ -102,6 +104,7 @@ impl TestFixture {
             .max()
             .map_or(1, |max| max + 1)
     }
+
 }
 
 impl Drop for TestFixture {
