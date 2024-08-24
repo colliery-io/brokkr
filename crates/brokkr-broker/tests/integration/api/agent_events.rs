@@ -2,10 +2,10 @@ use axum::{
     body::Body,
     http::{Request, StatusCode, Method},
 };
-use brokkr_models::models::agent_events::{AgentEvent, NewAgentEvent};
-use serde_json::json;
+use brokkr_models::models::agent_events::AgentEvent;
+
 use tower::ServiceExt;
-use uuid::Uuid;
+
 
 use crate::fixtures::TestFixture;
 use crate::fixtures::{create_test_stack, create_test_agent, create_test_deployment_object, create_test_agent_event};

@@ -2,10 +2,10 @@ use axum::{
     body::Body,
     http::{Request, StatusCode, Method},
 };
-use brokkr_models::models::agents::{Agent, NewAgent};
-use serde_json::{json, Value};
+use brokkr_models::models::agents::Agent;
+
 use tower::ServiceExt;
-use uuid::Uuid;
+
 
 // Import the TestFixture
 use crate::fixtures::TestFixture;
