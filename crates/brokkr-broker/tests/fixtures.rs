@@ -219,4 +219,45 @@ pub async fn create_test_stack(app: &axum::Router) -> Stack {
 }
 
 
-// Helper function to create a test deployment object
+/// Creates a test deployment object and returns it.
+///
+/// This function sends a POST request to create a new deployment object
+/// and returns the created object.
+///
+/// # Arguments
+///
+/// * `app` - The test application router
+/// * `stack_id` - The UUID of the stack to associate with the deployment object
+///
+/// # Returns
+///
+/// The created DeploymentObject
+pub async fn create_test_deployment_object(app: &Router, stack_id: Uuid) -> DeploymentObject {
+    let new_stack_object =  create_test_stack(app).await;
+
+    
+    let new_deployment_object = NewDeploymentObject {
+        stack_id: new_stack_object.id,
+        yaml_content: "test: content".to_string(),
+        yaml_checksum: "test_checksum".to_string(),
+        is_deletion_marker: false,
+    };
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/deployment-objects")
+                .header("Content-Type", "application/json")
+                .body(Body::from(serde_json::to_string(&new_deployment_object).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+    serde_json::from_slice(&body).unwrap()
+}
