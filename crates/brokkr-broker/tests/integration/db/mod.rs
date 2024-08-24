@@ -9,9 +9,9 @@ use std::time::Duration;
 use url::Url;
 use uuid::Uuid;
 
-// Import the module containing your connection pool code
 use brokkr_broker::db::create_shared_connection_pool;
 
+/// Represents a record in the test database table.
 #[derive(QueryableByName, PartialEq, Debug)]
 struct TestRecord {
     #[diesel(sql_type = Integer)]
@@ -20,6 +20,19 @@ struct TestRecord {
     name: String,
 }
 
+/// Integration test for the connection pool functionality.
+///
+/// This test performs the following steps:
+/// 1. Creates a temporary test database
+/// 2. Sets up a connection pool for the test database
+/// 3. Runs multiple tests to verify database operations and connection pool behavior
+/// 4. Cleans up by dropping the test database
+///
+/// The test covers:
+/// - Creating a table
+/// - Inserting and querying data
+/// - Verifying the maximum number of connections
+/// - Testing connection timeout when exceeding the maximum connections
 #[test]
 fn test_connection_pool_integration() {
     // Set up
@@ -102,7 +115,7 @@ fn test_connection_pool_integration() {
 
         assert_eq!(success_count, max_size, "Failed to get all {} connections. Got {} successful connections.", max_size, success_count);
 
-        // Attempting to get one more connection should time out
+        // Test 5: Attempt to exceed max connections
         let timeout_dur = Duration::from_secs(1);
         let extra_conn = test_pool.pool.get_timeout(timeout_dur);
         assert!(extra_conn.is_err(), "Expected timeout error when exceeding max connections, but got a connection");
@@ -118,5 +131,4 @@ fn test_connection_pool_integration() {
     sql_query(format!("DROP DATABASE IF EXISTS {}", test_db_name))
         .execute(&mut conn)
         .expect("Failed to drop test database");
-
 }

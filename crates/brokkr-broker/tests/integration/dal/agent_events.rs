@@ -2,6 +2,13 @@ use uuid::Uuid;
 use brokkr_models::models::agent_events::NewAgentEvent;
 use crate::fixtures::TestFixture;
 
+/// Tests the creation of an agent event.
+///
+/// This test:
+/// 1. Sets up a test fixture with an agent, stack, and deployment object.
+/// 2. Creates a new agent event using the NewAgentEvent struct.
+/// 3. Calls the create method of AgentEventsDAL.
+/// 4. Verifies that the created event matches the input data.
 #[test]
 fn test_create_agent_event() {
     let fixture = TestFixture::new();
@@ -27,6 +34,12 @@ fn test_create_agent_event() {
     assert_eq!(created_event.message, Some("Test message".to_string()));
 }
 
+/// Tests retrieving a single agent event by its UUID.
+///
+/// This test:
+/// 1. Sets up a test fixture and inserts a test agent event.
+/// 2. Retrieves the event using its UUID.
+/// 3. Verifies that the retrieved event matches the inserted event.
 #[test]
 fn test_get_agent_event() {
     let fixture = TestFixture::new();
@@ -44,6 +57,12 @@ fn test_get_agent_event() {
     assert_eq!(retrieved_event.deployment_object_id, deployment_object.uuid);
 }
 
+/// Tests listing all agent events.
+///
+/// This test:
+/// 1. Sets up a test fixture and inserts two test agent events.
+/// 2. Calls the list method of AgentEventsDAL.
+/// 3. Verifies that the correct number of events are returned.
 #[test]
 fn test_list_agent_events() {
     let fixture = TestFixture::new();
@@ -60,6 +79,15 @@ fn test_list_agent_events() {
     assert_eq!(events.len(), 2);
 }
 
+/// Tests retrieving agent events with various filters.
+///
+/// This test:
+/// 1. Sets up a test fixture with multiple agents, stacks, and events.
+/// 2. Tests retrieving all events.
+/// 3. Tests filtering events by stack.
+/// 4. Tests filtering events by agent.
+/// 5. Tests filtering events by both stack and agent.
+/// 6. Tests filtering with a non-existent stack.
 #[test]
 fn test_get_events() {
     let fixture = TestFixture::new();
@@ -100,6 +128,14 @@ fn test_get_events() {
     assert_eq!(non_existent_events.len(), 0);
 }
 
+/// Tests the soft deletion of an agent event.
+///
+/// This test:
+/// 1. Sets up a test fixture and inserts a test agent event.
+/// 2. Soft deletes the event.
+/// 3. Verifies that the event is not retrievable with the normal get method.
+/// 4. Verifies that the event is retrievable with the method that includes deleted events.
+/// 5. Checks that soft-deleted events do not appear in get_events results.
 #[test]
 fn test_soft_delete_agent_event() {
     let fixture = TestFixture::new();
@@ -130,6 +166,13 @@ fn test_soft_delete_agent_event() {
     assert!(!events.iter().any(|e| e.uuid == created_event.uuid));
 }
 
+/// Tests retrieving a soft-deleted agent event.
+///
+/// This test:
+/// 1. Sets up a test fixture and inserts a test agent event.
+/// 2. Soft deletes the event.
+/// 3. Retrieves the deleted event using the get_including_deleted method.
+/// 4. Verifies that the retrieved event matches the original and has a deletion timestamp.
 #[test]
 fn test_get_including_deleted() {
     let fixture = TestFixture::new();

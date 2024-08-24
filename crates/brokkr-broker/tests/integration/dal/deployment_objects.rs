@@ -2,7 +2,13 @@ use brokkr_models::models::deployment_objects::NewDeploymentObject;
 use diesel::result::Error as DieselError;
 use crate::fixtures::TestFixture;
 
-
+/// Tests the creation of a deployment object.
+///
+/// This test:
+/// 1. Sets up a test fixture and creates a test stack.
+/// 2. Creates a new deployment object using the NewDeploymentObject struct.
+/// 3. Calls the create method of DeploymentObjectsDAL.
+/// 4. Verifies that the created object matches the input data and has the correct sequence ID.
 #[test]
 fn test_create_deployment_object() {
     let fixture = TestFixture::new();
@@ -25,6 +31,13 @@ fn test_create_deployment_object() {
     assert_eq!(created_object.is_deletion_marker, false);
 }
 
+/// Tests retrieving a single deployment object by its UUID.
+///
+/// This test:
+/// 1. Sets up a test fixture and creates a test stack.
+/// 2. Creates a new deployment object.
+/// 3. Retrieves the object using its UUID.
+/// 4. Verifies that the retrieved object matches the created object.
 #[test]
 fn test_get_deployment_object_by_id() {
     let fixture = TestFixture::new();
@@ -47,6 +60,13 @@ fn test_get_deployment_object_by_id() {
     assert_eq!(retrieved_object.stack_id, stack_id);
 }
 
+/// Tests retrieving all deployment objects for a specific stack.
+///
+/// This test:
+/// 1. Sets up a test fixture and creates a test stack.
+/// 2. Creates two deployment objects for the stack.
+/// 3. Retrieves all objects for the stack.
+/// 4. Verifies that both objects are retrieved and have correct sequence IDs.
 #[test]
 fn test_get_deployment_objects_by_stack_id() {
     let fixture = TestFixture::new();
@@ -79,8 +99,12 @@ fn test_get_deployment_objects_by_stack_id() {
     assert!(retrieved_objects.iter().any(|obj| obj.sequence_id == 2));
 }
 
-
-
+/// Tests that updating a deployment object is not allowed.
+///
+/// This test:
+/// 1. Sets up a test fixture and creates a test deployment object.
+/// 2. Attempts to update the object's content and checksum.
+/// 3. Verifies that the update operation fails with the expected error message.
 #[test]
 fn test_update_deployment_object() {
     let fixture = TestFixture::new();
@@ -105,6 +129,13 @@ fn test_update_deployment_object() {
     }
 }
 
+/// Tests the soft deletion of a deployment object.
+///
+/// This test:
+/// 1. Sets up a test fixture and creates a test deployment object.
+/// 2. Soft deletes the object.
+/// 3. Verifies that the object has a deletion timestamp.
+/// 4. Checks that the deleted object doesn't appear in the list of active objects.
 #[test]
 fn test_soft_delete_deployment_object() {
     let fixture = TestFixture::new();
@@ -130,6 +161,14 @@ fn test_soft_delete_deployment_object() {
     assert!(!active_objects.iter().any(|obj| obj.uuid == created_object.uuid));
 }
 
+/// Tests retrieving only active (non-deleted) deployment objects.
+///
+/// This test:
+/// 1. Sets up a test fixture and creates a test stack.
+/// 2. Creates two deployment objects.
+/// 3. Soft deletes one of the objects.
+/// 4. Retrieves active objects.
+/// 5. Verifies that only the non-deleted object is returned.
 #[test]
 fn test_get_active_deployment_objects() {
     let fixture = TestFixture::new();
