@@ -89,9 +89,17 @@ mod tests {
     use super::Settings;
 
     #[test]
-    fn test_settings() {
-        // Test creating settings with default values
+    /// Test the creation of Settings with default values
+    ///
+    /// This test ensures that:
+    /// 1. A Settings instance can be created successfully using the `new` method
+    /// 2. When no custom configuration is provided (None), the default values are set correctly
+    /// 3. Specifically, it checks that the default database URL is set to the expected value
+    fn test_settings_default_values() {
+        // Attempt to create settings with default values (no custom configuration)
         let settings = Settings::new(None).unwrap();
+
+        // Assert that the default database URL is set to the expected value
         assert_eq!(
             settings.database.url,
             "postgres://brokkr:brokkr@localhost:5432/brokkr"

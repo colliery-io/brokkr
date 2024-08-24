@@ -214,18 +214,28 @@ mod tests {
     use log::LevelFilter;
     use std::sync::mpsc;
     use std::time::Instant;
-
     use std::thread;
     use std::time::Duration;
-    
 
     #[test]
+    /// Verifies that the logger initializes correctly with the specified log level.
+    ///
+    /// This test:
+    /// 1. Initializes the logger with the "info" level
+    /// 2. Checks that initialization is successful
+    /// 3. Verifies that the current log level is set to Info
     fn test_init() {
         assert!(init("info").is_ok());
         assert_eq!(CURRENT_LEVEL.load(Ordering::Relaxed), LevelFilter::Info as usize);
     }
 
     #[test]
+    /// Tests the ability to update the log level after initialization.
+    ///
+    /// This test:
+    /// 1. Initializes the logger with "info" level
+    /// 2. Updates the log level to "debug" and verifies the change
+    /// 3. Updates the log level to "warn" and verifies the change
     fn test_update_log_level() {
         init("info").expect("Failed to initialize logger");
         
@@ -237,6 +247,11 @@ mod tests {
     }
 
     #[test]
+    /// Checks the logger's behavior when given invalid log levels.
+    ///
+    /// This test:
+    /// 1. Attempts to initialize with an invalid level, expecting it to default to Info
+    /// 2. Tries to update to another invalid level, expecting no change
     fn test_invalid_log_level() {
         assert!(init("invalid_level").is_ok());
         assert_eq!(CURRENT_LEVEL.load(Ordering::Relaxed), LevelFilter::Info as usize);
@@ -246,6 +261,10 @@ mod tests {
     }
 
     #[test]
+    /// Ensures that all log macros can be called without errors.
+    ///
+    /// This test initializes the logger at the debug level and calls each log macro.
+    /// It doesn't verify the output, only that the calls don't cause errors.
     fn test_log_macros() {
         init("debug").expect("Failed to initialize logger");
         
@@ -256,10 +275,16 @@ mod tests {
 
         assert!(true);
     }
+
     #[test]
+    /// Tests thread safety and performance of the logger under concurrent usage.
+    ///
+    /// This test:
+    /// 1. Spawns multiple threads that perform logging operations and level changes
+    /// 2. Measures the time taken for operations and the maximum time for a single log
+    /// 3. Verifies that all operations complete without errors or deadlocks
+    /// 4. Checks that no single log operation takes an unusually long time
     fn test_thread_safety_and_performance() {
-        // this test exists because of a dead lock we ran into while doing some basic testing. it might be over kill
-        // but overkill is under rated
         init("info").expect("Failed to initialize logger");
 
         let thread_count = 10;

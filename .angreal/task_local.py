@@ -1,6 +1,6 @@
 import angreal # type: ignore
 from utils import docker_up,docker_down, docker_clean, cwd
-
+import subprocess
 
 
 local = angreal.command_group(name="local", about="dev commands for"

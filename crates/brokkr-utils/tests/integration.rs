@@ -3,8 +3,16 @@ use std::env;
 use std::fs;
 use tempfile::tempdir;
 
-/// Test loading settings from both a file and environment variables
 #[test]
+/// Tests the loading of settings from both a file and environment variables.
+///
+/// This test:
+/// 1. Creates a temporary TOML configuration file with specific settings.
+/// 2. Sets an environment variable to override one of the settings.
+/// 3. Loads the settings using the Settings::new() method.
+/// 4. Verifies that settings are correctly loaded from the file.
+/// 5. Checks that the environment variable successfully overrides the file setting.
+/// 6. Cleans up the temporary resources after the test.
 fn test_settings_from_file_and_env() {
     // Create a temporary directory for our test file
     let temp_dir = tempdir().expect("Failed to create temp dir");
@@ -46,8 +54,16 @@ fn test_settings_from_file_and_env() {
     env::remove_var("BROKKR__LOG__LEVEL");
 }
 
-/// Test loading default settings
 #[test]
+/// Tests the loading of default settings when no configuration file is provided.
+///
+/// This test:
+/// 1. Calls Settings::new() with None as the config file path.
+/// 2. Verifies that the default settings are correctly loaded.
+/// 3. Checks specific default values for database URL and log level.
+///
+/// Note: This test assumes knowledge of the expected default values. If defaults
+/// change, this test will need to be updated accordingly.
 fn test_settings_default() {
     // Test loading default settings
     let settings = Settings::new(None).expect("Failed to load default settings");
@@ -55,11 +71,12 @@ fn test_settings_default() {
     assert_eq!(
         settings.database.url,
         "postgres://brokkr:brokkr@localhost:5432/brokkr",
+        "Default database URL should match the expected value"
     );
     
     assert_eq!(
         settings.log.level,
         "debug",
+        "Default log level should be set to 'debug'"
     );
-    // Add more assertions for default values as needed
 }
