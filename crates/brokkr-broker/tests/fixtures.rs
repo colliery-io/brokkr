@@ -100,7 +100,7 @@ impl TestFixture {
             format!("Test Event {}", Uuid::new_v4()),
             "success".to_string(),
             Some("Test event message".to_string()),
-        );
+        ).unwrap();
 
         self.dal.agent_events().create(&new_agent_event)
             .expect("Failed to create test agent event")

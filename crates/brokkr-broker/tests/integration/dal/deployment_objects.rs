@@ -30,12 +30,12 @@ fn test_create_deployment_object() {
     assert_eq!(created_object.is_deletion_marker, false);
 }
 
-/// Tests retrieving a single deployment object by its UUID.
+/// Tests retrieving a single deployment object by its id.
 ///
 /// This test:
 /// 1. Sets up a test fixture and creates a test stack.
 /// 2. Creates a new deployment object.
-/// 3. Retrieves the object using its UUID.
+/// 3. Retrieves the object using its id.
 /// 4. Verifies that the retrieved object matches the created object.
 #[test]
 fn test_get_deployment_object_by_id() {
@@ -51,10 +51,10 @@ fn test_get_deployment_object_by_id() {
     let created_object = fixture.dal.deployment_objects().create(&new_deployment_object)
         .expect("Failed to create deployment object");
 
-    let retrieved_object = fixture.dal.deployment_objects().get_by_id(created_object.uuid)
+    let retrieved_object = fixture.dal.deployment_objects().get_by_id(created_object.id)
         .expect("Failed to get deployment object");
 
-    assert_eq!(retrieved_object.uuid, created_object.uuid);
+    assert_eq!(retrieved_object.id, created_object.id);
     assert_eq!(retrieved_object.stack_id, stack_id);
 }
 
@@ -111,7 +111,7 @@ fn test_update_deployment_object() {
     updated_object.yaml_content = "updated_key: updated_value".to_string();
     updated_object.yaml_checksum = "updated_checksum".to_string();
 
-    let result = fixture.dal.deployment_objects().update(created_object.uuid, &updated_object);
+    let result = fixture.dal.deployment_objects().update(created_object.id, &updated_object);
 
     assert!(result.is_err());
     match result.unwrap_err() {
@@ -146,14 +146,14 @@ fn test_soft_delete_deployment_object() {
     let created_object = fixture.dal.deployment_objects().create(&new_deployment_object)
         .expect("Failed to create deployment object");
 
-    let deleted_object = fixture.dal.deployment_objects().soft_delete(created_object.uuid)
+    let deleted_object = fixture.dal.deployment_objects().soft_delete(created_object.id)
         .expect("Failed to soft delete deployment object");
 
     assert!(deleted_object.deleted_at.is_some());
 
     let active_objects = fixture.dal.deployment_objects().get_active()
         .expect("Failed to get active deployment objects");
-    assert!(!active_objects.iter().any(|obj| obj.uuid == created_object.uuid));
+    assert!(!active_objects.iter().any(|obj| obj.id == created_object.id));
 }
 
 /// Tests retrieving only active (non-deleted) deployment objects.
@@ -186,7 +186,7 @@ fn test_get_active_deployment_objects() {
     fixture.dal.deployment_objects().create(&new_deployment_object2)
         .expect("Failed to create deployment object 2");
 
-    fixture.dal.deployment_objects().soft_delete(created_object1.uuid)
+    fixture.dal.deployment_objects().soft_delete(created_object1.id)
         .expect("Failed to soft delete deployment object");
 
     let active_objects = fixture.dal.deployment_objects().get_active()

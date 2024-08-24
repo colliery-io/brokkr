@@ -50,7 +50,7 @@ impl<'a> DeploymentObjectsDAL<'a> {
 
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
 
-        deployment_objects.filter(uuid.eq(object_uuid)).first(conn)
+        deployment_objects.filter(id.eq(object_uuid)).first(conn)
     }
 
     /// Retrieves all deployment objects for a given stack, ordered by sequence_id.
@@ -88,7 +88,7 @@ impl<'a> DeploymentObjectsDAL<'a> {
 
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
 
-        diesel::update(deployment_objects.filter(uuid.eq(object_uuid)))
+        diesel::update(deployment_objects.filter(id.eq(object_uuid)))
             .set(updated_object)
             .get_result(conn)
     }
@@ -108,7 +108,7 @@ impl<'a> DeploymentObjectsDAL<'a> {
 
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
 
-        diesel::update(deployment_objects.filter(uuid.eq(object_uuid)))
+        diesel::update(deployment_objects.filter(id.eq(object_uuid)))
             .set(deleted_at.eq(now))
             .get_result(conn)
     }

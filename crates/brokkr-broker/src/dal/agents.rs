@@ -47,7 +47,7 @@ impl<'a> AgentsDAL<'a> {
         use brokkr_models::schema::agents::dsl::*;
         let conn = &mut self.dal.pool.get().unwrap();
 
-        let mut query = agents.filter(uuid.eq(uuid)).into_boxed();
+        let mut query = agents.filter(id.eq(uuid)).into_boxed();
 
         if !include_deleted {
             query = query.filter(deleted_at.is_null());
@@ -70,7 +70,7 @@ impl<'a> AgentsDAL<'a> {
         use brokkr_models::schema::agents::dsl::*;
         let conn = &mut self.dal.pool.get().unwrap();
         let now = Utc::now().naive_utc();
-        let result = diesel::update(agents.filter(uuid.eq(uuid)))
+        let result = diesel::update(agents.filter(id.eq(uuid)))
             .set(deleted_at.eq(now))
             .execute(conn);
         
@@ -114,7 +114,7 @@ impl<'a> AgentsDAL<'a> {
     /// Returns a Result containing the updated Agent on success, or a diesel::result::Error on failure.
     pub fn update(&self, uuid: Uuid, agent: &Agent) -> Result<Agent, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().unwrap();
-        diesel::update(agents::table.filter(agents::uuid.eq(uuid)))
+        diesel::update(agents::table.filter(agents::id.eq(uuid)))
             .set(agent)
             .get_result(conn)
     }
@@ -130,7 +130,7 @@ impl<'a> AgentsDAL<'a> {
     /// Returns a Result containing the updated Agent on success, or a diesel::result::Error on failure.
     pub fn update_heartbeat(&self, uuid: Uuid) -> Result<Agent, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().unwrap();
-        diesel::update(agents::table.filter(agents::uuid.eq(uuid)))
+        diesel::update(agents::table.filter(agents::id.eq(uuid)))
             .set(agents::last_heartbeat.eq(diesel::dsl::now))
             .get_result(conn)
     }
@@ -147,7 +147,7 @@ impl<'a> AgentsDAL<'a> {
     /// Returns a Result containing the updated Agent on success, or a diesel::result::Error on failure.
     pub fn update_status(&self, uuid: Uuid, status: &str) -> Result<Agent, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().unwrap();
-        diesel::update(agents::table.filter(agents::uuid.eq(uuid)))
+        diesel::update(agents::table.filter(agents::id.eq(uuid)))
             .set(agents::status.eq(status))
             .get_result(conn)
     }

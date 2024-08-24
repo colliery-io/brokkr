@@ -92,7 +92,7 @@ impl<'a> AgentEventsDAL<'a> {
     pub fn get(&self, event_uuid: Uuid) -> Result<Option<AgentEvent>, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         agent_events::table
-            .filter(agent_events::uuid.eq(event_uuid))
+            .filter(agent_events::id.eq(event_uuid))
             .filter(agent_events::deleted_at.is_null())
             .first(conn)
             .optional()
@@ -109,7 +109,7 @@ impl<'a> AgentEventsDAL<'a> {
     /// Returns a Result containing () on success, or a diesel::result::Error on failure.
     pub fn soft_delete(&self, event_uuid: Uuid) -> Result<(), diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
-        diesel::update(agent_events::table.filter(agent_events::uuid.eq(event_uuid)))
+        diesel::update(agent_events::table.filter(agent_events::id.eq(event_uuid)))
             .set(agent_events::deleted_at.eq(Utc::now().naive_utc()))
             .execute(conn)
             .map(|_| ())
@@ -127,7 +127,7 @@ impl<'a> AgentEventsDAL<'a> {
     pub fn get_including_deleted(&self, event_uuid: Uuid) -> Result<Option<AgentEvent>, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         agent_events::table
-            .filter(agent_events::uuid.eq(event_uuid))
+            .filter(agent_events::id.eq(event_uuid))
             .first(conn)
             .optional()
     }

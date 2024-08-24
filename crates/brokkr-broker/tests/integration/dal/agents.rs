@@ -29,19 +29,19 @@ fn test_create_agent() {
     assert!(created_agent.annotations.is_some());
 }
 
-/// Tests retrieving a single agent by its UUID.
+/// Tests retrieving a single agent by its id.
 ///
 /// This test:
 /// 1. Sets up a test fixture and inserts a test agent.
-/// 2. Retrieves the agent using its UUID.
+/// 2. Retrieves the agent using its id.
 /// 3. Verifies that the retrieved agent matches the inserted agent.
 #[test]
 fn test_get_agent() {
     let fixture = TestFixture::new();
     let created_agent = fixture.insert_test_agent();
 
-    let retrieved_agent = fixture.dal.agents().get(created_agent.uuid, false).unwrap();
-    assert_eq!(retrieved_agent.uuid, created_agent.uuid);
+    let retrieved_agent = fixture.dal.agents().get(created_agent.id, false).unwrap();
+    assert_eq!(retrieved_agent.id, created_agent.id);
     assert_eq!(retrieved_agent.name, created_agent.name);
     assert_eq!(retrieved_agent.cluster_name, created_agent.cluster_name);
 }
@@ -79,7 +79,7 @@ fn test_update_agent() {
     agent.name = "Updated Agent".to_string();
     agent.cluster_name = "Updated Cluster".to_string();
 
-    let updated_agent = fixture.dal.agents().update(agent.uuid, &agent)
+    let updated_agent = fixture.dal.agents().update(agent.id, &agent)
         .expect("Failed to update agent");
 
     assert_eq!(updated_agent.name, "Updated Agent");
@@ -97,10 +97,10 @@ fn test_soft_delete_agent() {
     let fixture = TestFixture::new();
     let created_agent = fixture.insert_test_agent();
 
-    fixture.dal.agents().soft_delete(created_agent.uuid)
+    fixture.dal.agents().soft_delete(created_agent.id)
         .expect("Failed to soft delete agent");
 
-    let retrieved_agent = fixture.dal.agents().get(created_agent.uuid, true);
+    let retrieved_agent = fixture.dal.agents().get(created_agent.id, true);
     assert!(retrieved_agent.is_ok());
 }
 
@@ -115,7 +115,7 @@ fn test_update_heartbeat() {
     let fixture = TestFixture::new();
     let created_agent = fixture.insert_test_agent();
 
-    let updated_agent = fixture.dal.agents().update_heartbeat(created_agent.uuid)
+    let updated_agent = fixture.dal.agents().update_heartbeat(created_agent.id)
         .expect("Failed to update heartbeat");
 
     assert!(updated_agent.last_heartbeat.is_some());
@@ -133,7 +133,7 @@ fn test_update_status() {
     let fixture = TestFixture::new();
     let created_agent = fixture.insert_test_agent();
 
-    let updated_agent = fixture.dal.agents().update_status(created_agent.uuid, "active")
+    let updated_agent = fixture.dal.agents().update_status(created_agent.id, "active")
         .expect("Failed to update status");
 
     assert_eq!(updated_agent.status, "active");
@@ -197,7 +197,7 @@ fn test_update_agent_labels_and_annotations() {
     updated_agent.labels = Some(json!(["updated_label".to_string()]));
     updated_agent.annotations = Some(json![("updated_key".to_string(), "updated_value".to_string())]);
 
-    let result = fixture.dal.agents().update(created_agent.uuid, &updated_agent).expect("Failed to update agent");
+    let result = fixture.dal.agents().update(created_agent.id, &updated_agent).expect("Failed to update agent");
 
     assert_eq!(result.labels, Some(json!(["updated_label".to_string()])));
     assert_eq!(result.annotations, Some(json![("updated_key".to_string(), "updated_value".to_string())]));
