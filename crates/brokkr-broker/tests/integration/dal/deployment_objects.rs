@@ -17,7 +17,6 @@ fn test_create_deployment_object() {
     let new_deployment_object = NewDeploymentObject::new(
         stack_id,
         "key: value".to_string(),
-        "checksum123".to_string(),
         false,
     ).expect("Failed to create NewDeploymentObject");
 
@@ -26,7 +25,7 @@ fn test_create_deployment_object() {
 
     assert_eq!(created_object.stack_id, stack_id);
     assert_eq!(created_object.yaml_content, "key: value");
-    assert_eq!(created_object.yaml_checksum, "checksum123");
+    assert_eq!(created_object.yaml_checksum,"b701870861d6ff0565b7078ee799ae7362323298a814d7af4d2dce6cb8d8b674");
     assert_eq!(created_object.sequence_id, 1);
     assert_eq!(created_object.is_deletion_marker, false);
 }
@@ -46,7 +45,6 @@ fn test_get_deployment_object_by_id() {
     let new_deployment_object = NewDeploymentObject::new(
         stack_id,
         "key: value".to_string(),
-        "checksum123".to_string(),
         false,
     ).expect("Failed to create NewDeploymentObject");
 
@@ -75,14 +73,12 @@ fn test_get_deployment_objects_by_stack_id() {
     let new_deployment_object1 = NewDeploymentObject::new(
         stack_id,
         "key1: value1".to_string(),
-        "checksum1".to_string(),
         false,
     ).expect("Failed to create NewDeploymentObject");
 
     let new_deployment_object2 = NewDeploymentObject::new(
         stack_id,
         "key2: value2".to_string(),
-        "checksum2".to_string(),
         false,
     ).expect("Failed to create NewDeploymentObject");
 
@@ -144,7 +140,6 @@ fn test_soft_delete_deployment_object() {
     let new_deployment_object = NewDeploymentObject::new(
         stack_id,
         "key: value".to_string(),
-        "checksum123".to_string(),
         false,
     ).expect("Failed to create NewDeploymentObject");
 
@@ -177,14 +172,12 @@ fn test_get_active_deployment_objects() {
     let new_deployment_object1 = NewDeploymentObject::new(
         stack_id,
         "key1: value1".to_string(),
-        "checksum1".to_string(),
         false,
     ).expect("Failed to create NewDeploymentObject");
 
     let new_deployment_object2 = NewDeploymentObject::new(
         stack_id,
         "key2: value2".to_string(),
-        "checksum2".to_string(),
         false,
     ).expect("Failed to create NewDeploymentObject");
 
@@ -201,4 +194,38 @@ fn test_get_active_deployment_objects() {
 
     assert_eq!(active_objects.len(), 1);
     assert_eq!(active_objects[0].sequence_id, 2);
+}
+
+/// Tests creating a deployment object with a duplicate YAML checksum.
+///
+/// This test:
+/// 1. Sets up a test fixture and creates a test stack.
+/// 2. Creates a new deployment object with a specific YAML content and checksum.
+/// 3. Attempts to create another deployment object with the same checksum.
+/// 4. Verifies that the second creation attempt results in an error.
+#[test]
+fn test_create_deployment_object_with_duplicate_checksum() {
+    let fixture = TestFixture::new();
+    let stack_id = fixture.insert_test_stack();
+
+    let yaml_content = "key: value".to_string();
+
+    let new_deployment_object1 = NewDeploymentObject::new(
+        stack_id,
+        yaml_content.clone(),
+        false,
+    ).expect("Failed to create NewDeploymentObject");
+
+    let new_deployment_object2 = NewDeploymentObject::new(
+        stack_id,
+        yaml_content.clone(),
+        false,
+    ).expect("Failed to create NewDeploymentObject");
+
+    fixture.dal.deployment_objects().create(&new_deployment_object1)
+        .expect("Failed to create first deployment object");
+
+    let result = fixture.dal.deployment_objects().create(&new_deployment_object2);
+    assert!(result.is_err());
+    // You may want to check for a specific error message or type here
 }

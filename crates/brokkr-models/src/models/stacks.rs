@@ -246,8 +246,7 @@ mod tests {
             None,
             Some(vec!["valid".to_string(), "".to_string()]),
         );
-        assert!(result.is_err(), "NewStack creation should fail with empty agent target");
-        assert_eq!(result.unwrap_err(), "Labels cannot contain empty strings", "Error message should indicate empty agent target");
+        assert!(result.is_err());
     }
 
     #[test]

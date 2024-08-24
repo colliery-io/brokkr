@@ -1,5 +1,6 @@
 use brokkr_models::models::stacks::{Stack, NewStack};
 use uuid::Uuid;
+use serde_json::json;
 
 use crate::fixtures::TestFixture;
 
@@ -204,4 +205,58 @@ fn test_get_active_stacks() {
     assert_eq!(active_stacks.len(), 1);
     assert_eq!(active_stacks[0].id, created_active.id);
     assert_eq!(active_stacks[0].name, "Active Stack");
+}
+
+/// Tests creating a stack with a duplicate name.
+///
+/// This test:
+/// 1. Sets up a test fixture.
+/// 2. Creates a new stack with a specific name.
+/// 3. Attempts to create another stack with the same name.
+/// 4. Verifies that the second creation attempt results in an error.
+#[test]
+fn test_create_stack_with_duplicate_name() {
+    let fixture = TestFixture::new();
+    
+    let stack_name = "Duplicate Stack Name".to_string();
+    
+    let new_stack1 = NewStack::new(stack_name.clone(), None, None, None, None)
+        .expect("Failed to create NewStack");
+    let new_stack2 = NewStack::new(stack_name.clone(), None, None, None, None)
+        .expect("Failed to create NewStack");
+
+    fixture.dal.stacks().create(&new_stack1).expect("Failed to create first stack");
+
+    let result = fixture.dal.stacks().create(&new_stack2);
+    assert!(result.is_err());
+    // You may want to check for a specific error message or type here
+}
+
+/// Tests updating a stack's agent target.
+///
+/// This test:
+/// 1. Sets up a test fixture.
+/// 2. Creates a new stack with an initial agent target.
+/// 3. Updates the stack with a new agent target.
+/// 4. Verifies that the stack's agent target is correctly updated.
+#[test]
+fn test_update_stack_agent_target() {
+    let fixture = TestFixture::new();
+    
+    let new_stack = NewStack::new(
+        "Test Stack".to_string(),
+        None,
+        None,
+        None,
+        Some(vec!["initial_agent".to_string()]),
+    ).expect("Failed to create NewStack");
+
+    let created_stack = fixture.dal.stacks().create(&new_stack).expect("Failed to create stack");
+
+    let mut updated_stack = created_stack.clone();
+    updated_stack.agent_target = Some(json!["updated_agent".to_string()]);
+
+    let result = fixture.dal.stacks().update(created_stack.id, &updated_stack).expect("Failed to update stack");
+
+    assert_eq!(result.agent_target, Some(json!["updated_agent".to_string()]));
 }

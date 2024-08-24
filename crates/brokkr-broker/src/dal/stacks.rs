@@ -116,4 +116,5 @@ impl<'a> StacksDAL<'a> {
 
         stacks.filter(deleted_at.is_null()).load(conn)
     }
+
 }

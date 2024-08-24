@@ -1,5 +1,7 @@
 use brokkr_models::models::agents::NewAgent;
 use crate::fixtures::TestFixture;
+use serde_json::json;
+
 
 /// Tests the creation of an agent.
 ///
@@ -135,4 +137,68 @@ fn test_update_status() {
         .expect("Failed to update status");
 
     assert_eq!(updated_agent.status, "active");
+}
+
+/// Tests creating an agent with a conflicting name/cluster pair
+///
+/// This test:
+/// 1. Sets up a test fixture.
+/// 2. Creates a new agent with a specific name.
+/// 3. Attempts to create another agent with the same name.
+/// 4. Verifies that the second creation attempt results in an error.
+#[test]
+fn test_create_agent_with_conflicting_name() {
+    let fixture = TestFixture::new();
+    
+    let agent_name = "Duplicate Agent Name".to_string();
+    
+    let new_agent1 = NewAgent::new(
+        agent_name.clone(),
+        "Cluster1".to_string(),
+        None,
+        None,
+    ).expect("Failed to create NewAgent");
+
+    let new_agent2 = NewAgent::new(
+        agent_name.clone(),
+        "Cluster1".to_string(),
+        None,
+        None,
+    ).expect("Failed to create NewAgent");
+
+    fixture.dal.agents().create(&new_agent1).expect("Failed to create first agent");
+
+    let result = fixture.dal.agents().create(&new_agent2);
+    assert!(result.is_err());
+    // You may want to check for a specific error message or type here
+}
+
+/// Tests updating an agent's labels and annotations.
+///
+/// This test:
+/// 1. Sets up a test fixture.
+/// 2. Creates a new agent with initial labels and annotations.
+/// 3. Updates the agent with new labels and annotations.
+/// 4. Verifies that the agent's labels and annotations are correctly updated.
+#[test]
+fn test_update_agent_labels_and_annotations() {
+    let fixture = TestFixture::new();
+    
+    let new_agent = NewAgent::new(
+        "Test Agent".to_string(),
+        "Test Cluster".to_string(),
+        Some(vec!["initial_label".to_string()]),
+        Some(vec![("initial_key".to_string(), "initial_value".to_string())]),
+    ).expect("Failed to create NewAgent");
+
+    let created_agent = fixture.dal.agents().create(&new_agent).expect("Failed to create agent");
+
+    let mut updated_agent = created_agent.clone();
+    updated_agent.labels = Some(json!(["updated_label".to_string()]));
+    updated_agent.annotations = Some(json![("updated_key".to_string(), "updated_value".to_string())]);
+
+    let result = fixture.dal.agents().update(created_agent.uuid, &updated_agent).expect("Failed to update agent");
+
+    assert_eq!(result.labels, Some(json!(["updated_label".to_string()])));
+    assert_eq!(result.annotations, Some(json![("updated_key".to_string(), "updated_value".to_string())]));
 }
