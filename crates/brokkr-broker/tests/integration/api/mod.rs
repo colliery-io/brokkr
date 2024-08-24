@@ -1,7 +1,7 @@
 mod agents;
 mod stacks;
 mod deployment_objects;
-// tests/api_integration_tests.rs
+mod agent_events;
 use axum::{
     body::Body,
     http::{Request, StatusCode, Method},

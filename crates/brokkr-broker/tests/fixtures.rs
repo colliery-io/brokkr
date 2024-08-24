@@ -266,3 +266,32 @@ pub async fn create_test_deployment_object(app: &Router, stack_id: Uuid) -> Depl
     let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
     serde_json::from_slice(&body).unwrap()
 }
+
+
+pub async fn create_test_agent_event(app: &Router, agent_id: Uuid, deployment_object_id: Uuid) -> AgentEvent {
+    let new_event = NewAgentEvent {
+        agent_id,
+        deployment_object_id,
+        event_type: "TEST_EVENT".to_string(),
+        status: "SUCCESS".to_string(),
+        message: Some("Test event message".to_string()),
+    };
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/agent-events")
+                .header("Content-Type", "application/json")
+                .body(Body::from(serde_json::to_string(&new_event).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+    serde_json::from_slice(&body).unwrap()
+}

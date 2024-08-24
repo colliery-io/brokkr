@@ -7,7 +7,7 @@ use crate::dal::DAL;
 pub mod agents;
 pub mod stacks;
 pub mod deployment_objects;
-// pub mod agent_events;
+pub mod agent_events;
 
 /// Shared state for the application
 #[derive(Clone)]
@@ -23,6 +23,6 @@ pub fn configure_api_routes(dal: DAL) -> Router {
         .merge(agents::configure_routes())
         .merge(stacks::configure_routes())
         .merge(deployment_objects::configure_routes())
-        // .merge(agent_events::configure_routes())
+        .merge(agent_events::configure_routes())
         .with_state(app_state)
 }
