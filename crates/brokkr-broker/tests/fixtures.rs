@@ -138,24 +138,6 @@ impl TestFixture {
             .expect("Failed to create test agent")
     }
 
-    /// Gets the next available sequence ID for a given stack.
-    ///
-    /// # Arguments
-    ///
-    /// * `stack_id` - The UUID of the stack.
-    ///
-    /// # Returns
-    ///
-    /// Returns the next available sequence ID as an i64.
-    fn get_next_sequence_id(&self, stack_id: Uuid) -> i64 {
-        let existing_objects = self.dal.deployment_objects().get_by_stack_id(stack_id)
-            .expect("Failed to get existing deployment objects");
-        
-        existing_objects.iter()
-            .map(|obj| obj.sequence_id)
-            .max()
-            .map_or(1, |max| max + 1)
-    }
 }
 
 impl Drop for TestFixture {

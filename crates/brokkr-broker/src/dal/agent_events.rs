@@ -8,7 +8,7 @@ use uuid::Uuid;
 use brokkr_models::models::agent_events::{AgentEvent, NewAgentEvent};
 use brokkr_models::schema::agent_events;
 use brokkr_models::schema::deployment_objects;
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use crate::dal::DAL;
 
 /// Represents the Data Access Layer for AgentEvent-related operations.

@@ -1,4 +1,3 @@
-use chrono::Utc;
 use uuid::Uuid;
 use brokkr_models::models::agent_events::NewAgentEvent;
 use crate::fixtures::TestFixture;
