@@ -43,11 +43,17 @@ impl<'a> AgentsDAL<'a> {
     ///
     /// Returns a Result containing the Agent if found, or a diesel::result::Error if not found or on failure.
     #[allow(unused_variables)]
-    pub fn get(&self, uuid: Uuid) -> Result<Agent, diesel::result::Error> {
+    pub fn get(&self, uuid: Uuid, include_deleted: bool) -> Result<Agent, diesel::result::Error> {
         use brokkr_models::schema::agents::dsl::*;
         let conn = &mut self.dal.pool.get().unwrap();
-        agents.filter(uuid.eq(uuid))
-            .first(conn)
+
+        let mut query = agents.filter(uuid.eq(uuid)).into_boxed();
+
+        if !include_deleted {
+            query = query.filter(deleted_at.is_null());
+        }
+    
+        query.first(conn)
     }
 
     /// Soft deletes an agent by setting its deleted_at timestamp.

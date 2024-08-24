@@ -6,11 +6,13 @@
 
 use brokkr_broker::dal::DAL;
 use brokkr_broker::db::create_shared_connection_pool;
+use brokkr_broker::api;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use diesel::connection::Connection;
 use dotenv::dotenv;
 use std::env;
 use uuid::Uuid;
+use axum::Router;
 
 use brokkr_models::models::{NewStack, DeploymentObject, NewDeploymentObject, NewAgent, Agent, AgentEvent, NewAgentEvent};
 
@@ -135,6 +137,15 @@ impl TestFixture {
 
         self.dal.agents().create(&new_agent)
             .expect("Failed to create test agent")
+    }
+
+    /// Creates and returns an Axum Router with configured API routes.
+    ///
+    /// # Returns
+    ///
+    /// Returns a configured Axum Router.
+    pub fn create_test_router(&self) -> Router {
+        api::configure_api_routes(self.dal.clone())
     }
 
 }

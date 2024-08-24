@@ -40,7 +40,7 @@ fn test_get_agent() {
     let fixture = TestFixture::new();
     let created_agent = fixture.insert_test_agent();
 
-    let retrieved_agent = fixture.dal.agents().get(created_agent.uuid).unwrap();
+    let retrieved_agent = fixture.dal.agents().get(created_agent.uuid, false).unwrap();
     assert_eq!(retrieved_agent.uuid, created_agent.uuid);
     assert_eq!(retrieved_agent.name, created_agent.name);
     assert_eq!(retrieved_agent.cluster_name, created_agent.cluster_name);
@@ -100,7 +100,7 @@ fn test_soft_delete_agent() {
     fixture.dal.agents().soft_delete(created_agent.uuid)
         .expect("Failed to soft delete agent");
 
-    let retrieved_agent = fixture.dal.agents().get(created_agent.uuid);
+    let retrieved_agent = fixture.dal.agents().get(created_agent.uuid, true);
     assert!(retrieved_agent.is_ok());
 }
 
