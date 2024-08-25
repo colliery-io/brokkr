@@ -1,6 +1,9 @@
 //! This module aggregates all API routes and provides a function to configure the main router.
 
 use axum::Router;
+use axum::{http::StatusCode,
+    routing::get
+    };
 use crate::dal::DAL;
 
 // Import submodules
@@ -24,5 +27,13 @@ pub fn configure_api_routes(dal: DAL) -> Router {
         .merge(stacks::configure_routes())
         .merge(deployment_objects::configure_routes())
         .merge(agent_events::configure_routes())
+        // .merge(
+        //     Router::new().route("/healthz", get(healthz))
+        // )
         .with_state(app_state)
 }
+
+
+
+
+
