@@ -19,10 +19,11 @@ async fn main() {
     // Initialize logger
     brokkr_utils::logging::init(&config.log.level).expect("Failed to initialize logger");
 
+    info!("Starting application");
     let connection_pool = create_shared_connection_pool(&config.database.url, "brokkr", 5);
     let dal = DAL::new(connection_pool.pool.clone());    
 
-    info!("tst");
+    
 
     // Configure API routes
     let app = api::configure_api_routes(dal);
