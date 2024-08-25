@@ -12,13 +12,14 @@ name = "brokkr-broker"
 path = "src/bin.rs"
 
 [dependencies]
+brokkr-models = { path = "../brokkr-models" }
+brokkr-utils = { path = "../brokkr-utils" }
+
 axum  = { workspace=true }
 tokio  = { workspace=true }
 r2d2  = { workspace=true }
 r2d2_postgres  = { workspace=true }
 postgres  = { workspace=true }
-brokkr-models = { path = "../brokkr-models" }
-brokkr-utils = { path = "../brokkr-utils" }
 diesel  = { workspace=true }
 diesel_migrations = { workspace=true }
 dotenv  = { workspace=true }

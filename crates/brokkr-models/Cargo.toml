@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 brokkr-utils = { path = "../brokkr-utils" }
+
 diesel = { workspace = true }
 uuid = { workspace = true }
 serde = { workspace = true }
