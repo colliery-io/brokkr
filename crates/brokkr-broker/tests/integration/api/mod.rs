@@ -6,7 +6,7 @@ mod agent_events;
 
 use axum::{
     body::Body,
-    http::{Request, StatusCode, Method},
+    http::{Request, StatusCode},
 };
 
 use tower::ServiceExt;
