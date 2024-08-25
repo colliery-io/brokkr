@@ -2,7 +2,8 @@
 
 use axum::Router;
 use axum::{http::StatusCode,
-    routing::get
+    routing::get,
+    response::IntoResponse
     };
 use crate::dal::DAL;
 
@@ -27,13 +28,14 @@ pub fn configure_api_routes(dal: DAL) -> Router {
         .merge(stacks::configure_routes())
         .merge(deployment_objects::configure_routes())
         .merge(agent_events::configure_routes())
-        // .merge(
-        //     Router::new().route("/healthz", get(healthz))
-        // )
+        .route("/healthz", get(healthz))
         .with_state(app_state)
 }
 
 
 
-
+// Define the healthz handler
+async fn healthz() -> impl IntoResponse {
+    (StatusCode::OK, "OK")
+}
 
