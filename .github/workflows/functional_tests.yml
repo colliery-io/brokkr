@@ -1,12 +1,10 @@
+---
 name: Functional Tests
-
 on:
   workflow_call:
-
 env:
   CARGO_TERM_COLOR: always
   DATABASE_URL: postgres://brokkr:brokkr@localhost:5432/brokkr
-
 jobs:
   functional_tests:
     runs-on: ubuntu-latest
@@ -17,8 +15,7 @@ jobs:
           POSTGRES_USER: brokkr
           POSTGRES_PASSWORD: brokkr
           POSTGRES_DB: brokkr
-        ports:
-          - 5432:5432
+        ports: [5432:5432]
         options: >-
           --health-cmd pg_isready
           --health-interval 10s

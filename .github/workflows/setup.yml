@@ -1,51 +1,43 @@
-# .github/workflows/setup.yml
+---
 name: Setup
-
 on:
   workflow_call:
-
 jobs:
   setup:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
-    
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.x'
-    
-    - name: Install angreal
-      run: |
-        python -m pip install --upgrade pip
-        pip install angreal
-    
-    - name: Set up Rust
-      uses: actions-rs/toolchain@v1
-      with:
-        profile: minimal
-        toolchain: stable
-        override: true
-    
-    - name: Cache dependencies
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/.cargo/registry
-          ~/.cargo/git
-          target
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-    
-    - name: Build workspace
-      uses: actions-rs/cargo@v1
-      with:
-        command: build
-        args: --workspace --all-targets
-    
-    - name: Cache build
-      uses: actions/cache@v3
-      with:
-        path: target
-        key: ${{ runner.os }}-rust-build-${{ github.sha }}
-        restore-keys: |
-          ${{ runner.os }}-rust-build-
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.x
+      - name: Install angreal
+        run: |
+          python -m pip install --upgrade pip
+          pip install angreal
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - name: Cache dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: Build workspace
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --workspace --all-targets
+      - name: Cache build
+        uses: actions/cache@v3
+        with:
+          path: target
+          key: ${{ runner.os }}-rust-build-${{ github.sha }}
+          restore-keys: |-
+            ${{ runner.os }}-rust-build-
