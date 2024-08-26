@@ -52,4 +52,3 @@ def docs():
             "cargo doc --open --no-deps --document-private-items"
         ], cwd=cwd, shell=True
     )
-    

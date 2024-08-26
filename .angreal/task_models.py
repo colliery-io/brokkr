@@ -47,7 +47,7 @@ INSERT INTO temp_stack_id SELECT id FROM new_stack;
 
 -- 2. Create some test deployment objects
 INSERT INTO deployment_objects (stack_id, yaml_content, yaml_checksum, is_deletion_marker)
-VALUES 
+VALUES
 ((SELECT id FROM temp_stack_id), 'apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: test-config', md5('test-content-1'), FALSE),
 ((SELECT id FROM temp_stack_id), 'apiVersion: v1\nkind: Secret\nmetadata:\n  name: test-secret', md5('test-content-2'), FALSE);
 
@@ -60,7 +60,7 @@ VALUES ('test-agent', 'test-cluster', 'ACTIVE');
 
 -- 5. Create some test agent events
 INSERT INTO agent_events (agent_id, deployment_object_id, event_type, status, message)
-SELECT 
+SELECT
     (SELECT id FROM agents WHERE name = 'test-agent'),
     id,
     'APPLIED',
@@ -80,7 +80,7 @@ UPDATE stacks SET deleted_at = NOW() WHERE id = (SELECT id FROM temp_stack_id);
 SELECT * FROM deployment_objects WHERE stack_id = (SELECT id FROM temp_stack_id) ORDER BY sequence_id;
 
 -- Check if a deletion marker was created
-SELECT * FROM deployment_objects 
+SELECT * FROM deployment_objects
 WHERE stack_id = (SELECT id FROM temp_stack_id) AND is_deletion_marker = TRUE;
 
 -- 9. Test updating a deployment object (should fail due to prevent_deployment_object_changes trigger)
@@ -119,9 +119,9 @@ CREATE OR REPLACE FUNCTION print_tables() RETURNS void AS $$
 DECLARE
     table_name text;
 BEGIN
-    FOR table_name IN 
-        SELECT tablename 
-        FROM pg_tables 
+    FOR table_name IN
+        SELECT tablename
+        FROM pg_tables
         WHERE schemaname = 'public'
         ORDER BY tablename
     LOOP
@@ -150,7 +150,7 @@ def test():
     import tempfile
 
     # The SQL script to execute
-    
+
     def run_sql_in_docker(sql):
         # Write the SQL to a temporary file
         with tempfile.NamedTemporaryFile(mode='w', suffix='.sql', delete=False) as temp_sql_file:
@@ -159,24 +159,24 @@ def test():
 
         # Command to copy the SQL file into the container
         copy_cmd = f"docker cp {temp_sql_file_path} brokkr-dev-postgres-1:/tmp/test_script.sql"
-        
+
         # Command to execute the SQL script in the container
         exec_cmd = "docker exec brokkr-dev-postgres-1 psql -U brokkr -d brokkr -f /tmp/test_script.sql"
-        
+
         try:
             # Copy the SQL file to the container
             subprocess.run(copy_cmd, shell=True, check=True)
-            
+
             # Execute the SQL script
             result = subprocess.run(exec_cmd, shell=True, check=True, capture_output=True, text=True)
-            
+
             # Print the output
             print(result.stdout)
-            
+
             if result.stderr:
                 print("Errors or notices:")
                 print(result.stderr)
-        
+
         except subprocess.CalledProcessError as e:
             print(f"An error occurred: {e}")
             if e.output:
@@ -184,10 +184,10 @@ def test():
             if e.stderr:
                 print(f"Error: {e.stderr}")
 
-    # Run our migrations 
+    # Run our migrations
     migration_files = []
     migrations = os.path.join(brokkr_models_dir,'migrations')
-    
+
     for root,dirs,files in os.walk(migrations):
         for f in files:
             if f.endswith('up.sql'):
@@ -195,7 +195,7 @@ def test():
     migration_files.sort()
 
 
-    
+
     for f in migration_files:
         run_sql_in_docker(open(f,'r').read())
     # Run the SQL script

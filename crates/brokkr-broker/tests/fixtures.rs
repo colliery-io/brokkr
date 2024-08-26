@@ -4,21 +4,25 @@
 //! and insert test data for various entities like stacks, agents, deployment objects,
 //! and agent events.
 
+use axum::body::to_bytes;
+use axum::body::Body;
+use axum::Router;
+use brokkr_broker::api;
 use brokkr_broker::dal::DAL;
 use brokkr_broker::db::create_shared_connection_pool;
-use brokkr_broker::api;
-use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use diesel::connection::Connection;
+use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use dotenv::dotenv;
+use hyper::{Method, Request, StatusCode};
 use std::env;
+use std::usize;
+use tower::util::ServiceExt;
 use uuid::Uuid;
-use axum::Router;
-use tower::ServiceExt;
-use hyper::{Request, Method, Body,StatusCode};
 
-
-
-use brokkr_models::models::{NewStack, Stack, DeploymentObject, NewDeploymentObject, NewAgent, Agent, AgentEvent, NewAgentEvent};
+use brokkr_models::models::{
+    Agent, AgentEvent, DeploymentObject, NewAgent, NewAgentEvent, NewDeploymentObject, NewStack,
+    Stack,
+};
 
 /// Embedded migrations for the test database.
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("../brokkr-models/migrations");
@@ -49,16 +53,21 @@ impl TestFixture {
     pub fn new() -> Self {
         dotenv().ok();
         let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-        
+
         let connection_pool = create_shared_connection_pool(&database_url, "brokkr", 5);
         let dal = DAL::new(connection_pool.pool.clone());
 
         // Run migrations
-        let mut conn = connection_pool.pool.get().expect("Failed to get DB connection");
-        conn.begin_test_transaction().expect("Failed to start test transaction");
-        
+        let mut conn = connection_pool
+            .pool
+            .get()
+            .expect("Failed to get DB connection");
+        conn.begin_test_transaction()
+            .expect("Failed to start test transaction");
+
         // This runs the migrations within the transaction
-        conn.run_pending_migrations(MIGRATIONS).expect("Failed to run migrations");
+        conn.run_pending_migrations(MIGRATIONS)
+            .expect("Failed to run migrations");
 
         TestFixture { dal }
     }
@@ -70,16 +79,20 @@ impl TestFixture {
     /// Returns the UUID of the created stack.
     pub fn insert_test_stack(&self) -> Uuid {
         let new_stack = NewStack::new(
-            format!("Test Stack {}", Uuid::new_v4()),  // Ensure unique name
+            format!("Test Stack {}", Uuid::new_v4()), // Ensure unique name
             Some("Test Description".to_string()),
             Some(vec!["test".to_string()]),
             Some(vec![("key".to_string(), "value".to_string())]),
             Some(vec!["agent1".to_string()]),
-        ).expect("Failed to create NewStack");
+        )
+        .expect("Failed to create NewStack");
 
-        let created_stack = self.dal.stacks().create(&new_stack)
+        let created_stack = self
+            .dal
+            .stacks()
+            .create(&new_stack)
             .expect("Failed to create stack");
-        
+
         created_stack.id
     }
 
@@ -93,16 +106,23 @@ impl TestFixture {
     /// # Returns
     ///
     /// Returns the created AgentEvent.
-    pub fn insert_test_agent_event(&self, agent_id: Uuid, deployment_object_id: Uuid) -> AgentEvent {
+    pub fn insert_test_agent_event(
+        &self,
+        agent_id: Uuid,
+        deployment_object_id: Uuid,
+    ) -> AgentEvent {
         let new_agent_event = NewAgentEvent::new(
             agent_id,
             deployment_object_id,
             format!("Test Event {}", Uuid::new_v4()),
             "success".to_string(),
             Some("Test event message".to_string()),
-        ).unwrap();
+        )
+        .unwrap();
 
-        self.dal.agent_events().create(&new_agent_event)
+        self.dal
+            .agent_events()
+            .create(&new_agent_event)
             .expect("Failed to create test agent event")
     }
 
@@ -118,11 +138,14 @@ impl TestFixture {
     pub fn insert_test_deployment_object(&self, stack_id: Uuid) -> DeploymentObject {
         let new_deployment_object = NewDeploymentObject::new(
             stack_id,
-            format!("key: value{}", Uuid::new_v4()),  // Ensure unique content
+            format!("key: value{}", Uuid::new_v4()), // Ensure unique content
             false,
-        ).expect("Failed to create NewDeploymentObject");
+        )
+        .expect("Failed to create NewDeploymentObject");
 
-        self.dal.deployment_objects().create(&new_deployment_object)
+        self.dal
+            .deployment_objects()
+            .create(&new_deployment_object)
             .expect("Failed to create deployment object")
     }
 
@@ -137,9 +160,12 @@ impl TestFixture {
             "Test Cluster".to_string(),
             Some(vec!["test".to_string(), "fixture".to_string()]),
             Some(vec![("key".to_string(), "value".to_string())]),
-        ).expect("Failed to create NewAgent");
+        )
+        .expect("Failed to create NewAgent");
 
-        self.dal.agents().create(&new_agent)
+        self.dal
+            .agents()
+            .create(&new_agent)
             .expect("Failed to create test agent")
     }
 
@@ -151,7 +177,6 @@ impl TestFixture {
     pub fn create_test_router(&self) -> Router {
         api::configure_api_routes(self.dal.clone())
     }
-
 }
 
 impl Drop for TestFixture {
@@ -160,14 +185,14 @@ impl Drop for TestFixture {
     }
 }
 
-
 pub async fn create_test_agent(app: &axum::Router) -> Agent {
     let new_agent = NewAgent::new(
         "Test Agent".to_string(),
         "Test Cluster".to_string(),
         Some(vec!["test".to_string()]),
         Some(vec![("key".to_string(), "value".to_string())]),
-    ).unwrap();
+    )
+    .unwrap();
 
     let create_response = app
         .clone()
@@ -184,11 +209,11 @@ pub async fn create_test_agent(app: &axum::Router) -> Agent {
 
     assert_eq!(create_response.status(), StatusCode::CREATED);
 
-    let body = hyper::body::to_bytes(create_response.into_body()).await.unwrap();
+    let body = to_bytes(create_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
     serde_json::from_slice(&body).unwrap()
 }
-
-
 
 pub async fn create_test_stack(app: &Router) -> Stack {
     let new_stack = NewStack {
@@ -213,17 +238,22 @@ pub async fn create_test_stack(app: &Router) -> Stack {
         .unwrap();
 
     let status = response.status();
-    let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body_str = String::from_utf8_lossy(&body);
 
     println!("Stack creation response status: {}", status);
     println!("Stack creation response body: {}", body_str);
 
-    assert_eq!(status, StatusCode::OK, "Failed to create stack. Status: {}, Body: {}", status, body_str);
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "Failed to create stack. Status: {}, Body: {}",
+        status,
+        body_str
+    );
 
     serde_json::from_slice(&body).unwrap()
 }
-
 
 /// Creates a test deployment object and returns it.
 ///
@@ -239,8 +269,6 @@ pub async fn create_test_stack(app: &Router) -> Stack {
 ///
 /// The created DeploymentObject
 pub async fn create_test_deployment_object(app: &Router, stack_id: Uuid) -> DeploymentObject {
-
-    
     let new_deployment_object = NewDeploymentObject {
         stack_id: stack_id,
         yaml_content: "test: content".to_string(),
@@ -255,7 +283,9 @@ pub async fn create_test_deployment_object(app: &Router, stack_id: Uuid) -> Depl
                 .method(Method::POST)
                 .uri("/deployment-objects")
                 .header("Content-Type", "application/json")
-                .body(Body::from(serde_json::to_string(&new_deployment_object).unwrap()))
+                .body(Body::from(
+                    serde_json::to_string(&new_deployment_object).unwrap(),
+                ))
                 .unwrap(),
         )
         .await
@@ -263,12 +293,15 @@ pub async fn create_test_deployment_object(app: &Router, stack_id: Uuid) -> Depl
 
     assert_eq!(response.status(), StatusCode::CREATED);
 
-    let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     serde_json::from_slice(&body).unwrap()
 }
 
-
-pub async fn create_test_agent_event(app: &Router, agent_id: Uuid, deployment_object_id: Uuid) -> AgentEvent {
+pub async fn create_test_agent_event(
+    app: &Router,
+    agent_id: Uuid,
+    deployment_object_id: Uuid,
+) -> AgentEvent {
     let new_event = NewAgentEvent {
         agent_id,
         deployment_object_id,
@@ -292,6 +325,6 @@ pub async fn create_test_agent_event(app: &Router, agent_id: Uuid, deployment_ob
 
     assert_eq!(response.status(), StatusCode::CREATED);
 
-    let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     serde_json::from_slice(&body).unwrap()
 }

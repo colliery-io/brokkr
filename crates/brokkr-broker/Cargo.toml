@@ -27,15 +27,6 @@ uuid  = { workspace=true }
 url  = { workspace=true }
 chrono  = { workspace=true }
 serde  = { workspace=true }
-
-
-
-
-
-
-[dev-dependencies]
-tokio = { version = "1.0", features = ["full", "test-util"] }
-axum = "0.6"
-hyper = { version = "0.14", features = ["full"] }
-tower = "0.4"
-serde_json = "1.0"
+hyper = { workspace=true }
+tower = { workspace=true }
+serde_json = { workspace=true }

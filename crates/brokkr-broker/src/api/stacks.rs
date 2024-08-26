@@ -1,4 +1,3 @@
-
 //! # Stacks API Module
 //!
 //! This module provides the API endpoints for managing Stack entities using Axum.
@@ -7,18 +6,15 @@
 //! as well as listing all active stacks. The module uses the Axum web framework
 //! and interacts with a data access layer (DAL) to perform operations on Stack entities.
 
-
+use crate::api::AppState;
 use axum::{
     extract::{Path, State},
     http::StatusCode,
-    Json,
-    routing::{get, post, put, delete},
-    Router,
+    routing::{delete, get, post, put},
+    Json, Router,
 };
-use brokkr_models::models::stacks::{Stack, NewStack};
+use brokkr_models::models::stacks::{NewStack, Stack};
 use uuid::Uuid;
-use crate::api::AppState;
-
 
 /// Configures the stacks API routes.
 ///
@@ -41,7 +37,6 @@ pub fn configure_routes() -> Router<AppState> {
         .route("/stacks/:id", delete(delete_stack))
 }
 
-
 /// Handler for listing all active stacks.
 ///
 /// # Arguments
@@ -54,11 +49,13 @@ pub fn configure_routes() -> Router<AppState> {
 async fn list_stacks(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<Stack>>, (StatusCode, String)> {
-    state.dal.stacks().get_active()
+    state
+        .dal
+        .stacks()
+        .get_active()
         .map(Json)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
 }
-
 
 /// Handler for creating a new stack.
 ///
@@ -74,11 +71,13 @@ async fn create_stack(
     State(state): State<AppState>,
     Json(new_stack): Json<NewStack>,
 ) -> Result<Json<Stack>, (StatusCode, String)> {
-    state.dal.stacks().create(&new_stack)
+    state
+        .dal
+        .stacks()
+        .create(&new_stack)
         .map(Json)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
 }
-
 
 /// Handler for retrieving a stack by UUID.
 ///
@@ -95,14 +94,18 @@ async fn get_stack(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Stack>, (StatusCode, String)> {
-    state.dal.stacks().get_by_id(id)
+    state
+        .dal
+        .stacks()
+        .get_by_id(id)
         .map(Json)
         .map_err(|e| match e {
-            diesel::result::Error::NotFound => (StatusCode::NOT_FOUND, "Stack not found".to_string()),
+            diesel::result::Error::NotFound => {
+                (StatusCode::NOT_FOUND, "Stack not found".to_string())
+            }
             _ => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
         })
 }
-
 
 /// Handler for updating a stack.
 ///
@@ -121,14 +124,18 @@ async fn update_stack(
     Path(id): Path<Uuid>,
     Json(updated_stack): Json<Stack>,
 ) -> Result<Json<Stack>, (StatusCode, String)> {
-    state.dal.stacks().update(id, &updated_stack)
+    state
+        .dal
+        .stacks()
+        .update(id, &updated_stack)
         .map(Json)
         .map_err(|e| match e {
-            diesel::result::Error::NotFound => (StatusCode::NOT_FOUND, "Stack not found".to_string()),
+            diesel::result::Error::NotFound => {
+                (StatusCode::NOT_FOUND, "Stack not found".to_string())
+            }
             _ => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
         })
 }
-
 
 /// Handler for soft-deleting a stack.
 ///
@@ -145,10 +152,15 @@ async fn delete_stack(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, (StatusCode, String)> {
-    state.dal.stacks().soft_delete(id)
+    state
+        .dal
+        .stacks()
+        .soft_delete(id)
         .map(|_| StatusCode::NO_CONTENT)
         .map_err(|e| match e {
-            diesel::result::Error::NotFound => (StatusCode::NOT_FOUND, "Stack not found".to_string()),
+            diesel::result::Error::NotFound => {
+                (StatusCode::NOT_FOUND, "Stack not found".to_string())
+            }
             _ => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
         })
 }

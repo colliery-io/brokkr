@@ -16,16 +16,18 @@
 //! - `status`: String - Status of the event (max 10 characters)
 //! - `message`: Option<String> - Optional message providing additional details about the event
 
+use crate::schema::agent_events;
 use chrono::{DateTime, Utc};
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use crate::schema::agent_events;
 
 /// Represents an agent event in the system.
 ///
 /// This struct is used for querying existing agent events from the database.
-#[derive(Queryable, Selectable, Identifiable, Debug, Clone, Serialize, Deserialize, AsChangeset)]
+#[derive(
+    Queryable, Selectable, Identifiable, Debug, Clone, Serialize, Deserialize, AsChangeset,
+)]
 #[diesel(table_name = agent_events)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct AgentEvent {
@@ -126,13 +128,31 @@ mod tests {
             message.clone(),
         );
 
-        assert!(result.is_ok(), "NewAgentEvent creation should succeed with valid inputs");
+        assert!(
+            result.is_ok(),
+            "NewAgentEvent creation should succeed with valid inputs"
+        );
         let new_event = result.unwrap();
-        assert_eq!(new_event.agent_id, agent_id, "agent_id should match the input value");
-        assert_eq!(new_event.deployment_object_id, deployment_object_id, "deployment_object_id should match the input value");
-        assert_eq!(new_event.event_type, event_type, "event_type should match the input value");
-        assert_eq!(new_event.status, status, "status should match the input value");
-        assert_eq!(new_event.message, message, "message should match the input value");
+        assert_eq!(
+            new_event.agent_id, agent_id,
+            "agent_id should match the input value"
+        );
+        assert_eq!(
+            new_event.deployment_object_id, deployment_object_id,
+            "deployment_object_id should match the input value"
+        );
+        assert_eq!(
+            new_event.event_type, event_type,
+            "event_type should match the input value"
+        );
+        assert_eq!(
+            new_event.status, status,
+            "status should match the input value"
+        );
+        assert_eq!(
+            new_event.message, message,
+            "message should match the input value"
+        );
     }
 
     #[test]
@@ -146,8 +166,15 @@ mod tests {
             "success".to_string(),
             None,
         );
-        assert!(result.is_err(), "NewAgentEvent creation should fail with an event_type longer than 50 characters");
-        assert_eq!(result.unwrap_err(), "Event type cannot exceed 50 characters", "Error message should indicate the event_type is too long");
+        assert!(
+            result.is_err(),
+            "NewAgentEvent creation should fail with an event_type longer than 50 characters"
+        );
+        assert_eq!(
+            result.unwrap_err(),
+            "Event type cannot exceed 50 characters",
+            "Error message should indicate the event_type is too long"
+        );
     }
 
     #[test]
@@ -161,8 +188,15 @@ mod tests {
             long_status,
             None,
         );
-        assert!(result.is_err(), "NewAgentEvent creation should fail with a status longer than 10 characters");
-        assert_eq!(result.unwrap_err(), "Status cannot exceed 10 characters", "Error message should indicate the status is too long");
+        assert!(
+            result.is_err(),
+            "NewAgentEvent creation should fail with a status longer than 10 characters"
+        );
+        assert_eq!(
+            result.unwrap_err(),
+            "Status cannot exceed 10 characters",
+            "Error message should indicate the status is too long"
+        );
     }
 
     #[test]
@@ -175,7 +209,10 @@ mod tests {
             "fail".to_string(),
             Some("Test failure message".to_string()),
         );
-        assert!(result.is_ok(), "NewAgentEvent creation should succeed with a 'fail' status");
+        assert!(
+            result.is_ok(),
+            "NewAgentEvent creation should succeed with a 'fail' status"
+        );
         let new_event = result.unwrap();
         assert_eq!(new_event.status, "fail", "status should be set to 'fail'");
     }

@@ -1,17 +1,15 @@
 use axum::{
-    body::Body,
-    http::{Request, StatusCode, Method},
+    body::{to_bytes, Body},
+    http::{Method, Request, StatusCode},
 };
 
 use tower::ServiceExt;
 
-
 use brokkr_models::models::deployment_objects::DeploymentObject;
-
 
 // Import the TestFixture and helper functions
 use crate::fixtures::TestFixture;
-use crate::fixtures::{create_test_stack, create_test_deployment_object};
+use crate::fixtures::{create_test_deployment_object, create_test_stack};
 
 #[tokio::test]
 async fn test_create_deployment_object() {
@@ -32,7 +30,7 @@ async fn test_get_deployment_object() {
     let stack = create_test_stack(&app).await;
     let created_object = create_test_deployment_object(&app, stack.id).await;
 
-    let get_response = app
+    let response = app
         .clone()
         .oneshot(
             Request::builder()
@@ -44,9 +42,9 @@ async fn test_get_deployment_object() {
         .await
         .unwrap();
 
-    assert_eq!(get_response.status(), StatusCode::OK);
+    assert_eq!(response.status(), StatusCode::OK);
 
-    let body = hyper::body::to_bytes(get_response.into_body()).await.unwrap();
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let retrieved_object: DeploymentObject = serde_json::from_slice(&body).unwrap();
     assert_eq!(retrieved_object.id, created_object.id);
 }
@@ -59,7 +57,7 @@ async fn test_list_deployment_objects() {
     let stack = create_test_stack(&app).await;
     let created_object = create_test_deployment_object(&app, stack.id).await;
 
-    let list_response = app
+    let response = app
         .clone()
         .oneshot(
             Request::builder()
@@ -71,9 +69,9 @@ async fn test_list_deployment_objects() {
         .await
         .unwrap();
 
-    assert_eq!(list_response.status(), StatusCode::OK);
+    assert_eq!(response.status(), StatusCode::OK);
 
-    let body = hyper::body::to_bytes(list_response.into_body()).await.unwrap();
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let objects: Vec<DeploymentObject> = serde_json::from_slice(&body).unwrap();
     assert!(objects.iter().any(|o| o.id == created_object.id));
 }
@@ -89,9 +87,12 @@ async fn test_update_deployment_object_immutability() {
     let mut updated_object = created_object.clone();
     updated_object.yaml_content = "updated: content".to_string();
 
-    println!("Sending update request for deployment object: {:?}", updated_object);
+    println!(
+        "Sending update request for deployment object: {:?}",
+        updated_object
+    );
 
-    let update_response = app
+    let response = app
         .clone()
         .oneshot(
             Request::builder()
@@ -104,15 +105,22 @@ async fn test_update_deployment_object_immutability() {
         .await
         .unwrap();
 
-    let status = update_response.status();
-    let body = hyper::body::to_bytes(update_response.into_body()).await.unwrap();
+    let status = response.status();
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body_str = String::from_utf8_lossy(&body);
 
     println!("Update response status: {}", status);
     println!("Update response body: {}", body_str);
 
-    assert_eq!(status, StatusCode::BAD_REQUEST, "Expected update to be rejected");
-    assert!(body_str.contains("cannot be modified"), "Error message should indicate that modification is not allowed");
+    assert_eq!(
+        status,
+        StatusCode::BAD_REQUEST,
+        "Expected update to be rejected"
+    );
+    assert!(
+        body_str.contains("cannot be modified"),
+        "Error message should indicate that modification is not allowed"
+    );
 }
 
 #[tokio::test]
@@ -160,7 +168,7 @@ async fn test_list_active_deployment_objects() {
     let stack = create_test_stack(&app).await;
     let created_object = create_test_deployment_object(&app, stack.id).await;
 
-    let list_response = app
+    let response = app
         .clone()
         .oneshot(
             Request::builder()
@@ -172,9 +180,9 @@ async fn test_list_active_deployment_objects() {
         .await
         .unwrap();
 
-    assert_eq!(list_response.status(), StatusCode::OK);
+    assert_eq!(response.status(), StatusCode::OK);
 
-    let body = hyper::body::to_bytes(list_response.into_body()).await.unwrap();
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let active_objects: Vec<DeploymentObject> = serde_json::from_slice(&body).unwrap();
     assert!(active_objects.iter().any(|o| o.id == created_object.id));
 }

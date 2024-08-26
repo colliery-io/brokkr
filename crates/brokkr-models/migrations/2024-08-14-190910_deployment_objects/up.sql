@@ -59,11 +59,11 @@ BEGIN
     -- Delete all agent events associated with the deleted deployment objects
     DELETE FROM agent_events
     WHERE deployment_object_id IN (
-        SELECT id 
-        FROM deployment_objects 
+        SELECT id
+        FROM deployment_objects
         WHERE stack_id = OLD.id
     );
-    
+
     -- Delete all deployment objects for the stack, including the deletion marker
     DELETE FROM deployment_objects
     WHERE stack_id = OLD.id;

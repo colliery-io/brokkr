@@ -3,13 +3,13 @@
 //! It uses Diesel ORM for database operations and includes functionality for creating,
 //! retrieving, listing, and soft-deleting agent events.
 
-use diesel::prelude::*;
-use uuid::Uuid;
+use crate::dal::DAL;
 use brokkr_models::models::agent_events::{AgentEvent, NewAgentEvent};
 use brokkr_models::schema::agent_events;
 use brokkr_models::schema::deployment_objects;
 use chrono::Utc;
-use crate::dal::DAL;
+use diesel::prelude::*;
+use uuid::Uuid;
 
 /// Represents the Data Access Layer for AgentEvent-related operations.
 pub struct AgentEventsDAL<'a> {
@@ -77,7 +77,9 @@ impl<'a> AgentEventsDAL<'a> {
             .filter(agent_events::deleted_at.is_null())
             .order(agent_events::created_at.desc());
 
-        query.select(agent_events::all_columns).load::<AgentEvent>(conn)
+        query
+            .select(agent_events::all_columns)
+            .load::<AgentEvent>(conn)
     }
 
     /// Retrieves a non-deleted agent event by its UUID.
@@ -124,7 +126,10 @@ impl<'a> AgentEventsDAL<'a> {
     /// # Returns
     ///
     /// Returns a Result containing an Option<AgentEvent> if found (including deleted events), or a diesel::result::Error on failure.
-    pub fn get_including_deleted(&self, event_uuid: Uuid) -> Result<Option<AgentEvent>, diesel::result::Error> {
+    pub fn get_including_deleted(
+        &self,
+        event_uuid: Uuid,
+    ) -> Result<Option<AgentEvent>, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         agent_events::table
             .filter(agent_events::id.eq(event_uuid))

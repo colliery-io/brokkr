@@ -68,9 +68,4 @@ diesel::joinable!(agent_events -> agents (agent_id));
 diesel::joinable!(agent_events -> deployment_objects (deployment_object_id));
 diesel::joinable!(deployment_objects -> stacks (stack_id));
 
-diesel::allow_tables_to_appear_in_same_query!(
-    agent_events,
-    agents,
-    deployment_objects,
-    stacks,
-);
+diesel::allow_tables_to_appear_in_same_query!(agent_events, agents, deployment_objects, stacks,);

@@ -24,7 +24,9 @@ use uuid::Uuid;
 /// Represents a stack in the system.
 ///
 /// This struct is used for querying existing stacks from the database.
-#[derive(Queryable, Selectable, Identifiable, AsChangeset, Debug, Clone, Serialize, Deserialize)]
+#[derive(
+    Queryable, Selectable, Identifiable, AsChangeset, Debug, Clone, Serialize, Deserialize,
+)]
 #[diesel(table_name = crate::schema::stacks)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct Stack {
@@ -106,11 +108,14 @@ impl NewStack {
 
         // Check annotations
         if let Some(ref annotations) = annotations {
-            if annotations.iter().any(|(k, v)| k.trim().is_empty() || v.trim().is_empty()) {
+            if annotations
+                .iter()
+                .any(|(k, v)| k.trim().is_empty() || v.trim().is_empty())
+            {
                 return Err("Annotations cannot contain empty keys or values".to_string());
             }
         }
-        
+
         // Check agent_target
         if let Some(ref agent_target) = agent_target {
             if agent_target.iter().any(|target| target.trim().is_empty()) {
@@ -123,11 +128,10 @@ impl NewStack {
             description,
             labels: labels.map(|l| serde_json::to_value(l).unwrap()),
             annotations: annotations.map(|a| serde_json::to_value(a).unwrap()),
-            agent_target: agent_target.map(|l| serde_json::to_value(l).unwrap())
+            agent_target: agent_target.map(|l| serde_json::to_value(l).unwrap()),
         })
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -141,17 +145,18 @@ mod tests {
     /// validates the name field length and returns an appropriate error for an overly long name.
     fn test_new_stack_name_too_long() {
         let long_name = "a".repeat(256);
-        let result = NewStack::new(
-            long_name,
-            None,
-            None,
-            None,
-            None,
+        let result = NewStack::new(long_name, None, None, None, None);
+        assert!(
+            result.is_err(),
+            "NewStack creation should fail with a name longer than 255 characters"
         );
-        assert!(result.is_err(), "NewStack creation should fail with a name longer than 255 characters");
-        assert_eq!(result.unwrap_err(), "Name cannot exceed 255 characters", "Error message should indicate the name is too long");
+        assert_eq!(
+            result.unwrap_err(),
+            "Name cannot exceed 255 characters",
+            "Error message should indicate the name is too long"
+        );
     }
-    
+
     #[test]
     /// Tests the successful creation of a NewStack with all fields populated.
     ///
@@ -176,13 +181,29 @@ mod tests {
             labels.clone(),
             annotations.clone(),
             agent_target.clone(),
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_eq!(new_stack.name, name, "Name should match the input value");
-        assert_eq!(new_stack.description, description, "Description should match the input value");
-        assert_eq!(new_stack.labels, labels.map(|l| json!(l)), "Labels should be correctly converted to JSON");
-        assert_eq!(new_stack.annotations, annotations.map(|a| json!(a)), "Annotations should be correctly converted to JSON");
-        assert_eq!(new_stack.agent_target, agent_target.map(|a| json!(a)), "Agent target should be correctly converted to JSON");
+        assert_eq!(
+            new_stack.description, description,
+            "Description should match the input value"
+        );
+        assert_eq!(
+            new_stack.labels,
+            labels.map(|l| json!(l)),
+            "Labels should be correctly converted to JSON"
+        );
+        assert_eq!(
+            new_stack.annotations,
+            annotations.map(|a| json!(a)),
+            "Annotations should be correctly converted to JSON"
+        );
+        assert_eq!(
+            new_stack.agent_target,
+            agent_target.map(|a| json!(a)),
+            "Agent target should be correctly converted to JSON"
+        );
     }
 
     #[test]
@@ -191,15 +212,16 @@ mod tests {
     /// This test ensures that the NewStack::new() method properly
     /// validates the name field and returns an appropriate error for an empty name.
     fn test_new_stack_empty_name() {
-        let result = NewStack::new(
-            "".to_string(),
-            None,
-            None,
-            None,
-            None,
+        let result = NewStack::new("".to_string(), None, None, None, None);
+        assert!(
+            result.is_err(),
+            "NewStack creation should fail with empty name"
         );
-        assert!(result.is_err(), "NewStack creation should fail with empty name");
-        assert_eq!(result.unwrap_err(), "Name cannot be empty", "Error message should indicate empty name");
+        assert_eq!(
+            result.unwrap_err(),
+            "Name cannot be empty",
+            "Error message should indicate empty name"
+        );
     }
 
     #[test]
@@ -215,8 +237,15 @@ mod tests {
             None,
             None,
         );
-        assert!(result.is_err(), "NewStack creation should fail with empty label");
-        assert_eq!(result.unwrap_err(), "Labels cannot contain empty strings", "Error message should indicate empty label");
+        assert!(
+            result.is_err(),
+            "NewStack creation should fail with empty label"
+        );
+        assert_eq!(
+            result.unwrap_err(),
+            "Labels cannot contain empty strings",
+            "Error message should indicate empty label"
+        );
     }
 
     #[test]
@@ -232,8 +261,15 @@ mod tests {
             Some(vec![("".to_string(), "value".to_string())]),
             None,
         );
-        assert!(result.is_err(), "NewStack creation should fail with empty annotation key");
-        assert_eq!(result.unwrap_err(), "Annotations cannot contain empty keys or values", "Error message should indicate empty annotation key");
+        assert!(
+            result.is_err(),
+            "NewStack creation should fail with empty annotation key"
+        );
+        assert_eq!(
+            result.unwrap_err(),
+            "Annotations cannot contain empty keys or values",
+            "Error message should indicate empty annotation key"
+        );
     }
 
     #[test]
@@ -249,8 +285,15 @@ mod tests {
             Some(vec![("key".to_string(), "".to_string())]),
             None,
         );
-        assert!(result.is_err(), "NewStack creation should fail with empty annotation value");
-        assert_eq!(result.unwrap_err(), "Annotations cannot contain empty keys or values", "Error message should indicate empty annotation value");
+        assert!(
+            result.is_err(),
+            "NewStack creation should fail with empty annotation value"
+        );
+        assert_eq!(
+            result.unwrap_err(),
+            "Annotations cannot contain empty keys or values",
+            "Error message should indicate empty annotation value"
+        );
     }
 
     #[test]
@@ -281,7 +324,10 @@ mod tests {
             None,
             None,
         );
-        assert!(result.is_ok(), "NewStack creation should succeed with empty description");
+        assert!(
+            result.is_ok(),
+            "NewStack creation should succeed with empty description"
+        );
     }
 
     #[test]
@@ -297,7 +343,10 @@ mod tests {
             None,
             Some(vec!["agent1".to_string(), "agent2".to_string()]),
         );
-        assert!(result.is_ok(), "NewStack creation should succeed with valid agent targets");
+        assert!(
+            result.is_ok(),
+            "NewStack creation should succeed with valid agent targets"
+        );
     }
 
     #[test]
@@ -306,16 +355,16 @@ mod tests {
     /// This test ensures that the NewStack::new() method correctly handles
     /// the case where only the name is provided and all other fields are None.
     fn test_new_stack_all_none_optional_fields() {
-        let result = NewStack::new(
-            "Test Stack".to_string(),
-            None,
-            None,
-            None,
-            None,
+        let result = NewStack::new("Test Stack".to_string(), None, None, None, None);
+        assert!(
+            result.is_ok(),
+            "NewStack creation should succeed with all optional fields as None"
         );
-        assert!(result.is_ok(), "NewStack creation should succeed with all optional fields as None");
         let new_stack = result.unwrap();
-        assert_eq!(new_stack.name, "Test Stack", "Name should match the input value");
+        assert_eq!(
+            new_stack.name, "Test Stack",
+            "Name should match the input value"
+        );
         assert_eq!(new_stack.description, None, "Description should be None");
         assert_eq!(new_stack.labels, None, "Labels should be None");
         assert_eq!(new_stack.annotations, None, "Annotations should be None");

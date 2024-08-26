@@ -1,6 +1,6 @@
-use uuid::Uuid;
-use brokkr_models::models::agent_events::NewAgentEvent;
 use crate::fixtures::TestFixture;
+use brokkr_models::models::agent_events::NewAgentEvent;
+use uuid::Uuid;
 
 /// Tests the creation of an agent event.
 ///
@@ -22,9 +22,13 @@ fn test_create_agent_event() {
         "test_event".to_string(),
         "success".to_string(),
         Some("Test message".to_string()),
-    ).unwrap();
+    )
+    .unwrap();
 
-    let created_event = fixture.dal.agent_events().create(&new_agent_event)
+    let created_event = fixture
+        .dal
+        .agent_events()
+        .create(&new_agent_event)
         .expect("Failed to create agent event");
 
     assert_eq!(created_event.agent_id, agent.id);
@@ -48,7 +52,10 @@ fn test_get_agent_event() {
     let deployment_object = fixture.insert_test_deployment_object(stack);
     let created_event = fixture.insert_test_agent_event(agent.id, deployment_object.id);
 
-    let retrieved_event = fixture.dal.agent_events().get(created_event.id)
+    let retrieved_event = fixture
+        .dal
+        .agent_events()
+        .get(created_event.id)
         .expect("Failed to get agent event")
         .expect("Agent event not found");
 
@@ -73,7 +80,10 @@ fn test_list_agent_events() {
     fixture.insert_test_agent_event(agent.id, deployment_object.id);
     fixture.insert_test_agent_event(agent.id, deployment_object.id);
 
-    let events = fixture.dal.agent_events().list()
+    let events = fixture
+        .dal
+        .agent_events()
+        .list()
         .expect("Failed to list agent events");
 
     assert_eq!(events.len(), 2);
@@ -103,27 +113,42 @@ fn test_get_events() {
     fixture.insert_test_agent_event(agent2.id, deployment_object1.id);
 
     // Test getting all events
-    let all_events = fixture.dal.agent_events().get_events(None, None)
+    let all_events = fixture
+        .dal
+        .agent_events()
+        .get_events(None, None)
         .expect("Failed to get all agent events");
     assert_eq!(all_events.len(), 3);
 
     // Test getting events for a specific stack
-    let stack1_events = fixture.dal.agent_events().get_events(Some(stack1), None)
+    let stack1_events = fixture
+        .dal
+        .agent_events()
+        .get_events(Some(stack1), None)
         .expect("Failed to get stack1 agent events");
     assert_eq!(stack1_events.len(), 2);
 
     // Test getting events for a specific agent
-    let agent1_events = fixture.dal.agent_events().get_events(None, Some(agent1.id))
+    let agent1_events = fixture
+        .dal
+        .agent_events()
+        .get_events(None, Some(agent1.id))
         .expect("Failed to get agent1 events");
     assert_eq!(agent1_events.len(), 2);
 
     // Test getting events for a specific stack and agent
-    let stack1_agent1_events = fixture.dal.agent_events().get_events(Some(stack1), Some(agent1.id))
+    let stack1_agent1_events = fixture
+        .dal
+        .agent_events()
+        .get_events(Some(stack1), Some(agent1.id))
         .expect("Failed to get stack1 and agent1 events");
     assert_eq!(stack1_agent1_events.len(), 1);
 
     // Test getting events for a non-existent stack
-    let non_existent_events = fixture.dal.agent_events().get_events(Some(Uuid::new_v4()), None)
+    let non_existent_events = fixture
+        .dal
+        .agent_events()
+        .get_events(Some(Uuid::new_v4()), None)
         .expect("Failed to get non-existent events");
     assert_eq!(non_existent_events.len(), 0);
 }
@@ -144,16 +169,25 @@ fn test_soft_delete_agent_event() {
     let deployment_object = fixture.insert_test_deployment_object(stack);
     let created_event = fixture.insert_test_agent_event(agent.id, deployment_object.id);
 
-    fixture.dal.agent_events().soft_delete(created_event.id)
+    fixture
+        .dal
+        .agent_events()
+        .soft_delete(created_event.id)
         .expect("Failed to soft delete agent event");
 
     // The event should not be retrievable with the normal get method
-    let retrieved_event = fixture.dal.agent_events().get(created_event.id)
+    let retrieved_event = fixture
+        .dal
+        .agent_events()
+        .get(created_event.id)
         .expect("Failed to get agent event");
     assert!(retrieved_event.is_none());
 
     // But it should be retrievable with the method that includes deleted events
-    let retrieved_deleted_event = fixture.dal.agent_events().get_including_deleted(created_event.id)
+    let retrieved_deleted_event = fixture
+        .dal
+        .agent_events()
+        .get_including_deleted(created_event.id)
         .expect("Failed to get deleted agent event")
         .expect("Deleted event not found");
 
@@ -161,7 +195,10 @@ fn test_soft_delete_agent_event() {
     assert!(retrieved_deleted_event.deleted_at.is_some());
 
     // Soft-deleted events should not appear in get_events results
-    let events = fixture.dal.agent_events().get_events(None, None)
+    let events = fixture
+        .dal
+        .agent_events()
+        .get_events(None, None)
         .expect("Failed to get events");
     assert!(!events.iter().any(|e| e.id == created_event.id));
 }
@@ -182,11 +219,17 @@ fn test_get_including_deleted() {
     let created_event = fixture.insert_test_agent_event(agent.id, deployment_object.id);
 
     // Soft delete the event
-    fixture.dal.agent_events().soft_delete(created_event.id)
+    fixture
+        .dal
+        .agent_events()
+        .soft_delete(created_event.id)
         .expect("Failed to soft delete agent event");
 
     // Retrieve the deleted event
-    let retrieved_event = fixture.dal.agent_events().get_including_deleted(created_event.id)
+    let retrieved_event = fixture
+        .dal
+        .agent_events()
+        .get_including_deleted(created_event.id)
         .expect("Failed to get including deleted agent event")
         .expect("Deleted agent event not found");
 

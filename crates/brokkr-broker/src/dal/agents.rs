@@ -3,12 +3,12 @@
 //! It uses Diesel ORM for database operations and includes functionality for creating,
 //! retrieving, updating, and soft-deleting agents.
 
-use diesel::prelude::*;
-use uuid::Uuid;
+use crate::dal::DAL;
 use brokkr_models::models::agents::{Agent, NewAgent};
 use brokkr_models::schema::agents;
-use crate::dal::DAL;
 use chrono::Utc;
+use diesel::prelude::*;
+use uuid::Uuid;
 
 /// Represents the Data Access Layer for Agent-related operations.
 pub struct AgentsDAL<'a> {
@@ -52,7 +52,7 @@ impl<'a> AgentsDAL<'a> {
         if !include_deleted {
             query = query.filter(deleted_at.is_null());
         }
-    
+
         query.first(conn)
     }
 
@@ -73,10 +73,10 @@ impl<'a> AgentsDAL<'a> {
         let result = diesel::update(agents.filter(id.eq(uuid)))
             .set(deleted_at.eq(now))
             .execute(conn);
-        
+
         match result {
             Ok(_) => Ok(()),
-            Err(e) => Err(e)
+            Err(e) => Err(e),
         }
     }
 
@@ -92,14 +92,12 @@ impl<'a> AgentsDAL<'a> {
     pub fn list(&self, include_deleted: bool) -> Result<Vec<Agent>, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().unwrap();
         let mut query = agents::table.into_boxed();
-        
+
         if !include_deleted {
             query = query.filter(agents::deleted_at.is_null());
         }
-        
-        query
-            .select(agents::all_columns)
-            .load::<Agent>(conn)
+
+        query.select(agents::all_columns).load::<Agent>(conn)
     }
 
     /// Updates an existing agent.

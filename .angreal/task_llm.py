@@ -51,7 +51,7 @@ def copy_to_clipboard(text):
 @llm()
 @angreal.command(name="migrations", about="bring up backing services")
 def get_migrations():
-    
+
     # Find files matching 'up.sql' pattern
     files = find_files(brokkr_models_dir, 'up.sql')
 
@@ -65,7 +65,7 @@ def get_migrations():
 @llm()
 @angreal.command(name="models", about="bring up backing services")
 def get_models():
-    
+
     # Find files matching 'up.sql' pattern
     files = find_files(os.path.join(brokkr_models_dir,'src','models'), '.*\.rs')
 
@@ -74,7 +74,3 @@ def get_models():
 
     # Copy the concatenated content to the clipboard
     copy_to_clipboard(concatenated_content)
-
-
-
-

@@ -1,4 +1,3 @@
-
 //! # Deployment Objects Module
 //!
 //! This module defines the data structures and operations for deployment objects in the Brokkr system.
@@ -22,17 +21,18 @@
 //! from `DeploymentObject`: `stack_id`, `yaml_content`, `yaml_checksum`, and `is_deletion_marker`. The other fields are
 //! managed by the database or set after creation.
 
-
 use chrono::{DateTime, Utc};
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use uuid::Uuid;
-use sha2::{Sha256, Digest};
 
 /// Represents a deployment object in the system.
 ///
 /// This struct is used for querying existing deployment objects from the database.
-#[derive(Queryable, Selectable, Identifiable, AsChangeset, Debug, Clone, Serialize, Deserialize)]
+#[derive(
+    Queryable, Selectable, Identifiable, AsChangeset, Debug, Clone, Serialize, Deserialize,
+)]
 #[diesel(table_name = crate::schema::deployment_objects)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct DeploymentObject {
@@ -153,18 +153,29 @@ mod tests {
         let yaml_content = "key: value\nother_key: other_value".to_string();
         let is_deletion_marker = false;
 
-        let result = NewDeploymentObject::new(
-            stack_id,
-            yaml_content.clone(),
-            is_deletion_marker,
-        );
+        let result = NewDeploymentObject::new(stack_id, yaml_content.clone(), is_deletion_marker);
 
-        assert!(result.is_ok(), "NewDeploymentObject creation should succeed with valid inputs");
+        assert!(
+            result.is_ok(),
+            "NewDeploymentObject creation should succeed with valid inputs"
+        );
         let new_obj = result.unwrap();
-        assert_eq!(new_obj.stack_id, stack_id, "stack_id should match the input value");
-        assert_eq!(new_obj.yaml_content, yaml_content, "yaml_content should match the input value");
-        assert!(!new_obj.yaml_checksum.is_empty(), "yaml_checksum should not be empty");
-        assert_eq!(new_obj.is_deletion_marker, is_deletion_marker, "is_deletion_marker should match the input value");
+        assert_eq!(
+            new_obj.stack_id, stack_id,
+            "stack_id should match the input value"
+        );
+        assert_eq!(
+            new_obj.yaml_content, yaml_content,
+            "yaml_content should match the input value"
+        );
+        assert!(
+            !new_obj.yaml_checksum.is_empty(),
+            "yaml_checksum should not be empty"
+        );
+        assert_eq!(
+            new_obj.is_deletion_marker, is_deletion_marker,
+            "is_deletion_marker should match the input value"
+        );
     }
 
     #[test]
@@ -173,13 +184,16 @@ mod tests {
     /// This test ensures that the NewDeploymentObject::new() method properly
     /// validates the stack_id and returns an appropriate error.
     fn test_new_deployment_object_invalid_stack_id() {
-        let result = NewDeploymentObject::new(
-            Uuid::nil(),
-            "key: value".to_string(),
-            false,
+        let result = NewDeploymentObject::new(Uuid::nil(), "key: value".to_string(), false);
+        assert!(
+            result.is_err(),
+            "NewDeploymentObject creation should fail with nil stack ID"
         );
-        assert!(result.is_err(), "NewDeploymentObject creation should fail with nil stack ID");
-        assert_eq!(result.unwrap_err(), "Invalid stack ID", "Error message should indicate invalid stack ID");
+        assert_eq!(
+            result.unwrap_err(),
+            "Invalid stack ID",
+            "Error message should indicate invalid stack ID"
+        );
     }
 
     #[test]
@@ -188,13 +202,16 @@ mod tests {
     /// This test ensures that the NewDeploymentObject::new() method properly
     /// validates the yaml_content and returns an appropriate error if it's empty.
     fn test_new_deployment_object_empty_yaml() {
-        let result = NewDeploymentObject::new(
-            Uuid::new_v4(),
-            "".to_string(),
-            false,
+        let result = NewDeploymentObject::new(Uuid::new_v4(), "".to_string(), false);
+        assert!(
+            result.is_err(),
+            "NewDeploymentObject creation should fail with empty YAML content"
         );
-        assert!(result.is_err(), "NewDeploymentObject creation should fail with empty YAML content");
-        assert_eq!(result.unwrap_err(), "YAML content cannot be empty", "Error message should indicate empty YAML content");
+        assert_eq!(
+            result.unwrap_err(),
+            "YAML content cannot be empty",
+            "Error message should indicate empty YAML content"
+        );
     }
 
     #[test]
@@ -205,12 +222,19 @@ mod tests {
     fn test_new_deployment_object_invalid_yaml() {
         let result = NewDeploymentObject::new(
             Uuid::new_v4(),
-            "key: : value".to_string(),  // This is invalid YAML
+            "key: : value".to_string(), // This is invalid YAML
             false,
         );
-        assert!(result.is_err(), "NewDeploymentObject creation should fail with invalid YAML content");
+        assert!(
+            result.is_err(),
+            "NewDeploymentObject creation should fail with invalid YAML content"
+        );
         let err = result.unwrap_err();
-        assert!(err.starts_with("Invalid YAML:"), "Error message should start with 'Invalid YAML:'. Got: {}", err);
+        assert!(
+            err.starts_with("Invalid YAML:"),
+            "Error message should start with 'Invalid YAML:'. Got: {}",
+            err
+        );
     }
 
     #[test]
@@ -225,7 +249,10 @@ mod tests {
         let checksum1 = generate_checksum(&yaml_content);
         let checksum2 = generate_checksum(&yaml_content);
 
-        assert_eq!(checksum1, checksum2, "Checksums for the same content should be identical");
+        assert_eq!(
+            checksum1, checksum2,
+            "Checksums for the same content should be identical"
+        );
         assert!(!checksum1.is_empty(), "Checksum should not be empty");
     }
 }
