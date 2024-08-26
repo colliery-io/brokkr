@@ -63,3 +63,4 @@ pub fn configure_api_routes(dal: DAL) -> Router {
 /// Returns a 200 OK status code with "OK" in the body.
 async fn healthz() -> impl IntoResponse {
     (StatusCode::OK, "OK")
+}
