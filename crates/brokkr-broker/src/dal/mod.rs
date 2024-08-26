@@ -46,18 +46,18 @@
 //! Each entity-specific DAL provides methods for common database operations like
 //! create, read, update, and delete (CRUD).
 
-use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
+use diesel::PgConnection;
 
-mod agents;
 mod agent_events;
-mod stacks;
+mod agents;
 mod deployment_objects;
+mod stacks;
 
-pub use stacks::StacksDAL;
-pub use deployment_objects::DeploymentObjectsDAL;
-pub use agents::AgentsDAL;
 pub use agent_events::AgentEventsDAL;
+pub use agents::AgentsDAL;
+pub use deployment_objects::DeploymentObjectsDAL;
+pub use stacks::StacksDAL;
 
 /// The main Data Access Layer struct.
 ///

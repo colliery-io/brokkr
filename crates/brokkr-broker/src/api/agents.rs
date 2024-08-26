@@ -7,22 +7,20 @@
 //! uses the Axum web framework and interacts with a data access layer (DAL)
 //! to perform operations on Agent entities.
 
+use crate::api::AppState;
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
-    Json,
-    Router,
-    routing::{get, post, put, delete},
+    routing::{delete, get, post, put},
+    Json, Router,
 };
+use brokkr_models::models::agents::{Agent, NewAgent};
 use serde::Deserialize;
 use uuid::Uuid;
-use brokkr_models::models::agents::{Agent, NewAgent};
-use crate::api::AppState;
 
 /// Query parameters for listing agents
 #[derive(Deserialize)]
 pub struct ListAgentsQuery {
-
     /// Optional flag to include soft-deleted agents in the list
     include_deleted: Option<bool>,
 }
@@ -66,7 +64,10 @@ async fn create_agent(
     State(state): State<AppState>,
     Json(new_agent): Json<NewAgent>,
 ) -> Result<(StatusCode, Json<Agent>), StatusCode> {
-    state.dal.agents().create(&new_agent)
+    state
+        .dal
+        .agents()
+        .create(&new_agent)
         .map(|agent| (StatusCode::CREATED, Json(agent)))
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
 }
@@ -85,8 +86,10 @@ async fn get_agent(
     State(state): State<AppState>,
     Path(uuid): Path<Uuid>,
 ) -> Result<Json<Agent>, StatusCode> {
-
-    state.dal.agents().get(uuid,false)
+    state
+        .dal
+        .agents()
+        .get(uuid, false)
         .map(Json)
         .map_err(|_| StatusCode::NOT_FOUND)
 }
@@ -101,11 +104,11 @@ async fn get_agent(
 /// * On success: `StatusCode::NO_CONTENT`
 /// * On failure: `StatusCode::INTERNAL_SERVER_ERROR`
 
-async fn soft_delete_agent(
-    State(state): State<AppState>,
-    Path(uuid): Path<Uuid>,
-) -> StatusCode {
-    state.dal.agents().soft_delete(uuid)
+async fn soft_delete_agent(State(state): State<AppState>, Path(uuid): Path<Uuid>) -> StatusCode {
+    state
+        .dal
+        .agents()
+        .soft_delete(uuid)
         .map(|_| StatusCode::NO_CONTENT)
         .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR)
 }
@@ -124,7 +127,10 @@ async fn list_agents(
     State(state): State<AppState>,
     Query(params): Query<ListAgentsQuery>,
 ) -> Result<Json<Vec<Agent>>, StatusCode> {
-    state.dal.agents().list(params.include_deleted.unwrap_or(false))
+    state
+        .dal
+        .agents()
+        .list(params.include_deleted.unwrap_or(false))
         .map(Json)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
 }
@@ -145,7 +151,10 @@ async fn update_agent(
     Path(uuid): Path<Uuid>,
     Json(agent): Json<Agent>,
 ) -> Result<Json<Agent>, StatusCode> {
-    state.dal.agents().update(uuid, &agent)
+    state
+        .dal
+        .agents()
+        .update(uuid, &agent)
         .map(Json)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
 }
@@ -164,7 +173,10 @@ async fn update_heartbeat(
     State(state): State<AppState>,
     Path(uuid): Path<Uuid>,
 ) -> Result<Json<Agent>, StatusCode> {
-    state.dal.agents().update_heartbeat(uuid)
+    state
+        .dal
+        .agents()
+        .update_heartbeat(uuid)
         .map(Json)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
 }
@@ -185,7 +197,10 @@ async fn update_status(
     Path(uuid): Path<Uuid>,
     Json(status): Json<String>,
 ) -> Result<Json<Agent>, StatusCode> {
-    state.dal.agents().update_status(uuid, &status)
+    state
+        .dal
+        .agents()
+        .update_status(uuid, &status)
         .map(Json)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
 }

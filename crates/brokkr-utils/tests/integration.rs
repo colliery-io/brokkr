@@ -37,15 +37,13 @@ fn test_settings_from_file_and_env() {
 
     // Assert that settings are loaded correctly from the file
     assert_eq!(
-        settings.database.url,
-        "postgres://user:pass@testhost:5432/testdb",
+        settings.database.url, "postgres://user:pass@testhost:5432/testdb",
         "Database URL should match the one specified in the test config file"
     );
 
     // Assert that the environment variable override worked
     assert_eq!(
-        settings.log.level, 
-        "debug",
+        settings.log.level, "debug",
         "Log level should be overridden by the environment variable"
     );
 
@@ -69,14 +67,12 @@ fn test_settings_default() {
     let settings = Settings::new(None).expect("Failed to load default settings");
 
     assert_eq!(
-        settings.database.url,
-        "postgres://brokkr:brokkr@localhost:5432/brokkr",
+        settings.database.url, "postgres://brokkr:brokkr@localhost:5432/brokkr",
         "Default database URL should match the expected value"
     );
-    
+
     assert_eq!(
-        settings.log.level,
-        "debug",
+        settings.log.level, "debug",
         "Default log level should be set to 'debug'"
     );
 }

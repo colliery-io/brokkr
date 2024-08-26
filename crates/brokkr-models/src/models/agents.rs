@@ -29,7 +29,9 @@ use uuid::Uuid;
 /// Represents an agent in the system.
 ///
 /// This struct is used for querying existing agents from the database.
-#[derive(Queryable, Selectable, Identifiable, AsChangeset, Debug, Clone, Serialize, Deserialize)]
+#[derive(
+    Queryable, Selectable, Identifiable, AsChangeset, Debug, Clone, Serialize, Deserialize,
+)]
 #[diesel(table_name = crate::schema::agents)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct Agent {
@@ -113,7 +115,10 @@ impl NewAgent {
 
         // Check annotations
         if let Some(ref annotations) = annotations {
-            if annotations.iter().any(|(k, v)| k.trim().is_empty() || v.trim().is_empty()) {
+            if annotations
+                .iter()
+                .any(|(k, v)| k.trim().is_empty() || v.trim().is_empty())
+            {
                 return Err("Annotations cannot contain empty keys or values".to_string());
             }
         }
@@ -133,11 +138,13 @@ pub fn labels_to_json(labels: &Option<Vec<String>>) -> Option<serde_json::Value>
 }
 
 /// Converts a vector of key-value pairs to a JSON value for annotations.
-pub fn annotations_to_json(annotations: &Option<Vec<(String, String)>>) -> Option<serde_json::Value> {
-    annotations.as_ref().map(|a| serde_json::to_value(a).unwrap())
+pub fn annotations_to_json(
+    annotations: &Option<Vec<(String, String)>>,
+) -> Option<serde_json::Value> {
+    annotations
+        .as_ref()
+        .map(|a| serde_json::to_value(a).unwrap())
 }
-
-
 
 #[cfg(test)]
 mod tests {
@@ -167,19 +174,42 @@ mod tests {
             cluster_name.clone(),
             labels.clone(),
             annotations.clone(),
-        ).unwrap();
+        )
+        .unwrap();
 
-        assert_eq!(new_agent.name, name, "Agent name should match the input value");
-        assert_eq!(new_agent.cluster_name, cluster_name, "Cluster name should match the input value");
-        assert_eq!(new_agent.labels, labels_to_json(&labels), "Labels should be correctly converted to JSON");
-        assert_eq!(new_agent.annotations, annotations_to_json(&annotations), "Annotations should be correctly converted to JSON");
+        assert_eq!(
+            new_agent.name, name,
+            "Agent name should match the input value"
+        );
+        assert_eq!(
+            new_agent.cluster_name, cluster_name,
+            "Cluster name should match the input value"
+        );
+        assert_eq!(
+            new_agent.labels,
+            labels_to_json(&labels),
+            "Labels should be correctly converted to JSON"
+        );
+        assert_eq!(
+            new_agent.annotations,
+            annotations_to_json(&annotations),
+            "Annotations should be correctly converted to JSON"
+        );
 
         if let Some(lj) = new_agent.labels {
-            assert_eq!(lj, serde_json::json!(["orange", "blue"]), "Labels JSON should match expected format");
+            assert_eq!(
+                lj,
+                serde_json::json!(["orange", "blue"]),
+                "Labels JSON should match expected format"
+            );
         }
 
         if let Some(aj) = new_agent.annotations {
-            assert_eq!(aj, serde_json::json!([["security", "high"], ["color", "blue"]]), "Annotations JSON should match expected format");
+            assert_eq!(
+                aj,
+                serde_json::json!([["security", "high"], ["color", "blue"]]),
+                "Annotations JSON should match expected format"
+            );
         }
     }
 
@@ -189,14 +219,16 @@ mod tests {
     /// This test ensures that the NewAgent::new() method properly
     /// validates the name field and returns an appropriate error.
     fn test_new_agent_empty_name() {
-        let result = NewAgent::new(
-            "".to_string(),
-            "Test Cluster".to_string(),
-            None,
-            None,
+        let result = NewAgent::new("".to_string(), "Test Cluster".to_string(), None, None);
+        assert!(
+            result.is_err(),
+            "NewAgent creation should fail with empty name"
         );
-        assert!(result.is_err(), "NewAgent creation should fail with empty name");
-        assert_eq!(result.unwrap_err(), "Name cannot be empty", "Error message should indicate empty name");
+        assert_eq!(
+            result.unwrap_err(),
+            "Name cannot be empty",
+            "Error message should indicate empty name"
+        );
     }
 
     #[test]
@@ -205,14 +237,16 @@ mod tests {
     /// This test ensures that the NewAgent::new() method properly
     /// validates the cluster_name field and returns an appropriate error.
     fn test_new_agent_empty_cluster_name() {
-        let result = NewAgent::new(
-            "Test Agent".to_string(),
-            "".to_string(),
-            None,
-            None,
+        let result = NewAgent::new("Test Agent".to_string(), "".to_string(), None, None);
+        assert!(
+            result.is_err(),
+            "NewAgent creation should fail with empty cluster name"
         );
-        assert!(result.is_err(), "NewAgent creation should fail with empty cluster name");
-        assert_eq!(result.unwrap_err(), "Cluster name cannot be empty", "Error message should indicate empty cluster name");
+        assert_eq!(
+            result.unwrap_err(),
+            "Cluster name cannot be empty",
+            "Error message should indicate empty cluster name"
+        );
     }
 
     #[test]
@@ -227,8 +261,15 @@ mod tests {
             Some(vec!["valid".to_string(), "".to_string()]),
             None,
         );
-        assert!(result.is_err(), "NewAgent creation should fail with empty label");
-        assert_eq!(result.unwrap_err(), "Labels cannot contain empty strings", "Error message should indicate empty label");
+        assert!(
+            result.is_err(),
+            "NewAgent creation should fail with empty label"
+        );
+        assert_eq!(
+            result.unwrap_err(),
+            "Labels cannot contain empty strings",
+            "Error message should indicate empty label"
+        );
     }
 
     #[test]
@@ -243,8 +284,15 @@ mod tests {
             None,
             Some(vec![("".to_string(), "value".to_string())]),
         );
-        assert!(result.is_err(), "NewAgent creation should fail with empty annotation key");
-        assert_eq!(result.unwrap_err(), "Annotations cannot contain empty keys or values", "Error message should indicate empty annotation key or value");
+        assert!(
+            result.is_err(),
+            "NewAgent creation should fail with empty annotation key"
+        );
+        assert_eq!(
+            result.unwrap_err(),
+            "Annotations cannot contain empty keys or values",
+            "Error message should indicate empty annotation key or value"
+        );
     }
 
     #[test]
@@ -259,35 +307,46 @@ mod tests {
             None,
             Some(vec![("key".to_string(), "".to_string())]),
         );
-        assert!(result.is_err(), "NewAgent creation should fail with empty annotation value");
-        assert_eq!(result.unwrap_err(), "Annotations cannot contain empty keys or values", "Error message should indicate empty annotation key or value");
+        assert!(
+            result.is_err(),
+            "NewAgent creation should fail with empty annotation value"
+        );
+        assert_eq!(
+            result.unwrap_err(),
+            "Annotations cannot contain empty keys or values",
+            "Error message should indicate empty annotation key or value"
+        );
     }
 
     #[test]
     /// Tests that NewAgent creation fails when the name exceeds 255 characters.
     fn test_new_agent_name_too_long() {
         let long_name = "a".repeat(256);
-        let result = NewAgent::new(
-            long_name,
-            "Test Cluster".to_string(),
-            None,
-            None,
+        let result = NewAgent::new(long_name, "Test Cluster".to_string(), None, None);
+        assert!(
+            result.is_err(),
+            "NewAgent creation should fail with a name longer than 255 characters"
         );
-        assert!(result.is_err(), "NewAgent creation should fail with a name longer than 255 characters");
-        assert_eq!(result.unwrap_err(), "Name cannot exceed 255 characters", "Error message should indicate the name is too long");
+        assert_eq!(
+            result.unwrap_err(),
+            "Name cannot exceed 255 characters",
+            "Error message should indicate the name is too long"
+        );
     }
 
     #[test]
     /// Tests that NewAgent creation fails when the cluster name exceeds 255 characters.
     fn test_new_agent_cluster_name_too_long() {
         let long_cluster_name = "a".repeat(256);
-        let result = NewAgent::new(
-            "Test Agent".to_string(),
-            long_cluster_name,
-            None,
-            None,
+        let result = NewAgent::new("Test Agent".to_string(), long_cluster_name, None, None);
+        assert!(
+            result.is_err(),
+            "NewAgent creation should fail with a cluster name longer than 255 characters"
         );
-        assert!(result.is_err(), "NewAgent creation should fail with a cluster name longer than 255 characters");
-        assert_eq!(result.unwrap_err(), "Cluster name cannot exceed 255 characters", "Error message should indicate the cluster name is too long");
+        assert_eq!(
+            result.unwrap_err(),
+            "Cluster name cannot exceed 255 characters",
+            "Error message should indicate the cluster name is too long"
+        );
     }
 }

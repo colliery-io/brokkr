@@ -1,4 +1,3 @@
-
 //! # Agent Events API Module
 //!
 //! This module provides the API endpoints for managing AgentEvent entities using Axum.
@@ -7,18 +6,16 @@
 //! The module uses the Axum web framework and interacts with a data access layer (DAL)
 //! to perform operations on AgentEvent entities.
 
-
+use crate::api::AppState;
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
-    Json,
-    Router,
-    routing::{get, post, delete},
+    routing::{delete, get, post},
+    Json, Router,
 };
+use brokkr_models::models::agent_events::{AgentEvent, NewAgentEvent};
 use serde::Deserialize;
 use uuid::Uuid;
-use brokkr_models::models::agent_events::{AgentEvent, NewAgentEvent};
-use crate::api::AppState;
 
 /// Query parameters for listing agent events
 #[derive(Deserialize)]
@@ -60,7 +57,10 @@ async fn create_agent_event(
     State(state): State<AppState>,
     Json(new_event): Json<NewAgentEvent>,
 ) -> Result<(StatusCode, Json<AgentEvent>), StatusCode> {
-    state.dal.agent_events().create(&new_event)
+    state
+        .dal
+        .agent_events()
+        .create(&new_event)
         .map(|event| (StatusCode::CREATED, Json(event)))
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
 }
@@ -80,7 +80,10 @@ async fn get_agent_event(
     State(state): State<AppState>,
     Path(uuid): Path<Uuid>,
 ) -> Result<Json<AgentEvent>, StatusCode> {
-    state.dal.agent_events().get(uuid)
+    state
+        .dal
+        .agent_events()
+        .get(uuid)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .map(Json)
         .ok_or(StatusCode::NOT_FOUND)
@@ -100,7 +103,10 @@ async fn soft_delete_agent_event(
     State(state): State<AppState>,
     Path(uuid): Path<Uuid>,
 ) -> StatusCode {
-    state.dal.agent_events().soft_delete(uuid)
+    state
+        .dal
+        .agent_events()
+        .soft_delete(uuid)
         .map(|_| StatusCode::NO_CONTENT)
         .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR)
 }
@@ -119,7 +125,10 @@ async fn list_agent_events(
     State(state): State<AppState>,
     Query(params): Query<ListAgentEventsQuery>,
 ) -> Result<Json<Vec<AgentEvent>>, StatusCode> {
-    state.dal.agent_events().get_events(params.stack_id, params.agent_id)
+    state
+        .dal
+        .agent_events()
+        .get_events(params.stack_id, params.agent_id)
         .map(Json)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
 }

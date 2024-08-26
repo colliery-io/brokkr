@@ -1,13 +1,10 @@
 //! Data models for our application to interact with
-pub mod stacks;
-pub mod deployment_objects;
-pub mod agents;
 pub mod agent_events;
+pub mod agents;
+pub mod deployment_objects;
+pub mod stacks;
 
-pub use stacks::{Stack,NewStack};
-pub use deployment_objects::{DeploymentObject,NewDeploymentObject};
-pub use agents::{Agent,NewAgent};
-pub use agent_events::{AgentEvent,NewAgentEvent};
-
-
-
+pub use agent_events::{AgentEvent, NewAgentEvent};
+pub use agents::{Agent, NewAgent};
+pub use deployment_objects::{DeploymentObject, NewDeploymentObject};
+pub use stacks::{NewStack, Stack};

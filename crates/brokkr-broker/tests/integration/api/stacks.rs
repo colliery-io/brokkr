@@ -1,14 +1,13 @@
 use axum::{
-    body::Body,
-    http::{Request, StatusCode, Method},
+    body::{to_bytes, Body},
+    http::{Method, Request, StatusCode},
 };
 use brokkr_models::models::stacks::Stack;
 use tower::ServiceExt;
 
 // Import the TestFixture
-use crate::fixtures::TestFixture;
 use crate::fixtures::create_test_stack;
-
+use crate::fixtures::TestFixture;
 
 #[tokio::test]
 async fn test_create_stack() {
@@ -27,7 +26,7 @@ async fn test_get_stack() {
 
     let created_stack = create_test_stack(&app).await;
 
-    let get_response = app
+    let response = app
         .clone()
         .oneshot(
             Request::builder()
@@ -39,9 +38,9 @@ async fn test_get_stack() {
         .await
         .unwrap();
 
-    assert_eq!(get_response.status(), StatusCode::OK);
+    assert_eq!(response.status(), StatusCode::OK);
 
-    let body = hyper::body::to_bytes(get_response.into_body()).await.unwrap();
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let retrieved_stack: Stack = serde_json::from_slice(&body).unwrap();
     assert_eq!(retrieved_stack.id, created_stack.id);
 }
@@ -53,7 +52,7 @@ async fn test_list_stacks() {
 
     let created_stack = create_test_stack(&app).await;
 
-    let list_response = app
+    let response = app
         .clone()
         .oneshot(
             Request::builder()
@@ -65,9 +64,9 @@ async fn test_list_stacks() {
         .await
         .unwrap();
 
-    assert_eq!(list_response.status(), StatusCode::OK);
+    assert_eq!(response.status(), StatusCode::OK);
 
-    let body = hyper::body::to_bytes(list_response.into_body()).await.unwrap();
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let stacks: Vec<Stack> = serde_json::from_slice(&body).unwrap();
     assert!(stacks.iter().any(|s| s.id == created_stack.id));
 }
@@ -82,7 +81,7 @@ async fn test_update_stack() {
     let mut updated_stack = created_stack.clone();
     updated_stack.name = "Updated Stack".to_string();
 
-    let update_response = app
+    let response = app
         .clone()
         .oneshot(
             Request::builder()
@@ -95,9 +94,9 @@ async fn test_update_stack() {
         .await
         .unwrap();
 
-    assert_eq!(update_response.status(), StatusCode::OK);
+    assert_eq!(response.status(), StatusCode::OK);
 
-    let body = hyper::body::to_bytes(update_response.into_body()).await.unwrap();
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let updated_stack: Stack = serde_json::from_slice(&body).unwrap();
     assert_eq!(updated_stack.name, "Updated Stack");
 }
@@ -124,7 +123,7 @@ async fn test_delete_stack() {
     assert_eq!(delete_response.status(), StatusCode::NO_CONTENT);
 
     // Verify the stack is soft deleted (not returned in list)
-    let list_response = app
+    let response = app
         .oneshot(
             Request::builder()
                 .method(Method::GET)
@@ -135,9 +134,9 @@ async fn test_delete_stack() {
         .await
         .unwrap();
 
-    assert_eq!(list_response.status(), StatusCode::OK);
+    assert_eq!(response.status(), StatusCode::OK);
 
-    let body = hyper::body::to_bytes(list_response.into_body()).await.unwrap();
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let stacks: Vec<Stack> = serde_json::from_slice(&body).unwrap();
     assert!(!stacks.iter().any(|s| s.id == created_stack.id));
 }

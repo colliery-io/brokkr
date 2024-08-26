@@ -1,22 +1,18 @@
-
 //! # API Routes Aggregator Module
 //!
 //! This module aggregates all API routes and provides a function to configure the main router.
 //! It serves as the central point for organizing and initializing all API endpoints of the application.
 
 use axum::Router;
-use axum::{http::StatusCode,
-    routing::get,
-    response::IntoResponse
-};
+use axum::{http::StatusCode, response::IntoResponse, routing::get};
 
 use crate::dal::DAL;
 
 // Import submodules
-pub mod agents;
-pub mod stacks;
-pub mod deployment_objects;
 pub mod agent_events;
+pub mod agents;
+pub mod deployment_objects;
+pub mod stacks;
 
 /// Shared state for the application
 ///

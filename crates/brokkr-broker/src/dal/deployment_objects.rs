@@ -5,10 +5,10 @@
 //! It uses Diesel ORM for database operations and includes functionality for creating,
 //! retrieving, updating, and soft-deleting deployment objects.
 
+use crate::dal::DAL;
+use brokkr_models::models::deployment_objects::{DeploymentObject, NewDeploymentObject};
 use diesel::prelude::*;
 use uuid::Uuid;
-use brokkr_models::models::deployment_objects::{DeploymentObject, NewDeploymentObject};
-use crate::dal::DAL;
 
 /// Represents the Data Access Layer for DeploymentObject-related operations.
 pub struct DeploymentObjectsDAL<'a> {
@@ -26,7 +26,10 @@ impl<'a> DeploymentObjectsDAL<'a> {
     /// # Returns
     ///
     /// Returns a QueryResult containing the created DeploymentObject on success, or an error on failure.
-    pub fn create(&self, new_deployment_object: &NewDeploymentObject) -> QueryResult<DeploymentObject> {
+    pub fn create(
+        &self,
+        new_deployment_object: &NewDeploymentObject,
+    ) -> QueryResult<DeploymentObject> {
         use brokkr_models::schema::deployment_objects::dsl::*;
 
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
@@ -83,7 +86,11 @@ impl<'a> DeploymentObjectsDAL<'a> {
     /// # Returns
     ///
     /// Returns a QueryResult containing the updated DeploymentObject on success, or an error on failure.
-    pub fn update(&self, object_uuid: Uuid, updated_object: &DeploymentObject) -> QueryResult<DeploymentObject> {
+    pub fn update(
+        &self,
+        object_uuid: Uuid,
+        updated_object: &DeploymentObject,
+    ) -> QueryResult<DeploymentObject> {
         use brokkr_models::schema::deployment_objects::dsl::*;
 
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");

@@ -3,9 +3,9 @@
 //! It uses Diesel ORM for database operations and includes functionality for creating,
 //! retrieving, updating, and soft-deleting stacks.
 
-use brokkr_models::models::stacks::{Stack, NewStack};
-use chrono::Utc;
 use crate::dal::DAL;
+use brokkr_models::models::stacks::{NewStack, Stack};
+use chrono::Utc;
 use diesel::prelude::*;
 use uuid::Uuid;
 
@@ -116,5 +116,4 @@ impl<'a> StacksDAL<'a> {
 
         stacks.filter(deleted_at.is_null()).load(conn)
     }
-
 }

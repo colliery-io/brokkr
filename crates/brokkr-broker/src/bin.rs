@@ -1,12 +1,7 @@
-use axum::Server;
-use std::net::SocketAddr;
-use tokio;
-
 use brokkr_broker::api;
 use brokkr_broker::dal::DAL;
 
 use brokkr_broker::db::create_shared_connection_pool;
-
 
 use brokkr_utils::config::Settings;
 use brokkr_utils::logging::prelude::*;
@@ -21,22 +16,16 @@ async fn main() {
 
     info!("Starting application");
     let connection_pool = create_shared_connection_pool(&config.database.url, "brokkr", 5);
-    let dal = DAL::new(connection_pool.pool.clone());    
-
-    
+    let dal = DAL::new(connection_pool.pool.clone());
 
     // Configure API routes
     let app = api::configure_api_routes(dal);
 
     // Set up the server address
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
 
-    info!("Starting server on {}", addr);
+    info!("Starting server on {:?}", listener);
 
     // Start the server
-    match Server::bind(&addr).serve(app.into_make_service()).await {
-        Ok(_) => info!("Server shut down gracefully"),
-        Err(e) => error!("Server error: {}", e),
-    }
+    axum::serve(listener, app).await.unwrap();
 }
-

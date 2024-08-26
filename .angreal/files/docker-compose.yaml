@@ -1,5 +1,5 @@
+---
 version: '3.8'  # Add the version at the top
-
 services:
   postgres:
     image: docker.io/bitnami/postgresql:15
@@ -7,24 +7,19 @@ services:
       - POSTGRES_USER=brokkr
       - POSTGRES_PASSWORD=brokkr
       - POSTGRES_DB=brokkr
-    ports:
-      - 5432:5432
-    volumes:
-      - brokkr-postgres-data:/var/lib/postgresql/data
-    networks:
-      - default
+    ports: [5432:5432]
+    volumes: [brokkr-postgres-data:/var/lib/postgresql/data]
+    networks: [default]
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "brokkr"]
+      test: [CMD, pg_isready, -U, brokkr]
       interval: 5s
       retries: 3
       start_period: 60s
     restart: always
-    
   keycloak:
     container_name: brokkr-keycloak
     image: bitnami/keycloak:25
-    links:
-      - postgres
+    links: [postgres]
     environment:
       - KEYCLOAK_DATABASE_VENDOR=postgresql
       - KEYCLOAK_DATABASE_HOST=postgres
@@ -36,15 +31,12 @@ services:
       - KEYCLOAK_ADMIN_USER=brokkr
       - KEYCLOAK_ADMIN_PASSWORD=brokkr
       - KC_HTTP_ENABLED=true
-    ports:
-      - 8080:8080
+    ports: [8080:8080]
     restart: always
-    networks:
-      - default
+    networks: [default]
     depends_on:
       postgres:
         condition: service_healthy
-
 volumes:
   brokkr-postgres-data:
     driver: local
