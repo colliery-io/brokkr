@@ -15,7 +15,8 @@ jobs:
           POSTGRES_USER: brokkr
           POSTGRES_PASSWORD: brokkr
           POSTGRES_DB: brokkr
-        ports: [5432:5432]
+        ports: 
+          - 5432:5432
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
