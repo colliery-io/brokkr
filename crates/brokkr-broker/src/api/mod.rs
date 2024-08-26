@@ -1,3 +1,4 @@
+
 //! # API Routes Aggregator Module
 //!
 //! This module aggregates all API routes and provides a function to configure the main router.
@@ -8,6 +9,7 @@ use axum::{http::StatusCode,
     routing::get,
     response::IntoResponse
 };
+
 use crate::dal::DAL;
 
 // Import submodules
@@ -38,6 +40,7 @@ pub struct AppState {
 /// # Returns
 ///
 /// Returns a configured `Router` instance that includes all API routes and middleware.
+
 pub fn configure_api_routes(dal: DAL) -> Router {
     let app_state = AppState { dal };
 
@@ -60,4 +63,3 @@ pub fn configure_api_routes(dal: DAL) -> Router {
 /// Returns a 200 OK status code with "OK" in the body.
 async fn healthz() -> impl IntoResponse {
     (StatusCode::OK, "OK")
-}

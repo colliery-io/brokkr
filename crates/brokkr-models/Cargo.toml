@@ -17,6 +17,7 @@ diesel-derive-enum = { workspace = true }
 serde_yaml = { workspace = true }
 
 
+
 [dev-dependencies]
 url = { workspace = true }
 diesel_migrations = { workspace = true }

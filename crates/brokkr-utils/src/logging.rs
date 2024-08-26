@@ -46,7 +46,9 @@ use log::{ LevelFilter, Metadata, Record, SetLoggerError};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use once_cell::sync::OnceCell;
 
+
 pub use log::{debug, error, info, warn};
+
 
 static LOGGER: BrokkrLogger = BrokkrLogger;
 static CURRENT_LEVEL: AtomicUsize = AtomicUsize::new(LevelFilter::Info as usize);
@@ -170,9 +172,11 @@ fn level_filter_from_u8(v: u8) -> LevelFilter {
     }
 }
 
+
 pub mod prelude {
     pub use log::{debug, info, warn, error};
 }
+
 
 #[cfg(test)]
 mod tests {

@@ -1,3 +1,4 @@
+
 //! # Deployment Objects Module
 //!
 //! This module defines the data structures and operations for deployment objects in the Brokkr system.
@@ -20,6 +21,7 @@
 //! The `NewDeploymentObject` struct is used for creating new deployment objects and contains a subset of the fields
 //! from `DeploymentObject`: `stack_id`, `yaml_content`, `yaml_checksum`, and `is_deletion_marker`. The other fields are
 //! managed by the database or set after creation.
+
 
 use chrono::{DateTime, Utc};
 use diesel::prelude::*;
@@ -125,6 +127,7 @@ impl NewDeploymentObject {
 /// # Returns
 ///
 /// A string representation of the SHA-256 checksum
+
 fn generate_checksum(content: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(content.as_bytes());
@@ -216,6 +219,7 @@ mod tests {
     /// This test ensures that the generate_checksum() function:
     /// 1. Produces the same checksum for identical content
     /// 2. Produces a non-empty checksum
+
     fn test_checksum_generation() {
         let yaml_content = "key: value\nother_key: other_value".to_string();
         let checksum1 = generate_checksum(&yaml_content);

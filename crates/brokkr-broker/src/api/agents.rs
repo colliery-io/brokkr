@@ -22,6 +22,7 @@ use crate::api::AppState;
 /// Query parameters for listing agents
 #[derive(Deserialize)]
 pub struct ListAgentsQuery {
+
     /// Optional flag to include soft-deleted agents in the list
     include_deleted: Option<bool>,
 }
@@ -39,6 +40,7 @@ pub struct ListAgentsQuery {
 ///
 /// # Returns
 /// A configured `Router<AppState>` with all agent routes.
+
 pub fn configure_routes() -> Router<AppState> {
     Router::new()
         .route("/agents", post(create_agent))
@@ -59,6 +61,7 @@ pub fn configure_routes() -> Router<AppState> {
 /// # Returns
 /// * On success: A tuple containing `StatusCode::CREATED` and the created `Agent`
 /// * On failure: `StatusCode::INTERNAL_SERVER_ERROR`
+
 async fn create_agent(
     State(state): State<AppState>,
     Json(new_agent): Json<NewAgent>,
@@ -77,11 +80,13 @@ async fn create_agent(
 /// # Returns
 /// * On success: JSON representation of the `Agent`
 /// * On not found: `StatusCode::NOT_FOUND`
+
 async fn get_agent(
     State(state): State<AppState>,
     Path(uuid): Path<Uuid>,
 ) -> Result<Json<Agent>, StatusCode> {
-    state.dal.agents().get(uuid, false)
+
+    state.dal.agents().get(uuid,false)
         .map(Json)
         .map_err(|_| StatusCode::NOT_FOUND)
 }
@@ -95,6 +100,7 @@ async fn get_agent(
 /// # Returns
 /// * On success: `StatusCode::NO_CONTENT`
 /// * On failure: `StatusCode::INTERNAL_SERVER_ERROR`
+
 async fn soft_delete_agent(
     State(state): State<AppState>,
     Path(uuid): Path<Uuid>,
@@ -113,6 +119,7 @@ async fn soft_delete_agent(
 /// # Returns
 /// * On success: JSON array of `Agent` objects
 /// * On failure: `StatusCode::INTERNAL_SERVER_ERROR`
+
 async fn list_agents(
     State(state): State<AppState>,
     Query(params): Query<ListAgentsQuery>,
@@ -132,6 +139,7 @@ async fn list_agents(
 /// # Returns
 /// * On success: JSON representation of the updated `Agent`
 /// * On failure: `StatusCode::INTERNAL_SERVER_ERROR`
+
 async fn update_agent(
     State(state): State<AppState>,
     Path(uuid): Path<Uuid>,
@@ -151,6 +159,7 @@ async fn update_agent(
 /// # Returns
 /// * On success: JSON representation of the updated `Agent`
 /// * On failure: `StatusCode::INTERNAL_SERVER_ERROR`
+
 async fn update_heartbeat(
     State(state): State<AppState>,
     Path(uuid): Path<Uuid>,
@@ -170,6 +179,7 @@ async fn update_heartbeat(
 /// # Returns
 /// * On success: JSON representation of the updated `Agent`
 /// * On failure: `StatusCode::INTERNAL_SERVER_ERROR`
+
 async fn update_status(
     State(state): State<AppState>,
     Path(uuid): Path<Uuid>,

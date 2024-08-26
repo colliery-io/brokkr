@@ -1,3 +1,4 @@
+
 //! # Stacks API Module
 //!
 //! This module provides the API endpoints for managing Stack entities using Axum.
@@ -5,6 +6,7 @@
 //! It includes routes for creating, retrieving, updating, and soft-deleting stacks,
 //! as well as listing all active stacks. The module uses the Axum web framework
 //! and interacts with a data access layer (DAL) to perform operations on Stack entities.
+
 
 use axum::{
     extract::{Path, State},
@@ -17,6 +19,7 @@ use brokkr_models::models::stacks::{Stack, NewStack};
 use uuid::Uuid;
 use crate::api::AppState;
 
+
 /// Configures the stacks API routes.
 ///
 /// This function sets up the following routes:
@@ -28,6 +31,7 @@ use crate::api::AppState;
 ///
 /// # Returns
 /// A configured `Router<AppState>` with all stack routes.
+
 pub fn configure_routes() -> Router<AppState> {
     Router::new()
         .route("/stacks", get(list_stacks))
@@ -37,6 +41,7 @@ pub fn configure_routes() -> Router<AppState> {
         .route("/stacks/:id", delete(delete_stack))
 }
 
+
 /// Handler for listing all active stacks.
 ///
 /// # Arguments
@@ -45,6 +50,7 @@ pub fn configure_routes() -> Router<AppState> {
 /// # Returns
 /// * On success: JSON array of active `Stack` objects
 /// * On failure: `StatusCode::INTERNAL_SERVER_ERROR` with error message
+
 async fn list_stacks(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<Stack>>, (StatusCode, String)> {
@@ -52,6 +58,7 @@ async fn list_stacks(
         .map(Json)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
 }
+
 
 /// Handler for creating a new stack.
 ///
@@ -62,6 +69,7 @@ async fn list_stacks(
 /// # Returns
 /// * On success: JSON representation of the created `Stack`
 /// * On failure: `StatusCode::INTERNAL_SERVER_ERROR` with error message
+
 async fn create_stack(
     State(state): State<AppState>,
     Json(new_stack): Json<NewStack>,
@@ -70,6 +78,7 @@ async fn create_stack(
         .map(Json)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
 }
+
 
 /// Handler for retrieving a stack by UUID.
 ///
@@ -81,6 +90,7 @@ async fn create_stack(
 /// * On success: JSON representation of the `Stack`
 /// * On not found: `StatusCode::NOT_FOUND` with error message
 /// * On other errors: `StatusCode::INTERNAL_SERVER_ERROR` with error message
+
 async fn get_stack(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -93,6 +103,7 @@ async fn get_stack(
         })
 }
 
+
 /// Handler for updating a stack.
 ///
 /// # Arguments
@@ -104,6 +115,7 @@ async fn get_stack(
 /// * On success: JSON representation of the updated `Stack`
 /// * On not found: `StatusCode::NOT_FOUND` with error message
 /// * On other errors: `StatusCode::INTERNAL_SERVER_ERROR` with error message
+
 async fn update_stack(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -117,6 +129,7 @@ async fn update_stack(
         })
 }
 
+
 /// Handler for soft-deleting a stack.
 ///
 /// # Arguments
@@ -127,6 +140,7 @@ async fn update_stack(
 /// * On success: `StatusCode::NO_CONTENT`
 /// * On not found: `StatusCode::NOT_FOUND` with error message
 /// * On other errors: `StatusCode::INTERNAL_SERVER_ERROR` with error message
+
 async fn delete_stack(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,

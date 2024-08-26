@@ -39,3 +39,4 @@ async fn main() {
         Err(e) => error!("Server error: {}", e),
     }
 }
+
