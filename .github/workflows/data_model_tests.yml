@@ -1,10 +1,12 @@
----
 name: Data Model Tests
+
 on:
   workflow_call:
+
 env:
   CARGO_TERM_COLOR: always
   DATABASE_URL: postgres://brokkr:brokkr@localhost:5432/brokkr
+
 jobs:
   data_model_tests:
     runs-on: ubuntu-latest
@@ -15,16 +17,17 @@ jobs:
           POSTGRES_USER: brokkr
           POSTGRES_PASSWORD: brokkr
           POSTGRES_DB: brokkr
-        ports: [5432:5432]
+        ports:
+          - 5432:5432
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
     steps:
-      - uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
     # - name: Check for file changes
     #   uses: dorny/paths-filter@v2
     #   id: changes
@@ -32,36 +35,36 @@ jobs:
     #     filters: |
     #       data_model:
     #         - '**crates/brokkr-model/**'
-      - name: Set up Python
+    - name: Set up Python
       # if: steps.changes.outputs.data_model == 'true'
-        uses: actions/setup-python@v4
-        with:
-          python-version: 3.x
-      - name: Install angreal
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.x'
+    - name: Install angreal
       # if: steps.changes.outputs.data_model == 'true'
-        run: |
-          python -m pip install --upgrade pip
-          pip install angreal
-      - name: Set up Rust
+      run: |
+        python -m pip install --upgrade pip
+        pip install angreal
+    - name: Set up Rust
       # if: steps.changes.outputs.data_model == 'true'
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-      - name: Cache build
+      uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: stable
+        override: true
+    - name: Cache build
       # if: steps.changes.outputs.data_model == 'true'
-        uses: actions/cache@v3
-        with:
-          path: target
-          key: ${{ runner.os }}-rust-build-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-rust-build-
-      - name: Run data model tests
+      uses: actions/cache@v3
+      with:
+        path: target
+        key: ${{ runner.os }}-rust-build-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-rust-build-
+    - name: Run data model tests
       # if: steps.changes.outputs.data_model == 'true'
-        run: angreal models test
-        working-directory: ${{ inputs.data-model-path }}
-      - name: Run migration tests
+      run: angreal models test
+      working-directory: ${{ inputs.data-model-path }}
+    - name: Run migration tests
       # if: steps.changes.outputs.data_model == 'true'
-        run: angreal tests migrations
-        working-directory: ${{ inputs.data-model-path }}
+      run: angreal tests migrations
+      working-directory: ${{ inputs.data-model-path }}
