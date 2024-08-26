@@ -1,6 +1,5 @@
 ---
 name: brokkr-dev
-
 services:
   postgres:
     image: postgres:15-alpine
@@ -17,5 +16,32 @@ services:
       interval: 1s
       retries: 60
     restart: always
+  keycloak:
+    image: quay.io/keycloak/keycloak:23.0.6
+    command: start
+    environment:
+      KC_HOSTNAME: localhost
+      KC_HOSTNAME_PORT: 8080
+      KC_HOSTNAME_STRICT_BACKCHANNEL: false
+      KC_HTTP_ENABLED: true
+      KC_HOSTNAME_STRICT_HTTPS: false
+      KC_HEALTH_ENABLED: true
+      KEYCLOAK_ADMIN: brokkr
+      KEYCLOAK_ADMIN_PASSWORD: brokkr
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres/brokkr
+      KC_DB_USERNAME: brokkr
+      KC_DB_PASSWORD: brokkr
+    ports:
+      - 8080:8080
+    restart: always
+    depends_on:
+      - postgres
+    networks:
+      - keycloak_network
+networks:
+  keycloak_network:
+    driver: bridge
 volumes:
   brokkr-postgres-data:
+    driver: local

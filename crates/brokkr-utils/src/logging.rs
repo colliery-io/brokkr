@@ -47,49 +47,13 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use once_cell::sync::OnceCell;
 
 
+pub use log::{debug, error, info, warn};
+
+
 static LOGGER: BrokkrLogger = BrokkrLogger;
 static CURRENT_LEVEL: AtomicUsize = AtomicUsize::new(LevelFilter::Info as usize);
 static INIT: OnceCell<()> = OnceCell::new();
 
-/// Macro to log messages at various levels
-#[macro_export]
-macro_rules! log {
-    ($level:expr, $($arg:tt)+) => {
-        log::log!($level, $($arg)+)
-    };
-}
-
-/// Macro to log debug messages
-#[macro_export]
-macro_rules! debug {
-    ($($arg:tt)+) => {
-        log!(log::Level::Debug, $($arg)+)
-    };
-}
-
-/// Macro to log info messages
-#[macro_export]
-macro_rules! info {
-    ($($arg:tt)+) => {
-        log!(log::Level::Info, $($arg)+)
-    };
-}
-
-/// Macro to log warning messages
-#[macro_export]
-macro_rules! warn {
-    ($($arg:tt)+) => {
-        log!(log::Level::Warn, $($arg)+)
-    };
-}
-
-/// Macro to log error messages
-#[macro_export]
-macro_rules! error {
-    ($($arg:tt)+) => {
-        log!(log::Level::Error, $($arg)+)
-    };
-}
 
 
 /// Custom logger for the Brokkr application
@@ -207,6 +171,12 @@ fn level_filter_from_u8(v: u8) -> LevelFilter {
         _ => LevelFilter::Off,
     }
 }
+
+
+pub mod prelude {
+    pub use log::{debug, info, warn, error};
+}
+
 
 #[cfg(test)]
 mod tests {

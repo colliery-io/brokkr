@@ -1,3 +1,28 @@
+
+//! # Deployment Objects Module
+//!
+//! This module defines the data structures and operations for deployment objects in the Brokkr system.
+//!
+//! ## Core Data Model
+//!
+//! The core data model for deployment objects is represented by the `DeploymentObject` struct:
+//!
+//! - `id`: Uuid - Unique identifier for the deployment object
+//! - `created_at`: DateTime<Utc> - Timestamp when the deployment object was created
+//! - `updated_at`: DateTime<Utc> - Timestamp when the deployment object was last updated
+//! - `deleted_at`: Option<DateTime<Utc>> - Timestamp when the object was soft-deleted (if applicable)
+//! - `sequence_id`: i64 - Sequential identifier for ordering deployment objects
+//! - `stack_id`: Uuid - Identifier of the stack this deployment object belongs to
+//! - `yaml_content`: String - The YAML content of the deployment object
+//! - `yaml_checksum`: String - Checksum of the YAML content for integrity verification
+//! - `submitted_at`: DateTime<Utc> - Timestamp when the deployment object was submitted
+//! - `is_deletion_marker`: bool - Flag indicating if this object marks a deletion
+//!
+//! The `NewDeploymentObject` struct is used for creating new deployment objects and contains a subset of the fields
+//! from `DeploymentObject`: `stack_id`, `yaml_content`, `yaml_checksum`, and `is_deletion_marker`. The other fields are
+//! managed by the database or set after creation.
+
+
 use chrono::{DateTime, Utc};
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -94,6 +119,15 @@ impl NewDeploymentObject {
 }
 
 /// Generates a SHA-256 checksum for the given content.
+///
+/// # Arguments
+///
+/// * `content` - The string content to generate a checksum for
+///
+/// # Returns
+///
+/// A string representation of the SHA-256 checksum
+
 fn generate_checksum(content: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(content.as_bytes());
@@ -105,6 +139,15 @@ mod tests {
     use super::*;
 
     #[test]
+    /// Tests the successful creation of a NewDeploymentObject with valid input parameters.
+    ///
+    /// This test:
+    /// 1. Creates a new NewDeploymentObject with specific stack_id, yaml_content, and is_deletion_marker.
+    /// 2. Verifies that each field of the created object matches the input values.
+    /// 3. Checks that the yaml_checksum is generated and not empty.
+    ///
+    /// It ensures that the NewDeploymentObject::new() method correctly sets all fields
+    /// and properly generates the checksum.
     fn test_new_deployment_object_success() {
         let stack_id = Uuid::new_v4();
         let yaml_content = "key: value\nother_key: other_value".to_string();
@@ -125,6 +168,10 @@ mod tests {
     }
 
     #[test]
+    /// Tests that NewDeploymentObject creation fails when given an invalid stack_id.
+    ///
+    /// This test ensures that the NewDeploymentObject::new() method properly
+    /// validates the stack_id and returns an appropriate error.
     fn test_new_deployment_object_invalid_stack_id() {
         let result = NewDeploymentObject::new(
             Uuid::nil(),
@@ -136,6 +183,10 @@ mod tests {
     }
 
     #[test]
+    /// Tests that NewDeploymentObject creation fails when given empty YAML content.
+    ///
+    /// This test ensures that the NewDeploymentObject::new() method properly
+    /// validates the yaml_content and returns an appropriate error if it's empty.
     fn test_new_deployment_object_empty_yaml() {
         let result = NewDeploymentObject::new(
             Uuid::new_v4(),
@@ -147,6 +198,10 @@ mod tests {
     }
 
     #[test]
+    /// Tests that NewDeploymentObject creation fails when given invalid YAML content.
+    ///
+    /// This test ensures that the NewDeploymentObject::new() method properly
+    /// validates the yaml_content and returns an appropriate error if it's not valid YAML.
     fn test_new_deployment_object_invalid_yaml() {
         let result = NewDeploymentObject::new(
             Uuid::new_v4(),
@@ -159,6 +214,12 @@ mod tests {
     }
 
     #[test]
+    /// Tests that the checksum generation produces consistent and non-empty results.
+    ///
+    /// This test ensures that the generate_checksum() function:
+    /// 1. Produces the same checksum for identical content
+    /// 2. Produces a non-empty checksum
+
     fn test_checksum_generation() {
         let yaml_content = "key: value\nother_key: other_value".to_string();
         let checksum1 = generate_checksum(&yaml_content);

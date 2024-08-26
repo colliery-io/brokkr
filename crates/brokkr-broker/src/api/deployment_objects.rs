@@ -1,7 +1,13 @@
+
+//! # Deployment Objects API Module
+//!
 //! This module provides the API endpoints for managing DeploymentObject entities using Axum.
 //!
 //! It includes routes for creating, retrieving, updating, and soft-deleting deployment objects,
-//! as well as listing deployment objects for a specific stack.
+//! as well as listing deployment objects for a specific stack and listing active deployment objects.
+//! The module uses the Axum web framework and interacts with a data access layer (DAL)
+//! to perform operations on DeploymentObject entities.
+
 
 use axum::{
     extract::{Path, State},
@@ -15,6 +21,18 @@ use brokkr_models::models::deployment_objects::{DeploymentObject, NewDeploymentO
 use crate::api::AppState;
 
 /// Configures the deployment objects API routes.
+///
+/// This function sets up the following routes:
+/// - POST /deployment-objects: Create a new deployment object
+/// - GET /deployment-objects/:uuid: Get a specific deployment object
+/// - PUT /deployment-objects/:uuid: Update a deployment object
+/// - DELETE /deployment-objects/:uuid: Soft delete a deployment object
+/// - GET /stacks/:stack_uuid/deployment-objects: List all deployment objects for a specific stack
+/// - GET /deployment-objects/active: List all active deployment objects
+///
+/// # Returns
+/// A configured `Router<AppState>` with all deployment object routes.
+
 pub fn configure_routes() -> Router<AppState> {
     Router::new()
         .route("/deployment-objects", post(create_deployment_object))
@@ -26,6 +44,15 @@ pub fn configure_routes() -> Router<AppState> {
 }
 
 /// Handler for creating a new deployment object.
+///
+/// # Arguments
+/// * `state` - The application state containing the DAL
+/// * `new_deployment_object` - JSON payload containing the new deployment object data
+///
+/// # Returns
+/// * On success: A tuple containing `StatusCode::CREATED` and the created `DeploymentObject`
+/// * On failure: `StatusCode::INTERNAL_SERVER_ERROR`
+
 async fn create_deployment_object(
     State(state): State<AppState>,
     Json(new_deployment_object): Json<NewDeploymentObject>,
@@ -36,6 +63,15 @@ async fn create_deployment_object(
 }
 
 /// Handler for retrieving a deployment object by UUID.
+///
+/// # Arguments
+/// * `state` - The application state containing the DAL
+/// * `uuid` - The UUID of the deployment object to retrieve
+///
+/// # Returns
+/// * On success: JSON representation of the `DeploymentObject`
+/// * On not found: `StatusCode::NOT_FOUND`
+
 async fn get_deployment_object(
     State(state): State<AppState>,
     Path(uuid): Path<Uuid>,
@@ -46,6 +82,18 @@ async fn get_deployment_object(
 }
 
 /// Handler for updating a deployment object.
+///
+/// # Arguments
+/// * `state` - The application state containing the DAL
+/// * `uuid` - The UUID of the deployment object to update
+/// * `deployment_object` - JSON payload containing the updated deployment object data
+///
+/// # Returns
+/// * On success: JSON representation of the updated `DeploymentObject`
+/// * On failure: 
+///   - `StatusCode::BAD_REQUEST` if the object cannot be modified
+///   - `StatusCode::INTERNAL_SERVER_ERROR` for other errors
+
 async fn update_deployment_object(
     State(state): State<AppState>,
     Path(uuid): Path<Uuid>,
@@ -65,6 +113,15 @@ async fn update_deployment_object(
 }
 
 /// Handler for soft-deleting a deployment object.
+///
+/// # Arguments
+/// * `state` - The application state containing the DAL
+/// * `uuid` - The UUID of the deployment object to soft delete
+///
+/// # Returns
+/// * On success: `StatusCode::NO_CONTENT`
+/// * On failure: `StatusCode::INTERNAL_SERVER_ERROR`
+
 async fn soft_delete_deployment_object(
     State(state): State<AppState>,
     Path(uuid): Path<Uuid>,
@@ -75,6 +132,15 @@ async fn soft_delete_deployment_object(
 }
 
 /// Handler for listing all deployment objects for a specific stack.
+///
+/// # Arguments
+/// * `state` - The application state containing the DAL
+/// * `stack_uuid` - The UUID of the stack to list deployment objects for
+///
+/// # Returns
+/// * On success: JSON array of `DeploymentObject` objects
+/// * On failure: `StatusCode::INTERNAL_SERVER_ERROR`
+
 async fn list_deployment_objects(
     State(state): State<AppState>,
     Path(stack_uuid): Path<Uuid>,
@@ -85,6 +151,14 @@ async fn list_deployment_objects(
 }
 
 /// Handler for listing all active deployment objects.
+///
+/// # Arguments
+/// * `state` - The application state containing the DAL
+///
+/// # Returns
+/// * On success: JSON array of active `DeploymentObject` objects
+/// * On failure: `StatusCode::INTERNAL_SERVER_ERROR`
+
 async fn list_active_deployment_objects(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<DeploymentObject>>, StatusCode> {
