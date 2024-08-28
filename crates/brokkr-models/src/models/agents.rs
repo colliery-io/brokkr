@@ -55,6 +55,8 @@ pub struct Agent {
     pub last_heartbeat: Option<DateTime<Utc>>,
     /// Current status of the agent (max 50 characters, default 'INACTIVE')
     pub status: String,
+    /// Hash of the agent API Key
+    pub pak_hash: String
 }
 
 /// Represents a new agent to be inserted into the database.
