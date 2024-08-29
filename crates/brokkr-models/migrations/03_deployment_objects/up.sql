@@ -29,7 +29,10 @@ EXECUTE FUNCTION update_timestamp();
 CREATE OR REPLACE FUNCTION prevent_deployment_object_changes()
 RETURNS TRIGGER AS $$
 BEGIN
-    IF (NEW.deleted_at IS NOT NULL AND OLD.deleted_at IS NULL) THEN
+    IF TG_OP = 'DELETE' THEN
+        -- Allow deletions (they will be handled by the stack deletion trigger)
+        RETURN OLD;
+    ELSIF (NEW.deleted_at IS NOT NULL AND OLD.deleted_at IS NULL) THEN
         -- Allow setting deleted_at (soft delete)
         RETURN NEW;
     ELSIF (NEW.is_deletion_marker AND OLD.is_deletion_marker) THEN
@@ -38,7 +41,7 @@ BEGIN
     ELSE
         RAISE EXCEPTION 'Deployment objects cannot be modified except for soft deletion or updating deletion markers';
     END IF;
-END;
+end;
 $$ LANGUAGE plpgsql;
 
 -- Triggers to prevent deployment object changes
@@ -74,6 +77,6 @@ $$ LANGUAGE plpgsql;
 
 -- Trigger for hard deleting deployment objects
 CREATE TRIGGER trigger_hard_delete_deployment_objects
-AFTER DELETE ON stacks
+BEFORE DELETE ON stacks
 FOR EACH ROW
 EXECUTE FUNCTION hard_delete_deployment_objects_on_stack_delete();

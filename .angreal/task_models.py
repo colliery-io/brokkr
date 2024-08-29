@@ -31,82 +31,105 @@ def schema():
 
 
 TEST_SQL_SCRIPT = """
--- Start a transaction so we can rollback at the end
+-- Start transaction
 BEGIN;
 
--- Create a temporary table to store the stack_id
-CREATE TEMPORARY TABLE temp_stack_id (id UUID);
+-- Test 1: Create a stack
+-- Intended behavior: Successfully insert a new stack with name, description, and verify constraints
+INSERT INTO stacks (name, description) VALUES ('test-stack', 'A test stack');
+-- Verify insertion
+SELECT * FROM stacks WHERE name = 'test-stack';
+-- Test unique constraint
+INSERT INTO stacks (name, description) VALUES ('test-stack', 'Duplicate name')
+ON CONFLICT (name) DO NOTHING;
+-- Verify no duplicate was inserted
+SELECT COUNT(*) FROM stacks WHERE name = 'test-stack';
 
--- 1. Create a test stack
-WITH new_stack AS (
-    INSERT INTO stacks (name, description, labels, annotations, agent_target)
-    VALUES ('test-stack', 'A test stack', '{"env": "test"}', '{"version": "1.0"}', '["test-agent"]')
-    RETURNING id
-)
-INSERT INTO temp_stack_id SELECT id FROM new_stack;
+-- Test 2: Create an agent
+-- Intended behavior: Successfully insert a new agent and verify constraints
+INSERT INTO agents (name, cluster_name, status) VALUES ('test-agent', 'test-cluster', 'ACTIVE');
+-- Verify insertion
+SELECT * FROM agents WHERE name = 'test-agent';
+-- Test unique constraint
+INSERT INTO agents (name, cluster_name, status) VALUES ('test-agent', 'test-cluster', 'INACTIVE')
+ON CONFLICT (name, cluster_name) DO NOTHING;
+-- Verify no duplicate was inserted
+SELECT COUNT(*) FROM agents WHERE name = 'test-agent' AND cluster_name = 'test-cluster';
 
--- 2. Create some test deployment objects
-INSERT INTO deployment_objects (stack_id, yaml_content, yaml_checksum, is_deletion_marker)
-VALUES
-((SELECT id FROM temp_stack_id), 'apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: test-config', md5('test-content-1'), FALSE),
-((SELECT id FROM temp_stack_id), 'apiVersion: v1\nkind: Secret\nmetadata:\n  name: test-secret', md5('test-content-2'), FALSE);
+-- Test 3: Create a deployment object
+-- Intended behavior: Successfully insert a new deployment object and verify constraints
+INSERT INTO deployment_objects (stack_id, yaml_content, yaml_checksum)
+VALUES ((SELECT id FROM stacks WHERE name = 'test-stack'), 'test: content', md5('test: content'));
+-- Verify insertion and auto-generated fields
+SELECT * FROM deployment_objects WHERE stack_id = (SELECT id FROM stacks WHERE name = 'test-stack');
 
--- 3. Verify the deployment objects were created with sequence_ids
-SELECT * FROM deployment_objects WHERE stack_id = (SELECT id FROM temp_stack_id) ORDER BY sequence_id;
+-- Test 4: Create an agent target
+-- Intended behavior: Successfully link an agent to a stack
+INSERT INTO agent_targets (stack_id, agent_id)
+VALUES (
+    (SELECT id FROM stacks WHERE name = 'test-stack'),
+    (SELECT id FROM agents WHERE name = 'test-agent')
+);
+-- Verify insertion
+SELECT * FROM agent_targets;
 
--- 4. Create a test agent
-INSERT INTO agents (name, cluster_name, status)
-VALUES ('test-agent', 'test-cluster', 'ACTIVE');
-
--- 5. Create some test agent events
+-- Test 5: Create an agent event
+-- Intended behavior: Successfully insert a new agent event
 INSERT INTO agent_events (agent_id, deployment_object_id, event_type, status, message)
-SELECT
+VALUES (
     (SELECT id FROM agents WHERE name = 'test-agent'),
-    id,
+    (SELECT id FROM deployment_objects LIMIT 1),
     'APPLIED',
-    'success',
-    'Test deployment applied'
-FROM deployment_objects
-WHERE stack_id = (SELECT id FROM temp_stack_id);
-
--- 6. Verify the agent events were created
+    'SUCCESS',
+    'Test event'
+);
+-- Verify insertion
 SELECT * FROM agent_events;
 
--- 7. Test soft delete trigger on stack
-UPDATE stacks SET deleted_at = NOW() WHERE id = (SELECT id FROM temp_stack_id);
+-- Test 6: Test stack soft delete trigger
+-- Intended behavior: Soft delete stack, create deletion marker, and soft delete related deployment objects
+UPDATE stacks SET deleted_at = CURRENT_TIMESTAMP WHERE name = 'test-stack';
+-- Verify soft deletion of stack
+SELECT * FROM stacks WHERE name = 'test-stack';
+-- Verify soft deletion of related deployment objects
+SELECT * FROM deployment_objects WHERE stack_id = (SELECT id FROM stacks WHERE name = 'test-stack');
+-- Verify creation of deletion marker
+SELECT * FROM deployment_objects WHERE stack_id = (SELECT id FROM stacks WHERE name = 'test-stack') AND is_deletion_marker = TRUE;
 
--- 8. Verify the soft delete effects
--- Check if deployment objects are marked as deleted
-SELECT * FROM deployment_objects WHERE stack_id = (SELECT id FROM temp_stack_id) ORDER BY sequence_id;
-
--- Check if a deletion marker was created
-SELECT * FROM deployment_objects
-WHERE stack_id = (SELECT id FROM temp_stack_id) AND is_deletion_marker = TRUE;
-
--- 9. Test updating a deployment object (should fail due to prevent_deployment_object_changes trigger)
+-- Test 7: Test prevention of deployment object modifications
+-- Intended behavior: Prevent updates to non-deletion marker deployment objects
 DO $$
 DECLARE
     test_id UUID;
 BEGIN
-    SELECT id INTO test_id FROM deployment_objects WHERE stack_id = (SELECT id FROM temp_stack_id) LIMIT 1;
+    SELECT id INTO test_id FROM deployment_objects WHERE is_deletion_marker = FALSE LIMIT 1;
     BEGIN
-        UPDATE deployment_objects SET yaml_content = 'updated content' WHERE id = test_id;
+        UPDATE deployment_objects SET yaml_content = 'modified content' WHERE id = test_id;
         RAISE EXCEPTION 'Expected update to fail, but it succeeded';
     EXCEPTION WHEN others THEN
         RAISE NOTICE 'Update failed as expected: %', SQLERRM;
     END;
 END $$;
 
--- 10. Test cascade delete of agent events when an agent is deleted
-DELETE FROM agents WHERE name = 'test-agent';
+-- Test 8: Test cascade soft delete of agents
+-- Intended behavior: Soft delete agent and cascade to related agent events
+UPDATE agents SET deleted_at = CURRENT_TIMESTAMP WHERE name = 'test-agent';
+-- Verify soft deletion of agent
+SELECT * FROM agents WHERE name = 'test-agent';
+-- Verify soft deletion of related agent events
+SELECT * FROM agent_events WHERE agent_id = (SELECT id FROM agents WHERE name = 'test-agent');
 
--- Verify that related agent events were deleted
-SELECT * FROM agent_events;
+-- Test 9: Test hard delete of stack
+-- Intended behavior: Hard delete stack and cascade to all related objects
+DELETE FROM stacks WHERE name = 'test-stack';
+-- Verify deletion of stack
+SELECT COUNT(*) FROM stacks WHERE name = 'test-stack';
+-- Verify deletion of related deployment objects
+SELECT COUNT(*) FROM deployment_objects WHERE stack_id = (SELECT id FROM stacks WHERE name = 'test-stack');
+-- Verify deletion of related agent targets
+SELECT COUNT(*) FROM agent_targets WHERE stack_id = (SELECT id FROM stacks WHERE name = 'test-stack');
 
--- Drop the temporary table
-DROP TABLE temp_stack_id;
-
--- Rollback the transaction to clean up the test data
+-- Rollback transaction to clean up test data
 ROLLBACK;
 """
 
