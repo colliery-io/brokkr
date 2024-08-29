@@ -129,39 +129,64 @@ SELECT COUNT(*) FROM deployment_objects WHERE stack_id = (SELECT id FROM stacks 
 -- Verify deletion of related agent targets
 SELECT COUNT(*) FROM agent_targets WHERE stack_id = (SELECT id FROM stacks WHERE name = 'test-stack');
 
+-- Test 10: Test update_timestamp trigger
+-- Intended behavior: Automatically update the updated_at timestamp when a record is modified
+INSERT INTO stacks (name, description) VALUES ('update-test-stack', 'Testing update timestamp');
+SELECT updated_at AS original_timestamp FROM stacks WHERE name = 'update-test-stack';
+-- Wait for 1 second to ensure timestamp change
+SELECT pg_sleep(1);
+UPDATE stacks SET description = 'Modified description' WHERE name = 'update-test-stack';
+SELECT updated_at AS new_timestamp FROM stacks WHERE name = 'update-test-stack';
+
+-- Test 11: Test labels and annotations
+-- Intended behavior: Successfully add labels and annotations to objects
+INSERT INTO labels (object_id, object_type, label)
+VALUES ((SELECT id FROM stacks WHERE name = 'update-test-stack'), 'stack', 'test-label');
+INSERT INTO annotations (object_id, object_type, key, value)
+VALUES ((SELECT id FROM stacks WHERE name = 'update-test-stack'), 'stack', 'test-key', 'test-value');
+-- Verify insertions
+SELECT * FROM labels WHERE object_id = (SELECT id FROM stacks WHERE name = 'update-test-stack');
+SELECT * FROM annotations WHERE object_id = (SELECT id FROM stacks WHERE name = 'update-test-stack');
+
+-- Test 12: Test handle_stack_hard_delete function
+-- Intended behavior: Properly delete all related objects when a stack is hard deleted
+INSERT INTO stacks (name, description) VALUES ('hard-delete-test-stack', 'Testing hard delete');
+INSERT INTO agents (name, cluster_name, status) VALUES ('hard-delete-test-agent', 'test-cluster', 'ACTIVE');
+INSERT INTO deployment_objects (stack_id, yaml_content, yaml_checksum)
+VALUES ((SELECT id FROM stacks WHERE name = 'hard-delete-test-stack'), 'test: content', md5('test: content'));
+INSERT INTO agent_targets (stack_id, agent_id)
+VALUES (
+    (SELECT id FROM stacks WHERE name = 'hard-delete-test-stack'),
+    (SELECT id FROM agents WHERE name = 'hard-delete-test-agent')
+);
+INSERT INTO agent_events (agent_id, deployment_object_id, event_type, status, message)
+VALUES (
+    (SELECT id FROM agents WHERE name = 'hard-delete-test-agent'),
+    (SELECT id FROM deployment_objects WHERE stack_id = (SELECT id FROM stacks WHERE name = 'hard-delete-test-stack')),
+    'APPLIED',
+    'SUCCESS',
+    'Test event'
+);
+INSERT INTO labels (object_id, object_type, label)
+VALUES ((SELECT id FROM stacks WHERE name = 'hard-delete-test-stack'), 'stack', 'test-label');
+INSERT INTO annotations (object_id, object_type, key, value)
+VALUES ((SELECT id FROM stacks WHERE name = 'hard-delete-test-stack'), 'stack', 'test-key', 'test-value');
+
+-- Perform hard delete
+DELETE FROM stacks WHERE name = 'hard-delete-test-stack';
+
+-- Verify all related objects are deleted
+SELECT COUNT(*) FROM deployment_objects WHERE stack_id = (SELECT id FROM stacks WHERE name = 'hard-delete-test-stack');
+SELECT COUNT(*) FROM agent_targets WHERE stack_id = (SELECT id FROM stacks WHERE name = 'hard-delete-test-stack');
+SELECT COUNT(*) FROM agent_events WHERE deployment_object_id IN (SELECT id FROM deployment_objects WHERE stack_id = (SELECT id FROM stacks WHERE name = 'hard-delete-test-stack'));
+SELECT COUNT(*) FROM labels WHERE object_id = (SELECT id FROM stacks WHERE name = 'hard-delete-test-stack');
+SELECT COUNT(*) FROM annotations WHERE object_id = (SELECT id FROM stacks WHERE name = 'hard-delete-test-stack');
+
 -- Rollback transaction to clean up test data
 ROLLBACK;
 """
 
-tables_available= """
--- Start a transaction so we can rollback at the end
-BEGIN;
 
--- Function to print table names
-CREATE OR REPLACE FUNCTION print_tables() RETURNS void AS $$
-DECLARE
-    table_name text;
-BEGIN
-    FOR table_name IN
-        SELECT tablename
-        FROM pg_tables
-        WHERE schemaname = 'public'
-        ORDER BY tablename
-    LOOP
-        RAISE NOTICE 'Table: %', table_name;
-    END LOOP;
-END;
-$$ LANGUAGE plpgsql;
-
--- Call the function to print table names
-SELECT print_tables();
-
--- Drop the function
-DROP FUNCTION print_tables();
-
--- Rollback the transaction to clean up
-ROLLBACK;
-"""
 
 @models()
 @angreal.command(name="test")
@@ -222,5 +247,4 @@ def test():
     for f in migration_files:
         run_sql_in_docker(open(f,'r').read())
     # Run the SQL script
-    run_sql_in_docker(tables_available)
     run_sql_in_docker(TEST_SQL_SCRIPT)

@@ -59,3 +59,40 @@ AFTER UPDATE OF deleted_at ON stacks
 FOR EACH ROW
 WHEN (OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL)
 EXECUTE FUNCTION handle_stack_soft_delete();
+
+CREATE OR REPLACE FUNCTION handle_stack_hard_delete()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Delete labels associated with the stack
+    DELETE FROM labels
+    WHERE object_id = OLD.id AND object_type = 'stack';
+
+    -- Delete annotations associated with the stack
+    DELETE FROM annotations
+    WHERE object_id = OLD.id AND object_type = 'stack';
+
+    -- Delete agent_target rows associated with the stack
+    DELETE FROM agent_targets
+    WHERE stack_id = OLD.id;
+
+    -- Delete all agent events associated with the deleted deployment objects
+    DELETE FROM agent_events
+    WHERE deployment_object_id IN (
+        SELECT id
+        FROM deployment_objects
+        WHERE stack_id = OLD.id
+    );
+
+    -- Delete all deployment objects for the stack, including the deletion marker
+    DELETE FROM deployment_objects
+    WHERE stack_id = OLD.id;
+
+    RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger for stack hard deletion
+CREATE TRIGGER trigger_stack_hard_delete
+BEFORE DELETE ON stacks
+FOR EACH ROW
+EXECUTE FUNCTION handle_stack_hard_delete();
