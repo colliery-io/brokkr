@@ -1,109 +1,142 @@
-# DataModel
+# Data Design Description
 
 ```mermaid
 classDiagram
-    class base_table {
+    class stacks {
         +UUID id
         +TIMESTAMP created_at
         +TIMESTAMP updated_at
         +TIMESTAMP deleted_at
+        +VARCHAR(255) name
+        +TEXT description
+        +UUID agent_target
     }
+    
     class agents {
-        +UUID uuid [PK]
-        +VARCHAR name
-        +VARCHAR cluster_name
-        +JSONB labels
-        +JSONB annotations
+        +UUID id
+        +TIMESTAMP created_at
+        +TIMESTAMP updated_at
+        +TIMESTAMP deleted_at
+        +VARCHAR(255) name
+        +VARCHAR(255) cluster_name
         +TIMESTAMP last_heartbeat
-        +VARCHAR status
+        +VARCHAR(50) status
+        +TEXT pak_hash
     }
+    
     class deployment_objects {
-        +UUID uuid [PK]
-        +BIGSERIAL sequence_id [UQ]
-        +UUID stack_id [FK]
+        +UUID id
+        +TIMESTAMP created_at
+        +TIMESTAMP updated_at
+        +TIMESTAMP deleted_at
+        +BIGSERIAL sequence_id
+        +UUID stack_id
         +TEXT yaml_content
         +TEXT yaml_checksum
-        +TIMESTAMP deleted_at
         +TIMESTAMP submitted_at
         +BOOLEAN is_deletion_marker
     }
-    class stacks {
-        +UUID id [PK]
-        +VARCHAR name
-        +TEXT description
-        +JSONB labels
-        +JSONB annotations
-        +JSONB agent_target
-    }
+    
     class agent_events {
-        +UUID uuid [PK]
-        +UUID agent_id [FK]
-        +UUID deployment_object_id [FK]
-        +VARCHAR event_type
-        +VARCHAR status
+        +UUID id
+        +TIMESTAMP created_at
+        +TIMESTAMP updated_at
+        +TIMESTAMP deleted_at
+        +UUID agent_id
+        +UUID deployment_object_id
+        +VARCHAR(50) event_type
+        +VARCHAR(10) status
         +TEXT message
     }
-    base_table <|-- agents
-    base_table <|-- stacks
-    base_table <|-- agent_events
-    base_table <|-- deployment_objects
-    stacks "1" -- "*" deployment_objects : has
-    agents "1" -- "*" agent_events : generates
-    deployment_objects "1" -- "*" agent_events : relates to
+    
+    class agent_targets {
+        +UUID id
+        +UUID stack_id
+        +TEXT agent_name
+        +TEXT cluster_name
+    }
+    
+    class labels {
+        +UUID id
+        +UUID external_object_id
+        +VARCHAR(255) label
+    }
+    
+    class annotations {
+        +UUID id
+        +UUID external_object_id
+        +VARCHAR(255) key
+        +TEXT value
+    }
+    
+    stacks "1" -- "0..*" deployment_objects
+    stacks "1" -- "0..*" agent_targets
+    agents "1" -- "0..*" agent_events
+    deployment_objects "1" -- "0..*" agent_events
+    agents "1" -- "0..*" labels
+    agents "1" -- "0..*" annotations
+    stacks "1" -- "0..*" labels
+    stacks "1" -- "0..*" annotations
+
 ```
 
-# Design Description
+## Individual Table Descriptions
 
-## Base Structure:
-1. All tables inherit from `base_table`, which provides common fields like `id`, `created_at`, `updated_at`, and `deleted_at`.
-2. The `update_timestamp()` function updates the `updated_at` field on any change.
-3. The `soft_delete()` function sets the `deleted_at` field when a soft delete is performed.
+1. Stacks Table:
+   - Primary key: `id` (UUID)
+   - Unique constraint: `name`
+   - Contains basic information about stacks including name and description
+   - Has a soft delete mechanism (`deleted_at`)
+   - Associated with deployment objects and agent targets
 
-## Entities:
+2. Agents Table:
+   - Primary key: `id` (UUID)
+   - Unique constraint: combination of `name` and `cluster_name`
+   - Stores information about agents including status and last heartbeat
+   - Has a soft delete mechanism (`deleted_at`)
+   - Associated with agent events
 
-1. Agents:
-   - Represents the agents in the system.
-   - Has a unique constraint on `(name, cluster_name)`.
-   - Includes fields for labels, annotations, last heartbeat, and status that the Agent responds to.
+3. Deployment Objects Table:
+   - Primary key: `id` (UUID)
+   - Contains YAML content for deployments and its checksum
+   - Has a `sequence_id` for ordering
+   - Linked to a stack via `stack_id`
+   - Includes `is_deletion_marker` flag for marking deletions
+   - Has a soft delete mechanism (`deleted_at`)
 
-2. Stacks:
-   - Represents stacks in the system.
-   - Has a unique constraint on `name`.
-   - Contains labels, annotations, and agent targeting information.
+4. Agent Events Table:
+   - Primary key: `id` (UUID)
+   - Records events related to agents and deployment objects
+   - Linked to both an agent and a deployment object
+   - Includes event type, status, and a message
+   - Has a soft delete mechanism (`deleted_at`)
 
-3. Deployment Objects:
-   - Represents objects to be deployed.
-   - Linked to a stack via `stack_id`.
-   - Contains YAML content and its checksum.
-   - Includes a `is_deletion_marker` flag for marking deletions.
+5. Agent Targets Table:
+   - Primary key: `id` (UUID)
+   - Links stacks with specific agent and cluster combinations
+   - Unique constraint: combination of `stack_id`, `agent_name`, and `cluster_name`
 
-4. Agent Events:
-   - Represents events generated by agents on attempted apply.
-   - Linked to both an agent and a deployment object.
-   - Includes an event type, status (success/fail), and a message.
+6. Labels Table:
+   - Primary key: `id` (UUID)
+   - Stores labels for external objects (like agents or stacks)
+   - Unique constraint: combination of `external_object_id` and `label`
 
-## Cascading Events and Triggers:
+7. Annotations Table:
+   - Primary key: `id` (UUID)
+   - Stores key-value annotations for external objects
+   - Unique constraint: combination of `external_object_id` and `key`
 
-1. Soft Delete Propagation:
-   - When a stack is soft-deleted:
-     a. The `handle_stack_soft_delete()` function is triggered.
-     b. All existing deployment objects for the stack are soft-deleted.
-     c. A new deployment object with blank content is created as a deletion marker.
-   - When an agent is soft-deleted:
-     a. The `cascade_soft_delete_agents()` function is triggered.
-     b. All associated agent events are soft-deleted.
+Key Features:
+1. Soft Delete: All main tables (stacks, agents, deployment_objects, agent_events) support soft delete via the `deleted_at` column.
+2. Timestamps: All main tables have `created_at` and `updated_at` columns, automatically managed by triggers.
+3. Immutability: Deployment objects are designed to be immutable after creation, with exceptions for soft deletion and updating deletion markers.
+4. Cascading Deletes: The system implements cascading soft deletes and hard deletes through triggers and functions.
+5. Indexing: Appropriate indexes are created for efficient querying, especially on foreign keys and frequently used columns.
 
-2. Hard Delete Propagation:
-   - When a stack is hard-deleted:
-     a. The `hard_delete_deployment_objects_on_stack_delete()` function is triggered.
-     b. All associated agent events are hard-deleted.
-     c. All deployment objects for the stack are hard-deleted.
+The data model supports a system where:
+- Stacks can have multiple deployment objects and agent targets.
+- Agents can generate multiple events related to deployment objects.
+- Both stacks and agents can have multiple labels and annotations.
+- The system maintains a history of deployments and agent activities through the deployment_objects and agent_events tables.
 
-3. Deployment Object Immutability:
-   - The `prevent_deployment_object_changes()` function ensures that deployment objects cannot be modified after creation, except for soft deletion or updating deletion markers.
-
-4. Timestamp Updates:
-   - Any update to agents, stacks, or agent events triggers the `update_timestamp()` function, updating the `updated_at` field.
-
-5. Soft Delete Mechanism:
-   - Attempts to set `deleted_at` on agents, stacks, or agent events trigger the `soft_delete()` function, which sets the `deleted_at` timestamp.
+This design allows for efficient tracking of deployments, agent activities, and system states while maintaining data integrity and supporting soft delete mechanisms for data retention policies.

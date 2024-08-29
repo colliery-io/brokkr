@@ -50,6 +50,7 @@ pub fn configure_routes() -> Router<AppState> {
         .route("/agents/:uuid/heartbeat", put(update_heartbeat))
         .route("/agents/:uuid/status", put(update_status))
         .route("/agents/:uuid/generate_api_key", post(generate_api_key))
+        // .route("/agents/:uuid/undeployed", get(get_undeployed_objects))
 }
 
 /// Handler for creating a new agent.
@@ -255,3 +256,15 @@ async fn generate_api_key(
         "api_key": pak.to_string()
     })))
 }
+
+
+// async fn get_undeployed_objects(
+//     State(state): State<AppState>,
+//     Path(agent_id): Path<Uuid>,
+// ) -> Result<Json<Vec<(Stack, Vec<DeploymentObject>)>>, StatusCode> {
+//     state
+//         .dal
+//         .get_undeployed_objects_for_agent(agent_id)
+//         .map(Json)
+//         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+// }

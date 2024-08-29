@@ -4,11 +4,19 @@
 //! retrieving, updating, and soft-deleting agents.
 
 use crate::dal::DAL;
-use brokkr_models::models::agents::{Agent, NewAgent};
-use brokkr_models::schema::agents;
+use brokkr_models::models::{
+    agents::{Agent, NewAgent},
+    stacks::Stack,
+    deployment_objects::DeploymentObject,
+    };
+use brokkr_models::schema::*;
+
 use chrono::Utc;
 use diesel::prelude::*;
-use uuid::Uuid;
+use diesel::sql_query;
+use diesel::sql_types::{Text, Nullable, Jsonb, Uuid, Array};
+
+use uuid::Uuid as RustUuid;
 
 /// Represents the Data Access Layer for Agent-related operations.
 pub struct AgentsDAL<'a> {
@@ -43,7 +51,7 @@ impl<'a> AgentsDAL<'a> {
     ///
     /// Returns a Result containing the Agent if found, or a diesel::result::Error if not found or on failure.
     #[allow(unused_variables)]
-    pub fn get(&self, uuid: Uuid, include_deleted: bool) -> Result<Agent, diesel::result::Error> {
+    pub fn get(&self, uuid: RustUuid, include_deleted: bool) -> Result<Agent, diesel::result::Error> {
         use brokkr_models::schema::agents::dsl::*;
         let conn = &mut self.dal.pool.get().unwrap();
 
@@ -66,7 +74,7 @@ impl<'a> AgentsDAL<'a> {
     ///
     /// Returns Ok(()) on success, or a diesel::result::Error on failure.
     #[allow(unused_variables)]
-    pub fn soft_delete(&self, uuid: Uuid) -> Result<(), diesel::result::Error> {
+    pub fn soft_delete(&self, uuid: RustUuid) -> Result<(), diesel::result::Error> {
         use brokkr_models::schema::agents::dsl::*;
         let conn = &mut self.dal.pool.get().unwrap();
         let now = Utc::now().naive_utc();
@@ -110,7 +118,7 @@ impl<'a> AgentsDAL<'a> {
     /// # Returns
     ///
     /// Returns a Result containing the updated Agent on success, or a diesel::result::Error on failure.
-    pub fn update(&self, uuid: Uuid, agent: &Agent) -> Result<Agent, diesel::result::Error> {
+    pub fn update(&self, uuid: RustUuid, agent: &Agent) -> Result<Agent, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().unwrap();
         diesel::update(agents::table.filter(agents::id.eq(uuid)))
             .set(agent)
@@ -126,7 +134,7 @@ impl<'a> AgentsDAL<'a> {
     /// # Returns
     ///
     /// Returns a Result containing the updated Agent on success, or a diesel::result::Error on failure.
-    pub fn update_heartbeat(&self, uuid: Uuid) -> Result<Agent, diesel::result::Error> {
+    pub fn update_heartbeat(&self, uuid: RustUuid) -> Result<Agent, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().unwrap();
         diesel::update(agents::table.filter(agents::id.eq(uuid)))
             .set(agents::last_heartbeat.eq(diesel::dsl::now))
@@ -143,10 +151,60 @@ impl<'a> AgentsDAL<'a> {
     /// # Returns
     ///
     /// Returns a Result containing the updated Agent on success, or a diesel::result::Error on failure.
-    pub fn update_status(&self, uuid: Uuid, status: &str) -> Result<Agent, diesel::result::Error> {
+    pub fn update_status(&self, uuid: RustUuid, status: &str) -> Result<Agent, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().unwrap();
         diesel::update(agents::table.filter(agents::id.eq(uuid)))
             .set(agents::status.eq(status))
             .get_result(conn)
     }
+
+
+    /// Finds matching stacks and undeployed objects for a given agent.
+    ///
+    /// # Arguments
+    ///
+    /// * `agent_uuid` - The UUID of the agent to find matches for.
+    ///
+    /// # Returns
+    ///
+    /// Returns a Result containing a Vec of tuples (Stack, Vec<DeploymentObject>) on success,
+    /// or a diesel::result::Error on failure.
+    pub fn get_undeployed_objects(&self, agent_uuid: RustUuid) {//-> Result<Vec<(Stack, Vec<DeploymentObject>)>, diesel::result::Error> {
+        use brokkr_models::schema::agents::dsl::*;
+        use brokkr_models::schema::agents::dsl::id as agent_id;
+        use brokkr_models::schema::stacks::dsl::*;
+        use brokkr_models::schema::stacks::dsl::labels as stacks_labels;
+        let conn = &mut self.dal.pool.get().unwrap();
+
+
+        let agent = agents
+        .filter(agent_id.eq(agent_uuid))
+        .first::<Agent>(conn)?;
+
+        
+
+        // let stacks = stacks.filter(
+        //     stacks_labels.is_null()
+        //         .and(agent.labels.is_not_nill())
+        //         .and(array_contains_any(labels.cast(), agent.labels.cast()))
+        // )
+        
+        // .filter(
+        //     Stack::labels.is_not_null()
+        //         .and(agent.labels.is_not_null())
+        //         .and(array_contains_all(Stack::labels.cast(), agent.labels.cast()))
+        //     .or(Stack::agent_target.cast::<Jsonb>().contains(
+        //         serde_json::json!([{"agent": agent.name, "cluster": agent.cluster_name}])
+        //     ))
+        //     .or(
+        //         Stack::annotations.is_not_null()
+        //             .and(agent.annotations.is_not_null())
+        //             .and(Stack::annotations.cast::<Jsonb>().contains(agent.annotations.cast()))
+        //     )
+        // )
+        // .select(Stack::id);
+
+    }
+
+
 }

@@ -17,6 +17,15 @@ diesel::table! {
 }
 
 diesel::table! {
+    agent_targets (id) {
+        id -> Uuid,
+        stack_id -> Uuid,
+        agent_name -> Text,
+        cluster_name -> Text,
+    }
+}
+
+diesel::table! {
     agents (id) {
         id -> Uuid,
         created_at -> Timestamptz,
@@ -26,12 +35,20 @@ diesel::table! {
         name -> Varchar,
         #[max_length = 255]
         cluster_name -> Varchar,
-        labels -> Nullable<Jsonb>,
-        annotations -> Nullable<Jsonb>,
         last_heartbeat -> Nullable<Timestamptz>,
         #[max_length = 50]
         status -> Varchar,
         pak_hash -> Text,
+    }
+}
+
+diesel::table! {
+    annotations (id) {
+        id -> Uuid,
+        external_object_id -> Uuid,
+        #[max_length = 255]
+        key -> Varchar,
+        value -> Text,
     }
 }
 
@@ -51,6 +68,15 @@ diesel::table! {
 }
 
 diesel::table! {
+    labels (id) {
+        id -> Uuid,
+        external_object_id -> Uuid,
+        #[max_length = 255]
+        label -> Varchar,
+    }
+}
+
+diesel::table! {
     stacks (id) {
         id -> Uuid,
         created_at -> Timestamptz,
@@ -59,9 +85,6 @@ diesel::table! {
         #[max_length = 255]
         name -> Varchar,
         description -> Nullable<Text>,
-        labels -> Nullable<Jsonb>,
-        annotations -> Nullable<Jsonb>,
-        agent_target -> Nullable<Jsonb>,
     }
 }
 
@@ -71,7 +94,10 @@ diesel::joinable!(deployment_objects -> stacks (stack_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
     agent_events,
+    agent_targets,
     agents,
+    annotations,
     deployment_objects,
+    labels,
     stacks,
 );
