@@ -16,27 +16,27 @@ services:
       retries: 3
       start_period: 60s
     restart: always
-  keycloak:
-    container_name: brokkr-keycloak
-    image: bitnami/keycloak:25
-    links: [postgres]
-    environment:
-      - KEYCLOAK_DATABASE_VENDOR=postgresql
-      - KEYCLOAK_DATABASE_HOST=postgres
-      - KEYCLOAK_DATABASE_PORT=5432
-      - KEYCLOAK_DATABASE_NAME=brokkr
-      - KEYCLOAK_DATABASE_USER=brokkr
-      - KEYCLOAK_DATABASE_PASSWORD=brokkr
-      - KEYCLOAK_DATABASE_SCHEMA=public
-      - KEYCLOAK_ADMIN_USER=brokkr
-      - KEYCLOAK_ADMIN_PASSWORD=brokkr
-      - KC_HTTP_ENABLED=true
-    ports: [8080:8080]
-    restart: always
-    networks: [default]
-    depends_on:
-      postgres:
-        condition: service_healthy
+  # keycloak:
+  #   container_name: brokkr-keycloak
+  #   image: bitnami/keycloak:25
+  #   links: [postgres]
+  #   environment:
+  #     - KEYCLOAK_DATABASE_VENDOR=postgresql
+  #     - KEYCLOAK_DATABASE_HOST=postgres
+  #     - KEYCLOAK_DATABASE_PORT=5432
+  #     - KEYCLOAK_DATABASE_NAME=brokkr
+  #     - KEYCLOAK_DATABASE_USER=brokkr
+  #     - KEYCLOAK_DATABASE_PASSWORD=brokkr
+  #     - KEYCLOAK_DATABASE_SCHEMA=public
+  #     - KEYCLOAK_ADMIN_USER=brokkr
+  #     - KEYCLOAK_ADMIN_PASSWORD=brokkr
+  #     - KC_HTTP_ENABLED=true
+  #   ports: [8080:8080]
+  #   restart: always
+  #   networks: [default]
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
 volumes:
   brokkr-postgres-data:
     driver: local

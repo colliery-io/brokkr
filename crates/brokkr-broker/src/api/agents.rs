@@ -15,6 +15,7 @@ use axum::{
     Json, Router,
 };
 use brokkr_models::models::agents::{Agent, NewAgent};
+use prefixed_api_key::PrefixedApiKeyController;
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -48,6 +49,7 @@ pub fn configure_routes() -> Router<AppState> {
         .route("/agents/:uuid", delete(soft_delete_agent))
         .route("/agents/:uuid/heartbeat", put(update_heartbeat))
         .route("/agents/:uuid/status", put(update_status))
+        .route("/agents/:uuid/generate_api_key", post(generate_api_key))
 }
 
 /// Handler for creating a new agent.
@@ -203,4 +205,53 @@ async fn update_status(
         .update_status(uuid, &status)
         .map(Json)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+}
+
+/// Handler for generating an API key for an agent.
+///
+/// # Arguments
+/// * `state` - The application state containing the DAL
+/// * `uuid` - The UUID of the agent to generate an API key for
+///
+/// # Returns
+/// * On success: JSON object containing the generated API key
+/// * On failure: `StatusCode::INTERNAL_SERVER_ERROR`
+
+async fn generate_api_key(
+    State(state): State<AppState>,
+    Path(uuid): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let agent = state
+        .dal
+        .agents()
+        .get(uuid, false)
+        .map_err(|_| StatusCode::NOT_FOUND)?;
+
+    let prefix = format!("brokkr+{}+{}", agent.name, agent.cluster_name);
+    
+    let controller = PrefixedApiKeyController::configure()
+        .prefix(prefix.to_owned())
+        .seam_defaults()
+        .finalize()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let (pak, hash) = controller
+        .try_generate_key_and_hash()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // Update the agent with the new API key hash
+    let updated_agent = Agent {
+        pak_hash: hash,
+        ..agent
+    };
+
+    state
+        .dal
+        .agents()
+        .update(uuid, &updated_agent)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json(serde_json::json!({
+        "api_key": pak.to_string()
+    })))
 }

@@ -19,6 +19,7 @@ axum  = { workspace=true }
 tokio  = { workspace=true }
 r2d2  = { workspace=true }
 r2d2_postgres  = { workspace=true }
+prefixed-api-key = { workspace=true }
 postgres  = { workspace=true }
 diesel  = { workspace=true }
 diesel_migrations = { workspace=true }

@@ -224,3 +224,58 @@ async fn test_soft_delete_agent() {
 
     assert_eq!(get_deleted_response.status(), StatusCode::NOT_FOUND);
 }
+
+#[tokio::test]
+async fn test_generate_api_key() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router();
+
+    // Create a test agent
+    let created_agent = create_test_agent(&app).await;
+
+    // Generate API key
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(&format!("/agents/{}/generate_api_key", created_agent.id))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let api_key_response: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+    // Check if the response contains an API key
+    assert!(api_key_response.get("api_key").is_some());
+    let api_key = api_key_response["api_key"].as_str().unwrap();
+
+    // Verify the API key format
+    let expected_prefix = format!("brokkr+{}+{}", created_agent.name, created_agent.cluster_name);
+    assert!(api_key.starts_with(&expected_prefix));
+
+    // Verify that the agent's pak_hash has been updated
+    let agent_response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::GET)
+                .uri(&format!("/agents/{}", created_agent.id))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(agent_response.status(), StatusCode::OK);
+
+    let agent_body = to_bytes(agent_response.into_body(), usize::MAX).await.unwrap();
+    let updated_agent: Agent = serde_json::from_slice(&agent_body).unwrap();
+
+    assert!(!updated_agent.pak_hash.is_empty());
+    assert_ne!(updated_agent.pak_hash, created_agent.pak_hash);
+}
