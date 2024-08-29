@@ -15,13 +15,14 @@ CREATE INDEX idx_stack_name ON stacks (name);
 -- Create targets table
 CREATE TABLE agent_targets (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    stack_id UUID NOT NULL,
-    agent_name TEXT NOT NULL,
-    cluster_name TEXT NOT NULL,
-    UNIQUE (stack_id,agent_name,cluster_name)
+    stack_id UUID NOT NULL REFERENCES stacks(id) ON DELETE CASCADE,
+    agent_id UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (stack_id, agent_id)
 );
 
-CREATE INDEX idx_agent_targets ON agent_targets(stack_id);
+CREATE INDEX idx_agent_targets_stack_id ON agent_targets(stack_id);
+CREATE INDEX idx_agent_targets_agent_id ON agent_targets(agent_id);
 
 
 

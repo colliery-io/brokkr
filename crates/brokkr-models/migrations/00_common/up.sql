@@ -16,28 +16,28 @@ END;
 $$ LANGUAGE plpgsql;
 
 
--- Create labels table
+-- Labels table
 CREATE TABLE labels (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    external_object_id UUID NOT NULL,
+    object_id UUID NOT NULL,
+    object_type VARCHAR(50) NOT NULL,
     label VARCHAR(255) NOT NULL,
-    UNIQUE (external_object_id, label)
+    UNIQUE (object_id, object_type, label)
 );
 
--- Create indexes for labels
-CREATE INDEX idx_labels_object ON labels (external_object_id);
+CREATE INDEX idx_labels_object ON labels (object_id, object_type);
 CREATE INDEX idx_labels_label ON labels (label);
 
--- Create annotations table
+-- Annotations table
 CREATE TABLE annotations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    external_object_id UUID NOT NULL,
+    object_id UUID NOT NULL,
+    object_type VARCHAR(50) NOT NULL,
     key VARCHAR(255) NOT NULL,
     value TEXT NOT NULL,
-    UNIQUE (external_object_id, key)
+    UNIQUE (object_id, object_type, key)
 );
 
--- Create indexes for labels
-CREATE INDEX idx_annotations_object ON annotations (external_object_id);
-CREATE INDEX idx_annotations_label ON annotations (key);
+CREATE INDEX idx_annotations_object ON annotations (object_id, object_type);
+CREATE INDEX idx_annotations_key ON annotations (key);
 

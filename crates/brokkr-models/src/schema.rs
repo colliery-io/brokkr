@@ -20,8 +20,8 @@ diesel::table! {
     agent_targets (id) {
         id -> Uuid,
         stack_id -> Uuid,
-        agent_name -> Text,
-        cluster_name -> Text,
+        agent_id -> Uuid,
+        created_at -> Timestamptz,
     }
 }
 
@@ -45,7 +45,9 @@ diesel::table! {
 diesel::table! {
     annotations (id) {
         id -> Uuid,
-        external_object_id -> Uuid,
+        object_id -> Uuid,
+        #[max_length = 50]
+        object_type -> Varchar,
         #[max_length = 255]
         key -> Varchar,
         value -> Text,
@@ -70,7 +72,9 @@ diesel::table! {
 diesel::table! {
     labels (id) {
         id -> Uuid,
-        external_object_id -> Uuid,
+        object_id -> Uuid,
+        #[max_length = 50]
+        object_type -> Varchar,
         #[max_length = 255]
         label -> Varchar,
     }
@@ -90,6 +94,8 @@ diesel::table! {
 
 diesel::joinable!(agent_events -> agents (agent_id));
 diesel::joinable!(agent_events -> deployment_objects (deployment_object_id));
+diesel::joinable!(agent_targets -> agents (agent_id));
+diesel::joinable!(agent_targets -> stacks (stack_id));
 diesel::joinable!(deployment_objects -> stacks (stack_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
