@@ -1,0 +1,4 @@
+DROP FUNCTION IF EXISTS soft_delete();
+DROP FUNCTION IF EXISTS update_timestamp();
+DROP TABLE IF EXISTS labels;
+DROP TABLE IF EXISTS annotations;
