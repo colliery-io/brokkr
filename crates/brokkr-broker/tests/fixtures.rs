@@ -83,7 +83,7 @@ impl TestFixture {
             Some("Test Description".to_string()),
             Some(vec!["test".to_string()]),
             Some(vec![("key".to_string(), "value".to_string())]),
-            Some(vec!["agent1".to_string()]),
+            Some(vec![("agent1".to_string(),"cluster1".to_string())]),
         )
         .expect("Failed to create NewStack");
 

@@ -20,7 +20,7 @@ fn test_create_stack() {
         Some("Test Description".to_string()),
         Some(vec!["test".to_string()]),
         Some(vec![("key".to_string(), "value".to_string())]),
-        Some(vec!["agent1".to_string()]),
+        Some(vec![("agent1".to_string(),"cluster1".to_string())]),
     )
     .expect("Failed to create NewStack");
 
@@ -320,7 +320,7 @@ fn test_update_stack_agent_target() {
         None,
         None,
         None,
-        Some(vec!["initial_agent".to_string()]),
+        Some(vec![("agent1".to_string(),"cluster1".to_string())]),
     )
     .expect("Failed to create NewStack");
 

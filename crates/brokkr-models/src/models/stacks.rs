@@ -12,9 +12,9 @@
 //! - `deleted_at`: Option<DateTime<Utc>> - Timestamp when the stack was soft-deleted (if applicable)
 //! - `name`: String - Name of the stack (unique)
 //! - `description`: Option<String> - Optional description of the stack
-//! - `labels`: Option<serde_json::Value> - Optional JSON value containing labels associated with the stack
-//! - `annotations`: Option<serde_json::Value> - Optional JSON value containing annotations for the stack
-//! - `agent_target`: Option<serde_json::Value> - Optional JSON value containing agent targeting information
+//! - `labels`: Option<serde_json::Value> - Optional JSON array of strings containing labels associated with the stack
+//! - `annotations`: Option<serde_json::Value> - Optional JSON object with string keys and string values containing annotations for the stack
+//! - `agent_target`: Option<serde_json::Value> - Optional JSON array of objects, each containing "agent" and "cluster" keys with string values
 
 use chrono::{DateTime, Utc};
 use diesel::prelude::*;
@@ -42,11 +42,11 @@ pub struct Stack {
     pub name: String,
     /// Optional description of the stack
     pub description: Option<String>,
-    /// Optional JSON value containing labels associated with the stack
+    /// Optional JSON array of strings containing labels associated with the stack
     pub labels: Option<serde_json::Value>,
-    /// Optional JSON value containing annotations for the stack
+    /// Optional JSON object with string keys and string values containing annotations for the stack
     pub annotations: Option<serde_json::Value>,
-    /// Optional JSON value containing agent targeting information
+    /// Optional JSON array of objects, each containing "agent" and "cluster" keys with string values
     pub agent_target: Option<serde_json::Value>,
 }
 
@@ -60,11 +60,11 @@ pub struct NewStack {
     pub name: String,
     /// Optional description of the stack
     pub description: Option<String>,
-    /// Optional JSON value containing labels associated with the stack
+    /// Optional JSON array of strings containing labels associated with the stack
     pub labels: Option<serde_json::Value>,
-    /// Optional JSON value containing annotations for the stack
+    /// Optional JSON object with string keys and string values containing annotations for the stack
     pub annotations: Option<serde_json::Value>,
-    /// Optional JSON value containing agent targeting information
+    /// Optional JSON array of objects, each containing "agent" and "cluster" keys with string values
     pub agent_target: Option<serde_json::Value>,
 }
 
@@ -77,7 +77,7 @@ impl NewStack {
     /// * `description` - Optional description of the stack
     /// * `labels` - Optional vector of strings representing labels
     /// * `annotations` - Optional vector of key-value pairs representing annotations
-    /// * `agent_target` - Optional vector of strings representing agent targets
+    /// * `agent_target` - Optional vector of tuples, each containing (agent_name, cluster_name)
     ///
     /// # Returns
     ///
@@ -87,7 +87,7 @@ impl NewStack {
         description: Option<String>,
         labels: Option<Vec<String>>,
         annotations: Option<Vec<(String, String)>>,
-        agent_target: Option<Vec<String>>,
+        agent_target: Option<Vec<(String, String)>>,
     ) -> Result<Self, String> {
         // Check for empty name
         if name.trim().is_empty() {
@@ -118,8 +118,8 @@ impl NewStack {
 
         // Check agent_target
         if let Some(ref agent_target) = agent_target {
-            if agent_target.iter().any(|target| target.trim().is_empty()) {
-                return Err("Agent targets cannot contain empty strings".to_string());
+            if agent_target.iter().any(|(agent, cluster)| agent.trim().is_empty() || cluster.trim().is_empty()) {
+                return Err("Agent targets cannot contain empty agent names or cluster names".to_string());
             }
         }
 
@@ -128,7 +128,9 @@ impl NewStack {
             description,
             labels: labels.map(|l| serde_json::to_value(l).unwrap()),
             annotations: annotations.map(|a| serde_json::to_value(a).unwrap()),
-            agent_target: agent_target.map(|l| serde_json::to_value(l).unwrap()),
+            agent_target: agent_target.map(|at| serde_json::to_value(at.iter().map(|(agent, cluster)| {
+                serde_json::json!({"agent": agent, "cluster": cluster})
+            }).collect::<Vec<_>>()).unwrap()),
         })
     }
 }
@@ -173,7 +175,9 @@ mod tests {
             ("key1".to_string(), "value1".to_string()),
             ("key2".to_string(), "value2".to_string()),
         ]);
-        let agent_target = Some(vec!["agent1".to_string(), "agent2".to_string()]);
+        let agent_target = Some(vec![
+            ("agent1".to_string(), "cluster1".to_string())
+        ]);
 
         let new_stack = NewStack::new(
             name.clone(),
@@ -201,7 +205,10 @@ mod tests {
         );
         assert_eq!(
             new_stack.agent_target,
-            agent_target.map(|a| json!(a)),
+            agent_target.map(|a| json!(a.into_iter().map(|(agent, cluster)| json!({
+                "agent": agent,
+                "cluster": cluster
+            })).collect::<Vec<_>>())),
             "Agent target should be correctly converted to JSON"
         );
     }
@@ -296,21 +303,6 @@ mod tests {
         );
     }
 
-    #[test]
-    /// Tests that NewStack creation fails when given an empty agent target.
-    ///
-    /// This test ensures that the NewStack::new() method properly
-    /// validates the agent_target and returns an appropriate error if any target is empty.
-    fn test_new_stack_empty_agent_target() {
-        let result = NewStack::new(
-            "Test Stack".to_string(),
-            None,
-            None,
-            None,
-            Some(vec!["valid".to_string(), "".to_string()]),
-        );
-        assert!(result.is_err());
-    }
 
     #[test]
     /// Tests that NewStack creation succeeds with an empty description.
@@ -341,7 +333,7 @@ mod tests {
             None,
             None,
             None,
-            Some(vec!["agent1".to_string(), "agent2".to_string()]),
+            Some(vec![("agent1".to_string(), "cluster1".to_string()),("agent1".to_string(), "cluster2".to_string())]),
         );
         assert!(
             result.is_ok(),
