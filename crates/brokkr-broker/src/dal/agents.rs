@@ -1,24 +1,11 @@
-//! This module provides a Data Access Layer (DAL) for managing Agent entities in the database.
-//!
-//! It uses Diesel ORM for database operations and includes functionality for creating,
-//! retrieving, updating, and soft-deleting agents.
-
 use crate::dal::DAL;
-use brokkr_models::models::{
-    agents::{Agent, NewAgent},
-    stacks::Stack,
-    deployment_objects::DeploymentObject,
-    };
-use brokkr_models::schema::*;
-
+use brokkr_models::models::agents::{Agent, NewAgent};
+use brokkr_models::schema::agents;
 use chrono::Utc;
 use diesel::prelude::*;
-use diesel::sql_query;
-use diesel::sql_types::{Text, Nullable, Jsonb, Uuid, Array};
+use uuid::Uuid;
 
-use uuid::Uuid as RustUuid;
-
-/// Represents the Data Access Layer for Agent-related operations.
+/// Data Access Layer for Agent operations.
 pub struct AgentsDAL<'a> {
     /// Reference to the main DAL instance.
     pub dal: &'a DAL,
@@ -35,176 +22,147 @@ impl<'a> AgentsDAL<'a> {
     ///
     /// Returns a Result containing the created Agent on success, or a diesel::result::Error on failure.
     pub fn create(&self, new_agent: &NewAgent) -> Result<Agent, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().unwrap();
+        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         diesel::insert_into(agents::table)
             .values(new_agent)
             .get_result(conn)
     }
 
-    /// Retrieves an agent by its UUID, excluding soft-deleted agents.
+    /// Retrieves a non-deleted agent by its UUID.
     ///
     /// # Arguments
     ///
-    /// * `uuid` - The UUID of the agent to retrieve.
+    /// * `agent_uuid` - The UUID of the agent to retrieve.
     ///
     /// # Returns
     ///
-    /// Returns a Result containing the Agent if found, or a diesel::result::Error if not found or on failure.
-    #[allow(unused_variables)]
-    pub fn get(&self, uuid: RustUuid, include_deleted: bool) -> Result<Agent, diesel::result::Error> {
-        use brokkr_models::schema::agents::dsl::*;
-        let conn = &mut self.dal.pool.get().unwrap();
-
-        let mut query = agents.filter(id.eq(uuid)).into_boxed();
-
-        if !include_deleted {
-            query = query.filter(deleted_at.is_null());
-        }
-
-        query.first(conn)
+    /// Returns a Result containing an Option<Agent> if found (and not deleted), or a diesel::result::Error on failure.
+    pub fn get(&self, agent_uuid: Uuid) -> Result<Option<Agent>, diesel::result::Error> {
+        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        agents::table
+            .filter(agents::id.eq(agent_uuid))
+            .filter(agents::deleted_at.is_null())
+            .first(conn)
+            .optional()
     }
 
-    /// Soft deletes an agent by setting its deleted_at timestamp.
+    /// Retrieves an agent by its UUID, including deleted agents.
     ///
     /// # Arguments
     ///
-    /// * `uuid` - The UUID of the agent to soft delete.
+    /// * `agent_uuid` - The UUID of the agent to retrieve.
     ///
     /// # Returns
     ///
-    /// Returns Ok(()) on success, or a diesel::result::Error on failure.
-    #[allow(unused_variables)]
-    pub fn soft_delete(&self, uuid: RustUuid) -> Result<(), diesel::result::Error> {
-        use brokkr_models::schema::agents::dsl::*;
-        let conn = &mut self.dal.pool.get().unwrap();
-        let now = Utc::now().naive_utc();
-        let result = diesel::update(agents.filter(id.eq(uuid)))
-            .set(deleted_at.eq(now))
-            .execute(conn);
-
-        match result {
-            Ok(_) => Ok(()),
-            Err(e) => Err(e),
-        }
+    /// Returns a Result containing an Option<Agent> if found (including deleted agents), or a diesel::result::Error on failure.
+    pub fn get_including_deleted(&self, agent_uuid: Uuid) -> Result<Option<Agent>, diesel::result::Error> {
+        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        agents::table
+            .filter(agents::id.eq(agent_uuid))
+            .first(conn)
+            .optional()
     }
 
-    /// Lists all agents, optionally including soft-deleted ones.
-    ///
-    /// # Arguments
-    ///
-    /// * `include_deleted` - A boolean flag to determine whether to include soft-deleted agents.
+    /// Lists all non-deleted agents from the database.
     ///
     /// # Returns
     ///
-    /// Returns a Result containing a Vec of Agents on success, or a diesel::result::Error on failure.
-    pub fn list(&self, include_deleted: bool) -> Result<Vec<Agent>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().unwrap();
-        let mut query = agents::table.into_boxed();
-
-        if !include_deleted {
-            query = query.filter(agents::deleted_at.is_null());
-        }
-
-        query.select(agents::all_columns).load::<Agent>(conn)
+    /// Returns a Result containing a Vec of all non-deleted Agents on success, or a diesel::result::Error on failure.
+    pub fn list(&self) -> Result<Vec<Agent>, diesel::result::Error> {
+        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        agents::table
+            .filter(agents::deleted_at.is_null())
+            .load::<Agent>(conn)
     }
 
-    /// Updates an existing agent.
+    /// Lists all agents from the database, including deleted ones.
+    ///
+    /// # Returns
+    ///
+    /// Returns a Result containing a Vec of all Agents (including deleted ones) on success, or a diesel::result::Error on failure.
+    pub fn list_all(&self) -> Result<Vec<Agent>, diesel::result::Error> {
+        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        agents::table.load::<Agent>(conn)
+    }
+
+    /// Updates an existing agent in the database.
     ///
     /// # Arguments
     ///
-    /// * `uuid` - The UUID of the agent to update.
-    /// * `agent` - A reference to the Agent struct containing the updated details.
+    /// * `agent_uuid` - The UUID of the agent to update.
+    /// * `updated_agent` - A reference to the Agent struct containing the updated details.
     ///
     /// # Returns
     ///
     /// Returns a Result containing the updated Agent on success, or a diesel::result::Error on failure.
-    pub fn update(&self, uuid: RustUuid, agent: &Agent) -> Result<Agent, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().unwrap();
-        diesel::update(agents::table.filter(agents::id.eq(uuid)))
-            .set(agent)
+    pub fn update(&self, agent_uuid: Uuid, updated_agent: &Agent) -> Result<Agent, diesel::result::Error> {
+        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        diesel::update(agents::table.filter(agents::id.eq(agent_uuid)))
+            .set(updated_agent)
             .get_result(conn)
     }
 
-    /// Updates an agent's last heartbeat timestamp to the current time.
+    /// Soft deletes an agent by setting its deleted_at timestamp to the current time.
     ///
     /// # Arguments
     ///
-    /// * `uuid` - The UUID of the agent to update.
+    /// * `agent_uuid` - The UUID of the agent to soft delete.
     ///
     /// # Returns
     ///
-    /// Returns a Result containing the updated Agent on success, or a diesel::result::Error on failure.
-    pub fn update_heartbeat(&self, uuid: RustUuid) -> Result<Agent, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().unwrap();
-        diesel::update(agents::table.filter(agents::id.eq(uuid)))
-            .set(agents::last_heartbeat.eq(diesel::dsl::now))
-            .get_result(conn)
+    /// Returns a Result containing the number of affected rows (0 or 1) on success, or a diesel::result::Error on failure.
+    pub fn soft_delete(&self, agent_uuid: Uuid) -> Result<usize, diesel::result::Error> {
+        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        diesel::update(agents::table.filter(agents::id.eq(agent_uuid)))
+            .set(agents::deleted_at.eq(Utc::now()))
+            .execute(conn)
     }
 
-    /// Updates an agent's status.
+    /// Hard deletes an agent from the database.
     ///
     /// # Arguments
     ///
-    /// * `uuid` - The UUID of the agent to update.
-    /// * `status` - A string slice representing the new status.
+    /// * `agent_uuid` - The UUID of the agent to hard delete.
     ///
     /// # Returns
     ///
-    /// Returns a Result containing the updated Agent on success, or a diesel::result::Error on failure.
-    pub fn update_status(&self, uuid: RustUuid, status: &str) -> Result<Agent, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().unwrap();
-        diesel::update(agents::table.filter(agents::id.eq(uuid)))
-            .set(agents::status.eq(status))
-            .get_result(conn)
+    /// Returns a Result containing the number of affected rows (0 or 1) on success, or a diesel::result::Error on failure.
+    pub fn hard_delete(&self, agent_uuid: Uuid) -> Result<usize, diesel::result::Error> {
+        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        diesel::delete(agents::table.filter(agents::id.eq(agent_uuid)))
+            .execute(conn)
     }
 
-
-    /// Finds matching stacks and undeployed objects for a given agent.
+    /// Searches for non-deleted agents by name or cluster name.
     ///
     /// # Arguments
     ///
-    /// * `agent_uuid` - The UUID of the agent to find matches for.
+    /// * `query` - The search string to match against agent names or cluster names.
     ///
     /// # Returns
     ///
-    /// Returns a Result containing a Vec of tuples (Stack, Vec<DeploymentObject>) on success,
-    /// or a diesel::result::Error on failure.
-    // pub fn get_undeployed_objects(&self, agent_uuid: RustUuid) {//-> Result<Vec<(Stack, Vec<DeploymentObject>)>, diesel::result::Error> {
-    //     use brokkr_models::schema::agents::dsl::*;
-    //     use brokkr_models::schema::agents::dsl::id as agent_id;
-    //     use brokkr_models::schema::stacks::dsl::*;
-    //     use brokkr_models::schema::stacks::dsl::labels as stacks_labels;
-    //     let conn = &mut self.dal.pool.get().unwrap();
+    /// Returns a Result containing a Vec of matching non-deleted Agents on success, or a diesel::result::Error on failure.
+    pub fn search(&self, query: &str) -> Result<Vec<Agent>, diesel::result::Error> {
+        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        agents::table
+            .filter(agents::name.ilike(format!("%{}%", query)).or(agents::cluster_name.ilike(format!("%{}%", query))))
+            .filter(agents::deleted_at.is_null())
+            .load::<Agent>(conn)
+    }
 
-
-    //     let agent = agents
-    //     .filter(agent_id.eq(agent_uuid))
-    //     .first::<Agent>(conn)?;
-
-        
-
-        // let stacks = stacks.filter(
-        //     stacks_labels.is_null()
-        //         .and(agent.labels.is_not_nill())
-        //         .and(array_contains_any(labels.cast(), agent.labels.cast()))
-        // )
-        
-        // .filter(
-        //     Stack::labels.is_not_null()
-        //         .and(agent.labels.is_not_null())
-        //         .and(array_contains_all(Stack::labels.cast(), agent.labels.cast()))
-        //     .or(Stack::agent_target.cast::<Jsonb>().contains(
-        //         serde_json::json!([{"agent": agent.name, "cluster": agent.cluster_name}])
-        //     ))
-        //     .or(
-        //         Stack::annotations.is_not_null()
-        //             .and(agent.annotations.is_not_null())
-        //             .and(Stack::annotations.cast::<Jsonb>().contains(agent.annotations.cast()))
-        //     )
-        // )
-        // .select(Stack::id);
-
-    // }
-
-
+    /// Searches for all agents by name or cluster name, including deleted ones.
+    ///
+    /// # Arguments
+    ///
+    /// * `query` - The search string to match against agent names or cluster names.
+    ///
+    /// # Returns
+    ///
+    /// Returns a Result containing a Vec of all matching Agents (including deleted ones) on success, or a diesel::result::Error on failure.
+    pub fn search_all(&self, query: &str) -> Result<Vec<Agent>, diesel::result::Error> {
+        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        agents::table
+            .filter(agents::name.ilike(format!("%{}%", query)).or(agents::cluster_name.ilike(format!("%{}%", query))))
+            .load::<Agent>(conn)
+    }
 }

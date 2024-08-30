@@ -1,6 +1,6 @@
 // #![cfg(test)]
 // mod api;
-// mod dal;
+mod dal;
 // mod db;
-// #[path = "../fixtures.rs"]
-// mod fixtures;
+#[path = "../fixtures.rs"]
+mod fixtures;

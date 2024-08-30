@@ -1,4 +1,9 @@
-mod agent_events;
+mod stacks;
 mod agents;
 mod deployment_objects;
-mod stacks;
+mod stack_labels;
+mod stack_annotations;
+mod agent_annotations;
+mod agent_events;
+mod agent_labels;
+mod agent_targets;
