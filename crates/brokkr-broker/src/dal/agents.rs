@@ -169,17 +169,17 @@ impl<'a> AgentsDAL<'a> {
     ///
     /// Returns a Result containing a Vec of tuples (Stack, Vec<DeploymentObject>) on success,
     /// or a diesel::result::Error on failure.
-    pub fn get_undeployed_objects(&self, agent_uuid: RustUuid) {//-> Result<Vec<(Stack, Vec<DeploymentObject>)>, diesel::result::Error> {
-        use brokkr_models::schema::agents::dsl::*;
-        use brokkr_models::schema::agents::dsl::id as agent_id;
-        use brokkr_models::schema::stacks::dsl::*;
-        use brokkr_models::schema::stacks::dsl::labels as stacks_labels;
-        let conn = &mut self.dal.pool.get().unwrap();
+    // pub fn get_undeployed_objects(&self, agent_uuid: RustUuid) {//-> Result<Vec<(Stack, Vec<DeploymentObject>)>, diesel::result::Error> {
+    //     use brokkr_models::schema::agents::dsl::*;
+    //     use brokkr_models::schema::agents::dsl::id as agent_id;
+    //     use brokkr_models::schema::stacks::dsl::*;
+    //     use brokkr_models::schema::stacks::dsl::labels as stacks_labels;
+    //     let conn = &mut self.dal.pool.get().unwrap();
 
 
-        let agent = agents
-        .filter(agent_id.eq(agent_uuid))
-        .first::<Agent>(conn)?;
+    //     let agent = agents
+    //     .filter(agent_id.eq(agent_uuid))
+    //     .first::<Agent>(conn)?;
 
         
 
@@ -204,7 +204,7 @@ impl<'a> AgentsDAL<'a> {
         // )
         // .select(Stack::id);
 
-    }
+    // }
 
 
 }

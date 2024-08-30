@@ -1,6 +1,17 @@
 // @generated automatically by Diesel CLI.
 
 diesel::table! {
+    agent_annotations (id) {
+        id -> Uuid,
+        agent_id -> Uuid,
+        #[max_length = 255]
+        key -> Varchar,
+        value -> Text,
+        deleted_at -> Nullable<Timestamptz>,
+    }
+}
+
+diesel::table! {
     agent_events (id) {
         id -> Uuid,
         created_at -> Timestamptz,
@@ -17,11 +28,20 @@ diesel::table! {
 }
 
 diesel::table! {
+    agent_labels (id) {
+        id -> Uuid,
+        agent_id -> Uuid,
+        #[max_length = 255]
+        label -> Varchar,
+        deleted_at -> Nullable<Timestamptz>,
+    }
+}
+
+diesel::table! {
     agent_targets (id) {
         id -> Uuid,
-        stack_id -> Uuid,
         agent_id -> Uuid,
-        created_at -> Timestamptz,
+        stack_id -> Uuid,
     }
 }
 
@@ -43,18 +63,6 @@ diesel::table! {
 }
 
 diesel::table! {
-    annotations (id) {
-        id -> Uuid,
-        object_id -> Uuid,
-        #[max_length = 50]
-        object_type -> Varchar,
-        #[max_length = 255]
-        key -> Varchar,
-        value -> Text,
-    }
-}
-
-diesel::table! {
     deployment_objects (id) {
         id -> Uuid,
         created_at -> Timestamptz,
@@ -70,13 +78,23 @@ diesel::table! {
 }
 
 diesel::table! {
-    labels (id) {
+    stack_annotations (id) {
         id -> Uuid,
-        object_id -> Uuid,
-        #[max_length = 50]
-        object_type -> Varchar,
+        stack_id -> Uuid,
+        #[max_length = 255]
+        key -> Varchar,
+        value -> Text,
+        deleted_at -> Nullable<Timestamptz>,
+    }
+}
+
+diesel::table! {
+    stack_labels (id) {
+        id -> Uuid,
+        stack_id -> Uuid,
         #[max_length = 255]
         label -> Varchar,
+        deleted_at -> Nullable<Timestamptz>,
     }
 }
 
@@ -99,11 +117,13 @@ diesel::joinable!(agent_targets -> stacks (stack_id));
 diesel::joinable!(deployment_objects -> stacks (stack_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
+    agent_annotations,
     agent_events,
+    agent_labels,
     agent_targets,
     agents,
-    annotations,
     deployment_objects,
-    labels,
+    stack_annotations,
+    stack_labels,
     stacks,
 );

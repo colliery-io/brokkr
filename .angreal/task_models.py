@@ -31,159 +31,147 @@ def schema():
 
 
 TEST_SQL_SCRIPT = """
--- Start transaction
-BEGIN;
+-- Data Model Test Script
 
--- Test 1: Create a stack
--- Intended behavior: Successfully insert a new stack with name, description, and verify constraints
-INSERT INTO stacks (name, description) VALUES ('test-stack', 'A test stack');
--- Verify insertion
-SELECT * FROM stacks WHERE name = 'test-stack';
--- Test unique constraint
-INSERT INTO stacks (name, description) VALUES ('test-stack', 'Duplicate name')
-ON CONFLICT (name) DO NOTHING;
--- Verify no duplicate was inserted
-SELECT COUNT(*) FROM stacks WHERE name = 'test-stack';
+-- Stage 1: Insert sample data into the stacks table
+INSERT INTO stacks (name, description)
+VALUES 
+('Stack1', 'First test stack'),
+('Stack2', 'Second test stack');
 
--- Test 2: Create an agent
--- Intended behavior: Successfully insert a new agent and verify constraints
-INSERT INTO agents (name, cluster_name, status) VALUES ('test-agent', 'test-cluster', 'ACTIVE');
--- Verify insertion
-SELECT * FROM agents WHERE name = 'test-agent';
--- Test unique constraint
-INSERT INTO agents (name, cluster_name, status) VALUES ('test-agent', 'test-cluster', 'INACTIVE')
-ON CONFLICT (name, cluster_name) DO NOTHING;
--- Verify no duplicate was inserted
-SELECT COUNT(*) FROM agents WHERE name = 'test-agent' AND cluster_name = 'test-cluster';
+-- Stage 2: Insert sample data into the agents table
+INSERT INTO agents (name, cluster_name, status, pak_hash)
+VALUES 
+('Agent1', 'Cluster1', 'ACTIVE', 'hash1'),
+('Agent2', 'Cluster2', 'INACTIVE', 'hash2');
 
--- Test 3: Create a deployment object
--- Intended behavior: Successfully insert a new deployment object and verify constraints
+-- Stage 3: Create deployment objects for the stacks
 INSERT INTO deployment_objects (stack_id, yaml_content, yaml_checksum)
-VALUES ((SELECT id FROM stacks WHERE name = 'test-stack'), 'test: content', md5('test: content'));
--- Verify insertion and auto-generated fields
-SELECT * FROM deployment_objects WHERE stack_id = (SELECT id FROM stacks WHERE name = 'test-stack');
+VALUES 
+((SELECT id FROM stacks WHERE name = 'Stack1'), 'yaml: content1', 'checksum1'),
+((SELECT id FROM stacks WHERE name = 'Stack2'), 'yaml: content2', 'checksum2');
 
--- Test 4: Create an agent target
--- Intended behavior: Successfully link an agent to a stack
-INSERT INTO agent_targets (stack_id, agent_id)
-VALUES (
-    (SELECT id FROM stacks WHERE name = 'test-stack'),
-    (SELECT id FROM agents WHERE name = 'test-agent')
-);
--- Verify insertion
-SELECT * FROM agent_targets;
+-- Stage 4: Create agent_targets to associate agents with stacks
+INSERT INTO agent_targets (agent_id, stack_id)
+VALUES 
+((SELECT id FROM agents WHERE name = 'Agent1'), (SELECT id FROM stacks WHERE name = 'Stack1')),
+((SELECT id FROM agents WHERE name = 'Agent2'), (SELECT id FROM stacks WHERE name = 'Stack2'));
 
--- Test 5: Create an agent event
--- Intended behavior: Successfully insert a new agent event
+-- Stage 5: Add labels and annotations to stacks
+INSERT INTO stack_labels (stack_id, label)
+VALUES 
+((SELECT id FROM stacks WHERE name = 'Stack1'), 'label1'),
+((SELECT id FROM stacks WHERE name = 'Stack2'), 'label2');
+
+INSERT INTO stack_annotations (stack_id, key, value)
+VALUES 
+((SELECT id FROM stacks WHERE name = 'Stack1'), 'key1', 'value1'),
+((SELECT id FROM stacks WHERE name = 'Stack2'), 'key2', 'value2');
+
+-- Stage 6: Add labels and annotations to agents
+INSERT INTO agent_labels (agent_id, label)
+VALUES 
+((SELECT id FROM agents WHERE name = 'Agent1'), 'agent_label1'),
+((SELECT id FROM agents WHERE name = 'Agent2'), 'agent_label2');
+
+INSERT INTO agent_annotations (agent_id, key, value)
+VALUES 
+((SELECT id FROM agents WHERE name = 'Agent1'), 'agent_key1', 'agent_value1'),
+((SELECT id FROM agents WHERE name = 'Agent2'), 'agent_key2', 'agent_value2');
+
+-- Stage 7: Create agent events
 INSERT INTO agent_events (agent_id, deployment_object_id, event_type, status, message)
-VALUES (
-    (SELECT id FROM agents WHERE name = 'test-agent'),
-    (SELECT id FROM deployment_objects LIMIT 1),
-    'APPLIED',
-    'SUCCESS',
-    'Test event'
-);
--- Verify insertion
-SELECT * FROM agent_events;
+VALUES 
+((SELECT id FROM agents WHERE name = 'Agent1'), 
+ (SELECT id FROM deployment_objects WHERE stack_id = (SELECT id FROM stacks WHERE name = 'Stack1')),
+ 'DEPLOYMENT', 'SUCCESS', 'Deployment successful'),
+((SELECT id FROM agents WHERE name = 'Agent2'), 
+ (SELECT id FROM deployment_objects WHERE stack_id = (SELECT id FROM stacks WHERE name = 'Stack2')),
+ 'DEPLOYMENT', 'FAILURE', 'Deployment failed');
 
--- Test 6: Test stack soft delete trigger
--- Intended behavior: Soft delete stack, create deletion marker, and soft delete related deployment objects
-UPDATE stacks SET deleted_at = CURRENT_TIMESTAMP WHERE name = 'test-stack';
--- Verify soft deletion of stack
-SELECT * FROM stacks WHERE name = 'test-stack';
--- Verify soft deletion of related deployment objects
-SELECT * FROM deployment_objects WHERE stack_id = (SELECT id FROM stacks WHERE name = 'test-stack');
--- Verify creation of deletion marker
-SELECT * FROM deployment_objects WHERE stack_id = (SELECT id FROM stacks WHERE name = 'test-stack') AND is_deletion_marker = TRUE;
+-- Stage 8: Test soft deletion of a stack
+UPDATE stacks SET deleted_at = CURRENT_TIMESTAMP WHERE name = 'Stack1';
 
--- Test 7: Test prevention of deployment object modifications
--- Intended behavior: Prevent updates to non-deletion marker deployment objects
+-- Stage 9: Test hard deletion of an agent
+DELETE FROM agents WHERE name = 'Agent2';
+
+-- Stage 10: Verify data integrity and cascading operations
+-- Check if deployment objects are soft-deleted when stack is soft-deleted
+SELECT * FROM deployment_objects WHERE stack_id = (SELECT id FROM stacks WHERE name = 'Stack1');
+
+-- Check if agent events are deleted when an agent is hard-deleted
+SELECT * FROM agent_events WHERE agent_id = (SELECT id FROM agents WHERE name = 'Agent2');
+
+-- Check if agent_targets are deleted when an agent is hard-deleted
+SELECT * FROM agent_targets WHERE agent_id = (SELECT id FROM agents WHERE name = 'Agent2');
+
+-- Check if agent labels and annotations are deleted when an agent is hard-deleted
+SELECT * FROM agent_labels WHERE agent_id = (SELECT id FROM agents WHERE name = 'Agent2');
+SELECT * FROM agent_annotations WHERE agent_id = (SELECT id FROM agents WHERE name = 'Agent2');
+
+-- Stage 11: Test prevention of deployment object modifications
 DO $$
 DECLARE
-    test_id UUID;
+    error_message TEXT;
 BEGIN
-    SELECT id INTO test_id FROM deployment_objects WHERE is_deletion_marker = FALSE LIMIT 1;
-    BEGIN
-        UPDATE deployment_objects SET yaml_content = 'modified content' WHERE id = test_id;
-        RAISE EXCEPTION 'Expected update to fail, but it succeeded';
-    EXCEPTION WHEN others THEN
-        RAISE NOTICE 'Update failed as expected: %', SQLERRM;
-    END;
+    UPDATE deployment_objects 
+    SET yaml_content = 'modified content' 
+    WHERE stack_id = (SELECT id FROM stacks WHERE name = 'Stack2');
+
+    RAISE EXCEPTION 'Test failed: Deployment object modification was allowed';
+EXCEPTION
+    WHEN others THEN
+        GET STACKED DIAGNOSTICS error_message = MESSAGE_TEXT;
+        IF error_message LIKE 'Deployment objects cannot be modified%' THEN
+            RAISE NOTICE 'Test passed: Deployment object modification prevented as expected';
+        ELSE
+            RAISE EXCEPTION 'Test failed: Unexpected error: %', error_message;
+        END IF;
 END $$;
 
--- Test 8: Test cascade soft delete of agents
--- Intended behavior: Soft delete agent and cascade to related agent events
-UPDATE agents SET deleted_at = CURRENT_TIMESTAMP WHERE name = 'test-agent';
--- Verify soft deletion of agent
-SELECT * FROM agents WHERE name = 'test-agent';
--- Verify soft deletion of related agent events
-SELECT * FROM agent_events WHERE agent_id = (SELECT id FROM agents WHERE name = 'test-agent');
+-- Stage 12: Verify unique constraints
+-- Test unique stack name constraint
+DO $$
+DECLARE
+    error_message TEXT;
+BEGIN
+    INSERT INTO stacks (name, description) VALUES ('Stack2', 'Duplicate stack name');
 
--- Test 9: Test hard delete of stack
--- Intended behavior: Hard delete stack and cascade to all related objects
-DELETE FROM stacks WHERE name = 'test-stack';
--- Verify deletion of stack
-SELECT COUNT(*) FROM stacks WHERE name = 'test-stack';
--- Verify deletion of related deployment objects
-SELECT COUNT(*) FROM deployment_objects WHERE stack_id = (SELECT id FROM stacks WHERE name = 'test-stack');
--- Verify deletion of related agent targets
-SELECT COUNT(*) FROM agent_targets WHERE stack_id = (SELECT id FROM stacks WHERE name = 'test-stack');
+    RAISE EXCEPTION 'Test failed: Duplicate stack name was allowed';
+EXCEPTION
+    WHEN unique_violation THEN
+        GET STACKED DIAGNOSTICS error_message = MESSAGE_TEXT;
+        IF error_message LIKE '%unique constraint "unique_stack_name"%' THEN
+            RAISE NOTICE 'Test passed: Duplicate stack name prevented as expected';
+        ELSE
+            RAISE EXCEPTION 'Test failed: Unexpected error: %', error_message;
+        END IF;
+END $$;
 
--- Test 10: Test update_timestamp trigger
--- Intended behavior: Automatically update the updated_at timestamp when a record is modified
-INSERT INTO stacks (name, description) VALUES ('update-test-stack', 'Testing update timestamp');
-SELECT updated_at AS original_timestamp FROM stacks WHERE name = 'update-test-stack';
--- Wait for 1 second to ensure timestamp change
-SELECT pg_sleep(1);
-UPDATE stacks SET description = 'Modified description' WHERE name = 'update-test-stack';
-SELECT updated_at AS new_timestamp FROM stacks WHERE name = 'update-test-stack';
+-- Test unique agent-cluster constraint
+DO $$
+DECLARE
+    error_message TEXT;
+BEGIN
+    INSERT INTO agents (name, cluster_name, status, pak_hash)
+    VALUES ('Agent1', 'Cluster1', 'ACTIVE', 'hash3');
 
--- Test 11: Test labels and annotations
--- Intended behavior: Successfully add labels and annotations to objects
-INSERT INTO labels (object_id, object_type, label)
-VALUES ((SELECT id FROM stacks WHERE name = 'update-test-stack'), 'stack', 'test-label');
-INSERT INTO annotations (object_id, object_type, key, value)
-VALUES ((SELECT id FROM stacks WHERE name = 'update-test-stack'), 'stack', 'test-key', 'test-value');
--- Verify insertions
-SELECT * FROM labels WHERE object_id = (SELECT id FROM stacks WHERE name = 'update-test-stack');
-SELECT * FROM annotations WHERE object_id = (SELECT id FROM stacks WHERE name = 'update-test-stack');
+    RAISE EXCEPTION 'Test failed: Duplicate agent-cluster combination was allowed';
+EXCEPTION
+    WHEN unique_violation THEN
+        GET STACKED DIAGNOSTICS error_message = MESSAGE_TEXT;
+        IF error_message LIKE '%unique constraint "unique_agent_cluster"%' THEN
+            RAISE NOTICE 'Test passed: Duplicate agent-cluster combination prevented as expected';
+        ELSE
+            RAISE EXCEPTION 'Test failed: Unexpected error: %', error_message;
+        END IF;
+END $$;
 
--- Test 12: Test handle_stack_hard_delete function
--- Intended behavior: Properly delete all related objects when a stack is hard deleted
-INSERT INTO stacks (name, description) VALUES ('hard-delete-test-stack', 'Testing hard delete');
-INSERT INTO agents (name, cluster_name, status) VALUES ('hard-delete-test-agent', 'test-cluster', 'ACTIVE');
-INSERT INTO deployment_objects (stack_id, yaml_content, yaml_checksum)
-VALUES ((SELECT id FROM stacks WHERE name = 'hard-delete-test-stack'), 'test: content', md5('test: content'));
-INSERT INTO agent_targets (stack_id, agent_id)
-VALUES (
-    (SELECT id FROM stacks WHERE name = 'hard-delete-test-stack'),
-    (SELECT id FROM agents WHERE name = 'hard-delete-test-agent')
-);
-INSERT INTO agent_events (agent_id, deployment_object_id, event_type, status, message)
-VALUES (
-    (SELECT id FROM agents WHERE name = 'hard-delete-test-agent'),
-    (SELECT id FROM deployment_objects WHERE stack_id = (SELECT id FROM stacks WHERE name = 'hard-delete-test-stack')),
-    'APPLIED',
-    'SUCCESS',
-    'Test event'
-);
-INSERT INTO labels (object_id, object_type, label)
-VALUES ((SELECT id FROM stacks WHERE name = 'hard-delete-test-stack'), 'stack', 'test-label');
-INSERT INTO annotations (object_id, object_type, key, value)
-VALUES ((SELECT id FROM stacks WHERE name = 'hard-delete-test-stack'), 'stack', 'test-key', 'test-value');
-
--- Perform hard delete
-DELETE FROM stacks WHERE name = 'hard-delete-test-stack';
-
--- Verify all related objects are deleted
-SELECT COUNT(*) FROM deployment_objects WHERE stack_id = (SELECT id FROM stacks WHERE name = 'hard-delete-test-stack');
-SELECT COUNT(*) FROM agent_targets WHERE stack_id = (SELECT id FROM stacks WHERE name = 'hard-delete-test-stack');
-SELECT COUNT(*) FROM agent_events WHERE deployment_object_id IN (SELECT id FROM deployment_objects WHERE stack_id = (SELECT id FROM stacks WHERE name = 'hard-delete-test-stack'));
-SELECT COUNT(*) FROM labels WHERE object_id = (SELECT id FROM stacks WHERE name = 'hard-delete-test-stack');
-SELECT COUNT(*) FROM annotations WHERE object_id = (SELECT id FROM stacks WHERE name = 'hard-delete-test-stack');
-
--- Rollback transaction to clean up test data
-ROLLBACK;
+-- Stage 13: Basic queries to test indexes
+SELECT * FROM stacks WHERE name = 'Stack1';
+SELECT * FROM agents WHERE cluster_name = 'Cluster1';
+SELECT * FROM deployment_objects WHERE yaml_checksum = 'checksum1';
+SELECT * FROM agent_events WHERE event_type = 'DEPLOYMENT';
 """
 
 
