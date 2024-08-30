@@ -4,10 +4,10 @@ diesel::table! {
     agent_annotations (id) {
         id -> Uuid,
         agent_id -> Uuid,
-        #[max_length = 255]
+        #[max_length = 64]
         key -> Varchar,
-        value -> Text,
-        deleted_at -> Nullable<Timestamptz>,
+        #[max_length = 64]
+        value -> Varchar,
     }
 }
 
@@ -31,9 +31,8 @@ diesel::table! {
     agent_labels (id) {
         id -> Uuid,
         agent_id -> Uuid,
-        #[max_length = 255]
+        #[max_length = 64]
         label -> Varchar,
-        deleted_at -> Nullable<Timestamptz>,
     }
 }
 
@@ -81,10 +80,10 @@ diesel::table! {
     stack_annotations (id) {
         id -> Uuid,
         stack_id -> Uuid,
-        #[max_length = 255]
+        #[max_length = 64]
         key -> Varchar,
-        value -> Text,
-        deleted_at -> Nullable<Timestamptz>,
+        #[max_length = 64]
+        value -> Varchar,
     }
 }
 
@@ -92,9 +91,8 @@ diesel::table! {
     stack_labels (id) {
         id -> Uuid,
         stack_id -> Uuid,
-        #[max_length = 255]
+        #[max_length = 64]
         label -> Varchar,
-        deleted_at -> Nullable<Timestamptz>,
     }
 }
 
@@ -110,11 +108,15 @@ diesel::table! {
     }
 }
 
+diesel::joinable!(agent_annotations -> agents (agent_id));
 diesel::joinable!(agent_events -> agents (agent_id));
 diesel::joinable!(agent_events -> deployment_objects (deployment_object_id));
+diesel::joinable!(agent_labels -> agents (agent_id));
 diesel::joinable!(agent_targets -> agents (agent_id));
 diesel::joinable!(agent_targets -> stacks (stack_id));
 diesel::joinable!(deployment_objects -> stacks (stack_id));
+diesel::joinable!(stack_annotations -> stacks (stack_id));
+diesel::joinable!(stack_labels -> stacks (stack_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
     agent_annotations,

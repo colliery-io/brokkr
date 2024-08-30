@@ -51,21 +51,7 @@ EXECUTE FUNCTION handle_stack_soft_delete();
 CREATE OR REPLACE FUNCTION handle_stack_hard_delete()
 RETURNS TRIGGER AS $$
 BEGIN
-    -- Delete labels associated with the stack
-    DELETE FROM stack_labels
-    WHERE object_id = OLD.id AND object_type = 'stack';
 
-    -- Delete annotations associated with the stack
-    DELETE FROM stack_annotations
-    WHERE object_id = OLD.id AND object_type = 'stack';
-
-    -- Delete stack_labels associated with the stack
-    DELETE FROM stack_labels
-    WHERE stack_id = OLD.id;
-
-    -- Delete stack_annotations associated with the stack
-    DELETE FROM stack_annotations
-    WHERE stack_id = OLD.id;
 
     -- Delete agent_target rows associated with the stack
     DELETE FROM agent_targets
@@ -93,41 +79,17 @@ BEFORE DELETE ON stacks
 FOR EACH ROW
 EXECUTE FUNCTION handle_stack_hard_delete();
 
--- New function and trigger to cascade delete stack_labels
-CREATE OR REPLACE FUNCTION cascade_delete_stack_labels()
-RETURNS TRIGGER AS $$
-BEGIN
-    DELETE FROM stack_labels WHERE stack_id = OLD.id;
-    RETURN OLD;
-END;
-$$ LANGUAGE plpgsql;
 
-CREATE TRIGGER trigger_cascade_delete_stack_labels
-BEFORE DELETE ON stacks
-FOR EACH ROW
-EXECUTE FUNCTION cascade_delete_stack_labels();
 
--- New function and trigger to cascade delete stack_annotations
-CREATE OR REPLACE FUNCTION cascade_delete_stack_annotations()
-RETURNS TRIGGER AS $$
-BEGIN
-    DELETE FROM stack_annotations WHERE stack_id = OLD.id;
-    RETURN OLD;
-END;
-$$ LANGUAGE plpgsql;
 
-CREATE TRIGGER trigger_cascade_delete_stack_annotations
-BEFORE DELETE ON stacks
-FOR EACH ROW
-EXECUTE FUNCTION cascade_delete_stack_annotations();
 
 -- Existing stack_labels table creation (no changes)
 CREATE TABLE stack_labels (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     stack_id UUID NOT NULL,
-    label VARCHAR(255) NOT NULL,
-    deleted_at TIMESTAMP WITH TIME ZONE,
-    UNIQUE (stack_id, label)
+    label VARCHAR(64) NOT NULL,
+    UNIQUE (stack_id, label),
+    CONSTRAINT fk_stack_labels_stack FOREIGN KEY (stack_id) REFERENCES stacks(id) ON DELETE CASCADE
 );
 
 CREATE INDEX idx_stack_labels_object ON stack_labels (stack_id);
@@ -137,10 +99,9 @@ CREATE INDEX idx_stack_labels_label ON stack_labels (label);
 CREATE TABLE stack_annotations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     stack_id UUID NOT NULL,
-    key VARCHAR(255) NOT NULL,
-    value TEXT NOT NULL,
-    deleted_at TIMESTAMP WITH TIME ZONE,
-    UNIQUE (stack_id, key)
+    key VARCHAR(64) NOT NULL,
+    value VARCHAR(64) NOT NULL,
+    CONSTRAINT fk_stack_annotations_stack FOREIGN KEY (stack_id) REFERENCES stacks(id) ON DELETE CASCADE
 );
 
 CREATE INDEX idx_stack_annotations_object ON stack_annotations (stack_id);
