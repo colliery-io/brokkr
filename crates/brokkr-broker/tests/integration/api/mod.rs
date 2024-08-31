@@ -1,7 +1,7 @@
 // mod agent_events;
-mod agents;
+// mod agents;
 // mod deployment_objects;
-// mod stacks;
+mod stacks;
 
 use axum::{
     body::{to_bytes, Body},

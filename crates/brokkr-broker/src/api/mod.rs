@@ -3,7 +3,7 @@
 // //! This module aggregates all API routes and provides a function to configure the main router.
 // //! It serves as the central point for organizing and initializing all API endpoints of the application.
 
-mod v1;
+pub mod v1;
 use crate::dal::DAL;
 
 use axum::{

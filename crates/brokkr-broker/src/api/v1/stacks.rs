@@ -2,165 +2,183 @@
 use axum::{
     routing::{get, delete},
     Router,
-    extract::{Path, State, Query},
+    extract::{Path, State},
     Json,
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use uuid::Uuid;
 use crate::dal::DAL;
+use brokkr_models::models::{
+    stacks::{Stack, NewStack},
+    deployment_objects::{DeploymentObject, NewDeploymentObject},
+    stack_labels::{StackLabel, NewStackLabel},
+    stack_annotations::{StackAnnotation, NewStackAnnotation},
+};
 
-
-// Struct definitions for request and response bodies
 #[derive(Deserialize)]
 struct StackFilters {
     labels: Option<String>,
     annotations: Option<String>,
-    // Add other filter fields as needed
-}
-
-#[derive(Serialize, Deserialize)]
-struct Stack {
-    // Define stack fields
-}
-
-#[derive(Deserialize)]
-struct NewStack {
-    // Define fields for creating a new stack
 }
 
 #[derive(Deserialize)]
 struct UpdateStack {
-    // Define fields for updating a stack
+    name: Option<String>,
+    description: Option<String>,
 }
 
-#[derive(Serialize, Deserialize)]
-struct DeploymentObject {
-    // Define deployment object fields
-}
-
-#[derive(Deserialize)]
-struct NewDeploymentObject {
-    // Define fields for creating a new deployment object
-}
-
-#[derive(Serialize, Deserialize)]
-struct Label {
-    // Define label fields
-}
-
-#[derive(Serialize, Deserialize)]
-struct Annotation {
-    // Define annotation fields
-}
-
-// Handler functions
 async fn list_stacks(
     State(dal): State<DAL>,
-    Query(filters): Query<StackFilters>,
-) -> Json<Vec<Stack>> {
-    // Implement logic to list stacks with filtering
-    todo!()
+) -> Result<Json<Vec<Stack>>, axum::http::StatusCode> {
+    let stacks = dal.stacks().list()
+        .map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(stacks))
 }
 
 async fn create_stack(
     State(dal): State<DAL>,
     Json(new_stack): Json<NewStack>,
-) -> Json<Stack> {
-    // Implement logic to create a new stack
-    todo!()
+) -> Result<Json<Stack>, axum::http::StatusCode> {
+    let stack = dal.stacks().create(&new_stack)
+        .map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(stack))
 }
 
 async fn get_stack(
     State(dal): State<DAL>,
     Path(id): Path<Uuid>,
-) -> Json<Stack> {
-    // Implement logic to get a specific stack
-    todo!()
+) -> Result<Json<Stack>, axum::http::StatusCode> {
+    let stack = dal.stacks().get(id)
+        .map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(axum::http::StatusCode::NOT_FOUND)?;
+    Ok(Json(stack))
 }
 
 async fn update_stack(
     State(dal): State<DAL>,
     Path(id): Path<Uuid>,
     Json(update_stack): Json<UpdateStack>,
-) -> Json<Stack> {
-    // Implement logic to update a specific stack
-    todo!()
+) -> Result<Json<Stack>, axum::http::StatusCode> {
+    let mut stack = dal.stacks().get(id)
+        .map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(axum::http::StatusCode::NOT_FOUND)?;
+    
+    if let Some(name) = update_stack.name {
+        stack.name = name;
+    }
+    if let Some(description) = update_stack.description {
+        stack.description = Some(description);
+    }
+    
+    let updated_stack = dal.stacks().update(id, &stack)
+        .map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(updated_stack))
 }
 
 async fn delete_stack(
     State(dal): State<DAL>,
     Path(id): Path<Uuid>,
-) -> Json<()> {
-    // Implement logic to soft delete a specific stack
-    todo!()
+) -> Result<Json<()>, axum::http::StatusCode> {
+    dal.stacks().soft_delete(id)
+        .map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(()))
 }
 
 async fn list_deployment_objects(
     State(dal): State<DAL>,
     Path(id): Path<Uuid>,
-) -> Json<Vec<DeploymentObject>> {
-    // Implement logic to list deployment objects for a stack
-    todo!()
+) -> Result<Json<Vec<DeploymentObject>>, axum::http::StatusCode> {
+    let deployment_objects = dal.deployment_objects().list_for_stack(id)
+        .map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(deployment_objects))
 }
 
 async fn create_deployment_object(
     State(dal): State<DAL>,
-    Path(id): Path<Uuid>,
     Json(new_deployment_object): Json<NewDeploymentObject>,
-) -> Json<DeploymentObject> {
-    // Implement logic to create a new deployment object
-    todo!()
+) -> Result<Json<DeploymentObject>, axum::http::StatusCode> {
+    let deployment_object = dal.deployment_objects().create(&new_deployment_object)
+        .map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(deployment_object))
 }
 
 async fn list_labels(
     State(dal): State<DAL>,
     Path(id): Path<Uuid>,
-) -> Json<Vec<Label>> {
-    // Implement logic to list labels for a stack
-    todo!()
+) -> Result<Json<Vec<StackLabel>>, axum::http::StatusCode> {
+    let labels = dal.stack_labels().list_for_stack(id)
+        .map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(labels))
 }
 
 async fn add_label(
     State(dal): State<DAL>,
     Path(id): Path<Uuid>,
-    Json(label): Json<Label>,
-) -> Json<Label> {
-    // Implement logic to add a new label to a stack
-    todo!()
+    Json(label): Json<String>,
+) -> Result<Json<StackLabel>, axum::http::StatusCode> {
+    let new_label = NewStackLabel::new(id, label)
+        .map_err(|_| axum::http::StatusCode::BAD_REQUEST)?;
+    
+    let created_label = dal.stack_labels().create(&new_label)
+        .map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(created_label))
 }
 
 async fn remove_label(
     State(dal): State<DAL>,
     Path((id, label)): Path<(Uuid, String)>,
-) -> Json<()> {
-    // Implement logic to remove a specific label from a stack
-    todo!()
+) -> Result<Json<()>, axum::http::StatusCode> {
+    let labels = dal.stack_labels().list_for_stack(id)
+        .map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?;
+    
+    if let Some(label_to_remove) = labels.iter().find(|l| l.label == label) {
+        dal.stack_labels().delete(label_to_remove.id)
+            .map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?;
+        Ok(Json(()))
+    } else {
+        Err(axum::http::StatusCode::NOT_FOUND)
+    }
 }
 
 async fn list_annotations(
     State(dal): State<DAL>,
     Path(id): Path<Uuid>,
-) -> Json<Vec<Annotation>> {
-    // Implement logic to list annotations for a stack
-    todo!()
+) -> Result<Json<Vec<StackAnnotation>>, axum::http::StatusCode> {
+    let annotations = dal.stack_annotations().list_for_stack(id)
+        .map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(annotations))
 }
 
 async fn add_annotation(
     State(dal): State<DAL>,
     Path(id): Path<Uuid>,
-    Json(annotation): Json<Annotation>,
-) -> Json<Annotation> {
-    // Implement logic to add a new annotation to a stack
-    todo!()
+    Json(annotation): Json<(String, String)>,
+) -> Result<Json<StackAnnotation>, axum::http::StatusCode> {
+    let (key, value) = annotation;
+    let new_annotation = NewStackAnnotation::new(id, key, value)
+        .map_err(|_| axum::http::StatusCode::BAD_REQUEST)?;
+    
+    let created_annotation = dal.stack_annotations().create(&new_annotation)
+        .map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(created_annotation))
 }
 
 async fn remove_annotation(
     State(dal): State<DAL>,
     Path((id, key)): Path<(Uuid, String)>,
-) -> Json<()> {
-    // Implement logic to remove a specific annotation from a stack
-    todo!()
+) -> Result<Json<()>, axum::http::StatusCode> {
+    let annotations = dal.stack_annotations().list_for_stack(id)
+        .map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?;
+    
+    if let Some(annotation_to_remove) = annotations.iter().find(|a| a.key == key) {
+        dal.stack_annotations().delete(annotation_to_remove.id)
+            .map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?;
+        Ok(Json(()))
+    } else {
+        Err(axum::http::StatusCode::NOT_FOUND)
+    }
 }
+
 
 /// Create the router for stack-related endpoints
 pub fn configure_routes() -> Router<DAL> {
