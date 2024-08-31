@@ -3,26 +3,18 @@
 // //! This module aggregates all API routes and provides a function to configure the main router.
 // //! It serves as the central point for organizing and initializing all API endpoints of the application.
 
-// use axum::Router;
-// use axum::{http::StatusCode, response::IntoResponse, routing::get};
+mod v1;
+use crate::dal::DAL;
 
-// use crate::dal::DAL;
+use axum::{
+    Router,
+    routing::get,
+    response::IntoResponse
+    };
 
-// // Import submodules
-// pub mod agent_events;
-// pub mod agents;
-// pub mod deployment_objects;
-// pub mod stacks;
+use hyper::StatusCode;
 
-// /// Shared state for the application
-// ///
-// /// This struct holds the Data Access Layer (DAL) which is shared across
-// /// all route handlers to interact with the database.
-// #[derive(Clone)]
-// pub struct AppState {
-//     /// The Data Access Layer instance
-//     dal: DAL,
-// }
+
 
 // /// Configures and returns the main application router with all API routes
 // ///
@@ -37,26 +29,22 @@
 // ///
 // /// Returns a configured `Router` instance that includes all API routes and middleware.
 
-// pub fn configure_api_routes(dal: DAL) -> Router {
-//     let app_state = AppState { dal };
+pub fn configure_api_routes(dal: DAL) -> Router {
 
-//     Router::new()
-//         .merge(agents::configure_routes())
-//         .merge(stacks::configure_routes())
-//         .merge(deployment_objects::configure_routes())
-//         .merge(agent_events::configure_routes())
-//         .route("/healthz", get(healthz))
-//         .with_state(app_state)
-// }
+    Router::new()
+        .merge(v1::configure_routes())
+        .route("/healthz", get(healthz))
+        .with_state(dal)
+}
 
-// /// Health check endpoint handler
-// ///
-// /// This handler responds to GET requests at the "/healthz" endpoint.
-// /// It's used to verify that the API is up and running.
-// ///
-// /// # Returns
-// ///
-// /// Returns a 200 OK status code with "OK" in the body.
-// async fn healthz() -> impl IntoResponse {
-//     (StatusCode::OK, "OK")
-// }
+/// Health check endpoint handler
+///
+/// This handler responds to GET requests at the "/healthz" endpoint.
+/// It's used to verify that the API is up and running.
+///
+/// # Returns
+///
+/// Returns a 200 OK status code with "OK" in the body.
+async fn healthz() -> impl IntoResponse {
+    (StatusCode::OK, "OK")
+}

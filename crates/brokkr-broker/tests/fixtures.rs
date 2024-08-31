@@ -5,10 +5,12 @@
 //! and agent events.
 use brokkr_broker::dal::DAL;
 use brokkr_broker::db::create_shared_connection_pool;
+use brokkr_broker::api;
 use diesel::connection::Connection;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use dotenv::dotenv;
 
+use axum::Router;
 use std::env;
 use brokkr_models::models::{
     stacks::{NewStack, Stack},
@@ -32,6 +34,15 @@ pub struct TestFixture {
 }
 
 impl TestFixture {
+    /// Creates and returns an Axum Router with configured API routes.
+    ///
+    /// # Returns
+    ///
+    /// Returns a configured Axum Router.
+    pub fn create_test_router(&self) -> Router {
+        api::configure_api_routes(self.dal.clone())
+    }
+
     /// Creates a new TestFixture instance.
     ///
     /// This method sets up a test database connection, runs migrations,
