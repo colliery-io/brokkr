@@ -15,6 +15,7 @@ use brokkr_models::models::{
     stack_annotations::{StackAnnotation, NewStackAnnotation},
 };
 
+#[allow(dead_code)]
 #[derive(Deserialize)]
 struct StackFilters {
     labels: Option<String>,
