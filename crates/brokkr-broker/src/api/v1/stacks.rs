@@ -2,10 +2,10 @@
 use axum::{
     routing::{get, delete},
     Router,
-    extract::{Path, State},
+    extract::{Path, State, Query},
     Json,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use crate::dal::DAL;
 use brokkr_models::models::{
@@ -13,13 +13,13 @@ use brokkr_models::models::{
     deployment_objects::{DeploymentObject, NewDeploymentObject},
     stack_labels::{StackLabel, NewStackLabel},
     stack_annotations::{StackAnnotation, NewStackAnnotation},
+    agent_events::AgentEvent
 };
 
-#[allow(dead_code)]
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct StackFilters {
-    labels: Option<String>,
-    annotations: Option<String>,
+    labels: Option<Vec<String>>,
+    annotations: Option<Vec<(String, String)>>,
 }
 
 #[derive(Deserialize)]
@@ -28,12 +28,21 @@ struct UpdateStack {
     description: Option<String>,
 }
 
+#[derive(Deserialize)]
+struct AgentEventFilters {
+    status: Option<String>,
+}
+
+/// List stacks with optional filtering
 async fn list_stacks(
     State(dal): State<DAL>,
+    Query(filters): Query<StackFilters>,
 ) -> Result<Json<Vec<Stack>>, axum::http::StatusCode> {
-    let stacks = dal.stacks().list()
-        .map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?;
-    Ok(Json(stacks))
+    // Implement filtering logic here based on the `filters` parameter
+    todo!()
+    // let stacks = dal.stacks().list()
+    //     .map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?;
+    // Ok(Json(stacks))
 }
 
 async fn create_stack(
@@ -181,6 +190,21 @@ async fn remove_annotation(
 }
 
 
+async fn list_stack_events(
+    State(dal): State<DAL>,
+    Path(stack_id): Path<Uuid>,
+    Query(filters): Query<AgentEventFilters>,
+) -> Result<Json<Vec<AgentEvent>>, axum::http::StatusCode> {
+    let mut events = dal.agent_events().get_events(Some(stack_id), None)
+        .map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    if let Some(status) = filters.status {
+        events.retain(|event| event.status == status);
+    }
+
+    Ok(Json(events))
+}
+
 /// Create the router for stack-related endpoints
 pub fn configure_routes() -> Router<DAL> {
     Router::new()
@@ -191,5 +215,5 @@ pub fn configure_routes() -> Router<DAL> {
         .route("/stacks/:id/labels/:label", delete(remove_label))
         .route("/stacks/:id/annotations", get(list_annotations).post(add_annotation))
         .route("/stacks/:id/annotations/:key", delete(remove_annotation))
+        .route("/stacks/:stack_id/events", get(list_stack_events))
 }
-

@@ -19,7 +19,9 @@ use brokkr_models::models::{
     stack_labels::{NewStackLabel,StackLabel},
     stack_annotations::{NewStackAnnotation,StackAnnotation},
     agent_annotations::{NewAgentAnnotation,AgentAnnotation},
-    agent_targets::{NewAgentTarget,AgentTarget}
+    agent_labels::{NewAgentLabel, AgentLabel},
+    agent_targets::{NewAgentTarget,AgentTarget},
+    agent_events::{NewAgentEvent, AgentEvent}
 };
 
 use uuid::Uuid;
@@ -206,6 +208,55 @@ impl TestFixture {
         let new_target = NewAgentTarget::new(agent_id, stack_id)
             .expect("Failed to create NewAgentTarget");
         self.dal.agent_targets().create(&new_target).expect("Failed to create agent target")
+    }
+
+    /// Creates a new agent event for testing purposes.
+    ///
+    /// # Arguments
+    ///
+    /// * `agent` - A reference to the Agent the event belongs to.
+    /// * `deployment_object` - A reference to the DeploymentObject associated with the event.
+    /// * `event_type` - The type of the event.
+    /// * `status` - The status of the event.
+    /// * `message` - An optional message for the event.
+    ///
+    /// # Returns
+    ///
+    /// Returns the created AgentEvent on success, or panics on failure.
+    pub fn create_test_agent_event(
+        &self,
+        agent: &Agent,
+        deployment_object: &DeploymentObject,
+        event_type: &str,
+        status: &str,
+        message: Option<&str>,
+    ) -> AgentEvent {
+        let new_event = NewAgentEvent {
+            agent_id: agent.id,
+            deployment_object_id: deployment_object.id,
+            event_type: event_type.to_string(),
+            status: status.to_string(),
+            message: message.map(|m| m.to_string()),
+        };
+        self.dal.agent_events().create(&new_event)
+            .expect("Failed to create agent event")
+    }
+
+    /// Creates a new agent label for testing purposes.
+    ///
+    /// # Arguments
+    ///
+    /// * `agent_id` - The UUID of the agent to associate the label with.
+    /// * `label` - The label text.
+    ///
+    /// # Returns
+    ///
+    /// Returns the created AgentLabel on success, or panics on failure.
+    pub fn create_test_agent_label(&self, agent_id: Uuid, label: String) -> AgentLabel {
+        let new_label = NewAgentLabel::new(agent_id, label)
+            .expect("Failed to create NewAgentLabel");
+        self.dal.agent_labels().create(&new_label)
+            .expect("Failed to create agent label")
     }
 
 }
