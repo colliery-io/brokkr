@@ -1,6 +1,17 @@
 // @generated automatically by Diesel CLI.
 
 diesel::table! {
+    agent_annotations (id) {
+        id -> Uuid,
+        agent_id -> Uuid,
+        #[max_length = 64]
+        key -> Varchar,
+        #[max_length = 64]
+        value -> Varchar,
+    }
+}
+
+diesel::table! {
     agent_events (id) {
         id -> Uuid,
         created_at -> Timestamptz,
@@ -17,6 +28,23 @@ diesel::table! {
 }
 
 diesel::table! {
+    agent_labels (id) {
+        id -> Uuid,
+        agent_id -> Uuid,
+        #[max_length = 64]
+        label -> Varchar,
+    }
+}
+
+diesel::table! {
+    agent_targets (id) {
+        id -> Uuid,
+        agent_id -> Uuid,
+        stack_id -> Uuid,
+    }
+}
+
+diesel::table! {
     agents (id) {
         id -> Uuid,
         created_at -> Timestamptz,
@@ -26,11 +54,10 @@ diesel::table! {
         name -> Varchar,
         #[max_length = 255]
         cluster_name -> Varchar,
-        labels -> Nullable<Jsonb>,
-        annotations -> Nullable<Jsonb>,
         last_heartbeat -> Nullable<Timestamptz>,
         #[max_length = 50]
         status -> Varchar,
+        pak_hash -> Text,
     }
 }
 
@@ -50,6 +77,26 @@ diesel::table! {
 }
 
 diesel::table! {
+    stack_annotations (id) {
+        id -> Uuid,
+        stack_id -> Uuid,
+        #[max_length = 64]
+        key -> Varchar,
+        #[max_length = 64]
+        value -> Varchar,
+    }
+}
+
+diesel::table! {
+    stack_labels (id) {
+        id -> Uuid,
+        stack_id -> Uuid,
+        #[max_length = 64]
+        label -> Varchar,
+    }
+}
+
+diesel::table! {
     stacks (id) {
         id -> Uuid,
         created_at -> Timestamptz,
@@ -58,14 +105,27 @@ diesel::table! {
         #[max_length = 255]
         name -> Varchar,
         description -> Nullable<Text>,
-        labels -> Nullable<Jsonb>,
-        annotations -> Nullable<Jsonb>,
-        agent_target -> Nullable<Jsonb>,
     }
 }
 
+diesel::joinable!(agent_annotations -> agents (agent_id));
 diesel::joinable!(agent_events -> agents (agent_id));
 diesel::joinable!(agent_events -> deployment_objects (deployment_object_id));
+diesel::joinable!(agent_labels -> agents (agent_id));
+diesel::joinable!(agent_targets -> agents (agent_id));
+diesel::joinable!(agent_targets -> stacks (stack_id));
 diesel::joinable!(deployment_objects -> stacks (stack_id));
+diesel::joinable!(stack_annotations -> stacks (stack_id));
+diesel::joinable!(stack_labels -> stacks (stack_id));
 
-diesel::allow_tables_to_appear_in_same_query!(agent_events, agents, deployment_objects, stacks,);
+diesel::allow_tables_to_appear_in_same_query!(
+    agent_annotations,
+    agent_events,
+    agent_labels,
+    agent_targets,
+    agents,
+    deployment_objects,
+    stack_annotations,
+    stack_labels,
+    stacks,
+);

@@ -31,114 +31,150 @@ def schema():
 
 
 TEST_SQL_SCRIPT = """
--- Start a transaction so we can rollback at the end
-BEGIN;
+-- Data Model Test Script
 
--- Create a temporary table to store the stack_id
-CREATE TEMPORARY TABLE temp_stack_id (id UUID);
+-- Stage 1: Insert sample data into the stacks table
+INSERT INTO stacks (name, description)
+VALUES 
+('Stack1', 'First test stack'),
+('Stack2', 'Second test stack');
 
--- 1. Create a test stack
-WITH new_stack AS (
-    INSERT INTO stacks (name, description, labels, annotations, agent_target)
-    VALUES ('test-stack', 'A test stack', '{"env": "test"}', '{"version": "1.0"}', '["test-agent"]')
-    RETURNING id
-)
-INSERT INTO temp_stack_id SELECT id FROM new_stack;
+-- Stage 2: Insert sample data into the agents table
+INSERT INTO agents (name, cluster_name, status, pak_hash)
+VALUES 
+('Agent1', 'Cluster1', 'ACTIVE', 'hash1'),
+('Agent2', 'Cluster2', 'INACTIVE', 'hash2');
 
--- 2. Create some test deployment objects
-INSERT INTO deployment_objects (stack_id, yaml_content, yaml_checksum, is_deletion_marker)
-VALUES
-((SELECT id FROM temp_stack_id), 'apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: test-config', md5('test-content-1'), FALSE),
-((SELECT id FROM temp_stack_id), 'apiVersion: v1\nkind: Secret\nmetadata:\n  name: test-secret', md5('test-content-2'), FALSE);
+-- Stage 3: Create deployment objects for the stacks
+INSERT INTO deployment_objects (stack_id, yaml_content, yaml_checksum)
+VALUES 
+((SELECT id FROM stacks WHERE name = 'Stack1'), 'yaml: content1', 'checksum1'),
+((SELECT id FROM stacks WHERE name = 'Stack2'), 'yaml: content2', 'checksum2');
 
--- 3. Verify the deployment objects were created with sequence_ids
-SELECT * FROM deployment_objects WHERE stack_id = (SELECT id FROM temp_stack_id) ORDER BY sequence_id;
+-- Stage 4: Create agent_targets to associate agents with stacks
+INSERT INTO agent_targets (agent_id, stack_id)
+VALUES 
+((SELECT id FROM agents WHERE name = 'Agent1'), (SELECT id FROM stacks WHERE name = 'Stack1')),
+((SELECT id FROM agents WHERE name = 'Agent2'), (SELECT id FROM stacks WHERE name = 'Stack2'));
 
--- 4. Create a test agent
-INSERT INTO agents (name, cluster_name, status)
-VALUES ('test-agent', 'test-cluster', 'ACTIVE');
+-- Stage 5: Add labels and annotations to stacks
+INSERT INTO stack_labels (stack_id, label)
+VALUES 
+((SELECT id FROM stacks WHERE name = 'Stack1'), 'label1'),
+((SELECT id FROM stacks WHERE name = 'Stack2'), 'label2');
 
--- 5. Create some test agent events
+INSERT INTO stack_annotations (stack_id, key, value)
+VALUES 
+((SELECT id FROM stacks WHERE name = 'Stack1'), 'key1', 'value1'),
+((SELECT id FROM stacks WHERE name = 'Stack2'), 'key2', 'value2');
+
+-- Stage 6: Add labels and annotations to agents
+INSERT INTO agent_labels (agent_id, label)
+VALUES 
+((SELECT id FROM agents WHERE name = 'Agent1'), 'agent_label1'),
+((SELECT id FROM agents WHERE name = 'Agent2'), 'agent_label2');
+
+INSERT INTO agent_annotations (agent_id, key, value)
+VALUES 
+((SELECT id FROM agents WHERE name = 'Agent1'), 'agent_key1', 'agent_value1'),
+((SELECT id FROM agents WHERE name = 'Agent2'), 'agent_key2', 'agent_value2');
+
+-- Stage 7: Create agent events
 INSERT INTO agent_events (agent_id, deployment_object_id, event_type, status, message)
-SELECT
-    (SELECT id FROM agents WHERE name = 'test-agent'),
-    id,
-    'APPLIED',
-    'success',
-    'Test deployment applied'
-FROM deployment_objects
-WHERE stack_id = (SELECT id FROM temp_stack_id);
+VALUES 
+((SELECT id FROM agents WHERE name = 'Agent1'), 
+ (SELECT id FROM deployment_objects WHERE stack_id = (SELECT id FROM stacks WHERE name = 'Stack1')),
+ 'DEPLOYMENT', 'SUCCESS', 'Deployment successful'),
+((SELECT id FROM agents WHERE name = 'Agent2'), 
+ (SELECT id FROM deployment_objects WHERE stack_id = (SELECT id FROM stacks WHERE name = 'Stack2')),
+ 'DEPLOYMENT', 'FAILURE', 'Deployment failed');
 
--- 6. Verify the agent events were created
-SELECT * FROM agent_events;
+-- Stage 8: Test soft deletion of a stack
+UPDATE stacks SET deleted_at = CURRENT_TIMESTAMP WHERE name = 'Stack1';
 
--- 7. Test soft delete trigger on stack
-UPDATE stacks SET deleted_at = NOW() WHERE id = (SELECT id FROM temp_stack_id);
+-- Stage 9: Test hard deletion of an agent
+DELETE FROM agents WHERE name = 'Agent2';
 
--- 8. Verify the soft delete effects
--- Check if deployment objects are marked as deleted
-SELECT * FROM deployment_objects WHERE stack_id = (SELECT id FROM temp_stack_id) ORDER BY sequence_id;
+-- Stage 10: Verify data integrity and cascading operations
+-- Check if deployment objects are soft-deleted when stack is soft-deleted
+SELECT * FROM deployment_objects WHERE stack_id = (SELECT id FROM stacks WHERE name = 'Stack1');
 
--- Check if a deletion marker was created
-SELECT * FROM deployment_objects
-WHERE stack_id = (SELECT id FROM temp_stack_id) AND is_deletion_marker = TRUE;
+-- Check if agent events are deleted when an agent is hard-deleted
+SELECT * FROM agent_events WHERE agent_id = (SELECT id FROM agents WHERE name = 'Agent2');
 
--- 9. Test updating a deployment object (should fail due to prevent_deployment_object_changes trigger)
+-- Check if agent_targets are deleted when an agent is hard-deleted
+SELECT * FROM agent_targets WHERE agent_id = (SELECT id FROM agents WHERE name = 'Agent2');
+
+-- Check if agent labels and annotations are deleted when an agent is hard-deleted
+SELECT * FROM agent_labels WHERE agent_id = (SELECT id FROM agents WHERE name = 'Agent2');
+SELECT * FROM agent_annotations WHERE agent_id = (SELECT id FROM agents WHERE name = 'Agent2');
+
+-- Stage 11: Test prevention of deployment object modifications
 DO $$
 DECLARE
-    test_id UUID;
+    error_message TEXT;
 BEGIN
-    SELECT id INTO test_id FROM deployment_objects WHERE stack_id = (SELECT id FROM temp_stack_id) LIMIT 1;
-    BEGIN
-        UPDATE deployment_objects SET yaml_content = 'updated content' WHERE id = test_id;
-        RAISE EXCEPTION 'Expected update to fail, but it succeeded';
-    EXCEPTION WHEN others THEN
-        RAISE NOTICE 'Update failed as expected: %', SQLERRM;
-    END;
+    UPDATE deployment_objects 
+    SET yaml_content = 'modified content' 
+    WHERE stack_id = (SELECT id FROM stacks WHERE name = 'Stack2');
+
+    RAISE EXCEPTION 'Test failed: Deployment object modification was allowed';
+EXCEPTION
+    WHEN others THEN
+        GET STACKED DIAGNOSTICS error_message = MESSAGE_TEXT;
+        IF error_message LIKE 'Deployment objects cannot be modified%' THEN
+            RAISE NOTICE 'Test passed: Deployment object modification prevented as expected';
+        ELSE
+            RAISE EXCEPTION 'Test failed: Unexpected error: %', error_message;
+        END IF;
 END $$;
 
--- 10. Test cascade delete of agent events when an agent is deleted
-DELETE FROM agents WHERE name = 'test-agent';
-
--- Verify that related agent events were deleted
-SELECT * FROM agent_events;
-
--- Drop the temporary table
-DROP TABLE temp_stack_id;
-
--- Rollback the transaction to clean up the test data
-ROLLBACK;
-"""
-
-tables_available= """
--- Start a transaction so we can rollback at the end
-BEGIN;
-
--- Function to print table names
-CREATE OR REPLACE FUNCTION print_tables() RETURNS void AS $$
+-- Stage 12: Verify unique constraints
+-- Test unique stack name constraint
+DO $$
 DECLARE
-    table_name text;
+    error_message TEXT;
 BEGIN
-    FOR table_name IN
-        SELECT tablename
-        FROM pg_tables
-        WHERE schemaname = 'public'
-        ORDER BY tablename
-    LOOP
-        RAISE NOTICE 'Table: %', table_name;
-    END LOOP;
-END;
-$$ LANGUAGE plpgsql;
+    INSERT INTO stacks (name, description) VALUES ('Stack2', 'Duplicate stack name');
 
--- Call the function to print table names
-SELECT print_tables();
+    RAISE EXCEPTION 'Test failed: Duplicate stack name was allowed';
+EXCEPTION
+    WHEN unique_violation THEN
+        GET STACKED DIAGNOSTICS error_message = MESSAGE_TEXT;
+        IF error_message LIKE '%unique constraint "unique_stack_name"%' THEN
+            RAISE NOTICE 'Test passed: Duplicate stack name prevented as expected';
+        ELSE
+            RAISE EXCEPTION 'Test failed: Unexpected error: %', error_message;
+        END IF;
+END $$;
 
--- Drop the function
-DROP FUNCTION print_tables();
+-- Test unique agent-cluster constraint
+DO $$
+DECLARE
+    error_message TEXT;
+BEGIN
+    INSERT INTO agents (name, cluster_name, status, pak_hash)
+    VALUES ('Agent1', 'Cluster1', 'ACTIVE', 'hash3');
 
--- Rollback the transaction to clean up
-ROLLBACK;
+    RAISE EXCEPTION 'Test failed: Duplicate agent-cluster combination was allowed';
+EXCEPTION
+    WHEN unique_violation THEN
+        GET STACKED DIAGNOSTICS error_message = MESSAGE_TEXT;
+        IF error_message LIKE '%unique constraint "unique_agent_cluster"%' THEN
+            RAISE NOTICE 'Test passed: Duplicate agent-cluster combination prevented as expected';
+        ELSE
+            RAISE EXCEPTION 'Test failed: Unexpected error: %', error_message;
+        END IF;
+END $$;
+
+-- Stage 13: Basic queries to test indexes
+SELECT * FROM stacks WHERE name = 'Stack1';
+SELECT * FROM agents WHERE cluster_name = 'Cluster1';
+SELECT * FROM deployment_objects WHERE yaml_checksum = 'checksum1';
+SELECT * FROM agent_events WHERE event_type = 'DEPLOYMENT';
 """
+
+
 
 @models()
 @angreal.command(name="test")
@@ -199,5 +235,4 @@ def test():
     for f in migration_files:
         run_sql_in_docker(open(f,'r').read())
     # Run the SQL script
-    run_sql_in_docker(tables_available)
     run_sql_in_docker(TEST_SQL_SCRIPT)

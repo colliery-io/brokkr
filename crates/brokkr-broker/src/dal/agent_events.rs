@@ -1,8 +1,3 @@
-//! This module provides a Data Access Layer (DAL) for managing AgentEvent entities in the database.
-//!
-//! It uses Diesel ORM for database operations and includes functionality for creating,
-//! retrieving, listing, and soft-deleting agent events.
-
 use crate::dal::DAL;
 use brokkr_models::models::agent_events::{AgentEvent, NewAgentEvent};
 use brokkr_models::schema::agent_events;
@@ -11,7 +6,7 @@ use chrono::Utc;
 use diesel::prelude::*;
 use uuid::Uuid;
 
-/// Represents the Data Access Layer for AgentEvent-related operations.
+/// Data Access Layer for AgentEvent operations.
 pub struct AgentEventsDAL<'a> {
     /// Reference to the main DAL instance.
     pub dal: &'a DAL,
@@ -34,12 +29,59 @@ impl<'a> AgentEventsDAL<'a> {
             .get_result(conn)
     }
 
-    /// Lists all agent events from the database.
+    /// Retrieves a non-deleted agent event by its UUID.
+    ///
+    /// # Arguments
+    ///
+    /// * `event_uuid` - The UUID of the agent event to retrieve.
     ///
     /// # Returns
     ///
-    /// Returns a Result containing a Vec of all AgentEvents on success, or a diesel::result::Error on failure.
+    /// Returns a Result containing an Option<AgentEvent> if found (and not deleted), or a diesel::result::Error on failure.
+    pub fn get(&self, event_uuid: Uuid) -> Result<Option<AgentEvent>, diesel::result::Error> {
+        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        agent_events::table
+            .filter(agent_events::id.eq(event_uuid))
+            .filter(agent_events::deleted_at.is_null())
+            .first(conn)
+            .optional()
+    }
+
+    /// Retrieves an agent event by its UUID, including deleted events.
+    ///
+    /// # Arguments
+    ///
+    /// * `event_uuid` - The UUID of the agent event to retrieve.
+    ///
+    /// # Returns
+    ///
+    /// Returns a Result containing an Option<AgentEvent> if found (including deleted events), or a diesel::result::Error on failure.
+    pub fn get_including_deleted(&self, event_uuid: Uuid) -> Result<Option<AgentEvent>, diesel::result::Error> {
+        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        agent_events::table
+            .filter(agent_events::id.eq(event_uuid))
+            .first(conn)
+            .optional()
+    }
+
+    /// Lists all non-deleted agent events from the database.
+    ///
+    /// # Returns
+    ///
+    /// Returns a Result containing a Vec of all non-deleted AgentEvents on success, or a diesel::result::Error on failure.
     pub fn list(&self) -> Result<Vec<AgentEvent>, diesel::result::Error> {
+        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        agent_events::table
+            .filter(agent_events::deleted_at.is_null())
+            .load::<AgentEvent>(conn)
+    }
+
+    /// Lists all agent events from the database, including deleted ones.
+    ///
+    /// # Returns
+    ///
+    /// Returns a Result containing a Vec of all AgentEvents (including deleted ones) on success, or a diesel::result::Error on failure.
+    pub fn list_all(&self) -> Result<Vec<AgentEvent>, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         agent_events::table.load::<AgentEvent>(conn)
     }
@@ -82,22 +124,21 @@ impl<'a> AgentEventsDAL<'a> {
             .load::<AgentEvent>(conn)
     }
 
-    /// Retrieves a non-deleted agent event by its UUID.
+    /// Updates an existing agent event in the database.
     ///
     /// # Arguments
     ///
-    /// * `event_uuid` - The UUID of the agent event to retrieve.
+    /// * `event_uuid` - The UUID of the agent event to update.
+    /// * `updated_event` - A reference to the AgentEvent struct containing the updated details.
     ///
     /// # Returns
     ///
-    /// Returns a Result containing an Option<AgentEvent> if found (and not deleted), or a diesel::result::Error on failure.
-    pub fn get(&self, event_uuid: Uuid) -> Result<Option<AgentEvent>, diesel::result::Error> {
+    /// Returns a Result containing the updated AgentEvent on success, or a diesel::result::Error on failure.
+    pub fn update(&self, event_uuid: Uuid, updated_event: &AgentEvent) -> Result<AgentEvent, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
-        agent_events::table
-            .filter(agent_events::id.eq(event_uuid))
-            .filter(agent_events::deleted_at.is_null())
-            .first(conn)
-            .optional()
+        diesel::update(agent_events::table.filter(agent_events::id.eq(event_uuid)))
+            .set(updated_event)
+            .get_result(conn)
     }
 
     /// Soft deletes an agent event by setting its deleted_at timestamp to the current time.
@@ -108,32 +149,26 @@ impl<'a> AgentEventsDAL<'a> {
     ///
     /// # Returns
     ///
-    /// Returns a Result containing () on success, or a diesel::result::Error on failure.
-    pub fn soft_delete(&self, event_uuid: Uuid) -> Result<(), diesel::result::Error> {
+    /// Returns a Result containing the number of affected rows (0 or 1) on success, or a diesel::result::Error on failure.
+    pub fn soft_delete(&self, event_uuid: Uuid) -> Result<usize, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         diesel::update(agent_events::table.filter(agent_events::id.eq(event_uuid)))
-            .set(agent_events::deleted_at.eq(Utc::now().naive_utc()))
+            .set(agent_events::deleted_at.eq(Utc::now()))
             .execute(conn)
-            .map(|_| ())
     }
 
-    /// Retrieves an agent event by its UUID, including deleted events.
+    /// Hard deletes an agent event from the database.
     ///
     /// # Arguments
     ///
-    /// * `event_uuid` - The UUID of the agent event to retrieve.
+    /// * `event_uuid` - The UUID of the agent event to hard delete.
     ///
     /// # Returns
     ///
-    /// Returns a Result containing an Option<AgentEvent> if found (including deleted events), or a diesel::result::Error on failure.
-    pub fn get_including_deleted(
-        &self,
-        event_uuid: Uuid,
-    ) -> Result<Option<AgentEvent>, diesel::result::Error> {
+    /// Returns a Result containing the number of affected rows (0 or 1) on success, or a diesel::result::Error on failure.
+    pub fn hard_delete(&self, event_uuid: Uuid) -> Result<usize, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
-        agent_events::table
-            .filter(agent_events::id.eq(event_uuid))
-            .first(conn)
-            .optional()
+        diesel::delete(agent_events::table.filter(agent_events::id.eq(event_uuid)))
+            .execute(conn)
     }
 }

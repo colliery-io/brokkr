@@ -1,88 +1,94 @@
-//! # Agent Events
-//!
-//! This module defines the data structures and operations for agent events in the Brokkr system.
-//!
-//! ## Core Data Model
-//!
-//! The core data model for agent events is represented by the `AgentEvent` struct:
-//!
-//! - `id`: Uuid - Unique identifier for the agent event
-//! - `created_at`: DateTime<Utc> - Timestamp when the event was created
-//! - `updated_at`: DateTime<Utc> - Timestamp when the event was last updated
-//! - `deleted_at`: Option<DateTime<Utc>> - Timestamp when the event was soft-deleted (if applicable)
-//! - `agent_id`: Uuid - UUID of the agent associated with this event
-//! - `deployment_object_id`: Uuid - UUID of the deployment object associated with this event
-//! - `event_type`: String - Type of the event (max 50 characters)
-//! - `status`: String - Status of the event (max 10 characters)
-//! - `message`: Option<String> - Optional message providing additional details about the event
+//! # Agent Event Module
+//! 
+//! This module defines structures and methods for managing agent events in the system.
+//! 
+//! ## Data Model
+//! 
+//! Agent events represent actions or occurrences related to agents and deployment objects. 
+//! They are stored in the `agent_events` table with the following structure:
+//! 
+//! - `id`: UUID, primary key
+//! - `created_at`: TIMESTAMP, when the event was created
+//! - `updated_at`: TIMESTAMP, when the event was last updated
+//! - `deleted_at`: TIMESTAMP, for soft deletion support
+//! - `agent_id`: UUID, foreign key referencing the `agents` table
+//! - `deployment_object_id`: UUID, foreign key referencing the `deployment_objects` table
+//! - `event_type`: VARCHAR(50), type of the event
+//! - `status`: VARCHAR(10), status of the event
+//! - `message`: TEXT, optional message associated with the event
+//! 
+//! ## Usage
+//! 
+//! Agent events are used to track and record various actions and statuses related to agents
+//! and their interactions with deployment objects. This can be useful for monitoring,
+//! debugging, and auditing purposes.
+//! 
+//! ## Constraints
+//! 
+//! - Both `agent_id` and `deployment_object_id` must be valid, non-nil UUIDs.
+//! - `event_type` must be a non-empty string.
+//! - `status` must be one of: "SUCCESS", "FAILURE", "IN_PROGRESS", or "PENDING".
 
-use crate::schema::agent_events;
 use chrono::{DateTime, Utc};
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-/// Represents an agent event in the system.
-///
-/// This struct is used for querying existing agent events from the database.
-#[derive(
-    Queryable, Selectable, Identifiable, Debug, Clone, Serialize, Deserialize, AsChangeset,
-)]
-#[diesel(table_name = agent_events)]
+/// Represents an agent event in the database.
+#[derive(Queryable, Selectable, Identifiable, AsChangeset, Debug, Clone, Serialize, Deserialize)]
+#[diesel(table_name = crate::schema::agent_events)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct AgentEvent {
-    /// Unique identifier for the agent event
+    /// Unique identifier for the event.
     pub id: Uuid,
-    /// Timestamp when the event was created
+    /// Timestamp when the event was created.
     pub created_at: DateTime<Utc>,
-    /// Timestamp when the event was last updated
+    /// Timestamp when the event was last updated.
     pub updated_at: DateTime<Utc>,
-    /// Timestamp when the event was soft-deleted (if applicable)
+    /// Timestamp for soft deletion, if applicable.
     pub deleted_at: Option<DateTime<Utc>>,
-    /// UUID of the agent associated with this event
+    /// ID of the agent associated with this event.
     pub agent_id: Uuid,
-    /// UUID of the deployment object associated with this event
+    /// ID of the deployment object associated with this event.
     pub deployment_object_id: Uuid,
-    /// Type of the event (max 50 characters)
+    /// Type of the event.
     pub event_type: String,
-    /// Status of the event (max 10 characters)
+    /// Status of the event (e.g., "SUCCESS", "FAILURE", "IN_PROGRESS", "PENDING").
     pub status: String,
-    /// Optional message providing additional details about the event
+    /// Optional message providing additional details about the event.
     pub message: Option<String>,
 }
 
 /// Represents a new agent event to be inserted into the database.
-///
-/// This struct is used when creating new agent events.
 #[derive(Insertable, Debug, Clone, Serialize, Deserialize)]
-#[diesel(table_name = agent_events)]
+#[diesel(table_name = crate::schema::agent_events)]
 pub struct NewAgentEvent {
-    /// UUID of the agent associated with this event
+    /// ID of the agent associated with this event.
     pub agent_id: Uuid,
-    /// UUID of the deployment object associated with this event
+    /// ID of the deployment object associated with this event.
     pub deployment_object_id: Uuid,
-    /// Type of the event (max 50 characters)
+    /// Type of the event.
     pub event_type: String,
-    /// Status of the event (max 10 characters)
+    /// Status of the event (e.g., "SUCCESS", "FAILURE", "IN_PROGRESS", "PENDING").
     pub status: String,
-    /// Optional message providing additional details about the event
+    /// Optional message providing additional details about the event.
     pub message: Option<String>,
 }
 
 impl NewAgentEvent {
     /// Creates a new `NewAgentEvent` instance.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
-    /// * `agent_id` - UUID of the agent associated with this event
-    /// * `deployment_object_id` - UUID of the deployment object associated with this event
-    /// * `event_type` - Type of the event (max 50 characters)
-    /// * `status` - Status of the event (max 10 characters)
-    /// * `message` - Optional message providing additional details about the event
+    /// * `agent_id`: UUID of the agent associated with this event.
+    /// * `deployment_object_id`: UUID of the deployment object associated with this event.
+    /// * `event_type`: Type of the event. Must be a non-empty string.
+    /// * `status`: Status of the event. Must be one of: "SUCCESS", "FAILURE", "IN_PROGRESS", or "PENDING".
+    /// * `message`: Optional message providing additional details about the event.
     ///
     /// # Returns
     ///
-    /// A Result containing a new `NewAgentEvent` instance if successful, or an error message if validation fails.
+    /// Returns `Ok(NewAgentEvent)` if all parameters are valid, otherwise returns an `Err` with a description of the validation failure.
     pub fn new(
         agent_id: Uuid,
         deployment_object_id: Uuid,
@@ -90,11 +96,28 @@ impl NewAgentEvent {
         status: String,
         message: Option<String>,
     ) -> Result<Self, String> {
-        if event_type.len() > 50 {
-            return Err("Event type cannot exceed 50 characters".to_string());
+        // Validate agent_id
+        if agent_id.is_nil() {
+            return Err("Invalid agent ID".to_string());
         }
-        if status.len() > 10 {
-            return Err("Status cannot exceed 10 characters".to_string());
+
+        // Validate deployment_object_id
+        if deployment_object_id.is_nil() {
+            return Err("Invalid deployment object ID".to_string());
+        }
+
+        // Validate event_type
+        if event_type.trim().is_empty() {
+            return Err("Event type cannot be empty".to_string());
+        }
+
+        // Validate status
+        let valid_statuses = ["SUCCESS", "FAILURE", "IN_PROGRESS", "PENDING"];
+        if !valid_statuses.contains(&status.as_str()) {
+            return Err(format!(
+                "Invalid status. Must be one of: {}",
+                valid_statuses.join(", ")
+            ));
         }
 
         Ok(NewAgentEvent {
@@ -112,13 +135,12 @@ mod tests {
     use super::*;
 
     #[test]
-    /// Tests the successful creation of a NewAgentEvent with valid input parameters.
     fn test_new_agent_event_success() {
         let agent_id = Uuid::new_v4();
         let deployment_object_id = Uuid::new_v4();
-        let event_type = "test_event".to_string();
-        let status = "success".to_string();
-        let message = Some("Test message".to_string());
+        let event_type = "DEPLOYMENT".to_string();
+        let status = "SUCCESS".to_string();
+        let message = Some("Deployment completed successfully".to_string());
 
         let result = NewAgentEvent::new(
             agent_id,
@@ -128,92 +150,51 @@ mod tests {
             message.clone(),
         );
 
-        assert!(
-            result.is_ok(),
-            "NewAgentEvent creation should succeed with valid inputs"
-        );
+        assert!(result.is_ok(), "NewAgentEvent creation should succeed with valid inputs");
         let new_event = result.unwrap();
-        assert_eq!(
-            new_event.agent_id, agent_id,
-            "agent_id should match the input value"
-        );
-        assert_eq!(
-            new_event.deployment_object_id, deployment_object_id,
-            "deployment_object_id should match the input value"
-        );
-        assert_eq!(
-            new_event.event_type, event_type,
-            "event_type should match the input value"
-        );
-        assert_eq!(
-            new_event.status, status,
-            "status should match the input value"
-        );
-        assert_eq!(
-            new_event.message, message,
-            "message should match the input value"
-        );
+        assert_eq!(new_event.agent_id, agent_id, "agent_id should match the input value");
+        assert_eq!(new_event.deployment_object_id, deployment_object_id, "deployment_object_id should match the input value");
+        assert_eq!(new_event.event_type, event_type, "event_type should match the input value");
+        assert_eq!(new_event.status, status, "status should match the input value");
+        assert_eq!(new_event.message, message, "message should match the input value");
     }
 
     #[test]
-    /// Tests that NewAgentEvent creation fails when the event_type exceeds 50 characters.
-    fn test_new_agent_event_event_type_too_long() {
-        let long_event_type = "a".repeat(51);
+    fn test_new_agent_event_invalid_agent_id() {
         let result = NewAgentEvent::new(
+            Uuid::nil(),
             Uuid::new_v4(),
-            Uuid::new_v4(),
-            long_event_type,
-            "success".to_string(),
+            "DEPLOYMENT".to_string(),
+            "SUCCESS".to_string(),
             None,
         );
-        assert!(
-            result.is_err(),
-            "NewAgentEvent creation should fail with an event_type longer than 50 characters"
-        );
-        assert_eq!(
-            result.unwrap_err(),
-            "Event type cannot exceed 50 characters",
-            "Error message should indicate the event_type is too long"
-        );
+        assert!(result.is_err(), "NewAgentEvent creation should fail with nil agent ID");
+        assert_eq!(result.unwrap_err(), "Invalid agent ID", "Error message should indicate invalid agent ID");
     }
 
     #[test]
-    /// Tests that NewAgentEvent creation fails when the status exceeds 10 characters.
-    fn test_new_agent_event_status_too_long() {
-        let long_status = "a".repeat(11);
+    fn test_new_agent_event_invalid_status() {
         let result = NewAgentEvent::new(
             Uuid::new_v4(),
             Uuid::new_v4(),
-            "test_event".to_string(),
-            long_status,
+            "DEPLOYMENT".to_string(),
+            "INVALID_STATUS".to_string(),
             None,
         );
-        assert!(
-            result.is_err(),
-            "NewAgentEvent creation should fail with a status longer than 10 characters"
-        );
-        assert_eq!(
-            result.unwrap_err(),
-            "Status cannot exceed 10 characters",
-            "Error message should indicate the status is too long"
-        );
+        assert!(result.is_err(), "NewAgentEvent creation should fail with invalid status");
+        assert!(result.unwrap_err().contains("Invalid status"), "Error message should indicate invalid status");
     }
 
     #[test]
-    /// Tests the creation of a NewAgentEvent with a "fail" status.
-    fn test_new_agent_event_fail_status() {
+    fn test_new_agent_event_empty_event_type() {
         let result = NewAgentEvent::new(
             Uuid::new_v4(),
             Uuid::new_v4(),
-            "test_event".to_string(),
-            "fail".to_string(),
-            Some("Test failure message".to_string()),
+            "".to_string(),
+            "SUCCESS".to_string(),
+            None,
         );
-        assert!(
-            result.is_ok(),
-            "NewAgentEvent creation should succeed with a 'fail' status"
-        );
-        let new_event = result.unwrap();
-        assert_eq!(new_event.status, "fail", "status should be set to 'fail'");
+        assert!(result.is_err(), "NewAgentEvent creation should fail with empty event type");
+        assert_eq!(result.unwrap_err(), "Event type cannot be empty", "Error message should indicate empty event type");
     }
 }

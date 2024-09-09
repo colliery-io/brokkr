@@ -49,15 +49,33 @@
 use diesel::r2d2::{ConnectionManager, Pool};
 use diesel::PgConnection;
 
-mod agent_events;
-mod agents;
-mod deployment_objects;
-mod stacks;
+pub mod agents;
+use agents::AgentsDAL;
 
-pub use agent_events::AgentEventsDAL;
-pub use agents::AgentsDAL;
-pub use deployment_objects::DeploymentObjectsDAL;
-pub use stacks::StacksDAL;
+pub mod agent_annotations;
+use agent_annotations::AgentAnnotationsDAL;
+
+pub mod agent_events;
+use agent_events::AgentEventsDAL;
+
+pub mod agent_labels;
+use agent_labels::AgentLabelsDAL;
+
+pub mod agent_targets;
+use agent_targets::AgentTargetsDAL;
+
+pub mod stacks;
+use stacks::StacksDAL;
+
+pub mod stack_annotations;
+use stack_annotations::StackAnnotationsDAL;
+
+pub mod stack_labels;
+use stack_labels::StackLabelsDAL;
+
+pub mod deployment_objects;
+use deployment_objects::DeploymentObjectsDAL;
+
 
 /// The main Data Access Layer struct.
 ///
@@ -93,6 +111,15 @@ impl DAL {
         AgentsDAL { dal: self }
     }
 
+    /// Provides access to the Agent Anotations Data Access Layer.
+    ///
+    /// # Returns
+    ///
+    /// An instance of AgentAnontationsDAL.
+    pub fn agent_annotations(&self) -> AgentAnnotationsDAL{
+        AgentAnnotationsDAL { dal: self }
+    }
+
     /// Provides access to the Agent Events Data Access Layer.
     ///
     /// # Returns
@@ -101,6 +128,44 @@ impl DAL {
     pub fn agent_events(&self) -> AgentEventsDAL {
         AgentEventsDAL { dal: self }
     }
+
+    /// Provides access to the Agent Labels Data Access Layer.
+    ///
+    /// # Returns
+    ///
+    /// An instance of AgentLabelsDAL.
+    pub fn agent_labels(&self) -> AgentLabelsDAL {
+        AgentLabelsDAL { dal: self }
+    }
+
+    /// Provides access to the Agent Targets Data Access Layer.
+    ///
+    /// # Returns
+    ///
+    /// An instance of AgentTargetssDAL.
+    pub fn agent_targets(&self) -> AgentTargetsDAL {
+        AgentTargetsDAL { dal: self }
+    }
+
+    /// Provides access to the Stack Labels Data Access Layer.
+    ///
+    /// # Returns
+    ///
+    /// An instance of StackLabelsDAL.
+    pub fn stack_labels(&self) -> StackLabelsDAL {
+        StackLabelsDAL { dal: self }
+    }
+
+    /// Provides access to the Stack Anotations Data Access Layer.
+    ///
+    /// # Returns
+    ///
+    /// An instance of StackAnontationsDAL.
+    pub fn stack_annotations(&self) -> StackAnnotationsDAL{
+        StackAnnotationsDAL { dal: self }
+    }
+
+    
 
     /// Provides access to the Stacks Data Access Layer.
     ///

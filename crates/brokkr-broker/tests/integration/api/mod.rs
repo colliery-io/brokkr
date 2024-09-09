@@ -1,22 +1,24 @@
-mod agent_events;
+// mod agent_events;
 mod agents;
-mod deployment_objects;
+// mod deployment_objects;
 mod stacks;
+mod deployment_objects;
+mod agent_events;
 
 use axum::{
     body::{to_bytes, Body},
     http::{Request, StatusCode},
 };
 
-use tower::ServiceExt;
-
+// use tower::ServiceExt;
+use tower::util::ServiceExt;
 use crate::fixtures::TestFixture;
 
-#[tokio::test]
-async fn test_api_routes_configuration() {
-    let fixture = TestFixture::new(); // Use default DATABASE_URL
-    let _app = fixture.create_test_router();
-}
+// #[tokio::test]
+// async fn test_api_routes_configuration() {
+//     let fixture = TestFixture::new(); // Use default DATABASE_URL
+//     let _app = fixture.create_test_router();
+// }
 
 #[tokio::test]
 async fn test_healthz_endpoint() {

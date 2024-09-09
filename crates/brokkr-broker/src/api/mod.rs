@@ -1,52 +1,40 @@
-//! # API Routes Aggregator Module
-//!
-//! This module aggregates all API routes and provides a function to configure the main router.
-//! It serves as the central point for organizing and initializing all API endpoints of the application.
+// //! # API Routes Aggregator Module
+// //!
+// //! This module aggregates all API routes and provides a function to configure the main router.
+// //! It serves as the central point for organizing and initializing all API endpoints of the application.
 
-use axum::Router;
-use axum::{http::StatusCode, response::IntoResponse, routing::get};
-
+pub mod v1;
 use crate::dal::DAL;
 
-// Import submodules
-pub mod agent_events;
-pub mod agents;
-pub mod deployment_objects;
-pub mod stacks;
+use axum::{
+    Router,
+    routing::get,
+    response::IntoResponse
+    };
 
-/// Shared state for the application
-///
-/// This struct holds the Data Access Layer (DAL) which is shared across
-/// all route handlers to interact with the database.
-#[derive(Clone)]
-pub struct AppState {
-    /// The Data Access Layer instance
-    dal: DAL,
-}
+use hyper::StatusCode;
 
-/// Configures and returns the main application router with all API routes
-///
-/// This function is responsible for setting up the entire API structure of the application.
-/// It merges routes from all submodules and adds a health check endpoint.
-///
-/// # Arguments
-///
-/// * `dal` - An instance of the Data Access Layer
-///
-/// # Returns
-///
-/// Returns a configured `Router` instance that includes all API routes and middleware.
+
+
+// /// Configures and returns the main application router with all API routes
+// ///
+// /// This function is responsible for setting up the entire API structure of the application.
+// /// It merges routes from all submodules and adds a health check endpoint.
+// ///
+// /// # Arguments
+// ///
+// /// * `dal` - An instance of the Data Access Layer
+// ///
+// /// # Returns
+// ///
+// /// Returns a configured `Router` instance that includes all API routes and middleware.
 
 pub fn configure_api_routes(dal: DAL) -> Router {
-    let app_state = AppState { dal };
 
     Router::new()
-        .merge(agents::configure_routes())
-        .merge(stacks::configure_routes())
-        .merge(deployment_objects::configure_routes())
-        .merge(agent_events::configure_routes())
+        .merge(v1::configure_routes())
         .route("/healthz", get(healthz))
-        .with_state(app_state)
+        .with_state(dal)
 }
 
 /// Health check endpoint handler
