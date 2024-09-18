@@ -299,25 +299,6 @@ impl<'a> AgentsDAL<'a> {
         }
     }
 
-    /// Filters agents by agent targets.
-    ///
-    /// # Arguments
-    ///
-    /// * `agent_target_ids` - A vector of agent target UUIDs to filter by.
-    /// * `filter_type` - Specifies whether to use AND or OR logic for multiple agent targets.
-    ///
-    /// # Returns
-    ///
-    /// Returns a Result containing a Vec of matching Agents on success, or a diesel::result::Error on failure.
-    pub fn filter_by_agent_targets(&self, agent_target_ids: Vec<Uuid>, filter_type: FilterType) -> Result<Vec<Agent>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
-        agents::table
-            .inner_join(agent_targets::table)
-            .filter(agents::deleted_at.is_null())
-            .filter(agent_targets::stack_id.eq_any(agent_target_ids))
-            .select(agents::all_columns).distinct().load::<Agent>(conn)
-    }
-
     /// Retrieves an agent by its target ID.
     ///
     /// # Arguments
