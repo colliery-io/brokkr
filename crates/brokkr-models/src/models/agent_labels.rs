@@ -29,7 +29,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// Represents an agent label in the database.
-#[derive(Queryable, Selectable, Identifiable, AsChangeset, Debug, Clone, Serialize, Deserialize)]
+#[derive(Queryable, Selectable, Identifiable, AsChangeset, Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
 #[diesel(table_name = crate::schema::agent_labels)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct AgentLabel {

@@ -1,9 +1,19 @@
 use crate::dal::DAL;
 use brokkr_models::models::agents::{Agent, NewAgent};
-use brokkr_models::schema::agents;
+use brokkr_models::schema::{agents, agent_labels, agent_annotations, agent_targets};
+
 use chrono::Utc;
 use diesel::prelude::*;
 use uuid::Uuid;
+use crate::dal::FilterType;
+use std::collections::HashSet;
+
+pub struct AgentFilter {
+    pub labels: Vec<String>,
+    pub annotations: Vec<(String, String)>,
+    pub agent_targets: Vec<Uuid>,
+    pub filter_type: FilterType,
+}
 
 /// Data Access Layer for Agent operations.
 pub struct AgentsDAL<'a> {
@@ -133,36 +143,198 @@ impl<'a> AgentsDAL<'a> {
             .execute(conn)
     }
 
-    /// Searches for non-deleted agents by name or cluster name.
+    /// Filters agents by labels.
     ///
     /// # Arguments
     ///
-    /// * `query` - The search string to match against agent names or cluster names.
+    /// * `labels` - A vector of label strings to filter by.
+    /// * `filter_type` - Specifies whether to use AND or OR logic for multiple labels.
     ///
     /// # Returns
     ///
-    /// Returns a Result containing a Vec of matching non-deleted Agents on success, or a diesel::result::Error on failure.
-    pub fn search(&self, query: &str) -> Result<Vec<Agent>, diesel::result::Error> {
+    /// Returns a Result containing a Vec of matching Agents on success, or a diesel::result::Error on failure.
+    ///
+    /// # SQL Queries
+    ///
+    /// For FilterType::And:
+    /// ```sql
+    /// SELECT DISTINCT agents.*
+    /// FROM agents
+    /// WHERE agents.deleted_at IS NULL
+    ///   AND EXISTS (SELECT 1 FROM agent_labels WHERE agent_labels.agent_id = agents.id AND agent_labels.label = ?)
+    ///   AND EXISTS (SELECT 1 FROM agent_labels WHERE agent_labels.agent_id = agents.id AND agent_labels.label = ?)
+    ///   -- ... (repeated for each label)
+    /// ```
+    ///
+    /// For FilterType::Or:
+    /// ```sql
+    /// SELECT DISTINCT agents.*
+    /// FROM agents
+    /// INNER JOIN agent_labels ON agents.id = agent_labels.agent_id
+    /// WHERE agents.deleted_at IS NULL
+    ///   AND agent_labels.label IN (?, ?, ...)
+    /// ```
+    pub fn filter_by_labels(&self, labels: Vec<String>, filter_type: FilterType) -> Result<Vec<Agent>, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
-        agents::table
-            .filter(agents::name.ilike(format!("%{}%", query)).or(agents::cluster_name.ilike(format!("%{}%", query))))
-            .filter(agents::deleted_at.is_null())
-            .load::<Agent>(conn)
+        
+        match filter_type {
+            FilterType::And => {
+                let mut query = agents::table
+                    .filter(agents::deleted_at.is_null())
+                    .into_boxed();
+
+                for label in &labels {
+                    let subquery = agent_labels::table
+                        .filter(agent_labels::agent_id.eq(agents::id))
+                        .filter(agent_labels::label.eq(label));
+                    query = query.filter(diesel::dsl::exists(subquery));
+                }
+
+                query
+                    .select(agents::all_columns)
+                    .distinct()
+                    .load::<Agent>(conn)
+            },
+            FilterType::Or => {
+                agents::table
+                    .inner_join(agent_labels::table)
+                    .filter(agents::deleted_at.is_null())
+                    .filter(agent_labels::label.eq_any(labels))
+                    .select(agents::all_columns)
+                    .distinct()
+                    .load::<Agent>(conn)
+            }
+        }
     }
 
-    /// Searches for all agents by name or cluster name, including deleted ones.
+    /// Filters agents by annotations.
     ///
     /// # Arguments
     ///
-    /// * `query` - The search string to match against agent names or cluster names.
+    /// * `annotations` - A vector of (key, value) pairs to filter by.
+    /// * `filter_type` - Specifies whether to use AND or OR logic for multiple annotations.
     ///
     /// # Returns
     ///
-    /// Returns a Result containing a Vec of all matching Agents (including deleted ones) on success, or a diesel::result::Error on failure.
-    pub fn search_all(&self, query: &str) -> Result<Vec<Agent>, diesel::result::Error> {
+    /// Returns a Result containing a Vec of matching Agents on success, or a diesel::result::Error on failure.
+    ///
+    /// # SQL Generated (Roughly Equivalent)
+    ///
+    /// For FilterType::Or:
+    /// ```sql
+    /// SELECT DISTINCT agents.*
+    /// FROM agents
+    /// INNER JOIN agent_annotations ON agents.id = agent_annotations.agent_id
+    /// WHERE agents.deleted_at IS NULL
+    ///   AND ((agent_annotations.key = ? AND agent_annotations.value = ?)
+    ///     OR (agent_annotations.key = ? AND agent_annotations.value = ?)
+    ///     OR ...)
+    /// ```
+    ///
+    /// For FilterType::And:
+    /// ```sql
+    /// SELECT DISTINCT agents.*
+    /// FROM agents
+    /// WHERE agents.deleted_at IS NULL
+    ///   AND EXISTS (SELECT 1 FROM agent_annotations WHERE agent_annotations.agent_id = agents.id AND agent_annotations.key = ? AND agent_annotations.value = ?)
+    ///   AND EXISTS (SELECT 1 FROM agent_annotations WHERE agent_annotations.agent_id = agents.id AND agent_annotations.key = ? AND agent_annotations.value = ?)
+    ///   -- ... (repeated for each annotation pair)
+    /// ```
+    ///
+    /// Note: The actual implementation uses Rust code to perform the filtering,
+    /// which may not directly translate to a single SQL query.
+    pub fn filter_by_annotations(&self, annotations: Vec<(String, String)>, filter_type: FilterType) -> Result<Vec<Agent>, diesel::result::Error> {
+        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        
+        match filter_type {
+            FilterType::Or => {
+                let mut all_matching_agents = HashSet::new();
+
+                for (key, value) in annotations {
+                    let matching_agents: Vec<Agent> = agents::table
+                        .inner_join(agent_annotations::table)
+                        .filter(agents::deleted_at.is_null())
+                        .filter(agent_annotations::key.eq(key))
+                        .filter(agent_annotations::value.eq(value))
+                        .select(agents::all_columns)
+                        .load(conn)?;
+
+                    all_matching_agents.extend(matching_agents);
+                }
+
+                Ok(all_matching_agents.into_iter().collect())
+            },
+            FilterType::And => {
+                if annotations.is_empty() {
+                    return Ok(Vec::new());
+                }
+
+                let mut all_matching_agents: Option<HashSet<Agent>> = None;
+
+                for (key, value) in annotations {
+                    let matching_agents: HashSet<Agent> = agents::table
+                        .inner_join(agent_annotations::table)
+                        .filter(agents::deleted_at.is_null())
+                        .filter(agent_annotations::key.eq(key))
+                        .filter(agent_annotations::value.eq(value))
+                        .select(agents::all_columns)
+                        .load(conn)?
+                        .into_iter()
+                        .collect();
+
+                    all_matching_agents = match all_matching_agents {
+                        Some(agents) => Some(agents.intersection(&matching_agents).cloned().collect()),
+                        None => Some(matching_agents),
+                    };
+
+                    if let Some(ref agents) = all_matching_agents {
+                        if agents.is_empty() {
+                            break;
+                        }
+                    }
+                }
+
+                Ok(all_matching_agents.map_or_else(Vec::new, |agents| agents.into_iter().collect()))
+            }
+        }
+    }
+
+    /// Filters agents by agent targets.
+    ///
+    /// # Arguments
+    ///
+    /// * `agent_target_ids` - A vector of agent target UUIDs to filter by.
+    /// * `filter_type` - Specifies whether to use AND or OR logic for multiple agent targets.
+    ///
+    /// # Returns
+    ///
+    /// Returns a Result containing a Vec of matching Agents on success, or a diesel::result::Error on failure.
+    pub fn filter_by_agent_targets(&self, agent_target_ids: Vec<Uuid>, filter_type: FilterType) -> Result<Vec<Agent>, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         agents::table
-            .filter(agents::name.ilike(format!("%{}%", query)).or(agents::cluster_name.ilike(format!("%{}%", query))))
-            .load::<Agent>(conn)
+            .inner_join(agent_targets::table)
+            .filter(agents::deleted_at.is_null())
+            .filter(agent_targets::stack_id.eq_any(agent_target_ids))
+            .select(agents::all_columns).distinct().load::<Agent>(conn)
+    }
+
+    /// Retrieves an agent by its target ID.
+    ///
+    /// # Arguments
+    ///
+    /// * `agent_target_id` - The UUID of the agent target to retrieve.
+    ///
+    /// # Returns
+    ///
+    /// Returns a Result containing an Option<Agent> if found, or a diesel::result::Error on failure.
+    pub fn get_agent_by_target_id(&self, agent_target_id: Uuid) -> Result<Option<Agent>, diesel::result::Error> {
+        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        agents::table
+            .inner_join(agent_targets::table)
+            .filter(agents::deleted_at.is_null())
+            .filter(agent_targets::stack_id.eq(agent_target_id))
+            .select(agents::all_columns)
+            .first(conn)
+            .optional()
     }
 }

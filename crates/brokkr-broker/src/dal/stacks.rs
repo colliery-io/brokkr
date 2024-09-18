@@ -118,39 +118,6 @@ impl<'a> StacksDAL<'a> {
             .execute(conn)
     }
 
-    /// Searches for non-deleted stacks by name.
-    ///
-    /// # Arguments
-    ///
-    /// * `query` - The search string to match against stack names.
-    ///
-    /// # Returns
-    ///
-    /// Returns a Result containing a Vec of matching non-deleted Stacks on success, or a diesel::result::Error on failure.
-    pub fn search(&self, query: &str) -> Result<Vec<Stack>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
-        stacks::table
-            .filter(stacks::name.ilike(format!("%{}%", query)))
-            .filter(stacks::deleted_at.is_null())
-            .load::<Stack>(conn)
-    }
-
-    /// Searches for all stacks by name, including deleted ones.
-    ///
-    /// # Arguments
-    ///
-    /// * `query` - The search string to match against stack names.
-    ///
-    /// # Returns
-    ///
-    /// Returns a Result containing a Vec of all matching Stacks (including deleted ones) on success, or a diesel::result::Error on failure.
-    pub fn search_all(&self, query: &str) -> Result<Vec<Stack>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
-        stacks::table
-            .filter(stacks::name.ilike(format!("%{}%", query)))
-            .load::<Stack>(conn)
-    }
-
     /// Hard deletes a stack from the database.
     ///
     /// # Arguments

@@ -60,6 +60,16 @@ impl<'a> AgentAnnotationsDAL<'a> {
             .load::<AgentAnnotation>(conn)
     }
 
+    /// Lists all agent annotations in the database.
+    ///
+    /// # Returns
+    ///
+    /// Returns a Result containing a Vec of AgentAnnotations, or a diesel::result::Error on failure.
+    pub fn list(&self) -> Result<Vec<AgentAnnotation>, diesel::result::Error> {
+        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        agent_annotations::table.load::<AgentAnnotation>(conn)
+    }
+
     /// Updates an existing agent annotation in the database.
     ///
     /// # Arguments

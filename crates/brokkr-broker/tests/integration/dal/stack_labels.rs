@@ -64,15 +64,3 @@ fn test_delete_all_labels_for_stack() {
     assert!(remaining_labels.is_empty());
 }
 
-#[test]
-fn test_search_stack_labels() {
-    let fixture = TestFixture::new();
-    let stack1 = fixture.create_test_stack("Stack 1".to_string(), None);
-    let stack2 = fixture.create_test_stack("Stack 2".to_string(), None);
-    fixture.create_test_stack_label(stack1.id, "alpha-label".to_string());
-    fixture.create_test_stack_label(stack2.id, "beta-label".to_string());
-
-    let search_results = fixture.dal.stack_labels().search("alpha").expect("Failed to search stack labels");
-    assert_eq!(search_results.len(), 1);
-    assert_eq!(search_results[0].label, "alpha-label");
-}

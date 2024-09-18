@@ -75,21 +75,6 @@ fn test_soft_delete_stack() {
     assert!(deleted_stack.deleted_at.is_some());
 }
 
-#[test]
-fn test_search_stacks() {
-    let fixture = TestFixture::new();
-    fixture.create_test_stack("Apple Stack".to_string(), None);
-    fixture.create_test_stack("Banana Stack".to_string(), None);
-    let deleted_stack = fixture.create_test_stack("Apple Pie Stack".to_string(), None);
-    fixture.dal.stacks().soft_delete(deleted_stack.id).expect("Failed to soft delete stack");
-
-    let active_results = fixture.dal.stacks().search("Apple").expect("Failed to search stacks");
-    assert_eq!(active_results.len(), 1);
-    assert_eq!(active_results[0].name, "Apple Stack");
-
-    let all_results = fixture.dal.stacks().search_all("Apple").expect("Failed to search all stacks");
-    assert_eq!(all_results.len(), 2);
-}
 
 #[test]
 fn test_hard_delete_stack() {

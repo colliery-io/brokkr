@@ -90,19 +90,4 @@ impl<'a> StackLabelsDAL<'a> {
             .execute(conn)
     }
 
-    /// Searches for stack labels by label text.
-    ///
-    /// # Arguments
-    ///
-    /// * `query` - The search string to match against label text.
-    ///
-    /// # Returns
-    ///
-    /// Returns a Result containing a Vec of matching StackLabels on success, or a diesel::result::Error on failure.
-    pub fn search(&self, query: &str) -> Result<Vec<StackLabel>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
-        stack_labels::table
-            .filter(stack_labels::label.ilike(format!("%{}%", query)))
-            .load::<StackLabel>(conn)
-    }
 }

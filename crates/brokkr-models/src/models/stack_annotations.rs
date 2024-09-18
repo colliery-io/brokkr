@@ -30,7 +30,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// Represents a stack annotation in the database.
-#[derive(Queryable, Selectable, Identifiable, AsChangeset, Debug, Clone, Serialize, Deserialize)]
+#[derive(Queryable, Selectable, Identifiable, AsChangeset, Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
 #[diesel(table_name = crate::schema::stack_annotations)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct StackAnnotation {

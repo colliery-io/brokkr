@@ -12,6 +12,7 @@ pub mod models;
 /// Declares the schema module, which likely contains the database schema definitions.
 pub mod schema;
 
+
 #[allow(dead_code)]
 /// Establishes a connection to the PostgreSQL database.
 ///

@@ -1,5 +1,11 @@
 use brokkr_models::models::agents:: NewAgent;
 use crate::fixtures::TestFixture;
+use brokkr_models::models::agent_labels::NewAgentLabel;
+use brokkr_models::models::agent_annotations::NewAgentAnnotation;
+use brokkr_models::models::agent_targets::NewAgentTarget;
+use brokkr_models::models::stacks::NewStack;
+use brokkr_broker::dal::FilterType;
+use uuid::Uuid;
 
 #[test]
 fn test_create_agent() {
@@ -98,18 +104,154 @@ fn test_hard_delete_agent() {
 }
 
 #[test]
-fn test_search_agents() {
+fn test_filter_by_labels_single_label() {
     let fixture = TestFixture::new();
-    fixture.create_test_agent("Alpha Agent".to_string(), "Cluster 1".to_string());
-    fixture.create_test_agent("Beta Agent".to_string(), "Alpha Cluster".to_string());
-    let deleted_agent = fixture.create_test_agent("Gamma Agent".to_string(), "Cluster 3".to_string());
-    fixture.dal.agents().soft_delete(deleted_agent.id).expect("Failed to soft delete agent");
+    
+    let agent1 = fixture.create_test_agent("Agent 1".to_string(), "Cluster 1".to_string());
+    let agent2 = fixture.create_test_agent("Agent 2".to_string(), "Cluster 2".to_string());
+    
+    fixture.dal.agent_labels().create(&NewAgentLabel::new(agent1.id, "label1".to_string()).unwrap()).unwrap();
+    fixture.dal.agent_labels().create(&NewAgentLabel::new(agent2.id, "label2".to_string()).unwrap()).unwrap();
 
-    let active_results = fixture.dal.agents().search("Alpha").expect("Failed to search agents");
-    assert_eq!(active_results.len(), 2);
-    assert!(active_results.iter().any(|a| a.name == "Alpha Agent"));
-    assert!(active_results.iter().any(|a| a.cluster_name == "Alpha Cluster"));
-
-    let all_results = fixture.dal.agents().search_all("Agent").expect("Failed to search all agents");
-    assert_eq!(all_results.len(), 3);
+    let filtered_agents = fixture.dal.agents().filter_by_labels(vec!["label1".to_string()], FilterType::Or).unwrap();
+    assert_eq!(filtered_agents.len(), 1);
+    assert_eq!(filtered_agents[0].id, agent1.id);
 }
+
+#[test]
+fn test_filter_by_labels_multiple_labels_or() {
+    let fixture = TestFixture::new();
+    
+    let agent1 = fixture.create_test_agent("Agent 1".to_string(), "Cluster 1".to_string());
+    let agent2 = fixture.create_test_agent("Agent 2".to_string(), "Cluster 2".to_string());
+    let agent3 = fixture.create_test_agent("Agent 3".to_string(), "Cluster 3".to_string());
+    
+    fixture.dal.agent_labels().create(&NewAgentLabel::new(agent1.id, "label1".to_string()).unwrap()).unwrap();
+    fixture.dal.agent_labels().create(&NewAgentLabel::new(agent2.id, "label2".to_string()).unwrap()).unwrap();
+    fixture.dal.agent_labels().create(&NewAgentLabel::new(agent3.id, "label3".to_string()).unwrap()).unwrap();
+
+    let filtered_agents = fixture.dal.agents().filter_by_labels(vec!["label1".to_string(), "label2".to_string()], FilterType::Or).unwrap();
+    assert_eq!(filtered_agents.len(), 2);
+    assert!(filtered_agents.iter().any(|a| a.id == agent1.id));
+    assert!(filtered_agents.iter().any(|a| a.id == agent2.id));
+}
+
+#[test]
+fn test_filter_by_labels_multiple_labels_and() {
+    let fixture = TestFixture::new();
+    
+    let agent1 = fixture.create_test_agent("Agent 1".to_string(), "Cluster 1".to_string());
+    let agent2 = fixture.create_test_agent("Agent 2".to_string(), "Cluster 2".to_string());
+    
+    fixture.dal.agent_labels().create(&NewAgentLabel::new(agent1.id, "label1".to_string()).unwrap()).unwrap();
+    fixture.dal.agent_labels().create(&NewAgentLabel::new(agent1.id, "label2".to_string()).unwrap()).unwrap();
+    fixture.dal.agent_labels().create(&NewAgentLabel::new(agent2.id, "label2".to_string()).unwrap()).unwrap();
+
+    let filtered_agents = fixture.dal.agents().filter_by_labels(vec!["label1".to_string(), "label2".to_string()], FilterType::And).unwrap();
+    assert_eq!(filtered_agents.len(), 1);
+    assert_eq!(filtered_agents[0].id, agent1.id);
+}
+
+#[test]
+fn test_filter_by_labels_no_match() {
+    let fixture = TestFixture::new();
+    
+    let agent1 = fixture.create_test_agent("Agent 1".to_string(), "Cluster 1".to_string());
+    
+    fixture.dal.agent_labels().create(&NewAgentLabel::new(agent1.id, "label1".to_string()).unwrap()).unwrap();
+
+    let filtered_agents = fixture.dal.agents().filter_by_labels(vec!["non_existent_label".to_string()], FilterType::Or).unwrap();
+    assert_eq!(filtered_agents.len(), 0);
+}
+
+#[test]
+fn test_filter_by_annotations() {
+    let fixture = TestFixture::new();
+    
+    let agent1 = fixture.create_test_agent("Agent 1".to_string(), "Cluster 1".to_string());
+    let agent2 = fixture.create_test_agent("Agent 2".to_string(), "Cluster 2".to_string());
+    let agent3 = fixture.create_test_agent("Agent 3".to_string(), "Cluster 3".to_string());
+    
+    fixture.dal.agent_annotations().create(&NewAgentAnnotation::new(agent1.id, "key1".to_string(), "value1".to_string()).unwrap()).unwrap();
+    fixture.dal.agent_annotations().create(&NewAgentAnnotation::new(agent1.id, "key2".to_string(), "value2".to_string()).unwrap()).unwrap();
+    fixture.dal.agent_annotations().create(&NewAgentAnnotation::new(agent2.id, "key2".to_string(), "value2".to_string()).unwrap()).unwrap();
+    fixture.dal.agent_annotations().create(&NewAgentAnnotation::new(agent3.id, "key3".to_string(), "value3".to_string()).unwrap()).unwrap();
+
+    // Test OR logic
+    // Test 1: Filter by a single annotation (OR)
+    let filtered_agents = fixture.dal.agents().filter_by_annotations(vec![("key1".to_string(), "value1".to_string())], FilterType::Or).unwrap();
+    assert_eq!(filtered_agents.len(), 1);
+    assert!(filtered_agents.iter().any(|a| a.id == agent1.id));
+
+    // Test 2: Filter by multiple annotations (OR condition)
+    let filtered_agents = fixture.dal.agents().filter_by_annotations(vec![
+        ("key1".to_string(), "value1".to_string()),
+        ("key3".to_string(), "value3".to_string())
+    ], FilterType::Or).unwrap();
+    assert_eq!(filtered_agents.len(), 2);
+    assert!(filtered_agents.iter().any(|a| a.id == agent1.id));
+    assert!(filtered_agents.iter().any(|a| a.id == agent3.id));
+
+    // Test 3: Filter by an annotation present on multiple agents (OR)
+    let filtered_agents = fixture.dal.agents().filter_by_annotations(vec![("key2".to_string(), "value2".to_string())], FilterType::Or).unwrap();
+    assert_eq!(filtered_agents.len(), 2);
+    assert!(filtered_agents.iter().any(|a| a.id == agent1.id));
+    assert!(filtered_agents.iter().any(|a| a.id == agent2.id));
+
+    // Test AND logic
+    // Test 4: Filter by multiple annotations (AND condition)
+    let filtered_agents = fixture.dal.agents().filter_by_annotations(vec![
+        ("key1".to_string(), "value1".to_string()),
+        ("key2".to_string(), "value2".to_string())
+    ], FilterType::And).unwrap();
+    assert_eq!(filtered_agents.len(), 1);
+    assert!(filtered_agents.iter().any(|a| a.id == agent1.id));
+
+    // Test 5: Filter by non-matching annotations (AND condition)
+    let filtered_agents = fixture.dal.agents().filter_by_annotations(vec![
+        ("key1".to_string(), "value1".to_string()),
+        ("key3".to_string(), "value3".to_string())
+    ], FilterType::And).unwrap();
+    assert_eq!(filtered_agents.len(), 0);
+
+    // Test 6: Filter by non-existent annotation (OR)
+    let filtered_agents = fixture.dal.agents().filter_by_annotations(vec![("non_existent_key".to_string(), "non_existent_value".to_string())], FilterType::Or).unwrap();
+    assert_eq!(filtered_agents.len(), 0);
+
+    // Test 7: Filter by non-existent annotation (AND)
+    let filtered_agents = fixture.dal.agents().filter_by_annotations(vec![("non_existent_key".to_string(), "non_existent_value".to_string())], FilterType::And).unwrap();
+    assert_eq!(filtered_agents.len(), 0);
+
+    // Test 8: Filter by empty annotations list (OR)
+    let filtered_agents = fixture.dal.agents().filter_by_annotations(vec![], FilterType::Or).unwrap();
+    assert_eq!(filtered_agents.len(), 0);
+
+    // Test 9: Filter by empty annotations list (AND)
+    let filtered_agents = fixture.dal.agents().filter_by_annotations(vec![], FilterType::And).unwrap();
+    assert_eq!(filtered_agents.len(), 0);
+}
+
+#[test]
+fn test_get_agent_by_target_id() {
+    let fixture = TestFixture::new();
+    
+    let agent1 = fixture.create_test_agent("Agent 1".to_string(), "Cluster 1".to_string());
+    let agent2 = fixture.create_test_agent("Agent 2".to_string(), "Cluster 2".to_string());
+    
+    let stack1 = fixture.dal.stacks().create(&NewStack::new("Stack 1".to_string(), None).unwrap()).unwrap();
+    let stack2 = fixture.dal.stacks().create(&NewStack::new("Stack 2".to_string(), None).unwrap()).unwrap();
+    
+    fixture.dal.agent_targets().create(&NewAgentTarget::new(agent1.id, stack1.id).unwrap()).unwrap();
+    fixture.dal.agent_targets().create(&NewAgentTarget::new(agent2.id, stack2.id).unwrap()).unwrap();
+
+    // Test getting an agent by existing target
+    let found_agent = fixture.dal.agents().get_agent_by_target_id(stack1.id).unwrap();
+    assert!(found_agent.is_some());
+    assert_eq!(found_agent.unwrap().id, agent1.id);
+
+    // Test getting an agent by non-existing target
+    let non_existent_uuid = Uuid::new_v4();
+    let not_found_agent = fixture.dal.agents().get_agent_by_target_id(non_existent_uuid).unwrap();
+    assert!(not_found_agent.is_none());
+}
+

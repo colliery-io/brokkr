@@ -185,3 +185,9 @@ impl DAL {
         DeploymentObjectsDAL { dal: self }
     }
 }
+
+#[derive(PartialEq)]
+pub enum FilterType {
+    And,
+    Or,
+}

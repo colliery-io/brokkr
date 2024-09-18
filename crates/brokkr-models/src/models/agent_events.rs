@@ -35,7 +35,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// Represents an agent event in the database.
-#[derive(Queryable, Selectable, Identifiable, AsChangeset, Debug, Clone, Serialize, Deserialize)]
+#[derive(Queryable, Selectable, Identifiable, AsChangeset, Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
 #[diesel(table_name = crate::schema::agent_events)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct AgentEvent {
