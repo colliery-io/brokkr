@@ -255,3 +255,47 @@ fn test_get_agent_by_target_id() {
     assert!(not_found_agent.is_none());
 }
 
+#[test]
+fn test_get_agent_details() {
+    let fixture = TestFixture::new();
+    
+    let agent = fixture.create_test_agent("Test Agent".to_string(), "Test Cluster".to_string());
+    
+    // Create labels
+    fixture.dal.agent_labels().create(&NewAgentLabel::new(agent.id, "label1".to_string()).unwrap()).unwrap();
+    fixture.dal.agent_labels().create(&NewAgentLabel::new(agent.id, "label2".to_string()).unwrap()).unwrap();
+    
+    // Create annotations
+    fixture.dal.agent_annotations().create(&NewAgentAnnotation::new(agent.id, "key1".to_string(), "value1".to_string()).unwrap()).unwrap();
+    fixture.dal.agent_annotations().create(&NewAgentAnnotation::new(agent.id, "key2".to_string(), "value2".to_string()).unwrap()).unwrap();
+    
+    // Create targets
+    let stack = fixture.dal.stacks().create(&NewStack::new("Test Stack".to_string(), None).unwrap()).unwrap();
+    fixture.dal.agent_targets().create(&NewAgentTarget::new(agent.id, stack.id).unwrap()).unwrap();
+
+    // Get agent details
+    let (labels, targets, annotations) = fixture.dal.agents().get_agent_details(agent.id).unwrap();
+
+    // Assert labels
+    assert_eq!(labels.len(), 2);
+    assert!(labels.iter().any(|l| l.label == "label1"));
+    assert!(labels.iter().any(|l| l.label == "label2"));
+
+    // Assert targets
+    assert_eq!(targets.len(), 1);
+    assert_eq!(targets[0].stack_id, stack.id);
+
+    // Assert annotations
+    assert_eq!(annotations.len(), 2);
+    assert!(annotations.iter().any(|a| a.key == "key1" && a.value == "value1"));
+    assert!(annotations.iter().any(|a| a.key == "key2" && a.value == "value2"));
+
+    // Test with non-existent agent
+    let non_existent_uuid = Uuid::new_v4();
+    let result = fixture.dal.agents().get_agent_details(non_existent_uuid);
+    assert!(result.is_ok());
+    let (labels, targets, annotations) = result.unwrap();
+    assert!(labels.is_empty());
+    assert!(targets.is_empty());
+    assert!(annotations.is_empty());
+}

@@ -7,6 +7,7 @@ use brokkr_broker::dal::DAL;
 use brokkr_broker::db::create_shared_connection_pool;
 use brokkr_broker::api;
 use diesel::connection::Connection;
+use diesel::RunQueryDsl;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use dotenv::dotenv;
 
@@ -65,20 +66,18 @@ impl TestFixture {
         let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
         let connection_pool = create_shared_connection_pool(&database_url, "brokkr", 5);
-        let dal = DAL::new(connection_pool.pool.clone());
 
         // Run migrations
         let mut conn = connection_pool
             .pool
             .get()
             .expect("Failed to get DB connection");
-        conn.begin_test_transaction()
-            .expect("Failed to start test transaction");
 
         // This runs the migrations within the transaction
         conn.run_pending_migrations(MIGRATIONS)
             .expect("Failed to run migrations");
-
+        
+        let dal = DAL::new(connection_pool.pool.clone());
         TestFixture { dal }
     }
 
@@ -259,11 +258,20 @@ impl TestFixture {
             .expect("Failed to create agent label")
     }
 
+    fn reset_database(&self) {
+        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        // Revert all migrations
+        conn.revert_all_migrations(MIGRATIONS).expect("Failed to revert migrations");
+
+        // Run all migrations forward
+        conn.run_pending_migrations(MIGRATIONS).expect("Failed to run migrations");
+    }
+
 }
 
 impl Drop for TestFixture {
     fn drop(&mut self) {
-        // The test transaction will be automatically rolled back when the connection is dropped
+        self.reset_database();
     }
 }
 

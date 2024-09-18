@@ -7,6 +7,9 @@ use diesel::prelude::*;
 use uuid::Uuid;
 use crate::dal::FilterType;
 use std::collections::HashSet;
+use brokkr_models::models::agent_labels::AgentLabel;
+use brokkr_models::models::agent_targets::AgentTarget;
+use brokkr_models::models::agent_annotations::AgentAnnotation;
 
 pub struct AgentFilter {
     pub labels: Vec<String>,
@@ -317,5 +320,33 @@ impl<'a> AgentsDAL<'a> {
             .select(agents::all_columns)
             .first(conn)
             .optional()
+    }
+
+    /// Retrieves labels, targets, and annotations associated with a specific agent.
+    ///
+    /// # Arguments
+    ///
+    /// * `agent_id` - The UUID of the agent to retrieve details for.
+    ///
+    /// # Returns
+    ///
+    /// Returns a Result containing a tuple of (Vec<AgentLabel>, Vec<AgentTarget>, Vec<AgentAnnotation>)
+    /// on success, or a diesel::result::Error on failure.
+    pub fn get_agent_details(&self, agent_id: Uuid) -> Result<(Vec<AgentLabel>, Vec<AgentTarget>, Vec<AgentAnnotation>), diesel::result::Error> {
+        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+
+        let labels = agent_labels::table
+            .filter(agent_labels::agent_id.eq(agent_id))
+            .load::<AgentLabel>(conn)?;
+
+        let targets = agent_targets::table
+            .filter(agent_targets::agent_id.eq(agent_id))
+            .load::<AgentTarget>(conn)?;
+
+        let annotations = agent_annotations::table
+            .filter(agent_annotations::agent_id.eq(agent_id))
+            .load::<AgentAnnotation>(conn)?;
+
+        Ok((labels, targets, annotations))
     }
 }

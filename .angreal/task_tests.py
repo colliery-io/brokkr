@@ -10,41 +10,45 @@ test = angreal.command_group(name="tests", about="commands for testing the"
 
 @test()
 @angreal.command(name="unit", about="run unit tests")
-def unit_tests():
+@angreal.argument(name="test_filter", required=False, help="Filter for specific tests or modules")
+def unit_tests(test_filter: str = ""):
     """
+    Run unit tests with an optional filter.
     """
-    subprocess.run(
-        [
-            "cargo test -v --lib -- --test-threads=1",
-        ], cwd=cwd, shell=True
-    )
+    cmd = ["cargo", "test", "-v", "--lib", "--", "--test-threads=1"]
+    if test_filter:
+        cmd.extend(test_filter.split())
+    subprocess.run(cmd, cwd=cwd)
 
 @test()
-@angreal.command(name="functional", about="run our functional "
-                 "tests (crates/*/tests/functional.rs)")
-def functional_tests():
+@angreal.command(name="functional", about="run our functional tests (crates/*/tests/functional.rs)")
+@angreal.argument(name="test_filter", required=False, help="Filter for specific tests or modules")
+def functional_tests(test_filter: str = ""):
     """
+    Run functional tests with an optional filter.
     """
     docker_up()
-    subprocess.run(
-        [
-            "cargo test --test functional ",
-        ], cwd=cwd, shell=True
-    )
+    cmd = ["cargo", "test", "--test", "functional"]
+    if test_filter:
+        cmd.extend(["--", test_filter])
+    subprocess.run(cmd, cwd=cwd)
     docker_down()
 
 @test()
-@angreal.command(name="integration", about="run our integration "
-                 "tests (crates/*/tests/integration.rs)")
-def integration_tests():
+@angreal.command(name="integration", about="run our integration tests (crates/*/tests/integration.rs)")
+@angreal.argument(name="test_filter", required=False, help="Filter for specific tests or modules")
+def integration_tests(test_filter: str = ""):
     """
+    Run integration tests with an optional filter.
     """
     docker_up()
-    subprocess.run(
-        [
-            "cargo test --test integration",
-        ], cwd=cwd, shell=True
-    )
+    cmd = ["cargo", "test", "--test", "integration"]
+    if test_filter:
+        cmd.extend(["--", test_filter, "--test-threads=1"])
+    else:
+        cmd.extend(["--", "--test-threads=1"])
+
+    subprocess.run(cmd, cwd=cwd)
     docker_down()
 
 
