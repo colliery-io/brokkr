@@ -11,6 +11,7 @@ fn test_create_stack() {
     let new_stack = NewStack::new(
         "Test Stack".to_string(),
         Some("Test Description".to_string()),
+        None,
     )
     .expect("Failed to create NewStack");
 

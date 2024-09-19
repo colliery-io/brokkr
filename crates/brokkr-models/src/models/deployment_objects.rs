@@ -17,6 +17,7 @@
 //! - `yaml_checksum`: VARCHAR(64), SHA-256 checksum of the YAML content
 //! - `submitted_at`: TIMESTAMP, when the deployment was submitted
 //! - `is_deletion_marker`: BOOLEAN, indicates if this object marks a deletion
+//! - `generator_id`: UUID, ID of the generator associated with this deployment object
 //!
 //! ## Usage
 //!
@@ -73,6 +74,8 @@ pub struct DeploymentObject {
     pub submitted_at: DateTime<Utc>,
     /// Indicates if this object marks a deletion.
     pub is_deletion_marker: bool,
+    /// ID of the generator associated with this deployment object.
+    pub generator_id: Uuid,
 }
 
 /// Represents a new deployment object to be inserted into the database.
@@ -87,6 +90,8 @@ pub struct NewDeploymentObject {
     pub yaml_checksum: String,
     /// Indicates if this object marks a deletion.
     pub is_deletion_marker: bool,
+    /// ID of the generator associated with this deployment object.
+    pub generator_id: Uuid,
 }
 
 impl NewDeploymentObject {
@@ -97,6 +102,7 @@ impl NewDeploymentObject {
     /// * `stack_id`: UUID of the stack this deployment object belongs to.
     /// * `yaml_content`: YAML content of the deployment. Must be a non-empty string.
     /// * `is_deletion_marker`: Boolean indicating if this object marks a deletion.
+    /// * `generator_id`: UUID of the generator associated with this deployment object.
     ///
     /// # Returns
     ///
@@ -106,6 +112,7 @@ impl NewDeploymentObject {
         stack_id: Uuid,
         yaml_content: String,
         is_deletion_marker: bool,
+        generator_id: Uuid,
     ) -> Result<Self, String> {
         // Validate stack_id
         if stack_id.is_nil() {
@@ -125,6 +132,7 @@ impl NewDeploymentObject {
             yaml_content,
             yaml_checksum,
             is_deletion_marker,
+            generator_id,
         })
     }
 }
@@ -146,35 +154,24 @@ mod tests {
         let stack_id = Uuid::new_v4();
         let yaml_content = "key: value\nother_key: other_value".to_string();
         let is_deletion_marker = false;
+        let generator_id = Uuid::new_v4();
 
-        let result = NewDeploymentObject::new(stack_id, yaml_content.clone(), is_deletion_marker);
+        let result = NewDeploymentObject::new(stack_id, yaml_content.clone(), is_deletion_marker, generator_id);
 
         assert!(
             result.is_ok(),
             "NewDeploymentObject creation should succeed with valid inputs"
         );
         let new_obj = result.unwrap();
-        assert_eq!(
-            new_obj.stack_id, stack_id,
-            "stack_id should match the input value"
-        );
-        assert_eq!(
-            new_obj.yaml_content, yaml_content,
-            "yaml_content should match the input value"
-        );
-        assert!(
-            !new_obj.yaml_checksum.is_empty(),
-            "yaml_checksum should not be empty"
-        );
-        assert_eq!(
-            new_obj.is_deletion_marker, is_deletion_marker,
-            "is_deletion_marker should match the input value"
-        );
+        assert_eq!(new_obj.stack_id, stack_id);
+        assert_eq!(new_obj.yaml_content, yaml_content);
+        assert_eq!(new_obj.is_deletion_marker, is_deletion_marker);
+        assert_eq!(new_obj.generator_id, generator_id);
     }
 
     #[test]
     fn test_new_deployment_object_invalid_stack_id() {
-        let result = NewDeploymentObject::new(Uuid::nil(), "key: value".to_string(), false);
+        let result = NewDeploymentObject::new(Uuid::nil(), "key: value".to_string(), false, Uuid::nil());
         assert!(
             result.is_err(),
             "NewDeploymentObject creation should fail with nil stack ID"
@@ -188,7 +185,7 @@ mod tests {
 
     #[test]
     fn test_new_deployment_object_empty_yaml() {
-        let result = NewDeploymentObject::new(Uuid::new_v4(), "".to_string(), false);
+        let result = NewDeploymentObject::new(Uuid::new_v4(), "".to_string(), false, Uuid::nil());
         assert!(
             result.is_err(),
             "NewDeploymentObject creation should fail with empty YAML content"

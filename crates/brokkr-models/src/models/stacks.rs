@@ -59,6 +59,8 @@ pub struct Stack {
     pub name: String,
     /// Optional description of the stack.
     pub description: Option<String>,
+    /// Optional generator ID.
+    pub generator_id: Uuid,
 }
 
 /// Represents a new stack to be inserted into the database.
@@ -69,6 +71,8 @@ pub struct NewStack {
     pub name: String,
     /// Optional description of the stack.
     pub description: Option<String>,
+    /// Optional generator ID.
+    pub generator_id: Uuid,
 }
 
 impl NewStack {
@@ -78,12 +82,13 @@ impl NewStack {
     ///
     /// * `name`: Name of the stack. Must be a non-empty string.
     /// * `description`: Optional description of the stack. If provided, must not be an empty string.
+    /// * `generator_id`: Optional generator ID.
     ///
     /// # Returns
     ///
     /// Returns `Ok(NewStack)` if all parameters are valid,
     /// otherwise returns an `Err` with a description of the validation failure.
-    pub fn new(name: String, description: Option<String>) -> Result<Self, String> {
+    pub fn new(name: String, description: Option<String>, generator_id: Uuid) -> Result<Self, String> {
         // Validate name
         if name.trim().is_empty() {
             return Err("Stack name cannot be empty".to_string());
@@ -96,7 +101,7 @@ impl NewStack {
             }
         }
 
-        Ok(NewStack { name, description })
+        Ok(NewStack { name, description, generator_id })
     }
 }
 
@@ -108,24 +113,23 @@ mod tests {
     fn test_new_stack_success() {
         let name = "Test Stack".to_string();
         let description = Some("A test stack".to_string());
+        let generator_id = Uuid::new_v4();
 
-        let result = NewStack::new(name.clone(), description.clone());
+        let result = NewStack::new(name.clone(), description.clone(), generator_id);
 
         assert!(
             result.is_ok(),
             "NewStack creation should succeed with valid inputs"
         );
         let new_stack = result.unwrap();
-        assert_eq!(new_stack.name, name, "name should match the input value");
-        assert_eq!(
-            new_stack.description, description,
-            "description should match the input value"
-        );
+        assert_eq!(new_stack.name, name);
+        assert_eq!(new_stack.description, description);
+        assert_eq!(new_stack.generator_id, generator_id);
     }
 
     #[test]
     fn test_new_stack_empty_name() {
-        let result = NewStack::new("".to_string(), None);
+        let result = NewStack::new("".to_string(), None, Uuid::nil());
         assert!(
             result.is_err(),
             "NewStack creation should fail with empty name"
@@ -139,7 +143,7 @@ mod tests {
 
     #[test]
     fn test_new_stack_empty_description() {
-        let result = NewStack::new("Valid Name".to_string(), Some("".to_string()));
+        let result = NewStack::new("Valid Name".to_string(), Some("".to_string()), Uuid::nil());
         assert!(
             result.is_err(),
             "NewStack creation should fail with empty description"

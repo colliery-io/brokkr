@@ -7,7 +7,7 @@ fn test_create_deployment_object() {
     let stack = fixture.create_test_stack("Test Stack".to_string(), None);
 
     let new_deployment_object =
-        NewDeploymentObject::new(stack.id, "test yaml content".to_string(), false)
+        NewDeploymentObject::new(stack.id, "test yaml content".to_string(), false, None)
             .expect("Failed to create NewDeploymentObject");
 
     let created_deployment_object = fixture

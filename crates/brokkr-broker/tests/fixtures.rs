@@ -103,7 +103,7 @@ impl TestFixture {
     ///
     /// Returns the created Stack on success, or panics on failure.
     pub fn create_test_stack(&self, name: String, description: Option<String>) -> Stack {
-        let new_stack = NewStack::new(name, description).expect("Failed to create NewStack");
+        let new_stack = NewStack::new(name, description, None).expect("Failed to create NewStack");
         self.dal
             .stacks()
             .create(&new_stack)
@@ -146,7 +146,7 @@ impl TestFixture {
         is_deletion_marker: bool,
     ) -> DeploymentObject {
         let new_deployment_object =
-            NewDeploymentObject::new(stack_id, yaml_content, is_deletion_marker)
+            NewDeploymentObject::new(stack_id, yaml_content, is_deletion_marker, None)
                 .expect("Failed to create NewDeploymentObject");
         self.dal
             .deployment_objects()

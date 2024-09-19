@@ -13,7 +13,7 @@ fn test_create_agent_event() {
         .dal
         .stacks()
         .create(
-            &NewStack::new("Stack for create agent event".to_string(), None)
+            &NewStack::new("Stack for create agent event".to_string(), None, None)
                 .expect("Failed to create NewStack"),
         )
         .expect("Failed to create stack");
@@ -40,6 +40,7 @@ fn test_create_agent_event() {
                 stack.id,
                 "test: deployment for create event".to_string(),
                 false,
+                None,
             )
             .expect("Failed to create NewDeploymentObject"),
         )
@@ -79,7 +80,7 @@ fn test_get_agent_event() {
         .dal
         .stacks()
         .create(
-            &NewStack::new("Stack for get agent event".to_string(), None)
+            &NewStack::new("Stack for get agent event".to_string(), None, None)
                 .expect("Failed to create NewStack"),
         )
         .expect("Failed to create stack");
@@ -106,6 +107,7 @@ fn test_get_agent_event() {
                 stack.id,
                 "test: deployment for get event".to_string(),
                 false,
+                None,
             )
             .expect("Failed to create NewDeploymentObject"),
         )
@@ -145,7 +147,7 @@ fn test_get_deleted_agent_event() {
         .dal
         .stacks()
         .create(
-            &NewStack::new("Stack for deleted agent event".to_string(), None)
+            &NewStack::new("Stack for deleted agent event".to_string(), None, None)
                 .expect("Failed to create NewStack"),
         )
         .expect("Failed to create stack");
@@ -172,6 +174,7 @@ fn test_get_deleted_agent_event() {
                 stack.id,
                 "test: deployment for deleted event".to_string(),
                 false,
+                None,
             )
             .expect("Failed to create NewDeploymentObject"),
         )
@@ -224,7 +227,7 @@ fn test_update_agent_event() {
         .dal
         .stacks()
         .create(
-            &NewStack::new("Stack for update agent event".to_string(), None)
+            &NewStack::new("Stack for update agent event".to_string(), None, None)
                 .expect("Failed to create NewStack"),
         )
         .expect("Failed to create stack");
@@ -251,6 +254,7 @@ fn test_update_agent_event() {
                 stack.id,
                 "test: deployment for update event".to_string(),
                 false,
+                None,
             )
             .expect("Failed to create NewDeploymentObject"),
         )
@@ -293,7 +297,7 @@ fn test_soft_delete_agent_event() {
         .dal
         .stacks()
         .create(
-            &NewStack::new("Stack for soft delete agent event".to_string(), None)
+            &NewStack::new("Stack for soft delete agent event".to_string(), None,None)
                 .expect("Failed to create NewStack"),
         )
         .expect("Failed to create stack");
@@ -320,6 +324,7 @@ fn test_soft_delete_agent_event() {
                 stack.id,
                 "test: deployment for soft delete event".to_string(),
                 false,
+                None,
             )
             .expect("Failed to create NewDeploymentObject"),
         )
@@ -365,7 +370,7 @@ fn test_hard_delete_agent_event() {
         .dal
         .stacks()
         .create(
-            &NewStack::new("Stack for hard delete agent event".to_string(), None)
+            &NewStack::new("Stack for hard delete agent event".to_string(), None, None)
                 .expect("Failed to create NewStack"),
         )
         .expect("Failed to create stack");
@@ -392,6 +397,7 @@ fn test_hard_delete_agent_event() {
                 stack.id,
                 "test: deployment for hard delete event".to_string(),
                 false,
+                None,
             )
             .expect("Failed to create NewDeploymentObject"),
         )
@@ -436,7 +442,7 @@ fn test_list_agent_events() {
         .dal
         .stacks()
         .create(
-            &NewStack::new("Stack for listing events".to_string(), None)
+            &NewStack::new("Stack for listing events".to_string(), None, None)
                 .expect("Failed to create NewStack"),
         )
         .expect("Failed to create stack");
@@ -459,7 +465,7 @@ fn test_list_agent_events() {
         .dal
         .deployment_objects()
         .create(
-            &NewDeploymentObject::new(stack.id, "test: deployment for listing".to_string(), false)
+            &NewDeploymentObject::new(stack.id, "test: deployment for listing".to_string(), false, None)
                 .expect("Failed to create NewDeploymentObject"),
         )
         .expect("Failed to create deployment object");
@@ -524,7 +530,7 @@ fn test_get_events_filtered() {
         .dal
         .stacks()
         .create(
-            &NewStack::new("Stack1 for filtered events".to_string(), None)
+            &NewStack::new("Stack1 for filtered events".to_string(), None, None)
                 .expect("Failed to create NewStack"),
         )
         .expect("Failed to create stack1");
@@ -533,7 +539,7 @@ fn test_get_events_filtered() {
         .dal
         .stacks()
         .create(
-            &NewStack::new("Stack2 for filtered events".to_string(), None)
+            &NewStack::new("Stack2 for filtered events".to_string(), None, None)
                 .expect("Failed to create NewStack"),
         )
         .expect("Failed to create stack2");
@@ -568,7 +574,7 @@ fn test_get_events_filtered() {
         .dal
         .deployment_objects()
         .create(
-            &NewDeploymentObject::new(stack1.id, "test: deployment1".to_string(), false)
+            &NewDeploymentObject::new(stack1.id, "test: deployment1".to_string(), false, None)
                 .expect("Failed to create NewDeploymentObject"),
         )
         .expect("Failed to create deployment object1");
@@ -577,7 +583,7 @@ fn test_get_events_filtered() {
         .dal
         .deployment_objects()
         .create(
-            &NewDeploymentObject::new(stack2.id, "test: deployment2".to_string(), false)
+            &NewDeploymentObject::new(stack2.id, "test: deployment2".to_string(), false, None)
                 .expect("Failed to create NewDeploymentObject"),
         )
         .expect("Failed to create deployment object2");

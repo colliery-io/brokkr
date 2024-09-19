@@ -12,8 +12,7 @@ use diesel::sql_query;
 use diesel::sql_types::BigInt;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use tokio::signal;
-use std::sync::Arc;
-use brokkr_broker::AppState;
+
 
 /// Embedded migrations for the database
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("../brokkr-models/migrations");
@@ -53,6 +52,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Initialize logger
     brokkr_utils::logging::init(&config.log.level).expect("Failed to initialize logger");
+
+    // Create PAK controller
+    let _ = utils::pak::create_pak_controller(Some(&config)).expect("Failed to create PAK controller");
 
     // Execute the appropriate command
     match cli.command {
@@ -100,7 +102,7 @@ async fn serve(config: &Settings) -> Result<(), Box<dyn std::error::Error>> {
     // Perform first-time setup if necessary
     if is_first_run {
         info!("First time application startup detected. Creating admin role...");
-        utils::first_startup(config, &mut conn)?;
+        utils::first_startup(&mut conn)?;
     } else {
         info!("Existing application detected. Proceeding with normal startup.");
     }
@@ -109,10 +111,6 @@ async fn serve(config: &Settings) -> Result<(), Box<dyn std::error::Error>> {
     info!("Initializing Data Access Layer");
     let dal = DAL::new(connection_pool.pool.clone());
 
-    // Create application state
-    let app_state = Arc::new(AppState {
-        config: config.clone(),
-    });
 
     // Configure API routes
     info!("Configuring API routes");
@@ -148,7 +146,7 @@ fn rotate_admin(config: &Settings) -> Result<(), Box<dyn std::error::Error>> {
         .expect("Failed to establish database connection");
 
     // Run the first_startup function to generate a new admin key
-    utils::first_startup(config, &mut conn)?;
+    utils::upsert_admin(&mut conn)?;
 
     info!("Admin key rotated successfully");
     Ok(())

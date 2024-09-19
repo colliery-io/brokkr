@@ -89,6 +89,22 @@ diesel::table! {
         yaml_checksum -> Text,
         submitted_at -> Timestamptz,
         is_deletion_marker -> Bool,
+        generator_id -> Uuid,
+    }
+}
+
+diesel::table! {
+    generators (id) {
+        id -> Uuid,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
+        deleted_at -> Nullable<Timestamptz>,
+        #[max_length = 255]
+        name -> Varchar,
+        description -> Nullable<Text>,
+        pak_hash -> Text,
+        last_active_at -> Nullable<Timestamptz>,
+        is_active -> Bool,
     }
 }
 
@@ -121,6 +137,7 @@ diesel::table! {
         #[max_length = 255]
         name -> Varchar,
         description -> Nullable<Text>,
+        generator_id -> Uuid,
     }
 }
 
@@ -130,9 +147,11 @@ diesel::joinable!(agent_events -> deployment_objects (deployment_object_id));
 diesel::joinable!(agent_labels -> agents (agent_id));
 diesel::joinable!(agent_targets -> agents (agent_id));
 diesel::joinable!(agent_targets -> stacks (stack_id));
+diesel::joinable!(deployment_objects -> generators (generator_id));
 diesel::joinable!(deployment_objects -> stacks (stack_id));
 diesel::joinable!(stack_annotations -> stacks (stack_id));
 diesel::joinable!(stack_labels -> stacks (stack_id));
+diesel::joinable!(stacks -> generators (generator_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
     admin_role,
@@ -143,6 +162,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     agents,
     app_initialization,
     deployment_objects,
+    generators,
     stack_annotations,
     stack_labels,
     stacks,

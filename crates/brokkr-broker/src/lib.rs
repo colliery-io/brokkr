@@ -15,10 +15,3 @@ pub mod api;
 pub mod dal;
 pub mod db;
 pub mod utils;
-
-use brokkr_utils::Settings;
-use std::sync::Arc;
-
-pub struct AppState {
-    pub config: Settings,
-}

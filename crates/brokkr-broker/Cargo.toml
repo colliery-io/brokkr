@@ -28,6 +28,10 @@ dotenv  = { workspace=true }
 uuid  = { workspace=true }
 url  = { workspace=true }
 chrono  = { workspace=true }
+once_cell = { workspace=true }
+rand_core = { workspace=true }
+rand = { workspace=true }
+sha2 = { workspace=true }
 serde  = { workspace=true }
 hyper = { workspace=true }
 tower = { workspace=true }

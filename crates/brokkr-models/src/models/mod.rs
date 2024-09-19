@@ -7,3 +7,4 @@ pub mod deployment_objects;
 pub mod stack_annotations;
 pub mod stack_labels;
 pub mod stacks;
+pub mod generator;

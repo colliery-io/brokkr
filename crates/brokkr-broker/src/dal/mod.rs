@@ -76,6 +76,9 @@ use stack_labels::StackLabelsDAL;
 pub mod deployment_objects;
 use deployment_objects::DeploymentObjectsDAL;
 
+pub mod generators;
+use generators::GeneratorsDal;
+
 /// The main Data Access Layer struct.
 ///
 /// This struct serves as the central point for database operations,
@@ -181,6 +184,16 @@ impl DAL {
     pub fn deployment_objects(&self) -> DeploymentObjectsDAL {
         DeploymentObjectsDAL { dal: self }
     }
+
+    /// Provides access to the Generators Data Access Layer.
+    ///
+    /// # Returns
+    ///
+    /// An instance of GeneratorsDal.
+    pub fn generators(&self) -> GeneratorsDal {
+        GeneratorsDal { dal: self }
+    }
+    
 }
 
 #[derive(PartialEq)]

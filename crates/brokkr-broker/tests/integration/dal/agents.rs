@@ -440,12 +440,12 @@ fn test_get_agent_by_target_id() {
     let stack1 = fixture
         .dal
         .stacks()
-        .create(&NewStack::new("Stack 1".to_string(), None).unwrap())
+        .create(&NewStack::new("Stack 1".to_string(), None, None).unwrap())
         .unwrap();
     let stack2 = fixture
         .dal
         .stacks()
-        .create(&NewStack::new("Stack 2".to_string(), None).unwrap())
+        .create(&NewStack::new("Stack 2".to_string(), None, None).unwrap())
         .unwrap();
 
     fixture
@@ -516,7 +516,7 @@ fn test_get_agent_details() {
     let stack = fixture
         .dal
         .stacks()
-        .create(&NewStack::new("Test Stack".to_string(), None).unwrap())
+        .create(&NewStack::new("Test Stack".to_string(), None, None).unwrap())
         .unwrap();
     fixture
         .dal

@@ -7,3 +7,4 @@ mod deployment_objects;
 mod stack_annotations;
 mod stack_labels;
 mod stacks;
+mod generators;

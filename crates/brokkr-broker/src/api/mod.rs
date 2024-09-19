@@ -4,13 +4,7 @@
 // //! It serves as the central point for organizing and initializing all API endpoints of the application.
 
 pub mod v1;
-use crate::dal::DAL;
-use crate::AppState;
-use brokkr_utils::Settings;
-use std::sync::Arc;
-
 use axum::{response::IntoResponse, routing::get, Router};
-
 use hyper::StatusCode;
 
 // /// Configures and returns the main application router with all API routes
@@ -28,7 +22,10 @@ use hyper::StatusCode;
 
 pub fn configure_api_routes() -> Router {
     Router::new()
-        .route("/healthz", get(healthz))    
+        .nest("/api/v1", v1::routes())
+        .route("/healthz", get(healthz))
+        .route("/readyz", get(readyz))
+        .route("/metrics", get(metrics))
 }
 
 /// Health check endpoint handler
@@ -39,6 +36,31 @@ pub fn configure_api_routes() -> Router {
 /// # Returns
 ///
 /// Returns a 200 OK status code with "OK" in the body.
-async fn healthz( ) -> impl IntoResponse {
+async fn healthz() -> impl IntoResponse {
     (StatusCode::OK, "OK")
+}
+
+/// Ready check endpoint handler
+///
+/// This handler responds to GET requests at the "/readyz" endpoint.
+/// It's used to verify that the API is ready for use.
+///
+/// # Returns
+///
+/// Returns a 200 OK status code with "Ready" in the body.
+async fn readyz() -> impl IntoResponse {
+    (StatusCode::OK, "Ready")
+}
+
+/// Metrics endpoint handler
+///
+/// This handler responds to GET requests at the "/metrics" endpoint.
+/// It's used to retrieve metrics data.
+///
+/// # Returns
+///
+/// Returns a 200 OK status code with "Metrics data" in the body.
+async fn metrics() -> impl IntoResponse {
+    // Implement metrics collection and formatting here
+    (StatusCode::OK, "Metrics data")
 }

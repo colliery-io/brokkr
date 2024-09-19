@@ -1,11 +1,11 @@
 use brokkr_models::schema::admin_role;
-use brokkr_utils::config::Settings;
 use chrono::Utc;
 use diesel::prelude::*;
-use prefixed_api_key::PrefixedApiKeyController;
 use std::fs;
 use tokio::sync::oneshot;
 use uuid::Uuid;
+
+pub mod pak;
 
 pub async fn shutdown(shutdown_rx: oneshot::Receiver<()>) {
     let _ = shutdown_rx.await;
@@ -30,42 +30,25 @@ pub struct NewAdminKey {
 }
 
 pub fn first_startup(
-    config: &Settings,
     conn: &mut PgConnection,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    upsert_admin(config, conn)
+    upsert_admin(conn)
 }
 
-fn create_pak(config: &Settings) -> Result<(String, String), Box<dyn std::error::Error>> {
+fn create_pak() -> Result<(String, String), Box<dyn std::error::Error>> {
     // Configure PAK controller
-    let mut builder = PrefixedApiKeyController::configure()
-        .prefix(config.pak.prefix.clone().unwrap())
-        .rng_osrng()
-        .short_token_length(config.pak.short_token_length.unwrap())
-        .short_token_prefix(config.pak.short_token_prefix.clone())
-        .long_token_length(config.pak.long_token_length.unwrap());
-
-    let rng = config.pak.rng.clone().unwrap();
-
-    builder = match rng.as_str() {
-        "osrng" => builder.rng_osrng(),
-        "sha256" => builder.digest_sha256(),
-        _ => panic!("Invalid RNG type"),
-    };
-
-    let controller = builder.finalize().expect("failed to create pak controller");
+    let controller = pak::create_pak_controller(None);
 
     // Generate PAK and hash
-    controller.try_generate_key_and_hash()
+    controller.unwrap().try_generate_key_and_hash()
         .map(|(pak, hash)| (pak.to_string(), hash))
         .map_err(|e| e.into())
 }
 
-fn upsert_admin(
-    config: &Settings,
+pub fn upsert_admin(
     conn: &mut PgConnection,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (pak, hash) = create_pak(config)?;
+    let (pak, hash) = create_pak()?;
 
     // Update the existing admin role with the new PAK hash, or insert if it doesn't exist
     let existing_admin_key = admin_role::table
