@@ -4,7 +4,7 @@ pub mod agent_labels;
 pub mod agent_targets;
 pub mod agents;
 pub mod deployment_objects;
+pub mod generator;
 pub mod stack_annotations;
 pub mod stack_labels;
 pub mod stacks;
-pub mod generator;

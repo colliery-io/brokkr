@@ -4,7 +4,11 @@ use brokkr_models::models::deployment_objects::NewDeploymentObject;
 #[test]
 fn test_create_deployment_object() {
     let fixture = TestFixture::new();
-    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
     let stack = fixture.create_test_stack("Test Stack".to_string(), None, generator.id);
 
     let new_deployment_object =
@@ -25,7 +29,11 @@ fn test_create_deployment_object() {
 #[test]
 fn test_get_deployment_object() {
     let fixture = TestFixture::new();
-    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
     let stack = fixture.create_test_stack("Test Stack".to_string(), None, generator.id);
     let deployment_object =
         fixture.create_test_deployment_object(stack.id, "test yaml content".to_string(), false);
@@ -47,7 +55,11 @@ fn test_get_deployment_object() {
 #[test]
 fn test_get_deleted_deployment_object() {
     let fixture = TestFixture::new();
-    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
     let stack = fixture.create_test_stack("Test Stack".to_string(), None, generator.id);
     let deployment_object =
         fixture.create_test_deployment_object(stack.id, "test yaml content".to_string(), false);
@@ -78,7 +90,11 @@ fn test_get_deleted_deployment_object() {
 #[test]
 fn test_list_deployment_objects_for_stack() {
     let fixture = TestFixture::new();
-    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
     let stack = fixture.create_test_stack("Test Stack".to_string(), None, generator.id);
     fixture.create_test_deployment_object(stack.id, "yaml content 1".to_string(), false);
     fixture.create_test_deployment_object(stack.id, "yaml content 2".to_string(), false);
@@ -108,7 +124,11 @@ fn test_list_deployment_objects_for_stack() {
 #[test]
 fn test_soft_delete_deployment_object() {
     let fixture = TestFixture::new();
-    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
     let stack = fixture.create_test_stack("Test Stack".to_string(), None, generator.id);
     let deployment_object =
         fixture.create_test_deployment_object(stack.id, "test yaml content".to_string(), false);
@@ -132,7 +152,11 @@ fn test_soft_delete_deployment_object() {
 #[test]
 fn test_get_latest_deployment_object_for_stack() {
     let fixture = TestFixture::new();
-    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
     let stack = fixture.create_test_stack("Test Stack".to_string(), None, generator.id);
     fixture.create_test_deployment_object(stack.id, "yaml content 1".to_string(), false);
     fixture.create_test_deployment_object(stack.id, "yaml content 2".to_string(), false);
@@ -153,7 +177,11 @@ fn test_get_latest_deployment_object_for_stack() {
 #[test]
 fn test_get_undeployed_objects_for_agent() {
     let fixture = TestFixture::new();
-    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
     // Create an agent
     let agent = fixture.create_test_agent("Test Agent".to_string(), "Test Cluster".to_string());
 
@@ -244,7 +272,11 @@ fn test_get_undeployed_objects_for_agent_with_no_targets() {
 #[test]
 fn test_get_undeployed_objects_for_agent_with_all_deployed() {
     let fixture = TestFixture::new();
-    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
 
     // Create an agent
     let agent =
@@ -289,7 +321,11 @@ fn test_get_undeployed_objects_for_agent_with_deletion_markers() {
     );
 
     // Create a stack and associate the agent with it
-    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
     let stack = fixture.create_test_stack("Stack Deletion Markers".to_string(), None, generator.id);
     fixture.create_test_agent_target(agent.id, stack.id);
 
@@ -349,7 +385,11 @@ fn test_get_undeployed_objects_for_agent_with_deletion_markers() {
 #[test]
 fn test_search_deployment_objects_by_checksum() {
     let fixture = TestFixture::new();
-    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
     let stack = fixture.create_test_stack("Test Stack".to_string(), None, generator.id);
 
     // Create deployment objects with different checksums
@@ -412,7 +452,11 @@ fn test_get_applicable_deployment_objects() {
     let agent = fixture.create_test_agent("Test Agent".to_string(), "Test Cluster".to_string());
 
     // Create two stacks
-    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
     let stack1 = fixture.create_test_stack("Stack 1".to_string(), None, generator.id);
     let stack2 = fixture.create_test_stack("Stack 2".to_string(), None, generator.id);
 

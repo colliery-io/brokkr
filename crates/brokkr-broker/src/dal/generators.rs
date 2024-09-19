@@ -2,8 +2,8 @@ use crate::dal::DAL;
 use brokkr_models::models::generator::{Generator, NewGenerator};
 use brokkr_models::schema::generators;
 use chrono::Utc;
-use diesel::prelude::*;
 use diesel::dsl::now;
+use diesel::prelude::*;
 use uuid::Uuid;
 
 /// Data Access Layer for Generator operations.
@@ -120,8 +120,6 @@ impl<'a> GeneratorsDAL<'a> {
     ///
     /// Returns a Result containing the number of affected rows (0 or 1) on success, or a diesel::result::Error on failure.
     pub fn soft_delete(&self, generator_id: Uuid) -> Result<usize, diesel::result::Error> {
-
-
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         diesel::update(generators::table.filter(generators::id.eq(generator_id)))
             .set(generators::deleted_at.eq(Utc::now()))
@@ -172,7 +170,10 @@ impl<'a> GeneratorsDAL<'a> {
     /// # Returns
     ///
     /// Returns a Result containing the updated Generator on success, or a diesel::result::Error on failure.
-    pub fn update_last_active(&self, generator_uuid: Uuid) -> Result<Generator, diesel::result::Error> {
+    pub fn update_last_active(
+        &self,
+        generator_uuid: Uuid,
+    ) -> Result<Generator, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         diesel::update(generators::table.filter(generators::id.eq(generator_uuid)))
             .set((
@@ -191,7 +192,10 @@ impl<'a> GeneratorsDAL<'a> {
     /// # Returns
     ///
     /// Returns a Result containing an Option<Generator> if found, or a diesel::result::Error on failure.
-    pub fn get_by_name(&self, generator_name: &str) -> Result<Option<Generator>, diesel::result::Error> {
+    pub fn get_by_name(
+        &self,
+        generator_name: &str,
+    ) -> Result<Option<Generator>, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         generators::table
             .filter(generators::name.eq(generator_name))
@@ -209,7 +213,10 @@ impl<'a> GeneratorsDAL<'a> {
     /// # Returns
     ///
     /// Returns a Result containing a Vec of matching Generators on success, or a diesel::result::Error on failure.
-    pub fn get_by_active_status(&self, active: bool) -> Result<Vec<Generator>, diesel::result::Error> {
+    pub fn get_by_active_status(
+        &self,
+        active: bool,
+    ) -> Result<Vec<Generator>, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         generators::table
             .filter(generators::is_active.eq(active))

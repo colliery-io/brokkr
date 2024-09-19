@@ -13,7 +13,6 @@ use diesel::sql_types::BigInt;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use tokio::signal;
 
-
 /// Embedded migrations for the database
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("../brokkr-models/migrations");
 
@@ -41,7 +40,6 @@ enum Commands {
     RotateAdmin,
 }
 
-
 /// Main function to run the Brokkr Broker application
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -54,7 +52,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     brokkr_utils::logging::init(&config.log.level).expect("Failed to initialize logger");
 
     // Create PAK controller
-    let _ = utils::pak::create_pak_controller(Some(&config)).expect("Failed to create PAK controller");
+    let _ =
+        utils::pak::create_pak_controller(Some(&config)).expect("Failed to create PAK controller");
 
     // Execute the appropriate command
     match cli.command {
@@ -110,7 +109,6 @@ async fn serve(config: &Settings) -> Result<(), Box<dyn std::error::Error>> {
     // Initialize Data Access Layer
     info!("Initializing Data Access Layer");
     let dal = DAL::new(connection_pool.pool.clone());
-
 
     // Configure API routes
     info!("Configuring API routes");

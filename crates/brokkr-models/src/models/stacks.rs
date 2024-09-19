@@ -88,7 +88,11 @@ impl NewStack {
     ///
     /// Returns `Ok(NewStack)` if all parameters are valid,
     /// otherwise returns an `Err` with a description of the validation failure.
-    pub fn new(name: String, description: Option<String>, generator_id: Uuid) -> Result<Self, String> {
+    pub fn new(
+        name: String,
+        description: Option<String>,
+        generator_id: Uuid,
+    ) -> Result<Self, String> {
         // Validate name
         if name.trim().is_empty() {
             return Err("Stack name cannot be empty".to_string());
@@ -101,7 +105,11 @@ impl NewStack {
             }
         }
 
-        Ok(NewStack { name, description, generator_id })
+        Ok(NewStack {
+            name,
+            description,
+            generator_id,
+        })
     }
 }
 

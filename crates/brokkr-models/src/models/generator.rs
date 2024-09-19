@@ -43,10 +43,7 @@ impl NewGenerator {
             return Err("Generator name cannot be empty".to_string());
         }
 
-        Ok(NewGenerator {
-            name,
-            description,
-        })
+        Ok(NewGenerator { name, description })
     }
 }
 
@@ -61,7 +58,10 @@ mod tests {
 
         let result = NewGenerator::new(name.clone(), description.clone());
 
-        assert!(result.is_ok(), "NewGenerator creation should succeed with valid inputs");
+        assert!(
+            result.is_ok(),
+            "NewGenerator creation should succeed with valid inputs"
+        );
         let new_generator = result.unwrap();
         assert_eq!(new_generator.name, name);
         assert_eq!(new_generator.description, description);
@@ -70,13 +70,14 @@ mod tests {
     #[test]
     fn test_new_generator_empty_name() {
         let result = NewGenerator::new("".to_string(), None);
-        assert!(result.is_err(), "NewGenerator creation should fail with empty name");
+        assert!(
+            result.is_err(),
+            "NewGenerator creation should fail with empty name"
+        );
         assert_eq!(
             result.unwrap_err(),
             "Generator name cannot be empty",
             "Error message should indicate empty name"
         );
     }
-
-   
 }

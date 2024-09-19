@@ -17,10 +17,10 @@ use brokkr_models::models::{
     agent_targets::{AgentTarget, NewAgentTarget},
     agents::{Agent, NewAgent},
     deployment_objects::{DeploymentObject, NewDeploymentObject},
+    generator::{Generator, NewGenerator},
     stack_annotations::{NewStackAnnotation, StackAnnotation},
     stack_labels::{NewStackLabel, StackLabel},
     stacks::{NewStack, Stack},
-    generator::{Generator, NewGenerator},
 };
 use brokkr_utils::Settings;
 use std::env;
@@ -103,8 +103,14 @@ impl TestFixture {
     /// # Returns
     ///
     /// Returns the created Stack on success, or panics on failure.
-    pub fn create_test_stack(&self, name: String, description: Option<String>, generator_id: Uuid) -> Stack {
-        let new_stack = NewStack::new(name, description, generator_id).expect("Failed to create NewStack");
+    pub fn create_test_stack(
+        &self,
+        name: String,
+        description: Option<String>,
+        generator_id: Uuid,
+    ) -> Stack {
+        let new_stack =
+            NewStack::new(name, description, generator_id).expect("Failed to create NewStack");
         self.dal
             .stacks()
             .create(&new_stack)
@@ -298,7 +304,7 @@ impl TestFixture {
             .create(&new_label)
             .expect("Failed to create agent label")
     }
-     /// Creates a new generator for testing purposes.
+    /// Creates a new generator for testing purposes.
     ///
     /// # Arguments
     ///
@@ -315,13 +321,14 @@ impl TestFixture {
         description: Option<String>,
         api_key_hash: String,
     ) -> Generator {
-        let new_generator = NewGenerator::new(name, description)
-            .expect("Failed to create NewGenerator");
-        let created_generator = self.dal
+        let new_generator =
+            NewGenerator::new(name, description).expect("Failed to create NewGenerator");
+        let created_generator = self
+            .dal
             .generators()
             .create(&new_generator)
             .expect("Failed to create generator");
-        
+
         self.dal
             .generators()
             .update_pak_hash(created_generator.id, api_key_hash)
@@ -345,5 +352,3 @@ impl Drop for TestFixture {
         self.reset_database();
     }
 }
-
-   

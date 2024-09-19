@@ -74,7 +74,6 @@ pub struct DeploymentObject {
     pub submitted_at: DateTime<Utc>,
     /// Indicates if this object marks a deletion.
     pub is_deletion_marker: bool,
- 
 }
 
 /// Represents a new deployment object to be inserted into the database.
@@ -89,7 +88,6 @@ pub struct NewDeploymentObject {
     pub yaml_checksum: String,
     /// Indicates if this object marks a deletion.
     pub is_deletion_marker: bool,
-
 }
 
 impl NewDeploymentObject {

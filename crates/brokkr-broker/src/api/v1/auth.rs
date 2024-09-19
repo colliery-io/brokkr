@@ -1,9 +1,4 @@
-use axum::{
-    Router,
-    routing::post,
-    Json,
-    extract::Query,
-};
+use axum::{extract::Query, routing::post, Json, Router};
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize)]
@@ -24,8 +19,7 @@ enum Permissions {
 }
 
 pub fn routes() -> Router {
-    Router::new()
-        .route("/auth/verify-pak", post(verify_pak))
+    Router::new().route("/auth/verify-pak", post(verify_pak))
 }
 
 async fn verify_pak(Query(params): Query<PakQuery>) -> Json<AuthResponse> {
@@ -33,7 +27,12 @@ async fn verify_pak(Query(params): Query<PakQuery>) -> Json<AuthResponse> {
     // and retrieve the associated permissions. This is a mock implementation.
     let (is_valid, permissions) = match params.pak.as_str() {
         "admin_pak_123" => (true, Some(Permissions::Admin)),
-        "agent_pak_456" => (true, Some(Permissions::Agent { uuid: "agent-123".to_string() })),
+        "agent_pak_456" => (
+            true,
+            Some(Permissions::Agent {
+                uuid: "agent-123".to_string(),
+            }),
+        ),
         _ => (false, None),
     };
 

@@ -193,7 +193,6 @@ impl DAL {
     pub fn generators(&self) -> GeneratorsDAL {
         GeneratorsDAL { dal: self }
     }
-    
 }
 
 #[derive(PartialEq)]

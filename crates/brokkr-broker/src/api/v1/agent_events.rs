@@ -1,9 +1,4 @@
-use axum::{
-    Router,
-    routing::get,
-    extract::Path,
-    Json,
-};
+use axum::{extract::Path, routing::get, Json, Router};
 use serde_json::Value;
 
 pub fn routes() -> Router {

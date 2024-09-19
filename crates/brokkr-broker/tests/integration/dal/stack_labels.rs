@@ -4,7 +4,11 @@ use brokkr_models::models::stack_labels::NewStackLabel;
 #[test]
 fn test_create_stack_label() {
     let fixture = TestFixture::new();
-    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
     let stack = fixture.create_test_stack("Test Stack".to_string(), None, generator.id);
 
     let new_label = NewStackLabel::new(stack.id, "test-label".to_string())
@@ -22,7 +26,11 @@ fn test_create_stack_label() {
 #[test]
 fn test_get_stack_label() {
     let fixture = TestFixture::new();
-    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
     let stack = fixture.create_test_stack("Test Stack".to_string(), None, generator.id);
     let label = fixture.create_test_stack_label(stack.id, "test-label".to_string());
 
@@ -39,7 +47,11 @@ fn test_get_stack_label() {
 #[test]
 fn test_list_labels_for_stack() {
     let fixture = TestFixture::new();
-    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
     let stack = fixture.create_test_stack("Test Stack".to_string(), None, generator.id);
     fixture.create_test_stack_label(stack.id, "label1".to_string());
     fixture.create_test_stack_label(stack.id, "label2".to_string());
@@ -57,7 +69,11 @@ fn test_list_labels_for_stack() {
 #[test]
 fn test_delete_stack_label() {
     let fixture = TestFixture::new();
-    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
     let stack = fixture.create_test_stack("Test Stack".to_string(), None, generator.id);
     let label = fixture.create_test_stack_label(stack.id, "test-label".to_string());
 
@@ -79,7 +95,11 @@ fn test_delete_stack_label() {
 #[test]
 fn test_delete_all_labels_for_stack() {
     let fixture = TestFixture::new();
-    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
     let stack = fixture.create_test_stack("Test Stack".to_string(), None, generator.id);
     fixture.create_test_stack_label(stack.id, "label1".to_string());
     fixture.create_test_stack_label(stack.id, "label2".to_string());

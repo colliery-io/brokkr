@@ -1,7 +1,7 @@
 use crate::fixtures::TestFixture;
 use brokkr_models::models::generator::{Generator, NewGenerator};
-use uuid::Uuid;
 use chrono::Utc;
+use uuid::Uuid;
 
 #[test]
 fn test_create_generator() {
@@ -47,21 +47,36 @@ fn test_get_generator() {
 
     assert_eq!(retrieved_generator.id, created_generator.id);
     assert_eq!(retrieved_generator.name, created_generator.name);
-    assert_eq!(retrieved_generator.description, created_generator.description);
+    assert_eq!(
+        retrieved_generator.description,
+        created_generator.description
+    );
 }
 
 #[test]
 fn test_list_generators() {
     let fixture = TestFixture::new();
-    fixture.create_test_generator("Generator 1".to_string(), Some("Description 1".to_string()), "".to_string());
-    let deleted_generator = fixture.create_test_generator("Generator 2".to_string(), Some("Description 2".to_string()), "".to_string());
+    fixture.create_test_generator(
+        "Generator 1".to_string(),
+        Some("Description 1".to_string()),
+        "".to_string(),
+    );
+    let deleted_generator = fixture.create_test_generator(
+        "Generator 2".to_string(),
+        Some("Description 2".to_string()),
+        "".to_string(),
+    );
     fixture
         .dal
         .generators()
         .soft_delete(deleted_generator.id)
         .expect("Failed to soft delete generator");
 
-    let active_generators = fixture.dal.generators().list().expect("Failed to list generators");
+    let active_generators = fixture
+        .dal
+        .generators()
+        .list()
+        .expect("Failed to list generators");
     assert_eq!(active_generators.len(), 1);
     assert_eq!(active_generators[0].name, "Generator 1");
 
@@ -173,7 +188,11 @@ fn test_update_last_active() {
 fn test_get_by_name() {
     let fixture = TestFixture::new();
     let generator_name = "Test Generator".to_string();
-    fixture.create_test_generator(generator_name.clone(), Some("Test Description".to_string()), "".to_string());
+    fixture.create_test_generator(
+        generator_name.clone(),
+        Some("Test Description".to_string()),
+        "".to_string(),
+    );
 
     let retrieved_generator = fixture
         .dal
@@ -188,8 +207,16 @@ fn test_get_by_name() {
 #[test]
 fn test_get_by_active_status() {
     let fixture = TestFixture::new();
-    fixture.create_test_generator("Active Generator".to_string(), Some("Active Description".to_string()), "".to_string());
-    let inactive_generator = fixture.create_test_generator("Inactive Generator".to_string(), Some("Inactive Description".to_string()), "".to_string());
+    fixture.create_test_generator(
+        "Active Generator".to_string(),
+        Some("Active Description".to_string()),
+        "".to_string(),
+    );
+    let inactive_generator = fixture.create_test_generator(
+        "Inactive Generator".to_string(),
+        Some("Inactive Description".to_string()),
+        "".to_string(),
+    );
 
     fixture
         .dal

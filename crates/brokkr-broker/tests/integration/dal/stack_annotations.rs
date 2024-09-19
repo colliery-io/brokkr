@@ -4,7 +4,11 @@ use brokkr_models::models::stack_annotations::NewStackAnnotation;
 #[test]
 fn test_create_stack_annotation() {
     let fixture = TestFixture::new();
-    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
     let stack = fixture.create_test_stack("Test Stack".to_string(), None, generator.id);
 
     let new_annotation = NewStackAnnotation {
@@ -27,7 +31,11 @@ fn test_create_stack_annotation() {
 #[test]
 fn test_get_stack_annotation() {
     let fixture = TestFixture::new();
-    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
     let stack = fixture.create_test_stack("Test Stack".to_string(), None, generator.id);
     let annotation = fixture.create_test_stack_annotation(stack.id, "test_key", "test_value");
 
@@ -46,7 +54,11 @@ fn test_get_stack_annotation() {
 #[test]
 fn test_list_annotations_for_stack() {
     let fixture = TestFixture::new();
-    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
     let stack = fixture.create_test_stack("Test Stack".to_string(), None, generator.id);
     fixture.create_test_stack_annotation(stack.id, "key1", "value1");
     fixture.create_test_stack_annotation(stack.id, "key2", "value2");
@@ -69,7 +81,11 @@ fn test_list_annotations_for_stack() {
 #[test]
 fn test_update_stack_annotation() {
     let fixture = TestFixture::new();
-    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
     let stack = fixture.create_test_stack("Test Stack".to_string(), None, generator.id);
     let annotation = fixture.create_test_stack_annotation(stack.id, "old_key", "old_value");
 
@@ -90,7 +106,11 @@ fn test_update_stack_annotation() {
 #[test]
 fn test_delete_stack_annotation() {
     let fixture = TestFixture::new();
-    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
     let stack = fixture.create_test_stack("Test Stack".to_string(), None, generator.id);
     let annotation = fixture.create_test_stack_annotation(stack.id, "test_key", "test_value");
 
@@ -112,7 +132,11 @@ fn test_delete_stack_annotation() {
 #[test]
 fn test_delete_all_annotations_for_stack() {
     let fixture = TestFixture::new();
-    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
     let stack = fixture.create_test_stack("Test Stack".to_string(), None, generator.id);
     fixture.create_test_stack_annotation(stack.id, "key1", "value1");
     fixture.create_test_stack_annotation(stack.id, "key2", "value2");

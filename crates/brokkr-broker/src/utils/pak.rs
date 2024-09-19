@@ -1,14 +1,16 @@
-use std::sync::Arc;
+use brokkr_utils::logging::prelude::*;
 use brokkr_utils::Settings;
+use once_cell::sync::OnceCell;
 use prefixed_api_key::PrefixedApiKeyController;
 use rand::rngs::OsRng;
 use sha2::Sha256;
-use once_cell::sync::OnceCell;
-use brokkr_utils::logging::prelude::*;
+use std::sync::Arc;
 
 static PAK_CONTROLLER: OnceCell<Arc<PrefixedApiKeyController<OsRng, Sha256>>> = OnceCell::new();
 
-pub fn create_pak_controller(config: Option<&Settings>) -> Result<Arc<PrefixedApiKeyController<OsRng, Sha256>>, &'static str> {
+pub fn create_pak_controller(
+    config: Option<&Settings>,
+) -> Result<Arc<PrefixedApiKeyController<OsRng, Sha256>>, &'static str> {
     match (PAK_CONTROLLER.get(), config) {
         (Some(controller), _) => Ok(controller.clone()),
         (None, Some(cfg)) => {
@@ -17,12 +19,14 @@ pub fn create_pak_controller(config: Option<&Settings>) -> Result<Arc<PrefixedAp
                 Arc::new(create_pak_controller_inner(cfg).expect("Failed to create PAK controller"))
             });
             Ok(controller.clone())
-        },
+        }
         (None, None) => Err("PAK_CONTROLLER not initialized and no config provided"),
     }
 }
 
-fn create_pak_controller_inner(config: &Settings) -> Result<PrefixedApiKeyController<OsRng, Sha256>, Box<dyn std::error::Error>> {
+fn create_pak_controller_inner(
+    config: &Settings,
+) -> Result<PrefixedApiKeyController<OsRng, Sha256>, Box<dyn std::error::Error>> {
     // This function remains unchanged
     let builder = PrefixedApiKeyController::configure()
         .prefix(config.pak.prefix.clone().unwrap())
@@ -39,7 +43,8 @@ pub fn create_pak(config: &Settings) -> Result<(String, String), Box<dyn std::er
     let controller = create_pak_controller(Some(config))?;
 
     // Generate PAK and hash
-    controller.try_generate_key_and_hash()
+    controller
+        .try_generate_key_and_hash()
         .map(|(pak, hash)| (pak.to_string(), hash))
         .map_err(|e| e.into())
 }
@@ -52,13 +57,16 @@ mod tests {
     #[test]
     fn test_pak_controller_singleton() {
         let result = create_pak_controller(None);
-        assert!(result.is_err(), "Should fail when not initialized and no config provided");
+        assert!(
+            result.is_err(),
+            "Should fail when not initialized and no config provided"
+        );
 
-        
         let config = Settings::new(None).expect("Failed to load configuration");
 
         // First call should initialize the controller
-        let controller1 = create_pak_controller(Some(&config)).expect("Failed to create controller");
+        let controller1 =
+            create_pak_controller(Some(&config)).expect("Failed to create controller");
         let address1 = Arc::as_ptr(&controller1) as usize;
 
         // Second call should return the same controller
@@ -66,13 +74,17 @@ mod tests {
         let address2 = Arc::as_ptr(&controller2) as usize;
 
         // Check that both instances have the same memory address
-        assert_eq!(address1, address2, "Controllers should have the same memory address");
+        assert_eq!(
+            address1, address2,
+            "Controllers should have the same memory address"
+        );
 
         // Test in multiple threads
         let threads: Vec<_> = (0..10)
             .map(|_| {
                 thread::spawn(move || {
-                    let controller = create_pak_controller(None).expect("Failed to get controller in thread");
+                    let controller =
+                        create_pak_controller(None).expect("Failed to get controller in thread");
                     Arc::as_ptr(&controller) as usize
                 })
             })
@@ -99,6 +111,4 @@ mod tests {
         assert_ne!(pak1, pak2, "Generated PAKs should be different");
         assert_ne!(hash1, hash2, "Generated hashes should be different");
     }
-
-
 }

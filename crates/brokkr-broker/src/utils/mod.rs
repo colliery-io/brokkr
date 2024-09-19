@@ -29,9 +29,7 @@ pub struct NewAdminKey {
     pub pak_hash: String,
 }
 
-pub fn first_startup(
-    conn: &mut PgConnection,
-) -> Result<(), Box<dyn std::error::Error>> {
+pub fn first_startup(conn: &mut PgConnection) -> Result<(), Box<dyn std::error::Error>> {
     upsert_admin(conn)
 }
 
@@ -40,14 +38,14 @@ fn create_pak() -> Result<(String, String), Box<dyn std::error::Error>> {
     let controller = pak::create_pak_controller(None);
 
     // Generate PAK and hash
-    controller.unwrap().try_generate_key_and_hash()
+    controller
+        .unwrap()
+        .try_generate_key_and_hash()
         .map(|(pak, hash)| (pak.to_string(), hash))
         .map_err(|e| e.into())
 }
 
-pub fn upsert_admin(
-    conn: &mut PgConnection,
-) -> Result<(), Box<dyn std::error::Error>> {
+pub fn upsert_admin(conn: &mut PgConnection) -> Result<(), Box<dyn std::error::Error>> {
     let (pak, hash) = create_pak()?;
 
     // Update the existing admin role with the new PAK hash, or insert if it doesn't exist

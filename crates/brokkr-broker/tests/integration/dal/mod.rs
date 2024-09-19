@@ -4,7 +4,7 @@ mod agent_labels;
 mod agent_targets;
 mod agents;
 mod deployment_objects;
+mod generators;
 mod stack_annotations;
 mod stack_labels;
 mod stacks;
-mod generators;

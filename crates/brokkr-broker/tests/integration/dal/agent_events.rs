@@ -8,15 +8,23 @@ use brokkr_models::models::{
 fn test_create_agent_event() {
     let fixture = TestFixture::new();
 
-    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
 
     // Create a stack
     let stack = fixture
         .dal
         .stacks()
         .create(
-            &NewStack::new("Stack for create agent event".to_string(), None, generator.id)
-                .expect("Failed to create NewStack"),
+            &NewStack::new(
+                "Stack for create agent event".to_string(),
+                None,
+                generator.id,
+            )
+            .expect("Failed to create NewStack"),
         )
         .expect("Failed to create stack");
 
@@ -76,7 +84,11 @@ fn test_create_agent_event() {
 fn test_get_agent_event() {
     let fixture = TestFixture::new();
 
-    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
 
     // Create a stack
     let stack = fixture
@@ -144,15 +156,23 @@ fn test_get_agent_event() {
 fn test_get_deleted_agent_event() {
     let fixture = TestFixture::new();
 
-    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
 
     // Create a stack
     let stack = fixture
         .dal
         .stacks()
         .create(
-            &NewStack::new("Stack for deleted agent event".to_string(), None, generator.id)
-                .expect("Failed to create NewStack"),
+            &NewStack::new(
+                "Stack for deleted agent event".to_string(),
+                None,
+                generator.id,
+            )
+            .expect("Failed to create NewStack"),
         )
         .expect("Failed to create stack");
 
@@ -225,15 +245,23 @@ fn test_get_deleted_agent_event() {
 fn test_update_agent_event() {
     let fixture = TestFixture::new();
 
-    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
 
     // Create a stack
     let stack = fixture
         .dal
         .stacks()
         .create(
-            &NewStack::new("Stack for update agent event".to_string(), None, generator.id)
-                .expect("Failed to create NewStack"),
+            &NewStack::new(
+                "Stack for update agent event".to_string(),
+                None,
+                generator.id,
+            )
+            .expect("Failed to create NewStack"),
         )
         .expect("Failed to create stack");
 
@@ -296,15 +324,23 @@ fn test_update_agent_event() {
 fn test_soft_delete_agent_event() {
     let fixture = TestFixture::new();
 
-    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
 
     // Create a stack
     let stack = fixture
         .dal
         .stacks()
         .create(
-            &NewStack::new("Stack for soft delete agent event".to_string(), None, generator.id)
-                .expect("Failed to create NewStack"),
+            &NewStack::new(
+                "Stack for soft delete agent event".to_string(),
+                None,
+                generator.id,
+            )
+            .expect("Failed to create NewStack"),
         )
         .expect("Failed to create stack");
 
@@ -370,15 +406,23 @@ fn test_soft_delete_agent_event() {
 fn test_hard_delete_agent_event() {
     let fixture = TestFixture::new();
 
-    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
 
     // Create a stack
     let stack = fixture
         .dal
         .stacks()
         .create(
-            &NewStack::new("Stack for hard delete agent event".to_string(), None, generator.id)
-                .expect("Failed to create NewStack"),
+            &NewStack::new(
+                "Stack for hard delete agent event".to_string(),
+                None,
+                generator.id,
+            )
+            .expect("Failed to create NewStack"),
         )
         .expect("Failed to create stack");
 
@@ -443,7 +487,8 @@ fn test_hard_delete_agent_event() {
 fn test_list_agent_events() {
     let fixture = TestFixture::new();
 
-    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "".to_string());
+    let generator =
+        fixture.create_test_generator("Test Generator".to_string(), None, "".to_string());
     // Create a stack
     let stack = fixture
         .dal
@@ -532,7 +577,11 @@ fn test_list_agent_events() {
 fn test_get_events_filtered() {
     let fixture = TestFixture::new();
 
-    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
 
     // Create stacks with unique names
     let stack1 = fixture
