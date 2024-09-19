@@ -13,7 +13,7 @@ pub async fn shutdown(shutdown_rx: oneshot::Receiver<()>) {
     let _ = shutdown_rx.await;
     
     // Attempt to remove the file at /tmp/key.txt
-    fs::remove_file("/tmp/key.txt");
+    let _ = fs::remove_file("/tmp/key.txt");
 }
 
 
@@ -41,9 +41,9 @@ fn upsert_admin(config: &Settings, conn: &mut PgConnection) -> Result<(), Box<dy
     let mut builder = PrefixedApiKeyController::configure()
         .prefix(config.pak.prefix.clone().unwrap())
         .rng_osrng()
-        .short_token_length(config.pak.short_token_length.clone().unwrap())
+        .short_token_length(config.pak.short_token_length.unwrap())
         .short_token_prefix(config.pak.short_token_prefix.clone())
-        .long_token_length(config.pak.long_token_length.clone().unwrap());
+        .long_token_length(config.pak.long_token_length.unwrap());
     
     let rng = config.pak.rng.clone().unwrap();
 

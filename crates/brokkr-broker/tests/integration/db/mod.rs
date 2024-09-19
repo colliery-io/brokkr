@@ -38,7 +38,7 @@ fn test_connection_pool_integration() {
     // Set up
     let base_url =
         std::env::var("DATABASE_URL").expect("DATABASE_URL must be set for integration tests");
-    let test_db_name = format!("test_db_{}", Uuid::new_v4().to_string().replace("-", ""));
+    let test_db_name = format!("test_db_{}", Uuid::new_v4().to_string().replace('-', ""));
 
     let mut url = Url::parse(&base_url).expect("Invalid base URL");
     url.set_path("");

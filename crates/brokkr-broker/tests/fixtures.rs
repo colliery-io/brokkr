@@ -34,12 +34,19 @@ pub struct TestFixture {
     pub dal: DAL,
 }
 
+impl Default for TestFixture {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TestFixture {
     /// Creates and returns an Axum Router with configured API routes.
     ///
     /// # Returns
     ///
     /// Returns a configured Axum Router.
+    #[allow(dead_code)]
     pub fn create_test_router(&self) -> Router {
         api::configure_api_routes(self.dal.clone())
     }

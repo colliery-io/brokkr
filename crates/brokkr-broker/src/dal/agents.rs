@@ -1,7 +1,6 @@
 use crate::dal::DAL;
 use brokkr_models::models::agents::{Agent, NewAgent};
-use brokkr_models::schema::{agents,deployment_objects, agent_labels, agent_annotations, agent_targets};
-use brokkr_models::models::deployment_objects::DeploymentObject;
+use brokkr_models::schema::{agents, agent_labels, agent_annotations, agent_targets};
 use chrono::Utc;
 use diesel::prelude::*;
 use uuid::Uuid;
@@ -332,6 +331,8 @@ impl<'a> AgentsDAL<'a> {
     ///
     /// Returns a Result containing a tuple of (Vec<AgentLabel>, Vec<AgentTarget>, Vec<AgentAnnotation>)
     /// on success, or a diesel::result::Error on failure.
+    /// 
+    #[allow(clippy::type_complexity)]
     pub fn get_agent_details(&self, agent_id: Uuid) -> Result<(Vec<AgentLabel>, Vec<AgentTarget>, Vec<AgentAnnotation>), diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
 
