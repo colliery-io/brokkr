@@ -1,5 +1,5 @@
-use axum::{extract::Query, routing::post, Json, Router};
-use serde::{Deserialize, Serialize};
+use axum::{routing::post, Json, Router};
+use serde::Serialize;
 use crate::api::v1::middleware::AuthPayload;
 use axum::extract::Extension;
 

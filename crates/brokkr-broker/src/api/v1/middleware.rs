@@ -1,7 +1,6 @@
 use axum::{
     body::Body, extract::State, http::{Request, StatusCode}, middleware::Next, response::Response
 };
-use serde_json::json;
 use uuid::Uuid;
 use diesel::prelude::*;
 use brokkr_models::schema::admin_role;

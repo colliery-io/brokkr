@@ -206,7 +206,7 @@ mod tests {
         }
 
         // Test with different PAKs
-        let (pak2, hash2) = create_pak(&config).unwrap();
+        let (pak2,_hash2) = create_pak(&config).unwrap();
         assert_ne!(
             generate_pak_hash(pak),
             generate_pak_hash(pak2),

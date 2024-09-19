@@ -6,7 +6,6 @@ mod generators;
 mod stacks; // Add this line
 
 use axum::Router;
-use axum::body::Body;
 use axum::middleware::from_fn_with_state;
 use crate::dal::DAL;
 mod middleware;
