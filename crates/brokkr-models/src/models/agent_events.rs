@@ -1,12 +1,12 @@
 //! # Agent Event Module
-//! 
+//!
 //! This module defines structures and methods for managing agent events in the system.
-//! 
+//!
 //! ## Data Model
-//! 
-//! Agent events represent actions or occurrences related to agents and deployment objects. 
+//!
+//! Agent events represent actions or occurrences related to agents and deployment objects.
 //! They are stored in the `agent_events` table with the following structure:
-//! 
+//!
 //! - `id`: UUID, primary key
 //! - `created_at`: TIMESTAMP, when the event was created
 //! - `updated_at`: TIMESTAMP, when the event was last updated
@@ -16,15 +16,15 @@
 //! - `event_type`: VARCHAR(50), type of the event
 //! - `status`: VARCHAR(10), status of the event
 //! - `message`: TEXT, optional message associated with the event
-//! 
+//!
 //! ## Usage
-//! 
+//!
 //! Agent events are used to track and record various actions and statuses related to agents
 //! and their interactions with deployment objects. This can be useful for monitoring,
 //! debugging, and auditing purposes.
-//! 
+//!
 //! ## Constraints
-//! 
+//!
 //! - Both `agent_id` and `deployment_object_id` must be valid, non-nil UUIDs.
 //! - `event_type` must be a non-empty string.
 //! - `status` must be one of: "SUCCESS", "FAILURE", "IN_PROGRESS", or "PENDING".
@@ -35,7 +35,19 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// Represents an agent event in the database.
-#[derive(Queryable, Selectable, Identifiable, AsChangeset, Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
+#[derive(
+    Queryable,
+    Selectable,
+    Identifiable,
+    AsChangeset,
+    Debug,
+    Clone,
+    Serialize,
+    Deserialize,
+    Eq,
+    PartialEq,
+    Hash,
+)]
 #[diesel(table_name = crate::schema::agent_events)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct AgentEvent {
@@ -150,13 +162,31 @@ mod tests {
             message.clone(),
         );
 
-        assert!(result.is_ok(), "NewAgentEvent creation should succeed with valid inputs");
+        assert!(
+            result.is_ok(),
+            "NewAgentEvent creation should succeed with valid inputs"
+        );
         let new_event = result.unwrap();
-        assert_eq!(new_event.agent_id, agent_id, "agent_id should match the input value");
-        assert_eq!(new_event.deployment_object_id, deployment_object_id, "deployment_object_id should match the input value");
-        assert_eq!(new_event.event_type, event_type, "event_type should match the input value");
-        assert_eq!(new_event.status, status, "status should match the input value");
-        assert_eq!(new_event.message, message, "message should match the input value");
+        assert_eq!(
+            new_event.agent_id, agent_id,
+            "agent_id should match the input value"
+        );
+        assert_eq!(
+            new_event.deployment_object_id, deployment_object_id,
+            "deployment_object_id should match the input value"
+        );
+        assert_eq!(
+            new_event.event_type, event_type,
+            "event_type should match the input value"
+        );
+        assert_eq!(
+            new_event.status, status,
+            "status should match the input value"
+        );
+        assert_eq!(
+            new_event.message, message,
+            "message should match the input value"
+        );
     }
 
     #[test]
@@ -168,8 +198,15 @@ mod tests {
             "SUCCESS".to_string(),
             None,
         );
-        assert!(result.is_err(), "NewAgentEvent creation should fail with nil agent ID");
-        assert_eq!(result.unwrap_err(), "Invalid agent ID", "Error message should indicate invalid agent ID");
+        assert!(
+            result.is_err(),
+            "NewAgentEvent creation should fail with nil agent ID"
+        );
+        assert_eq!(
+            result.unwrap_err(),
+            "Invalid agent ID",
+            "Error message should indicate invalid agent ID"
+        );
     }
 
     #[test]
@@ -181,8 +218,14 @@ mod tests {
             "INVALID_STATUS".to_string(),
             None,
         );
-        assert!(result.is_err(), "NewAgentEvent creation should fail with invalid status");
-        assert!(result.unwrap_err().contains("Invalid status"), "Error message should indicate invalid status");
+        assert!(
+            result.is_err(),
+            "NewAgentEvent creation should fail with invalid status"
+        );
+        assert!(
+            result.unwrap_err().contains("Invalid status"),
+            "Error message should indicate invalid status"
+        );
     }
 
     #[test]
@@ -194,7 +237,14 @@ mod tests {
             "SUCCESS".to_string(),
             None,
         );
-        assert!(result.is_err(), "NewAgentEvent creation should fail with empty event type");
-        assert_eq!(result.unwrap_err(), "Event type cannot be empty", "Error message should indicate empty event type");
+        assert!(
+            result.is_err(),
+            "NewAgentEvent creation should fail with empty event type"
+        );
+        assert_eq!(
+            result.unwrap_err(),
+            "Event type cannot be empty",
+            "Error message should indicate empty event type"
+        );
     }
 }

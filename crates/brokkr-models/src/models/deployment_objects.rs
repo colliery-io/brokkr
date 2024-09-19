@@ -1,12 +1,12 @@
 //! # Deployment Object Module
-//! 
+//!
 //! This module defines structures and methods for managing deployment objects in the system.
-//! 
+//!
 //! ## Data Model
-//! 
+//!
 //! Deployment objects represent individual deployments or changes to a stack's configuration.
 //! They are stored in the `deployment_objects` table with the following structure:
-//! 
+//!
 //! - `id`: UUID, primary key
 //! - `created_at`: TIMESTAMP, when the deployment object was created
 //! - `updated_at`: TIMESTAMP, when the deployment object was last updated
@@ -17,15 +17,15 @@
 //! - `yaml_checksum`: VARCHAR(64), SHA-256 checksum of the YAML content
 //! - `submitted_at`: TIMESTAMP, when the deployment was submitted
 //! - `is_deletion_marker`: BOOLEAN, indicates if this object marks a deletion
-//! 
+//!
 //! ## Usage
-//! 
+//!
 //! Deployment objects are used to track changes and updates to stack configurations over time.
-//! They provide a historical record of deployments and can be used for rollbacks, audits, and 
+//! They provide a historical record of deployments and can be used for rollbacks, audits, and
 //! tracking the evolution of a stack's configuration.
-//! 
+//!
 //! ## Constraints
-//! 
+//!
 //! - The `stack_id` must be a valid, non-nil UUID.
 //! - The `yaml_content` must not be empty.
 //! - The `yaml_checksum` is automatically generated from the `yaml_content`.
@@ -37,7 +37,19 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// Represents a deployment object in the database.
-#[derive(Queryable, Selectable, Identifiable, AsChangeset, Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
+#[derive(
+    Queryable,
+    Selectable,
+    Identifiable,
+    AsChangeset,
+    Debug,
+    Clone,
+    Serialize,
+    Deserialize,
+    Eq,
+    PartialEq,
+    Hash,
+)]
 #[diesel(table_name = crate::schema::deployment_objects)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct DeploymentObject {
@@ -88,7 +100,7 @@ impl NewDeploymentObject {
     ///
     /// # Returns
     ///
-    /// Returns `Ok(NewDeploymentObject)` if all parameters are valid, 
+    /// Returns `Ok(NewDeploymentObject)` if all parameters are valid,
     /// otherwise returns an `Err` with a description of the validation failure.
     pub fn new(
         stack_id: Uuid,
@@ -119,7 +131,7 @@ impl NewDeploymentObject {
 
 /// Helper function to generate SHA-256 checksum for YAML content.
 fn generate_checksum(content: &str) -> String {
-    use sha2::{Sha256, Digest};
+    use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
     hasher.update(content.as_bytes());
     format!("{:x}", hasher.finalize())
@@ -137,25 +149,54 @@ mod tests {
 
         let result = NewDeploymentObject::new(stack_id, yaml_content.clone(), is_deletion_marker);
 
-        assert!(result.is_ok(), "NewDeploymentObject creation should succeed with valid inputs");
+        assert!(
+            result.is_ok(),
+            "NewDeploymentObject creation should succeed with valid inputs"
+        );
         let new_obj = result.unwrap();
-        assert_eq!(new_obj.stack_id, stack_id, "stack_id should match the input value");
-        assert_eq!(new_obj.yaml_content, yaml_content, "yaml_content should match the input value");
-        assert!(!new_obj.yaml_checksum.is_empty(), "yaml_checksum should not be empty");
-        assert_eq!(new_obj.is_deletion_marker, is_deletion_marker, "is_deletion_marker should match the input value");
+        assert_eq!(
+            new_obj.stack_id, stack_id,
+            "stack_id should match the input value"
+        );
+        assert_eq!(
+            new_obj.yaml_content, yaml_content,
+            "yaml_content should match the input value"
+        );
+        assert!(
+            !new_obj.yaml_checksum.is_empty(),
+            "yaml_checksum should not be empty"
+        );
+        assert_eq!(
+            new_obj.is_deletion_marker, is_deletion_marker,
+            "is_deletion_marker should match the input value"
+        );
     }
 
     #[test]
     fn test_new_deployment_object_invalid_stack_id() {
         let result = NewDeploymentObject::new(Uuid::nil(), "key: value".to_string(), false);
-        assert!(result.is_err(), "NewDeploymentObject creation should fail with nil stack ID");
-        assert_eq!(result.unwrap_err(), "Invalid stack ID", "Error message should indicate invalid stack ID");
+        assert!(
+            result.is_err(),
+            "NewDeploymentObject creation should fail with nil stack ID"
+        );
+        assert_eq!(
+            result.unwrap_err(),
+            "Invalid stack ID",
+            "Error message should indicate invalid stack ID"
+        );
     }
 
     #[test]
     fn test_new_deployment_object_empty_yaml() {
         let result = NewDeploymentObject::new(Uuid::new_v4(), "".to_string(), false);
-        assert!(result.is_err(), "NewDeploymentObject creation should fail with empty YAML content");
-        assert_eq!(result.unwrap_err(), "YAML content cannot be empty", "Error message should indicate empty YAML content");
+        assert!(
+            result.is_err(),
+            "NewDeploymentObject creation should fail with empty YAML content"
+        );
+        assert_eq!(
+            result.unwrap_err(),
+            "YAML content cannot be empty",
+            "Error message should indicate empty YAML content"
+        );
     }
 }

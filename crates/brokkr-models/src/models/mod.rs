@@ -1,9 +1,9 @@
-pub mod agents;
-pub mod stacks;
-pub mod deployment_objects;
-pub mod agent_events;
-pub mod agent_targets;
-pub mod stack_labels;
-pub mod stack_annotations;
 pub mod agent_annotations;
+pub mod agent_events;
 pub mod agent_labels;
+pub mod agent_targets;
+pub mod agents;
+pub mod deployment_objects;
+pub mod stack_annotations;
+pub mod stack_labels;
+pub mod stacks;

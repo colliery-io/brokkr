@@ -1,21 +1,18 @@
+use brokkr_models::schema::admin_role;
+use brokkr_utils::config::Settings;
+use chrono::Utc;
+use diesel::prelude::*;
+use prefixed_api_key::PrefixedApiKeyController;
 use std::fs;
 use tokio::sync::oneshot;
-use brokkr_utils::config::Settings;
-use prefixed_api_key::PrefixedApiKeyController;
-use diesel::prelude::*;
-use brokkr_models::schema::admin_role;
 use uuid::Uuid;
-use chrono::Utc;
-
-
 
 pub async fn shutdown(shutdown_rx: oneshot::Receiver<()>) {
     let _ = shutdown_rx.await;
-    
+
     // Attempt to remove the file at /tmp/key.txt
     let _ = fs::remove_file("/tmp/key.txt");
 }
-
 
 #[derive(Queryable, Selectable, Identifiable, AsChangeset, Debug, Clone)]
 #[diesel(table_name = admin_role)]
@@ -32,11 +29,17 @@ pub struct NewAdminKey {
     pub pak_hash: String,
 }
 
-pub fn first_startup(config: &Settings, conn: &mut PgConnection) -> Result<(), Box<dyn std::error::Error>> {
+pub fn first_startup(
+    config: &Settings,
+    conn: &mut PgConnection,
+) -> Result<(), Box<dyn std::error::Error>> {
     upsert_admin(config, conn)
 }
 
-fn upsert_admin(config: &Settings, conn: &mut PgConnection) -> Result<(), Box<dyn std::error::Error>> {
+fn upsert_admin(
+    config: &Settings,
+    conn: &mut PgConnection,
+) -> Result<(), Box<dyn std::error::Error>> {
     // Configure PAK controller
     let mut builder = PrefixedApiKeyController::configure()
         .prefix(config.pak.prefix.clone().unwrap())
@@ -44,7 +47,7 @@ fn upsert_admin(config: &Settings, conn: &mut PgConnection) -> Result<(), Box<dy
         .short_token_length(config.pak.short_token_length.unwrap())
         .short_token_prefix(config.pak.short_token_prefix.clone())
         .long_token_length(config.pak.long_token_length.unwrap());
-    
+
     let rng = config.pak.rng.clone().unwrap();
 
     builder = match rng.as_str() {
@@ -74,7 +77,9 @@ fn upsert_admin(config: &Settings, conn: &mut PgConnection) -> Result<(), Box<dy
         None => {
             // Insert new admin key
             diesel::insert_into(admin_role::table)
-                .values(&NewAdminKey { pak_hash: hash.clone() })
+                .values(&NewAdminKey {
+                    pak_hash: hash.clone(),
+                })
                 .execute(conn)?;
         }
     }

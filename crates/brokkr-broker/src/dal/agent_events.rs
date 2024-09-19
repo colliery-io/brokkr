@@ -56,7 +56,10 @@ impl<'a> AgentEventsDAL<'a> {
     /// # Returns
     ///
     /// Returns a Result containing an Option<AgentEvent> if found (including deleted events), or a diesel::result::Error on failure.
-    pub fn get_including_deleted(&self, event_uuid: Uuid) -> Result<Option<AgentEvent>, diesel::result::Error> {
+    pub fn get_including_deleted(
+        &self,
+        event_uuid: Uuid,
+    ) -> Result<Option<AgentEvent>, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         agent_events::table
             .filter(agent_events::id.eq(event_uuid))
@@ -134,7 +137,11 @@ impl<'a> AgentEventsDAL<'a> {
     /// # Returns
     ///
     /// Returns a Result containing the updated AgentEvent on success, or a diesel::result::Error on failure.
-    pub fn update(&self, event_uuid: Uuid, updated_event: &AgentEvent) -> Result<AgentEvent, diesel::result::Error> {
+    pub fn update(
+        &self,
+        event_uuid: Uuid,
+        updated_event: &AgentEvent,
+    ) -> Result<AgentEvent, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         diesel::update(agent_events::table.filter(agent_events::id.eq(event_uuid)))
             .set(updated_event)
@@ -168,7 +175,6 @@ impl<'a> AgentEventsDAL<'a> {
     /// Returns a Result containing the number of affected rows (0 or 1) on success, or a diesel::result::Error on failure.
     pub fn hard_delete(&self, event_uuid: Uuid) -> Result<usize, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
-        diesel::delete(agent_events::table.filter(agent_events::id.eq(event_uuid)))
-            .execute(conn)
+        diesel::delete(agent_events::table.filter(agent_events::id.eq(event_uuid))).execute(conn)
     }
 }

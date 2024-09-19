@@ -1,9 +1,9 @@
 // mod agent_events;
 mod agents;
 // mod deployment_objects;
-mod stacks;
-mod deployment_objects;
 mod agent_events;
+mod deployment_objects;
+mod stacks;
 
 use axum::{
     body::{to_bytes, Body},
@@ -11,8 +11,8 @@ use axum::{
 };
 
 // use tower::ServiceExt;
-use tower::util::ServiceExt;
 use crate::fixtures::TestFixture;
+use tower::util::ServiceExt;
 
 // #[tokio::test]
 // async fn test_api_routes_configuration() {

@@ -1,5 +1,5 @@
 use crate::dal::DAL;
-use brokkr_models::models::stack_annotations::{StackAnnotation, NewStackAnnotation};
+use brokkr_models::models::stack_annotations::{NewStackAnnotation, StackAnnotation};
 use brokkr_models::schema::stack_annotations;
 use diesel::prelude::*;
 use uuid::Uuid;
@@ -20,7 +20,10 @@ impl<'a> StackAnnotationsDAL<'a> {
     /// # Returns
     ///
     /// Returns a Result containing the created StackAnnotation on success, or a diesel::result::Error on failure.
-    pub fn create(&self, new_annotation: &NewStackAnnotation) -> Result<StackAnnotation, diesel::result::Error> {
+    pub fn create(
+        &self,
+        new_annotation: &NewStackAnnotation,
+    ) -> Result<StackAnnotation, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         diesel::insert_into(stack_annotations::table)
             .values(new_annotation)
@@ -36,7 +39,10 @@ impl<'a> StackAnnotationsDAL<'a> {
     /// # Returns
     ///
     /// Returns a Result containing an Option<StackAnnotation> if found, or a diesel::result::Error on failure.
-    pub fn get(&self, annotation_id: Uuid) -> Result<Option<StackAnnotation>, diesel::result::Error> {
+    pub fn get(
+        &self,
+        annotation_id: Uuid,
+    ) -> Result<Option<StackAnnotation>, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         stack_annotations::table
             .filter(stack_annotations::id.eq(annotation_id))
@@ -53,7 +59,10 @@ impl<'a> StackAnnotationsDAL<'a> {
     /// # Returns
     ///
     /// Returns a Result containing a Vec of StackAnnotations for the specified stack, or a diesel::result::Error on failure.
-    pub fn list_for_stack(&self, stack_id: Uuid) -> Result<Vec<StackAnnotation>, diesel::result::Error> {
+    pub fn list_for_stack(
+        &self,
+        stack_id: Uuid,
+    ) -> Result<Vec<StackAnnotation>, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         stack_annotations::table
             .filter(stack_annotations::stack_id.eq(stack_id))
@@ -70,7 +79,11 @@ impl<'a> StackAnnotationsDAL<'a> {
     /// # Returns
     ///
     /// Returns a Result containing the updated StackAnnotation on success, or a diesel::result::Error on failure.
-    pub fn update(&self, annotation_id: Uuid, updated_annotation: &StackAnnotation) -> Result<StackAnnotation, diesel::result::Error> {
+    pub fn update(
+        &self,
+        annotation_id: Uuid,
+        updated_annotation: &StackAnnotation,
+    ) -> Result<StackAnnotation, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         diesel::update(stack_annotations::table.filter(stack_annotations::id.eq(annotation_id)))
             .set(updated_annotation)

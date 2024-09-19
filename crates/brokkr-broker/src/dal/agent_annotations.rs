@@ -20,7 +20,10 @@ impl<'a> AgentAnnotationsDAL<'a> {
     /// # Returns
     ///
     /// Returns a Result containing the created AgentAnnotation on success, or a diesel::result::Error on failure.
-    pub fn create(&self, new_annotation: &NewAgentAnnotation) -> Result<AgentAnnotation, diesel::result::Error> {
+    pub fn create(
+        &self,
+        new_annotation: &NewAgentAnnotation,
+    ) -> Result<AgentAnnotation, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         diesel::insert_into(agent_annotations::table)
             .values(new_annotation)
@@ -36,7 +39,10 @@ impl<'a> AgentAnnotationsDAL<'a> {
     /// # Returns
     ///
     /// Returns a Result containing an Option<AgentAnnotation> if found, or a diesel::result::Error on failure.
-    pub fn get(&self, annotation_id: Uuid) -> Result<Option<AgentAnnotation>, diesel::result::Error> {
+    pub fn get(
+        &self,
+        annotation_id: Uuid,
+    ) -> Result<Option<AgentAnnotation>, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         agent_annotations::table
             .filter(agent_annotations::id.eq(annotation_id))
@@ -53,7 +59,10 @@ impl<'a> AgentAnnotationsDAL<'a> {
     /// # Returns
     ///
     /// Returns a Result containing a Vec of AgentAnnotations for the specified agent, or a diesel::result::Error on failure.
-    pub fn list_for_agent(&self, agent_id: Uuid) -> Result<Vec<AgentAnnotation>, diesel::result::Error> {
+    pub fn list_for_agent(
+        &self,
+        agent_id: Uuid,
+    ) -> Result<Vec<AgentAnnotation>, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         agent_annotations::table
             .filter(agent_annotations::agent_id.eq(agent_id))
@@ -80,7 +89,11 @@ impl<'a> AgentAnnotationsDAL<'a> {
     /// # Returns
     ///
     /// Returns a Result containing the updated AgentAnnotation on success, or a diesel::result::Error on failure.
-    pub fn update(&self, annotation_id: Uuid, updated_annotation: &AgentAnnotation) -> Result<AgentAnnotation, diesel::result::Error> {
+    pub fn update(
+        &self,
+        annotation_id: Uuid,
+        updated_annotation: &AgentAnnotation,
+    ) -> Result<AgentAnnotation, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         diesel::update(agent_annotations::table.filter(agent_annotations::id.eq(annotation_id)))
             .set(updated_annotation)

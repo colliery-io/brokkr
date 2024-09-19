@@ -1,5 +1,5 @@
-use brokkr_models::models::stack_annotations::NewStackAnnotation;
 use crate::fixtures::TestFixture;
+use brokkr_models::models::stack_annotations::NewStackAnnotation;
 
 #[test]
 fn test_create_stack_annotation() {
@@ -12,7 +12,10 @@ fn test_create_stack_annotation() {
         value: "test_value".to_string(),
     };
 
-    let created_annotation = fixture.dal.stack_annotations().create(&new_annotation)
+    let created_annotation = fixture
+        .dal
+        .stack_annotations()
+        .create(&new_annotation)
         .expect("Failed to create stack annotation");
 
     assert_eq!(created_annotation.stack_id, stack.id);
@@ -26,7 +29,10 @@ fn test_get_stack_annotation() {
     let stack = fixture.create_test_stack("Test Stack".to_string(), None);
     let annotation = fixture.create_test_stack_annotation(stack.id, "test_key", "test_value");
 
-    let retrieved_annotation = fixture.dal.stack_annotations().get(annotation.id)
+    let retrieved_annotation = fixture
+        .dal
+        .stack_annotations()
+        .get(annotation.id)
         .expect("Failed to get stack annotation")
         .expect("Stack annotation not found");
 
@@ -42,12 +48,19 @@ fn test_list_annotations_for_stack() {
     fixture.create_test_stack_annotation(stack.id, "key1", "value1");
     fixture.create_test_stack_annotation(stack.id, "key2", "value2");
 
-    let annotations = fixture.dal.stack_annotations().list_for_stack(stack.id)
+    let annotations = fixture
+        .dal
+        .stack_annotations()
+        .list_for_stack(stack.id)
         .expect("Failed to list stack annotations");
 
     assert_eq!(annotations.len(), 2);
-    assert!(annotations.iter().any(|a| a.key == "key1" && a.value == "value1"));
-    assert!(annotations.iter().any(|a| a.key == "key2" && a.value == "value2"));
+    assert!(annotations
+        .iter()
+        .any(|a| a.key == "key1" && a.value == "value1"));
+    assert!(annotations
+        .iter()
+        .any(|a| a.key == "key2" && a.value == "value2"));
 }
 
 #[test]
@@ -60,7 +73,10 @@ fn test_update_stack_annotation() {
     updated_annotation.key = "new_key".to_string();
     updated_annotation.value = "new_value".to_string();
 
-    let result = fixture.dal.stack_annotations().update(annotation.id, &updated_annotation)
+    let result = fixture
+        .dal
+        .stack_annotations()
+        .update(annotation.id, &updated_annotation)
         .expect("Failed to update stack annotation");
 
     assert_eq!(result.key, "new_key");
@@ -73,11 +89,17 @@ fn test_delete_stack_annotation() {
     let stack = fixture.create_test_stack("Test Stack".to_string(), None);
     let annotation = fixture.create_test_stack_annotation(stack.id, "test_key", "test_value");
 
-    let affected_rows = fixture.dal.stack_annotations().delete(annotation.id)
+    let affected_rows = fixture
+        .dal
+        .stack_annotations()
+        .delete(annotation.id)
         .expect("Failed to delete stack annotation");
     assert_eq!(affected_rows, 1);
 
-    let deleted_annotation = fixture.dal.stack_annotations().get(annotation.id)
+    let deleted_annotation = fixture
+        .dal
+        .stack_annotations()
+        .get(annotation.id)
         .expect("Failed to attempt retrieval of deleted annotation");
     assert!(deleted_annotation.is_none());
 }
@@ -89,11 +111,17 @@ fn test_delete_all_annotations_for_stack() {
     fixture.create_test_stack_annotation(stack.id, "key1", "value1");
     fixture.create_test_stack_annotation(stack.id, "key2", "value2");
 
-    let affected_rows = fixture.dal.stack_annotations().delete_all_for_stack(stack.id)
+    let affected_rows = fixture
+        .dal
+        .stack_annotations()
+        .delete_all_for_stack(stack.id)
         .expect("Failed to delete all stack annotations");
     assert_eq!(affected_rows, 2);
 
-    let remaining_annotations = fixture.dal.stack_annotations().list_for_stack(stack.id)
+    let remaining_annotations = fixture
+        .dal
+        .stack_annotations()
+        .list_for_stack(stack.id)
         .expect("Failed to list stack annotations after deletion");
     assert!(remaining_annotations.is_empty());
 }

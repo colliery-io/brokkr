@@ -71,8 +71,7 @@ impl<'a> AgentLabelsDAL<'a> {
     /// Returns a Result containing the number of affected rows (0 or 1) on success, or a diesel::result::Error on failure.
     pub fn delete(&self, label_id: Uuid) -> Result<usize, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
-        diesel::delete(agent_labels::table.filter(agent_labels::id.eq(label_id)))
-            .execute(conn)
+        diesel::delete(agent_labels::table.filter(agent_labels::id.eq(label_id))).execute(conn)
     }
 
     /// Deletes all labels for a specific agent.
@@ -99,7 +98,7 @@ impl<'a> AgentLabelsDAL<'a> {
     ///
     /// # Returns
     ///
-    /// Returns a Result containing a boolean (true if the label exists, false otherwise) on success, 
+    /// Returns a Result containing a boolean (true if the label exists, false otherwise) on success,
     /// or a diesel::result::Error on failure.
     pub fn label_exists(&self, agent_id: Uuid, label: &str) -> Result<bool, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");

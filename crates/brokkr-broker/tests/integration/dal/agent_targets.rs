@@ -1,5 +1,5 @@
-use brokkr_models::models::agent_targets::NewAgentTarget;
 use crate::fixtures::TestFixture;
+use brokkr_models::models::agent_targets::NewAgentTarget;
 
 #[test]
 fn test_create_agent_target() {
@@ -7,8 +7,13 @@ fn test_create_agent_target() {
     let agent = fixture.create_test_agent("Test Agent".to_string(), "Test Cluster".to_string());
     let stack = fixture.create_test_stack("Test Stack".to_string(), None);
 
-    let new_target = NewAgentTarget::new(agent.id, stack.id).expect("Failed to create NewAgentTarget");
-    let created_target = fixture.dal.agent_targets().create(&new_target).expect("Failed to create agent target");
+    let new_target =
+        NewAgentTarget::new(agent.id, stack.id).expect("Failed to create NewAgentTarget");
+    let created_target = fixture
+        .dal
+        .agent_targets()
+        .create(&new_target)
+        .expect("Failed to create agent target");
 
     assert_eq!(created_target.agent_id, agent.id);
     assert_eq!(created_target.stack_id, stack.id);
@@ -21,7 +26,12 @@ fn test_get_agent_target() {
     let stack = fixture.create_test_stack("Test Stack".to_string(), None);
     let target = fixture.create_test_agent_target(agent.id, stack.id);
 
-    let retrieved_target = fixture.dal.agent_targets().get(target.id).expect("Failed to get agent target").unwrap();
+    let retrieved_target = fixture
+        .dal
+        .agent_targets()
+        .get(target.id)
+        .expect("Failed to get agent target")
+        .unwrap();
     assert_eq!(retrieved_target.id, target.id);
     assert_eq!(retrieved_target.agent_id, agent.id);
     assert_eq!(retrieved_target.stack_id, stack.id);
@@ -39,7 +49,11 @@ fn test_list_agent_targets() {
     fixture.create_test_agent_target(agent1.id, stack2.id);
     fixture.create_test_agent_target(agent2.id, stack1.id);
 
-    let all_targets = fixture.dal.agent_targets().list().expect("Failed to list agent targets");
+    let all_targets = fixture
+        .dal
+        .agent_targets()
+        .list()
+        .expect("Failed to list agent targets");
     assert_eq!(all_targets.len(), 3);
 }
 
@@ -53,7 +67,11 @@ fn test_list_agent_targets_for_agent() {
     fixture.create_test_agent_target(agent.id, stack1.id);
     fixture.create_test_agent_target(agent.id, stack2.id);
 
-    let agent_targets = fixture.dal.agent_targets().list_for_agent(agent.id).expect("Failed to list agent targets for agent");
+    let agent_targets = fixture
+        .dal
+        .agent_targets()
+        .list_for_agent(agent.id)
+        .expect("Failed to list agent targets for agent");
     assert_eq!(agent_targets.len(), 2);
     assert!(agent_targets.iter().all(|t| t.agent_id == agent.id));
 }
@@ -68,7 +86,11 @@ fn test_list_agent_targets_for_stack() {
     fixture.create_test_agent_target(agent1.id, stack.id);
     fixture.create_test_agent_target(agent2.id, stack.id);
 
-    let stack_targets = fixture.dal.agent_targets().list_for_stack(stack.id).expect("Failed to list agent targets for stack");
+    let stack_targets = fixture
+        .dal
+        .agent_targets()
+        .list_for_stack(stack.id)
+        .expect("Failed to list agent targets for stack");
     assert_eq!(stack_targets.len(), 2);
     assert!(stack_targets.iter().all(|t| t.stack_id == stack.id));
 }
@@ -80,10 +102,18 @@ fn test_delete_agent_target() {
     let stack = fixture.create_test_stack("Test Stack".to_string(), None);
     let target = fixture.create_test_agent_target(agent.id, stack.id);
 
-    let affected_rows = fixture.dal.agent_targets().delete(target.id).expect("Failed to delete agent target");
+    let affected_rows = fixture
+        .dal
+        .agent_targets()
+        .delete(target.id)
+        .expect("Failed to delete agent target");
     assert_eq!(affected_rows, 1);
 
-    let deleted_target = fixture.dal.agent_targets().get(target.id).expect("Failed to attempt retrieval of deleted agent target");
+    let deleted_target = fixture
+        .dal
+        .agent_targets()
+        .get(target.id)
+        .expect("Failed to attempt retrieval of deleted agent target");
     assert!(deleted_target.is_none());
 }
 
@@ -97,10 +127,18 @@ fn test_delete_agent_targets_for_agent() {
     fixture.create_test_agent_target(agent.id, stack1.id);
     fixture.create_test_agent_target(agent.id, stack2.id);
 
-    let affected_rows = fixture.dal.agent_targets().delete_for_agent(agent.id).expect("Failed to delete agent targets for agent");
+    let affected_rows = fixture
+        .dal
+        .agent_targets()
+        .delete_for_agent(agent.id)
+        .expect("Failed to delete agent targets for agent");
     assert_eq!(affected_rows, 2);
 
-    let remaining_targets = fixture.dal.agent_targets().list_for_agent(agent.id).expect("Failed to list agent targets for agent");
+    let remaining_targets = fixture
+        .dal
+        .agent_targets()
+        .list_for_agent(agent.id)
+        .expect("Failed to list agent targets for agent");
     assert!(remaining_targets.is_empty());
 }
 
@@ -114,9 +152,17 @@ fn test_delete_agent_targets_for_stack() {
     fixture.create_test_agent_target(agent1.id, stack.id);
     fixture.create_test_agent_target(agent2.id, stack.id);
 
-    let affected_rows = fixture.dal.agent_targets().delete_for_stack(stack.id).expect("Failed to delete agent targets for stack");
+    let affected_rows = fixture
+        .dal
+        .agent_targets()
+        .delete_for_stack(stack.id)
+        .expect("Failed to delete agent targets for stack");
     assert_eq!(affected_rows, 2);
 
-    let remaining_targets = fixture.dal.agent_targets().list_for_stack(stack.id).expect("Failed to list agent targets for stack");
+    let remaining_targets = fixture
+        .dal
+        .agent_targets()
+        .list_for_stack(stack.id)
+        .expect("Failed to list agent targets for stack");
     assert!(remaining_targets.is_empty());
 }

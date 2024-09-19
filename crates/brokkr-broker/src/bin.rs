@@ -1,17 +1,17 @@
 use brokkr_broker::api;
 use brokkr_broker::dal::DAL;
 use brokkr_broker::db::create_shared_connection_pool;
+use brokkr_broker::utils;
 use brokkr_utils::config::Settings;
 use brokkr_utils::logging::prelude::*;
 use clap::{Parser, Subcommand};
-use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
+use diesel::deserialize::QueryableByName;
 use diesel::prelude::*;
+use diesel::result::Error as DieselError;
 use diesel::sql_query;
 use diesel::sql_types::BigInt;
-use diesel::deserialize::QueryableByName;
-use diesel::result::Error as DieselError;
+use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use tokio::signal;
-use brokkr_broker::utils;
 
 /// Embedded migrations for the database
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("../brokkr-models/migrations");
@@ -71,23 +71,28 @@ async fn serve(config: &Settings) -> Result<(), Box<dyn std::error::Error>> {
 
     // Run pending migrations
     info!("Running pending database migrations");
-    let mut conn = connection_pool.pool.get().expect("Failed to get DB connection");
-    conn.run_pending_migrations(MIGRATIONS).expect("Failed to run migrations");
+    let mut conn = connection_pool
+        .pool
+        .get()
+        .expect("Failed to get DB connection");
+    conn.run_pending_migrations(MIGRATIONS)
+        .expect("Failed to run migrations");
     info!("Database migrations completed successfully");
 
     // Check if this is the first time running the application
-    let is_first_run = conn.transaction(|conn| {
-        let result: Count = sql_query("SELECT COUNT(*) as count FROM app_initialization")
-            .get_result(conn)?;
-        if result.count == 0 {
-            // If it's the first run, insert a record into app_initialization
-            sql_query("INSERT INTO app_initialization DEFAULT VALUES")
-                .execute(conn)?;
-            Ok::<bool, DieselError>(true)
-        } else {
-            Ok::<bool, DieselError>(false)
-        }
-    }).expect("Failed to check initialization status");
+    let is_first_run = conn
+        .transaction(|conn| {
+            let result: Count =
+                sql_query("SELECT COUNT(*) as count FROM app_initialization").get_result(conn)?;
+            if result.count == 0 {
+                // If it's the first run, insert a record into app_initialization
+                sql_query("INSERT INTO app_initialization DEFAULT VALUES").execute(conn)?;
+                Ok::<bool, DieselError>(true)
+            } else {
+                Ok::<bool, DieselError>(false)
+            }
+        })
+        .expect("Failed to check initialization status");
 
     // Perform first-time setup if necessary
     if is_first_run {

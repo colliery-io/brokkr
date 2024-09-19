@@ -3,25 +3,25 @@
 //! It includes functionality to set up a test database, run migrations,
 //! and insert test data for various entities like stacks, agents, deployment objects,
 //! and agent events.
+use brokkr_broker::api;
 use brokkr_broker::dal::DAL;
 use brokkr_broker::db::create_shared_connection_pool;
-use brokkr_broker::api;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use dotenv::dotenv;
 
 use axum::Router;
-use std::env;
 use brokkr_models::models::{
+    agent_annotations::{AgentAnnotation, NewAgentAnnotation},
+    agent_events::{AgentEvent, NewAgentEvent},
+    agent_labels::{AgentLabel, NewAgentLabel},
+    agent_targets::{AgentTarget, NewAgentTarget},
+    agents::{Agent, NewAgent},
+    deployment_objects::{DeploymentObject, NewDeploymentObject},
+    stack_annotations::{NewStackAnnotation, StackAnnotation},
+    stack_labels::{NewStackLabel, StackLabel},
     stacks::{NewStack, Stack},
-    agents::{NewAgent,Agent},
-    deployment_objects::{NewDeploymentObject,DeploymentObject},
-    stack_labels::{NewStackLabel,StackLabel},
-    stack_annotations::{NewStackAnnotation,StackAnnotation},
-    agent_annotations::{NewAgentAnnotation,AgentAnnotation},
-    agent_labels::{NewAgentLabel, AgentLabel},
-    agent_targets::{NewAgentTarget,AgentTarget},
-    agent_events::{NewAgentEvent, AgentEvent}
 };
+use std::env;
 
 use uuid::Uuid;
 /// Embedded migrations for the test database.
@@ -81,7 +81,7 @@ impl TestFixture {
         // This runs the migrations within the transaction
         conn.run_pending_migrations(MIGRATIONS)
             .expect("Failed to run migrations");
-        
+
         let dal = DAL::new(connection_pool.pool.clone());
         TestFixture { dal }
     }
@@ -99,14 +99,12 @@ impl TestFixture {
     /// # Returns
     ///
     /// Returns the created Stack on success, or panics on failure.
-    pub fn create_test_stack(
-        &self,
-        name: String,
-        description: Option<String>
-    ) -> Stack {
-        let new_stack = NewStack::new(name, description)
-            .expect("Failed to create NewStack");
-        self.dal.stacks().create(&new_stack).expect("Failed to create stack")
+    pub fn create_test_stack(&self, name: String, description: Option<String>) -> Stack {
+        let new_stack = NewStack::new(name, description).expect("Failed to create NewStack");
+        self.dal
+            .stacks()
+            .create(&new_stack)
+            .expect("Failed to create stack")
     }
 
     /// Creates a new agent for testing purposes.
@@ -120,11 +118,12 @@ impl TestFixture {
     ///
     /// Returns the created Agent on success, or panics on failure.
     pub fn create_test_agent(&self, name: String, cluster_name: String) -> Agent {
-        let new_agent = NewAgent::new(name, cluster_name)
-            .expect("Failed to create NewAgent");
-        self.dal.agents().create(&new_agent).expect("Failed to create agent")
+        let new_agent = NewAgent::new(name, cluster_name).expect("Failed to create NewAgent");
+        self.dal
+            .agents()
+            .create(&new_agent)
+            .expect("Failed to create agent")
     }
-
 
     /// Creates a new deployment object for testing purposes.
     ///
@@ -137,10 +136,18 @@ impl TestFixture {
     /// # Returns
     ///
     /// Returns the created DeploymentObject on success, or panics on failure.
-    pub fn create_test_deployment_object(&self, stack_id: Uuid, yaml_content: String, is_deletion_marker: bool) -> DeploymentObject {
-        let new_deployment_object = NewDeploymentObject::new(stack_id, yaml_content, is_deletion_marker)
-            .expect("Failed to create NewDeploymentObject");
-        self.dal.deployment_objects().create(&new_deployment_object)
+    pub fn create_test_deployment_object(
+        &self,
+        stack_id: Uuid,
+        yaml_content: String,
+        is_deletion_marker: bool,
+    ) -> DeploymentObject {
+        let new_deployment_object =
+            NewDeploymentObject::new(stack_id, yaml_content, is_deletion_marker)
+                .expect("Failed to create NewDeploymentObject");
+        self.dal
+            .deployment_objects()
+            .create(&new_deployment_object)
             .expect("Failed to create deployment object")
     }
 
@@ -155,9 +162,12 @@ impl TestFixture {
     ///
     /// Returns the created StackLabel on success, or panics on failure.
     pub fn create_test_stack_label(&self, stack_id: Uuid, label: String) -> StackLabel {
-        let new_label = NewStackLabel::new(stack_id, label)
-            .expect("Failed to create NewStackLabel");
-        self.dal.stack_labels().create(&new_label).expect("Failed to create stack label")
+        let new_label =
+            NewStackLabel::new(stack_id, label).expect("Failed to create NewStackLabel");
+        self.dal
+            .stack_labels()
+            .create(&new_label)
+            .expect("Failed to create stack label")
     }
 
     /// Creates a new stack annotation for testing purposes.
@@ -171,15 +181,23 @@ impl TestFixture {
     /// # Returns
     ///
     /// Returns the created StackAnnotation on success, or panics on failure.
-    pub fn create_test_stack_annotation(&self, stack_id: Uuid, key: &str, value: &str) -> StackAnnotation {
+    pub fn create_test_stack_annotation(
+        &self,
+        stack_id: Uuid,
+        key: &str,
+        value: &str,
+    ) -> StackAnnotation {
         let new_annotation = NewStackAnnotation {
             stack_id,
             key: key.to_string(),
             value: value.to_string(),
         };
-        self.dal.stack_annotations().create(&new_annotation).expect("Failed to create stack annotation")
+        self.dal
+            .stack_annotations()
+            .create(&new_annotation)
+            .expect("Failed to create stack annotation")
     }
-    
+
     /// Creates a new agent annotation for testing purposes.
     ///
     /// # Arguments
@@ -191,12 +209,19 @@ impl TestFixture {
     /// # Returns
     ///
     /// Returns the created AgentAnnotation on success, or panics on failure.
-    pub fn create_test_agent_annotation(&self, agent_id: Uuid, key: String, value: String) -> AgentAnnotation {
+    pub fn create_test_agent_annotation(
+        &self,
+        agent_id: Uuid,
+        key: String,
+        value: String,
+    ) -> AgentAnnotation {
         let new_annotation = NewAgentAnnotation::new(agent_id, key, value)
             .expect("Failed to create NewAgentAnnotation");
-        self.dal.agent_annotations().create(&new_annotation).expect("Failed to create agent annotation")
+        self.dal
+            .agent_annotations()
+            .create(&new_annotation)
+            .expect("Failed to create agent annotation")
     }
-
 
     /// Creates a new agent target for testing purposes.
     ///
@@ -209,9 +234,12 @@ impl TestFixture {
     ///
     /// Returns the created AgentTarget on success, or panics on failure.
     pub fn create_test_agent_target(&self, agent_id: Uuid, stack_id: Uuid) -> AgentTarget {
-        let new_target = NewAgentTarget::new(agent_id, stack_id)
-            .expect("Failed to create NewAgentTarget");
-        self.dal.agent_targets().create(&new_target).expect("Failed to create agent target")
+        let new_target =
+            NewAgentTarget::new(agent_id, stack_id).expect("Failed to create NewAgentTarget");
+        self.dal
+            .agent_targets()
+            .create(&new_target)
+            .expect("Failed to create agent target")
     }
 
     /// Creates a new agent event for testing purposes.
@@ -242,7 +270,9 @@ impl TestFixture {
             status: status.to_string(),
             message: message.map(|m| m.to_string()),
         };
-        self.dal.agent_events().create(&new_event)
+        self.dal
+            .agent_events()
+            .create(&new_event)
             .expect("Failed to create agent event")
     }
 
@@ -257,21 +287,24 @@ impl TestFixture {
     ///
     /// Returns the created AgentLabel on success, or panics on failure.
     pub fn create_test_agent_label(&self, agent_id: Uuid, label: String) -> AgentLabel {
-        let new_label = NewAgentLabel::new(agent_id, label)
-            .expect("Failed to create NewAgentLabel");
-        self.dal.agent_labels().create(&new_label)
+        let new_label =
+            NewAgentLabel::new(agent_id, label).expect("Failed to create NewAgentLabel");
+        self.dal
+            .agent_labels()
+            .create(&new_label)
             .expect("Failed to create agent label")
     }
 
     fn reset_database(&self) {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         // Revert all migrations
-        conn.revert_all_migrations(MIGRATIONS).expect("Failed to revert migrations");
+        conn.revert_all_migrations(MIGRATIONS)
+            .expect("Failed to revert migrations");
 
         // Run all migrations forward
-        conn.run_pending_migrations(MIGRATIONS).expect("Failed to run migrations");
+        conn.run_pending_migrations(MIGRATIONS)
+            .expect("Failed to run migrations");
     }
-
 }
 
 impl Drop for TestFixture {
@@ -279,4 +312,3 @@ impl Drop for TestFixture {
         self.reset_database();
     }
 }
-

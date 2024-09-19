@@ -1,5 +1,5 @@
 use crate::dal::DAL;
-use brokkr_models::models::stack_labels::{StackLabel, NewStackLabel};
+use brokkr_models::models::stack_labels::{NewStackLabel, StackLabel};
 use brokkr_models::schema::stack_labels;
 use diesel::prelude::*;
 use uuid::Uuid;
@@ -71,8 +71,7 @@ impl<'a> StackLabelsDAL<'a> {
     /// Returns a Result containing the number of affected rows (0 or 1) on success, or a diesel::result::Error on failure.
     pub fn delete(&self, label_id: Uuid) -> Result<usize, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
-        diesel::delete(stack_labels::table.filter(stack_labels::id.eq(label_id)))
-            .execute(conn)
+        diesel::delete(stack_labels::table.filter(stack_labels::id.eq(label_id))).execute(conn)
     }
 
     /// Deletes all labels for a specific stack.
@@ -89,5 +88,4 @@ impl<'a> StackLabelsDAL<'a> {
         diesel::delete(stack_labels::table.filter(stack_labels::stack_id.eq(stack_id)))
             .execute(conn)
     }
-
 }

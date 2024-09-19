@@ -1,11 +1,13 @@
+use crate::dal::FilterType;
 use crate::dal::DAL;
-use brokkr_models::models::stacks::{Stack, NewStack};
-use brokkr_models::schema::{agent_labels, agent_annotations, agent_targets, stacks, stack_labels, stack_annotations};
+use brokkr_models::models::stacks::{NewStack, Stack};
+use brokkr_models::schema::{
+    agent_annotations, agent_labels, agent_targets, stack_annotations, stack_labels, stacks,
+};
 use chrono::Utc;
 use diesel::prelude::*;
-use uuid::Uuid;
-use crate::dal::FilterType;
 use std::collections::HashSet;
+use uuid::Uuid;
 
 /// Data Access Layer for Stack operations.
 pub struct StacksDAL<'a> {
@@ -56,7 +58,10 @@ impl<'a> StacksDAL<'a> {
     /// # Returns
     ///
     /// Returns a Result containing an Option<Stack> if found (including deleted stacks), or a diesel::result::Error on failure.
-    pub fn get_including_deleted(&self, stack_uuid: Uuid) -> Result<Option<Stack>, diesel::result::Error> {
+    pub fn get_including_deleted(
+        &self,
+        stack_uuid: Uuid,
+    ) -> Result<Option<Stack>, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         stacks::table
             .filter(stacks::id.eq(stack_uuid))
@@ -96,7 +101,11 @@ impl<'a> StacksDAL<'a> {
     /// # Returns
     ///
     /// Returns a Result containing the updated Stack on success, or a diesel::result::Error on failure.
-    pub fn update(&self, stack_uuid: Uuid, updated_stack: &Stack) -> Result<Stack, diesel::result::Error> {
+    pub fn update(
+        &self,
+        stack_uuid: Uuid,
+        updated_stack: &Stack,
+    ) -> Result<Stack, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         diesel::update(stacks::table.filter(stacks::id.eq(stack_uuid)))
             .set(updated_stack)
@@ -130,8 +139,7 @@ impl<'a> StacksDAL<'a> {
     /// Returns a Result containing the number of affected rows (0 or 1) on success, or a diesel::result::Error on failure.
     pub fn hard_delete(&self, stack_uuid: Uuid) -> Result<usize, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
-        diesel::delete(stacks::table.filter(stacks::id.eq(stack_uuid)))
-            .execute(conn)
+        diesel::delete(stacks::table.filter(stacks::id.eq(stack_uuid))).execute(conn)
     }
 
     /// Filters stacks by labels.
@@ -144,9 +152,13 @@ impl<'a> StacksDAL<'a> {
     /// # Returns
     ///
     /// Returns a Result containing a Vec of matching Stacks on success, or a diesel::result::Error on failure.
-    pub fn filter_by_labels(&self, labels: Vec<String>, filter_type: FilterType) -> Result<Vec<Stack>, diesel::result::Error> {
+    pub fn filter_by_labels(
+        &self,
+        labels: Vec<String>,
+        filter_type: FilterType,
+    ) -> Result<Vec<Stack>, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
-        
+
         match filter_type {
             FilterType::And => {
                 let mut query = stacks::table
@@ -164,16 +176,14 @@ impl<'a> StacksDAL<'a> {
                     .select(stacks::all_columns)
                     .distinct()
                     .load::<Stack>(conn)
-            },
-            FilterType::Or => {
-                stacks::table
-                    .inner_join(stack_labels::table)
-                    .filter(stacks::deleted_at.is_null())
-                    .filter(stack_labels::label.eq_any(labels))
-                    .select(stacks::all_columns)
-                    .distinct()
-                    .load::<Stack>(conn)
             }
+            FilterType::Or => stacks::table
+                .inner_join(stack_labels::table)
+                .filter(stacks::deleted_at.is_null())
+                .filter(stack_labels::label.eq_any(labels))
+                .select(stacks::all_columns)
+                .distinct()
+                .load::<Stack>(conn),
         }
     }
 
@@ -187,9 +197,13 @@ impl<'a> StacksDAL<'a> {
     /// # Returns
     ///
     /// Returns a Result containing a Vec of matching Stacks on success, or a diesel::result::Error on failure.
-    pub fn filter_by_annotations(&self, annotations: Vec<(String, String)>, filter_type: FilterType) -> Result<Vec<Stack>, diesel::result::Error> {
+    pub fn filter_by_annotations(
+        &self,
+        annotations: Vec<(String, String)>,
+        filter_type: FilterType,
+    ) -> Result<Vec<Stack>, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
-        
+
         match filter_type {
             FilterType::Or => {
                 let mut all_matching_stacks = HashSet::new();
@@ -207,7 +221,7 @@ impl<'a> StacksDAL<'a> {
                 }
 
                 Ok(all_matching_stacks.into_iter().collect())
-            },
+            }
             FilterType::And => {
                 if annotations.is_empty() {
                     return Ok(Vec::new());
@@ -227,7 +241,9 @@ impl<'a> StacksDAL<'a> {
                         .collect();
 
                     all_matching_stacks = match all_matching_stacks {
-                        Some(stacks) => Some(stacks.intersection(&matching_stacks).cloned().collect()),
+                        Some(stacks) => {
+                            Some(stacks.intersection(&matching_stacks).cloned().collect())
+                        }
                         None => Some(matching_stacks),
                     };
 
@@ -238,7 +254,10 @@ impl<'a> StacksDAL<'a> {
                     }
                 }
 
-                Ok(all_matching_stacks.map_or_else(Vec::new, |stacks| stacks.into_iter().collect()))
+                Ok(
+                    all_matching_stacks
+                        .map_or_else(Vec::new, |stacks| stacks.into_iter().collect()),
+                )
             }
         }
     }
@@ -257,7 +276,10 @@ impl<'a> StacksDAL<'a> {
     ///
     /// This method uses OR logic when matching labels and annotations, meaning a stack will be included
     /// if it matches any of the agent's labels or annotations.
-    pub fn get_associated_stacks(&self, agent_id: Uuid) -> Result<Vec<Stack>, diesel::result::Error> {
+    pub fn get_associated_stacks(
+        &self,
+        agent_id: Uuid,
+    ) -> Result<Vec<Stack>, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
 
         // Get agent labels

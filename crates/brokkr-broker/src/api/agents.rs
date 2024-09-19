@@ -50,7 +50,7 @@ pub fn configure_routes() -> Router<AppState> {
         .route("/agents/:uuid/heartbeat", put(update_heartbeat))
         .route("/agents/:uuid/status", put(update_status))
         .route("/agents/:uuid/generate_api_key", post(generate_api_key))
-        // .route("/agents/:uuid/undeployed", get(get_undeployed_objects))
+    // .route("/agents/:uuid/undeployed", get(get_undeployed_objects))
 }
 
 /// Handler for creating a new agent.
@@ -229,7 +229,7 @@ async fn generate_api_key(
         .map_err(|_| StatusCode::NOT_FOUND)?;
 
     let prefix = format!("brokkr+{}+{}", agent.name, agent.cluster_name);
-    
+
     let controller = PrefixedApiKeyController::configure()
         .prefix(prefix.to_owned())
         .seam_defaults()
@@ -256,7 +256,6 @@ async fn generate_api_key(
         "api_key": pak.to_string()
     })))
 }
-
 
 // async fn get_undeployed_objects(
 //     State(state): State<AppState>,

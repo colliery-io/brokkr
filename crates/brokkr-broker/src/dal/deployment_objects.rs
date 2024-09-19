@@ -1,8 +1,8 @@
 use crate::dal::DAL;
-use brokkr_models::models::deployment_objects::{DeploymentObject, NewDeploymentObject};
 use brokkr_models::models::agent_targets::AgentTarget;
-use brokkr_models::schema::deployment_objects;
+use brokkr_models::models::deployment_objects::{DeploymentObject, NewDeploymentObject};
 use brokkr_models::schema::agent_targets;
+use brokkr_models::schema::deployment_objects;
 use chrono::Utc;
 use diesel::prelude::*;
 use uuid::Uuid;
@@ -23,7 +23,10 @@ impl<'a> DeploymentObjectsDAL<'a> {
     /// # Returns
     ///
     /// Returns a Result containing the created DeploymentObject on success, or a diesel::result::Error on failure.
-    pub fn create(&self, new_deployment_object: &NewDeploymentObject) -> Result<DeploymentObject, diesel::result::Error> {
+    pub fn create(
+        &self,
+        new_deployment_object: &NewDeploymentObject,
+    ) -> Result<DeploymentObject, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         diesel::insert_into(deployment_objects::table)
             .values(new_deployment_object)
@@ -39,7 +42,10 @@ impl<'a> DeploymentObjectsDAL<'a> {
     /// # Returns
     ///
     /// Returns a Result containing an Option<DeploymentObject> if found (and not deleted), or a diesel::result::Error on failure.
-    pub fn get(&self, deployment_object_uuid: Uuid) -> Result<Option<DeploymentObject>, diesel::result::Error> {
+    pub fn get(
+        &self,
+        deployment_object_uuid: Uuid,
+    ) -> Result<Option<DeploymentObject>, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         deployment_objects::table
             .filter(deployment_objects::id.eq(deployment_object_uuid))
@@ -57,7 +63,10 @@ impl<'a> DeploymentObjectsDAL<'a> {
     /// # Returns
     ///
     /// Returns a Result containing an Option<DeploymentObject> if found (including deleted objects), or a diesel::result::Error on failure.
-    pub fn get_including_deleted(&self, deployment_object_uuid: Uuid) -> Result<Option<DeploymentObject>, diesel::result::Error> {
+    pub fn get_including_deleted(
+        &self,
+        deployment_object_uuid: Uuid,
+    ) -> Result<Option<DeploymentObject>, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         deployment_objects::table
             .filter(deployment_objects::id.eq(deployment_object_uuid))
@@ -74,7 +83,10 @@ impl<'a> DeploymentObjectsDAL<'a> {
     /// # Returns
     ///
     /// Returns a Result containing a Vec of all non-deleted DeploymentObjects for the specified stack on success, or a diesel::result::Error on failure.
-    pub fn list_for_stack(&self, stack_id: Uuid) -> Result<Vec<DeploymentObject>, diesel::result::Error> {
+    pub fn list_for_stack(
+        &self,
+        stack_id: Uuid,
+    ) -> Result<Vec<DeploymentObject>, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         deployment_objects::table
             .filter(deployment_objects::stack_id.eq(stack_id))
@@ -92,7 +104,10 @@ impl<'a> DeploymentObjectsDAL<'a> {
     /// # Returns
     ///
     /// Returns a Result containing a Vec of all DeploymentObjects for the specified stack (including deleted ones) on success, or a diesel::result::Error on failure.
-    pub fn list_all_for_stack(&self, stack_id: Uuid) -> Result<Vec<DeploymentObject>, diesel::result::Error> {
+    pub fn list_all_for_stack(
+        &self,
+        stack_id: Uuid,
+    ) -> Result<Vec<DeploymentObject>, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         deployment_objects::table
             .filter(deployment_objects::stack_id.eq(stack_id))
@@ -109,11 +124,16 @@ impl<'a> DeploymentObjectsDAL<'a> {
     /// # Returns
     ///
     /// Returns a Result containing the number of affected rows (0 or 1) on success, or a diesel::result::Error on failure.
-    pub fn soft_delete(&self, deployment_object_uuid: Uuid) -> Result<usize, diesel::result::Error> {
+    pub fn soft_delete(
+        &self,
+        deployment_object_uuid: Uuid,
+    ) -> Result<usize, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
-        diesel::update(deployment_objects::table.filter(deployment_objects::id.eq(deployment_object_uuid)))
-            .set(deployment_objects::deleted_at.eq(Utc::now()))
-            .execute(conn)
+        diesel::update(
+            deployment_objects::table.filter(deployment_objects::id.eq(deployment_object_uuid)),
+        )
+        .set(deployment_objects::deleted_at.eq(Utc::now()))
+        .execute(conn)
     }
 
     /// Retrieves the latest non-deleted deployment object for a specific stack.
@@ -125,7 +145,10 @@ impl<'a> DeploymentObjectsDAL<'a> {
     /// # Returns
     ///
     /// Returns a Result containing an Option<DeploymentObject> if found, or a diesel::result::Error on failure.
-    pub fn get_latest_for_stack(&self, stack_id: Uuid) -> Result<Option<DeploymentObject>, diesel::result::Error> {
+    pub fn get_latest_for_stack(
+        &self,
+        stack_id: Uuid,
+    ) -> Result<Option<DeploymentObject>, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         deployment_objects::table
             .filter(deployment_objects::stack_id.eq(stack_id))
@@ -145,7 +168,10 @@ impl<'a> DeploymentObjectsDAL<'a> {
     ///
     /// Returns a Result containing a Vec of DeploymentObjects that are undeployed for the agent,
     /// sorted by sequence_id in descending order (most recent first), or a diesel::result::Error on failure.
-    pub fn get_undeployed_objects_for_agent(&self, agent_id: Uuid) -> Result<Vec<DeploymentObject>, diesel::result::Error> {
+    pub fn get_undeployed_objects_for_agent(
+        &self,
+        agent_id: Uuid,
+    ) -> Result<Vec<DeploymentObject>, diesel::result::Error> {
         // Step 1: Get the list of stacks the agent is responsible for
         let responsible_stacks = self.dal.stacks().get_associated_stacks(agent_id)?;
 
@@ -157,12 +183,16 @@ impl<'a> DeploymentObjectsDAL<'a> {
         }
 
         // Step 3: Filter out objects that have been deployed (have corresponding agent events)
-        let deployed_object_ids = self.dal.agent_events().get_events(None, Some(agent_id))?
+        let deployed_object_ids = self
+            .dal
+            .agent_events()
+            .get_events(None, Some(agent_id))?
             .into_iter()
             .map(|event| event.deployment_object_id)
             .collect::<Vec<Uuid>>();
 
-        let undeployed_objects = all_objects.into_iter()
+        let undeployed_objects = all_objects
+            .into_iter()
             .filter(|obj| !deployed_object_ids.contains(&obj.id))
             .collect::<Vec<DeploymentObject>>();
 
@@ -183,7 +213,10 @@ impl<'a> DeploymentObjectsDAL<'a> {
     ///
     /// Returns a Result containing a Vec of DeploymentObjects that match the checksum,
     /// or a diesel::result::Error on failure.
-    pub fn search(&self, yaml_checksum: &str) -> Result<Vec<DeploymentObject>, diesel::result::Error> {
+    pub fn search(
+        &self,
+        yaml_checksum: &str,
+    ) -> Result<Vec<DeploymentObject>, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         deployment_objects::table
             .filter(deployment_objects::yaml_checksum.eq(yaml_checksum))
@@ -192,7 +225,10 @@ impl<'a> DeploymentObjectsDAL<'a> {
             .load::<DeploymentObject>(conn)
     }
 
-    pub fn get_applicable_deployment_objects(&self, agent_id: Uuid) -> Result<Vec<DeploymentObject>, diesel::result::Error> {
+    pub fn get_applicable_deployment_objects(
+        &self,
+        agent_id: Uuid,
+    ) -> Result<Vec<DeploymentObject>, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
 
         let agent_targets = agent_targets::table
@@ -200,7 +236,10 @@ impl<'a> DeploymentObjectsDAL<'a> {
             .load::<AgentTarget>(conn)?;
 
         let applicable_objects = deployment_objects::table
-            .filter(deployment_objects::stack_id.eq_any(agent_targets.iter().map(|target| target.stack_id)))
+            .filter(
+                deployment_objects::stack_id
+                    .eq_any(agent_targets.iter().map(|target| target.stack_id)),
+            )
             .filter(deployment_objects::deleted_at.is_null())
             .order(deployment_objects::sequence_id.desc())
             .load::<DeploymentObject>(conn)?;

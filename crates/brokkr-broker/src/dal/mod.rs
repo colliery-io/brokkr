@@ -76,7 +76,6 @@ use stack_labels::StackLabelsDAL;
 pub mod deployment_objects;
 use deployment_objects::DeploymentObjectsDAL;
 
-
 /// The main Data Access Layer struct.
 ///
 /// This struct serves as the central point for database operations,
@@ -116,7 +115,7 @@ impl DAL {
     /// # Returns
     ///
     /// An instance of AgentAnontationsDAL.
-    pub fn agent_annotations(&self) -> AgentAnnotationsDAL{
+    pub fn agent_annotations(&self) -> AgentAnnotationsDAL {
         AgentAnnotationsDAL { dal: self }
     }
 
@@ -161,11 +160,9 @@ impl DAL {
     /// # Returns
     ///
     /// An instance of StackAnontationsDAL.
-    pub fn stack_annotations(&self) -> StackAnnotationsDAL{
+    pub fn stack_annotations(&self) -> StackAnnotationsDAL {
         StackAnnotationsDAL { dal: self }
     }
-
-    
 
     /// Provides access to the Stacks Data Access Layer.
     ///
