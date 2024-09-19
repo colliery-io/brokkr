@@ -19,17 +19,7 @@ BEFORE UPDATE ON generators
 FOR EACH ROW
 EXECUTE FUNCTION update_timestamp();
 
--- Add generator_id to stacks table
-ALTER TABLE stacks
-ADD COLUMN generator_id UUID NOT NULL REFERENCES generators(id);
 
-CREATE INDEX idx_stacks_generator_id ON stacks(generator_id);
-
--- Add generator_id to deployment_objects table
-ALTER TABLE deployment_objects
-ADD COLUMN generator_id UUID NOT NULL REFERENCES generators(id);
-
-CREATE INDEX idx_deployment_objects_generator_id ON deployment_objects(generator_id);
 
 -- Function for cascading soft delete of generators
 CREATE OR REPLACE FUNCTION cascade_soft_delete_generators()

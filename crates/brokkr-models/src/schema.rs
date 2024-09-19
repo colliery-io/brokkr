@@ -89,7 +89,6 @@ diesel::table! {
         yaml_checksum -> Text,
         submitted_at -> Timestamptz,
         is_deletion_marker -> Bool,
-        generator_id -> Uuid,
     }
 }
 
@@ -147,7 +146,6 @@ diesel::joinable!(agent_events -> deployment_objects (deployment_object_id));
 diesel::joinable!(agent_labels -> agents (agent_id));
 diesel::joinable!(agent_targets -> agents (agent_id));
 diesel::joinable!(agent_targets -> stacks (stack_id));
-diesel::joinable!(deployment_objects -> generators (generator_id));
 diesel::joinable!(deployment_objects -> stacks (stack_id));
 diesel::joinable!(stack_annotations -> stacks (stack_id));
 diesel::joinable!(stack_labels -> stacks (stack_id));

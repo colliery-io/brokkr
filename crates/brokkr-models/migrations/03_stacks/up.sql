@@ -6,12 +6,16 @@ CREATE TABLE stacks (
     deleted_at TIMESTAMP WITH TIME ZONE,
     name VARCHAR(255) NOT NULL,
     description TEXT,
+    generator_id UUID NOT NULL REFERENCES generators(id),
     CONSTRAINT unique_stack_name UNIQUE (name)
 );
+
+
 
 -- Existing indexes (no changes)
 CREATE INDEX idx_stack_id ON stacks(id);
 CREATE INDEX idx_stack_name ON stacks (name);
+CREATE INDEX idx_stacks_generator_id ON stacks(generator_id);
 
 -- Existing trigger (no changes)
 CREATE TRIGGER update_stack_timestamp

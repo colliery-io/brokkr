@@ -33,31 +33,37 @@ def schema():
 TEST_SQL_SCRIPT = """
 -- Data Model Test Script
 
--- Stage 1: Insert sample data into the stacks table
-INSERT INTO stacks (name, description)
+-- Stage 1: Insert sample data into the generators table
+INSERT INTO generators (name, description, pak_hash)
 VALUES 
-('Stack1', 'First test stack'),
-('Stack2', 'Second test stack');
+('Generator1', 'First test generator', 'gen_hash1'),
+('Generator2', 'Second test generator', 'gen_hash2');
 
--- Stage 2: Insert sample data into the agents table
+-- Stage 2: Insert sample data into the stacks table
+INSERT INTO stacks (name, description, generator_id)
+VALUES 
+('Stack1', 'First test stack', (SELECT id FROM generators WHERE name = 'Generator1')),
+('Stack2', 'Second test stack', (SELECT id FROM generators WHERE name = 'Generator2'));
+
+-- Stage 3: Insert sample data into the agents table
 INSERT INTO agents (name, cluster_name, status, pak_hash)
 VALUES 
 ('Agent1', 'Cluster1', 'ACTIVE', 'hash1'),
 ('Agent2', 'Cluster2', 'INACTIVE', 'hash2');
 
--- Stage 3: Create deployment objects for the stacks
-INSERT INTO deployment_objects (stack_id, yaml_content, yaml_checksum)
+-- Stage 4: Create deployment objects for the stacks
+INSERT INTO deployment_objects (stack_id, yaml_content, yaml_checksum, submitted_at, is_deletion_marker)
 VALUES 
-((SELECT id FROM stacks WHERE name = 'Stack1'), 'yaml: content1', 'checksum1'),
-((SELECT id FROM stacks WHERE name = 'Stack2'), 'yaml: content2', 'checksum2');
+((SELECT id FROM stacks WHERE name = 'Stack1'), 'yaml: content1', 'checksum1', CURRENT_TIMESTAMP, FALSE),
+((SELECT id FROM stacks WHERE name = 'Stack2'), 'yaml: content2', 'checksum2', CURRENT_TIMESTAMP, FALSE);
 
--- Stage 4: Create agent_targets to associate agents with stacks
+-- Stage 5: Create agent_targets to associate agents with stacks
 INSERT INTO agent_targets (agent_id, stack_id)
 VALUES 
 ((SELECT id FROM agents WHERE name = 'Agent1'), (SELECT id FROM stacks WHERE name = 'Stack1')),
 ((SELECT id FROM agents WHERE name = 'Agent2'), (SELECT id FROM stacks WHERE name = 'Stack2'));
 
--- Stage 5: Add labels and annotations to stacks
+-- Stage 6: Add labels and annotations to stacks
 INSERT INTO stack_labels (stack_id, label)
 VALUES 
 ((SELECT id FROM stacks WHERE name = 'Stack1'), 'label1'),
@@ -68,7 +74,7 @@ VALUES
 ((SELECT id FROM stacks WHERE name = 'Stack1'), 'key1', 'value1'),
 ((SELECT id FROM stacks WHERE name = 'Stack2'), 'key2', 'value2');
 
--- Stage 6: Add labels and annotations to agents
+-- Stage 7: Add labels and annotations to agents
 INSERT INTO agent_labels (agent_id, label)
 VALUES 
 ((SELECT id FROM agents WHERE name = 'Agent1'), 'agent_label1'),
@@ -79,23 +85,23 @@ VALUES
 ((SELECT id FROM agents WHERE name = 'Agent1'), 'agent_key1', 'agent_value1'),
 ((SELECT id FROM agents WHERE name = 'Agent2'), 'agent_key2', 'agent_value2');
 
--- Stage 7: Create agent events
+-- Stage 8: Create agent events
 INSERT INTO agent_events (agent_id, deployment_object_id, event_type, status, message)
 VALUES 
 ((SELECT id FROM agents WHERE name = 'Agent1'), 
- (SELECT id FROM deployment_objects WHERE stack_id = (SELECT id FROM stacks WHERE name = 'Stack1')),
+ (SELECT id FROM deployment_objects WHERE stack_id = (SELECT id FROM stacks WHERE name = 'Stack1') LIMIT 1),
  'DEPLOYMENT', 'SUCCESS', 'Deployment successful'),
 ((SELECT id FROM agents WHERE name = 'Agent2'), 
- (SELECT id FROM deployment_objects WHERE stack_id = (SELECT id FROM stacks WHERE name = 'Stack2')),
+ (SELECT id FROM deployment_objects WHERE stack_id = (SELECT id FROM stacks WHERE name = 'Stack2') LIMIT 1),
  'DEPLOYMENT', 'FAILURE', 'Deployment failed');
 
--- Stage 8: Test soft deletion of a stack
+-- Stage 9: Test soft deletion of a stack
 UPDATE stacks SET deleted_at = CURRENT_TIMESTAMP WHERE name = 'Stack1';
 
--- Stage 9: Test hard deletion of an agent
+-- Stage 10: Test hard deletion of an agent
 DELETE FROM agents WHERE name = 'Agent2';
 
--- Stage 10: Verify data integrity and cascading operations
+-- Stage 11: Verify data integrity and cascading operations
 -- Check if deployment objects are soft-deleted when stack is soft-deleted
 SELECT * FROM deployment_objects WHERE stack_id = (SELECT id FROM stacks WHERE name = 'Stack1');
 
@@ -109,7 +115,7 @@ SELECT * FROM agent_targets WHERE agent_id = (SELECT id FROM agents WHERE name =
 SELECT * FROM agent_labels WHERE agent_id = (SELECT id FROM agents WHERE name = 'Agent2');
 SELECT * FROM agent_annotations WHERE agent_id = (SELECT id FROM agents WHERE name = 'Agent2');
 
--- Stage 11: Test prevention of deployment object modifications
+-- Stage 12: Test prevention of deployment object modifications
 DO $$
 DECLARE
     error_message TEXT;
@@ -129,13 +135,13 @@ EXCEPTION
         END IF;
 END $$;
 
--- Stage 12: Verify unique constraints
+-- Stage 13: Verify unique constraints
 -- Test unique stack name constraint
 DO $$
 DECLARE
     error_message TEXT;
 BEGIN
-    INSERT INTO stacks (name, description) VALUES ('Stack2', 'Duplicate stack name');
+    INSERT INTO stacks (name, description, generator_id) VALUES ('Stack2', 'Duplicate stack name', (SELECT id FROM generators WHERE name = 'Generator2'));
 
     RAISE EXCEPTION 'Test failed: Duplicate stack name was allowed';
 EXCEPTION
@@ -167,11 +173,12 @@ EXCEPTION
         END IF;
 END $$;
 
--- Stage 13: Basic queries to test indexes
+-- Stage 14: Basic queries to test indexes
 SELECT * FROM stacks WHERE name = 'Stack1';
 SELECT * FROM agents WHERE cluster_name = 'Cluster1';
 SELECT * FROM deployment_objects WHERE yaml_checksum = 'checksum1';
 SELECT * FROM agent_events WHERE event_type = 'DEPLOYMENT';
+SELECT * FROM generators WHERE name = 'Generator1';
 """
 
 
