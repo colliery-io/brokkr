@@ -21,6 +21,7 @@ use brokkr_models::models::{
     stack_labels::{NewStackLabel, StackLabel},
     stacks::{NewStack, Stack},
 };
+use brokkr_utils::Settings;
 use std::env;
 
 use uuid::Uuid;
@@ -32,6 +33,7 @@ pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("../brokkr-models/m
 pub struct TestFixture {
     /// The Data Access Layer (DAL) instance for database operations.
     pub dal: DAL,
+    pub settings: Settings,
 }
 
 impl Default for TestFixture {
@@ -48,7 +50,7 @@ impl TestFixture {
     /// Returns a configured Axum Router.
     #[allow(dead_code)]
     pub fn create_test_router(&self) -> Router {
-        api::configure_api_routes(self.dal.clone())
+        api::configure_api_routes()
     }
 
     /// Creates a new TestFixture instance.
@@ -83,7 +85,8 @@ impl TestFixture {
             .expect("Failed to run migrations");
 
         let dal = DAL::new(connection_pool.pool.clone());
-        TestFixture { dal }
+        let settings = Settings::new(None).expect("Failed to load settings");
+        TestFixture { dal, settings }
     }
 
     /// Creates a new stack for testing purposes.

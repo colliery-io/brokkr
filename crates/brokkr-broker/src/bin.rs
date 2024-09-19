@@ -12,6 +12,8 @@ use diesel::sql_query;
 use diesel::sql_types::BigInt;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use tokio::signal;
+use std::sync::Arc;
+use brokkr_broker::AppState;
 
 /// Embedded migrations for the database
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("../brokkr-models/migrations");
@@ -39,6 +41,7 @@ enum Commands {
     /// Rotate the admin key
     RotateAdmin,
 }
+
 
 /// Main function to run the Brokkr Broker application
 #[tokio::main]
@@ -106,9 +109,14 @@ async fn serve(config: &Settings) -> Result<(), Box<dyn std::error::Error>> {
     info!("Initializing Data Access Layer");
     let dal = DAL::new(connection_pool.pool.clone());
 
+    // Create application state
+    let app_state = Arc::new(AppState {
+        config: config.clone(),
+    });
+
     // Configure API routes
     info!("Configuring API routes");
-    let app = api::configure_api_routes(dal);
+    let app = api::configure_api_routes();
 
     // Set up the server address
     let addr = "0.0.0.0:3000";

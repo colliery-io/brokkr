@@ -36,10 +36,7 @@ pub fn first_startup(
     upsert_admin(config, conn)
 }
 
-fn upsert_admin(
-    config: &Settings,
-    conn: &mut PgConnection,
-) -> Result<(), Box<dyn std::error::Error>> {
+fn create_pak(config: &Settings) -> Result<(String, String), Box<dyn std::error::Error>> {
     // Configure PAK controller
     let mut builder = PrefixedApiKeyController::configure()
         .prefix(config.pak.prefix.clone().unwrap())
@@ -59,7 +56,16 @@ fn upsert_admin(
     let controller = builder.finalize().expect("failed to create pak controller");
 
     // Generate PAK and hash
-    let (pak, hash) = controller.try_generate_key_and_hash()?;
+    controller.try_generate_key_and_hash()
+        .map(|(pak, hash)| (pak.to_string(), hash))
+        .map_err(|e| e.into())
+}
+
+fn upsert_admin(
+    config: &Settings,
+    conn: &mut PgConnection,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let (pak, hash) = create_pak(config)?;
 
     // Update the existing admin role with the new PAK hash, or insert if it doesn't exist
     let existing_admin_key = admin_role::table

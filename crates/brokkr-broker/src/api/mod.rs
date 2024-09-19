@@ -5,6 +5,9 @@
 
 pub mod v1;
 use crate::dal::DAL;
+use crate::AppState;
+use brokkr_utils::Settings;
+use std::sync::Arc;
 
 use axum::{response::IntoResponse, routing::get, Router};
 
@@ -23,11 +26,9 @@ use hyper::StatusCode;
 // ///
 // /// Returns a configured `Router` instance that includes all API routes and middleware.
 
-pub fn configure_api_routes(dal: DAL) -> Router {
+pub fn configure_api_routes() -> Router {
     Router::new()
-        .merge(v1::configure_routes())
-        .route("/healthz", get(healthz))
-        .with_state(dal)
+        .route("/healthz", get(healthz))    
 }
 
 /// Health check endpoint handler
@@ -38,6 +39,6 @@ pub fn configure_api_routes(dal: DAL) -> Router {
 /// # Returns
 ///
 /// Returns a 200 OK status code with "OK" in the body.
-async fn healthz() -> impl IntoResponse {
+async fn healthz( ) -> impl IntoResponse {
     (StatusCode::OK, "OK")
 }
