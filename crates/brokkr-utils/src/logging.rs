@@ -240,6 +240,7 @@ mod tests {
     ///
     /// This test initializes the logger at the debug level and calls each log macro.
     /// It doesn't verify the output, only that the calls don't cause errors.
+    #[allow(clippy::assertions_on_constants)]
     fn test_log_macros() {
         init("debug").expect("Failed to initialize logger");
 
@@ -247,7 +248,7 @@ mod tests {
         info!("This is an info message");
         warn!("This is a warning message");
         error!("This is an error message");
-        #[allow(clippy::assertions_on_constants)]
+        
         assert!(true);
     }
 
