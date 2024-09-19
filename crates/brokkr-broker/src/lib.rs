@@ -14,3 +14,4 @@
 pub mod api;
 pub mod dal;
 pub mod db;
+pub mod utils;

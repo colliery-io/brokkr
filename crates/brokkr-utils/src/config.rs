@@ -35,6 +35,8 @@ pub struct Settings {
     pub database: Database,
     /// Logging configuration
     pub log: Log,
+    /// PAK configuration
+    pub pak: PAK,
 }
 
 /// Represents the database configuration
@@ -50,6 +52,39 @@ pub struct Database {
 pub struct Log {
     /// Log level (e.g., "info", "debug", "warn", "error")
     pub level: String,
+}
+
+/// Represents the PAK configuration
+#[derive(Debug, Deserialize, Clone)]
+pub struct PAK {
+    /// PAK prefix
+    pub prefix: Option<String>,
+    /// Digest algorithm for PAK
+    pub digest: Option<String>,
+    /// RNG type for PAK
+    pub rng: Option<String>,
+    /// Short token length for PAK
+    pub short_token_length: Option<usize>,
+    /// Short token length as a string
+    pub short_token_length_str: Option<String>,
+    /// Prefix for short tokens
+    pub short_token_prefix: Option<String>,
+    /// Long token length for PAK
+    pub long_token_length: Option<usize>,
+    /// Long token length as a string
+    pub long_token_length_str: Option<String>,
+}
+
+impl PAK {
+    /// Convert short token length to string
+    pub fn short_length_as_str(&mut self) {
+        self.short_token_length_str = self.short_token_length.map(|v| v.to_string());
+    }
+
+    /// Convert long token length to string
+    pub fn long_length_as_str(&mut self) {
+        self.long_token_length_str = self.long_token_length.map(|v| v.to_string());
+    }
 }
 
 impl Settings {

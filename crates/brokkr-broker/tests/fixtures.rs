@@ -6,8 +6,6 @@
 use brokkr_broker::dal::DAL;
 use brokkr_broker::db::create_shared_connection_pool;
 use brokkr_broker::api;
-use diesel::connection::Connection;
-use diesel::RunQueryDsl;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use dotenv::dotenv;
 

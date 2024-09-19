@@ -299,3 +299,37 @@ fn test_get_agent_details() {
     assert!(targets.is_empty());
     assert!(annotations.is_empty());
 }
+
+
+
+#[test]
+fn test_record_heartbeat() {
+    let fixture = TestFixture::new();
+    
+    // Create an agent
+    let agent = fixture.create_test_agent("Heartbeat Test Agent".to_string(), "Test Cluster".to_string());
+    
+    // Record a heartbeat
+    fixture.dal.agents().record_heartbeat(agent.id)
+        .expect("Failed to record heartbeat");
+    
+    // Retrieve the agent and check the last_heartbeat
+    let updated_agent = fixture.dal.agents().get(agent.id)
+        .expect("Failed to get agent")
+        .expect("Agent not found");
+    
+    assert!(updated_agent.last_heartbeat.is_some(), "Last heartbeat should be set");
+    
+    // Record another heartbeat after a short delay
+    std::thread::sleep(std::time::Duration::from_millis(10));
+    fixture.dal.agents().record_heartbeat(agent.id)
+        .expect("Failed to record second heartbeat");
+    
+    // Retrieve the agent again and check if the last_heartbeat was updated
+    let agent_after_second_heartbeat = fixture.dal.agents().get(agent.id)
+        .expect("Failed to get agent")
+        .expect("Agent not found");
+    
+    assert!(agent_after_second_heartbeat.last_heartbeat.unwrap() > updated_agent.last_heartbeat.unwrap(),
+            "Last heartbeat should be updated after second heartbeat");
+}

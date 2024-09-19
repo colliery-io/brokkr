@@ -6,6 +6,7 @@ resolver = "2"
     axum = { version = "0.7.5", features = [] }
     chrono = { version = "0.4", features = ["serde"] }
     config = { version = "0.13.1", features = [] }
+    clap = { version = "4.5.17" }
     diesel = { version = "2.0.0", features = ["postgres", "uuid", "chrono", "serde_json", "r2d2"] }
     diesel-derive-enum = { version = "2.0", features = ["postgres"] }
     diesel_logger = { version = "0.3", features = [] }

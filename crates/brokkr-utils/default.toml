@@ -3,3 +3,11 @@ url = "postgres://brokkr:brokkr@localhost:5432/brokkr"
 
 [log]
 level = "debug"
+
+[pak]
+prefix = "brokkr"
+rng = "osrng"
+digest = 8
+short_token_length = 8
+long_token_length = 24
+short_token_prefix = "BR"

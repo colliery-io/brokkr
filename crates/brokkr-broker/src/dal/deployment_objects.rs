@@ -1,6 +1,8 @@
 use crate::dal::DAL;
 use brokkr_models::models::deployment_objects::{DeploymentObject, NewDeploymentObject};
+use brokkr_models::models::agent_targets::AgentTarget;
 use brokkr_models::schema::deployment_objects;
+use brokkr_models::schema::agent_targets;
 use chrono::Utc;
 use diesel::prelude::*;
 use uuid::Uuid;
@@ -131,5 +133,78 @@ impl<'a> DeploymentObjectsDAL<'a> {
             .order(deployment_objects::sequence_id.desc())
             .first(conn)
             .optional()
+    }
+
+    /// Retrieves a list of undeployed objects for an agent based on its responsibilities.
+    ///
+    /// # Arguments
+    ///
+    /// * `agent_id` - The UUID of the agent to get undeployed objects for.
+    ///
+    /// # Returns
+    ///
+    /// Returns a Result containing a Vec of DeploymentObjects that are undeployed for the agent,
+    /// sorted by sequence_id in descending order (most recent first), or a diesel::result::Error on failure.
+    pub fn get_undeployed_objects_for_agent(&self, agent_id: Uuid) -> Result<Vec<DeploymentObject>, diesel::result::Error> {
+        // Step 1: Get the list of stacks the agent is responsible for
+        let responsible_stacks = self.dal.stacks().get_associated_stacks(agent_id)?;
+
+        // Step 2: Get all deployment objects for these stacks
+        let mut all_objects = Vec::new();
+        for stack in responsible_stacks {
+            let stack_objects = self.list_for_stack(stack.id)?;
+            all_objects.extend(stack_objects);
+        }
+
+        // Step 3: Filter out objects that have been deployed (have corresponding agent events)
+        let deployed_object_ids = self.dal.agent_events().get_events(None, Some(agent_id))?
+            .into_iter()
+            .map(|event| event.deployment_object_id)
+            .collect::<Vec<Uuid>>();
+
+        let undeployed_objects = all_objects.into_iter()
+            .filter(|obj| !deployed_object_ids.contains(&obj.id))
+            .collect::<Vec<DeploymentObject>>();
+
+        // Step 4: Sort by sequence_id in descending order
+        let mut sorted_undeployed_objects = undeployed_objects;
+        sorted_undeployed_objects.sort_by(|a, b| b.sequence_id.cmp(&a.sequence_id));
+
+        Ok(sorted_undeployed_objects)
+    }
+
+    /// Searches for deployment objects by checksum.
+    ///
+    /// # Arguments
+    ///
+    /// * `checksum` - The checksum to search for.
+    ///
+    /// # Returns
+    ///
+    /// Returns a Result containing a Vec of DeploymentObjects that match the checksum,
+    /// or a diesel::result::Error on failure.
+    pub fn search(&self, yaml_checksum: &str) -> Result<Vec<DeploymentObject>, diesel::result::Error> {
+        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        deployment_objects::table
+            .filter(deployment_objects::yaml_checksum.eq(yaml_checksum))
+            .filter(deployment_objects::deleted_at.is_null())
+            .order(deployment_objects::sequence_id.desc())
+            .load::<DeploymentObject>(conn)
+    }
+
+    pub fn get_applicable_deployment_objects(&self, agent_id: Uuid) -> Result<Vec<DeploymentObject>, diesel::result::Error> {
+        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+
+        let agent_targets = agent_targets::table
+            .filter(agent_targets::agent_id.eq(agent_id))
+            .load::<AgentTarget>(conn)?;
+
+        let applicable_objects = deployment_objects::table
+            .filter(deployment_objects::stack_id.eq_any(agent_targets.iter().map(|target| target.stack_id)))
+            .filter(deployment_objects::deleted_at.is_null())
+            .order(deployment_objects::sequence_id.desc())
+            .load::<DeploymentObject>(conn)?;
+
+        Ok(applicable_objects)
     }
 }

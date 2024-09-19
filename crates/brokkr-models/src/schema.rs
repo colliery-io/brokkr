@@ -1,6 +1,15 @@
 // @generated automatically by Diesel CLI.
 
 diesel::table! {
+    admin_role (id) {
+        id -> Uuid,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
+        pak_hash -> Text,
+    }
+}
+
+diesel::table! {
     agent_annotations (id) {
         id -> Uuid,
         agent_id -> Uuid,
@@ -62,6 +71,13 @@ diesel::table! {
 }
 
 diesel::table! {
+    app_initialization (id) {
+        id -> Int4,
+        initialized_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
     deployment_objects (id) {
         id -> Uuid,
         created_at -> Timestamptz,
@@ -119,11 +135,13 @@ diesel::joinable!(stack_annotations -> stacks (stack_id));
 diesel::joinable!(stack_labels -> stacks (stack_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
+    admin_role,
     agent_annotations,
     agent_events,
     agent_labels,
     agent_targets,
     agents,
+    app_initialization,
     deployment_objects,
     stack_annotations,
     stack_labels,

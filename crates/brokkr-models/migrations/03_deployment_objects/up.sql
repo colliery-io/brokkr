@@ -10,7 +10,6 @@ CREATE TABLE deployment_objects (
     submitted_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     is_deletion_marker BOOLEAN NOT NULL DEFAULT FALSE,
     CONSTRAINT fk_stack FOREIGN KEY (stack_id) REFERENCES stacks(id),
-    CONSTRAINT unique_yaml_per_stack UNIQUE (stack_id, yaml_checksum),
     CONSTRAINT deployment_objects_sequence_id_key UNIQUE (sequence_id)
 );
 
