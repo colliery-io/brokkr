@@ -247,7 +247,7 @@ mod tests {
         info!("This is an info message");
         warn!("This is a warning message");
         error!("This is an error message");
-
+        #[allow(clippy::assertions_on_constants)]
         assert!(true);
     }
 
