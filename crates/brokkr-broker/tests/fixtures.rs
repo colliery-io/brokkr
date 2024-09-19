@@ -53,7 +53,7 @@ impl TestFixture {
     /// Returns a configured Axum Router.
     #[allow(dead_code)]
     pub fn create_test_router(&self) -> Router {
-        api::configure_api_routes()
+        api::configure_api_routes(self.dal.clone())
     }
 
     /// Creates a new TestFixture instance.

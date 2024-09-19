@@ -1,43 +1,24 @@
 use axum::{extract::Query, routing::post, Json, Router};
 use serde::{Deserialize, Serialize};
+use crate::api::v1::middleware::AuthPayload;
+use axum::extract::Extension;
 
-#[derive(Deserialize)]
-struct PakQuery {
-    pak: String,
+
+pub fn routes() -> Router {
+    Router::new().route("/auth/pak", post(verify_pak))
 }
 
 #[derive(Serialize)]
 struct AuthResponse {
-    is_valid: bool,
-    permissions: Option<Permissions>,
+    admin: bool,
+    agent: Option<String>,
+    generator: Option<String>,
 }
 
-#[derive(Serialize)]
-enum Permissions {
-    Admin,
-    Agent { uuid: String },
-}
-
-pub fn routes() -> Router {
-    Router::new().route("/auth/verify-pak", post(verify_pak))
-}
-
-async fn verify_pak(Query(params): Query<PakQuery>) -> Json<AuthResponse> {
-    // In a real implementation, you would verify the PAK against your database
-    // and retrieve the associated permissions. This is a mock implementation.
-    let (is_valid, permissions) = match params.pak.as_str() {
-        "admin_pak_123" => (true, Some(Permissions::Admin)),
-        "agent_pak_456" => (
-            true,
-            Some(Permissions::Agent {
-                uuid: "agent-123".to_string(),
-            }),
-        ),
-        _ => (false, None),
-    };
-
+async fn verify_pak(Extension(auth_payload): Extension<AuthPayload>) -> Json<AuthResponse> {
     Json(AuthResponse {
-        is_valid,
-        permissions,
+        admin: auth_payload.admin,
+        agent: auth_payload.agent.map(|id| id.to_string()),
+        generator: auth_payload.generator.map(|id| id.to_string()),
     })
 }

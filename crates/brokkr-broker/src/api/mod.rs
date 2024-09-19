@@ -6,6 +6,7 @@
 pub mod v1;
 use axum::{response::IntoResponse, routing::get, Router};
 use hyper::StatusCode;
+use crate::dal::DAL;
 
 // /// Configures and returns the main application router with all API routes
 // ///
@@ -20,9 +21,9 @@ use hyper::StatusCode;
 // ///
 // /// Returns a configured `Router` instance that includes all API routes and middleware.
 
-pub fn configure_api_routes() -> Router {
+pub fn configure_api_routes(dal: DAL) -> Router<> {
     Router::new()
-        .nest("/api/v1", v1::routes())
+        .nest("/api/v1", v1::routes(dal))
         .route("/healthz", get(healthz))
         .route("/readyz", get(readyz))
         .route("/metrics", get(metrics))

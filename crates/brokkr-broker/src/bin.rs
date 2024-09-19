@@ -120,11 +120,11 @@ async fn serve(config: &Settings) -> Result<(), Box<dyn std::error::Error>> {
 
     // Initialize Data Access Layer
     info!("Initializing Data Access Layer");
-    let _dal = DAL::new(connection_pool.pool.clone());
+    let dal = DAL::new(connection_pool.pool.clone());
 
     // Configure API routes
     info!("Configuring API routes");
-    let app = api::configure_api_routes();
+    let app = api::configure_api_routes(dal);
 
     // Set up the server address
     let addr = "0.0.0.0:3000";

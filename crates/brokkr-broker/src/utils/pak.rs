@@ -5,6 +5,7 @@ use prefixed_api_key::PrefixedApiKeyController;
 use rand::rngs::OsRng;
 use sha2::Sha256;
 use std::sync::Arc;
+use prefixed_api_key::PrefixedApiKey;
 
 static PAK_CONTROLLER: OnceCell<Arc<PrefixedApiKeyController<OsRng, Sha256>>> = OnceCell::new();
 
@@ -47,6 +48,19 @@ pub fn create_pak(config: &Settings) -> Result<(String, String), Box<dyn std::er
         .try_generate_key_and_hash()
         .map(|(pak, hash)| (pak.to_string(), hash))
         .map_err(|e| e.into())
+}
+
+pub fn verify_pak(pak: String, stored_hash: String) -> bool {
+    let pak = PrefixedApiKey::from_string(pak.as_str()).expect("Failed to parse PAK");
+    let controller = create_pak_controller(None).expect("Failed to create PAK controller");
+    let computed_hash = controller.long_token_hashed(&pak);
+    stored_hash == computed_hash
+}
+
+pub fn generate_pak_hash(pak: String) -> String {
+    let pak = PrefixedApiKey::from_string(pak.as_str()).expect("Failed to parse PAK");
+    let controller = create_pak_controller(None).expect("Failed to create PAK controller");
+    controller.long_token_hashed(&pak)
 }
 
 #[cfg(test)]
@@ -110,5 +124,94 @@ mod tests {
         // PAKs should be different
         assert_ne!(pak1, pak2, "Generated PAKs should be different");
         assert_ne!(hash1, hash2, "Generated hashes should be different");
+    }
+
+    #[test]
+    fn test_verify_pak() {
+        let config = Settings::new(None).expect("Failed to load configuration");
+        
+        // Initialize the PAK controller
+        create_pak_controller(Some(&config)).expect("Failed to create controller");
+
+        // Generate a PAK and hash
+        let (pak, hash) = create_pak(&config).unwrap();
+
+        // Verify the PAK
+        assert!(verify_pak(pak.clone(), hash.clone()), "PAK verification failed");
+
+        // Test with an invalid PAK
+        assert!(!verify_pak(pak.clone(), "0000000000000000000000000000000000000000000000000000000000000000".to_string()), "Invalid PAK should not verify");
+
+        // Test thread safety
+        let pak_clone = pak.clone();
+        let hash_clone = hash.clone();
+        let handles: Vec<_> = (0..10)
+            .map(|_| {
+                let pak = pak_clone.clone();
+                let hash = hash_clone.clone();
+                std::thread::spawn(move || verify_pak(pak.clone(), hash.clone()))
+            })
+            .collect();
+
+        for handle in handles {
+            assert!(handle.join().unwrap(), "PAK verification failed in thread");
+        }
+
+        // Test consistency
+        for _ in 0..100 {
+            assert!(verify_pak(pak.clone(), hash.clone()), "PAK verification inconsistent");
+        }
+    }
+
+    #[test]
+    fn test_generate_pak_hash() {
+        let config = Settings::new(None).expect("Failed to load configuration");
+        
+        // Initialize the PAK controller
+        create_pak_controller(Some(&config)).expect("Failed to create controller");
+
+        // Generate a PAK and hash
+        let (pak, original_hash) = create_pak(&config).unwrap();
+
+        // Generate hash from the PAK
+        let generated_hash = generate_pak_hash(pak.clone());
+
+        // Verify that the generated hash matches the original hash
+        assert_eq!(original_hash, generated_hash, "Generated hash should match the original hash");
+
+        // Test consistency
+        for _ in 0..100 {
+            assert_eq!(
+                generated_hash,
+                generate_pak_hash(pak.clone()),
+                "Hash generation should be consistent"
+            );
+        }
+
+        // Test thread safety
+        let pak_clone = pak.clone();
+        let handles: Vec<_> = (0..10)
+            .map(|_| {
+                let pak = pak_clone.clone();
+                std::thread::spawn(move || generate_pak_hash(pak))
+            })
+            .collect();
+
+        for handle in handles {
+            assert_eq!(
+                generated_hash,
+                handle.join().unwrap(),
+                "Hash generation should be consistent across threads"
+            );
+        }
+
+        // Test with different PAKs
+        let (pak2, hash2) = create_pak(&config).unwrap();
+        assert_ne!(
+            generate_pak_hash(pak),
+            generate_pak_hash(pak2),
+            "Hashes for different PAKs should be different"
+        );
+
     }
 }

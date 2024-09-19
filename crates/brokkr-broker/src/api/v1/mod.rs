@@ -6,13 +6,20 @@ mod generators;
 mod stacks; // Add this line
 
 use axum::Router;
+use axum::body::Body;
+use axum::middleware::from_fn_with_state;
+use crate::dal::DAL;
+mod middleware;
 
-pub fn routes() -> Router {
+pub fn routes(dal: DAL) -> Router {
     Router::new()
-        .merge(stacks::routes())
         .merge(agents::routes())
+        .merge(stacks::routes())
         .merge(deployment_objects::routes())
         .merge(agent_events::routes())
-        .merge(auth::routes())
         .merge(generators::routes())
+        .merge(auth::routes())
+        .layer(from_fn_with_state(dal.clone(), middleware::auth_middleware::<axum::body::Body>))
 }
+
+
