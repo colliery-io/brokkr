@@ -71,7 +71,7 @@ pub fn upsert_admin(conn: &mut PgConnection) -> Result<(), Box<dyn std::error::E
         }
     }
     // Write PAK to /tmp/key.txt
-    fs::write("/tmp/key.txt", pak.to_string())?;
+    fs::write("/tmp/key.txt", pak)?;
 
     Ok(())
 }

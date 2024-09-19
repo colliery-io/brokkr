@@ -2,7 +2,6 @@ use crate::dal::DAL;
 use brokkr_models::models::generator::{Generator, NewGenerator};
 use brokkr_models::schema::generators;
 use chrono::Utc;
-use diesel::dsl::now;
 use diesel::prelude::*;
 use uuid::Uuid;
 

@@ -1,7 +1,6 @@
 use crate::fixtures::TestFixture;
-use brokkr_models::models::generator::{Generator, NewGenerator};
+use brokkr_models::models::generator::NewGenerator;
 use chrono::Utc;
-use uuid::Uuid;
 
 #[test]
 fn test_create_generator() {

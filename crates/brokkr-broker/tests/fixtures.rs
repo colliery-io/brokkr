@@ -30,6 +30,8 @@ use uuid::Uuid;
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("../brokkr-models/migrations");
 
 /// Represents a test fixture for the Brokkr project.
+
+#[allow(dead_code)]
 #[derive(Clone)]
 pub struct TestFixture {
     /// The Data Access Layer (DAL) instance for database operations.
