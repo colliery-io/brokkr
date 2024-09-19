@@ -12,6 +12,7 @@ use diesel::sql_query;
 use diesel::sql_types::BigInt;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use tokio::signal;
+use uuid::Uuid;
 
 /// Embedded migrations for the database
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("../brokkr-models/migrations");
@@ -38,6 +39,16 @@ enum Commands {
     Serve,
     /// Rotate the admin key
     RotateAdmin,
+    /// Rotate an agent key
+    RotateAgentKey {
+        #[arg(long)]
+        uuid: Uuid,
+    },
+    /// Rotate a generator key
+    RotateGeneratorKey {
+        #[arg(long)]
+        uuid: Uuid,
+    },
 }
 
 /// Main function to run the Brokkr Broker application
@@ -59,8 +70,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     match cli.command {
         Commands::Serve => serve(&config).await?,
         Commands::RotateAdmin => rotate_admin(&config)?,
+        Commands::RotateAgentKey { uuid } => rotate_agent_key(&config, uuid)?,
+        Commands::RotateGeneratorKey { uuid} => rotate_generator_key(&config, uuid)?,
     }
-
     Ok(())
 }
 
@@ -147,5 +159,34 @@ fn rotate_admin(config: &Settings) -> Result<(), Box<dyn std::error::Error>> {
     utils::upsert_admin(&mut conn)?;
 
     info!("Admin key rotated successfully");
+    Ok(())
+}
+
+fn rotate_agent_key(config: &Settings, uuid: Uuid) -> Result<(), Box<dyn std::error::Error>> {
+    info!("Rotating agent key");
+
+    let pool = create_shared_connection_pool(&config.database.url, "brokkr", 1);
+    let dal = DAL::new(pool.pool.clone());
+
+    let agent = dal.agents().get(uuid)?.ok_or("Agent not found")?;
+    let new_pak_hash = utils::pak::create_pak(config)?.1;
+    dal.agents().update_pak_hash(agent.id, new_pak_hash)?;
+
+    info!("Agent key rotated successfully for agent: {}", agent.name);
+    Ok(())
+}
+
+fn rotate_generator_key(config: &Settings, uuid: Uuid) -> Result<(), Box<dyn std::error::Error>> {
+    info!("Rotating generator key");
+
+    let pool = create_shared_connection_pool(&config.database.url, "brokkr", 1);
+    let dal = DAL::new(pool.pool.clone());
+
+    let generator = dal.generators().get(uuid)?.ok_or("Generator not found")?;
+
+    let new_pak_hash = utils::pak::create_pak(config)?.1;
+    dal.generators().update_pak_hash(generator.id, new_pak_hash)?;
+
+    info!("Generator key rotated successfully for generator: {}", generator.name);
     Ok(())
 }

@@ -384,4 +384,25 @@ impl<'a> AgentsDAL<'a> {
 
         Ok(())
     }
+
+    /// Updates the pak_hash for an agent.
+    ///
+    /// # Arguments
+    ///
+    /// * `agent_uuid` - The UUID of the agent to update.
+    /// * `new_pak_hash` - The new pak_hash value.
+    ///
+    /// # Returns
+    ///
+    /// Returns a Result containing the updated Agent on success, or a diesel::result::Error on failure.
+    pub fn update_pak_hash(
+        &self,
+        agent_uuid: Uuid,
+        new_pak_hash: String,
+    ) -> Result<Agent, diesel::result::Error> {
+        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        diesel::update(agents::table.filter(agents::id.eq(agent_uuid)))
+            .set(agents::pak_hash.eq(new_pak_hash))
+            .get_result(conn)
+    }
 }

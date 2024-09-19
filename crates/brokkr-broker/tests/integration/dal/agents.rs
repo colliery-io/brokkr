@@ -617,3 +617,28 @@ fn test_record_heartbeat() {
         "Last heartbeat should be updated after second heartbeat"
     );
 }
+
+#[test]
+fn test_update_agent_pak_hash() {
+    let fixture = TestFixture::new();
+    let agent = fixture.create_test_agent("Test Agent".to_string(), "Test Cluster".to_string());
+
+    let new_pak_hash = "new_pak_hash".to_string();
+    let updated_agent = fixture
+        .dal
+        .agents()
+        .update_pak_hash(agent.id, new_pak_hash.clone())
+        .expect("Failed to update pak_hash");
+
+    assert_eq!(updated_agent.pak_hash, new_pak_hash);
+
+    // Verify the update by fetching the agent again
+    let fetched_agent = fixture
+        .dal
+        .agents()
+        .get(agent.id)
+        .expect("Failed to get agent")
+        .expect("Agent not found");
+
+    assert_eq!(fetched_agent.pak_hash, new_pak_hash);
+}
