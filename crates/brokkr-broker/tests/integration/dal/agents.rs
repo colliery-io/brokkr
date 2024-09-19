@@ -433,6 +433,7 @@ fn test_filter_by_annotations() {
 #[test]
 fn test_get_agent_by_target_id() {
     let fixture = TestFixture::new();
+    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
 
     let agent1 = fixture.create_test_agent("Agent 1".to_string(), "Cluster 1".to_string());
     let agent2 = fixture.create_test_agent("Agent 2".to_string(), "Cluster 2".to_string());
@@ -440,12 +441,12 @@ fn test_get_agent_by_target_id() {
     let stack1 = fixture
         .dal
         .stacks()
-        .create(&NewStack::new("Stack 1".to_string(), None, None).unwrap())
+        .create(&NewStack::new("Stack 1".to_string(), None, generator.id).unwrap())
         .unwrap();
     let stack2 = fixture
         .dal
         .stacks()
-        .create(&NewStack::new("Stack 2".to_string(), None, None).unwrap())
+        .create(&NewStack::new("Stack 2".to_string(), None, generator.id).unwrap())
         .unwrap();
 
     fixture
@@ -482,6 +483,7 @@ fn test_get_agent_by_target_id() {
 fn test_get_agent_details() {
     let fixture = TestFixture::new();
 
+    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
     let agent = fixture.create_test_agent("Test Agent".to_string(), "Test Cluster".to_string());
 
     // Create labels
@@ -516,7 +518,7 @@ fn test_get_agent_details() {
     let stack = fixture
         .dal
         .stacks()
-        .create(&NewStack::new("Test Stack".to_string(), None, None).unwrap())
+        .create(&NewStack::new("Test Stack".to_string(), None, generator.id).unwrap())
         .unwrap();
     fixture
         .dal

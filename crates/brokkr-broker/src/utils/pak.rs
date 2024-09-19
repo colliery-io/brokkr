@@ -51,6 +51,10 @@ mod tests {
 
     #[test]
     fn test_pak_controller_singleton() {
+        let result = create_pak_controller(None);
+        assert!(result.is_err(), "Should fail when not initialized and no config provided");
+
+        
         let config = Settings::new(None).expect("Failed to load configuration");
 
         // First call should initialize the controller
@@ -96,10 +100,5 @@ mod tests {
         assert_ne!(hash1, hash2, "Generated hashes should be different");
     }
 
-    #[test]
-    fn test_pak_controller_uninitialized() {
-        // This should fail because the controller is not initialized
-        let result = create_pak_controller(None);
-        assert!(result.is_err(), "Should fail when not initialized and no config provided");
-    }
+
 }

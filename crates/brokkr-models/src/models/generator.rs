@@ -25,7 +25,7 @@ pub struct Generator {
     pub deleted_at: Option<DateTime<Utc>>,
     pub name: String,
     pub description: Option<String>,
-    pub pak_hash: String,
+    pub pak_hash: Option<String>,
     pub last_active_at: Option<DateTime<Utc>>,
     pub is_active: bool,
 }

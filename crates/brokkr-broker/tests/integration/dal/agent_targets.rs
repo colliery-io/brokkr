@@ -4,8 +4,9 @@ use brokkr_models::models::agent_targets::NewAgentTarget;
 #[test]
 fn test_create_agent_target() {
     let fixture = TestFixture::new();
+    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
     let agent = fixture.create_test_agent("Test Agent".to_string(), "Test Cluster".to_string());
-    let stack = fixture.create_test_stack("Test Stack".to_string(), None);
+    let stack = fixture.create_test_stack("Test Stack".to_string(), None, generator.id);
 
     let new_target =
         NewAgentTarget::new(agent.id, stack.id).expect("Failed to create NewAgentTarget");
@@ -22,8 +23,9 @@ fn test_create_agent_target() {
 #[test]
 fn test_get_agent_target() {
     let fixture = TestFixture::new();
+    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
     let agent = fixture.create_test_agent("Test Agent".to_string(), "Test Cluster".to_string());
-    let stack = fixture.create_test_stack("Test Stack".to_string(), None);
+    let stack = fixture.create_test_stack("Test Stack".to_string(), None, generator.id);
     let target = fixture.create_test_agent_target(agent.id, stack.id);
 
     let retrieved_target = fixture
@@ -40,10 +42,11 @@ fn test_get_agent_target() {
 #[test]
 fn test_list_agent_targets() {
     let fixture = TestFixture::new();
+    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
     let agent1 = fixture.create_test_agent("Agent 1".to_string(), "Cluster 1".to_string());
     let agent2 = fixture.create_test_agent("Agent 2".to_string(), "Cluster 2".to_string());
-    let stack1 = fixture.create_test_stack("Stack 1".to_string(), None);
-    let stack2 = fixture.create_test_stack("Stack 2".to_string(), None);
+    let stack1 = fixture.create_test_stack("Stack 1".to_string(), None, generator.id);
+    let stack2 = fixture.create_test_stack("Stack 2".to_string(), None, generator.id);
 
     fixture.create_test_agent_target(agent1.id, stack1.id);
     fixture.create_test_agent_target(agent1.id, stack2.id);
@@ -60,9 +63,10 @@ fn test_list_agent_targets() {
 #[test]
 fn test_list_agent_targets_for_agent() {
     let fixture = TestFixture::new();
+    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
     let agent = fixture.create_test_agent("Test Agent".to_string(), "Test Cluster".to_string());
-    let stack1 = fixture.create_test_stack("Stack 1".to_string(), None);
-    let stack2 = fixture.create_test_stack("Stack 2".to_string(), None);
+    let stack1 = fixture.create_test_stack("Stack 1".to_string(), None, generator.id);
+    let stack2 = fixture.create_test_stack("Stack 2".to_string(), None, generator.id);
 
     fixture.create_test_agent_target(agent.id, stack1.id);
     fixture.create_test_agent_target(agent.id, stack2.id);
@@ -79,9 +83,10 @@ fn test_list_agent_targets_for_agent() {
 #[test]
 fn test_list_agent_targets_for_stack() {
     let fixture = TestFixture::new();
+    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
     let agent1 = fixture.create_test_agent("Agent 1".to_string(), "Cluster 1".to_string());
     let agent2 = fixture.create_test_agent("Agent 2".to_string(), "Cluster 2".to_string());
-    let stack = fixture.create_test_stack("Test Stack".to_string(), None);
+    let stack = fixture.create_test_stack("Test Stack".to_string(), None, generator.id);
 
     fixture.create_test_agent_target(agent1.id, stack.id);
     fixture.create_test_agent_target(agent2.id, stack.id);
@@ -98,8 +103,9 @@ fn test_list_agent_targets_for_stack() {
 #[test]
 fn test_delete_agent_target() {
     let fixture = TestFixture::new();
+    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
     let agent = fixture.create_test_agent("Test Agent".to_string(), "Test Cluster".to_string());
-    let stack = fixture.create_test_stack("Test Stack".to_string(), None);
+    let stack = fixture.create_test_stack("Test Stack".to_string(), None, generator.id);
     let target = fixture.create_test_agent_target(agent.id, stack.id);
 
     let affected_rows = fixture
@@ -120,9 +126,10 @@ fn test_delete_agent_target() {
 #[test]
 fn test_delete_agent_targets_for_agent() {
     let fixture = TestFixture::new();
+    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
     let agent = fixture.create_test_agent("Test Agent".to_string(), "Test Cluster".to_string());
-    let stack1 = fixture.create_test_stack("Stack 1".to_string(), None);
-    let stack2 = fixture.create_test_stack("Stack 2".to_string(), None);
+    let stack1 = fixture.create_test_stack("Stack 1".to_string(), None, generator.id);
+    let stack2 = fixture.create_test_stack("Stack 2".to_string(), None, generator.id);
 
     fixture.create_test_agent_target(agent.id, stack1.id);
     fixture.create_test_agent_target(agent.id, stack2.id);
@@ -145,9 +152,10 @@ fn test_delete_agent_targets_for_agent() {
 #[test]
 fn test_delete_agent_targets_for_stack() {
     let fixture = TestFixture::new();
+    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
     let agent1 = fixture.create_test_agent("Agent 1".to_string(), "Cluster 1".to_string());
     let agent2 = fixture.create_test_agent("Agent 2".to_string(), "Cluster 2".to_string());
-    let stack = fixture.create_test_stack("Test Stack".to_string(), None);
+    let stack = fixture.create_test_stack("Test Stack".to_string(), None, generator.id);
 
     fixture.create_test_agent_target(agent1.id, stack.id);
     fixture.create_test_agent_target(agent2.id, stack.id);

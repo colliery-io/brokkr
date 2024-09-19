@@ -20,6 +20,7 @@ use brokkr_models::models::{
     stack_annotations::{NewStackAnnotation, StackAnnotation},
     stack_labels::{NewStackLabel, StackLabel},
     stacks::{NewStack, Stack},
+    generator::{Generator, NewGenerator},
 };
 use brokkr_utils::Settings;
 use std::env;
@@ -102,8 +103,8 @@ impl TestFixture {
     /// # Returns
     ///
     /// Returns the created Stack on success, or panics on failure.
-    pub fn create_test_stack(&self, name: String, description: Option<String>) -> Stack {
-        let new_stack = NewStack::new(name, description, None).expect("Failed to create NewStack");
+    pub fn create_test_stack(&self, name: String, description: Option<String>, generator_id: Uuid) -> Stack {
+        let new_stack = NewStack::new(name, description, generator_id).expect("Failed to create NewStack");
         self.dal
             .stacks()
             .create(&new_stack)
@@ -146,7 +147,7 @@ impl TestFixture {
         is_deletion_marker: bool,
     ) -> DeploymentObject {
         let new_deployment_object =
-            NewDeploymentObject::new(stack_id, yaml_content, is_deletion_marker, None)
+            NewDeploymentObject::new(stack_id, yaml_content, is_deletion_marker)
                 .expect("Failed to create NewDeploymentObject");
         self.dal
             .deployment_objects()
@@ -297,6 +298,35 @@ impl TestFixture {
             .create(&new_label)
             .expect("Failed to create agent label")
     }
+     /// Creates a new generator for testing purposes.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The name of the generator.
+    /// * `description` - An optional description for the generator.
+    /// * `api_key_hash` - The hashed API key for the generator.
+    ///
+    /// # Returns
+    ///
+    /// Returns the created Generator on success, or panics on failure.
+    pub fn create_test_generator(
+        &self,
+        name: String,
+        description: Option<String>,
+        api_key_hash: String,
+    ) -> Generator {
+        let new_generator = NewGenerator::new(name, description)
+            .expect("Failed to create NewGenerator");
+        let created_generator = self.dal
+            .generators()
+            .create(&new_generator)
+            .expect("Failed to create generator");
+        
+        self.dal
+            .generators()
+            .update_pak_hash(created_generator.id, api_key_hash)
+            .expect("Failed to update pak_hash")
+    }
 
     fn reset_database(&self) {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
@@ -315,3 +345,5 @@ impl Drop for TestFixture {
         self.reset_database();
     }
 }
+
+   

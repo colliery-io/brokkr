@@ -7,11 +7,11 @@ use brokkr_broker::dal::FilterType;
 #[test]
 fn test_create_stack() {
     let fixture = TestFixture::new();
-
+    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
     let new_stack = NewStack::new(
         "Test Stack".to_string(),
         Some("Test Description".to_string()),
-        None,
+        generator.id,
     )
     .expect("Failed to create NewStack");
 
@@ -27,7 +27,8 @@ fn test_create_stack() {
 #[test]
 fn test_get_stack() {
     let fixture = TestFixture::new();
-    let created_stack = fixture.create_test_stack("Test Stack".to_string(), None);
+    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
+    let created_stack = fixture.create_test_stack("Test Stack".to_string(), None, generator.id);
     let search_stack_id = vec![created_stack.id];
     let retrieved_stack = fixture
         .dal
@@ -42,7 +43,8 @@ fn test_get_stack() {
 #[test]
 fn test_get_deleted_stack() {
     let fixture = TestFixture::new();
-    let created_stack = fixture.create_test_stack("Test Stack".to_string(), None);
+    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
+    let created_stack = fixture.create_test_stack("Test Stack".to_string(), None, generator.id);
 
     fixture
         .dal
@@ -71,8 +73,9 @@ fn test_get_deleted_stack() {
 #[test]
 fn test_list_stacks() {
     let fixture = TestFixture::new();
-    fixture.create_test_stack("Stack 1".to_string(), None);
-    let deleted_stack = fixture.create_test_stack("Stack 2".to_string(), None);
+    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
+    fixture.create_test_stack("Stack 1".to_string(), None, generator.id);
+    let deleted_stack = fixture.create_test_stack("Stack 2".to_string(), None, generator.id);
     fixture
         .dal
         .stacks()
@@ -99,7 +102,8 @@ fn test_update_stack() {
 #[test]
 fn test_soft_delete_stack() {
     let fixture = TestFixture::new();
-    let created_stack = fixture.create_test_stack("To Be Deleted".to_string(), None);
+    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
+    let created_stack = fixture.create_test_stack("To Be Deleted".to_string(), None, generator.id);
 
     let affected_rows = fixture
         .dal
@@ -120,7 +124,8 @@ fn test_soft_delete_stack() {
 #[test]
 fn test_hard_delete_stack() {
     let fixture = TestFixture::new();
-    let created_stack = fixture.create_test_stack("To Be Hard Deleted".to_string(), None);
+    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
+    let created_stack = fixture.create_test_stack("To Be Hard Deleted".to_string(), None, generator.id);
 
     // First, let's soft delete the stack
     fixture
@@ -174,9 +179,9 @@ fn test_hard_delete_non_existent_stack() {
 #[test]
 fn test_filter_by_labels_or() {
     let fixture = TestFixture::new();
-
-    let stack1 = fixture.create_test_stack("Stack 1".to_string(), None);
-    let stack2 = fixture.create_test_stack("Stack 2".to_string(), None);
+    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string()); 
+    let stack1 = fixture.create_test_stack("Stack 1".to_string(), None, generator.id);
+    let stack2 = fixture.create_test_stack("Stack 2".to_string(), None, generator.id);
 
     fixture.create_test_stack_label(stack1.id, "label1".to_string());
     fixture.create_test_stack_label(stack1.id, "label2".to_string());
@@ -198,9 +203,9 @@ fn test_filter_by_labels_or() {
 #[test]
 fn test_filter_by_labels_and() {
     let fixture = TestFixture::new();
-
-    let stack1 = fixture.create_test_stack("Stack 1".to_string(), None);
-    let stack2 = fixture.create_test_stack("Stack 2".to_string(), None);
+    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string()); 
+    let stack1 = fixture.create_test_stack("Stack 1".to_string(), None, generator.id);
+    let stack2 = fixture.create_test_stack("Stack 2".to_string(), None, generator.id);
 
     fixture.create_test_stack_label(stack1.id, "label1".to_string());
     fixture.create_test_stack_label(stack1.id, "label2".to_string());
@@ -221,8 +226,8 @@ fn test_filter_by_labels_and() {
 #[test]
 fn test_filter_by_labels_no_match() {
     let fixture = TestFixture::new();
-
-    let stack1 = fixture.create_test_stack("Stack 1".to_string(), None);
+    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string()); 
+    let stack1 = fixture.create_test_stack("Stack 1".to_string(), None, generator.id);
     fixture.create_test_stack_label(stack1.id, "label1".to_string());
 
     let and_filtered_no_match = fixture
@@ -263,9 +268,9 @@ fn test_filter_by_labels_non_existent() {
 #[test]
 fn test_filter_by_labels_duplicate() {
     let fixture = TestFixture::new();
-
-    let stack1 = fixture.create_test_stack("Stack 1".to_string(), None);
-    let stack2 = fixture.create_test_stack("Stack 2".to_string(), None);
+    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());     
+    let stack1 = fixture.create_test_stack("Stack 1".to_string(), None, generator.id);
+    let stack2 = fixture.create_test_stack("Stack 2".to_string(), None, generator.id);
 
     fixture.create_test_stack_label(stack1.id, "label2".to_string());
     fixture.create_test_stack_label(stack2.id, "label2".to_string());
@@ -286,8 +291,8 @@ fn test_filter_by_labels_duplicate() {
 #[test]
 fn test_filter_by_labels_mixed_existing_and_non_existent() {
     let fixture = TestFixture::new();
-
-    let stack1 = fixture.create_test_stack("Stack 1".to_string(), None);
+    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string()); 
+    let stack1 = fixture.create_test_stack("Stack 1".to_string(), None, generator.id);
     fixture.create_test_stack_label(stack1.id, "label1".to_string());
 
     let non_existent_label = "non_existent_label".to_string();
@@ -325,10 +330,10 @@ fn test_filter_by_labels_mixed_existing_and_non_existent() {
 #[test]
 fn test_filter_by_annotations() {
     let fixture = TestFixture::new();
-
-    let stack1 = fixture.create_test_stack("Stack 1".to_string(), None);
-    let stack2 = fixture.create_test_stack("Stack 2".to_string(), None);
-    let stack3 = fixture.create_test_stack("Stack 3".to_string(), None);
+    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string()); 
+    let stack1 = fixture.create_test_stack("Stack 1".to_string(), None, generator.id);
+    let stack2 = fixture.create_test_stack("Stack 2".to_string(), None, generator.id);
+    let stack3 = fixture.create_test_stack("Stack 3".to_string(), None, generator.id);
 
     fixture.create_test_stack_annotation(stack1.id, "key1", "value1");
     fixture.create_test_stack_annotation(stack1.id, "key2", "value2");
@@ -404,10 +409,11 @@ fn test_get_associated_stacks() {
     let agent2 = fixture.create_test_agent("Agent 2".to_string(), "Cluster 2".to_string());
 
     // Create stacks
-    let stack1 = fixture.create_test_stack("Stack 1".to_string(), None);
-    let stack2 = fixture.create_test_stack("Stack 2".to_string(), None);
-    let stack3 = fixture.create_test_stack("Stack 3".to_string(), None);
-    let stack4 = fixture.create_test_stack("Stack 4".to_string(), None);
+    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string()); 
+    let stack1 = fixture.create_test_stack("Stack 1".to_string(), None, generator.id);
+    let stack2 = fixture.create_test_stack("Stack 2".to_string(), None, generator.id);
+    let stack3 = fixture.create_test_stack("Stack 3".to_string(), None, generator.id);
+    let stack4 = fixture.create_test_stack("Stack 4".to_string(), None, generator.id);
 
     // Add labels
     println!("Adding labels to agent and stacks");

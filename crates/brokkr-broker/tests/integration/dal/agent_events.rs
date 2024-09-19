@@ -8,12 +8,14 @@ use brokkr_models::models::{
 fn test_create_agent_event() {
     let fixture = TestFixture::new();
 
+    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
+
     // Create a stack
     let stack = fixture
         .dal
         .stacks()
         .create(
-            &NewStack::new("Stack for create agent event".to_string(), None, None)
+            &NewStack::new("Stack for create agent event".to_string(), None, generator.id)
                 .expect("Failed to create NewStack"),
         )
         .expect("Failed to create stack");
@@ -40,7 +42,6 @@ fn test_create_agent_event() {
                 stack.id,
                 "test: deployment for create event".to_string(),
                 false,
-                None,
             )
             .expect("Failed to create NewDeploymentObject"),
         )
@@ -75,12 +76,14 @@ fn test_create_agent_event() {
 fn test_get_agent_event() {
     let fixture = TestFixture::new();
 
+    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
+
     // Create a stack
     let stack = fixture
         .dal
         .stacks()
         .create(
-            &NewStack::new("Stack for get agent event".to_string(), None, None)
+            &NewStack::new("Stack for get agent event".to_string(), None, generator.id)
                 .expect("Failed to create NewStack"),
         )
         .expect("Failed to create stack");
@@ -107,7 +110,6 @@ fn test_get_agent_event() {
                 stack.id,
                 "test: deployment for get event".to_string(),
                 false,
-                None,
             )
             .expect("Failed to create NewDeploymentObject"),
         )
@@ -142,12 +144,14 @@ fn test_get_agent_event() {
 fn test_get_deleted_agent_event() {
     let fixture = TestFixture::new();
 
+    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
+
     // Create a stack
     let stack = fixture
         .dal
         .stacks()
         .create(
-            &NewStack::new("Stack for deleted agent event".to_string(), None, None)
+            &NewStack::new("Stack for deleted agent event".to_string(), None, generator.id)
                 .expect("Failed to create NewStack"),
         )
         .expect("Failed to create stack");
@@ -174,7 +178,6 @@ fn test_get_deleted_agent_event() {
                 stack.id,
                 "test: deployment for deleted event".to_string(),
                 false,
-                None,
             )
             .expect("Failed to create NewDeploymentObject"),
         )
@@ -222,12 +225,14 @@ fn test_get_deleted_agent_event() {
 fn test_update_agent_event() {
     let fixture = TestFixture::new();
 
+    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
+
     // Create a stack
     let stack = fixture
         .dal
         .stacks()
         .create(
-            &NewStack::new("Stack for update agent event".to_string(), None, None)
+            &NewStack::new("Stack for update agent event".to_string(), None, generator.id)
                 .expect("Failed to create NewStack"),
         )
         .expect("Failed to create stack");
@@ -254,7 +259,6 @@ fn test_update_agent_event() {
                 stack.id,
                 "test: deployment for update event".to_string(),
                 false,
-                None,
             )
             .expect("Failed to create NewDeploymentObject"),
         )
@@ -292,12 +296,14 @@ fn test_update_agent_event() {
 fn test_soft_delete_agent_event() {
     let fixture = TestFixture::new();
 
+    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
+
     // Create a stack
     let stack = fixture
         .dal
         .stacks()
         .create(
-            &NewStack::new("Stack for soft delete agent event".to_string(), None,None)
+            &NewStack::new("Stack for soft delete agent event".to_string(), None, generator.id)
                 .expect("Failed to create NewStack"),
         )
         .expect("Failed to create stack");
@@ -324,7 +330,6 @@ fn test_soft_delete_agent_event() {
                 stack.id,
                 "test: deployment for soft delete event".to_string(),
                 false,
-                None,
             )
             .expect("Failed to create NewDeploymentObject"),
         )
@@ -365,12 +370,14 @@ fn test_soft_delete_agent_event() {
 fn test_hard_delete_agent_event() {
     let fixture = TestFixture::new();
 
+    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
+
     // Create a stack
     let stack = fixture
         .dal
         .stacks()
         .create(
-            &NewStack::new("Stack for hard delete agent event".to_string(), None, None)
+            &NewStack::new("Stack for hard delete agent event".to_string(), None, generator.id)
                 .expect("Failed to create NewStack"),
         )
         .expect("Failed to create stack");
@@ -397,7 +404,6 @@ fn test_hard_delete_agent_event() {
                 stack.id,
                 "test: deployment for hard delete event".to_string(),
                 false,
-                None,
             )
             .expect("Failed to create NewDeploymentObject"),
         )
@@ -437,12 +443,13 @@ fn test_hard_delete_agent_event() {
 fn test_list_agent_events() {
     let fixture = TestFixture::new();
 
+    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "".to_string());
     // Create a stack
     let stack = fixture
         .dal
         .stacks()
         .create(
-            &NewStack::new("Stack for listing events".to_string(), None, None)
+            &NewStack::new("Stack for listing events".to_string(), None, generator.id)
                 .expect("Failed to create NewStack"),
         )
         .expect("Failed to create stack");
@@ -465,7 +472,7 @@ fn test_list_agent_events() {
         .dal
         .deployment_objects()
         .create(
-            &NewDeploymentObject::new(stack.id, "test: deployment for listing".to_string(), false, None)
+            &NewDeploymentObject::new(stack.id, "test: deployment for listing".to_string(), false)
                 .expect("Failed to create NewDeploymentObject"),
         )
         .expect("Failed to create deployment object");
@@ -525,12 +532,14 @@ fn test_list_agent_events() {
 fn test_get_events_filtered() {
     let fixture = TestFixture::new();
 
+    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
+
     // Create stacks with unique names
     let stack1 = fixture
         .dal
         .stacks()
         .create(
-            &NewStack::new("Stack1 for filtered events".to_string(), None, None)
+            &NewStack::new("Stack1 for filtered events".to_string(), None, generator.id)
                 .expect("Failed to create NewStack"),
         )
         .expect("Failed to create stack1");
@@ -539,7 +548,7 @@ fn test_get_events_filtered() {
         .dal
         .stacks()
         .create(
-            &NewStack::new("Stack2 for filtered events".to_string(), None, None)
+            &NewStack::new("Stack2 for filtered events".to_string(), None, generator.id)
                 .expect("Failed to create NewStack"),
         )
         .expect("Failed to create stack2");
@@ -574,7 +583,7 @@ fn test_get_events_filtered() {
         .dal
         .deployment_objects()
         .create(
-            &NewDeploymentObject::new(stack1.id, "test: deployment1".to_string(), false, None)
+            &NewDeploymentObject::new(stack1.id, "test: deployment1".to_string(), false)
                 .expect("Failed to create NewDeploymentObject"),
         )
         .expect("Failed to create deployment object1");
@@ -583,7 +592,7 @@ fn test_get_events_filtered() {
         .dal
         .deployment_objects()
         .create(
-            &NewDeploymentObject::new(stack2.id, "test: deployment2".to_string(), false, None)
+            &NewDeploymentObject::new(stack2.id, "test: deployment2".to_string(), false)
                 .expect("Failed to create NewDeploymentObject"),
         )
         .expect("Failed to create deployment object2");

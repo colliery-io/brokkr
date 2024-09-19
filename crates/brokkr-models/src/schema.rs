@@ -101,7 +101,7 @@ diesel::table! {
         #[max_length = 255]
         name -> Varchar,
         description -> Nullable<Text>,
-        pak_hash -> Text,
+        pak_hash -> Nullable<Text>,
         last_active_at -> Nullable<Timestamptz>,
         is_active -> Bool,
     }

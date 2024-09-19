@@ -5,7 +5,7 @@ CREATE TABLE generators (
     deleted_at TIMESTAMP WITH TIME ZONE,
     name VARCHAR(255) NOT NULL,
     description TEXT,
-    pak_hash TEXT NOT NULL,
+    pak_hash TEXT,
     last_active_at TIMESTAMP WITH TIME ZONE,
     is_active BOOLEAN NOT NULL DEFAULT TRUE
 );
@@ -27,11 +27,11 @@ RETURNS TRIGGER AS $$
 BEGIN
     UPDATE stacks
     SET deleted_at = NEW.deleted_at
-    WHERE generator_id = NEW.id AND deleted_at IS NULL;
+    WHERE id = NEW.id AND deleted_at IS NULL;
 
     UPDATE deployment_objects
     SET deleted_at = NEW.deleted_at
-    WHERE generator_id = NEW.id AND deleted_at IS NULL;
+    WHERE id = NEW.id AND deleted_at IS NULL;
 
     RETURN NEW;
 END;

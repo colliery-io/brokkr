@@ -77,7 +77,7 @@ pub mod deployment_objects;
 use deployment_objects::DeploymentObjectsDAL;
 
 pub mod generators;
-use generators::GeneratorsDal;
+use generators::GeneratorsDAL;
 
 /// The main Data Access Layer struct.
 ///
@@ -190,8 +190,8 @@ impl DAL {
     /// # Returns
     ///
     /// An instance of GeneratorsDal.
-    pub fn generators(&self) -> GeneratorsDal {
-        GeneratorsDal { dal: self }
+    pub fn generators(&self) -> GeneratorsDAL {
+        GeneratorsDAL { dal: self }
     }
     
 }
