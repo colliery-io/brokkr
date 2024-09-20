@@ -10,7 +10,7 @@ use axum::middleware::from_fn_with_state;
 use crate::dal::DAL;
 mod middleware;
 
-pub fn routes(dal: DAL) -> Router {
+pub fn routes(dal: DAL) -> Router<DAL> {
     Router::new()
         .merge(agents::routes())
         .merge(stacks::routes())

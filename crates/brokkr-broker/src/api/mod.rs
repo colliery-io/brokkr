@@ -21,7 +21,7 @@ use crate::dal::DAL;
 // ///
 // /// Returns a configured `Router` instance that includes all API routes and middleware.
 
-pub fn configure_api_routes(dal: DAL) -> Router<> {
+pub fn configure_api_routes(dal: DAL) -> Router<DAL> {
     Router::new()
         .nest("/api/v1", v1::routes(dal))
         .route("/healthz", get(healthz))

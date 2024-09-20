@@ -4,8 +4,9 @@ use axum::{
     Json, Router,
 };
 use serde_json::Value;
+use crate::dal::DAL;
 
-pub fn routes() -> Router {
+pub fn routes() -> Router<DAL> {
     Router::new()
         .route("/stacks", get(list_stacks).post(create_stack))
         .route(

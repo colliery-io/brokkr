@@ -1,7 +1,8 @@
 use axum::{extract::Path, routing::get, Json, Router};
 use serde_json::Value;
+use crate::dal::DAL;
 
-pub fn routes() -> Router {
+pub fn routes() -> Router<DAL> {
     Router::new()
         .route("/deployment-objects", get(list_deployment_objects))
         .route("/deployment-objects/:id", get(get_deployment_object))

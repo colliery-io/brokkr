@@ -1,11 +1,15 @@
 use axum::{
-    extract::Path,
+    extract::{Path, State, Extension},
     routing::{delete, get, post},
     Json, Router,
 };
 use serde_json::Value;
+use axum::http::StatusCode;
+use crate::dal::DAL;
+use crate::api::v1::middleware::AuthPayload;
+use brokkr_models::models::agents::Agent;
 
-pub fn routes() -> Router {
+pub fn routes() -> Router<DAL> {
     Router::new()
         .route("/agents", get(list_agents).post(create_agent))
         .route(
@@ -29,8 +33,27 @@ pub fn routes() -> Router {
         )
 }
 
-async fn list_agents() -> Json<Value> {
-    Json(serde_json::json!({"message": "List all agents"}))
+async fn list_agents(
+    State(dal): State<DAL>,
+    Extension(auth_payload): Extension<AuthPayload>,
+) -> Result<Json<Vec<Agent>>, (StatusCode, Json<serde_json::Value>)> {
+    if !auth_payload.admin {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({"error": "Unauthorized"})),
+        ));
+    }
+
+    match dal.agents().list() {
+        Ok(agents) => Ok(Json(agents)),
+        Err(e) => {
+            eprintln!("Error fetching agents: {:?}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Failed to fetch agents"})),
+            ))
+        }
+    }
 }
 
 async fn create_agent() -> Json<Value> {

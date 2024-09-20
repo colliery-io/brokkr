@@ -8,7 +8,7 @@ use brokkr_broker::dal::DAL;
 use brokkr_broker::db::create_shared_connection_pool;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use dotenv::dotenv;
-
+use brokkr_broker::utils;
 use axum::Router;
 use brokkr_models::models::{
     agent_annotations::{AgentAnnotation, NewAgentAnnotation},
@@ -26,6 +26,8 @@ use brokkr_utils::Settings;
 use std::env;
 
 use uuid::Uuid;
+use brokkr_broker::utils::pak;
+
 /// Embedded migrations for the test database.
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("../brokkr-models/migrations");
 
@@ -37,6 +39,7 @@ pub struct TestFixture {
     /// The Data Access Layer (DAL) instance for database operations.
     pub dal: DAL,
     pub settings: Settings,
+    pub admin_pak: String,
 }
 
 impl Default for TestFixture {
@@ -52,7 +55,7 @@ impl TestFixture {
     ///
     /// Returns a configured Axum Router.
     #[allow(dead_code)]
-    pub fn create_test_router(&self) -> Router {
+    pub fn create_test_router(&self) -> Router<DAL> {
         api::configure_api_routes(self.dal.clone())
     }
 
@@ -76,7 +79,7 @@ impl TestFixture {
         let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
         let connection_pool = create_shared_connection_pool(&database_url, "brokkr", 5);
-
+        let settings = Settings::new(None).expect("Failed to load settings");
         // Run migrations
         let mut conn = connection_pool
             .pool
@@ -87,9 +90,19 @@ impl TestFixture {
         conn.run_pending_migrations(MIGRATIONS)
             .expect("Failed to run migrations");
 
+        utils::pak::create_pak_controller(Some(&settings)).expect("Failed to create PAK controller");
+        utils::first_startup(&mut conn).expect("Failed to run first startup");
+
+        // Read the admin PAK from the temporary file
+        let admin_pak_path = std::env::temp_dir().join("/tmp/key.txt");
+        let admin_pak = std::fs::read_to_string(admin_pak_path)
+            .expect("Failed to read admin PAK from temporary file")
+            .trim()
+            .to_string();
+
         let dal = DAL::new(connection_pool.pool.clone());
-        let settings = Settings::new(None).expect("Failed to load settings");
-        TestFixture { dal, settings }
+        
+        TestFixture { dal, settings, admin_pak }
     }
 
     /// Creates a new stack for testing purposes.
@@ -347,6 +360,7 @@ impl TestFixture {
         conn.run_pending_migrations(MIGRATIONS)
             .expect("Failed to run migrations");
     }
+
 }
 
 impl Drop for TestFixture {

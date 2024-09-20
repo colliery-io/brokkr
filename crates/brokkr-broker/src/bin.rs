@@ -124,7 +124,7 @@ async fn serve(config: &Settings) -> Result<(), Box<dyn std::error::Error>> {
 
     // Configure API routes
     info!("Configuring API routes");
-    let app = api::configure_api_routes(dal);
+    let app = api::configure_api_routes(dal.clone()).with_state(dal);
 
     // Set up the server address
     let addr = "0.0.0.0:3000";

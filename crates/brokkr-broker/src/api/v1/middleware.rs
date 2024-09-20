@@ -4,7 +4,7 @@ use axum::{
 use uuid::Uuid;
 use diesel::prelude::*;
 use brokkr_models::schema::admin_role;
-
+use serde::Serialize;
 use crate::dal::DAL;
 use crate::utils::pak;
 
@@ -15,6 +15,13 @@ pub struct AuthPayload {
     pub generator: Option<Uuid>,
 }
 
+#[derive(Serialize)]
+pub struct AuthResponse {
+    pub admin: bool,
+    pub agent: Option<String>,
+    pub generator: Option<String>,
+}
+
 pub async fn auth_middleware<B>(
     State(dal): State<DAL>,
     mut request: Request<Body>,
@@ -22,7 +29,7 @@ pub async fn auth_middleware<B>(
 ) -> Result<Response, StatusCode> {
     let pak = request
         .headers()
-        .get("X-PAK")
+        .get("Authorization")
         .and_then(|header| header.to_str().ok())
         .ok_or(StatusCode::UNAUTHORIZED)?;
 
