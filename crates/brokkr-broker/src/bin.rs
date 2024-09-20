@@ -169,7 +169,7 @@ fn rotate_agent_key(config: &Settings, uuid: Uuid) -> Result<(), Box<dyn std::er
     let dal = DAL::new(pool.pool.clone());
 
     let agent = dal.agents().get(uuid)?.ok_or("Agent not found")?;
-    let new_pak_hash = utils::pak::create_pak(config)?.1;
+    let new_pak_hash = utils::pak::create_pak()?.1;
     dal.agents().update_pak_hash(agent.id, new_pak_hash)?;
 
     info!("Agent key rotated successfully for agent: {}", agent.name);
@@ -184,7 +184,7 @@ fn rotate_generator_key(config: &Settings, uuid: Uuid) -> Result<(), Box<dyn std
 
     let generator = dal.generators().get(uuid)?.ok_or("Generator not found")?;
 
-    let new_pak_hash = utils::pak::create_pak(config)?.1;
+    let new_pak_hash = utils::pak::create_pak()?.1;
     dal.generators().update_pak_hash(generator.id, new_pak_hash)?;
 
     info!("Generator key rotated successfully for generator: {}", generator.name);

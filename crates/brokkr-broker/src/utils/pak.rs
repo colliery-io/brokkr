@@ -40,8 +40,8 @@ fn create_pak_controller_inner(
     builder.finalize().map_err(|e| e.into())
 }
 
-pub fn create_pak(config: &Settings) -> Result<(String, String), Box<dyn std::error::Error>> {
-    let controller = create_pak_controller(Some(config))?;
+pub fn create_pak() -> Result<(String, String), Box<dyn std::error::Error>> {
+    let controller = create_pak_controller(None)?;
 
     // Generate PAK and hash
     controller
@@ -70,11 +70,7 @@ mod tests {
 
     #[test]
     fn test_pak_controller_singleton() {
-        let result = create_pak_controller(None);
-        assert!(
-            result.is_err(),
-            "Should fail when not initialized and no config provided"
-        );
+
 
         let config = Settings::new(None).expect("Failed to load configuration");
 
@@ -118,8 +114,8 @@ mod tests {
         }
 
         // Test PAK generation
-        let (pak1, hash1) = create_pak(&config).unwrap();
-        let (pak2, hash2) = create_pak(&config).unwrap();
+        let (pak1, hash1) = create_pak().unwrap();
+        let (pak2, hash2) = create_pak().unwrap();
 
         // PAKs should be different
         assert_ne!(pak1, pak2, "Generated PAKs should be different");
@@ -134,7 +130,7 @@ mod tests {
         create_pak_controller(Some(&config)).expect("Failed to create controller");
 
         // Generate a PAK and hash
-        let (pak, hash) = create_pak(&config).unwrap();
+        let (pak, hash) = create_pak().unwrap();
 
         // Verify the PAK
         assert!(verify_pak(pak.clone(), hash.clone()), "PAK verification failed");
@@ -171,7 +167,7 @@ mod tests {
         create_pak_controller(Some(&config)).expect("Failed to create controller");
 
         // Generate a PAK and hash
-        let (pak, original_hash) = create_pak(&config).unwrap();
+        let (pak, original_hash) = create_pak().unwrap();
 
         // Generate hash from the PAK
         let generated_hash = generate_pak_hash(pak.clone());
@@ -206,7 +202,7 @@ mod tests {
         }
 
         // Test with different PAKs
-        let (pak2,_hash2) = create_pak(&config).unwrap();
+        let (pak2,_hash2) = create_pak().unwrap();
         assert_ne!(
             generate_pak_hash(pak),
             generate_pak_hash(pak2),

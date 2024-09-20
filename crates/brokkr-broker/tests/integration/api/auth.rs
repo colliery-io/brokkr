@@ -19,7 +19,7 @@ async fn test_verify_pak_endpoint() {
     let test_agent = fixture.create_test_agent("Test Agent".to_string(), "Test Cluster".to_string());
 
     // Generate a PAK for the test agent
-    let (pak, hash) = pak::create_pak(&fixture.settings).unwrap();
+    let (pak, hash) = pak::create_pak().unwrap();
 
     // Update the agent's PAK hash
     fixture.dal.agents().update_pak_hash(test_agent.id, hash).unwrap();
