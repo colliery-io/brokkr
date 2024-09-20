@@ -26,7 +26,6 @@ use brokkr_utils::Settings;
 use std::env;
 
 use uuid::Uuid;
-use brokkr_broker::utils::pak;
 
 /// Embedded migrations for the test database.
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("../brokkr-models/migrations");
