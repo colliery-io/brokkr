@@ -146,8 +146,9 @@ async fn update_agent(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
     Path(id): Path<Uuid>,
-    Json(updated_agent): Json<Agent>,
+    Json(update_payload): Json<serde_json::Value>,
 ) -> Result<Json<Agent>, (StatusCode, Json<serde_json::Value>)> {
+
     if !auth_payload.admin && auth_payload.agent != Some(id) {
         return Err((
             StatusCode::FORBIDDEN,
@@ -155,16 +156,24 @@ async fn update_agent(
         ));
     }
 
-    match dal.agents().update(id, &updated_agent) {
-        Ok(agent) => Ok(Json(agent)),
-        Err(e) => {
-            eprintln!("Error updating agent: {:?}", e);
-            Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": "Failed to update agent"})),
-            ))
-        }
+    let mut agent = dal.agents().get(id)
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Failed to fetch agent"}))))?
+        .ok_or((StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "Agent not found"}))))?;
+
+    if let Some(name) = update_payload.get("name").and_then(|v| v.as_str()) {
+        agent.name = name.to_string();
     }
+    if let Some(cluster_name) = update_payload.get("cluster_name").and_then(|v| v.as_str()) {
+        agent.cluster_name = cluster_name.to_string();
+    }
+    if let Some(status) = update_payload.get("status").and_then(|v| v.as_str()) {
+        agent.status = status.to_string();
+    }
+
+    let updated_agent = dal.agents().update(id, &agent)
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Failed to update agent"}))))?;
+
+    Ok(Json(updated_agent))
 }
 
 async fn delete_agent(

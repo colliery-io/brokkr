@@ -25,6 +25,7 @@ pub struct Generator {
     pub deleted_at: Option<DateTime<Utc>>,
     pub name: String,
     pub description: Option<String>,
+    #[serde(skip_serializing, skip_deserializing)]
     pub pak_hash: Option<String>,
     pub last_active_at: Option<DateTime<Utc>>,
     pub is_active: bool,

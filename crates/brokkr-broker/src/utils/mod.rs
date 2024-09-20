@@ -31,6 +31,8 @@ pub struct NewAdminKey {
 
 pub fn first_startup(conn: &mut PgConnection) -> Result<(), Box<dyn std::error::Error>> {
     upsert_admin(conn)
+
+    
 }
 
 fn create_pak() -> Result<(String, String), Box<dyn std::error::Error>> {
@@ -67,6 +69,36 @@ pub fn upsert_admin(conn: &mut PgConnection) -> Result<(), Box<dyn std::error::E
                 .values(&NewAdminKey {
                     pak_hash: hash.clone(),
                 })
+                .execute(conn)?;
+        }
+    }
+
+    // Create or update the Admin Generator
+    use brokkr_models::schema::generators;
+    let existing_admin_generator = generators::table
+        .filter(generators::name.eq("admin-generator"))
+        .select(generators::id)
+        .first::<Uuid>(conn)
+        .optional()?;
+
+    match existing_admin_generator {
+        Some(id) => {
+            // Update existing Admin Generator
+            diesel::update(generators::table.find(id))
+                .set((
+                    generators::pak_hash.eq(hash.clone()),
+                    generators::description.eq("Linked to Admin PAK"),
+                ))
+                .execute(conn)?;
+        }
+        None => {
+            // Insert new Admin Generator
+            diesel::insert_into(generators::table)
+                .values((
+                    generators::name.eq("admin-generator"),
+                    generators::description.eq("Linked to Admin PAK"),
+                    generators::pak_hash.eq(hash.clone()),
+                ))
                 .execute(conn)?;
         }
     }

@@ -67,6 +67,7 @@ pub struct Agent {
     /// Current status of the agent.
     pub status: String,
     /// Hash of the agent's Pre-shared Authentication Key (PAK).
+    #[serde(skip_serializing, skip_deserializing)]
     pub pak_hash: String,
 }
 

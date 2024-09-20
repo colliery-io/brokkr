@@ -1,10 +1,12 @@
 use axum::{
     body::{to_bytes, Body},
     http::{Request, StatusCode},
+    Router
 };
 use tower::ServiceExt;
 use crate::fixtures::TestFixture;
 use brokkr_models::models::agents::NewAgent;
+use brokkr_models::models::agents::Agent;
 use brokkr_models::models::agent_events::NewAgentEvent;
 use brokkr_models::models::agent_labels::NewAgentLabel;
 use brokkr_models::models::agent_annotations::NewAgentAnnotation;
@@ -12,6 +14,30 @@ use brokkr_models::models::agent_targets::NewAgentTarget;
 use brokkr_models::models::stacks::NewStack;
 use serde_json;
 use uuid::Uuid;
+use std::ops::Not;
+
+
+async fn make_unauthorized_request(app: Router, method: &str, uri: &str, body: Option<String>) -> StatusCode {
+    let mut request = Request::builder()
+        .method(method)
+        .uri(uri);
+    
+    if let Some(ref b) = body {
+        request = request.header("Content-Type", "application/json");
+    }
+
+    let response = app
+        .oneshot(
+            request
+                .body(Body::from(body.unwrap_or_default()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    response.status()
+}
+
 
 #[tokio::test]
 async fn test_create_agent() {
@@ -80,20 +106,25 @@ async fn test_update_agent() {
     let app = fixture.create_test_router().with_state(fixture.dal.clone());
     let admin_pak = fixture.admin_pak.clone();
 
+    // Create a test agent
     let test_agent = fixture.create_test_agent("Test Agent".to_string(), "Test Cluster".to_string());
 
-    let mut updated_agent = test_agent.clone();
-    updated_agent.name = "Updated Agent".to_string();
-    updated_agent.cluster_name = "Updated Cluster".to_string();
+    // Prepare update payload
+    let update_payload = serde_json::json!({
+        "name": "Updated Agent",
+        "cluster_name": "Updated Cluster",
+        "status": "ACTIVE"
+    });
 
+    // Send update request
     let response = app
         .oneshot(
             Request::builder()
                 .method("PUT")
                 .uri(format!("/api/v1/agents/{}", test_agent.id))
                 .header("Content-Type", "application/json")
-                .header("Authorization", admin_pak)
-                .body(Body::from(serde_json::to_string(&updated_agent).unwrap()))
+                .header("Authorization", format!("Bearer {}", admin_pak))
+                .body(Body::from(serde_json::to_string(&update_payload).unwrap()))
                 .unwrap(),
         )
         .await
@@ -101,11 +132,26 @@ async fn test_update_agent() {
 
     assert_eq!(response.status(), StatusCode::OK);
 
+    // Parse response body
     let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let updated_agent: Agent = serde_json::from_slice(&body).unwrap();
 
-    assert_eq!(json["name"], "Updated Agent");
-    assert_eq!(json["cluster_name"], "Updated Cluster");
+    // Verify updated fields
+    assert_eq!(updated_agent.name, "Updated Agent");
+    assert_eq!(updated_agent.cluster_name, "Updated Cluster");
+    assert_eq!(updated_agent.status, "ACTIVE");
+
+    // Verify unchanged fields
+    assert_eq!(updated_agent.id, test_agent.id);
+    assert!(updated_agent.updated_at > test_agent.created_at);
+    assert_eq!(updated_agent.deleted_at, None);
+
+    // Verify that pak_hash is not returned in the response
+    assert!(serde_json::to_string(&updated_agent).unwrap().contains("pak_hash").not());
+
+    // Fetch the agent from the database to verify the update
+    let db_agent = fixture.dal.agents().get(test_agent.id).unwrap().unwrap();
+    assert_eq!(db_agent, updated_agent);
 }
 
 #[tokio::test]
@@ -139,10 +185,14 @@ async fn test_list_agent_events() {
 
     let test_agent = fixture.create_test_agent("Test Agent".to_string(), "Test Cluster".to_string());
 
+    let test_stack = fixture.create_test_stack("Test Stack".to_string(), None, fixture.admin_generator.id);
+
+    let test_do = fixture.create_test_deployment_object(test_stack.id, "Test Deployment Object".to_string(), false);
+
     // Create a test event
     let new_event = NewAgentEvent::new(
         test_agent.id,
-        Uuid::new_v4(), // Assuming a random UUID for deployment_object_id
+        test_do.id,
         "TEST_EVENT".to_string(),
         "SUCCESS".to_string(),
         Some("Test message".to_string()),
@@ -177,10 +227,12 @@ async fn test_create_agent_event() {
     let admin_pak = fixture.admin_pak.clone();
 
     let test_agent = fixture.create_test_agent("Test Agent".to_string(), "Test Cluster".to_string());
+    let test_stack = fixture.create_test_stack("Test Stack".to_string(), None, fixture.admin_generator.id);
+    let test_do = fixture.create_test_deployment_object(test_stack.id, "Test Deployment Object".to_string(), false);
 
     let new_event = NewAgentEvent::new(
         test_agent.id,
-        Uuid::new_v4(), // Assuming a random UUID for deployment_object_id
+        test_do.id,
         "TEST_EVENT".to_string(),
         "SUCCESS".to_string(),
         Some("Test message".to_string()),
@@ -407,7 +459,7 @@ async fn test_list_agent_targets() {
     let test_agent = fixture.create_test_agent("Test Agent".to_string(), "Test Cluster".to_string());
 
     // Create a test stack
-    let new_stack = NewStack::new("Test Stack".to_string(), None, Uuid::new_v4())
+    let new_stack = NewStack::new("Test Stack".to_string(), None, fixture.admin_generator.id)
         .expect("Failed to create NewStack");
     let stack = fixture.dal.stacks().create(&new_stack).expect("Failed to create stack");
 
@@ -446,7 +498,7 @@ async fn test_add_agent_target() {
     let test_agent = fixture.create_test_agent("Test Agent".to_string(), "Test Cluster".to_string());
 
     // Create a test stack
-    let new_stack = NewStack::new("Test Stack".to_string(), None, Uuid::new_v4())
+    let new_stack = NewStack::new("Test Stack".to_string(), None, fixture.admin_generator.id)
         .expect("Failed to create NewStack");
     let stack = fixture.dal.stacks().create(&new_stack).expect("Failed to create stack");
 
@@ -483,7 +535,7 @@ async fn test_remove_agent_target() {
     let test_agent = fixture.create_test_agent("Test Agent".to_string(), "Test Cluster".to_string());
 
     // Create a test stack
-    let new_stack = NewStack::new("Test Stack".to_string(), None, Uuid::new_v4())
+    let new_stack = NewStack::new("Test Stack".to_string(), None, fixture.admin_generator.id)
         .expect("Failed to create NewStack");
     let stack = fixture.dal.stacks().create(&new_stack).expect("Failed to create stack");
 
@@ -507,3 +559,253 @@ async fn test_remove_agent_target() {
     assert_eq!(response.status(), StatusCode::NO_CONTENT);
 }
 
+#[tokio::test]
+async fn test_unauthorized_list_agent_events() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+    let test_agent = fixture.create_test_agent("Test Agent".to_string(), "Test Cluster".to_string());
+
+    let status = make_unauthorized_request(
+        app.clone(),
+        "GET",
+        &format!("/api/v1/agents/{}/events", test_agent.id),
+        None,
+    ).await;
+
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn test_unauthorized_create_agent_event() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+    let test_agent = fixture.create_test_agent("Test Agent".to_string(), "Test Cluster".to_string());
+
+    let new_event = NewAgentEvent::new(
+        test_agent.id,
+        Uuid::new_v4(),
+        "TEST_EVENT".to_string(),
+        "SUCCESS".to_string(),
+        Some("Test message".to_string()),
+    ).expect("Failed to create NewAgentEvent");
+
+    let status = make_unauthorized_request(
+        app.clone(),
+        "POST",
+        &format!("/api/v1/agents/{}/events", test_agent.id),
+        Some(serde_json::to_string(&new_event).unwrap()),
+    ).await;
+
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn test_unauthorized_list_agent_labels() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+    let test_agent = fixture.create_test_agent("Test Agent".to_string(), "Test Cluster".to_string());
+
+    let status = make_unauthorized_request(
+        app.clone(),
+        "GET",
+        &format!("/api/v1/agents/{}/labels", test_agent.id),
+        None,
+    ).await;
+
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn test_unauthorized_add_agent_label() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+    let test_agent = fixture.create_test_agent("Test Agent".to_string(), "Test Cluster".to_string());
+
+    let new_label = NewAgentLabel::new(test_agent.id, "new_label".to_string())
+        .expect("Failed to create NewAgentLabel");
+
+    let status = make_unauthorized_request(
+        app.clone(),
+        "POST",
+        &format!("/api/v1/agents/{}/labels", test_agent.id),
+        Some(serde_json::to_string(&new_label).unwrap()),
+    ).await;
+
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn test_unauthorized_create_agent() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+
+    let new_agent = NewAgent::new("Test Agent".to_string(), "Test Cluster".to_string())
+        .expect("Failed to create NewAgent");
+
+    let status = make_unauthorized_request(
+        app.clone(),
+        "POST",
+        "/api/v1/agents",
+        Some(serde_json::to_string(&new_agent).unwrap()),
+    ).await;
+
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn test_unauthorized_get_agent() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+    let test_agent = fixture.create_test_agent("Test Agent".to_string(), "Test Cluster".to_string());
+
+    let status = make_unauthorized_request(
+        app.clone(),
+        "GET",
+        &format!("/api/v1/agents/{}", test_agent.id),
+        None,
+    ).await;
+
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn test_unauthorized_update_agent() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+    let test_agent = fixture.create_test_agent("Test Agent".to_string(), "Test Cluster".to_string());
+
+    let updated_agent = serde_json::json!({
+        "name": "Updated Agent",
+        "cluster_name": "Updated Cluster"
+    });
+
+    let status = make_unauthorized_request(
+        app.clone(),
+        "PUT",
+        &format!("/api/v1/agents/{}", test_agent.id),
+        Some(serde_json::to_string(&updated_agent).unwrap()),
+    ).await;
+
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn test_unauthorized_delete_agent() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+    let test_agent = fixture.create_test_agent("Test Agent".to_string(), "Test Cluster".to_string());
+
+    let status = make_unauthorized_request(
+        app.clone(),
+        "DELETE",
+        &format!("/api/v1/agents/{}", test_agent.id),
+        None,
+    ).await;
+
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn test_get_agent_with_mismatched_pak() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+
+    let (agent1, agent1_pak) = fixture.create_test_agent_with_pak("Agent 1".to_string(), "Cluster 1".to_string());
+    let (agent2, _) = fixture.create_test_agent_with_pak("Agent 2".to_string(), "Cluster 2".to_string());
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/api/v1/agents/{}", agent2.id))
+                .header("Authorization", format!("Bearer {}", agent1_pak))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn test_update_agent_with_mismatched_pak() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+
+    let (agent1, agent1_pak) = fixture.create_test_agent_with_pak("Agent 1".to_string(), "Cluster 1".to_string());
+    let (agent2, _) = fixture.create_test_agent_with_pak("Agent 2".to_string(), "Cluster 2".to_string());
+
+    let mut updated_agent = agent2.clone();
+    updated_agent.name = "Updated Agent 2".to_string();
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri(format!("/api/v1/agents/{}", agent2.id))
+                .header("Content-Type", "application/json")
+                .header("Authorization", format!("Bearer {}", agent1_pak))
+                .body(Body::from(serde_json::to_string(&updated_agent).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn test_create_agent_event_with_mismatched_pak() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+
+    let (agent1, agent1_pak) = fixture.create_test_agent_with_pak("Agent 1".to_string(), "Cluster 1".to_string());
+    let (agent2, _) = fixture.create_test_agent_with_pak("Agent 2".to_string(), "Cluster 2".to_string());
+
+    let new_event = NewAgentEvent::new(
+        agent2.id,
+        Uuid::new_v4(),
+        "TEST_EVENT".to_string(),
+        "SUCCESS".to_string(),
+        Some("Test message".to_string()),
+    ).expect("Failed to create NewAgentEvent");
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/agents/{}/events", agent2.id))
+                .header("Content-Type", "application/json")
+                .header("Authorization", format!("Bearer {}", agent1_pak))
+                .body(Body::from(serde_json::to_string(&new_event).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn test_list_agent_labels_with_mismatched_pak() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+
+    let (agent1, agent1_pak) = fixture.create_test_agent_with_pak("Agent 1".to_string(), "Cluster 1".to_string());
+    let (agent2, _) = fixture.create_test_agent_with_pak("Agent 2".to_string(), "Cluster 2".to_string());
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/api/v1/agents/{}/labels", agent2.id))
+                .header("Authorization", format!("Bearer {}", agent1_pak))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
