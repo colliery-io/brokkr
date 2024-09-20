@@ -31,8 +31,6 @@ pub struct NewAdminKey {
 
 pub fn first_startup(conn: &mut PgConnection) -> Result<(), Box<dyn std::error::Error>> {
     upsert_admin(conn)
-
-    
 }
 
 fn create_pak() -> Result<(String, String), Box<dyn std::error::Error>> {

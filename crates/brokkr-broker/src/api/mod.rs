@@ -4,9 +4,9 @@
 // //! It serves as the central point for organizing and initializing all API endpoints of the application.
 
 pub mod v1;
+use crate::dal::DAL;
 use axum::{response::IntoResponse, routing::get, Router};
 use hyper::StatusCode;
-use crate::dal::DAL;
 
 // /// Configures and returns the main application router with all API routes
 // ///

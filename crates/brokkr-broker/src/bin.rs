@@ -71,7 +71,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Commands::Serve => serve(&config).await?,
         Commands::RotateAdmin => rotate_admin(&config)?,
         Commands::RotateAgentKey { uuid } => rotate_agent_key(&config, uuid)?,
-        Commands::RotateGeneratorKey { uuid} => rotate_generator_key(&config, uuid)?,
+        Commands::RotateGeneratorKey { uuid } => rotate_generator_key(&config, uuid)?,
     }
     Ok(())
 }
@@ -185,8 +185,12 @@ fn rotate_generator_key(config: &Settings, uuid: Uuid) -> Result<(), Box<dyn std
     let generator = dal.generators().get(uuid)?.ok_or("Generator not found")?;
 
     let new_pak_hash = utils::pak::create_pak()?.1;
-    dal.generators().update_pak_hash(generator.id, new_pak_hash)?;
+    dal.generators()
+        .update_pak_hash(generator.id, new_pak_hash)?;
 
-    info!("Generator key rotated successfully for generator: {}", generator.name);
+    info!(
+        "Generator key rotated successfully for generator: {}",
+        generator.name
+    );
     Ok(())
 }

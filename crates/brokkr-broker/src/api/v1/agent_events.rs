@@ -1,6 +1,6 @@
+use crate::dal::DAL;
 use axum::{extract::Path, routing::get, Json, Router};
 use serde_json::Value;
-use crate::dal::DAL;
 pub fn routes() -> Router<DAL> {
     Router::new()
         .route("/agent-events", get(list_agent_events))

@@ -1,10 +1,10 @@
+use crate::dal::DAL;
 use axum::{
     extract::Path,
     routing::{delete, get},
     Json, Router,
 };
 use serde_json::Value;
-use crate::dal::DAL;
 
 pub fn routes() -> Router<DAL> {
     Router::new()

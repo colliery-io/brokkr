@@ -5,7 +5,6 @@ use axum::{
 use serde_json::json;
 use tower::ServiceExt;
 
-
 use brokkr_broker::utils::pak;
 
 use crate::fixtures::TestFixture;
@@ -16,13 +15,18 @@ async fn test_verify_pak_endpoint() {
     let app = fixture.create_test_router().with_state(fixture.dal.clone());
 
     // Create a test agent
-    let test_agent = fixture.create_test_agent("Test Agent".to_string(), "Test Cluster".to_string());
+    let test_agent =
+        fixture.create_test_agent("Test Agent".to_string(), "Test Cluster".to_string());
 
     // Generate a PAK for the test agent
     let (pak, hash) = pak::create_pak().unwrap();
 
     // Update the agent's PAK hash
-    fixture.dal.agents().update_pak_hash(test_agent.id, hash).unwrap();
+    fixture
+        .dal
+        .agents()
+        .update_pak_hash(test_agent.id, hash)
+        .unwrap();
 
     // Send a request to verify the PAK
     let response = app
@@ -56,7 +60,6 @@ async fn test_verify_admin_pak_endpoint() {
     // Generate an admin PAK
     let admin_pak = fixture.admin_pak.clone();
 
-    
     // Send a request to verify the admin PAK
     let response = app
         .oneshot(

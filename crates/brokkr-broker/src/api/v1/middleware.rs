@@ -1,12 +1,16 @@
-use axum::{
-    body::Body, extract::State, http::{Request, StatusCode}, middleware::Next, response::Response
-};
-use uuid::Uuid;
-use diesel::prelude::*;
-use brokkr_models::schema::admin_role;
-use serde::Serialize;
 use crate::dal::DAL;
 use crate::utils::pak;
+use axum::{
+    body::Body,
+    extract::State,
+    http::{Request, StatusCode},
+    middleware::Next,
+    response::Response,
+};
+use brokkr_models::schema::admin_role;
+use diesel::prelude::*;
+use serde::Serialize;
+use uuid::Uuid;
 
 #[derive(Clone, Debug)]
 pub struct AuthPayload {
@@ -41,9 +45,10 @@ pub async fn auth_middleware<B>(
 }
 
 async fn verify_pak(dal: &DAL, pak: &str) -> Result<AuthPayload, StatusCode> {
-    
-
-    let conn = &mut dal.pool.get().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let conn = &mut dal
+        .pool
+        .get()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     // Check admin role
     let admin_key = admin_role::table
@@ -63,7 +68,10 @@ async fn verify_pak(dal: &DAL, pak: &str) -> Result<AuthPayload, StatusCode> {
     }
 
     // Check agents
-    let agents = dal.agents().list().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let agents = dal
+        .agents()
+        .list()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     for agent in agents {
         if pak::verify_pak(pak.to_string(), agent.pak_hash) {
             return Ok(AuthPayload {
@@ -75,7 +83,10 @@ async fn verify_pak(dal: &DAL, pak: &str) -> Result<AuthPayload, StatusCode> {
     }
 
     // Check generators
-    let generators = dal.generators().list().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let generators = dal
+        .generators()
+        .list()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     for generator in generators {
         if pak::verify_pak(pak.to_string(), generator.pak_hash.unwrap_or_default()) {
             return Ok(AuthPayload {

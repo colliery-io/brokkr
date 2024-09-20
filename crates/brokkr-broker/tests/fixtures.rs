@@ -3,13 +3,12 @@
 //! It includes functionality to set up a test database, run migrations,
 //! and insert test data for various entities like stacks, agents, deployment objects,
 //! and agent events.
+use axum::Router;
 use brokkr_broker::api;
 use brokkr_broker::dal::DAL;
 use brokkr_broker::db::create_shared_connection_pool;
-use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
-use dotenv::dotenv;
 use brokkr_broker::utils;
-use axum::Router;
+use brokkr_broker::utils::pak;
 use brokkr_models::models::{
     agent_annotations::{AgentAnnotation, NewAgentAnnotation},
     agent_events::{AgentEvent, NewAgentEvent},
@@ -23,8 +22,9 @@ use brokkr_models::models::{
     stacks::{NewStack, Stack},
 };
 use brokkr_utils::Settings;
+use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
+use dotenv::dotenv;
 use std::env;
-use brokkr_broker::utils::pak;
 use uuid::Uuid;
 
 /// Embedded migrations for the test database.
@@ -77,7 +77,7 @@ impl TestFixture {
     pub fn new() -> Self {
         dotenv().ok();
         let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    
+
         let connection_pool = create_shared_connection_pool(&database_url, "brokkr", 5);
         let settings = Settings::new(None).expect("Failed to load settings");
         // Run migrations
@@ -85,31 +85,37 @@ impl TestFixture {
             .pool
             .get()
             .expect("Failed to get DB connection");
-    
+
         // This runs the migrations within the transaction
         conn.run_pending_migrations(MIGRATIONS)
             .expect("Failed to run migrations");
-    
-        utils::pak::create_pak_controller(Some(&settings)).expect("Failed to create PAK controller");
+
+        utils::pak::create_pak_controller(Some(&settings))
+            .expect("Failed to create PAK controller");
         utils::first_startup(&mut conn).expect("Failed to run first startup");
-    
+
         // Read the admin PAK from the temporary file
         let admin_pak_path = std::env::temp_dir().join("/tmp/key.txt");
         let admin_pak = std::fs::read_to_string(admin_pak_path)
             .expect("Failed to read admin PAK from temporary file")
             .trim()
             .to_string();
-    
+
         let dal = DAL::new(connection_pool.pool.clone());
-    
+
         // Fetch the admin generator
         let admin_generator = dal
             .generators()
             .get_by_name("admin-generator")
             .expect("Failed to get admin generator")
             .expect("Admin generator not found");
-    
-        TestFixture { dal, settings, admin_pak, admin_generator }
+
+        TestFixture {
+            dal,
+            settings,
+            admin_pak,
+            admin_generator,
+        }
     }
 
     /// Creates a new stack for testing purposes.
@@ -357,11 +363,22 @@ impl TestFixture {
             .expect("Failed to update pak_hash")
     }
 
-    pub fn create_test_agent_with_pak(&self, name: String, cluster_name: String) -> (Agent, String) {
+    pub fn create_test_agent_with_pak(
+        &self,
+        name: String,
+        cluster_name: String,
+    ) -> (Agent, String) {
         let (pak, hash) = pak::create_pak().expect("Failed to create PAK");
         let new_agent = NewAgent::new(name, cluster_name).expect("Failed to create NewAgent");
-        let agent = self.dal.agents().create(&new_agent).expect("Failed to create agent");
-        self.dal.agents().update_pak_hash(agent.id, hash).expect("Failed to update PAK hash");
+        let agent = self
+            .dal
+            .agents()
+            .create(&new_agent)
+            .expect("Failed to create agent");
+        self.dal
+            .agents()
+            .update_pak_hash(agent.id, hash)
+            .expect("Failed to update PAK hash");
         (agent, pak)
     }
 
@@ -375,7 +392,6 @@ impl TestFixture {
         conn.run_pending_migrations(MIGRATIONS)
             .expect("Failed to run migrations");
     }
-
 }
 
 impl Drop for TestFixture {

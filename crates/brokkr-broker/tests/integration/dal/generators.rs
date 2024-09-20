@@ -79,7 +79,6 @@ fn test_list_generators() {
     // We have two active generators, the admin generator and the one we just created
     // This is purely because of the test fixture setup
     assert_eq!(active_generators.len(), 2);
-   
 
     let all_generators = fixture
         .dal

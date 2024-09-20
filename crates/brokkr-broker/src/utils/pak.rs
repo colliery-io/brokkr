@@ -1,11 +1,11 @@
 use brokkr_utils::logging::prelude::*;
 use brokkr_utils::Settings;
 use once_cell::sync::OnceCell;
+use prefixed_api_key::PrefixedApiKey;
 use prefixed_api_key::PrefixedApiKeyController;
 use rand::rngs::OsRng;
 use sha2::Sha256;
 use std::sync::Arc;
-use prefixed_api_key::PrefixedApiKey;
 
 static PAK_CONTROLLER: OnceCell<Arc<PrefixedApiKeyController<OsRng, Sha256>>> = OnceCell::new();
 
@@ -70,8 +70,6 @@ mod tests {
 
     #[test]
     fn test_pak_controller_singleton() {
-
-
         let config = Settings::new(None).expect("Failed to load configuration");
 
         // First call should initialize the controller
@@ -125,7 +123,7 @@ mod tests {
     #[test]
     fn test_verify_pak() {
         let config = Settings::new(None).expect("Failed to load configuration");
-        
+
         // Initialize the PAK controller
         create_pak_controller(Some(&config)).expect("Failed to create controller");
 
@@ -133,10 +131,19 @@ mod tests {
         let (pak, hash) = create_pak().unwrap();
 
         // Verify the PAK
-        assert!(verify_pak(pak.clone(), hash.clone()), "PAK verification failed");
+        assert!(
+            verify_pak(pak.clone(), hash.clone()),
+            "PAK verification failed"
+        );
 
         // Test with an invalid PAK
-        assert!(!verify_pak(pak.clone(), "0000000000000000000000000000000000000000000000000000000000000000".to_string()), "Invalid PAK should not verify");
+        assert!(
+            !verify_pak(
+                pak.clone(),
+                "0000000000000000000000000000000000000000000000000000000000000000".to_string()
+            ),
+            "Invalid PAK should not verify"
+        );
 
         // Test thread safety
         let pak_clone = pak.clone();
@@ -155,14 +162,17 @@ mod tests {
 
         // Test consistency
         for _ in 0..100 {
-            assert!(verify_pak(pak.clone(), hash.clone()), "PAK verification inconsistent");
+            assert!(
+                verify_pak(pak.clone(), hash.clone()),
+                "PAK verification inconsistent"
+            );
         }
     }
 
     #[test]
     fn test_generate_pak_hash() {
         let config = Settings::new(None).expect("Failed to load configuration");
-        
+
         // Initialize the PAK controller
         create_pak_controller(Some(&config)).expect("Failed to create controller");
 
@@ -173,7 +183,10 @@ mod tests {
         let generated_hash = generate_pak_hash(pak.clone());
 
         // Verify that the generated hash matches the original hash
-        assert_eq!(original_hash, generated_hash, "Generated hash should match the original hash");
+        assert_eq!(
+            original_hash, generated_hash,
+            "Generated hash should match the original hash"
+        );
 
         // Test consistency
         for _ in 0..100 {
@@ -202,12 +215,11 @@ mod tests {
         }
 
         // Test with different PAKs
-        let (pak2,_hash2) = create_pak().unwrap();
+        let (pak2, _hash2) = create_pak().unwrap();
         assert_ne!(
             generate_pak_hash(pak),
             generate_pak_hash(pak2),
             "Hashes for different PAKs should be different"
         );
-
     }
 }

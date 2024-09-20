@@ -1,20 +1,20 @@
+use crate::api::v1::middleware::AuthPayload;
+use crate::dal::DAL;
+use crate::utils::pak;
+use axum::http::StatusCode;
 use axum::{
-    extract::{Path, State, Extension},
+    extract::{Extension, Path, State},
     routing::{delete, get, post},
     Json, Router,
 };
-use serde_json::Value;
-use axum::http::StatusCode;
-use crate::dal::DAL;
-use crate::api::v1::middleware::AuthPayload;
-use brokkr_models::models::agents::{Agent, NewAgent};
-use uuid::Uuid;
+use brokkr_models::models::agent_annotations::{AgentAnnotation, NewAgentAnnotation};
 use brokkr_models::models::agent_events::{AgentEvent, NewAgentEvent};
 use brokkr_models::models::agent_labels::{AgentLabel, NewAgentLabel};
-use brokkr_models::models::agent_annotations::{AgentAnnotation, NewAgentAnnotation};
 use brokkr_models::models::agent_targets::{AgentTarget, NewAgentTarget};
+use brokkr_models::models::agents::{Agent, NewAgent};
 use brokkr_models::models::deployment_objects::DeploymentObject;
-use crate::utils::pak;
+use serde_json::Value;
+use uuid::Uuid;
 
 pub fn routes() -> Router<DAL> {
     Router::new()
@@ -85,7 +85,6 @@ async fn create_agent(
                     Json(serde_json::json!({"error": "Failed to create PAK"})),
                 )
             })?;
-        
 
             match dal.agents().update_pak_hash(agent.id, pak_hash) {
                 Ok(updated_agent) => {
@@ -94,7 +93,7 @@ async fn create_agent(
                         "initial_pak": pak
                     });
                     Ok(Json(response))
-                },
+                }
                 Err(e) => {
                     eprintln!("Error updating agent PAK hash: {:?}", e);
                     Err((
@@ -103,7 +102,7 @@ async fn create_agent(
                     ))
                 }
             }
-        },
+        }
         Err(e) => {
             eprintln!("Error creating agent: {:?}", e);
             Err((
@@ -148,7 +147,6 @@ async fn update_agent(
     Path(id): Path<Uuid>,
     Json(update_payload): Json<serde_json::Value>,
 ) -> Result<Json<Agent>, (StatusCode, Json<serde_json::Value>)> {
-
     if !auth_payload.admin && auth_payload.agent != Some(id) {
         return Err((
             StatusCode::FORBIDDEN,
@@ -156,9 +154,19 @@ async fn update_agent(
         ));
     }
 
-    let mut agent = dal.agents().get(id)
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Failed to fetch agent"}))))?
-        .ok_or((StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "Agent not found"}))))?;
+    let mut agent = dal
+        .agents()
+        .get(id)
+        .map_err(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Failed to fetch agent"})),
+            )
+        })?
+        .ok_or((
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "Agent not found"})),
+        ))?;
 
     if let Some(name) = update_payload.get("name").and_then(|v| v.as_str()) {
         agent.name = name.to_string();
@@ -170,8 +178,12 @@ async fn update_agent(
         agent.status = status.to_string();
     }
 
-    let updated_agent = dal.agents().update(id, &agent)
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Failed to update agent"}))))?;
+    let updated_agent = dal.agents().update(id, &agent).map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "Failed to update agent"})),
+        )
+    })?;
 
     Ok(Json(updated_agent))
 }
@@ -213,7 +225,12 @@ async fn list_events(
     }
 
     match dal.agent_events().get_events(None, Some(id)) {
-        Ok(events) => Ok(Json(events.into_iter().map(|e| serde_json::to_value(e).unwrap()).collect())),
+        Ok(events) => Ok(Json(
+            events
+                .into_iter()
+                .map(|e| serde_json::to_value(e).unwrap())
+                .collect(),
+        )),
         Err(e) => {
             eprintln!("Error fetching agent events: {:?}", e);
             Err((
@@ -461,7 +478,7 @@ async fn add_target(
     Path(id): Path<Uuid>,
     Json(new_target): Json<NewAgentTarget>,
 ) -> Result<Json<AgentTarget>, (StatusCode, Json<serde_json::Value>)> {
-    if !auth_payload.admin {
+    if !auth_payload.admin && auth_payload.agent != Some(id) {
         return Err((
             StatusCode::FORBIDDEN,
             Json(serde_json::json!({"error": "Unauthorized"})),
@@ -485,7 +502,7 @@ async fn remove_target(
     Extension(auth_payload): Extension<AuthPayload>,
     Path((id, stack_id)): Path<(Uuid, Uuid)>,
 ) -> Result<StatusCode, (StatusCode, Json<serde_json::Value>)> {
-    if !auth_payload.admin {
+    if !auth_payload.admin && auth_payload.agent != Some(id) {
         return Err((
             StatusCode::FORBIDDEN,
             Json(serde_json::json!({"error": "Unauthorized"})),
@@ -527,7 +544,7 @@ async fn record_heartbeat(
     Extension(auth_payload): Extension<AuthPayload>,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, (StatusCode, Json<serde_json::Value>)> {
-    if !auth_payload.admin && auth_payload.agent != Some(id) {
+    if auth_payload.agent != Some(id) {
         return Err((
             StatusCode::FORBIDDEN,
             Json(serde_json::json!({"error": "Unauthorized"})),
@@ -558,7 +575,10 @@ async fn get_applicable_deployment_objects(
         ));
     }
 
-    match dal.deployment_objects().get_undeployed_objects_for_agent(id) {
+    match dal
+        .deployment_objects()
+        .get_undeployed_objects_for_agent(id)
+    {
         Ok(objects) => Ok(Json(objects)),
         Err(e) => {
             eprintln!("Error fetching applicable deployment objects: {:?}", e);
