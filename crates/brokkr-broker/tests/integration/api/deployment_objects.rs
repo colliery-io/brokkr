@@ -6,6 +6,8 @@ use axum::{
 use tower::ServiceExt;
 use uuid::Uuid;
 use brokkr_broker::utils::pak::create_pak;
+use brokkr_models::models::deployment_objects::{NewDeploymentObject, DeploymentObject};
+use brokkr_models::models::stacks::Stack;
 
 #[tokio::test]
 async fn test_get_deployment_object_admin_success() {
@@ -38,7 +40,10 @@ async fn test_get_deployment_object_admin_success() {
 async fn test_get_deployment_object_agent_success() {
     let fixture = TestFixture::new();
     let app = fixture.create_test_router().with_state(fixture.dal.clone());
-    let (agent, agent_pak) = fixture.create_test_agent_with_pak("Test Agent".to_string(), "Test Cluster".to_string());
+    
+    let agent = fixture.create_test_agent("Test Agent".to_string(), "Test Cluster".to_string());
+    let (pak, hash) = create_pak().unwrap();
+    fixture.dal.agents().update_pak_hash(agent.id, hash).unwrap();
 
     let stack = fixture.create_test_stack("Test Stack".to_string(), None, fixture.admin_generator.id);
     let deployment_object = fixture.create_test_deployment_object(stack.id, "test yaml".to_string(), false);
@@ -49,7 +54,7 @@ async fn test_get_deployment_object_agent_success() {
             Request::builder()
                 .method("GET")
                 .uri(format!("/api/v1/deployment-objects/{}", deployment_object.id))
-                .header("Authorization", format!("Bearer {}", agent_pak))
+                .header("Authorization", format!("Bearer {}", pak))
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -68,7 +73,6 @@ async fn test_get_deployment_object_generator_success() {
     let app = fixture.create_test_router().with_state(fixture.dal.clone());
     
     let (pak, hash) = create_pak().unwrap();
-
     let generator = fixture.create_test_generator(
         "Test Generator".to_string(),
         Some("Test Description".to_string()),
@@ -100,7 +104,10 @@ async fn test_get_deployment_object_generator_success() {
 async fn test_get_deployment_object_agent_forbidden() {
     let fixture = TestFixture::new();
     let app = fixture.create_test_router().with_state(fixture.dal.clone());
-    let (agent, agent_pak) = fixture.create_test_agent_with_pak("Test Agent".to_string(), "Test Cluster".to_string());
+    
+    let agent = fixture.create_test_agent("Test Agent".to_string(), "Test Cluster".to_string());
+    let (pak, hash) = create_pak().unwrap();
+    fixture.dal.agents().update_pak_hash(agent.id, hash).unwrap();
 
     let stack = fixture.create_test_stack("Test Stack".to_string(), None, fixture.admin_generator.id);
     let deployment_object = fixture.create_test_deployment_object(stack.id, "test yaml".to_string(), false);
@@ -111,7 +118,7 @@ async fn test_get_deployment_object_agent_forbidden() {
             Request::builder()
                 .method("GET")
                 .uri(format!("/api/v1/deployment-objects/{}", deployment_object.id))
-                .header("Authorization", format!("Bearer {}", agent_pak))
+                .header("Authorization", format!("Bearer {}", pak))
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -135,7 +142,6 @@ async fn test_get_deployment_object_generator_forbidden() {
         generator1_hash
     );
     
-
     let generator2 = fixture.create_test_generator(
         "Test Generator 2".to_string(),
         Some("Test Description 2".to_string()),
@@ -196,6 +202,235 @@ async fn test_get_deployment_object_unauthorized() {
                 .method("GET")
                 .uri(format!("/api/v1/deployment-objects/{}", deployment_object.id))
                 .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn test_update_stack_with_admin_pak() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+    let admin_pak = fixture.admin_pak.clone();
+
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
+    let stack = fixture.create_test_stack("Test Stack".to_string(), None, generator.id);
+
+    let updated_stack = Stack {
+        name: "Updated Stack".to_string(),
+        description: Some("Updated Description".to_string()),
+        ..stack.clone()
+    };
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri(format!("/api/v1/stacks/{}", stack.id))
+                .header("Content-Type", "application/json")
+                .header("Authorization", &admin_pak)
+                .body(Body::from(serde_json::to_string(&updated_stack).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+    assert_eq!(json["name"], "Updated Stack");
+    assert_eq!(json["description"], "Updated Description");
+}
+
+#[tokio::test]
+async fn test_update_stack_with_generator_pak() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
+    let stack = fixture.create_test_stack("Test Stack".to_string(), None, generator.id);
+
+    let updated_stack = Stack {
+        name: "Updated Stack".to_string(),
+        description: Some("Updated Description".to_string()),
+        ..stack.clone()
+    };
+
+    let (generator_pak, generator_hash) = create_pak().unwrap();
+    fixture.dal.generators().update_pak_hash(generator.id, generator_hash).unwrap();
+    
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri(format!("/api/v1/stacks/{}", stack.id))
+                .header("Content-Type", "application/json")
+                .header("Authorization", &generator_pak)
+                .body(Body::from(serde_json::to_string(&updated_stack).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn test_update_stack_with_bad_pak() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
+    let stack = fixture.create_test_stack("Test Stack".to_string(), None, generator.id);
+
+    let updated_stack = Stack {
+        name: "Updated Stack".to_string(),
+        description: Some("Updated Description".to_string()),
+        ..stack.clone()
+    };
+
+    let bad_pak = "brokkr_BR555Hk5_EnacJW2sQCxRCr1rhRTLyf8NP3a55555".to_string();
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri(format!("/api/v1/stacks/{}", stack.id))
+                .header("Content-Type", "application/json")
+                .header("Authorization", &bad_pak)
+                .body(Body::from(serde_json::to_string(&updated_stack).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn test_create_deployment_object_with_admin_pak() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+    let admin_pak = fixture.admin_pak.clone();
+
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
+    let stack = fixture.create_test_stack("Test Stack".to_string(), None, generator.id);
+
+    let new_deployment_object = NewDeploymentObject {
+        stack_id: stack.id,
+        yaml_content: "test yaml".to_string(),
+        yaml_checksum: "test checksum".to_string(),
+        is_deletion_marker: false,
+    };
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/stacks/{}/deployment-objects", stack.id))
+                .header("Content-Type", "application/json")
+                .header("Authorization", &admin_pak)
+                .body(Body::from(serde_json::to_string(&new_deployment_object).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+    assert_eq!(json["stack_id"], stack.id.to_string());
+    assert_eq!(json["yaml_content"], "test yaml");
+}
+
+#[tokio::test]
+async fn test_create_deployment_object_with_generator_pak() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
+    let stack = fixture.create_test_stack("Test Stack".to_string(), None, generator.id);
+
+    let new_deployment_object = NewDeploymentObject {
+        stack_id: stack.id,
+        yaml_content: "test yaml".to_string(),
+        yaml_checksum: "test checksum".to_string(),
+        is_deletion_marker: false,
+    };
+
+    let (generator_pak, generator_hash) = create_pak().unwrap();
+    fixture.dal.generators().update_pak_hash(generator.id, generator_hash).unwrap();
+    
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/stacks/{}/deployment-objects", stack.id))
+                .header("Content-Type", "application/json")
+                .header("Authorization", &generator_pak)
+                .body(Body::from(serde_json::to_string(&new_deployment_object).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn test_create_deployment_object_with_bad_pak() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
+    let stack = fixture.create_test_stack("Test Stack".to_string(), None, generator.id);
+
+    let new_deployment_object = NewDeploymentObject {
+        stack_id: stack.id,
+        yaml_content: "test yaml".to_string(),
+        yaml_checksum: "test checksum".to_string(),
+        is_deletion_marker: false,
+    };
+
+    let bad_pak = "brokkr_BR555Hk5_EnacJW2sQCxRCr1rhRTLyf8NP3a55555".to_string();
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/stacks/{}/deployment-objects", stack.id))
+                .header("Content-Type", "application/json")
+                .header("Authorization", &bad_pak)
+                .body(Body::from(serde_json::to_string(&new_deployment_object).unwrap()))
                 .unwrap(),
         )
         .await

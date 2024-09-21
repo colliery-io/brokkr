@@ -363,6 +363,14 @@ impl TestFixture {
             .expect("Failed to update pak_hash")
     }
 
+    pub fn create_test_generator_with_pak(&self, name: String, description: Option<String>) -> (Generator, String) {
+        let (pak, hash) = utils::pak::create_pak().expect("Failed to create PAK");
+        let new_generator = NewGenerator::new(name, description).expect("Failed to create NewGenerator");
+        let generator = self.dal.generators().create(&new_generator).expect("Failed to create generator");
+        self.dal.generators().update_pak_hash(generator.id, hash).expect("Failed to update PAK hash");
+        (generator, pak)
+    }
+
     pub fn create_test_agent_with_pak(
         &self,
         name: String,
