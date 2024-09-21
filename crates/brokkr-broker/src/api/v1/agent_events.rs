@@ -4,7 +4,7 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use brokkr_models::models::agent_events::{AgentEvent, NewAgentEvent};
+use brokkr_models::models::agent_events::AgentEvent;
 use uuid::Uuid;
 
 pub fn routes() -> Router<DAL> {
