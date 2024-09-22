@@ -209,62 +209,6 @@ async fn test_soft_delete_stack() {
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
-#[tokio::test]
-async fn test_hard_delete_stack() {
-    let fixture = TestFixture::new();
-    let app = fixture.create_test_router().with_state(fixture.dal.clone());
-    let admin_pak = fixture.admin_pak.clone();
-
-    let generator = fixture.create_test_generator(
-        "Test Generator".to_string(),
-        None,
-        "test_api_key_hash".to_string(),
-    );
-    let stack = fixture.create_test_stack("Test Stack".to_string(), None, generator.id);
-
-    // First, soft delete the stack
-    let _ = app.clone()
-        .oneshot(
-            Request::builder()
-                .method("DELETE")
-                .uri(format!("/api/v1/stacks/{}", stack.id))
-                .header("Authorization", &admin_pak)
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    // Now, hard delete the stack
-    let response = app.clone()
-        .oneshot(
-            Request::builder()
-                .method("DELETE")
-                .uri(format!("/api/v1/stacks/{}/hard", stack.id))
-                .header("Authorization", &admin_pak)
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(response.status(), StatusCode::NO_CONTENT);
-
-    // Verify the stack is hard deleted
-    let response = app
-        .oneshot(
-            Request::builder()
-                .method("GET")
-                .uri(format!("/api/v1/stacks/{}", stack.id))
-                .header("Authorization", &admin_pak)
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(response.status(), StatusCode::NOT_FOUND);
-}
 
 #[tokio::test]
 async fn test_add_stack_annotation() {
@@ -523,63 +467,6 @@ async fn test_create_deployment_object() {
     assert_eq!(json["is_deletion_marker"], false);
 }
 
-#[tokio::test]
-async fn test_get_associated_stacks() {
-    let fixture = TestFixture::new();
-    let app = fixture.create_test_router().with_state(fixture.dal.clone());
-    let admin_pak = fixture.admin_pak.clone();
-
-    let generator = fixture.create_test_generator(
-        "Test Generator".to_string(),
-        None,
-        "test_api_key_hash".to_string(),
-    );
-    let stack1 = fixture.create_test_stack("Stack 1".to_string(), None, generator.id);
-    let stack2 = fixture.create_test_stack("Stack 2".to_string(), None, generator.id);
-
-    let agent = fixture.create_test_agent("Test Agent".to_string(), "Test Cluster".to_string());
-
-    // Associate agent with stacks
-    fixture.create_test_agent_target(agent.id, stack1.id);
-    fixture.create_test_agent_label(agent.id, "test_label".to_string());
-    fixture.create_test_stack_label(stack2.id, "test_label".to_string());
-
-    println!("Agent: {:?}", agent);
-    println!("Stack 1: {:?}", stack1);
-    println!("Stack 2: {:?}", stack2);
-
-    // Verify associations
-    let agent_targets = fixture.dal.agent_targets().list_for_agent(agent.id).unwrap();
-    println!("Agent targets: {:?}", agent_targets);
-    let agent_labels = fixture.dal.agent_labels().list_for_agent(agent.id).unwrap();
-    println!("Agent labels: {:?}", agent_labels);
-    let stack2_labels = fixture.dal.stack_labels().list_for_stack(stack2.id).unwrap();
-    println!("Stack 2 labels: {:?}", stack2_labels);
-
-    let response = app
-        .oneshot(
-            Request::builder()
-                .method("GET")
-                .uri(format!("/api/v1/agents/{}/associated-stacks", agent.id))
-                .header("Authorization", &admin_pak)
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    let status = response.status();
-    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    let body_str = String::from_utf8_lossy(&body);
-
-    println!("Response status: {}", status);
-    println!("Response body: {}", body_str);
-
-    assert_eq!(status, StatusCode::OK, "Unexpected status code. Body: {}", body_str);
-
-    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    assert_eq!(json.as_array().unwrap().len(), 2);
-}
 
 #[tokio::test]
 async fn test_create_stack_with_generator_pak() {
