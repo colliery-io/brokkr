@@ -4,13 +4,13 @@
 //! It includes submodules for various API functionalities and sets up the main router
 //! with authentication middleware.
 
-mod agent_events;
-mod agents;
-mod auth;
-mod deployment_objects;
-mod generators;
-mod stacks; // Add this line
-mod middleware;
+pub mod agent_events;
+pub mod agents;
+pub mod auth;
+pub mod deployment_objects;
+pub mod generators;
+pub mod stacks; 
+pub mod middleware;
 
 use crate::dal::DAL;
 use axum::middleware::from_fn_with_state;
