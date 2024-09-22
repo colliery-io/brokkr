@@ -4,7 +4,6 @@ use axum::{
     http::{Request, StatusCode},
 };
 use brokkr_models::models::agent_events::NewAgentEvent;
-use serde_json::json;
 use tower::ServiceExt;
 use uuid::Uuid;
 

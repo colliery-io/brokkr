@@ -1,10 +1,15 @@
+//! Data Access Layer for Stack Label operations.
+//!
+//! This module provides functionality to interact with stack labels in the database,
+//! including creating, retrieving, listing, and deleting labels.
+
 use crate::dal::DAL;
 use brokkr_models::models::stack_labels::{NewStackLabel, StackLabel};
 use brokkr_models::schema::stack_labels;
 use diesel::prelude::*;
 use uuid::Uuid;
 
-/// Data Access Layer for StackLabel operations.
+/// Handles database operations for Stack Labels.
 pub struct StackLabelsDAL<'a> {
     /// Reference to the main DAL instance.
     pub dal: &'a DAL,
@@ -15,11 +20,15 @@ impl<'a> StackLabelsDAL<'a> {
     ///
     /// # Arguments
     ///
-    /// * `new_label` - A reference to the NewStackLabel struct containing the label details.
+    /// * `new_label` - The new label details to be inserted.
     ///
     /// # Returns
     ///
-    /// Returns a Result containing the created StackLabel on success, or a diesel::result::Error on failure.
+    /// The created `StackLabel` or a database error.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `diesel::result::Error` if the database operation fails.
     pub fn create(&self, new_label: &NewStackLabel) -> Result<StackLabel, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         diesel::insert_into(stack_labels::table)
@@ -31,11 +40,15 @@ impl<'a> StackLabelsDAL<'a> {
     ///
     /// # Arguments
     ///
-    /// * `label_id` - The UUID of the stack label to retrieve.
+    /// * `label_id` - The UUID of the label to retrieve.
     ///
     /// # Returns
     ///
-    /// Returns a Result containing an Option<StackLabel> if found, or a diesel::result::Error on failure.
+    /// An `Option<StackLabel>` if found, or `None` if not found.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `diesel::result::Error` if the database operation fails.
     pub fn get(&self, label_id: Uuid) -> Result<Option<StackLabel>, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         stack_labels::table
@@ -48,11 +61,15 @@ impl<'a> StackLabelsDAL<'a> {
     ///
     /// # Arguments
     ///
-    /// * `stack_id` - The UUID of the stack to get labels for.
+    /// * `stack_id` - The UUID of the stack whose labels to retrieve.
     ///
     /// # Returns
     ///
-    /// Returns a Result containing a Vec of StackLabels for the specified stack, or a diesel::result::Error on failure.
+    /// A vector of `StackLabel`s associated with the specified stack.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `diesel::result::Error` if the database operation fails.
     pub fn list_for_stack(&self, stack_id: Uuid) -> Result<Vec<StackLabel>, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         stack_labels::table
@@ -64,11 +81,15 @@ impl<'a> StackLabelsDAL<'a> {
     ///
     /// # Arguments
     ///
-    /// * `label_id` - The UUID of the stack label to delete.
+    /// * `label_id` - The UUID of the label to delete.
     ///
     /// # Returns
     ///
-    /// Returns a Result containing the number of affected rows (0 or 1) on success, or a diesel::result::Error on failure.
+    /// The number of affected rows (0 or 1).
+    ///
+    /// # Errors
+    ///
+    /// Returns a `diesel::result::Error` if the database operation fails.
     pub fn delete(&self, label_id: Uuid) -> Result<usize, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         diesel::delete(stack_labels::table.filter(stack_labels::id.eq(label_id))).execute(conn)
@@ -78,11 +99,15 @@ impl<'a> StackLabelsDAL<'a> {
     ///
     /// # Arguments
     ///
-    /// * `stack_id` - The UUID of the stack to delete labels for.
+    /// * `stack_id` - The UUID of the stack whose labels to delete.
     ///
     /// # Returns
     ///
-    /// Returns a Result containing the number of affected rows on success, or a diesel::result::Error on failure.
+    /// The number of affected rows.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `diesel::result::Error` if the database operation fails.
     pub fn delete_all_for_stack(&self, stack_id: Uuid) -> Result<usize, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         diesel::delete(stack_labels::table.filter(stack_labels::stack_id.eq(stack_id)))

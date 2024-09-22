@@ -1,3 +1,9 @@
+//! Agent management API endpoints.
+//!
+//! This module provides routes and handlers for managing agents, including CRUD operations,
+//! event logging, label management, annotation management, target management, and heartbeat recording.
+
+
 use crate::api::v1::middleware::AuthPayload;
 use crate::dal::DAL;
 use crate::utils::pak;
@@ -16,6 +22,7 @@ use brokkr_models::models::deployment_objects::DeploymentObject;
 use serde_json::Value;
 use uuid::Uuid;
 
+/// Creates and returns the router for agent-related endpoints.
 pub fn routes() -> Router<DAL> {
     Router::new()
         .route("/agents", get(list_agents).post(create_agent))
@@ -40,6 +47,10 @@ pub fn routes() -> Router<DAL> {
         )
 }
 
+/// Lists all agents.
+///
+/// # Authorization
+/// Requires admin privileges.
 async fn list_agents(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -63,6 +74,10 @@ async fn list_agents(
     }
 }
 
+/// Creates a new agent.
+///
+/// # Authorization
+/// Requires admin privileges.
 async fn create_agent(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -113,6 +128,10 @@ async fn create_agent(
     }
 }
 
+/// Retrieves a specific agent by ID.
+///
+/// # Authorization
+/// Requires admin privileges or matching agent ID.
 async fn get_agent(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -141,6 +160,10 @@ async fn get_agent(
     }
 }
 
+/// Updates an existing agent.
+///
+/// # Authorization
+/// Requires admin privileges or matching agent ID.
 async fn update_agent(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -188,6 +211,10 @@ async fn update_agent(
     Ok(Json(updated_agent))
 }
 
+/// Soft deletes an agent.
+///
+/// # Authorization
+/// Requires admin privileges.
 async fn delete_agent(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -212,6 +239,10 @@ async fn delete_agent(
     }
 }
 
+/// Lists events for a specific agent.
+///
+/// # Authorization
+/// Requires admin privileges or matching agent ID.
 async fn list_events(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -241,6 +272,10 @@ async fn list_events(
     }
 }
 
+/// Creates a new event for a specific agent.
+///
+/// # Authorization
+/// Requires admin privileges or matching agent ID.
 async fn create_event(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -266,6 +301,10 @@ async fn create_event(
     }
 }
 
+/// Lists labels for a specific agent.
+///
+/// # Authorization
+/// Requires admin privileges or matching agent ID.
 async fn list_labels(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -290,6 +329,10 @@ async fn list_labels(
     }
 }
 
+/// Adds a new label to a specific agent.
+///
+/// # Authorization
+/// Requires admin privileges or matching agent ID.
 async fn add_label(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -315,6 +358,10 @@ async fn add_label(
     }
 }
 
+/// Removes a label from a specific agent.
+///
+/// # Authorization
+/// Requires admin privileges or matching agent ID.
 async fn remove_label(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -357,6 +404,10 @@ async fn remove_label(
     }
 }
 
+/// Lists annotations for a specific agent.
+///
+/// # Authorization
+/// Requires admin privileges or matching agent ID.
 async fn list_annotations(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -381,6 +432,10 @@ async fn list_annotations(
     }
 }
 
+/// Adds a new annotation to a specific agent.
+///
+/// # Authorization
+/// Requires admin privileges or matching agent ID.
 async fn add_annotation(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -406,6 +461,10 @@ async fn add_annotation(
     }
 }
 
+/// Removes an annotation from a specific agent.
+///
+/// # Authorization
+/// Requires admin privileges or matching agent ID.
 async fn remove_annotation(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -448,6 +507,10 @@ async fn remove_annotation(
     }
 }
 
+/// Lists targets for a specific agent.
+///
+/// # Authorization
+/// Requires admin privileges or matching agent ID.
 async fn list_targets(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -472,6 +535,10 @@ async fn list_targets(
     }
 }
 
+/// Adds a new target to a specific agent.
+///
+/// # Authorization
+/// Requires admin privileges or matching agent ID.
 async fn add_target(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -497,6 +564,10 @@ async fn add_target(
     }
 }
 
+/// Removes a target from a specific agent.
+///
+/// # Authorization
+/// Requires admin privileges or matching agent ID.
 async fn remove_target(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -539,6 +610,10 @@ async fn remove_target(
     }
 }
 
+/// Records a heartbeat for a specific agent.
+///
+/// # Authorization
+/// Requires matching agent ID.
 async fn record_heartbeat(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -563,6 +638,10 @@ async fn record_heartbeat(
     }
 }
 
+/// Retrieves applicable deployment objects for a specific agent.
+///
+/// # Authorization
+/// Requires admin privileges or matching agent ID.
 async fn get_applicable_deployment_objects(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,

@@ -1,15 +1,33 @@
+//! API v1 module for the Brokkr broker.
+//!
+//! This module defines the structure and routes for version 1 of the Brokkr API.
+//! It includes submodules for various API functionalities and sets up the main router
+//! with authentication middleware.
+
 mod agent_events;
 mod agents;
 mod auth;
 mod deployment_objects;
 mod generators;
 mod stacks; // Add this line
+mod middleware;
 
 use crate::dal::DAL;
 use axum::middleware::from_fn_with_state;
 use axum::Router;
-mod middleware;
 
+/// Constructs and returns the main router for API v1.
+///
+/// This function combines routes from various submodules and applies
+/// authentication middleware to all routes.
+///
+/// # Arguments
+///
+/// * `dal` - The Data Access Layer instance for database operations.
+///
+/// # Returns
+///
+/// A `Router<DAL>` instance configured with all API v1 routes and middleware.
 pub fn routes(dal: DAL) -> Router<DAL> {
     Router::new()
         .merge(agents::routes())

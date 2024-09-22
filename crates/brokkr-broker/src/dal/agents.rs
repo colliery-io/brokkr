@@ -10,6 +10,7 @@ use diesel::prelude::*;
 use std::collections::HashSet;
 use uuid::Uuid;
 
+/// Struct for filtering agents based on various criteria.
 pub struct AgentFilter {
     pub labels: Vec<String>,
     pub annotations: Vec<(String, String)>,
@@ -28,11 +29,23 @@ impl<'a> AgentsDAL<'a> {
     ///
     /// # Arguments
     ///
-    /// * `new_agent` - A reference to the NewAgent struct containing the agent details.
+    /// * `new_agent` - A `NewAgent` struct containing the agent's details.
     ///
     /// # Returns
     ///
-    /// Returns a Result containing the created Agent on success, or a diesel::result::Error on failure.
+    /// Returns a `Result` containing the created `Agent` on success,
+    /// or a `diesel::result::Error` on failure.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use brokkr_broker::dal::DAL;
+    /// use brokkr_models::models::agents::NewAgent;
+    ///
+    /// let dal = DAL::new(pool);
+    /// let new_agent = NewAgent::new("Agent Name", "Cluster Name").unwrap();
+    /// let created_agent = dal.agents().create(&new_agent).expect("Failed to create agent");
+    /// ```
     pub fn create(&self, new_agent: &NewAgent) -> Result<Agent, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         diesel::insert_into(agents::table)
@@ -48,7 +61,8 @@ impl<'a> AgentsDAL<'a> {
     ///
     /// # Returns
     ///
-    /// Returns a Result containing an Option<Agent> if found (and not deleted), or a diesel::result::Error on failure.
+    /// Returns a `Result` containing an `Option<Agent>` if found (and not deleted),
+    /// or a `diesel::result::Error` on failure.
     pub fn get(&self, agent_uuid: Uuid) -> Result<Option<Agent>, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         agents::table
@@ -66,7 +80,8 @@ impl<'a> AgentsDAL<'a> {
     ///
     /// # Returns
     ///
-    /// Returns a Result containing an Option<Agent> if found (including deleted agents), or a diesel::result::Error on failure.
+    /// Returns a `Result` containing an `Option<Agent>` if found (including deleted agents),
+    /// or a `diesel::result::Error` on failure.
     pub fn get_including_deleted(
         &self,
         agent_uuid: Uuid,
@@ -82,7 +97,8 @@ impl<'a> AgentsDAL<'a> {
     ///
     /// # Returns
     ///
-    /// Returns a Result containing a Vec of all non-deleted Agents on success, or a diesel::result::Error on failure.
+    /// Returns a `Result` containing a `Vec` of all non-deleted `Agent`s on success,
+    /// or a `diesel::result::Error` on failure.
     pub fn list(&self) -> Result<Vec<Agent>, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         agents::table
@@ -94,7 +110,8 @@ impl<'a> AgentsDAL<'a> {
     ///
     /// # Returns
     ///
-    /// Returns a Result containing a Vec of all Agents (including deleted ones) on success, or a diesel::result::Error on failure.
+    /// Returns a `Result` containing a `Vec` of all `Agent`s (including deleted ones) on success,
+    /// or a `diesel::result::Error` on failure.
     pub fn list_all(&self) -> Result<Vec<Agent>, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         agents::table.load::<Agent>(conn)
@@ -105,11 +122,12 @@ impl<'a> AgentsDAL<'a> {
     /// # Arguments
     ///
     /// * `agent_uuid` - The UUID of the agent to update.
-    /// * `updated_agent` - A reference to the Agent struct containing the updated details.
+    /// * `updated_agent` - A reference to the `Agent` struct containing the updated details.
     ///
     /// # Returns
     ///
-    /// Returns a Result containing the updated Agent on success, or a diesel::result::Error on failure.
+    /// Returns a `Result` containing the updated `Agent` on success,
+    /// or a `diesel::result::Error` on failure.
     pub fn update(
         &self,
         agent_uuid: Uuid,
@@ -129,7 +147,8 @@ impl<'a> AgentsDAL<'a> {
     ///
     /// # Returns
     ///
-    /// Returns a Result containing the number of affected rows (0 or 1) on success, or a diesel::result::Error on failure.
+    /// Returns a `Result` containing the number of affected rows (0 or 1) on success,
+    /// or a `diesel::result::Error` on failure.
     pub fn soft_delete(&self, agent_uuid: Uuid) -> Result<usize, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         diesel::update(agents::table.filter(agents::id.eq(agent_uuid)))
@@ -145,7 +164,8 @@ impl<'a> AgentsDAL<'a> {
     ///
     /// # Returns
     ///
-    /// Returns a Result containing the number of affected rows (0 or 1) on success, or a diesel::result::Error on failure.
+    /// Returns a `Result` containing the number of affected rows (0 or 1) on success,
+    /// or a `diesel::result::Error` on failure.
     pub fn hard_delete(&self, agent_uuid: Uuid) -> Result<usize, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         diesel::delete(agents::table.filter(agents::id.eq(agent_uuid))).execute(conn)
@@ -160,11 +180,12 @@ impl<'a> AgentsDAL<'a> {
     ///
     /// # Returns
     ///
-    /// Returns a Result containing a Vec of matching Agents on success, or a diesel::result::Error on failure.
+    /// Returns a `Result` containing a `Vec` of matching `Agent`s on success,
+    /// or a `diesel::result::Error` on failure.
     ///
     /// # SQL Queries
     ///
-    /// For FilterType::And:
+    /// For `FilterType::And`:
     /// ```sql
     /// SELECT DISTINCT agents.*
     /// FROM agents
@@ -174,7 +195,7 @@ impl<'a> AgentsDAL<'a> {
     ///   -- ... (repeated for each label)
     /// ```
     ///
-    /// For FilterType::Or:
+    /// For `FilterType::Or`:
     /// ```sql
     /// SELECT DISTINCT agents.*
     /// FROM agents
@@ -226,11 +247,12 @@ impl<'a> AgentsDAL<'a> {
     ///
     /// # Returns
     ///
-    /// Returns a Result containing a Vec of matching Agents on success, or a diesel::result::Error on failure.
+    /// Returns a `Result` containing a `Vec` of matching `Agent`s on success,
+    /// or a `diesel::result::Error` on failure.
     ///
     /// # SQL Generated (Roughly Equivalent)
     ///
-    /// For FilterType::Or:
+    /// For `FilterType::Or`:
     /// ```sql
     /// SELECT DISTINCT agents.*
     /// FROM agents
@@ -241,7 +263,7 @@ impl<'a> AgentsDAL<'a> {
     ///     OR ...)
     /// ```
     ///
-    /// For FilterType::And:
+    /// For `FilterType::And`:
     /// ```sql
     /// SELECT DISTINCT agents.*
     /// FROM agents
@@ -326,7 +348,8 @@ impl<'a> AgentsDAL<'a> {
     ///
     /// # Returns
     ///
-    /// Returns a Result containing an Option<Agent> if found, or a diesel::result::Error on failure.
+    /// Returns a `Result` containing an `Option<Agent>` if found,
+    /// or a `diesel::result::Error` on failure.
     pub fn get_agent_by_target_id(
         &self,
         agent_target_id: Uuid,
@@ -349,9 +372,8 @@ impl<'a> AgentsDAL<'a> {
     ///
     /// # Returns
     ///
-    /// Returns a Result containing a tuple of (Vec<AgentLabel>, Vec<AgentTarget>, Vec<AgentAnnotation>)
-    /// on success, or a diesel::result::Error on failure.
-    ///
+    /// Returns a `Result` containing a tuple of `(Vec<AgentLabel>, Vec<AgentTarget>, Vec<AgentAnnotation>)`
+    /// on success, or a `diesel::result::Error` on failure.
     #[allow(clippy::type_complexity)]
     pub fn get_agent_details(
         &self,
@@ -375,6 +397,15 @@ impl<'a> AgentsDAL<'a> {
         Ok((labels, targets, annotations))
     }
 
+    /// Records a heartbeat for the specified agent.
+    ///
+    /// # Arguments
+    ///
+    /// * `agent_id` - The UUID of the agent to record the heartbeat for.
+    ///
+    /// # Returns
+    ///
+    /// Returns a `Result<()>` on success, or a `diesel::result::Error` on failure.
     pub fn record_heartbeat(&self, agent_id: Uuid) -> Result<(), diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
 
@@ -394,7 +425,8 @@ impl<'a> AgentsDAL<'a> {
     ///
     /// # Returns
     ///
-    /// Returns a Result containing the updated Agent on success, or a diesel::result::Error on failure.
+    /// Returns a `Result` containing the updated `Agent` on success,
+    /// or a `diesel::result::Error` on failure.
     pub fn update_pak_hash(
         &self,
         agent_uuid: Uuid,

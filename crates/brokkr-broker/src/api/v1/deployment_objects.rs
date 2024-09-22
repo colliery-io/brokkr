@@ -1,3 +1,8 @@
+//! Deployment Objects API module for Brokkr.
+//!
+//! This module provides routes and handlers for managing deployment objects,
+//! including retrieval based on user authentication and authorization.
+
 use crate::dal::DAL;
 use crate::api::v1::middleware::AuthPayload;
 use axum::{
@@ -8,12 +13,27 @@ use axum::{
 use brokkr_models::models::deployment_objects::DeploymentObject;
 use uuid::Uuid;
 
+/// Creates and returns the router for deployment object endpoints.
+///
+/// # Returns
+///
+/// A `Router` instance configured with the deployment object routes.
 pub fn routes() -> Router<DAL> {
     Router::new()
         .route("/deployment-objects/:id", get(get_deployment_object))
 }
 
-
+/// Retrieves a deployment object by ID, with access control based on user role.
+///
+/// # Arguments
+///
+/// * `dal` - The data access layer for database operations.
+/// * `auth_payload` - The authentication payload containing user role information.
+/// * `id` - The UUID of the deployment object to retrieve.
+///
+/// # Returns
+///
+/// A `Result` containing either the `DeploymentObject` as JSON or an error response.
 async fn get_deployment_object(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -22,6 +42,7 @@ async fn get_deployment_object(
     match dal.deployment_objects().get(id) {
         Ok(Some(object)) => {
             if auth_payload.admin {
+                // Admin users have unrestricted access
                 Ok(Json(object))
             } else if let Some(agent_id) = auth_payload.agent {
                 // Check if the agent is associated with this deployment object

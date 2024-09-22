@@ -1,3 +1,8 @@
+//! Prefixed API Key (PAK) management utilities.
+//!
+//! This module provides functionality for creating, verifying, and managing
+//! Prefixed API Keys using a singleton controller pattern.
+
 use brokkr_utils::logging::prelude::*;
 use brokkr_utils::Settings;
 use once_cell::sync::OnceCell;
@@ -7,8 +12,18 @@ use rand::rngs::OsRng;
 use sha2::Sha256;
 use std::sync::Arc;
 
+/// Singleton instance of the PAK controller.
 static PAK_CONTROLLER: OnceCell<Arc<PrefixedApiKeyController<OsRng, Sha256>>> = OnceCell::new();
 
+/// Creates or retrieves the PAK controller.
+///
+/// # Arguments
+///
+/// * `config` - Optional settings for initializing the controller.
+///
+/// # Returns
+///
+/// Returns a Result containing the Arc-wrapped PAK controller or an error message.
 pub fn create_pak_controller(
     config: Option<&Settings>,
 ) -> Result<Arc<PrefixedApiKeyController<OsRng, Sha256>>, &'static str> {
@@ -25,6 +40,15 @@ pub fn create_pak_controller(
     }
 }
 
+/// Internal function to create a new PAK controller.
+///
+/// # Arguments
+///
+/// * `config` - Settings for configuring the PAK controller.
+///
+/// # Returns
+///
+/// Returns a Result containing the new PAK controller or an error.
 fn create_pak_controller_inner(
     config: &Settings,
 ) -> Result<PrefixedApiKeyController<OsRng, Sha256>, Box<dyn std::error::Error>> {
@@ -40,6 +64,11 @@ fn create_pak_controller_inner(
     builder.finalize().map_err(|e| e.into())
 }
 
+/// Generates a new Prefixed API Key and its hash.
+///
+/// # Returns
+///
+/// Returns a Result containing a tuple of the PAK string and its hash, or an error.
 pub fn create_pak() -> Result<(String, String), Box<dyn std::error::Error>> {
     let controller = create_pak_controller(None)?;
 
@@ -50,6 +79,16 @@ pub fn create_pak() -> Result<(String, String), Box<dyn std::error::Error>> {
         .map_err(|e| e.into())
 }
 
+/// Verifies a Prefixed API Key against a stored hash.
+///
+/// # Arguments
+///
+/// * `pak` - The Prefixed API Key to verify.
+/// * `stored_hash` - The previously stored hash to compare against.
+///
+/// # Returns
+///
+/// Returns true if the PAK is valid, false otherwise.
 pub fn verify_pak(pak: String, stored_hash: String) -> bool {
     let pak = PrefixedApiKey::from_string(pak.as_str()).expect("Failed to parse PAK");
     let controller = create_pak_controller(None).expect("Failed to create PAK controller");
@@ -57,6 +96,15 @@ pub fn verify_pak(pak: String, stored_hash: String) -> bool {
     stored_hash == computed_hash
 }
 
+/// Generates a hash for a given Prefixed API Key.
+///
+/// # Arguments
+///
+/// * `pak` - The Prefixed API Key to hash.
+///
+/// # Returns
+///
+/// Returns the generated hash as a String.
 pub fn generate_pak_hash(pak: String) -> String {
     let pak = PrefixedApiKey::from_string(pak.as_str()).expect("Failed to parse PAK");
     let controller = create_pak_controller(None).expect("Failed to create PAK controller");

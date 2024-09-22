@@ -4,9 +4,8 @@ use axum::{
     http::{Request, StatusCode},
 };
 use brokkr_models::models::generator::{Generator, NewGenerator};
-use serde_json::json;
 use tower::ServiceExt;
-use uuid::Uuid;
+
 
 #[tokio::test]
 async fn test_list_generators_admin_success() {

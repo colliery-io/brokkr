@@ -6,7 +6,7 @@ use axum::{
 use tower::ServiceExt;
 use uuid::Uuid;
 use brokkr_broker::utils::pak::create_pak;
-use brokkr_models::models::deployment_objects::{NewDeploymentObject, DeploymentObject};
+use brokkr_models::models::deployment_objects::NewDeploymentObject;
 use brokkr_models::models::stacks::Stack;
 
 #[tokio::test]
@@ -134,9 +134,9 @@ async fn test_get_deployment_object_generator_forbidden() {
     let app = fixture.create_test_router().with_state(fixture.dal.clone());
     
     let (generator1_pak, generator1_hash) = create_pak().unwrap();
-    let (generator2_pak, generator2_hash) = create_pak().unwrap();
+    let (_generator2_pak, generator2_hash) = create_pak().unwrap();
 
-    let generator1 = fixture.create_test_generator(
+    let _generator1 = fixture.create_test_generator(
         "Test Generator 1".to_string(),
         Some("Test Description 1".to_string()),
         generator1_hash

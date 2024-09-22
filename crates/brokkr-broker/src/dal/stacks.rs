@@ -1,3 +1,9 @@
+//! Data Access Layer for Stack operations.
+//!
+//! This module provides functionality to interact with the database for Stack-related operations,
+//! including creating, retrieving, updating, and deleting stacks, as well as filtering stacks
+//! based on various criteria.
+
 use crate::dal::FilterType;
 use crate::dal::DAL;
 use brokkr_models::models::stacks::{NewStack, Stack};
@@ -264,6 +270,9 @@ impl<'a> StacksDAL<'a> {
 
     /// Retrieves all stacks associated with a specific agent based on its labels, annotations, and targets.
     ///
+    /// This method uses OR logic when matching labels and annotations, meaning a stack will be included
+    /// if it matches any of the agent's labels or annotations.
+    ///
     /// # Arguments
     ///
     /// * `agent_id` - The UUID of the agent.
@@ -271,11 +280,6 @@ impl<'a> StacksDAL<'a> {
     /// # Returns
     ///
     /// Returns a Result containing a Vec of associated Stacks on success, or a diesel::result::Error on failure.
-    ///
-    /// # Note
-    ///
-    /// This method uses OR logic when matching labels and annotations, meaning a stack will be included
-    /// if it matches any of the agent's labels or annotations.
     pub fn get_associated_stacks(
         &self,
         agent_id: Uuid,

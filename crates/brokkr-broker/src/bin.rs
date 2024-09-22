@@ -1,3 +1,8 @@
+//! Brokkr Broker CLI application
+//!
+//! This module provides the command-line interface for the Brokkr Broker application.
+//! It includes functionality for serving the broker, rotating keys, and managing the application.
+
 use brokkr_broker::api;
 use brokkr_broker::dal::DAL;
 use brokkr_broker::db::create_shared_connection_pool;
@@ -52,6 +57,9 @@ enum Commands {
 }
 
 /// Main function to run the Brokkr Broker application
+///
+/// This function initializes the application, parses command-line arguments,
+/// and executes the appropriate command based on user input.
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
@@ -77,6 +85,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// Function to start the Brokkr Broker server
+///
+/// This function initializes the database, runs migrations, checks for first-time setup,
+/// configures API routes, and starts the server with graceful shutdown support.
 async fn serve(config: &Settings) -> Result<(), Box<dyn std::error::Error>> {
     info!("Starting Brokkr Broker application");
 
@@ -148,6 +159,8 @@ async fn serve(config: &Settings) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// Function to rotate the admin key
+///
+/// This function generates a new admin key and updates it in the database.
 fn rotate_admin(config: &Settings) -> Result<(), Box<dyn std::error::Error>> {
     info!("Rotating admin key");
 

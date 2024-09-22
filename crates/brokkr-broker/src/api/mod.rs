@@ -1,7 +1,18 @@
-// //! # API Routes Aggregator Module
-// //!
-// //! This module aggregates all API routes and provides a function to configure the main router.
-// //! It serves as the central point for organizing and initializing all API endpoints of the application.
+//! # API Module
+//!
+//! This module handles the API routes and configurations for the Brokkr Broker.
+//! It includes versioned API endpoints and middleware for authentication and request handling.
+//!
+//! ## Submodules
+//!
+//! - `v1`: Contains the version 1 of the API endpoints.
+//!
+//! ## Main Functions
+//!
+//! - `configure_api_routes`: Sets up the main application router with all API routes.
+//! - `healthz`: Health check endpoint handler.
+//! - `readyz`: Ready check endpoint handler.
+//! - `metrics`: Metrics endpoint handler.
 
 pub mod v1;
 use crate::dal::DAL;

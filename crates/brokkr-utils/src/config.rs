@@ -20,6 +20,35 @@
 //! - In a configuration file: Use the appropriate key (e.g., `database.url = "new_value"`)
 //! - Using environment variables: Set the variable with the "BROKKR__" prefix and "__" as separators
 //!   (e.g., `BROKKR__DATABASE__URL=new_value`)
+//!
+//! # Available Environment Variables
+//!
+//! The following environment variables can be used to configure Brokkr:
+//!
+//! - `BROKKR__DATABASE__URL`: Sets the database connection URL
+//!   Default: "postgres://brokkr:brokkr@localhost:5432/brokkr"
+//!
+//! - `BROKKR__LOG__LEVEL`: Sets the log level for the application
+//!   Default: "debug"
+//!   Possible values: "trace", "debug", "info", "warn", "error"
+//!
+//! - `BROKKR__PAK__PREFIX`: Sets the prefix for PAKs (Pre-Authentication Keys)
+//!   Default: "brokkr"
+//!
+//! - `BROKKR__PAK__RNG`: Sets the random number generator type for PAK generation
+//!   Default: "osrng"
+//!
+//! - `BROKKR__PAK__DIGEST`: Sets the digest algorithm for PAK generation
+//!   Default: 8
+//!
+//! - `BROKKR__PAK__SHORT_TOKEN_LENGTH`: Sets the length of short PAK tokens
+//!   Default: 8
+//!
+//! - `BROKKR__PAK__LONG_TOKEN_LENGTH`: Sets the length of long PAK tokens
+//!   Default: 24
+//!
+//! - `BROKKR__PAK__SHORT_TOKEN_PREFIX`: Sets the prefix for short PAK tokens
+//!   Default: "BR"
 
 use config::{Config, ConfigError, Environment, File};
 use serde::Deserialize;

@@ -1,3 +1,9 @@
+//! Data Access Layer for AgentEvent operations.
+//!
+//! This module provides functionality to interact with the agent_events table in the database.
+//! It includes methods for creating, retrieving, updating, and deleting agent events, as well as
+//! listing events with various filtering options.
+
 use crate::dal::DAL;
 use brokkr_models::models::agent_events::{AgentEvent, NewAgentEvent};
 use brokkr_models::schema::agent_events;

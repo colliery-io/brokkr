@@ -1,3 +1,8 @@
+//! Data Access Layer for DeploymentObject operations.
+//!
+//! This module provides functionality to interact with deployment objects in the database,
+//! including creating, retrieving, listing, and soft-deleting deployment objects.
+
 use crate::dal::DAL;
 use brokkr_models::models::agent_targets::AgentTarget;
 use brokkr_models::models::deployment_objects::{DeploymentObject, NewDeploymentObject};
@@ -160,6 +165,12 @@ impl<'a> DeploymentObjectsDAL<'a> {
 
     /// Retrieves a list of undeployed objects for an agent based on its responsibilities.
     ///
+    /// This method performs the following steps:
+    /// 1. Get the list of stacks the agent is responsible for
+    /// 2. Get all deployment objects for these stacks
+    /// 3. Filter out objects that have been deployed (have corresponding agent events)
+    /// 4. Sort by sequence_id in descending order
+    ///
     /// # Arguments
     ///
     /// * `agent_id` - The UUID of the agent to get undeployed objects for.
@@ -225,6 +236,19 @@ impl<'a> DeploymentObjectsDAL<'a> {
             .load::<DeploymentObject>(conn)
     }
 
+    /// Retrieves applicable deployment objects for a given agent.
+    ///
+    /// This method fetches deployment objects based on the agent's targets and filters out deleted objects.
+    /// The results are sorted by sequence_id in descending order.
+    ///
+    /// # Arguments
+    ///
+    /// * `agent_id` - The UUID of the agent to retrieve applicable deployment objects for.
+    ///
+    /// # Returns
+    ///
+    /// Returns a Result containing a Vec of DeploymentObjects that are applicable for the agent,
+    /// sorted by sequence_id in descending order (most recent first), or a diesel::result::Error on failure.
     pub fn get_applicable_deployment_objects(
         &self,
         agent_id: Uuid,

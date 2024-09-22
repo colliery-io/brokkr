@@ -6,6 +6,10 @@ use diesel::prelude::*;
 use uuid::Uuid;
 
 /// Data Access Layer for Generator operations.
+///
+/// This module provides a set of methods to interact with the generators table in the database.
+/// It includes operations for creating, retrieving, updating, and deleting generators,
+/// as well as specialized queries for filtering and updating specific fields.
 pub struct GeneratorsDAL<'a> {
     /// Reference to the main DAL instance.
     pub dal: &'a DAL,
@@ -20,7 +24,7 @@ impl<'a> GeneratorsDAL<'a> {
     ///
     /// # Returns
     ///
-    /// Returns a Result containing the created Generator on success, or a diesel::result::Error on failure.
+    /// A Result containing the created Generator on success, or a diesel::result::Error on failure.
     pub fn create(&self, new_generator: &NewGenerator) -> Result<Generator, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         diesel::insert_into(generators::table)
@@ -36,7 +40,7 @@ impl<'a> GeneratorsDAL<'a> {
     ///
     /// # Returns
     ///
-    /// Returns a Result containing an Option<Generator> if found (and not deleted), or a diesel::result::Error on failure.
+    /// A Result containing an Option<Generator> if found (and not deleted), or a diesel::result::Error on failure.
     pub fn get(&self, generator_uuid: Uuid) -> Result<Option<Generator>, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         generators::table
@@ -54,7 +58,7 @@ impl<'a> GeneratorsDAL<'a> {
     ///
     /// # Returns
     ///
-    /// Returns a Result containing an Option<Generator> if found (including deleted generators), or a diesel::result::Error on failure.
+    /// A Result containing an Option<Generator> if found (including deleted generators), or a diesel::result::Error on failure.
     pub fn get_including_deleted(
         &self,
         generator_uuid: Uuid,
@@ -70,7 +74,7 @@ impl<'a> GeneratorsDAL<'a> {
     ///
     /// # Returns
     ///
-    /// Returns a Result containing a Vec of all non-deleted Generators on success, or a diesel::result::Error on failure.
+    /// A Result containing a Vec of all non-deleted Generators on success, or a diesel::result::Error on failure.
     pub fn list(&self) -> Result<Vec<Generator>, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         generators::table
@@ -82,7 +86,7 @@ impl<'a> GeneratorsDAL<'a> {
     ///
     /// # Returns
     ///
-    /// Returns a Result containing a Vec of all Generators (including deleted ones) on success, or a diesel::result::Error on failure.
+    /// A Result containing a Vec of all Generators (including deleted ones) on success, or a diesel::result::Error on failure.
     pub fn list_all(&self) -> Result<Vec<Generator>, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         generators::table.load::<Generator>(conn)
@@ -97,7 +101,7 @@ impl<'a> GeneratorsDAL<'a> {
     ///
     /// # Returns
     ///
-    /// Returns a Result containing the updated Generator on success, or a diesel::result::Error on failure.
+    /// A Result containing the updated Generator on success, or a diesel::result::Error on failure.
     pub fn update(
         &self,
         generator_uuid: Uuid,
@@ -117,7 +121,7 @@ impl<'a> GeneratorsDAL<'a> {
     ///
     /// # Returns
     ///
-    /// Returns a Result containing the number of affected rows (0 or 1) on success, or a diesel::result::Error on failure.
+    /// A Result containing the number of affected rows (0 or 1) on success, or a diesel::result::Error on failure.
     pub fn soft_delete(&self, generator_id: Uuid) -> Result<usize, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         diesel::update(generators::table.filter(generators::id.eq(generator_id)))
@@ -133,7 +137,7 @@ impl<'a> GeneratorsDAL<'a> {
     ///
     /// # Returns
     ///
-    /// Returns a Result containing the number of affected rows (0 or 1) on success, or a diesel::result::Error on failure.
+    /// A Result containing the number of affected rows (0 or 1) on success, or a diesel::result::Error on failure.
     pub fn hard_delete(&self, generator_uuid: Uuid) -> Result<usize, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         diesel::delete(generators::table.filter(generators::id.eq(generator_uuid))).execute(conn)
@@ -148,7 +152,7 @@ impl<'a> GeneratorsDAL<'a> {
     ///
     /// # Returns
     ///
-    /// Returns a Result containing the updated Generator on success, or a diesel::result::Error on failure.
+    /// A Result containing the updated Generator on success, or a diesel::result::Error on failure.
     pub fn update_pak_hash(
         &self,
         generator_uuid: Uuid,
@@ -160,7 +164,7 @@ impl<'a> GeneratorsDAL<'a> {
             .get_result(conn)
     }
 
-    /// Updates the last_active_at timestamp for a generator.
+    /// Updates the last_active_at timestamp for a generator and sets is_active to true.
     ///
     /// # Arguments
     ///
@@ -168,7 +172,7 @@ impl<'a> GeneratorsDAL<'a> {
     ///
     /// # Returns
     ///
-    /// Returns a Result containing the updated Generator on success, or a diesel::result::Error on failure.
+    /// A Result containing the updated Generator on success, or a diesel::result::Error on failure.
     pub fn update_last_active(
         &self,
         generator_uuid: Uuid,
@@ -182,7 +186,7 @@ impl<'a> GeneratorsDAL<'a> {
             .get_result(conn)
     }
 
-    /// Retrieves a generator by its name.
+    /// Retrieves a non-deleted generator by its name.
     ///
     /// # Arguments
     ///
@@ -190,7 +194,7 @@ impl<'a> GeneratorsDAL<'a> {
     ///
     /// # Returns
     ///
-    /// Returns a Result containing an Option<Generator> if found, or a diesel::result::Error on failure.
+    /// A Result containing an Option<Generator> if found, or a diesel::result::Error on failure.
     pub fn get_by_name(
         &self,
         generator_name: &str,
@@ -203,7 +207,7 @@ impl<'a> GeneratorsDAL<'a> {
             .optional()
     }
 
-    /// Retrieves generators by their active status.
+    /// Retrieves non-deleted generators by their active status.
     ///
     /// # Arguments
     ///
@@ -211,7 +215,7 @@ impl<'a> GeneratorsDAL<'a> {
     ///
     /// # Returns
     ///
-    /// Returns a Result containing a Vec of matching Generators on success, or a diesel::result::Error on failure.
+    /// A Result containing a Vec of matching Generators on success, or a diesel::result::Error on failure.
     pub fn get_by_active_status(
         &self,
         active: bool,

@@ -1,10 +1,15 @@
+//! Data Access Layer for Stack Annotation operations.
+//!
+//! This module provides functionality to interact with stack annotations in the database,
+//! including creating, retrieving, updating, and deleting annotations.
+
 use crate::dal::DAL;
 use brokkr_models::models::stack_annotations::{NewStackAnnotation, StackAnnotation};
 use brokkr_models::schema::stack_annotations;
 use diesel::prelude::*;
 use uuid::Uuid;
 
-/// Data Access Layer for Stack Annotation operations.
+/// Handles database operations for Stack Annotations.
 pub struct StackAnnotationsDAL<'a> {
     /// Reference to the main DAL instance.
     pub dal: &'a DAL,
@@ -15,11 +20,15 @@ impl<'a> StackAnnotationsDAL<'a> {
     ///
     /// # Arguments
     ///
-    /// * `new_annotation` - A reference to the NewStackAnnotation struct containing the annotation details.
+    /// * `new_annotation` - The new annotation details to be inserted.
     ///
     /// # Returns
     ///
-    /// Returns a Result containing the created StackAnnotation on success, or a diesel::result::Error on failure.
+    /// The created `StackAnnotation` or a database error.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `diesel::result::Error` if the database operation fails.
     pub fn create(
         &self,
         new_annotation: &NewStackAnnotation,
@@ -38,7 +47,11 @@ impl<'a> StackAnnotationsDAL<'a> {
     ///
     /// # Returns
     ///
-    /// Returns a Result containing an Option<StackAnnotation> if found, or a diesel::result::Error on failure.
+    /// An `Option<StackAnnotation>` if found, or `None` if not found.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `diesel::result::Error` if the database operation fails.
     pub fn get(
         &self,
         annotation_id: Uuid,
@@ -58,7 +71,11 @@ impl<'a> StackAnnotationsDAL<'a> {
     ///
     /// # Returns
     ///
-    /// Returns a Result containing a Vec of StackAnnotations for the specified stack, or a diesel::result::Error on failure.
+    /// A vector of `StackAnnotation`s associated with the specified stack.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `diesel::result::Error` if the database operation fails.
     pub fn list_for_stack(
         &self,
         stack_id: Uuid,
@@ -74,11 +91,15 @@ impl<'a> StackAnnotationsDAL<'a> {
     /// # Arguments
     ///
     /// * `annotation_id` - The UUID of the annotation to update.
-    /// * `updated_annotation` - A reference to the StackAnnotation struct containing the updated details.
+    /// * `updated_annotation` - The updated annotation details.
     ///
     /// # Returns
     ///
-    /// Returns a Result containing the updated StackAnnotation on success, or a diesel::result::Error on failure.
+    /// The updated `StackAnnotation`.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `diesel::result::Error` if the database operation fails.
     pub fn update(
         &self,
         annotation_id: Uuid,
@@ -98,7 +119,11 @@ impl<'a> StackAnnotationsDAL<'a> {
     ///
     /// # Returns
     ///
-    /// Returns a Result containing the number of affected rows (0 or 1) on success, or a diesel::result::Error on failure.
+    /// The number of affected rows (0 or 1).
+    ///
+    /// # Errors
+    ///
+    /// Returns a `diesel::result::Error` if the database operation fails.
     pub fn delete(&self, annotation_id: Uuid) -> Result<usize, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         diesel::delete(stack_annotations::table.filter(stack_annotations::id.eq(annotation_id)))
@@ -113,7 +138,11 @@ impl<'a> StackAnnotationsDAL<'a> {
     ///
     /// # Returns
     ///
-    /// Returns a Result containing the number of affected rows on success, or a diesel::result::Error on failure.
+    /// The number of affected rows.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `diesel::result::Error` if the database operation fails.
     pub fn delete_all_for_stack(&self, stack_id: Uuid) -> Result<usize, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         diesel::delete(stack_annotations::table.filter(stack_annotations::stack_id.eq(stack_id)))

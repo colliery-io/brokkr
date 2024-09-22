@@ -1,3 +1,8 @@
+//! Generators API module for Brokkr.
+//!
+//! This module provides routes and handlers for managing generators,
+//! including CRUD operations with appropriate access control.
+
 use crate::dal::DAL;
 use crate::api::v1::middleware::AuthPayload;
 use axum::{
@@ -10,6 +15,11 @@ use uuid::Uuid;
 use crate::utils::pak;
 use axum::http::StatusCode;
 
+/// Creates and returns the router for generator endpoints.
+///
+/// # Returns
+///
+/// A `Router` instance configured with the generator routes.
 pub fn routes() -> Router<DAL> {
     Router::new()
         .route("/generators", get(list_generators))
@@ -19,6 +29,16 @@ pub fn routes() -> Router<DAL> {
         .route("/generators/:id", delete(delete_generator))
 }
 
+/// Lists all generators. Requires admin access.
+///
+/// # Arguments
+///
+/// * `dal` - The data access layer for database operations.
+/// * `auth_payload` - The authentication payload containing user role information.
+///
+/// # Returns
+///
+/// A `Result` containing either a list of `Generator`s as JSON or an error response.
 async fn list_generators(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -42,6 +62,17 @@ async fn list_generators(
     }
 }
 
+/// Creates a new generator. Requires admin access.
+///
+/// # Arguments
+///
+/// * `dal` - The data access layer for database operations.
+/// * `auth_payload` - The authentication payload containing user role information.
+/// * `new_generator` - The data for the new generator to be created.
+///
+/// # Returns
+///
+/// A `Result` containing either the created `Generator` and its PAK as JSON or an error response.
 async fn create_generator(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -88,6 +119,17 @@ async fn create_generator(
     }
 }
 
+/// Retrieves a specific generator by ID.
+///
+/// # Arguments
+///
+/// * `dal` - The data access layer for database operations.
+/// * `auth_payload` - The authentication payload containing user role information.
+/// * `id` - The UUID of the generator to retrieve.
+///
+/// # Returns
+///
+/// A `Result` containing either the `Generator` as JSON or an error response.
 async fn get_generator(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -116,6 +158,18 @@ async fn get_generator(
     }
 }
 
+/// Updates an existing generator.
+///
+/// # Arguments
+///
+/// * `dal` - The data access layer for database operations.
+/// * `auth_payload` - The authentication payload containing user role information.
+/// * `id` - The UUID of the generator to update.
+/// * `updated_generator` - The updated generator data.
+///
+/// # Returns
+///
+/// A `Result` containing either the updated `Generator` as JSON or an error response.
 async fn update_generator(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -141,6 +195,17 @@ async fn update_generator(
     }
 }
 
+/// Soft deletes a generator.
+///
+/// # Arguments
+///
+/// * `dal` - The data access layer for database operations.
+/// * `auth_payload` - The authentication payload containing user role information.
+/// * `id` - The UUID of the generator to delete.
+///
+/// # Returns
+///
+/// A `Result` containing either a success status code or an error response.
 async fn delete_generator(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,

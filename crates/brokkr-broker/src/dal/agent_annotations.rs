@@ -1,10 +1,15 @@
+//! Data Access Layer for Agent Annotation operations.
+//!
+//! This module provides functionality to interact with agent annotations in the database,
+//! including creating, retrieving, updating, and deleting annotations.
+
 use crate::dal::DAL;
 use brokkr_models::models::agent_annotations::{AgentAnnotation, NewAgentAnnotation};
 use brokkr_models::schema::agent_annotations;
 use diesel::prelude::*;
 use uuid::Uuid;
 
-/// Data Access Layer for Agent Annotation operations.
+/// Handles database operations for Agent Annotations.
 pub struct AgentAnnotationsDAL<'a> {
     /// Reference to the main DAL instance.
     pub dal: &'a DAL,
@@ -15,11 +20,15 @@ impl<'a> AgentAnnotationsDAL<'a> {
     ///
     /// # Arguments
     ///
-    /// * `new_annotation` - A reference to the NewAgentAnnotation struct containing the annotation details.
+    /// * `new_annotation` - The new annotation details.
     ///
     /// # Returns
     ///
-    /// Returns a Result containing the created AgentAnnotation on success, or a diesel::result::Error on failure.
+    /// The created `AgentAnnotation` or a database error.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `diesel::result::Error` if the database operation fails.
     pub fn create(
         &self,
         new_annotation: &NewAgentAnnotation,
@@ -38,7 +47,11 @@ impl<'a> AgentAnnotationsDAL<'a> {
     ///
     /// # Returns
     ///
-    /// Returns a Result containing an Option<AgentAnnotation> if found, or a diesel::result::Error on failure.
+    /// An `Option<AgentAnnotation>` if found, or `None` if not found.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `diesel::result::Error` if the database operation fails.
     pub fn get(
         &self,
         annotation_id: Uuid,
@@ -58,7 +71,11 @@ impl<'a> AgentAnnotationsDAL<'a> {
     ///
     /// # Returns
     ///
-    /// Returns a Result containing a Vec of AgentAnnotations for the specified agent, or a diesel::result::Error on failure.
+    /// A `Vec<AgentAnnotation>` containing all annotations for the specified agent.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `diesel::result::Error` if the database operation fails.
     pub fn list_for_agent(
         &self,
         agent_id: Uuid,
@@ -73,7 +90,11 @@ impl<'a> AgentAnnotationsDAL<'a> {
     ///
     /// # Returns
     ///
-    /// Returns a Result containing a Vec of AgentAnnotations, or a diesel::result::Error on failure.
+    /// A `Vec<AgentAnnotation>` containing all agent annotations.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `diesel::result::Error` if the database operation fails.
     pub fn list(&self) -> Result<Vec<AgentAnnotation>, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         agent_annotations::table.load::<AgentAnnotation>(conn)
@@ -84,11 +105,15 @@ impl<'a> AgentAnnotationsDAL<'a> {
     /// # Arguments
     ///
     /// * `annotation_id` - The UUID of the annotation to update.
-    /// * `updated_annotation` - A reference to the AgentAnnotation struct containing the updated details.
+    /// * `updated_annotation` - The updated annotation details.
     ///
     /// # Returns
     ///
-    /// Returns a Result containing the updated AgentAnnotation on success, or a diesel::result::Error on failure.
+    /// The updated `AgentAnnotation`.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `diesel::result::Error` if the database operation fails.
     pub fn update(
         &self,
         annotation_id: Uuid,
@@ -108,7 +133,11 @@ impl<'a> AgentAnnotationsDAL<'a> {
     ///
     /// # Returns
     ///
-    /// Returns a Result containing the number of affected rows (0 or 1) on success, or a diesel::result::Error on failure.
+    /// The number of affected rows (0 or 1).
+    ///
+    /// # Errors
+    ///
+    /// Returns a `diesel::result::Error` if the database operation fails.
     pub fn delete(&self, annotation_id: Uuid) -> Result<usize, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         diesel::delete(agent_annotations::table.filter(agent_annotations::id.eq(annotation_id)))
@@ -123,7 +152,11 @@ impl<'a> AgentAnnotationsDAL<'a> {
     ///
     /// # Returns
     ///
-    /// Returns a Result containing the number of affected rows on success, or a diesel::result::Error on failure.
+    /// The number of affected rows.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `diesel::result::Error` if the database operation fails.
     pub fn delete_all_for_agent(&self, agent_id: Uuid) -> Result<usize, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         diesel::delete(agent_annotations::table.filter(agent_annotations::agent_id.eq(agent_id)))
