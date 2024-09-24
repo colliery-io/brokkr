@@ -349,8 +349,8 @@ async fn test_add_stack_label() {
     let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body_str = String::from_utf8_lossy(&body);
 
-    println!("Response status: {}", status);
-    println!("Response body: {}", body_str);
+    
+    
 
     assert_eq!(status, StatusCode::OK, "Unexpected status code. Body: {}", body_str);
 

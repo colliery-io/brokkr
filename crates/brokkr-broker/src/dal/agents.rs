@@ -437,4 +437,34 @@ impl<'a> AgentsDAL<'a> {
             .set(agents::pak_hash.eq(new_pak_hash))
             .get_result(conn)
     }
+
+        /// Retrieves an agent by its name and cluster name.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The name of the agent to retrieve.
+    /// * `cluster_name` - The name of the cluster the agent belongs to.
+    ///
+    /// # Returns
+    ///
+    /// Returns a `Result` containing an `Option<Agent>` if found,
+    /// or a `diesel::result::Error` on failure.
+    pub fn get_by_name_and_cluster_name(
+        &self,
+        name: String,
+        cluster_name: String,
+    ) -> Result<Option<Agent>, diesel::result::Error> {
+        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let query = agents::table
+            .filter(agents::name.eq(&name))
+            .filter(agents::cluster_name.eq(&cluster_name))
+            .filter(agents::deleted_at.is_null());
+    
+        
+    
+        let result = query.first(conn).optional();
+        
+    
+        result
+    }
 }

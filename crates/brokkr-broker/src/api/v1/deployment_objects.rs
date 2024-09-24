@@ -58,7 +58,7 @@ async fn get_deployment_object(
                         }
                     }
                     Err(e) => {
-                        eprintln!("Error fetching agent targets: {:?}", e);
+                        
                         Err((
                             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                             Json(serde_json::json!({"error": "Failed to verify agent association"})),
@@ -86,7 +86,7 @@ async fn get_deployment_object(
                         }
                     }
                     Err(e) => {
-                        eprintln!("Error fetching associated stack: {:?}", e);
+                        
                         Err((
                             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                             Json(serde_json::json!({"error": "Failed to fetch associated stack"})),
@@ -105,7 +105,7 @@ async fn get_deployment_object(
             Json(serde_json::json!({"error": "Deployment object not found"})),
         )),
         Err(e) => {
-            eprintln!("Error fetching deployment object: {:?}", e);
+            
             Err((
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to fetch deployment object"})),

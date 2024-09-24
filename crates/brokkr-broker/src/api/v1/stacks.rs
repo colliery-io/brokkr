@@ -45,7 +45,6 @@ async fn list_stacks(
     match dal.stacks().list() {
         Ok(stacks) => Ok(Json(stacks)),
         Err(e) => {
-            eprintln!("Error fetching stacks: {:?}", e);
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to fetch stacks"})),
@@ -79,7 +78,6 @@ async fn create_stack(
     match dal.stacks().create(&new_stack) {
         Ok(stack) => Ok(Json(stack)),
         Err(e) => {
-            eprintln!("Error creating stack: {:?}", e);
             Err((
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to create stack"})),
@@ -94,7 +92,6 @@ async fn get_stack(
     Path(id): Path<Uuid>,
 ) -> Result<Json<Stack>, (StatusCode, Json<serde_json::Value>)> {
     let stack = dal.stacks().get(vec![id]).map_err(|e| {
-        eprintln!("Error fetching stack: {:?}", e);
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({"error": "Failed to fetch stack"})),
@@ -127,7 +124,6 @@ async fn update_stack(
     Json(updated_stack): Json<Stack>,
 ) -> Result<Json<Stack>, (StatusCode, Json<serde_json::Value>)> {
     let existing_stack = dal.stacks().get(vec![id]).map_err(|e| {
-        eprintln!("Error fetching stack: {:?}", e);
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({"error": "Failed to fetch stack"})),
@@ -160,7 +156,6 @@ async fn update_stack(
     match dal.stacks().update(id, &updated_stack) {
         Ok(stack) => Ok(Json(stack)),
         Err(e) => {
-            eprintln!("Error updating stack: {:?}", e);
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to update stack"})),
@@ -175,7 +170,6 @@ async fn delete_stack(
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, (StatusCode, Json<serde_json::Value>)> {
     let existing_stack = dal.stacks().get(vec![id]).map_err(|e| {
-        eprintln!("Error fetching stack: {:?}", e);
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({"error": "Failed to fetch stack"})),
@@ -201,7 +195,6 @@ async fn delete_stack(
     match dal.stacks().soft_delete(id) {
         Ok(_) => Ok(StatusCode::NO_CONTENT),
         Err(e) => {
-            eprintln!("Error deleting stack: {:?}", e);
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to delete stack"})),
@@ -218,7 +211,7 @@ async fn list_deployment_objects(
     // Check if the user is an admin or the associated generator
     if !auth_payload.admin {
         let stack = dal.stacks().get(vec![stack_id]).map_err(|e| {
-            eprintln!("Error fetching stack: {:?}", e);
+            
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to fetch stack"})),
@@ -245,7 +238,7 @@ async fn list_deployment_objects(
     match dal.deployment_objects().list_for_stack(stack_id) {
         Ok(objects) => Ok(Json(objects)),
         Err(e) => {
-            eprintln!("Error fetching deployment objects: {:?}", e);
+            
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to fetch deployment objects"})),
@@ -263,7 +256,7 @@ async fn create_deployment_object(
     // Check if the user is an admin or the associated generator
     if !auth_payload.admin {
         let stack = dal.stacks().get(vec![stack_id]).map_err(|e| {
-            eprintln!("Error fetching stack: {:?}", e);
+            
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to fetch stack"})),
@@ -298,7 +291,7 @@ async fn create_deployment_object(
     match dal.deployment_objects().create(&new_object) {
         Ok(object) => Ok(Json(object)),
         Err(e) => {
-            eprintln!("Error creating deployment object: {:?}", e);
+            
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to create deployment object"})),
@@ -324,7 +317,7 @@ async fn list_labels(
     match dal.stack_labels().list_for_stack(stack_id) {
         Ok(labels) => Ok(Json(labels)),
         Err(e) => {
-            eprintln!("Error fetching stack labels: {:?}", e);
+            
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to fetch stack labels"})),
@@ -342,7 +335,7 @@ async fn add_label(
     // Check if the user is an admin or the associated generator
     if !auth_payload.admin {
         let stack = dal.stacks().get(vec![stack_id]).map_err(|e| {
-            eprintln!("Error fetching stack: {:?}", e);
+            
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to fetch stack"})),
@@ -380,7 +373,7 @@ async fn add_label(
     match dal.stack_labels().create(&new_label) {
         Ok(new_label) => Ok(Json(new_label)),
         Err(e) => {
-            eprintln!("Error adding stack label: {:?}", e);
+            
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to add stack label"})),
@@ -397,7 +390,7 @@ async fn remove_label(
     // Check authorization
     if !auth_payload.admin {
         let stack = dal.stacks().get(vec![stack_id]).map_err(|e| {
-            eprintln!("Error fetching stack: {:?}", e);
+            
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to fetch stack"})),
@@ -427,7 +420,7 @@ async fn remove_label(
                 match dal.stack_labels().delete(stack_label.id) {
                     Ok(_) => Ok(StatusCode::NO_CONTENT),
                     Err(e) => {
-                        eprintln!("Error removing stack label: {:?}", e);
+                        
                         Err((
                             StatusCode::INTERNAL_SERVER_ERROR,
                             Json(serde_json::json!({"error": "Failed to remove stack label"})),
@@ -442,7 +435,7 @@ async fn remove_label(
             }
         }
         Err(e) => {
-            eprintln!("Error fetching stack labels: {:?}", e);
+            
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to fetch stack labels"})),
@@ -461,7 +454,7 @@ async fn is_authorized_for_stack(
     }
 
     let stack = dal.stacks().get(vec![stack_id]).map_err(|e| {
-        eprintln!("Error fetching stack: {:?}", e);
+        
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({"error": "Failed to fetch stack"})),
@@ -483,7 +476,7 @@ async fn is_authorized_for_stack(
 
     if let Some(agent_id) = auth_payload.agent {
         let agent_targets = dal.agent_targets().list_for_agent(agent_id).map_err(|e| {
-            eprintln!("Error fetching agent targets: {:?}", e);
+            
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to fetch agent targets"})),
@@ -515,7 +508,7 @@ async fn list_annotations(
     match dal.stack_annotations().list_for_stack(stack_id) {
         Ok(annotations) => Ok(Json(annotations)),
         Err(e) => {
-            eprintln!("Error fetching stack annotations: {:?}", e);
+            
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to fetch stack annotations"})),
@@ -533,7 +526,7 @@ async fn add_annotation(
     // Check if the user is an admin or the associated generator
     if !auth_payload.admin {
         let stack = dal.stacks().get(vec![stack_id]).map_err(|e| {
-            eprintln!("Error fetching stack: {:?}", e);
+            
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to fetch stack"})),
@@ -568,7 +561,7 @@ async fn add_annotation(
     match dal.stack_annotations().create(&new_annotation) {
         Ok(new_annotation) => Ok(Json(new_annotation)),
         Err(e) => {
-            eprintln!("Error adding stack annotation: {:?}", e);
+            
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to add stack annotation"})),
@@ -585,7 +578,7 @@ async fn remove_annotation(
     // Check authorization
     if !auth_payload.admin {
         let stack = dal.stacks().get(vec![stack_id]).map_err(|e| {
-            eprintln!("Error fetching stack: {:?}", e);
+            
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to fetch stack"})),
@@ -615,7 +608,7 @@ async fn remove_annotation(
                 match dal.stack_annotations().delete(stack_annotation.id) {
                     Ok(_) => Ok(StatusCode::NO_CONTENT),
                     Err(e) => {
-                        eprintln!("Error removing stack annotation: {:?}", e);
+                        
                         Err((
                             StatusCode::INTERNAL_SERVER_ERROR,
                             Json(serde_json::json!({"error": "Failed to remove stack annotation"})),
@@ -630,7 +623,7 @@ async fn remove_annotation(
             }
         }
         Err(e) => {
-            eprintln!("Error fetching stack annotations: {:?}", e);
+            
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to fetch stack annotations"})),

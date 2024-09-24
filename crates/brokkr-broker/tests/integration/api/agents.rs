@@ -994,3 +994,36 @@ async fn test_get_applicable_deployment_objects() {
     assert_eq!(fetched_objects.len(), 1);
     assert!(fetched_objects.iter().any(|obj| obj.id == do4.id));
 }
+
+#[tokio::test]
+async fn test_get_agent_by_name_and_cluster_name() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+    let admin_pak = fixture.admin_pak.clone();
+
+    // Create a test agent
+    let _test_agent = fixture.create_test_agent("test-agent".to_string(), "test-cluster".to_string());
+
+ 
+
+    // Retrieve the agent by name and cluster name
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/agents/?name=test-agent&cluster_name=test-cluster")
+                .header("Authorization", admin_pak)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let agent: Agent = serde_json::from_slice(&body).unwrap();
+
+    assert_eq!(agent.name, "test-agent");
+    assert_eq!(agent.cluster_name, "test-cluster");
+}

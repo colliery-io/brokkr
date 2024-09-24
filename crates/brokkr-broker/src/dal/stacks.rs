@@ -291,35 +291,35 @@ impl<'a> StacksDAL<'a> {
             .filter(agent_labels::agent_id.eq(agent_id))
             .select(agent_labels::label)
             .load::<String>(conn)?;
-        println!("Agent labels: {:?}", labels);
+        
 
         // Get agent annotations
         let annotations: Vec<(String, String)> = agent_annotations::table
             .filter(agent_annotations::agent_id.eq(agent_id))
             .select((agent_annotations::key, agent_annotations::value))
             .load::<(String, String)>(conn)?;
-        println!("Agent annotations: {:?}", annotations);
+        
 
         // Get agent targets
         let targets: Vec<Uuid> = agent_targets::table
             .filter(agent_targets::agent_id.eq(agent_id))
             .select(agent_targets::stack_id)
             .load::<Uuid>(conn)?;
-        println!("Agent targets: {:?}", targets);
+        
 
         let mut associated_stacks = HashSet::new();
 
         // Get stacks matching labels
         if !labels.is_empty() {
             let label_stacks = self.filter_by_labels(labels, FilterType::Or)?;
-            println!("Stacks matching labels: {:?}", label_stacks);
+            
             associated_stacks.extend(label_stacks);
         }
 
         // Get stacks matching annotations
         if !annotations.is_empty() {
             let annotation_stacks = self.filter_by_annotations(annotations, FilterType::Or)?;
-            println!("Stacks matching annotations: {:?}", annotation_stacks);
+            
             associated_stacks.extend(annotation_stacks);
         }
 
@@ -329,7 +329,7 @@ impl<'a> StacksDAL<'a> {
                 .filter(stacks::id.eq_any(targets))
                 .filter(stacks::deleted_at.is_null())
                 .load::<Stack>(conn)?;
-            println!("Stacks matching targets: {:?}", target_stacks);
+            
             associated_stacks.extend(target_stacks);
         }
 
@@ -337,7 +337,7 @@ impl<'a> StacksDAL<'a> {
         let mut result: Vec<Stack> = associated_stacks.into_iter().collect();
         result.sort_by(|a, b| a.id.cmp(&b.id));
 
-        println!("Final associated stacks: {:?}", result);
+        
         Ok(result)
     }
 }

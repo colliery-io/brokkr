@@ -34,7 +34,7 @@ async fn list_agent_events(
     match dal.agent_events().list() {
         Ok(events) => Ok(Json(events)),
         Err(e) => {
-            eprintln!("Error fetching agent events: {:?}", e);
+            
             Err((
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to fetch agent events"})),

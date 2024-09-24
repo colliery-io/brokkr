@@ -44,9 +44,9 @@ def integration_tests(test_filter: str = ""):
     docker_up()
     cmd = ["cargo", "test", "--test", "integration"]
     if test_filter:
-        cmd.extend(["--", test_filter, "--test-threads=1"])
+        cmd.extend(["--", test_filter, "--test-threads=1", "--nocapture"])
     else:
-        cmd.extend(["--", "--test-threads=1"])
+        cmd.extend(["--", "--test-threads=1", "--nocapture"])
 
     subprocess.run(cmd, cwd=cwd)
     docker_down()

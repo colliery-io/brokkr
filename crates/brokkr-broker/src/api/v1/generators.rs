@@ -53,7 +53,7 @@ async fn list_generators(
     match dal.generators().list() {
         Ok(generators) => Ok(Json(generators)),
         Err(e) => {
-            eprintln!("Error fetching generators: {:?}", e);
+            
             Err((
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to fetch generators"})),
@@ -86,7 +86,7 @@ async fn create_generator(
     }
 
     let (pak, pak_hash) = pak::create_pak().map_err(|e| {
-        eprintln!("Error creating PAK: {:?}", e);
+        
         (
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({"error": "Failed to create PAK"})),
@@ -101,7 +101,7 @@ async fn create_generator(
                     "pak": pak
                 }))),
                 Err(e) => {
-                    eprintln!("Error updating generator PAK hash: {:?}", e);
+                    
                     Err((
                         axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                         Json(serde_json::json!({"error": "Failed to update generator PAK hash"})),
@@ -110,7 +110,7 @@ async fn create_generator(
             }
         }
         Err(e) => {
-            eprintln!("Error creating generator: {:?}", e);
+            
             Err((
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to create generator"})),
@@ -149,7 +149,7 @@ async fn get_generator(
             Json(serde_json::json!({"error": "Generator not found"})),
         )),
         Err(e) => {
-            eprintln!("Error fetching generator: {:?}", e);
+            
             Err((
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to fetch generator"})),
@@ -186,7 +186,7 @@ async fn update_generator(
     match dal.generators().update(id, &updated_generator) {
         Ok(generator) => Ok(Json(generator)),
         Err(e) => {
-            eprintln!("Error updating generator: {:?}", e);
+            
             Err((
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to update generator"})),
@@ -221,7 +221,7 @@ async fn delete_generator(
     match dal.generators().soft_delete(id) {
         Ok(_) => Ok(StatusCode::NO_CONTENT),
         Err(e) => {
-            eprintln!("Error deleting generator: {:?}", e);
+            
             Err((
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to delete generator"})),

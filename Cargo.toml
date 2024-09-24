@@ -1,6 +1,7 @@
 [workspace]
-members = ["crates/*"]
+members = [ "crates/*"]
 resolver = "2"
+edition = "2024"
 
 [workspace.dependencies]
     axum = { version = "0.7.5", features = [] }

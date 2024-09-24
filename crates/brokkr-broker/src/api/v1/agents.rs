@@ -9,7 +9,7 @@ use crate::dal::DAL;
 use crate::utils::pak;
 use axum::http::StatusCode;
 use axum::{
-    extract::{Extension, Path, State},
+    extract::{Extension, Path, State, Query},
     routing::{delete, get, post},
     Json, Router,
 };
@@ -20,6 +20,7 @@ use brokkr_models::models::agent_targets::{AgentTarget, NewAgentTarget};
 use brokkr_models::models::agents::{Agent, NewAgent};
 use brokkr_models::models::deployment_objects::DeploymentObject;
 use serde_json::Value;
+use serde::Deserialize;
 use uuid::Uuid;
 
 /// Creates and returns the router for agent-related endpoints.
@@ -27,9 +28,14 @@ pub fn routes() -> Router<DAL> {
     Router::new()
         .route("/agents", get(list_agents).post(create_agent))
         .route(
+            "/agents/",
+            get(search_agent),
+        )        
+        .route(
             "/agents/:id",
-            get(get_agent).put(update_agent).delete(delete_agent),
+            get(get_agent_by_id).put(update_agent).delete(delete_agent),
         )
+        
         .route("/agents/:id/events", get(list_events).post(create_event))
         .route("/agents/:id/labels", get(list_labels).post(add_label))
         .route("/agents/:id/labels/:label", delete(remove_label))
@@ -45,6 +51,7 @@ pub fn routes() -> Router<DAL> {
             "/agents/:id/applicable-deployment-objects",
             get(get_applicable_deployment_objects),
         )
+        // .route("/agents", get(get_agent))
 }
 
 /// Lists all agents.
@@ -65,7 +72,7 @@ async fn list_agents(
     match dal.agents().list() {
         Ok(agents) => Ok(Json(agents)),
         Err(e) => {
-            eprintln!("Error fetching agents: {:?}", e);
+            
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to fetch agents"})),
@@ -94,7 +101,7 @@ async fn create_agent(
         Ok(agent) => {
             // Generate initial PAK and set PAK hash
             let (pak, pak_hash) = pak::create_pak().map_err(|e| {
-                eprintln!("Error creating PAK: {:?}", e);
+                
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     Json(serde_json::json!({"error": "Failed to create PAK"})),
@@ -110,7 +117,7 @@ async fn create_agent(
                     Ok(Json(response))
                 }
                 Err(e) => {
-                    eprintln!("Error updating agent PAK hash: {:?}", e);
+                    
                     Err((
                         StatusCode::INTERNAL_SERVER_ERROR,
                         Json(serde_json::json!({"error": "Failed to update agent PAK hash"})),
@@ -119,7 +126,7 @@ async fn create_agent(
             }
         }
         Err(e) => {
-            eprintln!("Error creating agent: {:?}", e);
+            
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to create agent"})),
@@ -128,11 +135,18 @@ async fn create_agent(
     }
 }
 
+
+#[derive(Deserialize)]
+struct AgentQuery {
+    name: Option<String>,
+    cluster_name: Option<String>,
+}
+
 /// Retrieves a specific agent by ID.
 ///
 /// # Authorization
 /// Requires admin privileges or matching agent ID.
-async fn get_agent(
+async fn get_agent_by_id(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
     Path(id): Path<Uuid>,
@@ -151,12 +165,53 @@ async fn get_agent(
             Json(serde_json::json!({"error": "Agent not found"})),
         )),
         Err(e) => {
-            eprintln!("Error fetching agent: {:?}", e);
+            
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to fetch agent"})),
             ))
         }
+    }
+}
+
+/// Searches for an agent by name and cluster name.
+///
+/// # Authorization
+/// Requires admin privileges.
+async fn search_agent(
+    State(dal): State<DAL>,
+    Extension(auth_payload): Extension<AuthPayload>,
+    Query(query): Query<AgentQuery>,
+) -> Result<Json<Agent>, (StatusCode, Json<serde_json::Value>)> {
+    if let (Some(name), Some(cluster_name)) = (query.name.clone(), query.cluster_name.clone()) {
+        match dal.agents().get_by_name_and_cluster_name(name, cluster_name) {
+            Ok(Some(agent)) => {
+                if auth_payload.admin || auth_payload.agent == Some(agent.id) {
+                    Ok(Json(agent))
+                } else {
+                    Err((
+                        StatusCode::FORBIDDEN,
+                        Json(serde_json::json!({"error": "Unauthorized"})),
+                    ))
+                }
+            }
+            Ok(None) => Err((
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({"error": "Agent not found"})),
+            )),
+            Err(e) => {
+                eprintln!("Error fetching agent: {:?}", e);
+                Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({"error": "Failed to fetch agent"})),
+                ))
+            }
+        }
+    } else {
+        Err((
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "Invalid request"})),
+        ))
     }
 }
 
@@ -230,7 +285,7 @@ async fn delete_agent(
     match dal.agents().soft_delete(id) {
         Ok(_) => Ok(StatusCode::NO_CONTENT),
         Err(e) => {
-            eprintln!("Error deleting agent: {:?}", e);
+            
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to delete agent"})),
@@ -263,7 +318,7 @@ async fn list_events(
                 .collect(),
         )),
         Err(e) => {
-            eprintln!("Error fetching agent events: {:?}", e);
+            
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to fetch agent events"})),
@@ -292,7 +347,7 @@ async fn create_event(
     match dal.agent_events().create(&new_event) {
         Ok(event) => Ok(Json(event)),
         Err(e) => {
-            eprintln!("Error creating agent event: {:?}", e);
+            
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to create agent event"})),
@@ -320,7 +375,7 @@ async fn list_labels(
     match dal.agent_labels().list_for_agent(id) {
         Ok(labels) => Ok(Json(labels)),
         Err(e) => {
-            eprintln!("Error fetching agent labels: {:?}", e);
+            
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to fetch agent labels"})),
@@ -349,7 +404,7 @@ async fn add_label(
     match dal.agent_labels().create(&new_label) {
         Ok(label) => Ok(Json(label)),
         Err(e) => {
-            eprintln!("Error adding agent label: {:?}", e);
+            
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to add agent label"})),
@@ -380,7 +435,7 @@ async fn remove_label(
                 match dal.agent_labels().delete(agent_label.id) {
                     Ok(_) => Ok(StatusCode::NO_CONTENT),
                     Err(e) => {
-                        eprintln!("Error removing agent label: {:?}", e);
+                        
                         Err((
                             StatusCode::INTERNAL_SERVER_ERROR,
                             Json(serde_json::json!({"error": "Failed to remove agent label"})),
@@ -395,7 +450,7 @@ async fn remove_label(
             }
         }
         Err(e) => {
-            eprintln!("Error fetching agent labels: {:?}", e);
+            
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to fetch agent labels"})),
@@ -423,7 +478,7 @@ async fn list_annotations(
     match dal.agent_annotations().list_for_agent(id) {
         Ok(annotations) => Ok(Json(annotations)),
         Err(e) => {
-            eprintln!("Error fetching agent annotations: {:?}", e);
+            
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to fetch agent annotations"})),
@@ -452,7 +507,7 @@ async fn add_annotation(
     match dal.agent_annotations().create(&new_annotation) {
         Ok(annotation) => Ok(Json(annotation)),
         Err(e) => {
-            eprintln!("Error adding agent annotation: {:?}", e);
+            
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to add agent annotation"})),
@@ -483,7 +538,7 @@ async fn remove_annotation(
                 match dal.agent_annotations().delete(agent_annotation.id) {
                     Ok(_) => Ok(StatusCode::NO_CONTENT),
                     Err(e) => {
-                        eprintln!("Error removing agent annotation: {:?}", e);
+                        
                         Err((
                             StatusCode::INTERNAL_SERVER_ERROR,
                             Json(serde_json::json!({"error": "Failed to remove agent annotation"})),
@@ -498,7 +553,7 @@ async fn remove_annotation(
             }
         }
         Err(e) => {
-            eprintln!("Error fetching agent annotations: {:?}", e);
+            
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to fetch agent annotations"})),
@@ -526,7 +581,7 @@ async fn list_targets(
     match dal.agent_targets().list_for_agent(id) {
         Ok(targets) => Ok(Json(targets)),
         Err(e) => {
-            eprintln!("Error fetching agent targets: {:?}", e);
+            
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to fetch agent targets"})),
@@ -555,7 +610,7 @@ async fn add_target(
     match dal.agent_targets().create(&new_target) {
         Ok(target) => Ok(Json(target)),
         Err(e) => {
-            eprintln!("Error adding agent target: {:?}", e);
+            
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to add agent target"})),
@@ -586,7 +641,7 @@ async fn remove_target(
                 match dal.agent_targets().delete(target.id) {
                     Ok(_) => Ok(StatusCode::NO_CONTENT),
                     Err(e) => {
-                        eprintln!("Error removing agent target: {:?}", e);
+                        
                         Err((
                             StatusCode::INTERNAL_SERVER_ERROR,
                             Json(serde_json::json!({"error": "Failed to remove agent target"})),
@@ -601,7 +656,7 @@ async fn remove_target(
             }
         }
         Err(e) => {
-            eprintln!("Error fetching agent targets: {:?}", e);
+            
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to fetch agent targets"})),
@@ -629,7 +684,7 @@ async fn record_heartbeat(
     match dal.agents().record_heartbeat(id) {
         Ok(_) => Ok(StatusCode::NO_CONTENT),
         Err(e) => {
-            eprintln!("Error recording agent heartbeat: {:?}", e);
+            
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to record agent heartbeat"})),
@@ -660,7 +715,7 @@ async fn get_applicable_deployment_objects(
     {
         Ok(objects) => Ok(Json(objects)),
         Err(e) => {
-            eprintln!("Error fetching applicable deployment objects: {:?}", e);
+            
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to fetch applicable deployment objects"})),
@@ -668,3 +723,4 @@ async fn get_applicable_deployment_objects(
         }
     }
 }
+

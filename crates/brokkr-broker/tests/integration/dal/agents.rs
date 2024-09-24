@@ -642,3 +642,32 @@ fn test_update_agent_pak_hash() {
 
     assert_eq!(fetched_agent.pak_hash, new_pak_hash);
 }
+
+#[test]
+fn test_get_agent_by_name_and_cluster_name() {
+    let fixture = TestFixture::new();
+
+    // Create a test agent
+    let created_agent = fixture.create_test_agent("Test Agent".to_string(), "Test Cluster".to_string());
+
+    // Retrieve the agent by name and cluster name
+    let retrieved_agent = fixture
+        .dal
+        .agents()
+        .get_by_name_and_cluster_name("Test Agent".to_string(), "Test Cluster".to_string())
+        .expect("Failed to get agent by name and cluster name")
+        .unwrap();
+
+    // Verify the retrieved agent
+    assert_eq!(retrieved_agent.id, created_agent.id);
+    assert_eq!(retrieved_agent.name, created_agent.name);
+    assert_eq!(retrieved_agent.cluster_name, created_agent.cluster_name);
+
+    // Test with non-existent agent
+    let non_existent_agent = fixture
+        .dal
+        .agents()
+        .get_by_name_and_cluster_name("Non Existent Agent".to_string(), "Test Cluster".to_string())
+        .expect("Failed to get non-existent agent by name and cluster name");
+    assert!(non_existent_agent.is_none());
+}
