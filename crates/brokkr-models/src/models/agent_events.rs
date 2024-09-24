@@ -81,7 +81,7 @@ pub struct NewAgentEvent {
     pub deployment_object_id: Uuid,
     /// Type of the event.
     pub event_type: String,
-    /// Status of the event (e.g., "SUCCESS", "FAILURE", "IN_PROGRESS", "PENDING").
+    /// Status of the event (e.g., "SUCCESS", "FAILURE").
     pub status: String,
     /// Optional message providing additional details about the event.
     pub message: Option<String>,
@@ -95,7 +95,7 @@ impl NewAgentEvent {
     /// * `agent_id`: UUID of the agent associated with this event.
     /// * `deployment_object_id`: UUID of the deployment object associated with this event.
     /// * `event_type`: Type of the event. Must be a non-empty string.
-    /// * `status`: Status of the event. Must be one of: "SUCCESS", "FAILURE", "IN_PROGRESS", or "PENDING".
+    /// * `status`: Status of the event. Must be one of: "SUCCESS", "FAILURE".
     /// * `message`: Optional message providing additional details about the event.
     ///
     /// # Returns
@@ -124,7 +124,7 @@ impl NewAgentEvent {
         }
 
         // Validate status
-        let valid_statuses = ["SUCCESS", "FAILURE", "IN_PROGRESS", "PENDING"];
+        let valid_statuses = ["SUCCESS", "FAILURE"];
         if !valid_statuses.contains(&status.as_str()) {
             return Err(format!(
                 "Invalid status. Must be one of: {}",
