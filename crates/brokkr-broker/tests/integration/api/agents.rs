@@ -11,6 +11,7 @@ use brokkr_models::models::agent_targets::NewAgentTarget;
 use brokkr_models::models::agents::Agent;
 use brokkr_models::models::agents::NewAgent;
 use brokkr_models::models::stacks::NewStack;
+use brokkr_models::models::deployment_objects::DeploymentObject;
 use std::ops::Not;
 use tower::ServiceExt;
 use uuid::Uuid;
@@ -919,4 +920,77 @@ async fn test_list_agent_labels_with_mismatched_pak() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn test_record_heartbeat() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+    
+    let (agent, pak) =
+    fixture.create_test_agent_with_pak("Agent 1".to_string(), "Cluster 1".to_string());
+    
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/agents/{}/heartbeat", agent.id))
+                .header("Authorization", format!("Bearer {}", pak))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+    // Verify that the last_heartbeat_at field has been updated
+    let updated_agent = fixture.dal.agents().get(agent.id).unwrap().unwrap();
+    assert!(updated_agent.last_heartbeat.is_some());
+    assert!(updated_agent.last_heartbeat.unwrap() > agent.created_at);
+}
+
+#[tokio::test]
+async fn test_get_applicable_deployment_objects() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+    
+    // Create an agent
+    let (agent, pak) = fixture.create_test_agent_with_pak("Test Agent".to_string(), "Test Cluster".to_string());
+    // Create a stack
+    let stack = fixture.create_test_stack("Test Stack".to_string(), None, fixture.admin_generator.id);
+    fixture.create_test_agent_target(agent.id, stack.id);
+
+    // Create 4 deployment objects
+    let do1 = fixture.create_test_deployment_object(stack.id, "yaml_content: object1".to_string(), false);
+    let do2 = fixture.create_test_deployment_object(stack.id, "yaml_content: object2".to_string(), false);
+    let do3 = fixture.create_test_deployment_object(stack.id, "yaml_content: object3".to_string(), false);
+    let do4 = fixture.create_test_deployment_object(stack.id, "yaml_content: object4".to_string(), false);
+
+    // Create 3 agent events: 1 success, 1 failure, 1 success
+    fixture.create_test_agent_event(&agent, &do1, "DEPLOY", "SUCCESS", None);
+    fixture.create_test_agent_event(&agent, &do2, "DEPLOY", "FAILURE", None);
+    fixture.create_test_agent_event(&agent, &do3, "DEPLOY", "SUCCESS", None);
+
+    // Get applicable deployment objects
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/api/v1/agents/{}/applicable-deployment-objects", agent.id))
+                .header("Authorization", format!("Bearer {}", pak))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let fetched_objects: Vec<DeploymentObject> = serde_json::from_slice(&body).unwrap();
+
+    // It should match the last deployment object (do4)
+    assert_eq!(fetched_objects.len(), 1);
+    assert!(fetched_objects.iter().any(|obj| obj.id == do4.id));
 }
