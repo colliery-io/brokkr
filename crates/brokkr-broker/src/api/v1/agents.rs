@@ -71,8 +71,7 @@ async fn list_agents(
 
     match dal.agents().list() {
         Ok(agents) => Ok(Json(agents)),
-        Err(e) => {
-            
+        Err(_) => {
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to fetch agents"})),
@@ -100,7 +99,7 @@ async fn create_agent(
     match dal.agents().create(&new_agent) {
         Ok(agent) => {
             // Generate initial PAK and set PAK hash
-            let (pak, pak_hash) = pak::create_pak().map_err(|e| {
+            let (pak, pak_hash) = pak::create_pak().map_err(|_| {
                 
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
@@ -116,7 +115,7 @@ async fn create_agent(
                     });
                     Ok(Json(response))
                 }
-                Err(e) => {
+                Err(_) => {
                     
                     Err((
                         StatusCode::INTERNAL_SERVER_ERROR,
@@ -125,7 +124,7 @@ async fn create_agent(
                 }
             }
         }
-        Err(e) => {
+        Err(_) => {
             
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -164,7 +163,7 @@ async fn get_agent_by_id(
             StatusCode::NOT_FOUND,
             Json(serde_json::json!({"error": "Agent not found"})),
         )),
-        Err(e) => {
+        Err(_) => {
             
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -199,8 +198,7 @@ async fn search_agent(
                 StatusCode::NOT_FOUND,
                 Json(serde_json::json!({"error": "Agent not found"})),
             )),
-            Err(e) => {
-                eprintln!("Error fetching agent: {:?}", e);
+            Err(_) => {
                 Err((
                     StatusCode::INTERNAL_SERVER_ERROR,
                     Json(serde_json::json!({"error": "Failed to fetch agent"})),
@@ -284,7 +282,7 @@ async fn delete_agent(
 
     match dal.agents().soft_delete(id) {
         Ok(_) => Ok(StatusCode::NO_CONTENT),
-        Err(e) => {
+        Err(_) => {
             
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -317,7 +315,7 @@ async fn list_events(
                 .map(|e| serde_json::to_value(e).unwrap())
                 .collect(),
         )),
-        Err(e) => {
+        Err(_) => {
             
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -346,7 +344,7 @@ async fn create_event(
 
     match dal.agent_events().create(&new_event) {
         Ok(event) => Ok(Json(event)),
-        Err(e) => {
+        Err(_) => {
             
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -374,7 +372,7 @@ async fn list_labels(
 
     match dal.agent_labels().list_for_agent(id) {
         Ok(labels) => Ok(Json(labels)),
-        Err(e) => {
+        Err(_) => {
             
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -403,7 +401,7 @@ async fn add_label(
 
     match dal.agent_labels().create(&new_label) {
         Ok(label) => Ok(Json(label)),
-        Err(e) => {
+        Err(_) => {
             
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -434,7 +432,7 @@ async fn remove_label(
             if let Some(agent_label) = labels.into_iter().find(|l| l.label == label) {
                 match dal.agent_labels().delete(agent_label.id) {
                     Ok(_) => Ok(StatusCode::NO_CONTENT),
-                    Err(e) => {
+                    Err(_) => {
                         
                         Err((
                             StatusCode::INTERNAL_SERVER_ERROR,
@@ -449,7 +447,7 @@ async fn remove_label(
                 ))
             }
         }
-        Err(e) => {
+        Err(_) => {
             
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -477,7 +475,7 @@ async fn list_annotations(
 
     match dal.agent_annotations().list_for_agent(id) {
         Ok(annotations) => Ok(Json(annotations)),
-        Err(e) => {
+        Err(_) => {
             
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -506,7 +504,7 @@ async fn add_annotation(
 
     match dal.agent_annotations().create(&new_annotation) {
         Ok(annotation) => Ok(Json(annotation)),
-        Err(e) => {
+        Err(_) => {
             
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -537,7 +535,7 @@ async fn remove_annotation(
             if let Some(agent_annotation) = annotations.into_iter().find(|a| a.key == key) {
                 match dal.agent_annotations().delete(agent_annotation.id) {
                     Ok(_) => Ok(StatusCode::NO_CONTENT),
-                    Err(e) => {
+                    Err(_) => {
                         
                         Err((
                             StatusCode::INTERNAL_SERVER_ERROR,
@@ -552,7 +550,7 @@ async fn remove_annotation(
                 ))
             }
         }
-        Err(e) => {
+        Err(_) => {
             
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -580,7 +578,7 @@ async fn list_targets(
 
     match dal.agent_targets().list_for_agent(id) {
         Ok(targets) => Ok(Json(targets)),
-        Err(e) => {
+        Err(_) => {
             
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -609,7 +607,7 @@ async fn add_target(
 
     match dal.agent_targets().create(&new_target) {
         Ok(target) => Ok(Json(target)),
-        Err(e) => {
+        Err(_) => {
             
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -640,7 +638,7 @@ async fn remove_target(
             if let Some(target) = targets.into_iter().find(|t| t.stack_id == stack_id) {
                 match dal.agent_targets().delete(target.id) {
                     Ok(_) => Ok(StatusCode::NO_CONTENT),
-                    Err(e) => {
+                    Err(_) => {
                         
                         Err((
                             StatusCode::INTERNAL_SERVER_ERROR,
@@ -655,7 +653,7 @@ async fn remove_target(
                 ))
             }
         }
-        Err(e) => {
+        Err(_) => {
             
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -683,7 +681,7 @@ async fn record_heartbeat(
 
     match dal.agents().record_heartbeat(id) {
         Ok(_) => Ok(StatusCode::NO_CONTENT),
-        Err(e) => {
+        Err(_) => {
             
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -714,7 +712,7 @@ async fn get_applicable_deployment_objects(
         .get_undeployed_objects_for_agent(id)
     {
         Ok(objects) => Ok(Json(objects)),
-        Err(e) => {
+        Err(_) => {
             
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,

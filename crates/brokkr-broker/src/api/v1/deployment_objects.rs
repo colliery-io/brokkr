@@ -57,7 +57,7 @@ async fn get_deployment_object(
                             ))
                         }
                     }
-                    Err(e) => {
+                    Err(_) => {
                         
                         Err((
                             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
@@ -85,7 +85,7 @@ async fn get_deployment_object(
                             ))
                         }
                     }
-                    Err(e) => {
+                    Err(_) => {
                         
                         Err((
                             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
@@ -104,7 +104,7 @@ async fn get_deployment_object(
             axum::http::StatusCode::NOT_FOUND,
             Json(serde_json::json!({"error": "Deployment object not found"})),
         )),
-        Err(e) => {
+        Err(_) => {
             
             Err((
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,

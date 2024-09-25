@@ -1,0 +1,10 @@
+[package]
+name = "brokkr-agent"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+
+brokkr-broker = {path = "../brokkr-broker"} 
+brokkr-models = {path = "../brokkr-models"}
+brokkr-utils = { path = "../brokkr-utils" }

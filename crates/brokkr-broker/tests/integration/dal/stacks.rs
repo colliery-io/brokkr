@@ -450,7 +450,7 @@ fn test_get_associated_stacks() {
     
 
     // Try to list all stacks
-    let stacks = fixture.dal.stacks().list().expect("Failed to list stacks");
+    let _stacks = fixture.dal.stacks().list().expect("Failed to list stacks");
     
 
     // Create agents
@@ -476,19 +476,19 @@ fn test_get_associated_stacks() {
     fixture.create_test_stack_label(stack2.id, "label2".to_string());
 
     // Verify labels
-    let agent_labels = fixture
+    let _agent_labels = fixture
         .dal
         .agent_labels()
         .list_for_agent(agent1.id)
         .expect("Failed to list agent labels");
     
-    let stack1_labels = fixture
+    let _stack1_labels = fixture
         .dal
         .stack_labels()
         .list_for_stack(stack1.id)
         .expect("Failed to list stack1 labels");
     
-    let stack2_labels = fixture
+    let _stack2_labels = fixture
         .dal
         .stack_labels()
         .list_for_stack(stack2.id)

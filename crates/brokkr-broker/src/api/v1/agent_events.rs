@@ -33,7 +33,7 @@ async fn list_agent_events(
 ) -> Result<Json<Vec<AgentEvent>>, (axum::http::StatusCode, Json<serde_json::Value>)> {
     match dal.agent_events().list() {
         Ok(events) => Ok(Json(events)),
-        Err(e) => {
+        Err(_) => {
             
             Err((
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,

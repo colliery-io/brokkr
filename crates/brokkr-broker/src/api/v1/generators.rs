@@ -52,7 +52,7 @@ async fn list_generators(
 
     match dal.generators().list() {
         Ok(generators) => Ok(Json(generators)),
-        Err(e) => {
+        Err(_) => {
             
             Err((
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
@@ -85,7 +85,7 @@ async fn create_generator(
         ));
     }
 
-    let (pak, pak_hash) = pak::create_pak().map_err(|e| {
+    let (pak, pak_hash) = pak::create_pak().map_err(|_| {
         
         (
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
@@ -100,7 +100,7 @@ async fn create_generator(
                     "generator": updated_generator,
                     "pak": pak
                 }))),
-                Err(e) => {
+                Err(_) => {
                     
                     Err((
                         axum::http::StatusCode::INTERNAL_SERVER_ERROR,
@@ -109,7 +109,7 @@ async fn create_generator(
                 }
             }
         }
-        Err(e) => {
+        Err(_) => {
             
             Err((
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
@@ -148,7 +148,7 @@ async fn get_generator(
             axum::http::StatusCode::NOT_FOUND,
             Json(serde_json::json!({"error": "Generator not found"})),
         )),
-        Err(e) => {
+        Err(_) => {
             
             Err((
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
@@ -185,7 +185,7 @@ async fn update_generator(
 
     match dal.generators().update(id, &updated_generator) {
         Ok(generator) => Ok(Json(generator)),
-        Err(e) => {
+        Err(_) => {
             
             Err((
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
@@ -220,7 +220,7 @@ async fn delete_generator(
 
     match dal.generators().soft_delete(id) {
         Ok(_) => Ok(StatusCode::NO_CONTENT),
-        Err(e) => {
+        Err(_) => {
             
             Err((
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
