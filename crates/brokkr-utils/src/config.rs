@@ -56,6 +56,7 @@ use serde::Deserialize;
 // Include the default settings file as a string constant
 const DEFAULT_SETTINGS: &str = include_str!("../default.toml");
 
+
 /// Represents the main settings structure for the application
 #[derive(Debug, Deserialize, Clone)]
 #[allow(unused)]
@@ -66,6 +67,20 @@ pub struct Settings {
     pub log: Log,
     /// PAK configuration
     pub pak: PAK,
+    /// Agent configuration
+    pub agent: Agent,
+}
+
+/// Represents the agent configuration
+#[derive(Debug, Deserialize, Clone)]
+#[allow(unused)]
+pub struct Agent {
+    /// Broker URL
+    pub broker_url: String,
+    /// Polling interval in seconds
+    pub polling_interval: u64,
+    /// Kubeconfig path
+    pub kubeconfig_path: Option<String>,
 }
 
 /// Represents the database configuration
@@ -162,6 +177,8 @@ mod tests {
     fn test_settings_default_values() {
         // Attempt to create settings with default values (no custom configuration)
         let settings = Settings::new(None).unwrap();
+
+        
 
         // Assert that the default database URL is set to the expected value
         assert_eq!(

@@ -4,7 +4,11 @@ version = "0.0.0"
 edition = "2021"
 
 [dependencies]
-
-brokkr-broker = {path = "../brokkr-broker"} 
-brokkr-models = {path = "../brokkr-models"}
+brokkr-broker = { path = "../brokkr-broker" }
+brokkr-models = { path = "../brokkr-models" }
 brokkr-utils = { path = "../brokkr-utils" }
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.11", features = ["json"] }
+kube = { version = "0.56" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"

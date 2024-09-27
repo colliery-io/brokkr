@@ -11,3 +11,8 @@ digest = 8
 short_token_length = 8
 long_token_length = 24
 short_token_prefix = "BR"
+
+[agent]
+broker_url = "http://localhost:8080"
+polling_interval = 10
+kubeconfig_path = "/home/${USER}/.kube/config"
