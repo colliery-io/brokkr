@@ -1,13 +1,11 @@
 # Stage 1: Build the application
-FROM rust:slim-buster AS builder
+FROM rust:1.79-slim-buster AS builder
 
 # Set the working directory
 WORKDIR /usr/src/brokkr-broker
 
 # Install necessary dependencies
 RUN apt-get update && apt-get install -y \
-    build-essential \
-    pkg-config \
     libssl-dev \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
@@ -16,13 +14,12 @@ RUN apt-get update && apt-get install -y \
 COPY . ./
 
 # Build the application
+RUN rm ./target/release/deps/brokkr_broker*
 RUN cargo build --bin brokkr-broker --release
 
 # Stage 2: Create the final image
 FROM debian:buster-slim
 RUN apt-get update && apt-get install -y \
-    build-essential \
-    pkg-config \
     libssl-dev \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*

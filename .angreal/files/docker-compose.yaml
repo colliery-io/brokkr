@@ -28,7 +28,9 @@ services:
     depends_on:
       - postgres
     environment:
-      - DATABASE_URL=postgres://brokkr:brokkr@postgres:5432/brokkr
+      - BROKKR__DATABASE__URL=postgres://brokkr:brokkr@postgres:5432/brokkr
+    volumes:
+      - /tmp/key.txt:/tmp/key.txt
 
 volumes:
   brokkr-postgres-data:

@@ -13,6 +13,6 @@ long_token_length = 24
 short_token_prefix = "BR"
 
 [agent]
-broker_url = "http://localhost:8080"
+broker_url = "http://localhost:3000"
 polling_interval = 10
 kubeconfig_path = "/home/${USER}/.kube/config"
