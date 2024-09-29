@@ -3,6 +3,7 @@ use reqwest::Client;
 use brokkr_models::models::agents::{NewAgent, Agent};
 use brokkr_models::models::stacks::{NewStack, Stack};
 use brokkr_models::models::deployment_objects::{NewDeploymentObject, DeploymentObject};
+use brokkr_models::models::generator::{NewGenerator, Generator};
 use std::fs;
 use uuid::Uuid;
 use reqwest::StatusCode;
@@ -14,7 +15,9 @@ pub struct TestFixture {
     pub test_agent_pak: String,
     pub test_agent: Agent,
     pub client: Client,
-    // pub stack: Stack,
+    pub stack: Stack,
+    pub test_generator_pak: String,
+    pub test_generator: Generator,
 }
 
 impl TestFixture {
@@ -29,15 +32,20 @@ impl TestFixture {
         
         broker_ready(&settings.agent.broker_url).await;
         
+        let (test_generator, test_generator_pak) = create_generator(&client, &settings.agent.broker_url, &admin_pak, "integration-test-generator").await;
         let (test_agent, test_agent_pak) = create_agent(&settings.agent.broker_url, &admin_pak).await;
-        // let stack = create_stack(&client, &settings.agent.broker_url, &admin_pak, "test-stack").await;
+        let stack = create_stack(&client, &settings.agent.broker_url, &test_generator_pak, "integration-agent-test-stack").await;
+
+
         TestFixture {
             settings,
             admin_pak,
             test_agent_pak,
             test_agent,
             client,
-            // stack,
+            stack,
+            test_generator_pak,
+            test_generator,
         }
     }
 
@@ -62,6 +70,29 @@ impl TestFixture {
         do_response.json().await.expect("Failed to parse deployment object JSON")
     }
 
+}
+
+async fn create_generator(client: &Client, broker_url: &str, admin_pak: &str, generator_name: &str) -> (Generator, String) {
+    let new_generator = NewGenerator {
+        name: generator_name.to_string(),
+        description: Some("Test Generator".to_string()),
+    };
+
+    let generator_response = client
+        .post(format!("{}/api/v1/generators", broker_url))
+        .header("Content-Type", "application/json")
+        .header("Authorization", admin_pak)
+        .body(Body::from(serde_json::to_string(&new_generator).unwrap()))
+        .send()
+        .await
+        .expect("Failed to send generator creation request");
+
+    assert_eq!(generator_response.status(), StatusCode::OK);
+    let json: serde_json::Value = generator_response.json().await.expect("Failed to parse JSON");
+    
+    let generator = serde_json::from_value(json["generator"].clone()).expect("Failed to parse generator");
+    let generator_pak = json["pak"].as_str().expect("Failed to get initial PAK").to_string();
+    (generator, generator_pak)
 }
 
 async fn create_stack(client: &Client, broker_url: &str, admin_pak: &str, stack_name: &str) -> Stack {
@@ -109,7 +140,7 @@ async fn broker_ready(base_url: &str) -> (){
 }
 async fn create_agent( base_url: &str, admin_pak: &str) -> (Agent, String){
     let client = Client::new();
-    let new_agent = NewAgent::new("test-agent".to_string(), "test-cluster".to_string())
+    let new_agent = NewAgent::new("integration-agent-test-agent".to_string(), "integration-agent-test-cluster".to_string())
         .expect("Failed to create NewAgent");
 
         let url = format!("{}/api/v1/agents",base_url);

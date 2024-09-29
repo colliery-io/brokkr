@@ -9,7 +9,7 @@ DOCKER_COMPOSE_FILE = os.path.join(angreal.get_root(),'files','docker-compose.ya
 
 
 def docker_up():
-    subprocess.run(f"docker compose -f {DOCKER_COMPOSE_FILE} up -d --wait"
+    subprocess.run(f"docker compose  -f {DOCKER_COMPOSE_FILE} up -d --wait"
                     , cwd=cwd, shell=True)
 
 def docker_down():

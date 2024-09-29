@@ -13,8 +13,7 @@ RUN apt-get update && apt-get install -y \
 # Copy the Cargo.toml and Cargo.lock files
 COPY . ./
 
-# Build the application
-RUN rm ./target/release/deps/brokkr_broker*
+
 RUN cargo build --bin brokkr-broker --release
 
 # Stage 2: Create the final image
