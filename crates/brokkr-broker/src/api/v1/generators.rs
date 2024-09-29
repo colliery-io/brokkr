@@ -14,6 +14,7 @@ use brokkr_models::models::generator::{Generator, NewGenerator};
 use uuid::Uuid;
 use crate::utils::pak;
 use axum::http::StatusCode;
+use brokkr_utils::logging::prelude::*;
 
 /// Creates and returns the router for generator endpoints.
 ///
@@ -21,6 +22,7 @@ use axum::http::StatusCode;
 ///
 /// A `Router` instance configured with the generator routes.
 pub fn routes() -> Router<DAL> {
+    info!("Setting up generator routes");
     Router::new()
         .route("/generators", get(list_generators))
         .route("/generators", post(create_generator))
@@ -43,7 +45,9 @@ async fn list_generators(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
 ) -> Result<Json<Vec<Generator>>, (axum::http::StatusCode, Json<serde_json::Value>)> {
+    info!("Handling request to list generators");
     if !auth_payload.admin {
+        warn!("Unauthorized attempt to list generators");
         return Err((
             axum::http::StatusCode::FORBIDDEN,
             Json(serde_json::json!({"error": "Admin access required"})),
@@ -51,9 +55,12 @@ async fn list_generators(
     }
 
     match dal.generators().list() {
-        Ok(generators) => Ok(Json(generators)),
-        Err(_) => {
-            
+        Ok(generators) => {
+            info!("Successfully retrieved {} generators", generators.len());
+            Ok(Json(generators))
+        }
+        Err(e) => {
+            error!("Failed to fetch generators: {:?}", e);
             Err((
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to fetch generators"})),
@@ -78,15 +85,17 @@ async fn create_generator(
     Extension(auth_payload): Extension<AuthPayload>,
     Json(new_generator): Json<NewGenerator>,
 ) -> Result<Json<serde_json::Value>, (axum::http::StatusCode, Json<serde_json::Value>)> {
+    info!("Handling request to create a new generator");
     if !auth_payload.admin {
+        warn!("Unauthorized attempt to create a generator");
         return Err((
             axum::http::StatusCode::FORBIDDEN,
             Json(serde_json::json!({"error": "Admin access required"})),
         ));
     }
 
-    let (pak, pak_hash) = pak::create_pak().map_err(|_| {
-        
+    let (pak, pak_hash) = pak::create_pak().map_err(|e| {
+        error!("Failed to create PAK: {:?}", e);
         (
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({"error": "Failed to create PAK"})),
@@ -96,12 +105,15 @@ async fn create_generator(
     match dal.generators().create(&new_generator) {
         Ok(generator) => {
             match dal.generators().update_pak_hash(generator.id, pak_hash) {
-                Ok(updated_generator) => Ok(Json(serde_json::json!({
-                    "generator": updated_generator,
-                    "pak": pak
-                }))),
-                Err(_) => {
-                    
+                Ok(updated_generator) => {
+                    info!("Successfully created generator with ID: {}", updated_generator.id);
+                    Ok(Json(serde_json::json!({
+                        "generator": updated_generator,
+                        "pak": pak
+                    })))
+                }
+                Err(e) => {
+                    error!("Failed to update generator PAK hash: {:?}", e);
                     Err((
                         axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                         Json(serde_json::json!({"error": "Failed to update generator PAK hash"})),
@@ -109,8 +121,8 @@ async fn create_generator(
                 }
             }
         }
-        Err(_) => {
-            
+        Err(e) => {
+            error!("Failed to create generator: {:?}", e);
             Err((
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to create generator"})),
@@ -135,7 +147,9 @@ async fn get_generator(
     Extension(auth_payload): Extension<AuthPayload>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Generator>, (axum::http::StatusCode, Json<serde_json::Value>)> {
+    info!("Handling request to get generator with ID: {}", id);
     if !auth_payload.admin && auth_payload.generator != Some(id) {
+        warn!("Unauthorized attempt to access generator with ID: {}", id);
         return Err((
             axum::http::StatusCode::FORBIDDEN,
             Json(serde_json::json!({"error": "Unauthorized access"})),
@@ -143,13 +157,19 @@ async fn get_generator(
     }
 
     match dal.generators().get(id) {
-        Ok(Some(generator)) => Ok(Json(generator)),
-        Ok(None) => Err((
-            axum::http::StatusCode::NOT_FOUND,
-            Json(serde_json::json!({"error": "Generator not found"})),
-        )),
-        Err(_) => {
-            
+        Ok(Some(generator)) => {
+            info!("Successfully retrieved generator with ID: {}", id);
+            Ok(Json(generator))
+        }
+        Ok(None) => {
+            warn!("Generator not found with ID: {}", id);
+            Err((
+                axum::http::StatusCode::NOT_FOUND,
+                Json(serde_json::json!({"error": "Generator not found"})),
+            ))
+        }
+        Err(e) => {
+            error!("Failed to fetch generator with ID {}: {:?}", id, e);
             Err((
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to fetch generator"})),
@@ -176,7 +196,9 @@ async fn update_generator(
     Path(id): Path<Uuid>,
     Json(updated_generator): Json<Generator>,
 ) -> Result<Json<Generator>, (axum::http::StatusCode, Json<serde_json::Value>)> {
+    info!("Handling request to update generator with ID: {}", id);
     if !auth_payload.admin && auth_payload.generator != Some(id) {
+        warn!("Unauthorized attempt to update generator with ID: {}", id);
         return Err((
             axum::http::StatusCode::FORBIDDEN,
             Json(serde_json::json!({"error": "Unauthorized access"})),
@@ -184,9 +206,12 @@ async fn update_generator(
     }
 
     match dal.generators().update(id, &updated_generator) {
-        Ok(generator) => Ok(Json(generator)),
-        Err(_) => {
-            
+        Ok(generator) => {
+            info!("Successfully updated generator with ID: {}", id);
+            Ok(Json(generator))
+        }
+        Err(e) => {
+            error!("Failed to update generator with ID {}: {:?}", id, e);
             Err((
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to update generator"})),
@@ -211,7 +236,9 @@ async fn delete_generator(
     Extension(auth_payload): Extension<AuthPayload>,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, (axum::http::StatusCode, Json<serde_json::Value>)> {
+    info!("Handling request to delete generator with ID: {}", id);
     if !auth_payload.admin && auth_payload.generator != Some(id) {
+        warn!("Unauthorized attempt to delete generator with ID: {}", id);
         return Err((
             axum::http::StatusCode::FORBIDDEN,
             Json(serde_json::json!({"error": "Unauthorized access"})),
@@ -219,9 +246,12 @@ async fn delete_generator(
     }
 
     match dal.generators().soft_delete(id) {
-        Ok(_) => Ok(StatusCode::NO_CONTENT),
-        Err(_) => {
-            
+        Ok(_) => {
+            info!("Successfully deleted generator with ID: {}", id);
+            Ok(StatusCode::NO_CONTENT)
+        }
+        Err(e) => {
+            error!("Failed to delete generator with ID {}: {:?}", id, e);
             Err((
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to delete generator"})),

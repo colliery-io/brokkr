@@ -11,6 +11,7 @@ use axum::{
 };
 use brokkr_models::models::agent_events::AgentEvent;
 use uuid::Uuid;
+use brokkr_utils::logging::prelude::*;
 
 /// Creates and returns a router for agent event-related endpoints.
 pub fn routes() -> Router<DAL> {
@@ -31,10 +32,14 @@ async fn list_agent_events(
     State(dal): State<DAL>,
     Extension(_auth_payload): Extension<crate::api::v1::middleware::AuthPayload>,
 ) -> Result<Json<Vec<AgentEvent>>, (axum::http::StatusCode, Json<serde_json::Value>)> {
+    info!("Handling request to list agent events");
     match dal.agent_events().list() {
-        Ok(events) => Ok(Json(events)),
-        Err(_) => {
-            
+        Ok(events) => {
+            info!("Successfully retrieved {} agent events", events.len());
+            Ok(Json(events))
+        }
+        Err(e) => {
+            error!("Failed to fetch agent events: {:?}", e);
             Err((
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to fetch agent events"})),
@@ -57,14 +62,21 @@ async fn get_agent_event(
     Extension(_auth_payload): Extension<crate::api::v1::middleware::AuthPayload>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<AgentEvent>, (axum::http::StatusCode, Json<serde_json::Value>)> {
+    info!("Handling request to get agent event with ID: {}", id);
     match dal.agent_events().get(id) {
-        Ok(Some(event)) => Ok(Json(event)),
-        Ok(None) => Err((
-            axum::http::StatusCode::NOT_FOUND,
-            Json(serde_json::json!({"error": "Agent event not found"})),
-        )),
+        Ok(Some(event)) => {
+            info!("Successfully retrieved agent event with ID: {}", id);
+            Ok(Json(event))
+        }
+        Ok(None) => {
+            warn!("Agent event with ID {} not found", id);
+            Err((
+                axum::http::StatusCode::NOT_FOUND,
+                Json(serde_json::json!({"error": "Agent event not found"})),
+            ))
+        }
         Err(e) => {
-            eprintln!("Error fetching agent event: {:?}", e);
+            error!("Error fetching agent event with ID {}: {:?}", id, e);
             Err((
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to fetch agent event"})),

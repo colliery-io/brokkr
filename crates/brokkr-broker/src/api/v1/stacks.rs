@@ -13,8 +13,10 @@ use brokkr_models::models::stack_labels::{StackLabel, NewStackLabel};
 use brokkr_models::models::stack_annotations::{StackAnnotation, NewStackAnnotation};
 use crate::api::v1::middleware::AuthPayload;
 use uuid::Uuid;
+use brokkr_utils::logging::prelude::*;
 
 pub fn routes() -> Router<DAL> {
+    info!("Setting up stack routes");
     Router::new()
         .route("/stacks", get(list_stacks).post(create_stack))
         .route(
@@ -35,7 +37,9 @@ async fn list_stacks(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
 ) -> Result<Json<Vec<Stack>>, (StatusCode, Json<serde_json::Value>)> {
+    info!("Handling request to list stacks");
     if !auth_payload.admin {
+        warn!("Unauthorized attempt to list stacks");
         return Err((
             StatusCode::FORBIDDEN,
             Json(serde_json::json!({"error": "Admin access required"})),
@@ -43,8 +47,12 @@ async fn list_stacks(
     }
 
     match dal.stacks().list() {
-        Ok(stacks) => Ok(Json(stacks)),
-        Err(_) => {
+        Ok(stacks) => {
+            info!("Successfully retrieved {} stacks", stacks.len());
+            Ok(Json(stacks))
+        }
+        Err(e) => {
+            error!("Failed to fetch stacks: {:?}", e);
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to fetch stacks"})),
@@ -57,29 +65,35 @@ async fn create_stack(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
     Json(new_stack): Json<NewStack>,
-) -> Result<Json<Stack>, (axum::http::StatusCode, Json<serde_json::Value>)> {
+) -> Result<Json<Stack>, (StatusCode, Json<serde_json::Value>)> {
+    info!("Handling request to create a new stack");
     if !auth_payload.admin && auth_payload.generator.is_none() {
+        warn!("Unauthorized attempt to create a stack");
         return Err((
-            axum::http::StatusCode::FORBIDDEN,
+            StatusCode::FORBIDDEN,
             Json(serde_json::json!({"error": "Admin or generator access required"})),
         ));
     }
 
-    // If it's a generator, ensure the generator_id matches
     if let Some(generator_id) = auth_payload.generator {
         if generator_id != new_stack.generator_id {
+            warn!("Generator attempted to create stack for another generator");
             return Err((
-                axum::http::StatusCode::FORBIDDEN,
+                StatusCode::FORBIDDEN,
                 Json(serde_json::json!({"error": "Generator can only create stacks for itself"})),
             ));
         }
     }
 
     match dal.stacks().create(&new_stack) {
-        Ok(stack) => Ok(Json(stack)),
-        Err(_) => {
+        Ok(stack) => {
+            info!("Successfully created stack with ID: {}", stack.id);
+            Ok(Json(stack))
+        }
+        Err(e) => {
+            error!("Failed to create stack: {:?}", e);
             Err((
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to create stack"})),
             ))
         }
@@ -91,7 +105,9 @@ async fn get_stack(
     Extension(auth_payload): Extension<AuthPayload>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Stack>, (StatusCode, Json<serde_json::Value>)> {
-    let stack = dal.stacks().get(vec![id]).map_err(|_| {
+    info!("Handling request to get stack with ID: {}", id);
+    let stack = dal.stacks().get(vec![id]).map_err(|e| {
+        error!("Failed to fetch stack with ID {}: {:?}", id, e);
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({"error": "Failed to fetch stack"})),
@@ -99,6 +115,7 @@ async fn get_stack(
     })?;
 
     if stack.is_empty() {
+        warn!("Stack not found with ID: {}", id);
         return Err((
             StatusCode::NOT_FOUND,
             Json(serde_json::json!({"error": "Stack not found"})),
@@ -108,12 +125,14 @@ async fn get_stack(
     let stack = &stack[0];
 
     if !auth_payload.admin && auth_payload.generator != Some(stack.generator_id) {
+        warn!("Unauthorized attempt to access stack with ID: {}", id);
         return Err((
             StatusCode::FORBIDDEN,
             Json(serde_json::json!({"error": "Access denied"})),
         ));
     }
 
+    info!("Successfully retrieved stack with ID: {}", id);
     Ok(Json(stack.clone()))
 }
 
@@ -123,7 +142,9 @@ async fn update_stack(
     Path(id): Path<Uuid>,
     Json(updated_stack): Json<Stack>,
 ) -> Result<Json<Stack>, (StatusCode, Json<serde_json::Value>)> {
-    let existing_stack = dal.stacks().get(vec![id]).map_err(|_| {
+    info!("Handling request to update stack with ID: {}", id);
+    let existing_stack = dal.stacks().get(vec![id]).map_err(|e| {
+        error!("Failed to fetch stack with ID {}: {:?}", id, e);
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({"error": "Failed to fetch stack"})),
@@ -131,6 +152,7 @@ async fn update_stack(
     })?;
 
     if existing_stack.is_empty() {
+        warn!("Stack not found with ID: {}", id);
         return Err((
             StatusCode::NOT_FOUND,
             Json(serde_json::json!({"error": "Stack not found"})),
@@ -140,6 +162,7 @@ async fn update_stack(
     let existing_stack = &existing_stack[0];
 
     if !auth_payload.admin && auth_payload.generator != Some(existing_stack.generator_id) {
+        warn!("Unauthorized attempt to update stack with ID: {}", id);
         return Err((
             StatusCode::FORBIDDEN,
             Json(serde_json::json!({"error": "Access denied"})),
@@ -147,6 +170,7 @@ async fn update_stack(
     }
 
     if id != updated_stack.id {
+        warn!("Stack ID mismatch during update for ID: {}", id);
         return Err((
             StatusCode::BAD_REQUEST,
             Json(serde_json::json!({"error": "Stack ID mismatch"})),
@@ -154,8 +178,12 @@ async fn update_stack(
     }
 
     match dal.stacks().update(id, &updated_stack) {
-        Ok(stack) => Ok(Json(stack)),
-        Err(_) => {
+        Ok(stack) => {
+            info!("Successfully updated stack with ID: {}", id);
+            Ok(Json(stack))
+        }
+        Err(e) => {
+            error!("Failed to update stack with ID {}: {:?}", id, e);
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to update stack"})),
@@ -169,7 +197,9 @@ async fn delete_stack(
     Extension(auth_payload): Extension<AuthPayload>,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, (StatusCode, Json<serde_json::Value>)> {
-    let existing_stack = dal.stacks().get(vec![id]).map_err(|_| {
+    info!("Handling request to delete stack with ID: {}", id);
+    let existing_stack = dal.stacks().get(vec![id]).map_err(|e| {
+        error!("Failed to fetch stack with ID {}: {:?}", id, e);
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({"error": "Failed to fetch stack"})),
@@ -177,6 +207,7 @@ async fn delete_stack(
     })?;
 
     if existing_stack.is_empty() {
+        warn!("Stack not found with ID: {}", id);
         return Err((
             StatusCode::NOT_FOUND,
             Json(serde_json::json!({"error": "Stack not found"})),
@@ -186,6 +217,7 @@ async fn delete_stack(
     let existing_stack = &existing_stack[0];
 
     if !auth_payload.admin && auth_payload.generator != Some(existing_stack.generator_id) {
+        warn!("Unauthorized attempt to delete stack with ID: {}", id);
         return Err((
             StatusCode::FORBIDDEN,
             Json(serde_json::json!({"error": "Access denied"})),
@@ -193,8 +225,12 @@ async fn delete_stack(
     }
 
     match dal.stacks().soft_delete(id) {
-        Ok(_) => Ok(StatusCode::NO_CONTENT),
-        Err(_) => {
+        Ok(_) => {
+            info!("Successfully deleted stack with ID: {}", id);
+            Ok(StatusCode::NO_CONTENT)
+        }
+        Err(e) => {
+            error!("Failed to delete stack with ID {}: {:?}", id, e);
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to delete stack"})),

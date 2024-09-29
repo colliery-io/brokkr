@@ -16,6 +16,7 @@ use brokkr_models::schema::admin_role;
 use diesel::prelude::*;
 use serde::Serialize;
 use uuid::Uuid;
+use brokkr_utils::logging::prelude::*;
 
 /// Represents the authenticated entity's payload.
 #[derive(Clone, Debug)]
@@ -58,17 +59,30 @@ pub async fn auth_middleware<B>(
     mut request: Request<Body>,
     next: Next,
 ) -> Result<Response, StatusCode> {
-    let pak = request
+    info!("Processing authentication middleware");
+    let pak = match request
         .headers()
         .get("Authorization")
         .and_then(|header| header.to_str().ok())
-        .ok_or(StatusCode::UNAUTHORIZED)?;
+    {
+        Some(pak) => pak,
+        None => {
+            warn!("Authorization header missing or invalid");
+            return Err(StatusCode::UNAUTHORIZED);
+        }
+    };
 
-    let auth_payload = verify_pak(&dal, pak).await?;
-
-    request.extensions_mut().insert(auth_payload);
-
-    Ok(next.run(request).await)
+    match verify_pak(&dal, pak).await {
+        Ok(auth_payload) => {
+            info!("Authentication successful");
+            request.extensions_mut().insert(auth_payload);
+            Ok(next.run(request).await)
+        }
+        Err(status) => {
+            warn!("Authentication failed with status: {:?}", status);
+            Err(status)
+        }
+    }
 }
 
 /// Verifies the provided PAK and returns the corresponding `AuthPayload`.
@@ -85,20 +99,28 @@ pub async fn auth_middleware<B>(
 ///
 /// A `Result` containing either the `AuthPayload` or an error status code.
 async fn verify_pak(dal: &DAL, pak: &str) -> Result<AuthPayload, StatusCode> {
+    info!("Verifying PAK");
     let conn = &mut dal
         .pool
         .get()
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|e| {
+            error!("Failed to get database connection: {:?}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     // Check admin role
     let admin_key = admin_role::table
         .select(admin_role::pak_hash)
         .first::<String>(conn)
         .optional()
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|e| {
+            error!("Failed to fetch admin role: {:?}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     if let Some(admin_hash) = admin_key {
         if pak::verify_pak(pak.to_string(), admin_hash) {
+            info!("Admin PAK verified");
             return Ok(AuthPayload {
                 admin: true,
                 agent: None,
@@ -111,9 +133,13 @@ async fn verify_pak(dal: &DAL, pak: &str) -> Result<AuthPayload, StatusCode> {
     let agents = dal
         .agents()
         .list()
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|e| {
+            error!("Failed to fetch agents: {:?}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
     for agent in agents {
         if pak::verify_pak(pak.to_string(), agent.pak_hash) {
+            info!("Agent PAK verified for agent ID: {}", agent.id);
             return Ok(AuthPayload {
                 admin: false,
                 agent: Some(agent.id),
@@ -126,9 +152,13 @@ async fn verify_pak(dal: &DAL, pak: &str) -> Result<AuthPayload, StatusCode> {
     let generators = dal
         .generators()
         .list()
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|e| {
+            error!("Failed to fetch generators: {:?}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
     for generator in generators {
         if pak::verify_pak(pak.to_string(), generator.pak_hash.unwrap_or_default()) {
+            info!("Generator PAK verified for generator ID: {}", generator.id);
             return Ok(AuthPayload {
                 admin: false,
                 agent: None,
@@ -137,5 +167,6 @@ async fn verify_pak(dal: &DAL, pak: &str) -> Result<AuthPayload, StatusCode> {
         }
     }
 
+    warn!("PAK verification failed");
     Err(StatusCode::UNAUTHORIZED)
 }
