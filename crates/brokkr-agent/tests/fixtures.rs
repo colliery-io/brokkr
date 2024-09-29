@@ -95,14 +95,14 @@ async fn create_generator(client: &Client, broker_url: &str, admin_pak: &str, ge
     (generator, generator_pak)
 }
 
-async fn create_stack(client: &Client, broker_url: &str, admin_pak: &str, stack_name: &str) -> Stack {
+async fn create_stack(client: &Client, broker_url: &str, pak: &str, stack_name: &str) -> Stack {
     let new_stack = NewStack::new(stack_name.to_string(), None, Uuid::new_v4())
         .expect("Failed to create NewStack");
 
     let stack_response = client
         .post(format!("{}/api/v1/stacks", broker_url))
         .header("Content-Type", "application/json")
-        .header("Authorization", admin_pak)
+        .header("Authorization", pak)
         .body(Body::from(serde_json::to_string(&new_stack).unwrap()))
         .send()
         .await
