@@ -2,7 +2,7 @@ import angreal # type: ignore
 import subprocess
 import os
 from utils import docker_up,docker_down,cwd, docker_clean
-
+import time
 test = angreal.command_group(name="tests", about="commands for testing the"
                              " application and library")
 
@@ -20,19 +20,6 @@ def unit_tests(test_filter: str = ""):
         cmd.extend(test_filter.split())
     subprocess.run(cmd, cwd=cwd)
 
-@test()
-@angreal.command(name="functional", about="run our functional tests (crates/*/tests/functional.rs)")
-@angreal.argument(name="test_filter", required=False, help="Filter for specific tests or modules")
-def functional_tests(test_filter: str = ""):
-    """
-    Run functional tests with an optional filter.
-    """
-    docker_up()
-    cmd = ["cargo", "test", "--test", "functional"]
-    if test_filter:
-        cmd.extend(["--", test_filter])
-    subprocess.run(cmd, cwd=cwd)
-    docker_down()
 
 @test()
 @angreal.command(name="integration", about="run our integration tests (crates/*/tests/integration.rs)")
@@ -41,7 +28,11 @@ def integration_tests(test_filter: str = ""):
     """
     Run integration tests with an optional filter.
     """
+    docker_down()
+    docker_clean()
     docker_up()
+
+    time.sleep(5)
     cmd = ["cargo", "test", "--test", "integration"]
     if test_filter:
         cmd.extend(["--", test_filter, "--test-threads=1", "--nocapture"])
@@ -49,7 +40,6 @@ def integration_tests(test_filter: str = ""):
         cmd.extend(["--", "--test-threads=1", "--nocapture"])
 
     subprocess.run(cmd, cwd=cwd)
-    docker_down()
 
 
 @test()
@@ -64,7 +54,7 @@ def migration_tests():
         "crates",
         "brokkr-models"
         )
-    docker_down()
+    docker_down(hard=True)
     docker_clean()
     docker_up()
 
@@ -74,5 +64,5 @@ def migration_tests():
         ], cwd=brokkr_models_dir, shell=True
     )
 
-    docker_down()
+    docker_down(hard=True)
     docker_clean()

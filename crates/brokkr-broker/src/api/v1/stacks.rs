@@ -3,7 +3,7 @@ use crate::dal::DAL;
 use axum::{    
     extract::{Extension, Path, State},
     http::StatusCode,
-    routing::{get, post, delete},
+    routing::{get, delete},
     Json,
     Router,
 };

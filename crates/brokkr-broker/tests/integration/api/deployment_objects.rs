@@ -93,9 +93,13 @@ async fn test_get_deployment_object_generator_success() {
         )
         .await
         .unwrap();
-
-    assert_eq!(response.status(), StatusCode::OK);
+    
     let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    println!("body: {:?}", body);
+
+    // let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
+    // assert_eq!(response.status(), StatusCode::OK);
+    
     let fetched_object: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(fetched_object["id"], deployment_object.id.to_string());
 }

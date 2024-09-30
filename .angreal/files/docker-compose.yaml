@@ -30,8 +30,7 @@ services:
     environment:
       - BROKKR__DATABASE__URL=postgres://brokkr:brokkr@postgres:5432/brokkr
     volumes:
-      - /tmp/key.txt:/tmp/key.txt
+      - /tmp/brokkr-keys:/tmp/brokkr-keys
 
 volumes:
   brokkr-postgres-data:
-  

@@ -95,7 +95,7 @@ impl TestFixture {
         utils::first_startup(&mut conn).expect("Failed to run first startup");
 
         // Read the admin PAK from the temporary file
-        let admin_pak_path = std::env::temp_dir().join("/tmp/key.txt");
+        let admin_pak_path = std::env::temp_dir().join("/tmp/brokkr-keys/key.txt");
         let admin_pak = std::fs::read_to_string(admin_pak_path)
             .expect("Failed to read admin PAK from temporary file")
             .trim()

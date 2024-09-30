@@ -69,6 +69,37 @@ async fn get_deployment_object(
                         ))
                     }
                 }
+            } else if let Some(generator_id) = auth_payload.generator {
+                // Check if the generator is associated with the stack of this deployment object
+                match dal.stacks().get(vec![object.stack_id]) {
+                    Ok(stacks) => {
+                        if let Some(stack) = stacks.first() {
+                            if stack.generator_id == generator_id {
+                                info!("Generator {} accessed deployment object with ID: {}", generator_id, id);
+                                Ok(Json(object))
+                            } else {
+                                warn!("Generator {} attempted to access unauthorized deployment object with ID: {}", generator_id, id);
+                                Err((
+                                    axum::http::StatusCode::FORBIDDEN,
+                                    Json(serde_json::json!({"error": "Generator is not associated with this deployment object"})),
+                                ))
+                            }
+                        } else {
+                            warn!("Stack not found for deployment object with ID: {}", id);
+                            Err((
+                                axum::http::StatusCode::NOT_FOUND,
+                                Json(serde_json::json!({"error": "Stack not found for this deployment object"})),
+                            ))
+                        }
+                    }
+                    Err(e) => {
+                        error!("Failed to fetch stack for deployment object with ID {}: {:?}", id, e);
+                        Err((
+                            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                            Json(serde_json::json!({"error": "Failed to fetch stack information"})),
+                        ))
+                    }
+                }
             } else {
                 warn!("Unauthorized access attempt to deployment object with ID: {}", id);
                 Err((

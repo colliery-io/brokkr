@@ -26,16 +26,21 @@ impl TestFixture {
         // Load default settings
         let settings = Settings::new(None).expect("Failed to load default settings");
         
-        
-        // this file is created by the docker-compose.yml file mointing the startup PAK to the local file system.
-        let admin_pak = fs::read_to_string("/tmp/key.txt").expect("Failed to read admin PAK").trim().to_string();
+        // Read the admin PAK from the new location
+        let admin_pak = fs::read_to_string("/tmp/brokkr-keys/key.txt")
+            .expect("Failed to read admin PAK")
+            .trim()
+            .to_string();
         
         broker_ready(&settings.agent.broker_url).await;
-        
-        let (test_generator, test_generator_pak) = create_generator(&client, &settings.agent.broker_url, &admin_pak, "integration-test-generator").await;
-        let (test_agent, test_agent_pak) = create_agent(&settings.agent.broker_url, &admin_pak).await;
-        let stack = create_stack(&client, &settings.agent.broker_url, &test_generator_pak, "integration-agent-test-stack").await;
+        tokio::time::sleep(std::time::Duration::from_secs(5)).await;// wait a few seconds extra for everything to be ready.
 
+        validate_pak(&admin_pak, &settings.agent.broker_url).await;
+
+        let (test_generator, test_generator_pak) = create_generator(&client, &settings.agent.broker_url, &admin_pak, "integration-test-generator").await;
+        
+        let (test_agent, test_agent_pak) = create_agent(&settings.agent.broker_url, &admin_pak).await;
+        let stack = create_stack(&client, &settings.agent.broker_url, &test_generator_pak, "integration-agent-test-stack", test_generator.id).await;
 
         TestFixture {
             settings,
@@ -95,8 +100,8 @@ async fn create_generator(client: &Client, broker_url: &str, admin_pak: &str, ge
     (generator, generator_pak)
 }
 
-async fn create_stack(client: &Client, broker_url: &str, pak: &str, stack_name: &str) -> Stack {
-    let new_stack = NewStack::new(stack_name.to_string(), None, Uuid::new_v4())
+async fn create_stack(client: &Client, broker_url: &str, pak: &str, stack_name: &str, generator_id: Uuid) -> Stack {
+    let new_stack = NewStack::new(stack_name.to_string(), None, generator_id)
         .expect("Failed to create NewStack");
 
     let stack_response = client
@@ -138,6 +143,8 @@ async fn broker_ready(base_url: &str) -> (){
         
     }
 }
+
+
 async fn create_agent( base_url: &str, admin_pak: &str) -> (Agent, String){
     let client = Client::new();
     let new_agent = NewAgent::new("integration-agent-test-agent".to_string(), "integration-agent-test-cluster".to_string())
@@ -165,6 +172,21 @@ async fn create_agent( base_url: &str, admin_pak: &str) -> (Agent, String){
         (test_agent,test_agent_pak)
 }
 
+
+
+pub async fn validate_pak(pak: &str, base_url: &str) -> bool {
+    let client = Client::new();
+    let response = client
+        .post(format!("{}/api/v1/auth/pak", base_url))
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {}", pak))
+        .send()
+        .await
+        .expect("Failed to send PAK validation request");
+
+    response.status() == StatusCode::OK
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -176,8 +198,8 @@ mod tests {
         
         assert!(!fixture.admin_pak.is_empty(), "Admin PAK should not be empty");
         assert!(!fixture.test_agent_pak.is_empty(), "Test agent PAK should not be empty");
-        assert_eq!(fixture.test_agent.name, "test-agent", "Test agent name should be 'Test Agent'");
-        assert_eq!(fixture.test_agent.cluster_name, "test-cluster", "Test agent cluster should be 'Test Cluster'");
+        assert_eq!(fixture.test_agent.name, "integration-agent-test-agent", "Test agent name should be 'integration-agent-test-agent'");
+        assert_eq!(fixture.test_agent.cluster_name, "integration-agent-test-cluster", "Test agent cluster should be 'integration-agent-test-cluster'");
     }
 
     // #[tokio::test]

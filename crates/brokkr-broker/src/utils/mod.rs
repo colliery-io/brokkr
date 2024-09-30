@@ -9,7 +9,8 @@ use diesel::prelude::*;
 use std::fs;
 use tokio::sync::oneshot;
 use uuid::Uuid;
-
+use brokkr_utils::logging::prelude::*;
+use std::path::Path;
 pub mod pak;
 
 /// Handles the shutdown process for the broker.
@@ -121,7 +122,10 @@ pub fn upsert_admin(conn: &mut PgConnection) -> Result<(), Box<dyn std::error::E
     }
 
     // Write PAK to temporary file
-    fs::write("/tmp/key.txt", pak)?;
+    info!("Writing PAK to temporary file");
+    let key_path = Path::new("/tmp/brokkr-keys/key.txt");
+    fs::create_dir_all(key_path.parent().unwrap())?;
+    fs::write(key_path, pak)?;
 
     Ok(())
 }
