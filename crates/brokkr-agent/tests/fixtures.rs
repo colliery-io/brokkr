@@ -9,6 +9,14 @@ use uuid::Uuid;
 use reqwest::StatusCode;
 use serde_json;
 use reqwest::Body;
+
+use once_cell::sync::Lazy;
+use std::sync::Arc;
+
+static FIXTURE: Lazy<Arc<TestFixture>> = Lazy::new(|| {
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    Arc::new(runtime.block_on(TestFixture::new()))
+});
 pub struct TestFixture {
     pub settings: Settings,
     pub admin_pak: String,
@@ -21,6 +29,10 @@ pub struct TestFixture {
 }
 
 impl TestFixture {
+    pub fn get() -> Arc<TestFixture> {
+        FIXTURE.clone()
+    }
+
     pub async fn new() -> Self {
         let client = Client::new();
         // Load default settings
@@ -54,16 +66,16 @@ impl TestFixture {
         }
     }
 
-    pub async fn create_deployment_object(&self, stack_id: Uuid, yaml_content: &str) -> DeploymentObject {
+    pub async fn create_deployment_object(&self, yaml_content: &str) -> DeploymentObject {
         let new_deployment_object = NewDeploymentObject {
-            stack_id,
+            stack_id: self.stack.id,
             yaml_content: yaml_content.to_string(),
             yaml_checksum: "test_checksum".to_string(),
             is_deletion_marker: false,
         };
 
         let do_response = self.client
-            .post(format!("{}/api/v1/stacks/{}/deployment-objects", self.settings.agent.broker_url, stack_id))
+            .post(format!("{}/api/v1/stacks/{}/deployment-objects", self.settings.agent.broker_url, self.stack.id))
             .header("Content-Type", "application/json")
             .header("Authorization", &self.admin_pak)
             .body(Body::from(serde_json::to_string(&new_deployment_object).unwrap()))
@@ -193,24 +205,14 @@ mod tests {
     use tokio;
 
     #[tokio::test]
-    async fn test_fixture_creation() {
+    async fn test_create_deployment_object() {
         let fixture = TestFixture::new().await;
-        
-        assert!(!fixture.admin_pak.is_empty(), "Admin PAK should not be empty");
-        assert!(!fixture.test_agent_pak.is_empty(), "Test agent PAK should not be empty");
-        assert_eq!(fixture.test_agent.name, "integration-agent-test-agent", "Test agent name should be 'integration-agent-test-agent'");
-        assert_eq!(fixture.test_agent.cluster_name, "integration-agent-test-cluster", "Test agent cluster should be 'integration-agent-test-cluster'");
+        let yaml_content = "test: deployment_object";
+        let deployment_object = fixture.create_deployment_object(yaml_content).await;
+
+        assert_eq!(deployment_object.stack_id, fixture.stack.id);
+        assert_eq!(deployment_object.yaml_content, yaml_content);
+        assert_eq!(deployment_object.is_deletion_marker, false);
     }
-
-    // #[tokio::test]
-    // async fn test_create_deployment_object() {
-    //     let fixture = TestFixture::new().await;
-    //     let yaml_content = "test: deployment_object";
-    //     let deployment_object = fixture.create_deployment_object(fixture.stack.id, yaml_content).await;
-
-    //     assert_eq!(deployment_object.stack_id, fixture.stack.id);
-    //     assert_eq!(deployment_object.yaml_content, yaml_content);
-    //     assert_eq!(deployment_object.is_deletion_marker, false);
-    // }
 }
 
