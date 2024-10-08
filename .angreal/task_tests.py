@@ -54,7 +54,7 @@ def migration_tests():
         "crates",
         "brokkr-models"
         )
-    docker_down(hard=True)
+    docker_down()
     docker_clean()
     docker_up()
 
@@ -64,5 +64,5 @@ def migration_tests():
         ], cwd=brokkr_models_dir, shell=True
     )
 
-    docker_down(hard=True)
+    docker_down()
     docker_clean()
