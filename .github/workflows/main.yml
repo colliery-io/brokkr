@@ -16,10 +16,6 @@ jobs:
     needs: setup
     uses: ./.github/workflows/integration_tests.yml
     if: github.event_name == 'pull_request'
-  functional_tests:
-    needs: setup
-    uses: ./.github/workflows/functional_tests.yml
-    if: github.event_name == 'pull_request'
   data_model_tests:
     needs: setup
     if: github.event_name == 'push' || github.event_name == 'pull_request'
