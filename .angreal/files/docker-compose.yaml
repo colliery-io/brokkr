@@ -32,5 +32,19 @@ services:
     volumes:
       - /tmp/brokkr-keys:/tmp/brokkr-keys
 
+  k3s:
+    image: rancher/k3s:v1.27.3-k3s1
+    privileged: true
+    environment:
+      - K3S_TOKEN=brokkr-secret
+      - K3S_KUBECONFIG_OUTPUT=/output/kubeconfig.yaml
+    volumes:
+      - k3s-data:/var/lib/rancher/k3s
+      - /tmp/brokkr-keys:/output
+    ports:
+      - "6443:6443"  # Kubernetes API server
+    command: server
+
 volumes:
   brokkr-postgres-data:
+  k3s-data:
