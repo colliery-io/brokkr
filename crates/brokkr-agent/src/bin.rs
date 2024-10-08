@@ -3,15 +3,14 @@
 // mod k8s_client;
 // mod poller;
 
-use brokkr_utils::config::{self, Config};
+
 // use api_client::ApiClient;
 // use k8s_client::K8sClient;
 // use poller::Poller;
 
 #[tokio::main]
 async fn main() {
-    let config = Settings::new(None).expect("Failed to load configuration");
-
+    // get config setup
 
     loop {
         // objects_to_deploy = client.get_deployment_objects().await;
