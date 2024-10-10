@@ -16,3 +16,7 @@ short_token_prefix = "BR"
 broker_url = "http://localhost:3000"
 polling_interval = 10
 kubeconfig_path = "/home/${USER}/.kube/config"
+max_retries = 60
+pak=''
+agent_name='DEFAULT'
+cluster_name='DEFAULT'

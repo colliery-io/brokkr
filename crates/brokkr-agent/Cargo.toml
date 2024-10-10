@@ -18,9 +18,11 @@ brokkr-utils = { path = "../brokkr-utils" }
 axum = { workspace = true }
 tokio = { version = "1", features = ["full"] }
 reqwest = { version = "0.11", features = ["json"] }
-# kube = { version = "0.56" }
+kube = { version = "0.95.0" , features = ["client"] }
+k8s-openapi = { version = "0.23.0", features = ["latest"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
+serde_yaml = {workspace =  true}
 uuid = { workspace = true }
 
 [dev-dependencies]

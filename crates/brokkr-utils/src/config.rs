@@ -81,6 +81,14 @@ pub struct Agent {
     pub polling_interval: u64,
     /// Kubeconfig path
     pub kubeconfig_path: Option<String>,
+    /// Max number of retries
+    pub max_retries: u32,
+    /// PAK
+    pub pak: String,
+    /// Agent name
+    pub agent_name: String,
+    /// Cluster name
+    pub cluster_name: String,
 }
 
 /// Represents the database configuration
