@@ -1,26 +1,18 @@
-use kube::api::{DynamicObject, GroupVersionKind, PatchParams};
-use kube::core::object;
+use brokkr_agent::broker::{send_failure_event, send_success_event};
+use kube::api::PatchParams;
 use reqwest::Client;
-use kube::ResourceExt;
 use kube::Client as K8sClient;
-use kube::discovery::{ApiCapabilities, ApiResource, Discovery, Scope};
-use kube::api::{Api,Patch};
+use kube::discovery::Discovery;
+
 use std::time::Duration;
-use std::collections::BTreeMap;
-use tokio::time::sleep;
-use reqwest::StatusCode;
 
 use brokkr_utils::config::Settings;
 use brokkr_utils::logging::prelude::*;
-use brokkr_models::models::agents::Agent;
-use brokkr_models::models::deployment_objects::DeploymentObject;
+use brokkr_agent::k8s;
 
 use brokkr_agent::broker;
+use crate::k8s::objects::STACK_LABEL;
 
-const STACK_LABEL: &str = "k8s.brokkr.io/stack";
-const CHECKSUM_ANNOTATION: &str = "k8s.brokkr.io/deployment-checksum";
-const LAST_CONFIG_ANNOTATION: &str = "k8s.brokkr.io/last-config-applied";
-const DEPLOYMENT_OBJECT_ID_LABEL: &str = "brokkr.io/deployment-object-id";
 
 
 
@@ -41,6 +33,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let discovery = Discovery::new(k8s_client.clone()).run().await?;
 
     loop {
+
+
         let deployment_objects = match broker::fetch_and_process_deployment_objects(&config, &client, &agent).await {
             Ok(objects) => {
                 info!("Successfully fetched and processed deployment objects");
@@ -54,131 +48,87 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         };
 
         for d_o in deployment_objects {
+
+            let d_o_id = d_o.id.clone();
             let is_deletion_marker = d_o.is_deletion_marker;
+
+            let current_deployment_state = k8s::api::get_all_objects_by_annotation(&k8s_client, &discovery, STACK_LABEL, d_o.stack_id.to_string().as_str()).await?;
             
             if is_deletion_marker {
                 // TODO: Implement deletion logic
                 info!("Processing deletion object: {}", &d_o.id);
-                // get all objects matching stack id
-                // run delete operation on them
-            } else {
-                let mut k8s_objects = vec![];
-                let yaml_docs = brokkr_agent::utils::multidoc_deserialize(&d_o.yaml_content)?;
-
-
-                for yaml_doc in yaml_docs {
-                    let mut obj: DynamicObject = serde_yaml::from_value(yaml_doc)?;
-                    let mut annotations =  BTreeMap::new();
-                    annotations.insert(STACK_LABEL.to_string(), d_o.stack_id.to_string());
-                    annotations.insert(CHECKSUM_ANNOTATION.to_string(), d_o.yaml_checksum.to_string());
-                    annotations.insert(DEPLOYMENT_OBJECT_ID_LABEL.to_string(), d_o.id.to_string());
-                    annotations.insert(LAST_CONFIG_ANNOTATION.to_string(), format!("{:?}",obj));
-                    obj.metadata.annotations.insert(annotations);
-
-                    let t= obj.types.clone().unwrap().kind; 
-
-                    // move namesapce and CRDs to the front of objects list for apply
-                    if t == "Namespace" || t == "CustomResourceDefinition" {
-                        k8s_objects.insert(0, obj);
-                    } else{
-                    k8s_objects.push(obj);
+                match k8s::api::delete_k8s_objects(&current_deployment_state, &discovery, k8s_client.clone()).await {
+                    Ok(_) => {
+                        let success_message = format!("Successfully deleted K8s objects for stack {}", &d_o.stack_id);
+                        info!("{}", success_message);
+                        send_success_event(&config, &client, &agent, d_o_id, Some(success_message)).await?;
+                    },
+                    Err(e) => {
+                        let error_message = format!("Failed to delete K8s objects: {:?}", e);
+                        error!("{}", error_message);
+                        send_failure_event(&config, &client, &agent, d_o_id, error_message).await?;
                     }
+                };
+             } else {
+
+                let k8s_objects = match k8s::objects::create_k8s_objects(d_o) {
+                    Ok(objects) => objects,
+                    Err(e) => {
+                        let error_message = format!("Failed to create K8s objects: {:?}", e);
+                        error!("{}", error_message);
+                        send_failure_event(&config, &client, &agent, d_o_id, error_message).await?;
+                        continue; // Skip to the next deployment object
+                    }
+                };
+    
+            // Dry run
+            if let Err(e) = k8s::api::apply_k8s_objects(&k8s_objects, &discovery, k8s_client.clone(), &ss_dry_run).await {
+                let error_message = format!("Dry run failed: {}", e);
+                error!("{}", error_message);
+                send_failure_event(&config, &client, &agent, d_o_id, error_message).await?;
+                continue;
+            }
+
+
+            // Actual apply
+            if let Err(e) = k8s::api::apply_k8s_objects(&k8s_objects, &discovery, k8s_client.clone(), &ssapply).await {
+                let apply_error = format!("Apply failed: {:?}", e);
+                error!("{}", apply_error);
+                let mut error_messages = vec![apply_error];
+
+                // Delete recently applied objects
+                if let Err(delete_err) = k8s::api::delete_k8s_objects(&k8s_objects, &discovery, k8s_client.clone()).await {
+                    error!("Failed to delete recently applied objects: {:?}", delete_err);
+                    error_messages.push(format!("Failed to delete recently applied objects: {}", delete_err));
                 }
 
-                // first pass dry runs
-                for k8s_object in &k8s_objects{
-                    info!("Processing k8s object: {:?}", k8s_object);
-                    let default_namespace = &"default".to_string();
-                    let namespace = k8s_object.metadata.namespace.as_ref().or(Some(default_namespace)).unwrap();
-
-                    let gvk = if let Some(tm) = &k8s_object.types{
-                        GroupVersionKind::try_from(tm)?
-                    } else {
-                        error!("Cannot apply object without valid TypeMeta {:?}", k8s_object);
-                        break;
-                    };
-                    let name = k8s_object.name_any();
-                    if let Some((ar,caps)) = discovery.resolve_gvk(&gvk) {
-                        let api = dynamic_api(ar, caps, k8s_client.clone(), Some(namespace), false);
-                        info!("Apply {:?}: \n{:?}", gvk.kind, serde_yaml::to_string(&k8s_object));
-                        let data = serde_json::to_value(&k8s_object)?;
-                        match api.patch(&name, &ss_dry_run, &Patch::Apply(data)).await {
-                            Ok(response) => {
-                                info!("Dry run successful for {:?} '{}'", gvk.kind, name);
-                            },
-                            Err(e) => {
-                                error!("Dry run failed for {:?} '{}': {:?}", gvk.kind, name, e);
-                                // register failed apply event
-                                // exit loop
-                            }
-                        }            
-                    }
+                // Re-apply the previous state
+                if let Err(reapply_err) = k8s::api::apply_k8s_objects(&current_deployment_state, &discovery, k8s_client.clone(), &ssapply).await {
+                    error!("Failed to re-apply previous state: {:?}", reapply_err);
+                    error_messages.push(format!("Failed to re-apply previous state: {}", reapply_err));
                 }
 
-
-                // second pass apply
+                // Send a single failure event with all error messages combined
+                let combined_error_message = error_messages.join("; ");
+                send_failure_event(&config, &client, &agent, d_o_id, combined_error_message).await?;
+                continue;
+            }
                 
+            // Send success event if we've reached this point without any failures
+            send_success_event(&config, &client, &agent, d_o_id, None).await?;
+            info!("Successfully applied K8s objects for deployment object {}", d_o_id);
+
                 
-
-                for k8s_object in &k8s_objects{
-                    info!("Processing k8s object: {:?}", k8s_object);
-                    let default_namespace = &"default".to_string();
-                    let namespace = k8s_object.metadata.namespace.as_ref().or(Some(default_namespace)).unwrap();
-
-                    let gvk = if let Some(tm) = &k8s_object.types{
-                        GroupVersionKind::try_from(tm)?
-                    } else {
-                        error!("Cannot apply object without valid TypeMeta {:?}", k8s_object);
-                        break;
-                    };
-                    let name = k8s_object.name_any();
-                    if let Some((ar,caps)) = discovery.resolve_gvk(&gvk) {
-                        let api = dynamic_api(ar, caps, k8s_client.clone(), Some(namespace), false);
-                        info!("Apply {:?}: \n{:?}", gvk.kind, serde_yaml::to_string(&k8s_object));
-                        let data = serde_json::to_value(&k8s_object)?;
-                        match api.patch(&name, &ssapply, &Patch::Apply(data)).await {
-                            Ok(response) => {
-                                info!("Dry run successful for {:?} '{}'", gvk.kind, name);
-                            },
-                            Err(e) => {
-                                error!("Dry run failed for {:?} '{}': {:?}", gvk.kind, name, e);
-                                // register failed apply event
-                                // exit loop
-                            }
-                        }            
-                    }
-                }
 
             }
         }
 
-        // Sleep for a while before the next iteration
-        tokio::time::sleep(Duration::from_secs(60)).await;
+        // Sleep for the configured polling interval before the next iteration
+        tokio::time::sleep(Duration::from_secs(config.agent.polling_interval)).await;
     }
     Ok(())
 }
 
 
 
-async fn process_deployment_object(object: DeploymentObject) -> Result<(), Box<dyn std::error::Error>> {
-    // TODO: Implement deployment logic
-    info!("Processing deployment object: {}", object.id);
-    // Add your deployment logic here
-    Ok(())
-}
 
-fn dynamic_api(
-    ar: ApiResource,
-    caps: ApiCapabilities,
-    client: K8sClient,
-    ns: Option<&str>,
-    all: bool,
-) -> Api<DynamicObject> {
-    if caps.scope == Scope::Cluster || all {
-        Api::all_with(client, &ar)
-    } else if let Some(namespace) = ns {
-        Api::namespaced_with(client, namespace, &ar)
-    } else {
-        Api::default_namespaced_with(client, &ar)
-    }
-}

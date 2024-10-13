@@ -32,7 +32,8 @@ def integration_tests(test_filter: str = ""):
     docker_clean()
     docker_up()
 
-    time.sleep(5)
+
+
     cmd = ["cargo", "test", "--test", "integration"]
     if test_filter:
         cmd.extend(["--", test_filter, "--test-threads=1", "--nocapture"])

@@ -96,13 +96,6 @@ fn test_connection_pool_integration() {
                     let start = std::time::Instant::now();
                     let conn = pool_clone.pool.get();
                     let duration = start.elapsed();
-                    match &conn {
-                        Ok(_) => println!("Thread {} got a connection after {:?}", i, duration),
-                        Err(e) => println!(
-                            "Thread {} failed to get a connection after {:?}: {:?}",
-                            i, duration, e
-                        ),
-                    }
                     (i, conn, duration)
                 })
             })
@@ -115,12 +108,7 @@ fn test_connection_pool_integration() {
 
         let success_count = results.iter().filter(|(_, r, _)| r.is_ok()).count();
 
-        for (i, result, duration) in &results {
-            match result {
-                Ok(_) => println!("Connection {} succeeded after {:?}", i, duration),
-                Err(e) => println!("Connection {} failed after {:?}: {:?}", i, duration, e),
-            }
-        }
+
 
         assert_eq!(
             success_count, max_size,
@@ -135,9 +123,7 @@ fn test_connection_pool_integration() {
             extra_conn.is_err(),
             "Expected timeout error when exceeding max connections, but got a connection"
         );
-        if let Err(e) = extra_conn {
-            println!("Got expected timeout error: {:?}", e);
-        }
+
     }
 
     // Clean up

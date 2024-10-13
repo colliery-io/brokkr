@@ -4,6 +4,10 @@ url = "postgres://brokkr:brokkr@localhost:5432/brokkr"
 [log]
 level = "debug"
 
+[broker]
+pak_hash = "4c697273df3d764cba950bb5c04368097685f09259f5bd880d892cf1ff9f4cdd"
+# brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8
+
 [pak]
 prefix = "brokkr"
 rng = "osrng"
@@ -20,3 +24,5 @@ max_retries = 60
 pak=''
 agent_name='DEFAULT'
 cluster_name='DEFAULT'
+max_event_message_retries = 2
+event_message_retry_delay = 5

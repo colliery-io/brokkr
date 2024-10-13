@@ -69,6 +69,16 @@ pub struct Settings {
     pub pak: PAK,
     /// Agent configuration
     pub agent: Agent,
+    /// Broker configuration
+    pub broker: Broker,
+}
+
+
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct Broker {
+    /// PAK Hash
+    pub pak_hash: Option<String>,
 }
 
 /// Represents the agent configuration
@@ -89,6 +99,10 @@ pub struct Agent {
     pub agent_name: String,
     /// Cluster name
     pub cluster_name: String,
+    /// Max number of retries for event messages    
+    pub max_event_message_retries: usize,
+    /// Delay between event message retries in seconds
+    pub event_message_retry_delay: u64,
 }
 
 /// Represents the database configuration

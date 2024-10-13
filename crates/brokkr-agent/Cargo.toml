@@ -8,7 +8,7 @@ name = "brokkr_agent"
 path = "src/lib.rs"
 
 [[bin]]
-name = "brokkr_agent"
+name = "brokkr-agent"
 path = "src/bin.rs"
 
 [dependencies]

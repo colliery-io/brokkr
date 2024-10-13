@@ -32,6 +32,16 @@ services:
     volumes:
       - /tmp/brokkr-keys:/tmp/brokkr-keys
 
+  brokkr-agent:
+    build:
+      context: ../..
+      dockerfile: docker/Dockerfile.agent
+    depends_on:
+      - postgres
+      - brokkr-broker
+    environment:
+      - BROKKR__BROKER_URL=http://brokkr-broker:3000
+
   k3s:
     image: rancher/k3s:v1.27.3-k3s1
     privileged: true

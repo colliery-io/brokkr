@@ -6,6 +6,10 @@ use std::time::Duration;
 use reqwest::StatusCode;
 use brokkr_models::models::agents::Agent;
 use brokkr_models::models::deployment_objects::DeploymentObject;
+use brokkr_models::models::agent_events::NewAgentEvent;
+use uuid::Uuid;
+
+
 
 pub async fn wait_for_broker_ready(config: &Settings) {
     let client = Client::new();
@@ -103,9 +107,62 @@ pub async fn fetch_and_process_deployment_objects(config: &Settings, client: &Cl
     if response.status().is_success() {
         let deployment_objects: Vec<DeploymentObject> = response.json().await?;
         info!("Fetched {} applicable deployment objects", deployment_objects.len());
-        Ok((deployment_objects))
+        Ok(deployment_objects)
     } else {
         error!("Failed to fetch applicable deployment objects: {}", response.status());
         Err(format!("Failed to fetch applicable deployment objects: {}", response.status()).into())
     }
+}
+
+pub async fn send_success_event(config: &Settings, client: &Client, agent: &Agent, deployment_object_id: Uuid, message: Option<String>) -> Result<(), Box<dyn std::error::Error>> {
+    send_event(config, client, agent, deployment_object_id, "DEPLOY", "SUCCESS", message).await
+}
+
+pub async fn send_failure_event(config: &Settings, client: &Client, agent: &Agent, deployment_object_id: Uuid, error_message: String) -> Result<(), Box<dyn std::error::Error>> {
+    send_event(config, client, agent, deployment_object_id, "DEPLOY", "FAILURE", Some(error_message)).await
+}
+
+async fn send_event(
+    config: &Settings,
+    client: &Client,
+    agent: &Agent,
+    deployment_object_id: Uuid,
+    event_type: &str,
+    status: &str,
+    message: Option<String>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let event_url = format!(
+        "{}/api/v1/agents/{}/events",
+        config.agent.broker_url,
+        agent.id
+    );
+
+    let new_event = NewAgentEvent::new(
+        agent.id,
+        deployment_object_id,
+        event_type.to_string(),
+        status.to_string(),
+        message,
+    )?;
+
+    for attempt in 1..=config.agent.max_event_message_retries {
+        let response = client
+            .post(&event_url)
+            .header("Authorization", format!("Bearer {}", config.agent.pak))
+            .json(&new_event)
+            .send()
+            .await?;
+
+        if response.status().is_success() {
+            info!("Successfully sent {} event for deployment object {}", status, deployment_object_id);
+            return Ok(());
+        } else {
+            error!("Failed to send {} event (attempt {}): {}", status, attempt, response.status());
+            if attempt < config.agent.max_event_message_retries {
+                sleep(Duration::from_secs(config.agent.event_message_retry_delay)).await;
+            }
+        }
+    }
+
+    Err(format!("Failed to send {} event after {} attempts", status, config.agent.max_event_message_retries).into())
 }

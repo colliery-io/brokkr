@@ -108,6 +108,7 @@ async fn verify_pak(dal: &DAL, pak: &str) -> Result<AuthPayload, StatusCode> {
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
+        
     // Check admin role
     let admin_key = admin_role::table
         .select(admin_role::pak_hash)
