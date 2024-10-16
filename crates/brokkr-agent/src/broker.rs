@@ -28,6 +28,7 @@ pub async fn wait_for_broker_ready(config: &Settings) {
             }
         }
         if attempt < config.agent.max_retries {
+            info!("Waiting for broker to be ready (attempt {})", attempt);
             sleep(Duration::from_secs(1)).await;
         }
     }

@@ -40,7 +40,7 @@ services:
       - postgres
       - brokkr-broker
     environment:
-      - BROKKR__BROKER_URL=http://brokkr-broker:3000
+      - BROKKR__AGENT__BROKER_URL=http://brokkr-dev-brokkr-broker-1:3000
 
   k3s:
     image: rancher/k3s:v1.27.3-k3s1

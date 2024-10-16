@@ -1,139 +1,64 @@
-// //! This module provides a test fixture for the Brokkr project.
-// //!
-// //! It includes functionality to set up a test database, run migrations,
-// //! and insert test data for various entities like stacks, agents, deployment objects,
-// //! and agent events.
-// use axum::Router;
-// use brokkr_broker::api;
-// use brokkr_broker::dal::DAL;
-// use brokkr_broker::db::create_shared_connection_pool;
-// use brokkr_broker::utils;
-// use brokkr_broker::utils::pak;
-// use brokkr_models::models::{
-//     agent_annotations::{AgentAnnotation, NewAgentAnnotation},
-//     agent_events::{AgentEvent, NewAgentEvent},
-//     agent_labels::{AgentLabel, NewAgentLabel},
-//     agent_targets::{AgentTarget, NewAgentTarget},
-//     agents::{Agent, NewAgent},
-//     deployment_objects::{DeploymentObject, NewDeploymentObject},
-//     generator::{Generator, NewGenerator},
-//     stack_annotations::{NewStackAnnotation, StackAnnotation},
-//     stack_labels::{NewStackLabel, StackLabel},
-//     stacks::{NewStack, Stack},
-// };
-// use brokkr_utils::Settings;
-// use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
-// use dotenv::dotenv;
-// use std::env;
-// use uuid::Uuid;
+use brokkr_agent::broker;
+use brokkr_utils::Settings;
+use reqwest::Client;
+use std::sync::Once;
+use brokkr_models::models::agents::NewAgent;
+use serde_json::Value;
 
-// /// Embedded migrations for the test database.
-// pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("../brokkr-models/migrations");
+static INIT: Once = Once::new();
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use once_cell::sync::OnceCell;
 
-// /// Represents a test fixture for the Brokkr project.
+static FIXTURE: OnceCell<Arc<Mutex<TestFixture>>> = OnceCell::new();
 
-// #[allow(dead_code)]
-// #[derive(Clone)]
-// pub struct TestFixture {
-//     /// The Data Access Layer (DAL) instance for database operations.
-//     pub dal: DAL,
-//     pub settings: Settings,
-//     pub admin_pak: String,
-//     pub admin_generator: Generator,
-// }
+pub async fn get_or_init_fixture() -> Arc<Mutex<TestFixture>> {
+    FIXTURE.get_or_init(|| {
+        Arc::new(Mutex::new(TestFixture::new()))
+    }).clone()
+}
 
-// impl Default for TestFixture {
-//     fn default() -> Self {
-//         Self::new()
-//     }
-// }
+#[allow(dead_code)]
+pub struct TestFixture {
+    pub admin_settings: Settings,
+    pub client: Client,
+    pub agent_settings: Settings,
+}
 
-// impl TestFixture {
-//     /// Creates and returns an Axum Router with configured API routes.
-//     ///
-//     /// # Returns
-//     ///
-//     /// Returns a configured Axum Router.
-//     #[allow(dead_code)]
-//     pub fn create_test_router(&self) -> Router<DAL> {
-//         api::configure_api_routes(self.dal.clone())
-//     }
+impl TestFixture {
+    pub fn new() -> Self {
+        INIT.call_once(|| {
+            // Initialize any global setup here
+        });
 
-//     /// Creates a new TestFixture instance.
-//     ///
-//     /// This method sets up a test database connection, runs migrations,
-//     /// and prepares the environment for testing.
-//     ///
-//     /// # Returns
-//     ///
-//     /// Returns a new TestFixture instance.
-//     ///
-//     /// # Panics
-//     ///
-//     /// This method will panic if:
-//     /// * The DATABASE_URL environment variable is not set
-//     /// * It fails to create a database connection
-//     /// * It fails to run migrations
-//     pub fn new() -> Self {
-//         dotenv().ok();
-//         let settings = Settings::new(None).expect("Failed to load settings");
-//         let connection_pool = create_shared_connection_pool(&settings.database.url  , "brokkr", 5);
-//         // Run migrations
-//         let mut conn = connection_pool
-//             .pool
-//             .get()
-//             .expect("Failed to get DB connection");
+        let admin_settings = Settings::new(None).expect("Failed to load settings");
+        let client = Client::new();
+        let agent_settings = admin_settings.clone();
 
-//         // This runs the migrations within the transaction
-//         conn.run_pending_migrations(MIGRATIONS)
-//             .expect("Failed to run migrations");
+        TestFixture { admin_settings, client, agent_settings }
+    }
 
+    pub async fn initialize(&mut self) {
+        let new_agent = NewAgent::new("test_agent".to_string(), "test_cluster".to_string())
+            .expect("Failed to create NewAgent");
+        
+        // Create the agent
+        let response = self.client.post(&format!("{}/api/v1/agents", self.admin_settings.agent.broker_url))
+            .header("Content-Type", "application/json")
+            .header("Authorization", format!("Bearer {}", self.admin_settings.agent.pak))
+            .json(&new_agent)
+            .send()
+            .await
+            .expect("Failed to send request");
 
-//         // this initializes the PAK controller and runs the initial startup logic for the broker
-//         utils::pak::create_pak_controller(Some(&settings))
-//             .expect("Failed to create PAK controller");
-//         utils::first_startup(&mut conn).expect("Failed to run first startup");
+        assert_eq!(response.status(), reqwest::StatusCode::OK);
+        let response_body: Value = response.json().await.expect("Failed to parse response body");
+        let agent_pak = response_body["initial_pak"].as_str().expect("Failed to get initial_pak");
 
-//         // Read the admin PAK from the temporary file
-//         let admin_pak_path = std::env::temp_dir().join("/tmp/brokkr-keys/key.txt");
-//         let admin_pak = std::fs::read_to_string(admin_pak_path)
-//             .expect("Failed to read admin PAK from temporary file")
-//             .trim()
-//             .to_string();
+        self.agent_settings.agent.pak = agent_pak.to_string();
+    }
 
-//         let dal = DAL::new(connection_pool.pool.clone());
-
-//         // Fetch the admin generator
-//         let admin_generator = dal
-//             .generators()
-//             .get_by_name("admin-generator")
-//             .expect("Failed to get admin generator")
-//             .expect("Admin generator not found");
-
-//         TestFixture {
-//             dal,
-//             settings,
-//             admin_pak,
-//             admin_generator,
-//         }
-//     }
-
- 
-
-//     fn reset_database(&self) {
-//         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
-//         // Revert all migrations
-//         conn.revert_all_migrations(MIGRATIONS)
-//             .expect("Failed to revert migrations");
-
-//         // Run all migrations forward
-//         conn.run_pending_migrations(MIGRATIONS)
-//             .expect("Failed to run migrations");
-//     }
-// }
-
-// impl Drop for TestFixture {
-//     fn drop(&mut self) {
-//         self.reset_database();
-//     }
-// }
+    pub async fn wait_for_broker(&self) {
+        broker::wait_for_broker_ready(&self.agent_settings).await;
+    }
+}

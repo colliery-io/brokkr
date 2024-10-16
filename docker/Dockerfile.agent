@@ -30,8 +30,6 @@ WORKDIR /usr/local/bin
 # Copy the built binary from the builder stage
 COPY --from=builder /usr/src/brokkr-agent/target/release/brokkr-agent .
 
-# Expose the port the application runs on
-EXPOSE 3000
 RUN chmod +x brokkr-agent
 # Command to run the application
 ENTRYPOINT ["./brokkr-agent"]

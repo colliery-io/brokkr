@@ -24,7 +24,6 @@ use brokkr_models::models::{
 use brokkr_utils::Settings;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use dotenv::dotenv;
-use std::env;
 use uuid::Uuid;
 
 /// Embedded migrations for the test database.

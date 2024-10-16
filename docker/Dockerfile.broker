@@ -7,6 +7,7 @@ WORKDIR /usr/src/brokkr-broker
 # Install necessary dependencies
 RUN apt-get update && apt-get install -y \
     libssl-dev \
+    pkg-config \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
@@ -20,6 +21,7 @@ RUN cargo build --bin brokkr-broker --release
 FROM debian:buster-slim
 RUN apt-get update && apt-get install -y \
     libssl-dev \
+    pkg-config \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 # Set the working directory

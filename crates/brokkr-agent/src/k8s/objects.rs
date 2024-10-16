@@ -1,7 +1,6 @@
 use kube::api::DynamicObject;
 use serde_yaml;
 use std::collections::BTreeMap;
-use uuid::Uuid;
 use brokkr_models::models::deployment_objects::DeploymentObject;
 use crate::utils;
 

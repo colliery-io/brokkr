@@ -32,6 +32,7 @@ def integration_tests(test_filter: str = ""):
     docker_clean()
     docker_up()
 
+    time.sleep(5)
 
 
     cmd = ["cargo", "test", "--test", "integration"]
