@@ -15,7 +15,9 @@ path = "src/bin.rs"
 brokkr-broker = { path = "../brokkr-broker" }
 brokkr-models = { path = "../brokkr-models" }
 brokkr-utils = { path = "../brokkr-utils" }
+
 axum = { workspace = true }
+clap = { workspace = true }
 tokio = { version = "1", features = ["full"] }
 reqwest = { version = "0.11", features = ["json"] }
 kube = { version = "0.95.0" , features = ["client"] }

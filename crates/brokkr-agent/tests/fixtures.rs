@@ -23,22 +23,28 @@ pub struct TestFixture {
     pub admin_settings: Settings,
     pub client: Client,
     pub agent_settings: Settings,
+    pub initialized: bool,
 }
 
 impl TestFixture {
     pub fn new() -> Self {
+        
         INIT.call_once(|| {
-            // Initialize any global setup here
-        });
+            });
 
         let admin_settings = Settings::new(None).expect("Failed to load settings");
         let client = Client::new();
         let agent_settings = admin_settings.clone();
 
-        TestFixture { admin_settings, client, agent_settings }
+        let test_fixture = TestFixture { admin_settings, client, agent_settings, initialized: false };
+        test_fixture
     }
 
     pub async fn initialize(&mut self) {
+        if self.initialized {
+            return;
+        }
+
         let new_agent = NewAgent::new("test_agent".to_string(), "test_cluster".to_string())
             .expect("Failed to create NewAgent");
         
@@ -56,6 +62,7 @@ impl TestFixture {
         let agent_pak = response_body["initial_pak"].as_str().expect("Failed to get initial_pak");
 
         self.agent_settings.agent.pak = agent_pak.to_string();
+        self.initialized = true;
     }
 
     pub async fn wait_for_broker(&self) {
