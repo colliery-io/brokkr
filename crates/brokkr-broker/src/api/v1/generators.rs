@@ -3,18 +3,18 @@
 //! This module provides routes and handlers for managing generators,
 //! including CRUD operations with appropriate access control.
 
-use crate::dal::DAL;
 use crate::api::v1::middleware::AuthPayload;
+use crate::dal::DAL;
+use crate::utils::pak;
+use axum::http::StatusCode;
 use axum::{
     extract::{Extension, Path, State},
     routing::{delete, get, post, put},
     Json, Router,
 };
 use brokkr_models::models::generator::{Generator, NewGenerator};
-use uuid::Uuid;
-use crate::utils::pak;
-use axum::http::StatusCode;
 use brokkr_utils::logging::prelude::*;
+use uuid::Uuid;
 
 /// Creates and returns the router for generator endpoints.
 ///
@@ -103,24 +103,25 @@ async fn create_generator(
     })?;
 
     match dal.generators().create(&new_generator) {
-        Ok(generator) => {
-            match dal.generators().update_pak_hash(generator.id, pak_hash) {
-                Ok(updated_generator) => {
-                    info!("Successfully created generator with ID: {}", updated_generator.id);
-                    Ok(Json(serde_json::json!({
-                        "generator": updated_generator,
-                        "pak": pak
-                    })))
-                }
-                Err(e) => {
-                    error!("Failed to update generator PAK hash: {:?}", e);
-                    Err((
-                        axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(serde_json::json!({"error": "Failed to update generator PAK hash"})),
-                    ))
-                }
+        Ok(generator) => match dal.generators().update_pak_hash(generator.id, pak_hash) {
+            Ok(updated_generator) => {
+                info!(
+                    "Successfully created generator with ID: {}",
+                    updated_generator.id
+                );
+                Ok(Json(serde_json::json!({
+                    "generator": updated_generator,
+                    "pak": pak
+                })))
             }
-        }
+            Err(e) => {
+                error!("Failed to update generator PAK hash: {:?}", e);
+                Err((
+                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({"error": "Failed to update generator PAK hash"})),
+                ))
+            }
+        },
         Err(e) => {
             error!("Failed to create generator: {:?}", e);
             Err((

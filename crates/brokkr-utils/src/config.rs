@@ -56,7 +56,6 @@ use serde::Deserialize;
 // Include the default settings file as a string constant
 const DEFAULT_SETTINGS: &str = include_str!("../default.toml");
 
-
 /// Represents the main settings structure for the application
 #[derive(Debug, Deserialize, Clone)]
 #[allow(unused)]
@@ -72,8 +71,6 @@ pub struct Settings {
     /// Broker configuration
     pub broker: Broker,
 }
-
-
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct Broker {
@@ -199,8 +196,6 @@ mod tests {
     fn test_settings_default_values() {
         // Attempt to create settings with default values (no custom configuration)
         let settings = Settings::new(None).unwrap();
-
-        
 
         // Assert that the default database URL is set to the expected value
         assert_eq!(

@@ -1,17 +1,13 @@
-use std::error::Error;
 use serde::de::Deserialize;
+use std::error::Error;
 
-
-pub fn multidoc_deserialize(multi_doc_str: &str) -> Result<Vec<serde_yaml::Value>,Box<dyn Error>> {
+pub fn multidoc_deserialize(multi_doc_str: &str) -> Result<Vec<serde_yaml::Value>, Box<dyn Error>> {
     let mut docs = vec![];
-    for d in serde_yaml::Deserializer::from_str(multi_doc_str){
+    for d in serde_yaml::Deserializer::from_str(multi_doc_str) {
         docs.push(serde_yaml::Value::deserialize(d)?);
     }
     Ok(docs)
 }
-
-
-
 
 #[cfg(test)]
 mod tests {

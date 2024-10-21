@@ -1,16 +1,16 @@
-use kube::api::DynamicObject;
-use kube::Discovery;
-use kube::Client as K8sClient;
-use kube::api::PatchParams;
 use brokkr_utils::logging::prelude::*;
+use kube::api::DynamicObject;
 use kube::api::GroupVersionKind;
-use kube::ResourceExt;
-use kube::api::Patch;
-use kube::discovery::ApiResource;
-use kube::discovery::ApiCapabilities;
-use kube::Api;
-use kube::discovery::Scope;
 use kube::api::ListParams;
+use kube::api::Patch;
+use kube::api::PatchParams;
+use kube::discovery::ApiCapabilities;
+use kube::discovery::ApiResource;
+use kube::discovery::Scope;
+use kube::Api;
+use kube::Client as K8sClient;
+use kube::Discovery;
+use kube::ResourceExt;
 
 pub async fn apply_k8s_objects(
     k8s_objects: &[DynamicObject],
@@ -21,23 +21,39 @@ pub async fn apply_k8s_objects(
     for k8s_object in k8s_objects {
         info!("Processing k8s object: {:?}", k8s_object);
         let default_namespace = &"default".to_string();
-        let namespace = k8s_object.metadata.namespace.as_ref().or(Some(default_namespace)).unwrap();
+        let namespace = k8s_object
+            .metadata
+            .namespace
+            .as_ref()
+            .or(Some(default_namespace))
+            .unwrap();
 
         let gvk = if let Some(tm) = &k8s_object.types {
             GroupVersionKind::try_from(tm)?
         } else {
-            error!("Cannot apply object without valid TypeMeta {:?}", k8s_object);
-            return Err(format!("Cannot apply object without valid TypeMeta {:?}", k8s_object).into());
+            error!(
+                "Cannot apply object without valid TypeMeta {:?}",
+                k8s_object
+            );
+            return Err(format!(
+                "Cannot apply object without valid TypeMeta {:?}",
+                k8s_object
+            )
+            .into());
         };
         let name = k8s_object.name_any();
         if let Some((ar, caps)) = discovery.resolve_gvk(&gvk) {
             let api = dynamic_api(ar, caps, k8s_client.clone(), Some(namespace), false);
-            info!("Apply {:?}: \n{:?}", gvk.kind, serde_yaml::to_string(&k8s_object));
+            info!(
+                "Apply {:?}: \n{:?}",
+                gvk.kind,
+                serde_yaml::to_string(&k8s_object)
+            );
             let data = serde_json::to_value(&k8s_object)?;
             match api.patch(&name, patch_params, &Patch::Apply(data)).await {
                 Ok(_) => {
                     info!("Apply successful for {:?} '{}'", gvk.kind, name);
-                },
+                }
                 Err(e) => {
                     error!("Apply failed for {:?} '{}': {:?}", gvk.kind, name, e);
                     // TODO: register failed apply event
@@ -75,9 +91,11 @@ pub async fn get_all_objects_by_annotation(
 
     for group in discovery.groups() {
         for (ar, caps) in group.recommended_resources() {
-            let api: Api<DynamicObject> = dynamic_api(ar.clone(), caps.clone(), k8s_client.clone(), None, true);
-            let lp = ListParams::default().labels(&format!("{}={}", annotation_key, annotation_value));
-            
+            let api: Api<DynamicObject> =
+                dynamic_api(ar.clone(), caps.clone(), k8s_client.clone(), None, true);
+            let lp =
+                ListParams::default().labels(&format!("{}={}", annotation_key, annotation_value));
+
             match api.list(&lp).await {
                 Ok(list) => results.extend(list.items),
                 Err(e) => warn!("Error listing resources for {:?}: {:?}", ar, e),
@@ -96,13 +114,25 @@ pub async fn delete_k8s_objects(
     for k8s_object in k8s_objects {
         info!("Processing k8s object for deletion: {:?}", k8s_object);
         let default_namespace = &"default".to_string();
-        let namespace = k8s_object.metadata.namespace.as_ref().or(Some(default_namespace)).unwrap();
+        let namespace = k8s_object
+            .metadata
+            .namespace
+            .as_ref()
+            .or(Some(default_namespace))
+            .unwrap();
 
         let gvk = if let Some(tm) = &k8s_object.types {
             GroupVersionKind::try_from(tm)?
         } else {
-            error!("Cannot delete object without valid TypeMeta {:?}", k8s_object);
-            return Err(format!("Cannot delete object without valid TypeMeta {:?}", k8s_object).into());
+            error!(
+                "Cannot delete object without valid TypeMeta {:?}",
+                k8s_object
+            );
+            return Err(format!(
+                "Cannot delete object without valid TypeMeta {:?}",
+                k8s_object
+            )
+            .into());
         };
         let name = k8s_object.name_any();
         if let Some((ar, caps)) = discovery.resolve_gvk(&gvk) {
@@ -111,7 +141,7 @@ pub async fn delete_k8s_objects(
             match api.delete(&name, &Default::default()).await {
                 Ok(_) => {
                     info!("Delete successful for {:?} '{}'", gvk.kind, name);
-                },
+                }
                 Err(e) => {
                     error!("Delete failed for {:?} '{}': {:?}", gvk.kind, name, e);
                     // TODO: register failed delete event
@@ -122,4 +152,3 @@ pub async fn delete_k8s_objects(
     }
     Ok(())
 }
-

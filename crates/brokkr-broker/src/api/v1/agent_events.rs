@@ -10,8 +10,8 @@ use axum::{
     Json, Router,
 };
 use brokkr_models::models::agent_events::AgentEvent;
-use uuid::Uuid;
 use brokkr_utils::logging::prelude::*;
+use uuid::Uuid;
 
 /// Creates and returns a router for agent event-related endpoints.
 pub fn routes() -> Router<DAL> {

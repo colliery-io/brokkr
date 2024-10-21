@@ -1,9 +1,13 @@
+use crate::broker;
 use brokkr_utils::config::Settings;
 use brokkr_utils::logging::prelude::*;
 use reqwest::Client;
-use crate::broker;
 
-pub async fn register(admin_pak: String, agent_name: String, cluster_name: String) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn register(
+    admin_pak: String,
+    agent_name: String,
+    cluster_name: String,
+) -> Result<(), Box<dyn std::error::Error>> {
     let config = Settings::new(None).expect("Failed to load configuration");
     let client = Client::new();
 
@@ -53,10 +57,12 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
 
     info!("Fetching agent details");
     let agent = broker::fetch_agent_details(&config, &client).await?;
-    info!("Agent details fetched successfully for agent: {}", agent.name);
+    info!(
+        "Agent details fetched successfully for agent: {}",
+        agent.name
+    );
 
     // ... (rest of the agent logic)
 
     Ok(())
 }
-

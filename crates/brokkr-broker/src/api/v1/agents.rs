@@ -8,7 +8,7 @@ use crate::dal::DAL;
 use crate::utils::pak;
 use axum::http::StatusCode;
 use axum::{
-    extract::{Extension, Path, State, Query},
+    extract::{Extension, Path, Query, State},
     routing::{delete, get, post},
     Json, Router,
 };
@@ -18,25 +18,21 @@ use brokkr_models::models::agent_labels::{AgentLabel, NewAgentLabel};
 use brokkr_models::models::agent_targets::{AgentTarget, NewAgentTarget};
 use brokkr_models::models::agents::{Agent, NewAgent};
 use brokkr_models::models::deployment_objects::DeploymentObject;
-use serde_json::Value;
-use serde::Deserialize;
-use uuid::Uuid;
 use brokkr_utils::logging::prelude::*;
+use serde::Deserialize;
+use serde_json::Value;
+use uuid::Uuid;
 
 /// Creates and returns the router for agent-related endpoints.
 pub fn routes() -> Router<DAL> {
     info!("Setting up agent routes");
     Router::new()
         .route("/agents", get(list_agents).post(create_agent))
-        .route(
-            "/agents/",
-            get(search_agent),
-        )        
+        .route("/agents/", get(search_agent))
         .route(
             "/agents/:id",
             get(get_agent_by_id).put(update_agent).delete(delete_agent),
         )
-        
         .route("/agents/:id/events", get(list_events).post(create_event))
         .route("/agents/:id/labels", get(list_labels).post(add_label))
         .route("/agents/:id/labels/:label", delete(remove_label))
@@ -201,8 +197,14 @@ async fn search_agent(
 ) -> Result<Json<Agent>, (StatusCode, Json<serde_json::Value>)> {
     info!("Handling request to search for agent");
     if let (Some(name), Some(cluster_name)) = (query.name.clone(), query.cluster_name.clone()) {
-        info!("Searching for agent with name: {} and cluster_name: {}", name, cluster_name);
-        match dal.agents().get_by_name_and_cluster_name(name, cluster_name) {
+        info!(
+            "Searching for agent with name: {} and cluster_name: {}",
+            name, cluster_name
+        );
+        match dal
+            .agents()
+            .get_by_name_and_cluster_name(name, cluster_name)
+        {
             Ok(Some(agent)) => {
                 if auth_payload.admin || auth_payload.agent == Some(agent.id) {
                     info!("Successfully found agent with ID: {}", agent.id);
@@ -345,7 +347,10 @@ async fn list_events(
 ) -> Result<Json<Vec<Value>>, (StatusCode, Json<serde_json::Value>)> {
     info!("Handling request to list events for agent with ID: {}", id);
     if !auth_payload.admin && auth_payload.agent != Some(id) {
-        warn!("Unauthorized attempt to list events for agent with ID: {}", id);
+        warn!(
+            "Unauthorized attempt to list events for agent with ID: {}",
+            id
+        );
         return Err((
             StatusCode::FORBIDDEN,
             Json(serde_json::json!({"error": "Unauthorized"})),
@@ -354,7 +359,11 @@ async fn list_events(
 
     match dal.agent_events().get_events(None, Some(id)) {
         Ok(events) => {
-            info!("Successfully retrieved {} events for agent with ID: {}", events.len(), id);
+            info!(
+                "Successfully retrieved {} events for agent with ID: {}",
+                events.len(),
+                id
+            );
             Ok(Json(
                 events
                     .into_iter()
@@ -384,7 +393,10 @@ async fn create_event(
 ) -> Result<Json<AgentEvent>, (StatusCode, Json<serde_json::Value>)> {
     info!("Handling request to create event for agent with ID: {}", id);
     if !auth_payload.admin && auth_payload.agent != Some(id) {
-        warn!("Unauthorized attempt to create event for agent with ID: {}", id);
+        warn!(
+            "Unauthorized attempt to create event for agent with ID: {}",
+            id
+        );
         return Err((
             StatusCode::FORBIDDEN,
             Json(serde_json::json!({"error": "Unauthorized"})),
@@ -417,7 +429,10 @@ async fn list_labels(
 ) -> Result<Json<Vec<AgentLabel>>, (StatusCode, Json<serde_json::Value>)> {
     info!("Handling request to list labels for agent with ID: {}", id);
     if !auth_payload.admin && auth_payload.agent != Some(id) {
-        warn!("Unauthorized attempt to list labels for agent with ID: {}", id);
+        warn!(
+            "Unauthorized attempt to list labels for agent with ID: {}",
+            id
+        );
         return Err((
             StatusCode::FORBIDDEN,
             Json(serde_json::json!({"error": "Unauthorized"})),
@@ -426,7 +441,11 @@ async fn list_labels(
 
     match dal.agent_labels().list_for_agent(id) {
         Ok(labels) => {
-            info!("Successfully retrieved {} labels for agent with ID: {}", labels.len(), id);
+            info!(
+                "Successfully retrieved {} labels for agent with ID: {}",
+                labels.len(),
+                id
+            );
             Ok(Json(labels))
         }
         Err(e) => {
@@ -451,7 +470,10 @@ async fn add_label(
 ) -> Result<Json<AgentLabel>, (StatusCode, Json<serde_json::Value>)> {
     info!("Handling request to add label for agent with ID: {}", id);
     if !auth_payload.admin && auth_payload.agent != Some(id) {
-        warn!("Unauthorized attempt to add label for agent with ID: {}", id);
+        warn!(
+            "Unauthorized attempt to add label for agent with ID: {}",
+            id
+        );
         return Err((
             StatusCode::FORBIDDEN,
             Json(serde_json::json!({"error": "Unauthorized"})),
@@ -482,9 +504,15 @@ async fn remove_label(
     Extension(auth_payload): Extension<AuthPayload>,
     Path((id, label)): Path<(Uuid, String)>,
 ) -> Result<StatusCode, (StatusCode, Json<serde_json::Value>)> {
-    info!("Handling request to remove label '{}' from agent with ID: {}", label, id);
+    info!(
+        "Handling request to remove label '{}' from agent with ID: {}",
+        label, id
+    );
     if !auth_payload.admin && auth_payload.agent != Some(id) {
-        warn!("Unauthorized attempt to remove label from agent with ID: {}", id);
+        warn!(
+            "Unauthorized attempt to remove label from agent with ID: {}",
+            id
+        );
         return Err((
             StatusCode::FORBIDDEN,
             Json(serde_json::json!({"error": "Unauthorized"})),
@@ -496,11 +524,17 @@ async fn remove_label(
             if let Some(agent_label) = labels.into_iter().find(|l| l.label == label) {
                 match dal.agent_labels().delete(agent_label.id) {
                     Ok(_) => {
-                        info!("Successfully removed label '{}' from agent with ID: {}", label, id);
+                        info!(
+                            "Successfully removed label '{}' from agent with ID: {}",
+                            label, id
+                        );
                         Ok(StatusCode::NO_CONTENT)
                     }
                     Err(e) => {
-                        error!("Failed to remove label '{}' from agent with ID {}: {:?}", label, id, e);
+                        error!(
+                            "Failed to remove label '{}' from agent with ID {}: {:?}",
+                            label, id, e
+                        );
                         Err((
                             StatusCode::INTERNAL_SERVER_ERROR,
                             Json(serde_json::json!({"error": "Failed to remove agent label"})),
@@ -534,9 +568,15 @@ async fn list_annotations(
     Extension(auth_payload): Extension<AuthPayload>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Vec<AgentAnnotation>>, (StatusCode, Json<serde_json::Value>)> {
-    info!("Handling request to list annotations for agent with ID: {}", id);
+    info!(
+        "Handling request to list annotations for agent with ID: {}",
+        id
+    );
     if !auth_payload.admin && auth_payload.agent != Some(id) {
-        warn!("Unauthorized attempt to list annotations for agent with ID: {}", id);
+        warn!(
+            "Unauthorized attempt to list annotations for agent with ID: {}",
+            id
+        );
         return Err((
             StatusCode::FORBIDDEN,
             Json(serde_json::json!({"error": "Unauthorized"})),
@@ -545,11 +585,18 @@ async fn list_annotations(
 
     match dal.agent_annotations().list_for_agent(id) {
         Ok(annotations) => {
-            info!("Successfully retrieved {} annotations for agent with ID: {}", annotations.len(), id);
+            info!(
+                "Successfully retrieved {} annotations for agent with ID: {}",
+                annotations.len(),
+                id
+            );
             Ok(Json(annotations))
         }
         Err(e) => {
-            error!("Failed to fetch annotations for agent with ID {}: {:?}", id, e);
+            error!(
+                "Failed to fetch annotations for agent with ID {}: {:?}",
+                id, e
+            );
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to fetch agent annotations"})),
@@ -568,9 +615,15 @@ async fn add_annotation(
     Path(id): Path<Uuid>,
     Json(new_annotation): Json<NewAgentAnnotation>,
 ) -> Result<Json<AgentAnnotation>, (StatusCode, Json<serde_json::Value>)> {
-    info!("Handling request to add annotation for agent with ID: {}", id);
+    info!(
+        "Handling request to add annotation for agent with ID: {}",
+        id
+    );
     if !auth_payload.admin && auth_payload.agent != Some(id) {
-        warn!("Unauthorized attempt to add annotation for agent with ID: {}", id);
+        warn!(
+            "Unauthorized attempt to add annotation for agent with ID: {}",
+            id
+        );
         return Err((
             StatusCode::FORBIDDEN,
             Json(serde_json::json!({"error": "Unauthorized"})),
@@ -601,9 +654,15 @@ async fn remove_annotation(
     Extension(auth_payload): Extension<AuthPayload>,
     Path((id, key)): Path<(Uuid, String)>,
 ) -> Result<StatusCode, (StatusCode, Json<serde_json::Value>)> {
-    info!("Handling request to remove annotation '{}' from agent with ID: {}", key, id);
+    info!(
+        "Handling request to remove annotation '{}' from agent with ID: {}",
+        key, id
+    );
     if !auth_payload.admin && auth_payload.agent != Some(id) {
-        warn!("Unauthorized attempt to remove annotation from agent with ID: {}", id);
+        warn!(
+            "Unauthorized attempt to remove annotation from agent with ID: {}",
+            id
+        );
         return Err((
             StatusCode::FORBIDDEN,
             Json(serde_json::json!({"error": "Unauthorized"})),
@@ -615,11 +674,17 @@ async fn remove_annotation(
             if let Some(agent_annotation) = annotations.into_iter().find(|a| a.key == key) {
                 match dal.agent_annotations().delete(agent_annotation.id) {
                     Ok(_) => {
-                        info!("Successfully removed annotation '{}' from agent with ID: {}", key, id);
+                        info!(
+                            "Successfully removed annotation '{}' from agent with ID: {}",
+                            key, id
+                        );
                         Ok(StatusCode::NO_CONTENT)
                     }
                     Err(e) => {
-                        error!("Failed to remove annotation '{}' from agent with ID {}: {:?}", key, id, e);
+                        error!(
+                            "Failed to remove annotation '{}' from agent with ID {}: {:?}",
+                            key, id, e
+                        );
                         Err((
                             StatusCode::INTERNAL_SERVER_ERROR,
                             Json(serde_json::json!({"error": "Failed to remove agent annotation"})),
@@ -635,7 +700,10 @@ async fn remove_annotation(
             }
         }
         Err(e) => {
-            error!("Failed to fetch annotations for agent with ID {}: {:?}", id, e);
+            error!(
+                "Failed to fetch annotations for agent with ID {}: {:?}",
+                id, e
+            );
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to fetch agent annotations"})),
@@ -655,7 +723,10 @@ async fn list_targets(
 ) -> Result<Json<Vec<AgentTarget>>, (StatusCode, Json<serde_json::Value>)> {
     info!("Handling request to list targets for agent with ID: {}", id);
     if !auth_payload.admin && auth_payload.agent != Some(id) {
-        warn!("Unauthorized attempt to list targets for agent with ID: {}", id);
+        warn!(
+            "Unauthorized attempt to list targets for agent with ID: {}",
+            id
+        );
         return Err((
             StatusCode::FORBIDDEN,
             Json(serde_json::json!({"error": "Unauthorized"})),
@@ -664,7 +735,11 @@ async fn list_targets(
 
     match dal.agent_targets().list_for_agent(id) {
         Ok(targets) => {
-            info!("Successfully retrieved {} targets for agent with ID: {}", targets.len(), id);
+            info!(
+                "Successfully retrieved {} targets for agent with ID: {}",
+                targets.len(),
+                id
+            );
             Ok(Json(targets))
         }
         Err(e) => {
@@ -689,7 +764,10 @@ async fn add_target(
 ) -> Result<Json<AgentTarget>, (StatusCode, Json<serde_json::Value>)> {
     info!("Handling request to add target for agent with ID: {}", id);
     if !auth_payload.admin && auth_payload.agent != Some(id) {
-        warn!("Unauthorized attempt to add target for agent with ID: {}", id);
+        warn!(
+            "Unauthorized attempt to add target for agent with ID: {}",
+            id
+        );
         return Err((
             StatusCode::FORBIDDEN,
             Json(serde_json::json!({"error": "Unauthorized"})),
@@ -720,9 +798,15 @@ async fn remove_target(
     Extension(auth_payload): Extension<AuthPayload>,
     Path((id, stack_id)): Path<(Uuid, Uuid)>,
 ) -> Result<StatusCode, (StatusCode, Json<serde_json::Value>)> {
-    info!("Handling request to remove target for stack {} from agent with ID: {}", stack_id, id);
+    info!(
+        "Handling request to remove target for stack {} from agent with ID: {}",
+        stack_id, id
+    );
     if !auth_payload.admin && auth_payload.agent != Some(id) {
-        warn!("Unauthorized attempt to remove target from agent with ID: {}", id);
+        warn!(
+            "Unauthorized attempt to remove target from agent with ID: {}",
+            id
+        );
         return Err((
             StatusCode::FORBIDDEN,
             Json(serde_json::json!({"error": "Unauthorized"})),
@@ -734,11 +818,17 @@ async fn remove_target(
             if let Some(target) = targets.into_iter().find(|t| t.stack_id == stack_id) {
                 match dal.agent_targets().delete(target.id) {
                     Ok(_) => {
-                        info!("Successfully removed target for stack {} from agent with ID: {}", stack_id, id);
+                        info!(
+                            "Successfully removed target for stack {} from agent with ID: {}",
+                            stack_id, id
+                        );
                         Ok(StatusCode::NO_CONTENT)
                     }
                     Err(e) => {
-                        error!("Failed to remove target for stack {} from agent with ID {}: {:?}", stack_id, id, e);
+                        error!(
+                            "Failed to remove target for stack {} from agent with ID {}: {:?}",
+                            stack_id, id, e
+                        );
                         Err((
                             StatusCode::INTERNAL_SERVER_ERROR,
                             Json(serde_json::json!({"error": "Failed to remove agent target"})),
@@ -746,7 +836,10 @@ async fn remove_target(
                     }
                 }
             } else {
-                warn!("Target for stack {} not found for agent with ID: {}", stack_id, id);
+                warn!(
+                    "Target for stack {} not found for agent with ID: {}",
+                    stack_id, id
+                );
                 Err((
                     StatusCode::NOT_FOUND,
                     Json(serde_json::json!({"error": "Target not found"})),
@@ -772,9 +865,15 @@ async fn record_heartbeat(
     Extension(auth_payload): Extension<AuthPayload>,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, (StatusCode, Json<serde_json::Value>)> {
-    info!("Handling request to record heartbeat for agent with ID: {}", id);
+    info!(
+        "Handling request to record heartbeat for agent with ID: {}",
+        id
+    );
     if auth_payload.agent != Some(id) {
-        warn!("Unauthorized attempt to record heartbeat for agent with ID: {}", id);
+        warn!(
+            "Unauthorized attempt to record heartbeat for agent with ID: {}",
+            id
+        );
         return Err((
             StatusCode::FORBIDDEN,
             Json(serde_json::json!({"error": "Unauthorized"})),
@@ -787,7 +886,10 @@ async fn record_heartbeat(
             Ok(StatusCode::NO_CONTENT)
         }
         Err(e) => {
-            error!("Failed to record heartbeat for agent with ID {}: {:?}", id, e);
+            error!(
+                "Failed to record heartbeat for agent with ID {}: {:?}",
+                id, e
+            );
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to record agent heartbeat"})),
@@ -805,9 +907,15 @@ async fn get_applicable_deployment_objects(
     Extension(auth_payload): Extension<AuthPayload>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Vec<DeploymentObject>>, (StatusCode, Json<serde_json::Value>)> {
-    info!("Handling request to get applicable deployment objects for agent with ID: {}", id);
+    info!(
+        "Handling request to get applicable deployment objects for agent with ID: {}",
+        id
+    );
     if !auth_payload.admin && auth_payload.agent != Some(id) {
-        warn!("Unauthorized attempt to get applicable deployment objects for agent with ID: {}", id);
+        warn!(
+            "Unauthorized attempt to get applicable deployment objects for agent with ID: {}",
+            id
+        );
         return Err((
             StatusCode::FORBIDDEN,
             Json(serde_json::json!({"error": "Unauthorized"})),
@@ -819,11 +927,18 @@ async fn get_applicable_deployment_objects(
         .get_undeployed_objects_for_agent(id)
     {
         Ok(objects) => {
-            info!("Successfully retrieved {} applicable deployment objects for agent with ID: {}", objects.len(), id);
+            info!(
+                "Successfully retrieved {} applicable deployment objects for agent with ID: {}",
+                objects.len(),
+                id
+            );
             Ok(Json(objects))
         }
         Err(e) => {
-            error!("Failed to fetch applicable deployment objects for agent with ID {}: {:?}", id, e);
+            error!(
+                "Failed to fetch applicable deployment objects for agent with ID {}: {:?}",
+                id, e
+            );
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to fetch applicable deployment objects"})),

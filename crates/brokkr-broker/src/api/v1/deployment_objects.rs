@@ -3,16 +3,16 @@
 //! This module provides routes and handlers for managing deployment objects,
 //! including retrieval based on user authentication and authorization.
 
-use crate::dal::DAL;
 use crate::api::v1::middleware::AuthPayload;
+use crate::dal::DAL;
 use axum::{
     extract::{Extension, Path, State},
     routing::get,
     Json, Router,
 };
 use brokkr_models::models::deployment_objects::DeploymentObject;
-use uuid::Uuid;
 use brokkr_utils::logging::prelude::*;
+use uuid::Uuid;
 
 /// Creates and returns the router for deployment object endpoints.
 ///
@@ -21,8 +21,7 @@ use brokkr_utils::logging::prelude::*;
 /// A `Router` instance configured with the deployment object routes.
 pub fn routes() -> Router<DAL> {
     info!("Setting up deployment object routes");
-    Router::new()
-        .route("/deployment-objects/:id", get(get_deployment_object))
+    Router::new().route("/deployment-objects/:id", get(get_deployment_object))
 }
 
 /// Retrieves a deployment object by ID, with access control based on user role.
@@ -50,19 +49,30 @@ async fn get_deployment_object(
             } else if let Some(agent_id) = auth_payload.agent {
                 match dal.agent_targets().list_for_agent(agent_id) {
                     Ok(targets) => {
-                        if targets.iter().any(|target| target.stack_id == object.stack_id) {
-                            info!("Agent {} accessed deployment object with ID: {}", agent_id, id);
+                        if targets
+                            .iter()
+                            .any(|target| target.stack_id == object.stack_id)
+                        {
+                            info!(
+                                "Agent {} accessed deployment object with ID: {}",
+                                agent_id, id
+                            );
                             Ok(Json(object))
                         } else {
                             warn!("Agent {} attempted to access unauthorized deployment object with ID: {}", agent_id, id);
                             Err((
                                 axum::http::StatusCode::FORBIDDEN,
-                                Json(serde_json::json!({"error": "Agent is not associated with this deployment object"})),
+                                Json(
+                                    serde_json::json!({"error": "Agent is not associated with this deployment object"}),
+                                ),
                             ))
                         }
                     }
                     Err(e) => {
-                        error!("Failed to fetch agent targets for agent {}: {:?}", agent_id, e);
+                        error!(
+                            "Failed to fetch agent targets for agent {}: {:?}",
+                            agent_id, e
+                        );
                         Err((
                             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                             Json(serde_json::json!({"error": "Failed to fetch agent targets"})),
@@ -75,25 +85,35 @@ async fn get_deployment_object(
                     Ok(stacks) => {
                         if let Some(stack) = stacks.first() {
                             if stack.generator_id == generator_id {
-                                info!("Generator {} accessed deployment object with ID: {}", generator_id, id);
+                                info!(
+                                    "Generator {} accessed deployment object with ID: {}",
+                                    generator_id, id
+                                );
                                 Ok(Json(object))
                             } else {
                                 warn!("Generator {} attempted to access unauthorized deployment object with ID: {}", generator_id, id);
                                 Err((
                                     axum::http::StatusCode::FORBIDDEN,
-                                    Json(serde_json::json!({"error": "Generator is not associated with this deployment object"})),
+                                    Json(
+                                        serde_json::json!({"error": "Generator is not associated with this deployment object"}),
+                                    ),
                                 ))
                             }
                         } else {
                             warn!("Stack not found for deployment object with ID: {}", id);
                             Err((
                                 axum::http::StatusCode::NOT_FOUND,
-                                Json(serde_json::json!({"error": "Stack not found for this deployment object"})),
+                                Json(
+                                    serde_json::json!({"error": "Stack not found for this deployment object"}),
+                                ),
                             ))
                         }
                     }
                     Err(e) => {
-                        error!("Failed to fetch stack for deployment object with ID {}: {:?}", id, e);
+                        error!(
+                            "Failed to fetch stack for deployment object with ID {}: {:?}",
+                            id, e
+                        );
                         Err((
                             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                             Json(serde_json::json!({"error": "Failed to fetch stack information"})),
@@ -101,7 +121,10 @@ async fn get_deployment_object(
                     }
                 }
             } else {
-                warn!("Unauthorized access attempt to deployment object with ID: {}", id);
+                warn!(
+                    "Unauthorized access attempt to deployment object with ID: {}",
+                    id
+                );
                 Err((
                     axum::http::StatusCode::FORBIDDEN,
                     Json(serde_json::json!({"error": "Unauthorized access"})),

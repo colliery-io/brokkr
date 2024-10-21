@@ -9,8 +9,8 @@ pub mod agents;
 pub mod auth;
 pub mod deployment_objects;
 pub mod generators;
-pub mod stacks; 
 pub mod middleware;
+pub mod stacks;
 
 use crate::dal::DAL;
 use axum::middleware::from_fn_with_state;

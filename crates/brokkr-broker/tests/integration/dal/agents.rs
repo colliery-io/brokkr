@@ -648,7 +648,8 @@ fn test_get_agent_by_name_and_cluster_name() {
     let fixture = TestFixture::new();
 
     // Create a test agent
-    let created_agent = fixture.create_test_agent("Test Agent".to_string(), "Test Cluster".to_string());
+    let created_agent =
+        fixture.create_test_agent("Test Agent".to_string(), "Test Cluster".to_string());
 
     // Retrieve the agent by name and cluster name
     let retrieved_agent = fixture

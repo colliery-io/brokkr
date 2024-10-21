@@ -108,8 +108,6 @@ fn test_connection_pool_integration() {
 
         let success_count = results.iter().filter(|(_, r, _)| r.is_ok()).count();
 
-
-
         assert_eq!(
             success_count, max_size,
             "Failed to get all {} connections. Got {} successful connections.",
@@ -123,7 +121,6 @@ fn test_connection_pool_integration() {
             extra_conn.is_err(),
             "Expected timeout error when exceeding max connections, but got a connection"
         );
-
     }
 
     // Clean up

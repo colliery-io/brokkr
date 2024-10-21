@@ -3,13 +3,12 @@ use axum::{
     http::{Request, StatusCode},
 };
 use brokkr_models::models::{
+    deployment_objects::NewDeploymentObject,
     stack_annotations::NewStackAnnotation,
     stacks::{NewStack, Stack},
-    deployment_objects::NewDeploymentObject,
 };
 
 use tower::ServiceExt;
-
 
 use crate::fixtures::TestFixture;
 use brokkr_broker::utils::pak::create_pak;
@@ -178,7 +177,8 @@ async fn test_soft_delete_stack() {
     );
     let stack = fixture.create_test_stack("Test Stack".to_string(), None, generator.id);
 
-    let response = app.clone()
+    let response = app
+        .clone()
         .oneshot(
             Request::builder()
                 .method("DELETE")
@@ -193,7 +193,8 @@ async fn test_soft_delete_stack() {
     assert_eq!(response.status(), StatusCode::NO_CONTENT);
 
     // Verify the stack is soft deleted
-    let response = app.clone()
+    let response = app
+        .clone()
         .oneshot(
             Request::builder()
                 .method("GET")
@@ -207,7 +208,6 @@ async fn test_soft_delete_stack() {
 
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
-
 
 #[tokio::test]
 async fn test_add_stack_annotation() {
@@ -268,10 +268,7 @@ async fn test_remove_stack_annotation() {
         .oneshot(
             Request::builder()
                 .method("DELETE")
-                .uri(format!(
-                    "/api/v1/stacks/{}/annotations/test_key",
-                    stack.id
-                ))
+                .uri(format!("/api/v1/stacks/{}/annotations/test_key", stack.id))
                 .header("Authorization", &admin_pak)
                 .body(Body::empty())
                 .unwrap(),
@@ -349,10 +346,12 @@ async fn test_add_stack_label() {
     let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body_str = String::from_utf8_lossy(&body);
 
-    
-    
-
-    assert_eq!(status, StatusCode::OK, "Unexpected status code. Body: {}", body_str);
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "Unexpected status code. Body: {}",
+        body_str
+    );
 
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(json["label"], "test_label");
@@ -449,7 +448,9 @@ async fn test_create_deployment_object() {
                 .uri(format!("/api/v1/stacks/{}/deployment-objects", stack.id))
                 .header("Content-Type", "application/json")
                 .header("Authorization", &admin_pak)
-                .body(Body::from(serde_json::to_string(&new_deployment_object).unwrap()))
+                .body(Body::from(
+                    serde_json::to_string(&new_deployment_object).unwrap(),
+                ))
                 .unwrap(),
         )
         .await
@@ -466,7 +467,6 @@ async fn test_create_deployment_object() {
     assert_eq!(json["is_deletion_marker"], false);
 }
 
-
 #[tokio::test]
 async fn test_create_stack_with_generator_pak() {
     let fixture = TestFixture::new();
@@ -479,7 +479,11 @@ async fn test_create_stack_with_generator_pak() {
     );
 
     let (generator_pak, generator_hash) = create_pak().unwrap();
-    fixture.dal.generators().update_pak_hash(generator.id, generator_hash).unwrap();
+    fixture
+        .dal
+        .generators()
+        .update_pak_hash(generator.id, generator_hash)
+        .unwrap();
 
     let new_stack = NewStack::new(
         "Test Stack".to_string(),
@@ -521,7 +525,11 @@ async fn test_create_stack_with_wrong_generator_pak() {
     );
 
     let (generator2_pak, generator2_hash) = create_pak().unwrap();
-    fixture.dal.generators().update_pak_hash(generator2.id, generator2_hash).unwrap();
+    fixture
+        .dal
+        .generators()
+        .update_pak_hash(generator2.id, generator2_hash)
+        .unwrap();
 
     let new_stack = NewStack::new(
         "Test Stack".to_string(),
@@ -563,7 +571,11 @@ async fn test_update_stack_with_wrong_generator_pak() {
     );
 
     let (generator2_pak, generator2_hash) = create_pak().unwrap();
-    fixture.dal.generators().update_pak_hash(generator2.id, generator2_hash).unwrap();
+    fixture
+        .dal
+        .generators()
+        .update_pak_hash(generator2.id, generator2_hash)
+        .unwrap();
 
     let stack = fixture.create_test_stack("Test Stack".to_string(), None, generator1.id);
 
@@ -606,7 +618,11 @@ async fn test_delete_stack_with_wrong_generator_pak() {
     );
 
     let (generator2_pak, generator2_hash) = create_pak().unwrap();
-    fixture.dal.generators().update_pak_hash(generator2.id, generator2_hash).unwrap();
+    fixture
+        .dal
+        .generators()
+        .update_pak_hash(generator2.id, generator2_hash)
+        .unwrap();
 
     let stack = fixture.create_test_stack("Test Stack".to_string(), None, generator1.id);
 
@@ -642,7 +658,11 @@ async fn test_add_stack_annotation_with_wrong_generator_pak() {
     );
 
     let (generator2_pak, generator2_hash) = create_pak().unwrap();
-    fixture.dal.generators().update_pak_hash(generator2.id, generator2_hash).unwrap();
+    fixture
+        .dal
+        .generators()
+        .update_pak_hash(generator2.id, generator2_hash)
+        .unwrap();
 
     let stack = fixture.create_test_stack("Test Stack".to_string(), None, generator1.id);
 

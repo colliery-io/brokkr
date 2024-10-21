@@ -76,7 +76,7 @@ impl TestFixture {
     pub fn new() -> Self {
         dotenv().ok();
         let settings = Settings::new(None).expect("Failed to load settings");
-        let connection_pool = create_shared_connection_pool(&settings.database.url  , "brokkr", 5);
+        let connection_pool = create_shared_connection_pool(&settings.database.url, "brokkr", 5);
         // Run migrations
         let mut conn = connection_pool
             .pool
@@ -86,7 +86,6 @@ impl TestFixture {
         // This runs the migrations within the transaction
         conn.run_pending_migrations(MIGRATIONS)
             .expect("Failed to run migrations");
-
 
         // this initializes the PAK controller and runs the initial startup logic for the broker
         utils::pak::create_pak_controller(Some(&settings))
@@ -358,11 +357,23 @@ impl TestFixture {
             .expect("Failed to update pak_hash")
     }
 
-    pub fn create_test_generator_with_pak(&self, name: String, description: Option<String>) -> (Generator, String) {
+    pub fn create_test_generator_with_pak(
+        &self,
+        name: String,
+        description: Option<String>,
+    ) -> (Generator, String) {
         let (pak, hash) = utils::pak::create_pak().expect("Failed to create PAK");
-        let new_generator = NewGenerator::new(name, description).expect("Failed to create NewGenerator");
-        let generator = self.dal.generators().create(&new_generator).expect("Failed to create generator");
-        self.dal.generators().update_pak_hash(generator.id, hash).expect("Failed to update PAK hash");
+        let new_generator =
+            NewGenerator::new(name, description).expect("Failed to create NewGenerator");
+        let generator = self
+            .dal
+            .generators()
+            .create(&new_generator)
+            .expect("Failed to create generator");
+        self.dal
+            .generators()
+            .update_pak_hash(generator.id, hash)
+            .expect("Failed to update PAK hash");
         (generator, pak)
     }
 

@@ -2,6 +2,9 @@ use crate::api;
 use crate::dal::DAL;
 use crate::db::create_shared_connection_pool;
 use crate::utils;
+use crate::utils::pak;
+use brokkr_models::models::agents::NewAgent;
+use brokkr_models::models::generator::NewGenerator;
 use brokkr_utils::config::Settings;
 use brokkr_utils::logging::prelude::*;
 use diesel::prelude::*;
@@ -11,13 +14,9 @@ use diesel::sql_types::BigInt;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use tokio::signal;
 use uuid::Uuid;
-use crate::utils::pak;
-use brokkr_models::models::agents::NewAgent;
-use brokkr_models::models::generator::NewGenerator;
 
 // Assuming MIGRATIONS is defined in the bin.rs file, we need to import it
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("../brokkr-models/migrations");
-
 
 // Struct to hold the count result from SQL query
 #[derive(QueryableByName, Debug)]
@@ -131,7 +130,10 @@ pub fn rotate_agent_key(config: &Settings, uuid: Uuid) -> Result<(), Box<dyn std
     Ok(())
 }
 
-pub fn rotate_generator_key(config: &Settings, uuid: Uuid) -> Result<(), Box<dyn std::error::Error>> {
+pub fn rotate_generator_key(
+    config: &Settings,
+    uuid: Uuid,
+) -> Result<(), Box<dyn std::error::Error>> {
     info!("Rotating generator key");
 
     let pool = create_shared_connection_pool(&config.database.url, "brokkr", 1);
@@ -150,7 +152,11 @@ pub fn rotate_generator_key(config: &Settings, uuid: Uuid) -> Result<(), Box<dyn
     Ok(())
 }
 
-pub fn create_agent(config: &Settings, name: String, cluster_name: String) -> Result<(), Box<dyn std::error::Error>> {
+pub fn create_agent(
+    config: &Settings,
+    name: String,
+    cluster_name: String,
+) -> Result<(), Box<dyn std::error::Error>> {
     info!("Creating new agent: {}", name);
 
     let pool = create_shared_connection_pool(&config.database.url, "brokkr", 1);
@@ -174,7 +180,11 @@ pub fn create_agent(config: &Settings, name: String, cluster_name: String) -> Re
     Ok(())
 }
 
-pub fn create_generator(config: &Settings, name: String, description: Option<String>) -> Result<(), Box<dyn std::error::Error>> {
+pub fn create_generator(
+    config: &Settings,
+    name: String,
+    description: Option<String>,
+) -> Result<(), Box<dyn std::error::Error>> {
     info!("Creating new generator: {}", name);
 
     let pool = create_shared_connection_pool(&config.database.url, "brokkr", 1);

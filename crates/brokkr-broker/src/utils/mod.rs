@@ -4,13 +4,13 @@
 //! the broker, including admin key management and shutdown procedures.
 
 use brokkr_models::schema::admin_role;
+use brokkr_utils::logging::prelude::*;
 use chrono::Utc;
 use diesel::prelude::*;
 use std::fs;
+use std::path::Path;
 use tokio::sync::oneshot;
 use uuid::Uuid;
-use brokkr_utils::logging::prelude::*;
-use std::path::Path;
 pub mod pak;
 use brokkr_utils::config::Settings;
 
@@ -44,7 +44,10 @@ pub struct NewAdminKey {
 ///
 /// This function is called when the broker starts for the first time and
 /// sets up the initial admin key.
-pub fn first_startup(conn: &mut PgConnection, config: &Settings) -> Result<(), Box<dyn std::error::Error>> {
+pub fn first_startup(
+    conn: &mut PgConnection,
+    config: &Settings,
+) -> Result<(), Box<dyn std::error::Error>> {
     upsert_admin(conn, config)
 }
 
@@ -66,7 +69,10 @@ fn create_pak() -> Result<(String, String), Box<dyn std::error::Error>> {
 /// This function creates or updates the admin key in the database,
 /// creates or updates the associated admin generator, and writes
 /// the PAK to a temporary file.
-pub fn upsert_admin(conn: &mut PgConnection, config: &Settings) -> Result<(), Box<dyn std::error::Error>> {
+pub fn upsert_admin(
+    conn: &mut PgConnection,
+    config: &Settings,
+) -> Result<(), Box<dyn std::error::Error>> {
     let pak_hash = match &config.broker.pak_hash {
         Some(hash) if !hash.is_empty() => {
             // Validate the provided hash
@@ -74,17 +80,17 @@ pub fn upsert_admin(conn: &mut PgConnection, config: &Settings) -> Result<(), Bo
                 return Err("Invalid PAK hash provided in configuration".into());
             }
             hash.clone()
-        },
+        }
         _ => {
             // Generate new PAK and hash
             let (pak, hash) = create_pak()?;
-            
+
             // Write PAK to temporary file
             info!("Writing PAK to temporary file");
             let key_path = Path::new("/tmp/brokkr-keys/key.txt");
             fs::create_dir_all(key_path.parent().unwrap())?;
             fs::write(key_path, pak)?;
-            
+
             hash
         }
     };

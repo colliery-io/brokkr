@@ -445,13 +445,10 @@ fn test_filter_by_annotations() {
 
 #[test]
 fn test_get_associated_stacks() {
-    
     let fixture = TestFixture::new();
-    
 
     // Try to list all stacks
     let _stacks = fixture.dal.stacks().list().expect("Failed to list stacks");
-    
 
     // Create agents
     let agent1 = fixture.create_test_agent("Agent 1".to_string(), "Cluster 1".to_string());
@@ -469,7 +466,7 @@ fn test_get_associated_stacks() {
     let stack4 = fixture.create_test_stack("Stack 4".to_string(), None, generator.id);
 
     // Add labels
-    
+
     fixture.create_test_agent_label(agent1.id, "label1".to_string());
     fixture.create_test_agent_label(agent1.id, "label2".to_string());
     fixture.create_test_stack_label(stack1.id, "label1".to_string());
@@ -481,19 +478,18 @@ fn test_get_associated_stacks() {
         .agent_labels()
         .list_for_agent(agent1.id)
         .expect("Failed to list agent labels");
-    
+
     let _stack1_labels = fixture
         .dal
         .stack_labels()
         .list_for_stack(stack1.id)
         .expect("Failed to list stack1 labels");
-    
+
     let _stack2_labels = fixture
         .dal
         .stack_labels()
         .list_for_stack(stack2.id)
         .expect("Failed to list stack2 labels");
-    
 
     // Add annotations
     fixture.create_test_agent_annotation(agent1.id, "key1".to_string(), "value1".to_string());

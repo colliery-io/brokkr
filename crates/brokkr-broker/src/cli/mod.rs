@@ -1,6 +1,6 @@
 pub mod commands;
 
-use clap::{Parser, Subcommand, Args};
+use clap::{Args, Parser, Subcommand};
 use uuid::Uuid;
 
 #[derive(Parser)]

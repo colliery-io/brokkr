@@ -1,21 +1,19 @@
-use brokkr_utils::Settings;
-use reqwest::Client;
-use brokkr_utils::logging::prelude::*;
-use tokio::time::sleep;
-use std::time::Duration;
-use reqwest::StatusCode;
+use brokkr_models::models::agent_events::NewAgentEvent;
 use brokkr_models::models::agents::Agent;
 use brokkr_models::models::deployment_objects::DeploymentObject;
-use brokkr_models::models::agent_events::NewAgentEvent;
+use brokkr_utils::logging::prelude::*;
+use brokkr_utils::Settings;
+use reqwest::Client;
+use reqwest::StatusCode;
+use std::time::Duration;
+use tokio::time::sleep;
 use uuid::Uuid;
-
-
 
 pub async fn wait_for_broker_ready(config: &Settings) {
     let client = Client::new();
     let readyz_url = format!("{}/readyz", config.agent.broker_url);
 
-    for attempt in 1..=config.agent.max_retries{
+    for attempt in 1..=config.agent.max_retries {
         match client.get(&readyz_url).send().await {
             Ok(response) => {
                 if response.status().is_success() {
@@ -32,7 +30,10 @@ pub async fn wait_for_broker_ready(config: &Settings) {
             sleep(Duration::from_secs(1)).await;
         }
     }
-    error!("Failed to connect to broker after {} attempts. Exiting.", config.agent.max_retries);
+    error!(
+        "Failed to connect to broker after {} attempts. Exiting.",
+        config.agent.max_retries
+    );
     std::process::exit(1);
 }
 
@@ -57,18 +58,22 @@ pub async fn verify_agent_pak(config: &Settings) -> Result<(), Box<dyn std::erro
             Err("Unauthorized PAK".into())
         }
         _ => {
-            error!("Agent PAK verification failed with status: {}", response.status());
+            error!(
+                "Agent PAK verification failed with status: {}",
+                response.status()
+            );
             Err(format!("PAK verification failed with status: {}", response.status()).into())
         }
     }
 }
 
-pub async fn fetch_agent_details(config: &Settings, client: &Client) -> Result<Agent, Box<dyn std::error::Error>> {
+pub async fn fetch_agent_details(
+    config: &Settings,
+    client: &Client,
+) -> Result<Agent, Box<dyn std::error::Error>> {
     let agent_url = format!(
         "{}/api/v1/agents/?name={}&cluster_name={}",
-        config.agent.broker_url,
-        config.agent.agent_name,
-        config.agent.cluster_name
+        config.agent.broker_url, config.agent.agent_name, config.agent.cluster_name
     );
 
     let response = client
@@ -78,25 +83,22 @@ pub async fn fetch_agent_details(config: &Settings, client: &Client) -> Result<A
         .await?;
 
     if response.status().is_success() {
-        let agents: Vec<Agent> = response.json().await?;
-        if let Some(agent) = agents.first() {
-            info!("Successfully fetched agent details for {}", agent.name);
-            Ok(agent.clone())
-        } else {
-            error!("No agent found with the given name and cluster name");
-            Err("No agent found".into())
-        }
+        let agent: Agent = response.json().await?;
+        Ok(agent)
     } else {
         error!("Failed to fetch agent details: {}", response.status());
         Err(format!("Failed to fetch agent details: {}", response.status()).into())
     }
 }
 
-pub async fn fetch_and_process_deployment_objects(config: &Settings, client: &Client, agent: &Agent) -> Result<Vec<DeploymentObject>, Box<dyn std::error::Error>> {
+pub async fn fetch_and_process_deployment_objects(
+    config: &Settings,
+    client: &Client,
+    agent: &Agent,
+) -> Result<Vec<DeploymentObject>, Box<dyn std::error::Error>> {
     let applicable_objects_url = format!(
         "{}/api/v1/agents/{}/applicable-deployment-objects",
-        config.agent.broker_url,
-        agent.id
+        config.agent.broker_url, agent.id
     );
 
     let response = client
@@ -107,20 +109,60 @@ pub async fn fetch_and_process_deployment_objects(config: &Settings, client: &Cl
 
     if response.status().is_success() {
         let deployment_objects: Vec<DeploymentObject> = response.json().await?;
-        info!("Fetched {} applicable deployment objects", deployment_objects.len());
+        info!(
+            "Fetched {} applicable deployment objects",
+            deployment_objects.len()
+        );
         Ok(deployment_objects)
     } else {
-        error!("Failed to fetch applicable deployment objects: {}", response.status());
-        Err(format!("Failed to fetch applicable deployment objects: {}", response.status()).into())
+        error!(
+            "Failed to fetch applicable deployment objects: {}",
+            response.status()
+        );
+        Err(format!(
+            "Failed to fetch applicable deployment objects: {}",
+            response.status()
+        )
+        .into())
     }
 }
 
-pub async fn send_success_event(config: &Settings, client: &Client, agent: &Agent, deployment_object_id: Uuid, message: Option<String>) -> Result<(), Box<dyn std::error::Error>> {
-    send_event(config, client, agent, deployment_object_id, "DEPLOY", "SUCCESS", message).await
+pub async fn send_success_event(
+    config: &Settings,
+    client: &Client,
+    agent: &Agent,
+    deployment_object_id: Uuid,
+    message: Option<String>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    send_event(
+        config,
+        client,
+        agent,
+        deployment_object_id,
+        "DEPLOY",
+        "SUCCESS",
+        message,
+    )
+    .await
 }
 
-pub async fn send_failure_event(config: &Settings, client: &Client, agent: &Agent, deployment_object_id: Uuid, error_message: String) -> Result<(), Box<dyn std::error::Error>> {
-    send_event(config, client, agent, deployment_object_id, "DEPLOY", "FAILURE", Some(error_message)).await
+pub async fn send_failure_event(
+    config: &Settings,
+    client: &Client,
+    agent: &Agent,
+    deployment_object_id: Uuid,
+    error_message: String,
+) -> Result<(), Box<dyn std::error::Error>> {
+    send_event(
+        config,
+        client,
+        agent,
+        deployment_object_id,
+        "DEPLOY",
+        "FAILURE",
+        Some(error_message),
+    )
+    .await
 }
 
 async fn send_event(
@@ -134,8 +176,7 @@ async fn send_event(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let event_url = format!(
         "{}/api/v1/agents/{}/events",
-        config.agent.broker_url,
-        agent.id
+        config.agent.broker_url, agent.id
     );
 
     let new_event = NewAgentEvent::new(
@@ -155,15 +196,27 @@ async fn send_event(
             .await?;
 
         if response.status().is_success() {
-            info!("Successfully sent {} event for deployment object {}", status, deployment_object_id);
+            info!(
+                "Successfully sent {} event for deployment object {}",
+                status, deployment_object_id
+            );
             return Ok(());
         } else {
-            error!("Failed to send {} event (attempt {}): {}", status, attempt, response.status());
+            error!(
+                "Failed to send {} event (attempt {}): {}",
+                status,
+                attempt,
+                response.status()
+            );
             if attempt < config.agent.max_event_message_retries {
                 sleep(Duration::from_secs(config.agent.event_message_retry_delay)).await;
             }
         }
     }
 
-    Err(format!("Failed to send {} event after {} attempts", status, config.agent.max_event_message_retries).into())
+    Err(format!(
+        "Failed to send {} event after {} attempts",
+        status, config.agent.max_event_message_retries
+    )
+    .into())
 }

@@ -10,11 +10,6 @@ use brokkr_utils::config::Settings;
 
 use brokkr_broker::cli::commands;
 
-
-
-
-
-
 /// Main function to run the Brokkr Broker application
 ///
 /// This function initializes the application, parses command-line arguments,
@@ -37,8 +32,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     match cli.command {
         Commands::Serve => commands::serve(&config).await?,
         Commands::Create(create_commands) => match create_commands.command {
-            CreateSubcommands::Agent { name, cluster_name } => commands::create_agent(&config, name, cluster_name)?,
-            CreateSubcommands::Generator { name, description } => commands::create_generator(&config, name, description)?,
+            CreateSubcommands::Agent { name, cluster_name } => {
+                commands::create_agent(&config, name, cluster_name)?
+            }
+            CreateSubcommands::Generator { name, description } => {
+                commands::create_generator(&config, name, description)?
+            }
         },
         Commands::Rotate(rotate_commands) => match rotate_commands.command {
             RotateSubcommands::Admin => commands::rotate_admin(&config)?,

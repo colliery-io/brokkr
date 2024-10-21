@@ -24,4 +24,3 @@ pub enum Commands {
 pub fn parse_cli() -> Cli {
     Cli::parse()
 }
-
