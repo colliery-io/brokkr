@@ -11,6 +11,7 @@ use brokkr_models::models::deployment_objects::{DeploymentObject, NewDeploymentO
 use brokkr_models::models::generator::{Generator, NewGenerator};
 use brokkr_models::models::stacks::NewStack;
 use brokkr_models::models::stacks::Stack;
+use brokkr_models::models::agent_targets::{AgentTarget, NewAgentTarget};
 use once_cell::sync::OnceCell;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -190,6 +191,30 @@ impl TestFixture {
         )
         .expect("Failed to parse response body");
         self.stack = Some(result);
+
+        let new_target = NewAgentTarget::new(
+            self.agent.as_ref().unwrap().id,
+            self.stack.as_ref().unwrap().id,
+        )
+        .unwrap();
+
+        let response = self
+            .client
+            .post(&format!(
+                "{}/api/v1/agents/{}/targets",
+                self.admin_settings.agent.broker_url,
+                self.agent.as_ref().unwrap().id
+            ))
+            .header("Content-Type", "application/json")
+            .header(
+                "Authorization",
+                format!("Bearer {}", self.admin_settings.agent.pak),
+            )
+            .json(&new_target)
+            .send()
+            .await
+            .expect("Failed to send request");
+        assert_eq!(response.status(), reqwest::StatusCode::OK);
     }
 
     pub async fn create_deployment(
@@ -201,7 +226,8 @@ impl TestFixture {
             self.stack.as_ref().expect("Stack not created").id,
             yaml_content,
             false,
-        );
+        )
+        .unwrap();
 
         let response = self
             .client
