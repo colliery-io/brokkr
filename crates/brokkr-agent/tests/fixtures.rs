@@ -6,12 +6,12 @@ use serde_json::Value;
 use std::sync::Once;
 
 static INIT: Once = Once::new();
+use brokkr_models::models::agent_targets::{AgentTarget, NewAgentTarget};
 use brokkr_models::models::agents::Agent;
 use brokkr_models::models::deployment_objects::{DeploymentObject, NewDeploymentObject};
 use brokkr_models::models::generator::{Generator, NewGenerator};
 use brokkr_models::models::stacks::NewStack;
 use brokkr_models::models::stacks::Stack;
-use brokkr_models::models::agent_targets::{AgentTarget, NewAgentTarget};
 use once_cell::sync::OnceCell;
 use std::sync::Arc;
 use tokio::sync::Mutex;

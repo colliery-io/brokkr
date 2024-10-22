@@ -220,3 +220,32 @@ async fn send_event(
     )
     .into())
 }
+
+pub async fn send_heartbeat(
+    config: &Settings,
+    client: &Client,
+    agent: &Agent,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let heartbeat_url = format!(
+        "{}/api/v1/agents/{}/heartbeat",
+        config.agent.broker_url, agent.id
+    );
+
+    let response = client
+        .post(&heartbeat_url)
+        .header("Authorization", format!("Bearer {}", config.agent.pak))
+        .send()
+        .await?;
+
+    if response.status().is_success() {
+        info!("Successfully sent heartbeat for agent: {}", agent.id);
+        Ok(())
+    } else {
+        error!(
+            "Failed to send heartbeat for agent: {}. Status: {}",
+            agent.id,
+            response.status()
+        );
+        Err(format!("Failed to send heartbeat. Status: {}", response.status()).into())
+    }
+}

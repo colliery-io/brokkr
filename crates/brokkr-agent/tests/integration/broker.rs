@@ -95,7 +95,6 @@ async fn test_fetch_and_process_deployment_objects() {
     assert_eq!(deployment_objects[0].id, deployment_object.id);
 }
 
-
 #[tokio::test]
 async fn test_successful_event_apply() {
     let fixture = get_or_init_fixture().await;
@@ -125,12 +124,10 @@ async fn test_successful_event_apply() {
         &fixture_guard.agent.as_ref().unwrap(),
         deployment_objects[0].id,
         None,
-    ).await;
-    
-    assert!(
-        result.is_ok(),
-        "Failed to send success event"
-    );
+    )
+    .await;
+
+    assert!(result.is_ok(), "Failed to send success event");
 
     let result = broker::fetch_and_process_deployment_objects(
         &fixture_guard.agent_settings,
@@ -148,10 +145,7 @@ async fn test_successful_event_apply() {
         deployment_objects.is_empty(),
         "Deployment objects should be empty"
     );
-
 }
-
-
 
 #[tokio::test]
 async fn test_failure_event_apply() {
@@ -184,19 +178,16 @@ async fn test_failure_event_apply() {
     );
     assert_eq!(deployment_objects[0].id, deployment_object.id);
 
-
     let result = broker::send_failure_event(
         &fixture_guard.agent_settings,
         &fixture_guard.client,
         &fixture_guard.agent.as_ref().unwrap(),
         deployment_objects[0].id,
         "Test failure".to_string(),
-    ).await;
-    
-    assert!(
-        result.is_ok(),
-        "Failed to send success event"
-    );
+    )
+    .await;
+
+    assert!(result.is_ok(), "Failed to send success event");
 
     let result = broker::fetch_and_process_deployment_objects(
         &fixture_guard.agent_settings,
@@ -213,5 +204,36 @@ async fn test_failure_event_apply() {
     assert!(
         deployment_objects.is_empty(),
         "Deployment objects should be empty"
+    );
+}
+
+#[tokio::test]
+async fn test_send_heartbeat() {
+    let fixture = get_or_init_fixture().await;
+    let mut fixture_guard = fixture.lock().await;
+    fixture_guard.initialize().await;
+
+    let result = broker::send_heartbeat(
+        &fixture_guard.agent_settings,
+        &fixture_guard.client,
+        &fixture_guard.agent.as_ref().unwrap(),
+    )
+    .await;
+
+    assert!(result.is_ok(), "Failed to send heartbeat");
+
+    // Verify that the heartbeat was recorded by fetching the agent details
+    let agent_details =
+        broker::fetch_agent_details(&fixture_guard.agent_settings, &fixture_guard.client)
+            .await
+            .expect("Failed to fetch agent details");
+
+    assert!(
+        agent_details.last_heartbeat.is_some(),
+        "Last heartbeat should be set"
+    );
+    assert!(
+        agent_details.last_heartbeat.unwrap() > fixture_guard.agent.as_ref().unwrap().created_at,
+        "Last heartbeat should be after agent creation time"
     );
 }
