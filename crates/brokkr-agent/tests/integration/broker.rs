@@ -150,3 +150,68 @@ async fn test_successful_event_apply() {
     );
 
 }
+
+
+
+#[tokio::test]
+async fn test_failure_event_apply() {
+    let fixture = get_or_init_fixture().await;
+    let mut fixture_guard = fixture.lock().await;
+    fixture_guard.initialize().await;
+
+    let deployment_object = fixture_guard
+        .create_deployment(
+            "agent-integration-test-stack",
+            TEST_NAMESPACE_YAML.to_string(),
+        )
+        .await;
+
+    let result = broker::fetch_and_process_deployment_objects(
+        &fixture_guard.agent_settings,
+        &fixture_guard.client,
+        &fixture_guard.agent.as_ref().unwrap(),
+    )
+    .await;
+    assert!(
+        result.is_ok(),
+        "Failed to fetch and process deployment objects"
+    );
+
+    let deployment_objects = result.unwrap();
+    assert!(
+        !deployment_objects.is_empty(),
+        "No deployment objects fetched"
+    );
+    assert_eq!(deployment_objects[0].id, deployment_object.id);
+
+
+    let result = broker::send_failure_event(
+        &fixture_guard.agent_settings,
+        &fixture_guard.client,
+        &fixture_guard.agent.as_ref().unwrap(),
+        deployment_objects[0].id,
+        "Test failure".to_string(),
+    ).await;
+    
+    assert!(
+        result.is_ok(),
+        "Failed to send success event"
+    );
+
+    let result = broker::fetch_and_process_deployment_objects(
+        &fixture_guard.agent_settings,
+        &fixture_guard.client,
+        &fixture_guard.agent.as_ref().unwrap(),
+    )
+    .await;
+    assert!(
+        result.is_ok(),
+        "Failed to fetch and process deployment objects"
+    );
+
+    let deployment_objects = result.unwrap();
+    assert!(
+        deployment_objects.is_empty(),
+        "Deployment objects should be empty"
+    );
+}
