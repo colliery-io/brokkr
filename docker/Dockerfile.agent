@@ -18,7 +18,7 @@ COPY . ./
 RUN cargo build --bin brokkr-agent --release
 
 # Stage 2: Create the final image
-FROM debian:buster-slim
+FROM debian:buster-slim AS broker-agent
 RUN apt-get update && apt-get install -y \
     libssl-dev \
     pkg-config \

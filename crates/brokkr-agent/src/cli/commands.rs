@@ -11,6 +11,10 @@ pub async fn register(
     let config = Settings::new(None).expect("Failed to load configuration");
     let client = Client::new();
 
+    info!("Waiting for broker to be ready");
+    broker::wait_for_broker_ready(&config).await;
+    info!("Broker is ready");
+
     let new_agent = brokkr_models::models::agents::NewAgent::new(agent_name, cluster_name)?;
 
     let response = client
@@ -27,7 +31,7 @@ pub async fn register(
         println!("Initial PAK: {}", agent["initial_pak"]);
 
         // Update the PAK in the configuration
-        std::env::set_var("BROKKR_AGENT_PAK", agent["initial_pak"].as_str().unwrap());
+        std::env::set_var("BROKKR__AGENT_PAK", agent["initial_pak"].as_str().unwrap());
     } else {
         let error_message = response.text().await?;
         eprintln!("Failed to register agent: {}", error_message);

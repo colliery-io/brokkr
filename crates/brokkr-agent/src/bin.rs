@@ -1,5 +1,6 @@
 use brokkr_agent::cli::commands;
 use brokkr_agent::cli::{parse_cli, Commands};
+use brokkr_utils::logging::prelude::*;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

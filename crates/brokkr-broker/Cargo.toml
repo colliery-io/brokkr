@@ -17,7 +17,7 @@ brokkr-utils = { path = "../brokkr-utils" }
 
 axum  = { workspace=true }
 tokio  = { workspace=true }
-clap = { workspace = true, features = ["derive"] }
+clap = { workspace = true, features = ["derive", "env"] }
 r2d2  = { workspace=true }
 r2d2_postgres  = { workspace=true }
 prefixed-api-key = { workspace=true }

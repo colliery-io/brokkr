@@ -6,7 +6,7 @@ use serde_json::Value;
 use std::sync::Once;
 
 static INIT: Once = Once::new();
-use brokkr_models::models::agent_targets::{AgentTarget, NewAgentTarget};
+use brokkr_models::models::agent_targets::NewAgentTarget;
 use brokkr_models::models::agents::Agent;
 use brokkr_models::models::deployment_objects::{DeploymentObject, NewDeploymentObject};
 use brokkr_models::models::generator::{Generator, NewGenerator};
@@ -217,11 +217,7 @@ impl TestFixture {
         assert_eq!(response.status(), reqwest::StatusCode::OK);
     }
 
-    pub async fn create_deployment(
-        &self,
-        stack_name: &str,
-        yaml_content: String,
-    ) -> DeploymentObject {
+    pub async fn create_deployment(&self, yaml_content: String) -> DeploymentObject {
         let new_deployment_object = NewDeploymentObject::new(
             self.stack.as_ref().expect("Stack not created").id,
             yaml_content,

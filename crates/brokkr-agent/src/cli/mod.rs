@@ -12,10 +12,13 @@ pub struct Cli {
 pub enum Commands {
     Register {
         #[arg(long)]
+        #[arg(env = "BROKKR__AGENT__ADMIN_PAK")]
         admin_pak: String,
         #[arg(long)]
+        #[arg(env = "BROKKR__AGENT__NAME")]
         agent_name: String,
         #[arg(long)]
+        #[arg(env = "BROKKR__AGENT__CLUSTER_NAME")]
         cluster_name: String,
     },
     Start,

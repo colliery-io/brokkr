@@ -1,10 +1,6 @@
 use crate::fixtures::get_or_init_fixture;
 use brokkr_agent::broker;
-use brokkr_models::models::agents::Agent;
-use brokkr_models::models::deployment_objects::DeploymentObject;
-use reqwest::StatusCode;
 use tokio::time::{timeout, Duration};
-use uuid::Uuid;
 
 const TEST_NAMESPACE_YAML: &str = r#"
 apiVersion: v1
@@ -70,10 +66,7 @@ async fn test_fetch_and_process_deployment_objects() {
     fixture_guard.initialize().await;
 
     let deployment_object = fixture_guard
-        .create_deployment(
-            "agent-integration-test-stack",
-            TEST_NAMESPACE_YAML.to_string(),
-        )
+        .create_deployment(TEST_NAMESPACE_YAML.to_string())
         .await;
 
     let result = broker::fetch_and_process_deployment_objects(
@@ -154,10 +147,7 @@ async fn test_failure_event_apply() {
     fixture_guard.initialize().await;
 
     let deployment_object = fixture_guard
-        .create_deployment(
-            "agent-integration-test-stack",
-            TEST_NAMESPACE_YAML.to_string(),
-        )
+        .create_deployment(TEST_NAMESPACE_YAML.to_string())
         .await;
 
     let result = broker::fetch_and_process_deployment_objects(
