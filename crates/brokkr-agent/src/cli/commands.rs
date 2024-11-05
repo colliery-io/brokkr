@@ -3,43 +3,6 @@ use brokkr_utils::config::Settings;
 use brokkr_utils::logging::prelude::*;
 use reqwest::Client;
 
-pub async fn register(
-    admin_pak: String,
-    agent_name: String,
-    cluster_name: String,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let config = Settings::new(None).expect("Failed to load configuration");
-    let client = Client::new();
-
-    info!("Waiting for broker to be ready");
-    broker::wait_for_broker_ready(&config).await;
-    info!("Broker is ready");
-
-    let new_agent = brokkr_models::models::agents::NewAgent::new(agent_name, cluster_name)?;
-
-    let response = client
-        .post(&format!("{}/api/v1/agents", config.agent.broker_url))
-        .header("Authorization", format!("Bearer {}", admin_pak))
-        .json(&new_agent)
-        .send()
-        .await?;
-
-    if response.status().is_success() {
-        let agent: serde_json::Value = response.json().await?;
-        println!("Agent registered successfully:");
-        println!("Agent: {}", serde_json::to_string_pretty(&agent["agent"])?);
-        println!("Initial PAK: {}", agent["initial_pak"]);
-
-        // Update the PAK in the configuration
-        std::env::set_var("BROKKR__AGENT_PAK", agent["initial_pak"].as_str().unwrap());
-    } else {
-        let error_message = response.text().await?;
-        eprintln!("Failed to register agent: {}", error_message);
-    }
-
-    Ok(())
-}
-
 pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
     let config = Settings::new(None).expect("Failed to load configuration");
     brokkr_utils::logging::init(&config.log.level).expect("Failed to initialize logger");
