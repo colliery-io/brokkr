@@ -45,9 +45,7 @@ services:
       - BROKKR__AGENT__NAME=brokkr-integration-test-agent
       - BROKKR__AGENT__CLUSTER_NAME=brokkr-dev-integration-cluster
     entrypoint: []
-    command: sh -c "./brokkr-agent register | export BROKKR__AGENT__PAK=$(BROKKR__AGENT__PAK) | while true; do sleep 1; done"
-    #| export BROKKR__AGENT__PAK=$(BROKKR__AGENT__PAK)"
-    #" && ./brokkr-agent start"
+    command: sh -c "./brokkr-agent start"
 
 
   k3s:
