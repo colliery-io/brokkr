@@ -17,7 +17,7 @@ pub static LAST_CONFIG_ANNOTATION: &str = "k8s.brokkr.io/last-config-applied";
 /// Label key for deployment object IDs
 pub static DEPLOYMENT_OBJECT_ID_LABEL: &str = "brokkr.io/deployment-object-id";
 
-/// Creates Kubernetes objects from a deployment object's YAML content.
+/// Creates Kubernetes objects from a brokkr deployment object's YAML content.
 ///
 /// # Arguments
 /// * `deployment_object` - The deployment object containing YAML content
@@ -32,6 +32,11 @@ pub fn create_k8s_objects(
     let yaml_docs = utils::multidoc_deserialize(&deployment_object.yaml_content)?;
 
     for yaml_doc in yaml_docs {
+        // Skip null documents
+        if yaml_doc.is_null() {
+            continue;
+        }
+
         let mut obj: DynamicObject = serde_yaml::from_value(yaml_doc)?;
         let mut annotations = BTreeMap::new();
         annotations.insert(
