@@ -1,3 +1,4 @@
+/// Kubernetes API interaction module for applying, deleting, and querying Kubernetes objects.
 use brokkr_utils::logging::prelude::*;
 use kube::api::DynamicObject;
 use kube::api::GroupVersionKind;
@@ -12,6 +13,16 @@ use kube::Client as K8sClient;
 use kube::Discovery;
 use kube::ResourceExt;
 
+/// Applies a list of Kubernetes objects to the cluster using server-side apply.
+///
+/// # Arguments
+/// * `k8s_objects` - List of DynamicObjects to apply
+/// * `discovery` - Kubernetes Discovery client for API resource resolution
+/// * `k8s_client` - Kubernetes client for API interactions
+/// * `patch_params` - Parameters for the patch operation
+///
+/// # Returns
+/// * `Result<(), Box<dyn std::error::Error>>` - Success or error with message
 pub async fn apply_k8s_objects(
     k8s_objects: &[DynamicObject],
     discovery: &Discovery,
@@ -65,6 +76,17 @@ pub async fn apply_k8s_objects(
     Ok(())
 }
 
+/// Creates a dynamic API client for interacting with Kubernetes resources.
+///
+/// # Arguments
+/// * `ar` - ApiResource describing the resource type
+/// * `caps` - API capabilities for the resource
+/// * `client` - Kubernetes client
+/// * `ns` - Optional namespace for namespaced resources
+/// * `all` - Whether to operate across all namespaces
+///
+/// # Returns
+/// * `Api<DynamicObject>` - Dynamic API client for the resource
 fn dynamic_api(
     ar: ApiResource,
     caps: ApiCapabilities,
@@ -81,6 +103,16 @@ fn dynamic_api(
     }
 }
 
+/// Retrieves all Kubernetes objects with a specific annotation key-value pair.
+///
+/// # Arguments
+/// * `k8s_client` - Kubernetes client
+/// * `discovery` - Kubernetes Discovery client
+/// * `annotation_key` - Annotation key to filter by
+/// * `annotation_value` - Annotation value to filter by
+///
+/// # Returns
+/// * `Result<Vec<DynamicObject>, Box<dyn std::error::Error>>` - List of matching objects or error
 pub async fn get_all_objects_by_annotation(
     k8s_client: &K8sClient,
     discovery: &Discovery,
@@ -106,6 +138,15 @@ pub async fn get_all_objects_by_annotation(
     Ok(results)
 }
 
+/// Deletes a list of Kubernetes objects from the cluster.
+///
+/// # Arguments
+/// * `k8s_objects` - List of DynamicObjects to delete
+/// * `discovery` - Kubernetes Discovery client for API resource resolution
+/// * `k8s_client` - Kubernetes client for API interactions
+///
+/// # Returns
+/// * `Result<(), Box<dyn std::error::Error>>` - Success or error with message
 pub async fn delete_k8s_objects(
     k8s_objects: &[DynamicObject],
     discovery: &Discovery,

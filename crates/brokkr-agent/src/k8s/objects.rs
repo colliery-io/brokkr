@@ -1,14 +1,29 @@
+/// Module for handling Kubernetes object creation and manipulation.
 use crate::utils;
 use brokkr_models::models::deployment_objects::DeploymentObject;
 use kube::api::DynamicObject;
 use serde_yaml;
 use std::collections::BTreeMap;
 
+/// Label key for identifying stack resources
 pub static STACK_LABEL: &str = "k8s.brokkr.io/stack";
+
+/// Annotation key for deployment checksums
 pub static CHECKSUM_ANNOTATION: &str = "k8s.brokkr.io/deployment-checksum";
+
+/// Annotation key for last applied configuration
 pub static LAST_CONFIG_ANNOTATION: &str = "k8s.brokkr.io/last-config-applied";
+
+/// Label key for deployment object IDs
 pub static DEPLOYMENT_OBJECT_ID_LABEL: &str = "brokkr.io/deployment-object-id";
 
+/// Creates Kubernetes objects from a deployment object's YAML content.
+///
+/// # Arguments
+/// * `deployment_object` - The deployment object containing YAML content
+///
+/// # Returns
+/// * `Result<Vec<DynamicObject>, Box<dyn std::error::Error>>` - List of created K8s objects or error
 pub fn create_k8s_objects(
     deployment_object: DeploymentObject,
 ) -> Result<Vec<DynamicObject>, Box<dyn std::error::Error>> {

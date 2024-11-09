@@ -1,3 +1,4 @@
+/// Module for interacting with the Brokkr broker service.
 use brokkr_models::models::agent_events::NewAgentEvent;
 use brokkr_models::models::agents::Agent;
 use brokkr_models::models::deployment_objects::DeploymentObject;
@@ -9,6 +10,10 @@ use std::time::Duration;
 use tokio::time::sleep;
 use uuid::Uuid;
 
+/// Waits for the broker service to become ready.
+///
+/// # Arguments
+/// * `config` - Application settings containing broker configuration
 pub async fn wait_for_broker_ready(config: &Settings) {
     let client = Client::new();
     let readyz_url = format!("{}/readyz", config.agent.broker_url);
@@ -37,6 +42,13 @@ pub async fn wait_for_broker_ready(config: &Settings) {
     std::process::exit(1);
 }
 
+/// Verifies the agent's Personal Access Key (PAK) with the broker.
+///
+/// # Arguments
+/// * `config` - Application settings containing the PAK
+///
+/// # Returns
+/// * `Result<(), Box<dyn std::error::Error>>` - Success or error with message
 pub async fn verify_agent_pak(config: &Settings) -> Result<(), Box<dyn std::error::Error>> {
     let client = Client::new();
     let auth_url = format!("{}/api/v1/auth/pak", config.agent.broker_url);
@@ -67,6 +79,14 @@ pub async fn verify_agent_pak(config: &Settings) -> Result<(), Box<dyn std::erro
     }
 }
 
+/// Fetches the details of the agent from the broker.
+///
+/// # Arguments
+/// * `config` - Application settings containing broker configuration
+/// * `client` - HTTP client for making requests to the broker
+///
+/// # Returns
+/// * `Result<Agent, Box<dyn std::error::Error>>` - Agent details or error
 pub async fn fetch_agent_details(
     config: &Settings,
     client: &Client,
@@ -91,6 +111,15 @@ pub async fn fetch_agent_details(
     }
 }
 
+/// Fetches applicable deployment objects from the broker for the given agent.
+///
+/// # Arguments
+/// * `config` - Application settings containing broker configuration
+/// * `client` - HTTP client for making requests to the broker
+/// * `agent` - Agent details
+///
+/// # Returns
+/// * `Result<Vec<DeploymentObject>, Box<dyn std::error::Error>>` - List of applicable deployment objects or error
 pub async fn fetch_and_process_deployment_objects(
     config: &Settings,
     client: &Client,
@@ -127,6 +156,17 @@ pub async fn fetch_and_process_deployment_objects(
     }
 }
 
+/// Sends a success event to the broker for the given deployment object.
+///
+/// # Arguments
+/// * `config` - Application settings containing broker configuration
+/// * `client` - HTTP client for making requests to the broker
+/// * `agent` - Agent details
+/// * `deployment_object_id` - ID of the deployment object
+/// * `message` - Optional message to include in the event
+///
+/// # Returns
+/// * `Result<(), Box<dyn std::error::Error>>` - Success or error with message
 pub async fn send_success_event(
     config: &Settings,
     client: &Client,
@@ -146,6 +186,17 @@ pub async fn send_success_event(
     .await
 }
 
+/// Sends a failure event to the broker for the given deployment object.
+///
+/// # Arguments
+/// * `config` - Application settings containing broker configuration
+/// * `client` - HTTP client for making requests to the broker
+/// * `agent` - Agent details
+/// * `deployment_object_id` - ID of the deployment object
+/// * `error_message` - Message to include in the event
+///
+/// # Returns
+/// * `Result<(), Box<dyn std::error::Error>>` - Success or error with message
 pub async fn send_failure_event(
     config: &Settings,
     client: &Client,
@@ -221,6 +272,15 @@ async fn send_event(
     .into())
 }
 
+/// Sends a heartbeat event to the broker for the given agent.
+///
+/// # Arguments
+/// * `config` - Application settings containing broker configuration
+/// * `client` - HTTP client for making requests to the broker
+/// * `agent` - Agent details
+///
+/// # Returns
+/// * `Result<(), Box<dyn std::error::Error>>` - Success or error with message
 pub async fn send_heartbeat(
     config: &Settings,
     client: &Client,

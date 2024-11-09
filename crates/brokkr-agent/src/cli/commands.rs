@@ -8,8 +8,7 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
     brokkr_utils::logging::init(&config.log.level).expect("Failed to initialize logger");
     info!("Starting Brokkr Agent");
 
-    // The rest of the agent logic remains the same as in the original main function
-    // We'll just include a small part of it here for brevity
+
 
     info!("Waiting for broker to be ready");
     broker::wait_for_broker_ready(&config).await;

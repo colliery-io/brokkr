@@ -1,6 +1,14 @@
+/// Utility functions for the Brokkr agent.
 use serde::de::Deserialize;
 use std::error::Error;
 
+/// Deserializes a multi-document YAML string into a vector of YAML values.
+///
+/// # Arguments
+/// * `multi_doc_str` - String containing multiple YAML documents
+///
+/// # Returns
+/// * `Result<Vec<serde_yaml::Value>, Box<dyn Error>>` - Vector of parsed YAML values or error
 pub fn multidoc_deserialize(multi_doc_str: &str) -> Result<Vec<serde_yaml::Value>, Box<dyn Error>> {
     let mut docs = vec![];
     for d in serde_yaml::Deserializer::from_str(multi_doc_str) {
