@@ -18,5 +18,5 @@ def docker_down():
 
 
 def docker_clean():
-    subprocess.run(["docker volume rm brokkr-dev_brokkr-postgres-data"]
+    subprocess.run(["docker volume rm brokkr-dev_brokkr-postgres-data brokkr-dev_k3s-data"]
                     , cwd=cwd, shell=True)

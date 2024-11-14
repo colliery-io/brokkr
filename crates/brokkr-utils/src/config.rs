@@ -177,8 +177,10 @@ impl Settings {
         // Build the configuration
         let settings = s.build().unwrap();
 
+
         // Deserialize the configuration into a Settings instance
-        settings.try_deserialize()
+         settings.try_deserialize()
+
     }
 }
 

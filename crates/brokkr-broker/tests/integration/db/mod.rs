@@ -8,6 +8,7 @@ use std::thread;
 use std::time::Duration;
 use url::Url;
 use uuid::Uuid;
+use brokkr_utils::Settings;
 
 use brokkr_broker::db::create_shared_connection_pool;
 
@@ -35,12 +36,11 @@ struct TestRecord {
 /// - Testing connection timeout when exceeding the maximum connections
 #[test]
 fn test_connection_pool_integration() {
-    // Set up
-    let base_url =
-        std::env::var("DATABASE_URL").expect("DATABASE_URL must be set for integration tests");
+    // Load settings from default configuration
+    let settings = Settings::new(None).expect("Failed to load settings");
     let test_db_name = format!("test_db_{}", Uuid::new_v4().to_string().replace('-', ""));
 
-    let mut url = Url::parse(&base_url).expect("Invalid base URL");
+    let mut url = Url::parse(&settings.database.url).expect("Invalid base URL");
     url.set_path("");
     let base_url_without_db = url.as_str();
 

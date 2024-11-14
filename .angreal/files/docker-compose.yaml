@@ -50,6 +50,12 @@ services:
 
   k3s:
     image: rancher/k3s:v1.27.3-k3s1
+    command:
+      - server
+      - --cluster-init
+      - --tls-san=k3s-server
+      - --write-kubeconfig=/output/kubeconfig.yaml
+      - --write-kubeconfig-mode=666
     privileged: true
     environment:
       - K3S_TOKEN=brokkr-secret
@@ -59,7 +65,11 @@ services:
       - /tmp/brokkr-keys:/output
     ports:
       - "6443:6443"  # Kubernetes API server
-    command: server
+    healthcheck:
+      test: ["CMD", "kubectl", "get", "--raw", "/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   brokkr-postgres-data:
