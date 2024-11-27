@@ -4,7 +4,7 @@ import os
 import subprocess
 
 
-models = angreal.command_group(name="models", about="commands for `brokkr-models`")
+models = angreal.command_group(name="models", about="commands for testing our core data model")
 
 
 
@@ -181,6 +181,33 @@ SELECT * FROM agent_events WHERE event_type = 'DEPLOYMENT';
 SELECT * FROM generators WHERE name = 'Generator1';
 """
 
+@models()
+@angreal.command(name="migrations", about="run all migrations + redo to ensure"
+                 " up and down work as intended. ")
+def migration_tests():
+    """
+    """
+    brokkr_models_dir = os.path.join(
+        angreal.get_root(),
+        '..',
+        "crates",
+        "brokkr-models"
+        )
+    docker_down()
+    docker_clean()
+    docker_up()
+
+    try:
+        os.environ["DATABASE_URL"] = "postgres://brokkr:brokkr@localhost:5432/brokkr"
+        result = subprocess.run(
+            [
+                "diesel migration run && diesel migration redo -a"
+            ], cwd=brokkr_models_dir, shell=True, check=True
+        )
+        return result.returncode
+    finally:
+        docker_down()
+        docker_clean()
 
 
 @models()
