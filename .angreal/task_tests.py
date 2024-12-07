@@ -66,10 +66,11 @@ def integration_tests(crate_name: str, test_filter: str = ""):
     docker_down()
     docker_clean()
     docker_up()
-    time.sleep(5)
+    time.sleep(180)
     
     try:
         run_integration_tests(crate_name, test_filter)
+        input("Press Enter to shutdown containers and clean up...")
     finally:
         docker_down()
         docker_clean()

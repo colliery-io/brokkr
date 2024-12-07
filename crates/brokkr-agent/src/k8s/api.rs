@@ -29,16 +29,22 @@ pub async fn apply_k8s_objects(
     k8s_client: K8sClient,
     patch_params: &PatchParams,
 ) -> Result<(), Box<dyn std::error::Error>> {
+
+     // Create discovery client and wait for it to be populated
+     let discovery = Discovery::new(k8s_client.clone()).run().await
+     .expect("Failed to create discovery client");
+
     for k8s_object in k8s_objects {
         info!("Processing k8s object: {:?}", k8s_object);
         let default_namespace = &"default".to_string();
         let namespace = k8s_object
             .metadata
             .namespace
-            .as_ref()
+            .as_deref()
             .or(Some(default_namespace))
             .unwrap();
 
+        
         let gvk = if let Some(tm) = &k8s_object.types {
             GroupVersionKind::try_from(tm)?
         } else {
@@ -52,7 +58,10 @@ pub async fn apply_k8s_objects(
             )
             .into());
         };
+
         let name = k8s_object.name_any();
+        
+        // This isn't working - check the return on the if
         if let Some((ar, caps)) = discovery.resolve_gvk(&gvk) {
             let api = dynamic_api(ar, caps, k8s_client.clone(), Some(namespace), false);
             info!(
@@ -71,6 +80,9 @@ pub async fn apply_k8s_objects(
                     return Err(Box::new(e));
                 }
             }
+        }
+        else {
+            return Err("SHIT".into());
         }
     }
     Ok(())

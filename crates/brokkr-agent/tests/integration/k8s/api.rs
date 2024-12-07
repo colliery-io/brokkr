@@ -4,9 +4,63 @@ use kube::{
     Client as K8sClient, 
     Discovery,
 };
+use kube::api::{DynamicObject, PatchParams, GroupVersionKind};
 use std::sync::Once;
 
+use brokkr_agent::k8s::api::apply_k8s_objects;
+
 static INIT: Once = Once::new();
+
+
+fn create_namespace_json(name: &str) -> serde_json::Value {
+    serde_json::json!({
+        "apiVersion": "v1",
+        "kind": "Namespace",
+        "metadata": {
+            "name": name
+        }
+    })
+}
+
+fn create_busybox_deployment_json(name: &str, namespace: &str) -> serde_json::Value {
+    serde_json::json!({
+        "apiVersion": "apps/v1",
+        "kind": "Deployment",
+        "metadata": {
+            "name": name,
+            "namespace": namespace
+        },
+        "spec": {
+            "replicas": 1,
+            "selector": {
+                "matchLabels": {
+                    "app": "busybox"
+                }
+            },
+            "template": {
+                "metadata": {
+                    "labels": {
+                        "app": "busybox"
+                    }
+                },
+                "spec": {
+                    "containers": [
+                        {
+                            "name": "busybox",
+                            "image": "busybox:latest",
+                            "command": ["sleep", "infinity"],
+                            "ports": [
+                                {
+                                    "containerPort": 8080
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
+        }
+    })
+}
 
 async fn setup() -> (K8sClient, Discovery) {
     // Initialize k8s client using the kubeconfig from the k3s container
@@ -50,13 +104,7 @@ async fn test_k8s_setup_and_cleanup() {
     
     // Create a test namespace
     let ns_api = Api::<Namespace>::all(client.clone());
-    let namespace = serde_json::json!({
-        "apiVersion": "v1",
-        "kind": "Namespace",
-        "metadata": {
-            "name": test_namespace
-        }
-    });
+    let namespace =  create_namespace_json(test_namespace);
     
     let ns = serde_json::from_value(namespace).unwrap();
     ns_api.create(&Default::default(), &ns).await.expect("Failed to create test namespace");
@@ -83,3 +131,32 @@ async fn test_k8s_setup_and_cleanup() {
         }
     }
 }
+
+#[tokio::test]
+async fn test_apply_k8s_objects() {
+    let test_namespace = "test-apply-k8sobjects";
+    
+    // Test setup
+    let (client, discovery) = setup().await;
+    
+    // Create a test namespace first
+    let ns_api = Api::<Namespace>::all(client.clone());
+    let namespace = create_namespace_json(test_namespace);
+    
+    let ns = serde_json::from_value(namespace).unwrap();
+    ns_api.create(&Default::default(), &ns).await.expect("Failed to create test namespace");
+   
+    // Create and apply the service object
+    let k8s_object: DynamicObject = serde_json::from_value(create_busybox_deployment_json("test-service", test_namespace)).unwrap();
+    let objects = vec![k8s_object];
+    
+    // Create patch params
+    let patch_params = PatchParams::apply("test-controller");
+    
+    // Apply the object
+    let result = apply_k8s_objects(&objects, &discovery, client.clone(), &patch_params).await;
+    assert!(result.is_ok(), "Failed to apply k8s object: {:?}", result.err());
+    
+ 
+}
+
