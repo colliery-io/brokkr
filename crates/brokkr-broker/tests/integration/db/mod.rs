@@ -1,3 +1,4 @@
+use brokkr_utils::Settings;
 use diesel::deserialize::QueryableByName;
 use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool};
@@ -8,7 +9,6 @@ use std::thread;
 use std::time::Duration;
 use url::Url;
 use uuid::Uuid;
-use brokkr_utils::Settings;
 
 use brokkr_broker::db::create_shared_connection_pool;
 

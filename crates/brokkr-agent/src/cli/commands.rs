@@ -2,9 +2,9 @@ use crate::broker;
 use brokkr_utils::config::Settings;
 use brokkr_utils::logging::prelude::*;
 use reqwest::Client;
-use tokio::select;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use tokio::select;
 use tokio::signal::ctrl_c;
 use tokio::time::{interval, Duration};
 
@@ -12,8 +12,6 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
     let config = Settings::new(None).expect("Failed to load configuration");
     brokkr_utils::logging::init(&config.log.level).expect("Failed to initialize logger");
     info!("Starting Brokkr Agent");
-
-
 
     info!("Waiting for broker to be ready");
     broker::wait_for_broker_ready(&config).await;
@@ -51,10 +49,10 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create interval timers for periodic tasks
     let mut heartbeat_interval = interval(Duration::from_secs(config.agent.polling_interval));
-    let mut deployment_check_interval = interval(Duration::from_secs(config.agent.polling_interval));
+    let mut deployment_check_interval =
+        interval(Duration::from_secs(config.agent.polling_interval));
 
-
-        // Main control loop
+    // Main control loop
     while running.load(Ordering::SeqCst) {
         select! {
             _ = heartbeat_interval.tick() => {
@@ -82,7 +80,6 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     info!("Agent shutdown complete");
-    
 
     Ok(())
 }

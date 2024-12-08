@@ -28,10 +28,11 @@ pub async fn apply_k8s_objects(
     k8s_client: K8sClient,
     patch_params: &PatchParams,
 ) -> Result<(), Box<dyn std::error::Error>> {
-
-     // Create discovery client and wait for it to be populated
-     let discovery = Discovery::new(k8s_client.clone()).run().await
-     .expect("Failed to create discovery client");
+    // Create discovery client and wait for it to be populated
+    let discovery = Discovery::new(k8s_client.clone())
+        .run()
+        .await
+        .expect("Failed to create discovery client");
 
     for k8s_object in k8s_objects {
         info!("Processing k8s object: {:?}", k8s_object);
@@ -43,7 +44,6 @@ pub async fn apply_k8s_objects(
             .or(Some(default_namespace))
             .unwrap();
 
-        
         let gvk = if let Some(tm) = &k8s_object.types {
             GroupVersionKind::try_from(tm)?
         } else {
@@ -59,8 +59,7 @@ pub async fn apply_k8s_objects(
         };
 
         let name = k8s_object.name_any();
-        
-    
+
         if let Some((ar, caps)) = discovery.resolve_gvk(&gvk) {
             let api = dynamic_api(ar, caps, k8s_client.clone(), Some(namespace), false);
             info!(
@@ -79,8 +78,7 @@ pub async fn apply_k8s_objects(
                     return Err(Box::new(e));
                 }
             }
-        }
-        else {
+        } else {
             error!("Unable to resolve GVK {:?}", gvk);
             return Err("Unable to resolve GVK".into());
         }
@@ -132,8 +130,10 @@ pub async fn get_all_objects_by_annotation(
 ) -> Result<Vec<DynamicObject>, Box<dyn std::error::Error>> {
     let mut results = Vec::new();
 
-    let discovery = Discovery::new(k8s_client.clone()).run().await
-    .expect("Failed to create discovery client");
+    let discovery = Discovery::new(k8s_client.clone())
+        .run()
+        .await
+        .expect("Failed to create discovery client");
 
     for group in discovery.groups() {
         for (ar, caps) in group.recommended_resources() {
@@ -165,8 +165,10 @@ pub async fn delete_k8s_objects(
     k8s_objects: &[DynamicObject],
     k8s_client: K8sClient,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let discovery = Discovery::new(k8s_client.clone()).run().await
-    .expect("Failed to create discovery client");
+    let discovery = Discovery::new(k8s_client.clone())
+        .run()
+        .await
+        .expect("Failed to create discovery client");
 
     for k8s_object in k8s_objects {
         info!("Processing k8s object for deletion: {:?}", k8s_object);

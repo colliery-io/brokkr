@@ -1,7 +1,9 @@
-use brokkr_agent::k8s::objects::{self, STACK_LABEL, CHECKSUM_ANNOTATION, DEPLOYMENT_OBJECT_ID_LABEL, LAST_CONFIG_ANNOTATION};
+use brokkr_agent::k8s::objects::{
+    self, CHECKSUM_ANNOTATION, DEPLOYMENT_OBJECT_ID_LABEL, LAST_CONFIG_ANNOTATION, STACK_LABEL,
+};
 use brokkr_models::models::deployment_objects::DeploymentObject;
-use uuid::Uuid;
 use chrono::Utc;
+use uuid::Uuid;
 
 #[test]
 fn test_create_k8s_objects_single_document() {
@@ -30,10 +32,10 @@ metadata:
 
     let k8s_objects = result.unwrap();
     assert_eq!(k8s_objects.len(), 1);
-    
+
     let obj = &k8s_objects[0];
     assert_eq!(obj.types.as_ref().unwrap().kind, "Namespace");
-    
+
     // Verify annotations
     let annotations = obj.metadata.annotations.as_ref().unwrap();
     assert!(annotations.contains_key(STACK_LABEL));
@@ -85,10 +87,10 @@ spec:
 
     let k8s_objects = result.unwrap();
     assert_eq!(k8s_objects.len(), 3);
-    
+
     // Verify Namespace is first
     assert_eq!(k8s_objects[0].types.as_ref().unwrap().kind, "Namespace");
-    
+
     // Verify all objects have required annotations
     for obj in k8s_objects {
         let annotations = obj.metadata.annotations.as_ref().unwrap();
@@ -141,9 +143,12 @@ metadata:
 
     let k8s_objects = result.unwrap();
     assert_eq!(k8s_objects.len(), 2);
-    
+
     // Verify CRD is first
-    assert_eq!(k8s_objects[0].types.as_ref().unwrap().kind, "CustomResourceDefinition");
+    assert_eq!(
+        k8s_objects[0].types.as_ref().unwrap().kind,
+        "CustomResourceDefinition"
+    );
 }
 
 #[test]
@@ -236,7 +241,7 @@ metadata:
 
     let k8s_objects = result.unwrap();
     assert_eq!(k8s_objects.len(), 4);
-    
+
     // Verify ordering: Namespace and CRD should be first
     assert!(matches!(
         k8s_objects[0].types.as_ref().unwrap().kind.as_str(),

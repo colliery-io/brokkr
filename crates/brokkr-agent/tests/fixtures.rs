@@ -5,8 +5,6 @@ use reqwest::Client;
 use serde_json::Value;
 use std::sync::Once;
 
-
-
 static INIT: Once = Once::new();
 use brokkr_models::models::agent_targets::NewAgentTarget;
 use brokkr_models::models::agents::Agent;
