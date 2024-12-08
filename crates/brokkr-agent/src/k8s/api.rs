@@ -137,7 +137,7 @@ pub async fn get_all_objects_by_annotation(
         for (ar, caps) in group.recommended_resources() {
             let api: Api<DynamicObject> =
                 dynamic_api(ar.clone(), caps.clone(), k8s_client.clone(), None, true);
-            
+
             match api.list(&Default::default()).await {
                 Ok(list) => {
                     // Filter objects by annotation

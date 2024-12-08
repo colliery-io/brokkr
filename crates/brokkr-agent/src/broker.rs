@@ -54,6 +54,7 @@ pub async fn verify_agent_pak(config: &Settings) -> Result<(), Box<dyn std::erro
     let auth_url = format!("{}/api/v1/auth/pak", config.agent.broker_url);
 
     info!("Verifying agent PAK with broker");
+    info!("PAK: {}", config.agent.pak);
     let response = client
         .post(&auth_url)
         .header("Authorization", format!("Bearer {}", config.agent.pak))
@@ -91,6 +92,10 @@ pub async fn fetch_agent_details(
     config: &Settings,
     client: &Client,
 ) -> Result<Agent, Box<dyn std::error::Error>> {
+    info!(
+        "Fetching agent details, name: {}, cluster_name: {}",
+        config.agent.agent_name, config.agent.cluster_name
+    );
     let agent_url = format!(
         "{}/api/v1/agents/?name={}&cluster_name={}",
         config.agent.broker_url, config.agent.agent_name, config.agent.cluster_name

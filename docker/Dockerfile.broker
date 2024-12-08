@@ -23,6 +23,7 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     pkg-config \
     libpq-dev \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 # Set the working directory
 WORKDIR /usr/local/bin

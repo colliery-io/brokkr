@@ -26,26 +26,51 @@ services:
     ports:
       - 3000:3000
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     environment:
       - BROKKR__DATABASE__URL=postgres://brokkr:brokkr@postgres:5432/brokkr
     volumes:
       - /tmp/brokkr-keys:/tmp/brokkr-keys
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  init-agent:
+    build:
+      context: ../..
+      dockerfile: docker/Dockerfile.broker
+    depends_on:
+      brokkr-broker:
+        condition: service_healthy
+    environment:
+      - BROKKR__DATABASE__URL=postgres://brokkr:brokkr@postgres:5432/brokkr
+    volumes:
+      - /tmp/brokkr-keys:/tmp/brokkr-keys
+    entrypoint: []
+    command: >
+      sh -c "
+        ./brokkr-broker create agent --name brokkr-integration-test-agent --cluster-name brokkr-dev-integration-cluster | tee /tmp/brokkr-keys/agent.out &&
+        grep 'Initial PAK:' /tmp/brokkr-keys/agent.out | cut -d' ' -f3 > /tmp/brokkr-keys/agent.pak
+      "
 
   brokkr-agent:
     build:
       context: ../..
       dockerfile: docker/Dockerfile.agent
     depends_on:
-      - postgres
-      - brokkr-broker
+      init-agent:
+        condition: service_completed_successfully
     environment:
-      - BROKKR__AGENT__BROKER_URL=http://brokkr-dev-brokkr-broker-1:3000
-      - BROKKR__AGENT__ADMIN_PAK=brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8
-      - BROKKR__AGENT__NAME=brokkr-integration-test-agent
+      - BROKKR__AGENT__BROKER_URL=http://brokkr-broker:3000
+      - BROKKR__AGENT__AGENT_NAME=brokkr-integration-test-agent
       - BROKKR__AGENT__CLUSTER_NAME=brokkr-dev-integration-cluster
+    volumes:
+      - /tmp/brokkr-keys:/tmp/brokkr-keys
     entrypoint: []
-    command: sh -c "./brokkr-agent start"
+    command: sh -c "export BROKKR__AGENT__PAK=$(cat /tmp/brokkr-keys/agent.pak) && env && cat /tmp/brokkr-keys/agent.pak && ./brokkr-agent start"
 
 
   k3s:

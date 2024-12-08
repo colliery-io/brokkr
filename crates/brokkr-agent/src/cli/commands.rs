@@ -15,7 +15,6 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
 
     info!("Waiting for broker to be ready");
     broker::wait_for_broker_ready(&config).await;
-    info!("Broker is ready");
 
     info!("Verifying agent PAK");
     broker::verify_agent_pak(&config).await?;
