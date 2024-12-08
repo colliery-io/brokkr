@@ -67,13 +67,21 @@ def integration_tests(crate_name: str, test_filter: str = ""):
     docker_clean()
     docker_up()
     time.sleep(180)
-    
+
+    return_codes = []
     try:
-        run_integration_tests(crate_name, test_filter)
+        if crate_name == "all":
+            for crate in CRATES:
+                return_code = run_integration_tests(crate, test_filter)
+                return_codes.append((crate,return_code))
+            if any(code != 0 for _, code in return_codes):
+                rc =   max(code for _, code in return_codes)
+                
+        else:
+            rc = run_integration_tests(crate_name, test_filter)
+        
         input("Press Enter to shutdown containers and clean up...")
     finally:
         docker_down()
         docker_clean()
-
-    
-
+        return rc

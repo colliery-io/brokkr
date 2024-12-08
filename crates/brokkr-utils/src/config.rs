@@ -96,7 +96,7 @@ pub struct Agent {
     pub agent_name: String,
     /// Cluster name
     pub cluster_name: String,
-    /// Max number of retries for event messages    
+    /// Max number of retries for event messages
     pub max_event_message_retries: usize,
     /// Delay between event message retries in seconds
     pub event_message_retry_delay: u64,

@@ -29,11 +29,11 @@ EXECUTE FUNCTION update_timestamp();
 CREATE OR REPLACE FUNCTION cascade_soft_delete_agents()
 RETURNS TRIGGER AS $$
 BEGIN
-    
+
     UPDATE agent_events
     SET deleted_at = NEW.deleted_at
     WHERE agent_id = NEW.id AND deleted_at IS NULL;
-    
+
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -49,7 +49,7 @@ EXECUTE FUNCTION cascade_soft_delete_agents();
 CREATE OR REPLACE FUNCTION handle_agent_hard_delete()
 RETURNS TRIGGER AS $$
 BEGIN
-    
+
     -- Delete agent_target rows associated with the agent
     DELETE FROM agent_targets
     WHERE agent_id = OLD.id;

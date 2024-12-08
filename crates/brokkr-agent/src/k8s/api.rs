@@ -41,8 +41,7 @@ pub async fn apply_k8s_objects(
             .metadata
             .namespace
             .as_deref()
-            .or(Some(default_namespace))
-            .unwrap();
+            .unwrap_or(default_namespace);
 
         let gvk = if let Some(tm) = &k8s_object.types {
             GroupVersionKind::try_from(tm)?
@@ -67,7 +66,7 @@ pub async fn apply_k8s_objects(
                 gvk.kind,
                 serde_yaml::to_string(&k8s_object)
             );
-            let data = serde_json::to_value(&k8s_object)?;
+            let data = serde_json::to_value(k8s_object)?;
             match api.patch(&name, patch_params, &Patch::Apply(data)).await {
                 Ok(_) => {
                     info!("Apply successful for {:?} '{}'", gvk.kind, name);
@@ -177,8 +176,7 @@ pub async fn delete_k8s_objects(
             .metadata
             .namespace
             .as_ref()
-            .or(Some(default_namespace))
-            .unwrap();
+            .unwrap_or(default_namespace);
 
         let gvk = if let Some(tm) = &k8s_object.types {
             GroupVersionKind::try_from(tm)?

@@ -65,7 +65,7 @@ pub async fn serve(config: &Settings) -> Result<(), Box<dyn std::error::Error>> 
     // Perform first-time setup if necessary
     if is_first_run {
         info!("First time application startup detected. Creating admin role...");
-        utils::first_startup(&mut conn, &config)?;
+        utils::first_startup(&mut conn, config)?;
     } else {
         info!("Existing application detected. Proceeding with normal startup.");
     }
@@ -110,7 +110,7 @@ pub fn rotate_admin(config: &Settings) -> Result<(), Box<dyn std::error::Error>>
         .expect("Failed to establish database connection");
 
     // Run the first_startup function to generate a new admin key
-    utils::upsert_admin(&mut conn, &config)?;
+    utils::upsert_admin(&mut conn, config)?;
 
     info!("Admin key rotated successfully");
     Ok(())

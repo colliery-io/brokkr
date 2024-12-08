@@ -460,8 +460,6 @@ impl<'a> AgentsDAL<'a> {
             .filter(agents::cluster_name.eq(&cluster_name))
             .filter(agents::deleted_at.is_null());
 
-        let result = query.first(conn).optional();
-
-        result
+        query.first(conn).optional()
     }
 }
