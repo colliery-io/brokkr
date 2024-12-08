@@ -47,14 +47,18 @@ CRATES = get_crates()
 @angreal.argument(name="crate_name", required=True, help= f"Name of the crate to test ({CRATES + ['all']})")
 def unit_tests(crate_name: str, test_filter: str = ""):
     """Run unit tests for a specific crate."""
+    return_codes = []
     if crate_name == "all":
         for crate in CRATES:
             return_code = run_unit_tests(crate, test_filter)
-            if return_code != 0:
-                return return_code
-        return 0
+            return_codes.append((crate,return_code))
+        if any(code != 0 for _, code in return_codes):
+            rc =   max(code for _, code in return_codes)
+            print(f"Unit tests failed for {crate} with return code {rc}")
     else:
-        return run_unit_tests(crate_name, test_filter)
+        rc = run_unit_tests(crate_name, test_filter)
+    
+    return rc
 
 
 @test()
@@ -66,6 +70,7 @@ def integration_tests(crate_name: str, test_filter: str = ""):
     docker_down()
     docker_clean()
     docker_up()
+    print("Waiting for applications to come up and be stable, this may take a while...grab a coffee!")
     time.sleep(180)
 
     return_codes = []
@@ -76,7 +81,7 @@ def integration_tests(crate_name: str, test_filter: str = ""):
                 return_codes.append((crate,return_code))
             if any(code != 0 for _, code in return_codes):
                 rc =   max(code for _, code in return_codes)
-                
+                print(f"Integration tests failed for {crate} with return code {rc}")
         else:
             rc = run_integration_tests(crate_name, test_filter)
         

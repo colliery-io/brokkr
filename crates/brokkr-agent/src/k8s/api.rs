@@ -2,7 +2,6 @@
 use brokkr_utils::logging::prelude::*;
 use kube::api::DynamicObject;
 use kube::api::GroupVersionKind;
-use kube::api::ListParams;
 use kube::api::Patch;
 use kube::api::PatchParams;
 use kube::discovery::ApiCapabilities;
@@ -138,11 +137,19 @@ pub async fn get_all_objects_by_annotation(
         for (ar, caps) in group.recommended_resources() {
             let api: Api<DynamicObject> =
                 dynamic_api(ar.clone(), caps.clone(), k8s_client.clone(), None, true);
-            let lp =
-                ListParams::default().labels(&format!("{}={}", annotation_key, annotation_value));
-
-            match api.list(&lp).await {
-                Ok(list) => results.extend(list.items),
+            
+            match api.list(&Default::default()).await {
+                Ok(list) => {
+                    // Filter objects by annotation
+                    let matching_objects = list.items.into_iter().filter(|obj| {
+                        obj.metadata
+                            .annotations
+                            .as_ref()
+                            .and_then(|annotations| annotations.get(annotation_key))
+                            .map_or(false, |value| value == annotation_value)
+                    });
+                    results.extend(matching_objects);
+                }
                 Err(e) => warn!("Error listing resources for {:?}: {:?}", ar, e),
             }
         }
