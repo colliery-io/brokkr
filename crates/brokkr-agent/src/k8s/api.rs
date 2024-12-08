@@ -25,7 +25,6 @@ use kube::ResourceExt;
 /// * `Result<(), Box<dyn std::error::Error>>` - Success or error with message
 pub async fn apply_k8s_objects(
     k8s_objects: &[DynamicObject],
-    discovery: &Discovery,
     k8s_client: K8sClient,
     patch_params: &PatchParams,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -61,7 +60,7 @@ pub async fn apply_k8s_objects(
 
         let name = k8s_object.name_any();
         
-        // This isn't working - check the return on the if
+    
         if let Some((ar, caps)) = discovery.resolve_gvk(&gvk) {
             let api = dynamic_api(ar, caps, k8s_client.clone(), Some(namespace), false);
             info!(
@@ -82,7 +81,8 @@ pub async fn apply_k8s_objects(
             }
         }
         else {
-            return Err("SHIT".into());
+            error!("Unable to resolve GVK {:?}", gvk);
+            return Err("Unable to resolve GVK".into());
         }
     }
     Ok(())
@@ -99,7 +99,7 @@ pub async fn apply_k8s_objects(
 ///
 /// # Returns
 /// * `Api<DynamicObject>` - Dynamic API client for the resource
-fn dynamic_api(
+pub fn dynamic_api(
     ar: ApiResource,
     caps: ApiCapabilities,
     client: K8sClient,
@@ -127,11 +127,13 @@ fn dynamic_api(
 /// * `Result<Vec<DynamicObject>, Box<dyn std::error::Error>>` - List of matching objects or error
 pub async fn get_all_objects_by_annotation(
     k8s_client: &K8sClient,
-    discovery: &Discovery,
     annotation_key: &str,
     annotation_value: &str,
 ) -> Result<Vec<DynamicObject>, Box<dyn std::error::Error>> {
     let mut results = Vec::new();
+
+    let discovery = Discovery::new(k8s_client.clone()).run().await
+    .expect("Failed to create discovery client");
 
     for group in discovery.groups() {
         for (ar, caps) in group.recommended_resources() {
@@ -161,9 +163,11 @@ pub async fn get_all_objects_by_annotation(
 /// * `Result<(), Box<dyn std::error::Error>>` - Success or error with message
 pub async fn delete_k8s_objects(
     k8s_objects: &[DynamicObject],
-    discovery: &Discovery,
     k8s_client: K8sClient,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let discovery = Discovery::new(k8s_client.clone()).run().await
+    .expect("Failed to create discovery client");
+
     for k8s_object in k8s_objects {
         info!("Processing k8s object for deletion: {:?}", k8s_object);
         let default_namespace = &"default".to_string();

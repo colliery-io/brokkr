@@ -6,8 +6,9 @@ use kube::{
 };
 use kube::api::{DynamicObject, PatchParams, GroupVersionKind};
 use std::sync::Once;
+use kube::discovery::{ApiCapabilities, ApiResource, Scope};
 
-use brokkr_agent::k8s::api::apply_k8s_objects;
+use brokkr_agent::k8s::api::{apply_k8s_objects,dynamic_api};
 
 static INIT: Once = Once::new();
 
@@ -146,17 +147,44 @@ async fn test_apply_k8s_objects() {
     let ns = serde_json::from_value(namespace).unwrap();
     ns_api.create(&Default::default(), &ns).await.expect("Failed to create test namespace");
    
-    // Create and apply the service object
-    let k8s_object: DynamicObject = serde_json::from_value(create_busybox_deployment_json("test-service", test_namespace)).unwrap();
-    let objects = vec![k8s_object];
+    // Create and apply the deployment object
+    let k8s_object: DynamicObject = serde_json::from_value(
+        create_busybox_deployment_json("test-deployment", test_namespace)
+    ).unwrap();
+    
+    let objects = vec![k8s_object.clone()];
     
     // Create patch params
     let patch_params = PatchParams::apply("test-controller");
     
     // Apply the object
-    let result = apply_k8s_objects(&objects, &discovery, client.clone(), &patch_params).await;
+    let result = apply_k8s_objects(&objects, client.clone(), &patch_params).await;
     assert!(result.is_ok(), "Failed to apply k8s object: {:?}", result.err());
     
- 
+    // Wait a bit for the deployment to be created
+    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+    
+    let discovery = Discovery::new(client.clone()).run().await
+     .expect("Failed to create discovery client");
+    // Verify the deployment exists
+    if let Some((ar, caps)) = discovery.resolve_gvk(&GroupVersionKind::gvk(
+        "apps",
+        "v1",
+        "Deployment"
+    )) {
+        let api = dynamic_api(ar, caps, client.clone(), Some(test_namespace), false);
+        let deployment = api.get("test-deployment").await;
+        assert!(deployment.is_ok(), "Failed to get deployment: {:?}", deployment.err());
+        
+        // Verify deployment details
+        let deployment = deployment.unwrap();
+        assert_eq!(deployment.metadata.name.as_deref(), Some("test-deployment"));
+        assert_eq!(deployment.metadata.namespace.as_deref(), Some(test_namespace));
+    } else {
+        panic!("Failed to resolve GVK for deployment");
+    }
+    
+    // Cleanup
+    cleanup(&client, test_namespace).await;
 }
 
