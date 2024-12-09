@@ -70,8 +70,33 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
                 match broker::fetch_and_process_deployment_objects(&config, &client, &agent).await {
                     Ok(objects) => {
                         for obj in objects {
-                            let k8s_objects = k8s::objects::create_k8s_objects(obj)?;
-                            k8s::api::apply_k8s_objects_with_rollback(&k8s_objects, k8s_client.clone()).await?;
+                            let k8s_objects = k8s::objects::create_k8s_objects(obj.clone())?;
+                            match k8s::api::apply_k8s_objects_with_rollback(&k8s_objects, k8s_client.clone()).await {
+                                Ok(_) => {
+                                    info!("Successfully applied Kubernetes objects");
+                                    if let Err(e) = broker::send_success_event(
+                                        &config,
+                                        &client,
+                                        &agent,
+                                        obj.id,
+                                        None,
+                                    ).await {
+                                        error!("Failed to send success event: {}", e);
+                                    }
+                                }
+                                Err(e) => {
+                                    error!("Failed to apply Kubernetes objects with rollback: {}", e);
+                                    if let Err(send_err) = broker::send_failure_event(
+                                        &config,
+                                        &client,
+                                        &agent,
+                                        obj.id,
+                                        e.to_string(),
+                                    ).await {
+                                        error!("Failed to send failure event: {}", send_err);
+                                    }
+                                }
+                            }
                         }
                     }
                     Err(e) => error!("Failed to fetch deployment objects: {}", e),
