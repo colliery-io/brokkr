@@ -1,5 +1,6 @@
 /// Kubernetes API interaction module for applying, deleting, and querying Kubernetes objects.
 use brokkr_utils::logging::prelude::*;
+use k8s_openapi::api::core::v1::Namespace;
 use kube::api::DynamicObject;
 use kube::api::GroupVersionKind;
 use kube::api::Patch;
@@ -25,8 +26,9 @@ use kube::ResourceExt;
 pub async fn apply_k8s_objects(
     k8s_objects: &[DynamicObject],
     k8s_client: K8sClient,
-    patch_params: &PatchParams,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let patch_params = PatchParams::apply("brokkr-controller");
+
     // Create discovery client and wait for it to be populated
     let discovery = Discovery::new(k8s_client.clone())
         .run()
@@ -66,7 +68,7 @@ pub async fn apply_k8s_objects(
                 serde_yaml::to_string(&k8s_object)
             );
             let data = serde_json::to_value(k8s_object)?;
-            match api.patch(&name, patch_params, &Patch::Apply(data)).await {
+            match api.patch(&name, &patch_params, &Patch::Apply(data)).await {
                 Ok(_) => {
                     info!("Apply successful for {:?} '{}'", gvk.kind, name);
                 }
@@ -215,4 +217,247 @@ pub async fn delete_k8s_objects(
         }
     }
     Ok(())
+}
+
+/// Validates Kubernetes objects against the API server without applying them.
+///
+/// # Arguments
+/// * `k8s_objects` - List of DynamicObjects to validate
+/// * `k8s_client` - Kubernetes client for API interactions
+///
+/// # Returns
+/// * `Result<(), Box<dyn std::error::Error>>` - Success or error with validation message
+pub async fn validate_k8s_objects(
+    k8s_objects: &[DynamicObject],
+    k8s_client: K8sClient,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut validation_errors = Vec::new();
+
+    let discovery = Discovery::new(k8s_client.clone())
+        .run()
+        .await
+        .expect("Failed to create discovery client");
+
+    for k8s_object in k8s_objects {
+        let default_namespace = &"default".to_string();
+        let namespace = k8s_object
+            .metadata
+            .namespace
+            .as_deref()
+            .unwrap_or(default_namespace);
+
+        let gvk = if let Some(tm) = &k8s_object.types {
+            match GroupVersionKind::try_from(tm) {
+                Ok(gvk) => gvk,
+                Err(e) => {
+                    validation_errors.push(format!(
+                        "Invalid TypeMeta for object '{}': {}",
+                        k8s_object.name_any(),
+                        e
+                    ));
+                    continue;
+                }
+            }
+        } else {
+            validation_errors.push(format!(
+                "Missing TypeMeta for object '{}'",
+                k8s_object.name_any()
+            ));
+            continue;
+        };
+
+        if let Some((ar, caps)) = discovery.resolve_gvk(&gvk) {
+            let api = dynamic_api(ar, caps, k8s_client.clone(), Some(namespace), false);
+
+            match serde_json::to_value(k8s_object) {
+                Ok(data) => {
+                    let mut patch_params = PatchParams::apply("validation");
+                    patch_params = patch_params.dry_run();
+
+                    match api
+                        .patch(&k8s_object.name_any(), &patch_params, &Patch::Apply(data))
+                        .await
+                    {
+                        Ok(_) => {
+                            info!(
+                                "Validation successful for {:?} '{}'",
+                                gvk.kind,
+                                k8s_object.name_any()
+                            );
+                        }
+                        Err(e) => {
+                            error!(
+                                "Validation failed for {:?} '{}': {:?}",
+                                gvk.kind,
+                                k8s_object.name_any(),
+                                e
+                            );
+                            validation_errors.push(format!(
+                                "Validation failed for {} '{}': {}",
+                                gvk.kind,
+                                k8s_object.name_any(),
+                                e
+                            ));
+                        }
+                    }
+                }
+                Err(e) => {
+                    validation_errors.push(format!(
+                        "Failed to serialize object '{}': {}",
+                        k8s_object.name_any(),
+                        e
+                    ));
+                }
+            }
+        } else {
+            validation_errors.push(format!(
+                "Unable to resolve GVK {:?} for object '{}'",
+                gvk,
+                k8s_object.name_any()
+            ));
+        }
+    }
+
+    if validation_errors.is_empty() {
+        Ok(())
+    } else {
+        Err(validation_errors.join("\n").into())
+    }
+}
+
+/// Applies a list of Kubernetes objects to the cluster with validation.
+///
+/// This function first validates all objects using dry-run, then applies them
+/// only if all validations pass. This ensures atomic behavior across multiple objects.
+///
+/// # Arguments
+/// * `k8s_objects` - List of DynamicObjects to apply
+/// * `k8s_client` - Kubernetes client for API interactions
+/// * `patch_params` - Parameters for the patch operation
+///
+/// # Returns
+/// * `Result<(), Box<dyn std::error::Error>>` - Success or error with message
+pub async fn safe_apply_k8s_objects(
+    k8s_objects: &[DynamicObject],
+    k8s_client: K8sClient,
+) -> Result<(), Box<dyn std::error::Error>> {
+    // Validate all objects first
+    if let Err(e) = validate_k8s_objects(k8s_objects, k8s_client.clone()).await {
+        error!("Pre-apply validation failed: {}", e);
+        return Err(e);
+    }
+
+    // If validation succeeds, proceed with actual apply
+    info!("Pre-apply validation successful, proceeding with apply");
+    apply_k8s_objects(k8s_objects, k8s_client).await
+}
+
+/// Applies a list of Kubernetes objects to the cluster with rollback capability.
+///
+/// This function tracks the state of objects before applying changes and attempts
+/// to rollback to the previous state if any apply operations fail.
+///
+/// # Arguments
+/// * `k8s_objects` - List of DynamicObjects to apply
+/// * `k8s_client` - Kubernetes client for API interactions
+/// * `patch_params` - Parameters for the patch operation
+///
+/// # Returns
+/// * `Result<(), Box<dyn std::error::Error>>` - Success or error with message
+pub async fn apply_k8s_objects_with_rollback(
+    k8s_objects: &[DynamicObject],
+    k8s_client: K8sClient,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let patch_params = PatchParams::apply("brokkr-controller");
+
+    // Store original states for potential rollback
+    let mut original_states = Vec::new();
+    let discovery = Discovery::new(k8s_client.clone())
+        .run()
+        .await
+        .expect("Failed to create discovery client");
+
+    // Capture original states
+    for k8s_object in k8s_objects {
+        if let Some((ar, caps)) = discovery.resolve_gvk(&GroupVersionKind::try_from(
+            k8s_object.types.as_ref().unwrap(),
+        )?) {
+            let api = dynamic_api(
+                ar,
+                caps,
+                k8s_client.clone(),
+                k8s_object.metadata.namespace.as_deref(),
+                false,
+            );
+            if let Ok(existing) = api.get(&k8s_object.name_any()).await {
+                original_states.push(existing);
+            }
+        }
+    }
+
+    // Attempt to apply all objects
+    match safe_apply_k8s_objects(k8s_objects, k8s_client.clone()).await {
+        Ok(_) => Ok(()),
+        Err(e) => {
+            error!("Apply failed, attempting rollback: {}", e);
+
+            // Attempt rollback with same patch_params
+            for original in original_states {
+                if let Some((ar, caps)) = discovery.resolve_gvk(&GroupVersionKind::try_from(
+                    original.types.as_ref().unwrap(),
+                )?) {
+                    let api = dynamic_api(
+                        ar,
+                        caps,
+                        k8s_client.clone(),
+                        original.metadata.namespace.as_deref(),
+                        false,
+                    );
+                    let data = serde_json::to_value(&original)?;
+                    if let Err(rollback_err) = api
+                        .patch(&original.name_any(), &patch_params, &Patch::Apply(data))
+                        .await
+                    {
+                        error!(
+                            "Rollback failed for {}: {}",
+                            original.name_any(),
+                            rollback_err
+                        );
+                    }
+                }
+            }
+
+            Err(e)
+        }
+    }
+}
+
+/// Creates a Kubernetes client using either a provided kubeconfig path or default configuration.
+///
+/// # Arguments
+/// * `kubeconfig_path` - Optional path to kubeconfig file
+///
+/// # Returns
+/// * `Result<K8sClient, Box<dyn std::error::Error>>` - Kubernetes client or error
+pub async fn create_k8s_client(
+    kubeconfig_path: Option<&str>,
+) -> Result<K8sClient, Box<dyn std::error::Error>> {
+    // Set KUBECONFIG environment variable if path is provided
+    if let Some(path) = kubeconfig_path {
+        std::env::set_var("KUBECONFIG", path);
+    }
+
+    let client = K8sClient::try_default()
+        .await
+        .map_err(|e| format!("Failed to create Kubernetes client: {}", e))?;
+
+    // Verify cluster connectivity by attempting to list namespaces
+    let ns_api = Api::<Namespace>::all(client.clone());
+    ns_api
+        .list(&Default::default())
+        .await
+        .map_err(|e| format!("Failed to connect to Kubernetes cluster: {}", e))?;
+
+    info!("Successfully connected to Kubernetes cluster");
+    Ok(client)
 }

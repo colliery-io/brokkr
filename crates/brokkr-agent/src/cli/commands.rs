@@ -1,4 +1,4 @@
-use crate::broker;
+use crate::{broker, k8s};
 use brokkr_utils::config::Settings;
 use brokkr_utils::logging::prelude::*;
 use reqwest::Client;
@@ -29,6 +29,12 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
         "Agent details fetched successfully for agent: {}",
         agent.name
     );
+
+    // Initialize Kubernetes client
+    info!("Initializing Kubernetes client");
+    let k8s_client = kube::Client::try_default()
+        .await
+        .expect("Failed to create Kubernetes client");
 
     info!("Starting main control loop");
     let running = Arc::new(AtomicBool::new(true));
@@ -64,8 +70,8 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
                 match broker::fetch_and_process_deployment_objects(&config, &client, &agent).await {
                     Ok(objects) => {
                         for obj in objects {
-                            //  TODO: Process deployment object
-                            todo!("Process deployment object: {}", obj.id);
+                            let k8s_objects = k8s::objects::create_k8s_objects(obj)?;
+                            k8s::api::apply_k8s_objects_with_rollback(&k8s_objects, k8s_client.clone()).await?;
                         }
                     }
                     Err(e) => error!("Failed to fetch deployment objects: {}", e),
