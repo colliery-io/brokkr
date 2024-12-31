@@ -32,7 +32,7 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
 
     // Initialize Kubernetes client
     info!("Initializing Kubernetes client");
-    let k8s_client = kube::Client::try_default()
+    let k8s_client = k8s::api::create_k8s_client(config.agent.kubeconfig_path.as_deref())
         .await
         .expect("Failed to create Kubernetes client");
 

@@ -63,14 +63,41 @@ services:
     depends_on:
       init-agent:
         condition: service_completed_successfully
+      init-kubeconfig:
+        condition: service_completed_successfully
     environment:
       - BROKKR__AGENT__BROKER_URL=http://brokkr-broker:3000
       - BROKKR__AGENT__AGENT_NAME=brokkr-integration-test-agent
       - BROKKR__AGENT__CLUSTER_NAME=brokkr-dev-integration-cluster
+      - BROKKR__AGENT__KUBECONFIG_PATH=/tmp/brokkr-keys/kubeconfig.yaml
     volumes:
       - /tmp/brokkr-keys:/tmp/brokkr-keys
     entrypoint: []
-    command: sh -c "export BROKKR__AGENT__PAK=$(cat /tmp/brokkr-keys/agent.pak) && env && cat /tmp/brokkr-keys/agent.pak && ./brokkr-agent start"
+    command: >
+      sh -c "
+        # Wait for kubeconfig to be ready and accessible
+        while [ ! -f /tmp/brokkr-keys/kubeconfig.yaml ] || [ ! -s /tmp/brokkr-keys/kubeconfig.yaml ]; do
+          echo 'Waiting for kubeconfig to be ready...'
+          sleep 2
+        done
+
+        # Wait for agent PAK to be ready
+        while [ ! -f /tmp/brokkr-keys/agent.pak ] || [ ! -s /tmp/brokkr-keys/agent.pak ]; do
+          echo 'Waiting for agent PAK to be ready...'
+          sleep 2
+        done
+
+        # Export PAK and start agent
+        export BROKKR__AGENT__PAK=$(cat /tmp/brokkr-keys/agent.pak)
+
+        # Verify kubeconfig is valid
+        if ! KUBECONFIG=/tmp/brokkr-keys/kubeconfig.yaml kubectl get nodes > /dev/null 2>&1; then
+          echo 'Waiting for Kubernetes API to be accessible...'
+          sleep 5
+        fi
+
+        env && cat /tmp/brokkr-keys/agent.pak && ./brokkr-agent start
+      "
 
 
   k3s:
@@ -78,7 +105,6 @@ services:
     command:
       - server
       - --cluster-init
-      - --tls-san=k3s-server
       - --write-kubeconfig=/output/kubeconfig.yaml
       - --write-kubeconfig-mode=666
     privileged: true
@@ -89,12 +115,28 @@ services:
       - k3s-data:/var/lib/rancher/k3s
       - /tmp/brokkr-keys:/output
     ports:
-      - "6443:6443"  # Kubernetes API server
+      - "6443:6443"
     healthcheck:
       test: ["CMD", "kubectl", "get", "--raw", "/healthz"]
       interval: 10s
       timeout: 5s
       retries: 5
+
+  init-kubeconfig:
+    image: alpine
+    depends_on:
+      k3s:
+        condition: service_healthy
+    volumes:
+      - /tmp/brokkr-keys:/tmp/brokkr-keys
+    command: >
+      sh -c '
+        apk add --no-cache sed &&
+        export KUBECONFIG=/tmp/brokkr-keys/kubeconfig.yaml &&
+        # Only update the server URL
+        sed -i "s|server: https://127.0.0.1:6443|server: https://brokkr-dev-k3s-1:6443|g" /tmp/brokkr-keys/kubeconfig.yaml
+        sleep 5
+      '
 
 volumes:
   brokkr-postgres-data:
