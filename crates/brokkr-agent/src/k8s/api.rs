@@ -1,3 +1,4 @@
+use backoff::ExponentialBackoffBuilder;
 /// Kubernetes API interaction module for applying, deleting, and querying Kubernetes objects.
 use brokkr_utils::logging::prelude::*;
 use k8s_openapi::api::core::v1::Namespace;
@@ -11,7 +12,81 @@ use kube::discovery::Scope;
 use kube::Api;
 use kube::Client as K8sClient;
 use kube::Discovery;
+use kube::Error as KubeError;
 use kube::ResourceExt;
+use std::time::Duration;
+
+/// Retry configuration for Kubernetes operations
+struct RetryConfig {
+    max_elapsed_time: Duration,
+    initial_interval: Duration,
+    max_interval: Duration,
+    multiplier: f64,
+}
+
+impl Default for RetryConfig {
+    fn default() -> Self {
+        Self {
+            max_elapsed_time: Duration::from_secs(300), // 5 minutes
+            initial_interval: Duration::from_secs(1),
+            max_interval: Duration::from_secs(60),
+            multiplier: 2.0,
+        }
+    }
+}
+
+/// Determines if a Kubernetes error is retryable
+fn is_retryable_error(error: &KubeError) -> bool {
+    match error {
+        KubeError::Api(api_err) => {
+            matches!(api_err.code, 429 | 500 | 503 | 504)
+                || matches!(
+                    api_err.reason.as_str(),
+                    "ServiceUnavailable" | "InternalError" | "Timeout"
+                )
+        }
+        _ => false,
+    }
+}
+
+/// Executes a Kubernetes operation with retries
+async fn with_retries<F, Fut, T>(
+    operation: F,
+    config: RetryConfig,
+) -> Result<T, Box<dyn std::error::Error>>
+where
+    F: Fn() -> Fut,
+    Fut: std::future::Future<Output = Result<T, KubeError>>,
+{
+    let backoff = ExponentialBackoffBuilder::new()
+        .with_initial_interval(config.initial_interval)
+        .with_max_interval(config.max_interval)
+        .with_multiplier(config.multiplier)
+        .with_max_elapsed_time(Some(config.max_elapsed_time))
+        .build();
+
+    let operation_with_backoff = || async {
+        match operation().await {
+            Ok(value) => Ok(value),
+            Err(error) => {
+                if is_retryable_error(&error) {
+                    warn!("Retryable error encountered: {}", error);
+                    Err(backoff::Error::Transient {
+                        err: error,
+                        retry_after: None,
+                    })
+                } else {
+                    error!("Non-retryable error encountered: {}", error);
+                    Err(backoff::Error::Permanent(error))
+                }
+            }
+        }
+    };
+
+    backoff::future::retry(backoff, operation_with_backoff)
+        .await
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
+}
 
 /// Applies a list of Kubernetes objects to the cluster using server-side apply.
 ///
@@ -28,8 +103,6 @@ pub async fn apply_k8s_objects(
     k8s_client: K8sClient,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let patch_params = PatchParams::apply("brokkr-controller");
-
-    // Create discovery client and wait for it to be populated
     let discovery = Discovery::new(k8s_client.clone())
         .run()
         .await
@@ -58,26 +131,41 @@ pub async fn apply_k8s_objects(
             .into());
         };
 
-        let name = k8s_object.name_any();
+        let _name = k8s_object.name_any();
 
         if let Some((ar, caps)) = discovery.resolve_gvk(&gvk) {
             let api = dynamic_api(ar, caps, k8s_client.clone(), Some(namespace), false);
             info!(
-                "Apply {:?}: \n{:?}",
+                "Applying {:?}: \n{:?}",
                 gvk.kind,
-                serde_yaml::to_string(&k8s_object)
+                serde_yaml::to_string(&k8s_object)?
             );
+
             let data = serde_json::to_value(k8s_object)?;
-            match api.patch(&name, &patch_params, &Patch::Apply(data)).await {
-                Ok(_) => {
-                    info!("Apply successful for {:?} '{}'", gvk.kind, name);
-                }
-                Err(e) => {
-                    error!("Apply failed for {:?} '{}': {:?}", gvk.kind, name, e);
-                    // TODO: register failed apply event
-                    return Err(Box::new(e));
-                }
-            }
+            let patch_params = patch_params.clone();
+            let name = k8s_object.name_any();
+            let name_for_error = name.clone(); // Clone for error handling
+
+            with_retries(
+                move || {
+                    let api = api.clone();
+                    let data = data.clone();
+                    let name = name.clone();
+                    let patch_params = patch_params.clone();
+                    async move { api.patch(&name, &patch_params, &Patch::Apply(data)).await }
+                },
+                RetryConfig::default(),
+            )
+            .await
+            .map_err(|e| {
+                error!(
+                    "Apply failed for {:?} '{}': {:?}",
+                    gvk.kind, name_for_error, e
+                );
+                e
+            })?;
+
+            info!("Successfully applied {:?} '{}'", gvk.kind, name_for_error);
         } else {
             error!("Unable to resolve GVK {:?}", gvk);
             return Err("Unable to resolve GVK".into());
@@ -200,20 +288,31 @@ pub async fn delete_k8s_objects(
             )
             .into());
         };
-        let name = k8s_object.name_any();
+        let _name = k8s_object.name_any();
         if let Some((ar, caps)) = discovery.resolve_gvk(&gvk) {
             let api = dynamic_api(ar, caps, k8s_client.clone(), Some(namespace), false);
+            let name = k8s_object.name_any();
+            let name_for_error = name.clone(); // Clone for error handling
             info!("Deleting {:?}: {}", gvk.kind, name);
-            match api.delete(&name, &Default::default()).await {
-                Ok(_) => {
-                    info!("Delete successful for {:?} '{}'", gvk.kind, name);
-                }
-                Err(e) => {
-                    error!("Delete failed for {:?} '{}': {:?}", gvk.kind, name, e);
-                    // TODO: register failed delete event
-                    return Err(Box::new(e));
-                }
-            }
+
+            with_retries(
+                move || {
+                    let api = api.clone();
+                    let name = name.clone();
+                    async move { api.delete(&name, &Default::default()).await }
+                },
+                RetryConfig::default(),
+            )
+            .await
+            .map_err(|e| {
+                error!(
+                    "Delete failed for {:?} '{}': {:?}",
+                    gvk.kind, name_for_error, e
+                );
+                e
+            })?;
+
+            info!("Successfully deleted {:?} '{}'", gvk.kind, name_for_error);
         }
     }
     Ok(())

@@ -50,32 +50,41 @@ pub async fn wait_for_broker_ready(config: &Settings) {
 /// # Returns
 /// * `Result<(), Box<dyn std::error::Error>>` - Success or error with message
 pub async fn verify_agent_pak(config: &Settings) -> Result<(), Box<dyn std::error::Error>> {
-    let client = Client::new();
-    let auth_url = format!("{}/api/v1/auth/pak", config.agent.broker_url);
+    let url = format!("{}/api/v1/auth/pak", config.agent.broker_url);
+    debug!("Verifying agent PAK at {}", url);
 
-    info!("Verifying agent PAK with broker");
-    info!("PAK: {}", config.agent.pak);
-    let response = client
-        .post(&auth_url)
+    let response = reqwest::Client::new()
+        .post(&url)
+        .header("Content-Type", "application/json")
         .header("Authorization", format!("Bearer {}", config.agent.pak))
+        .body("{}") // Empty JSON body
         .send()
-        .await?;
+        .await
+        .map_err(|e| {
+            error!("Failed to send PAK verification request: {}", e);
+            Box::new(e) as Box<dyn std::error::Error>
+        })?;
 
     match response.status() {
         StatusCode::OK => {
-            info!("Agent PAK verified successfully");
+            info!("Successfully verified agent PAK");
             Ok(())
         }
         StatusCode::UNAUTHORIZED => {
-            error!("Agent PAK verification failed: Unauthorized");
-            Err("Unauthorized PAK".into())
+            error!("Agent PAK verification failed: unauthorized");
+            Err("Invalid agent PAK".into())
         }
-        _ => {
+        status => {
+            let error_body = response.text().await.unwrap_or_default();
             error!(
-                "Agent PAK verification failed with status: {}",
-                response.status()
+                "PAK verification failed with status {}: {}",
+                status, error_body
             );
-            Err(format!("PAK verification failed with status: {}", response.status()).into())
+            Err(format!(
+                "PAK verification failed. Status: {}, Body: {}",
+                status, error_body
+            )
+            .into())
         }
     }
 }
@@ -92,27 +101,55 @@ pub async fn fetch_agent_details(
     config: &Settings,
     client: &Client,
 ) -> Result<Agent, Box<dyn std::error::Error>> {
-    info!(
-        "Fetching agent details, name: {}, cluster_name: {}",
-        config.agent.agent_name, config.agent.cluster_name
-    );
-    let agent_url = format!(
-        "{}/api/v1/agents/?name={}&cluster_name={}",
+    let url = format!(
+        "{}/api/v1/agents/by-name/{}?cluster_name={}",
         config.agent.broker_url, config.agent.agent_name, config.agent.cluster_name
     );
+    debug!("Fetching agent details from {}", url);
 
     let response = client
-        .get(&agent_url)
+        .get(&url)
         .header("Authorization", format!("Bearer {}", config.agent.pak))
         .send()
-        .await?;
+        .await
+        .map_err(|e| {
+            error!("Failed to fetch agent details: {}", e);
+            Box::new(e) as Box<dyn std::error::Error>
+        })?;
 
-    if response.status().is_success() {
-        let agent: Agent = response.json().await?;
-        Ok(agent)
-    } else {
-        error!("Failed to fetch agent details: {}", response.status());
-        Err(format!("Failed to fetch agent details: {}", response.status()).into())
+    match response.status() {
+        StatusCode::OK => {
+            let agent: Agent = response.json().await.map_err(|e| {
+                error!("Failed to deserialize agent details: {}", e);
+                Box::new(e) as Box<dyn std::error::Error>
+            })?;
+
+            info!(
+                "Successfully fetched details for agent {} in cluster {}",
+                agent.name, agent.cluster_name
+            );
+
+            Ok(agent)
+        }
+        StatusCode::NOT_FOUND => {
+            error!(
+                "Agent not found: name={}, cluster={}",
+                config.agent.agent_name, config.agent.cluster_name
+            );
+            Err("Agent not found".into())
+        }
+        status => {
+            let error_body = response.text().await.unwrap_or_default();
+            error!(
+                "Failed to fetch agent details. Status {}: {}",
+                status, error_body
+            );
+            Err(format!(
+                "Failed to fetch agent details. Status: {}, Body: {}",
+                status, error_body
+            )
+            .into())
+        }
     }
 }
 
@@ -130,34 +167,50 @@ pub async fn fetch_and_process_deployment_objects(
     client: &Client,
     agent: &Agent,
 ) -> Result<Vec<DeploymentObject>, Box<dyn std::error::Error>> {
-    let applicable_objects_url = format!(
+    let url = format!(
         "{}/api/v1/agents/{}/applicable-deployment-objects",
         config.agent.broker_url, agent.id
     );
 
+    debug!("Fetching deployment objects from {}", url);
+
     let response = client
-        .get(&applicable_objects_url)
+        .get(&url)
         .header("Authorization", format!("Bearer {}", config.agent.pak))
         .send()
-        .await?;
+        .await
+        .map_err(|e| {
+            error!("Failed to send request to broker: {}", e);
+            Box::new(e) as Box<dyn std::error::Error>
+        })?;
 
-    if response.status().is_success() {
-        let deployment_objects: Vec<DeploymentObject> = response.json().await?;
-        info!(
-            "Fetched {} applicable deployment objects",
-            deployment_objects.len()
-        );
-        Ok(deployment_objects)
-    } else {
-        error!(
-            "Failed to fetch applicable deployment objects: {}",
-            response.status()
-        );
-        Err(format!(
-            "Failed to fetch applicable deployment objects: {}",
-            response.status()
-        )
-        .into())
+    match response.status() {
+        StatusCode::OK => {
+            let deployment_objects: Vec<DeploymentObject> = response.json().await.map_err(|e| {
+                error!("Failed to deserialize deployment objects: {}", e);
+                Box::new(e) as Box<dyn std::error::Error>
+            })?;
+
+            info!(
+                "Successfully fetched {} deployment objects for agent {}",
+                deployment_objects.len(),
+                agent.name
+            );
+
+            Ok(deployment_objects)
+        }
+        status => {
+            let error_body = response.text().await.unwrap_or_default();
+            error!(
+                "Broker request failed with status {}: {}",
+                status, error_body
+            );
+            Err(format!(
+                "Broker request failed. Status: {}, Body: {}",
+                status, error_body
+            )
+            .into())
+        }
     }
 }
 
@@ -179,16 +232,55 @@ pub async fn send_success_event(
     deployment_object_id: Uuid,
     message: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    send_event(
-        config,
-        client,
-        agent,
+    let url = format!(
+        "{}/api/v1/agents/{}/events",
+        config.agent.broker_url, agent.id
+    );
+    debug!(
+        "Sending success event for deployment {} to {}",
+        deployment_object_id, url
+    );
+
+    let event = NewAgentEvent {
+        agent_id: agent.id,
         deployment_object_id,
-        "DEPLOY",
-        "SUCCESS",
+        event_type: "DEPLOY".to_string(),
+        status: "SUCCESS".to_string(),
         message,
-    )
-    .await
+    };
+
+    let response = client
+        .post(&url)
+        .header("Authorization", format!("Bearer {}", config.agent.pak))
+        .json(&event)
+        .send()
+        .await
+        .map_err(|e| {
+            error!("Failed to send success event: {}", e);
+            Box::new(e) as Box<dyn std::error::Error>
+        })?;
+
+    match response.status() {
+        StatusCode::OK | StatusCode::CREATED => {
+            info!(
+                "Successfully reported deployment success for object {}",
+                deployment_object_id
+            );
+            Ok(())
+        }
+        status => {
+            let error_body = response.text().await.unwrap_or_default();
+            error!(
+                "Failed to send success event. Status {}: {}",
+                status, error_body
+            );
+            Err(format!(
+                "Failed to send success event. Status: {}, Body: {}",
+                status, error_body
+            )
+            .into())
+        }
+    }
 }
 
 /// Sends a failure event to the broker for the given deployment object.
@@ -209,72 +301,58 @@ pub async fn send_failure_event(
     deployment_object_id: Uuid,
     error_message: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    send_event(
-        config,
-        client,
-        agent,
-        deployment_object_id,
-        "DEPLOY",
-        "FAILURE",
-        Some(error_message),
-    )
-    .await
-}
-
-async fn send_event(
-    config: &Settings,
-    client: &Client,
-    agent: &Agent,
-    deployment_object_id: Uuid,
-    event_type: &str,
-    status: &str,
-    message: Option<String>,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let event_url = format!(
+    let url = format!(
         "{}/api/v1/agents/{}/events",
         config.agent.broker_url, agent.id
     );
+    debug!(
+        "Sending failure event for deployment {} to {}",
+        deployment_object_id, url
+    );
 
-    let new_event = NewAgentEvent::new(
-        agent.id,
+    let event = NewAgentEvent {
+        agent_id: agent.id,
         deployment_object_id,
-        event_type.to_string(),
-        status.to_string(),
-        message,
-    )?;
+        event_type: "DEPLOY".to_string(),
+        status: "FAILURE".to_string(),
+        message: Some(error_message),
+    };
 
-    for attempt in 1..=config.agent.max_event_message_retries {
-        let response = client
-            .post(&event_url)
-            .header("Authorization", format!("Bearer {}", config.agent.pak))
-            .json(&new_event)
-            .send()
-            .await?;
-
-        if response.status().is_success() {
-            info!(
-                "Successfully sent {} event for deployment object {}",
-                status, deployment_object_id
-            );
-            return Ok(());
-        } else {
+    let response = client
+        .post(&url)
+        .header("Authorization", format!("Bearer {}", config.agent.pak))
+        .json(&event)
+        .send()
+        .await
+        .map_err(|e| {
             error!(
-                "Failed to send {} event (attempt {}): {}",
-                status,
-                attempt,
-                response.status()
+                "Failed to send failure event for deployment {}: {}",
+                deployment_object_id, e
             );
-            if attempt < config.agent.max_event_message_retries {
-                sleep(Duration::from_secs(config.agent.event_message_retry_delay)).await;
-            }
+            Box::new(e) as Box<dyn std::error::Error>
+        })?;
+
+    match response.status() {
+        StatusCode::OK | StatusCode::CREATED => {
+            info!(
+                "Successfully reported deployment failure for object {}",
+                deployment_object_id
+            );
+            Ok(())
+        }
+        status => {
+            let error_body = response.text().await.unwrap_or_default();
+            error!(
+                "Failed to send failure event. Status {}: {}",
+                status, error_body
+            );
+            Err(format!(
+                "Failed to send failure event. Status: {}, Body: {}",
+                status, error_body
+            )
+            .into())
         }
     }
-
-    Err(format!(
-        "Failed to send {} event after {} attempts",
-        status, config.agent.max_event_message_retries
-    )
-    .into())
 }
 
 /// Sends a heartbeat event to the broker for the given agent.
@@ -291,26 +369,37 @@ pub async fn send_heartbeat(
     client: &Client,
     agent: &Agent,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let heartbeat_url = format!(
+    let url = format!(
         "{}/api/v1/agents/{}/heartbeat",
         config.agent.broker_url, agent.id
     );
 
     let response = client
-        .post(&heartbeat_url)
+        .post(&url)
         .header("Authorization", format!("Bearer {}", config.agent.pak))
         .send()
-        .await?;
+        .await
+        .map_err(|e| {
+            error!("Failed to send heartbeat for agent {}: {}", agent.name, e);
+            Box::new(e) as Box<dyn std::error::Error>
+        })?;
 
-    if response.status().is_success() {
-        info!("Successfully sent heartbeat for agent: {}", agent.id);
-        Ok(())
-    } else {
-        error!(
-            "Failed to send heartbeat for agent: {}. Status: {}",
-            agent.id,
-            response.status()
-        );
-        Err(format!("Failed to send heartbeat. Status: {}", response.status()).into())
+    match response.status() {
+        StatusCode::OK | StatusCode::NO_CONTENT => {
+            trace!("Heartbeat sent successfully for agent {}", agent.name);
+            Ok(())
+        }
+        StatusCode::UNAUTHORIZED => {
+            error!("Heartbeat unauthorized for agent {}", agent.name);
+            Err("Unauthorized: Invalid agent PAK".into())
+        }
+        status => {
+            let error_body = response.text().await.unwrap_or_default();
+            error!(
+                "Heartbeat failed for agent {}. Status {}: {}",
+                agent.name, status, error_body
+            );
+            Err(format!("Heartbeat failed. Status: {}, Body: {}", status, error_body).into())
+        }
     }
 }
