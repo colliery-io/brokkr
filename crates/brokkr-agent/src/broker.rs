@@ -102,7 +102,7 @@ pub async fn fetch_agent_details(
     client: &Client,
 ) -> Result<Agent, Box<dyn std::error::Error>> {
     let url = format!(
-        "{}/api/v1/agents/by-name/{}?cluster_name={}",
+        "{}/api/v1/agents/?name={}&cluster_name={}",
         config.agent.broker_url, config.agent.agent_name, config.agent.cluster_name
     );
     debug!("Fetching agent details from {}", url);

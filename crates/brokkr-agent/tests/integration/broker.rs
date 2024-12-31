@@ -47,12 +47,20 @@ async fn test_fetch_agent_details() {
 
     let result =
         broker::fetch_agent_details(&fixture_guard.agent_settings, &fixture_guard.client).await;
+
+    match &result {
+        Ok(agent) => println!("Successfully fetched agent: {:?}", agent),
+        Err(e) => println!("Error fetching agent details: {:?}", e),
+    }
+
     assert!(
         result.is_ok(),
         "Agent details should be fetched successfully"
     );
     let agent = result.unwrap();
+
     assert_eq!(agent.name, fixture_guard.agent_settings.agent.agent_name);
+
     assert_eq!(
         agent.cluster_name,
         fixture_guard.agent_settings.agent.cluster_name
@@ -210,18 +218,26 @@ async fn test_send_heartbeat() {
     )
     .await;
 
+    match &result {
+        Ok(_) => println!("Successfully sent heartbeat"),
+        Err(e) => println!("Error sending heartbeat: {:?}", e),
+    }
     assert!(result.is_ok(), "Failed to send heartbeat");
 
-    // Verify that the heartbeat was recorded by fetching the agent details
     let agent_details =
-        broker::fetch_agent_details(&fixture_guard.agent_settings, &fixture_guard.client)
-            .await
-            .expect("Failed to fetch agent details");
+        broker::fetch_agent_details(&fixture_guard.agent_settings, &fixture_guard.client).await;
+
+    match &agent_details {
+        Ok(details) => println!("Successfully fetched agent details: {:?}", details),
+        Err(e) => println!("Error fetching agent details: {:?}", e),
+    }
+    let agent_details = agent_details.expect("Failed to fetch agent details");
 
     assert!(
         agent_details.last_heartbeat.is_some(),
         "Last heartbeat should be set"
     );
+
     assert!(
         agent_details.last_heartbeat.unwrap() > fixture_guard.agent.as_ref().unwrap().created_at,
         "Last heartbeat should be after agent creation time"
