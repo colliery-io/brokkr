@@ -49,4 +49,4 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-rust-build-
       - name: Run integration tests
-        run: angreal tests integration
+        run: angreal tests integration all

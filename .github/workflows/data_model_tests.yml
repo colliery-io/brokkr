@@ -47,9 +47,9 @@ jobs:
           key: ${{ runner.os }}-rust-build-${{ github.sha }}
           restore-keys: |
             ${{ runner.os }}-rust-build-
-      - name: Run data model tests
+      - name: Run data models test
         run: angreal models test
         working-directory: ${{ inputs.data-model-path }}
       - name: Run migration tests
-        run: angreal tests migrations
+        run: angreal models migrations
         working-directory: ${{ inputs.data-model-path }}

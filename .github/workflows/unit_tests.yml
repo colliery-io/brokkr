@@ -32,4 +32,4 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-rust-build-
       - name: Run unit tests
-        run: angreal tests unit
+        run: angreal tests unit all
