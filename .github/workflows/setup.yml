@@ -16,12 +16,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pip-
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: 3.x
-          cache: 'pip'
-
       - name: Install angreal
         if: steps.python-cache.outputs.cache-hit != 'true'
         run: |
