@@ -48,6 +48,7 @@ CRATES = get_crates()
 def unit_tests(crate_name: str, test_filter: str = ""):
     """Run unit tests for a specific crate."""
     return_codes = []
+    rc = None
     if crate_name == "all":
         for crate in CRATES:
             return_code = run_unit_tests(crate, test_filter)
@@ -74,6 +75,7 @@ def integration_tests(crate_name: str, test_filter: str = "", skip_docker: bool 
     print("Waiting for applications to come up and be stable, this may take a while...grab a coffee!")
     time.sleep(180)
 
+    rc = None
     return_codes = []
     try:
         if crate_name == "all":
