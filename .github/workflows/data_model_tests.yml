@@ -48,8 +48,8 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-rust-build-${{ github.sha }}
       - name: Run data models test
-        run: angreal models --no-docker test
+        run: angreal models test --skip-docker
         working-directory: ${{ inputs.data-model-path }}
       - name: Run migration tests
-        run: angreal models --skip-docker migrations
+        run: angreal models  migrations --skip-docker
         working-directory: ${{ inputs.data-model-path }}
