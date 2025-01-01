@@ -1,9 +1,7 @@
 import angreal # type: ignore
 import subprocess
-import os
 from utils import docker_up,docker_down,cwd, docker_clean
 import time
-import glob
 test = angreal.command_group(name="tests", about="commands for test suites")
 
 
@@ -11,8 +9,10 @@ test = angreal.command_group(name="tests", about="commands for test suites")
 
 def get_crates():
     """Get all crates in the workspace."""
-    crates_path = os.path.join(cwd, "crates", "*")
-    return [os.path.basename(p) for p in glob.glob(crates_path) if os.path.isdir(p)]
+    return {
+        "integration_tests": ["brokkr-agent", "brokkr-broker"],
+        "unit_tests": ["brokkr-agent", "brokkr-broker", "brokkr-models", "brokkr-utils"]
+    }
 
 def run_unit_tests(crate_name: str = "", test_filter: str = ""):
     """Run unit tests for a specific crate or all crates."""
@@ -44,13 +44,13 @@ CRATES = get_crates()
 @test()
 @angreal.command(name="unit", about="run unit tests for a specific crate")
 @angreal.argument(name="test_filter", required=False, help="Filter for specific tests or modules")
-@angreal.argument(name="crate_name", required=True, help= f"Name of the crate to test ({CRATES + ['all']})")
+@angreal.argument(name="crate_name", required=True, help= f"Name of the crate to test ({CRATES['unit_tests'] + ['all']})")
 def unit_tests(crate_name: str, test_filter: str = ""):
     """Run unit tests for a specific crate."""
     return_codes = []
     rc = None
     if crate_name == "all":
-        for crate in CRATES:
+        for crate in CRATES["unit_tests"]:
             return_code = run_unit_tests(crate, test_filter)
             return_codes.append((crate,return_code))
         if any(code != 0 for _, code in return_codes):
@@ -66,20 +66,20 @@ def unit_tests(crate_name: str, test_filter: str = ""):
 @angreal.command(name="integration", about="run integration tests for a specific crate")
 @angreal.argument(name="skip_docker", long="skip-docker", required=False, help="Skip docker compose up", takes_value=False, is_flag=True)
 @angreal.argument(name="test_filter", required=False, help="Filter for specific tests or modules")
-@angreal.argument(name="crate_name", required=True, help= f"Name of the crate to test ({CRATES + ['all']})")
+@angreal.argument(name="crate_name", required=True, help= f"Name of the crate to test ({CRATES['integration_tests'] + ['all']})")
 def integration_tests(crate_name: str, test_filter: str = "", skip_docker: bool = False):
     """Run integration tests for a specific crate."""
     if not skip_docker:
         docker_clean()
         docker_up()
-    print("Waiting for applications to come up and be stable, this may take a while...grab a coffee!")
-    time.sleep(180)
+        print("Waiting for applications to come up and be stable, this may take a while...grab a coffee!")
+        time.sleep(180)
 
     rc = None
     return_codes = []
     try:
         if crate_name == "all":
-            for crate in CRATES:
+            for crate in CRATES["integration_tests"]:
                 return_code = run_integration_tests(crate, test_filter)
                 return_codes.append((crate,return_code))
             if any(code != 0 for _, code in return_codes):

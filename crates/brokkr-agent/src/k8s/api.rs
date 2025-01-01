@@ -31,6 +31,7 @@
 //! 2. CustomResourceDefinitions
 //! 3. Other resources
 
+use crate::k8s::objects::verify_object_ownership;
 use backoff::ExponentialBackoffBuilder;
 use brokkr_utils::logging::prelude::*;
 use k8s_openapi::api::core::v1::Namespace;
@@ -47,6 +48,7 @@ use kube::Discovery;
 use kube::Error as KubeError;
 use kube::ResourceExt;
 use std::time::Duration;
+use uuid::Uuid;
 
 /// Retry configuration for Kubernetes operations
 struct RetryConfig {
@@ -292,6 +294,7 @@ pub async fn get_all_objects_by_annotation(
 pub async fn delete_k8s_objects(
     k8s_objects: &[DynamicObject],
     k8s_client: K8sClient,
+    agent_id: &Uuid,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let discovery = Discovery::new(k8s_client.clone())
         .run()
@@ -299,6 +302,20 @@ pub async fn delete_k8s_objects(
         .expect("Failed to create discovery client");
 
     for k8s_object in k8s_objects {
+        // Verify ownership before attempting deletion
+        if !verify_object_ownership(k8s_object, agent_id) {
+            error!(
+                "Cannot delete object '{}' as it is not owned by agent {}",
+                k8s_object.name_any(),
+                agent_id
+            );
+            return Err(format!(
+                "Cannot delete object '{}' as it is not owned by this agent",
+                k8s_object.name_any()
+            )
+            .into());
+        }
+
         info!("Processing k8s object for deletion: {:?}", k8s_object);
         let default_namespace = &"default".to_string();
         let namespace = k8s_object

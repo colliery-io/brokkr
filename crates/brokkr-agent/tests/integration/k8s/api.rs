@@ -6,71 +6,68 @@ use k8s_openapi::api::core::v1::Namespace;
 use kube::api::{DynamicObject, GroupVersionKind, Patch, PatchParams};
 use kube::{Api, Client as K8sClient, Discovery};
 use std::sync::Once;
+use uuid::Uuid;
 
 static INIT: Once = Once::new();
 
-fn create_namespace_json(name: &str) -> serde_json::Value {
+fn create_namespace_json(name: &str, agent_id: &Uuid) -> serde_json::Value {
     serde_json::json!({
         "apiVersion": "v1",
         "kind": "Namespace",
         "metadata": {
-            "name": name
-        }
-    })
-}
-
-fn create_busybox_deployment_json(name: &str, namespace: &str) -> serde_json::Value {
-    serde_json::json!({
-        "apiVersion": "apps/v1",
-        "kind": "Deployment",
-        "metadata": {
             "name": name,
-            "namespace": namespace
-        },
-        "spec": {
-            "replicas": 1,
-            "selector": {
-                "matchLabels": {
-                    "app": "busybox"
-                }
-            },
-            "template": {
-                "metadata": {
-                    "labels": {
-                        "app": "busybox"
-                    }
-                },
-                "spec": {
-                    "containers": [
-                        {
-                            "name": "busybox",
-                            "image": "busybox:latest",
-                            "command": ["sleep", "infinity"],
-                            "ports": [
-                                {
-                                    "containerPort": 8080
-                                }
-                            ]
-                        }
-                    ]
-                }
+            "annotations": {
+                "brokkr.io/owner-id": agent_id.to_string()
             }
         }
     })
 }
 
-/// Sets up a test environment with a Kubernetes client and Discovery
-///
-/// # Returns
-/// A tuple containing:
-/// * K8sClient - Configured Kubernetes client
-/// * Discovery - Discovery instance for API resource information
-///
-/// # Panics
-/// Panics if unable to create the client or discovery instance
+fn create_busybox_deployment_json(
+    name: &str,
+    namespace: &str,
+    agent_id: &Uuid,
+) -> serde_json::Value {
+    let deployment = serde_json::json!({
+        "apiVersion": "apps/v1",
+        "kind": "Deployment",
+        "metadata": {
+            "name": name,
+            "namespace": namespace,
+            "annotations": {
+                "brokkr.io/owner-id": agent_id.to_string()
+            }
+        },
+        "spec": {
+            "replicas": 1,
+            "selector": {
+                "matchLabels": {
+                    "app": name
+                }
+            },
+            "template": {
+                "metadata": {
+                    "labels": {
+                        "app": name
+                    }
+                },
+                "spec": {
+                    "containers": [{
+                        "name": name,
+                        "image": "busybox",
+                        "command": ["sleep", "3600"]
+                    }]
+                }
+            }
+        }
+    });
+
+    deployment
+}
+
 async fn setup() -> (K8sClient, Discovery) {
     // Initialize k8s client using the kubeconfig from the k3s container
-    let client = create_k8s_client(Some("/tmp/brokkr-keys/kubeconfig.local.yaml"))
+    let client = create_k8s_client(Some("/tmp/brokkr-keys/kubeconfig.yaml"))
         .await
         .unwrap();
 
@@ -91,14 +88,6 @@ async fn setup() -> (K8sClient, Discovery) {
     (client, discovery)
 }
 
-/// Cleans up test resources in the specified namespace
-///
-/// # Arguments
-/// * `client` - Kubernetes client to use for cleanup
-/// * `namespace` - Namespace containing resources to clean up
-///
-/// # Panics
-/// Panics if cleanup operations fail
 async fn cleanup(client: &K8sClient, namespace: &str) {
     // Delete test namespace if it exists
     let ns_api = Api::<Namespace>::all(client.clone());
@@ -108,13 +97,13 @@ async fn cleanup(client: &K8sClient, namespace: &str) {
 #[tokio::test]
 async fn test_k8s_setup_and_cleanup() {
     let test_namespace = "test-setup-cleanup";
-
+    let agent_id = Uuid::new_v4();
     // Test setup
     let (client, _discovery) = setup().await;
 
     // Create a test namespace using patch
     let ns_api = Api::<Namespace>::all(client.clone());
-    let namespace = create_namespace_json(test_namespace);
+    let namespace = create_namespace_json(test_namespace, &agent_id);
     let ns: DynamicObject = serde_json::from_value(namespace).unwrap();
 
     let patch_params = PatchParams::apply("test-controller");
@@ -166,10 +155,11 @@ async fn test_k8s_setup_and_cleanup() {
 async fn test_apply_k8s_objects() {
     let test_namespace = "test-apply-k8sobjects";
     let (client, _discovery) = setup().await;
+    let agent_id = Uuid::new_v4();
 
     // Create test namespace
     let ns_api = Api::<Namespace>::all(client.clone());
-    let namespace = create_namespace_json(test_namespace);
+    let namespace = create_namespace_json(test_namespace, &agent_id);
     let ns: DynamicObject = serde_json::from_value(namespace).unwrap();
 
     let patch_params = PatchParams::apply("test-controller");
@@ -186,6 +176,7 @@ async fn test_apply_k8s_objects() {
     let k8s_object: DynamicObject = serde_json::from_value(create_busybox_deployment_json(
         "test-deployment",
         test_namespace,
+        &agent_id,
     ))
     .unwrap();
 
@@ -236,13 +227,13 @@ async fn test_apply_k8s_objects() {
 #[tokio::test]
 async fn test_reapply_k8s_objects() {
     let test_namespace = "test-reapply-k8sobjects";
-
+    let agent_id = Uuid::new_v4();
     // Test setup
     let (client, _discovery) = setup().await;
 
     // Create a test namespace using patch
     let ns_api = Api::<Namespace>::all(client.clone());
-    let namespace = create_namespace_json(test_namespace);
+    let namespace = create_namespace_json(test_namespace, &agent_id);
     let ns: DynamicObject = serde_json::from_value(namespace).unwrap();
 
     let patch_params = PatchParams::apply("test-controller");
@@ -259,6 +250,7 @@ async fn test_reapply_k8s_objects() {
     let k8s_object: DynamicObject = serde_json::from_value(create_busybox_deployment_json(
         "test-deployment",
         test_namespace,
+        &agent_id,
     ))
     .unwrap();
 
@@ -343,13 +335,13 @@ async fn test_reapply_k8s_objects() {
 #[tokio::test]
 async fn test_delete_k8s_object_success() {
     let test_namespace = "test-delete-k8sobjects";
-
+    let agent_id = Uuid::new_v4();
     // Test setup
     let (client, _discovery) = setup().await;
 
     // Create a test namespace using patch
     let ns_api = Api::<Namespace>::all(client.clone());
-    let namespace = create_namespace_json(test_namespace);
+    let namespace = create_namespace_json(test_namespace, &agent_id);
     let ns: DynamicObject = serde_json::from_value(namespace).unwrap();
 
     let patch_params = PatchParams::apply("test-controller");
@@ -366,6 +358,7 @@ async fn test_delete_k8s_object_success() {
     let k8s_object: DynamicObject = serde_json::from_value(create_busybox_deployment_json(
         "test-deployment",
         test_namespace,
+        &agent_id,
     ))
     .unwrap();
 
@@ -383,7 +376,7 @@ async fn test_delete_k8s_object_success() {
     tokio::time::sleep(std::time::Duration::from_secs(5)).await;
 
     // Delete the deployment
-    let result = delete_k8s_objects(&objects, client.clone()).await;
+    let result = delete_k8s_objects(&objects, client.clone(), &agent_id).await;
     assert!(
         result.is_ok(),
         "Failed to delete k8s object: {:?}",
@@ -414,13 +407,13 @@ async fn test_delete_k8s_object_success() {
 #[tokio::test]
 async fn test_delete_k8s_object_not_found() {
     let test_namespace = "test-delete-nonexistent";
-
+    let agent_id = Uuid::new_v4();
     // Test setup
     let (client, _discovery) = setup().await;
 
     // Create a test namespace using patch
     let ns_api = Api::<Namespace>::all(client.clone());
-    let namespace = create_namespace_json(test_namespace);
+    let namespace = create_namespace_json(test_namespace, &agent_id);
     let ns: DynamicObject = serde_json::from_value(namespace).unwrap();
 
     let patch_params = PatchParams::apply("test-controller");
@@ -437,13 +430,14 @@ async fn test_delete_k8s_object_not_found() {
     let k8s_object: DynamicObject = serde_json::from_value(create_busybox_deployment_json(
         "nonexistent-deployment",
         test_namespace,
+        &agent_id,
     ))
     .unwrap();
 
     let objects = vec![k8s_object];
 
     // Try to delete the non-existent deployment
-    let result = delete_k8s_objects(&objects, client.clone()).await;
+    let result = delete_k8s_objects(&objects, client.clone(), &agent_id).await;
     assert!(
         result.is_err(),
         "Expected error when deleting non-existent object"
@@ -456,13 +450,13 @@ async fn test_delete_k8s_object_not_found() {
 #[tokio::test]
 async fn test_get_objects_by_annotation_found() {
     let test_namespace = "test-get-objects-annotation";
-
+    let agent_id = Uuid::new_v4();
     // Test setup
     let (client, _discovery) = setup().await;
 
     // Create test namespace
     let ns_api = Api::<Namespace>::all(client.clone());
-    let namespace = create_namespace_json(test_namespace);
+    let namespace = create_namespace_json(test_namespace, &agent_id);
     let ns: DynamicObject = serde_json::from_value(namespace).unwrap();
 
     let patch_params = PatchParams::apply("test-controller");
@@ -479,6 +473,7 @@ async fn test_get_objects_by_annotation_found() {
     let mut k8s_object: DynamicObject = serde_json::from_value(create_busybox_deployment_json(
         "test-deployment-1",
         test_namespace,
+        &agent_id,
     ))
     .unwrap();
 
@@ -507,13 +502,13 @@ async fn test_get_objects_by_annotation_found() {
 #[tokio::test]
 async fn test_get_objects_by_annotation_not_found() {
     let test_namespace = "test-get-objects-no-annotation";
-
+    let agent_id = Uuid::new_v4();
     // Test setup
     let (client, _discovery) = setup().await;
 
     // Create test namespace
     let ns_api = Api::<Namespace>::all(client.clone());
-    let namespace = create_namespace_json(test_namespace);
+    let namespace = create_namespace_json(test_namespace, &agent_id);
     let ns: DynamicObject = serde_json::from_value(namespace).unwrap();
 
     let patch_params = PatchParams::apply("test-controller");
@@ -530,6 +525,7 @@ async fn test_get_objects_by_annotation_not_found() {
     let k8s_object: DynamicObject = serde_json::from_value(create_busybox_deployment_json(
         "test-deployment",
         test_namespace,
+        &agent_id,
     ))
     .unwrap();
 
@@ -555,11 +551,13 @@ async fn test_get_objects_by_annotation_not_found() {
 #[tokio::test]
 async fn test_validate_k8s_objects_valid() {
     let test_namespace = "test-validate-k8sobjects";
+    let agent_id = Uuid::new_v4();
+    // Test setup
     let (client, _discovery) = setup().await;
 
     // Create test namespace
     let ns_api = Api::<Namespace>::all(client.clone());
-    let namespace = create_namespace_json(test_namespace);
+    let namespace = create_namespace_json(test_namespace, &agent_id);
     let ns: DynamicObject = serde_json::from_value(namespace).unwrap();
 
     let patch_params = PatchParams::apply("test-controller");
@@ -576,6 +574,7 @@ async fn test_validate_k8s_objects_valid() {
     let valid_object: DynamicObject = serde_json::from_value(create_busybox_deployment_json(
         "test-deployment",
         test_namespace,
+        &agent_id,
     ))
     .unwrap();
 
@@ -589,11 +588,13 @@ async fn test_validate_k8s_objects_valid() {
 #[tokio::test]
 async fn test_validate_k8s_objects_invalid() {
     let test_namespace = "test-validate-invalid-k8sobjects";
+    let agent_id = Uuid::new_v4();
+    // Test setup
     let (client, _discovery) = setup().await;
 
     // Create test namespace
     let ns_api = Api::<Namespace>::all(client.clone());
-    let namespace = create_namespace_json(test_namespace);
+    let namespace = create_namespace_json(test_namespace, &agent_id);
     let ns: DynamicObject = serde_json::from_value(namespace).unwrap();
 
     let patch_params = PatchParams::apply("test-controller");
@@ -651,11 +652,13 @@ async fn test_validate_k8s_objects_invalid() {
 #[tokio::test]
 async fn test_apply_k8s_objects_with_rollback() {
     let test_namespace = "test-apply-rollback";
+    let agent_id = Uuid::new_v4();
+    // Test setup
     let (client, _discovery) = setup().await;
 
     // Create test namespace
     let ns_api = Api::<Namespace>::all(client.clone());
-    let namespace = create_namespace_json(test_namespace);
+    let namespace = create_namespace_json(test_namespace, &agent_id);
     let ns: DynamicObject = serde_json::from_value(namespace).unwrap();
 
     let patch_params = PatchParams::apply("test-controller");
@@ -670,7 +673,7 @@ async fn test_apply_k8s_objects_with_rollback() {
 
     // Create initial valid deployment with a specific replica count
     let mut initial_deployment: DynamicObject = serde_json::from_value(
-        create_busybox_deployment_json("test-deployment", test_namespace),
+        create_busybox_deployment_json("test-deployment", test_namespace, &agent_id),
     )
     .unwrap();
 

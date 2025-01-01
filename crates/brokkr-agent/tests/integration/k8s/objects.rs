@@ -27,7 +27,7 @@ metadata:
         submitted_at: Utc::now(),
     };
 
-    let result = objects::create_k8s_objects(deployment_object);
+    let result = objects::create_k8s_objects(deployment_object, Uuid::new_v4());
     assert!(result.is_ok());
 
     let k8s_objects = result.unwrap();
@@ -82,7 +82,7 @@ spec:
         submitted_at: Utc::now(),
     };
 
-    let result = objects::create_k8s_objects(deployment_object);
+    let result = objects::create_k8s_objects(deployment_object, Uuid::new_v4());
     assert!(result.is_ok());
 
     let k8s_objects = result.unwrap();
@@ -138,7 +138,7 @@ metadata:
         submitted_at: Utc::now(),
     };
 
-    let result = objects::create_k8s_objects(deployment_object);
+    let result = objects::create_k8s_objects(deployment_object, Uuid::new_v4());
     assert!(result.is_ok());
 
     let k8s_objects = result.unwrap();
@@ -175,7 +175,7 @@ invalid: [
         submitted_at: Utc::now(),
     };
 
-    let result = objects::create_k8s_objects(deployment_object);
+    let result = objects::create_k8s_objects(deployment_object, Uuid::new_v4());
     assert!(result.is_err());
 }
 
@@ -194,7 +194,7 @@ fn test_create_k8s_objects_empty_yaml() {
         submitted_at: Utc::now(),
     };
 
-    let result = objects::create_k8s_objects(deployment_object);
+    let result = objects::create_k8s_objects(deployment_object, Uuid::new_v4());
     assert!(result.is_ok());
     assert_eq!(result.unwrap().len(), 0);
 }
@@ -236,7 +236,7 @@ metadata:
         submitted_at: Utc::now(),
     };
 
-    let result = objects::create_k8s_objects(deployment_object);
+    let result = objects::create_k8s_objects(deployment_object, Uuid::new_v4());
     assert!(result.is_ok());
 
     let k8s_objects = result.unwrap();
