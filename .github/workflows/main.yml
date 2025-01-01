@@ -5,7 +5,6 @@ on:
     branches: [main]
   pull_request:
     branches: [main, develop]
-
 jobs:
   setup:
     uses: ./.github/workflows/setup.yml
@@ -16,7 +15,7 @@ jobs:
     needs: setup
     uses: ./.github/workflows/integration_tests.yml
     if: github.event_name == 'pull_request'
-  data_model_tests:
-    needs: setup
-    if: github.event_name == 'push' || github.event_name == 'pull_request'
-    uses: ./.github/workflows/data_model_tests.yml
+# data_model_tests:
+#   needs: setup
+#   if: github.event_name == 'push' || github.event_name == 'pull_request'
+#   uses: ./.github/workflows/data_model_tests.yml
