@@ -36,7 +36,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pip-
 
-
       - name: Install angreal
         if: steps.python-cache.outputs.cache-hit != 'true'
         run: |
@@ -44,6 +43,7 @@ jobs:
           pip install angreal
 
       - name: Rust Cache
+        id: cargo-cache
         uses: actions/cache@v3
         with:
           path: |
@@ -61,6 +61,11 @@ jobs:
           profile: minimal
           toolchain: stable
           override: true
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpq-dev
 
       - name: Install Diesel CLI
         if: steps.cargo-cache.outputs.cache-hit != 'true'
