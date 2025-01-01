@@ -66,6 +66,40 @@ pub struct Settings {
     pub log: Log,
     /// PAK configuration
     pub pak: PAK,
+    /// Agent configuration
+    pub agent: Agent,
+    /// Broker configuration
+    pub broker: Broker,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct Broker {
+    /// PAK Hash
+    pub pak_hash: Option<String>,
+}
+
+/// Represents the agent configuration
+#[derive(Debug, Deserialize, Clone)]
+#[allow(unused)]
+pub struct Agent {
+    /// Broker URL
+    pub broker_url: String,
+    /// Polling interval in seconds
+    pub polling_interval: u64,
+    /// Kubeconfig path
+    pub kubeconfig_path: Option<String>,
+    /// Max number of retries
+    pub max_retries: u32,
+    /// PAK
+    pub pak: String,
+    /// Agent name
+    pub agent_name: String,
+    /// Cluster name
+    pub cluster_name: String,
+    /// Max number of retries for event messages
+    pub max_event_message_retries: usize,
+    /// Delay between event message retries in seconds
+    pub event_message_retry_delay: u64,
 }
 
 /// Represents the database configuration

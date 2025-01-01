@@ -438,7 +438,7 @@ impl<'a> AgentsDAL<'a> {
             .get_result(conn)
     }
 
-        /// Retrieves an agent by its name and cluster name.
+    /// Retrieves an agent by its name and cluster name.
     ///
     /// # Arguments
     ///
@@ -459,12 +459,7 @@ impl<'a> AgentsDAL<'a> {
             .filter(agents::name.eq(&name))
             .filter(agents::cluster_name.eq(&cluster_name))
             .filter(agents::deleted_at.is_null());
-    
-        
-    
-        let result = query.first(conn).optional();
-        
-    
-        result
+
+        query.first(conn).optional()
     }
 }

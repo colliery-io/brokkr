@@ -9,7 +9,7 @@ DOCKER_COMPOSE_FILE = os.path.join(angreal.get_root(),'files','docker-compose.ya
 
 
 def docker_up():
-    subprocess.run(f"docker compose -f {DOCKER_COMPOSE_FILE} up -d --wait"
+    subprocess.run(f"docker compose  -f {DOCKER_COMPOSE_FILE} up --build -d --wait"
                     , cwd=cwd, shell=True)
 
 def docker_down():
@@ -18,5 +18,5 @@ def docker_down():
 
 
 def docker_clean():
-    subprocess.run(["docker volume rm brokkr-dev_brokkr-postgres-data"]
+    subprocess.run(["docker volume rm brokkr-dev_brokkr-postgres-data brokkr-dev_k3s-data"]
                     , cwd=cwd, shell=True)

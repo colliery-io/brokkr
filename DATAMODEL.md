@@ -200,7 +200,7 @@ The data model supports a system where:
    - **Event:** `AFTER UPDATE OF deleted_at`
    - **Function:** `handle_stack_soft_delete()`
    - **Description:** Soft deletes all associated deployment objects and inserts a deletion marker.
-   - **Code Reference:** 
+   - **Code Reference:**
      ```sql:crates/brokkr-models/migrations/03_stacks/up.sql
      startLine: 27
      endLine: 52
@@ -211,7 +211,7 @@ The data model supports a system where:
    - **Event:** `BEFORE DELETE`
    - **Function:** `handle_stack_hard_delete()`
    - **Description:** Deletes all associated agent targets, agent events, and deployment objects.
-   - **Code Reference:** 
+   - **Code Reference:**
      ```sql:crates/brokkr-models/migrations/03_stacks/up.sql
      startLine: 55
      endLine: 84
@@ -230,7 +230,7 @@ The data model supports a system where:
    - **Event:** `BEFORE UPDATE`
    - **Function:** `prevent_deployment_object_changes()`
    - **Description:** Prevents changes to deployment objects except for soft deletion or updating deletion markers.
-   - **Code Reference:** 
+   - **Code Reference:**
      ```sql:crates/brokkr-models/migrations/04_deployment_objects/up.sql
      startLine: 27
      endLine: 50
@@ -241,7 +241,7 @@ The data model supports a system where:
    - **Event:** `BEFORE DELETE ON stacks`
    - **Function:** `hard_delete_deployment_objects_on_stack_delete()`
    - **Description:** Deletes all associated agent events and deployment objects.
-   - **Code Reference:** 
+   - **Code Reference:**
      ```sql:crates/brokkr-models/migrations/04_deployment_objects/up.sql
      startLine: 57
      endLine: 82
@@ -260,7 +260,7 @@ The data model supports a system where:
    - **Event:** `AFTER UPDATE`
    - **Function:** `cascade_soft_delete_generators()`
    - **Description:** Soft deletes all associated stacks and deployment objects.
-   - **Code Reference:** 
+   - **Code Reference:**
      ```sql:crates/brokkr-models/migrations/02_generators/up.sql
      startLine: 24
      endLine: 45
@@ -271,7 +271,7 @@ The data model supports a system where:
    - **Event:** `BEFORE DELETE`
    - **Function:** `handle_generator_hard_delete()`
    - **Description:** Handles hard deletion of generators.
-   - **Code Reference:** 
+   - **Code Reference:**
      ```sql:crates/brokkr-models/migrations/02_generators/up.sql
      startLine: 48
      endLine: 67
@@ -290,7 +290,7 @@ The data model supports a system where:
    - **Event:** `AFTER UPDATE`
    - **Function:** `cascade_soft_delete_agents()`
    - **Description:** Soft deletes all associated agent events.
-   - **Code Reference:** 
+   - **Code Reference:**
      ```sql:crates/brokkr-models/migrations/01_agents/up.sql
      startLine: 29
      endLine: 46
@@ -301,7 +301,7 @@ The data model supports a system where:
    - **Event:** `BEFORE DELETE`
    - **Function:** `handle_agent_hard_delete()`
    - **Description:** Deletes all associated agent targets and agent events.
-   - **Code Reference:** 
+   - **Code Reference:**
      ```sql:crates/brokkr-models/migrations/01_agents/up.sql
      startLine: 49
      endLine: 69

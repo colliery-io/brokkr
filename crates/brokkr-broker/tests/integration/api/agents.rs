@@ -10,8 +10,8 @@ use brokkr_models::models::agent_labels::NewAgentLabel;
 use brokkr_models::models::agent_targets::NewAgentTarget;
 use brokkr_models::models::agents::Agent;
 use brokkr_models::models::agents::NewAgent;
-use brokkr_models::models::stacks::NewStack;
 use brokkr_models::models::deployment_objects::DeploymentObject;
+use brokkr_models::models::stacks::NewStack;
 use std::ops::Not;
 use tower::ServiceExt;
 use uuid::Uuid;
@@ -926,10 +926,9 @@ async fn test_list_agent_labels_with_mismatched_pak() {
 async fn test_record_heartbeat() {
     let fixture = TestFixture::new();
     let app = fixture.create_test_router().with_state(fixture.dal.clone());
-    
+
     let (agent, pak) =
-    fixture.create_test_agent_with_pak("Agent 1".to_string(), "Cluster 1".to_string());
-    
+        fixture.create_test_agent_with_pak("Agent 1".to_string(), "Cluster 1".to_string());
 
     let response = app
         .oneshot(
@@ -955,18 +954,24 @@ async fn test_record_heartbeat() {
 async fn test_get_applicable_deployment_objects() {
     let fixture = TestFixture::new();
     let app = fixture.create_test_router().with_state(fixture.dal.clone());
-    
+
     // Create an agent
-    let (agent, pak) = fixture.create_test_agent_with_pak("Test Agent".to_string(), "Test Cluster".to_string());
+    let (agent, pak) =
+        fixture.create_test_agent_with_pak("Test Agent".to_string(), "Test Cluster".to_string());
     // Create a stack
-    let stack = fixture.create_test_stack("Test Stack".to_string(), None, fixture.admin_generator.id);
+    let stack =
+        fixture.create_test_stack("Test Stack".to_string(), None, fixture.admin_generator.id);
     fixture.create_test_agent_target(agent.id, stack.id);
 
     // Create 4 deployment objects
-    let do1 = fixture.create_test_deployment_object(stack.id, "yaml_content: object1".to_string(), false);
-    let do2 = fixture.create_test_deployment_object(stack.id, "yaml_content: object2".to_string(), false);
-    let do3 = fixture.create_test_deployment_object(stack.id, "yaml_content: object3".to_string(), false);
-    let do4 = fixture.create_test_deployment_object(stack.id, "yaml_content: object4".to_string(), false);
+    let do1 =
+        fixture.create_test_deployment_object(stack.id, "yaml_content: object1".to_string(), false);
+    let do2 =
+        fixture.create_test_deployment_object(stack.id, "yaml_content: object2".to_string(), false);
+    let do3 =
+        fixture.create_test_deployment_object(stack.id, "yaml_content: object3".to_string(), false);
+    let do4 =
+        fixture.create_test_deployment_object(stack.id, "yaml_content: object4".to_string(), false);
 
     // Create 3 agent events: 1 success, 1 failure, 1 success
     fixture.create_test_agent_event(&agent, &do1, "DEPLOY", "SUCCESS", None);
@@ -978,7 +983,10 @@ async fn test_get_applicable_deployment_objects() {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri(format!("/api/v1/agents/{}/applicable-deployment-objects", agent.id))
+                .uri(format!(
+                    "/api/v1/agents/{}/applicable-deployment-objects",
+                    agent.id
+                ))
                 .header("Authorization", format!("Bearer {}", pak))
                 .body(Body::empty())
                 .unwrap(),
@@ -1002,9 +1010,8 @@ async fn test_get_agent_by_name_and_cluster_name() {
     let admin_pak = fixture.admin_pak.clone();
 
     // Create a test agent
-    let _test_agent = fixture.create_test_agent("test-agent".to_string(), "test-cluster".to_string());
-
- 
+    let _test_agent =
+        fixture.create_test_agent("test-agent".to_string(), "test-cluster".to_string());
 
     // Retrieve the agent by name and cluster name
     let response = app

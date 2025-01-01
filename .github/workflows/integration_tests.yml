@@ -6,22 +6,8 @@ env:
   CARGO_TERM_COLOR: always
   DATABASE_URL: postgres://brokkr:brokkr@localhost:5432/brokkr
 jobs:
-  functional_tests:
+  integration_tests:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:13
-        env:
-          POSTGRES_USER: brokkr
-          POSTGRES_PASSWORD: brokkr
-          POSTGRES_DB: brokkr
-        ports: 
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
     steps:
       - uses: actions/checkout@v3
         with:
@@ -47,6 +33,11 @@ jobs:
           path: target
           key: ${{ runner.os }}-rust-build-${{ github.sha }}
           restore-keys: |
-            ${{ runner.os }}-rust-build-
-      - name: Run functional tests
-        run: angreal tests integration
+            ${{ runner.os }}-rust-build-${{ github.sha }}
+      - name: docker compose up
+        uses: hoverkraft-tech/compose-action@v2.0.1
+        with:
+          compose-file: ".angreal/files/docker-compose.yaml"
+          test-command: angreal tests integration all
+      - name: Execute integration tests
+        run: angreal tests integration --skip-docker all

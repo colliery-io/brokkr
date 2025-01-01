@@ -40,4 +40,4 @@ jobs:
           path: target
           key: ${{ runner.os }}-rust-build-${{ github.sha }}
           restore-keys: |-
-            ${{ runner.os }}-rust-build-
+            ${{ runner.os }}-rust-build-${{ github.sha }}

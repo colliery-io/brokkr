@@ -15,9 +15,17 @@ async fn test_list_agent_events_success() {
 
     // Create a test agent and event
     let agent = fixture.create_test_agent("Test Agent".to_string(), "Test Cluster".to_string());
-    let stack = fixture.create_test_stack("Test Stack".to_string(), None, fixture.admin_generator.id);
-    let deployment_object = fixture.create_test_deployment_object(stack.id, "test yaml".to_string(), false);
-    fixture.create_test_agent_event(&agent, &deployment_object, "TEST", "SUCCESS", Some("Test message"));
+    let stack =
+        fixture.create_test_stack("Test Stack".to_string(), None, fixture.admin_generator.id);
+    let deployment_object =
+        fixture.create_test_deployment_object(stack.id, "test yaml".to_string(), false);
+    fixture.create_test_agent_event(
+        &agent,
+        &deployment_object,
+        "TEST",
+        "SUCCESS",
+        Some("Test message"),
+    );
 
     let response = app
         .oneshot(
@@ -75,7 +83,6 @@ async fn test_list_agent_events_unauthorized_no_pak() {
 
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
-
 
 #[tokio::test]
 async fn test_create_agent_event_unauthorized_non_existent_pak() {
@@ -141,9 +148,17 @@ async fn test_get_agent_event_success() {
     let admin_pak = fixture.admin_pak.clone();
 
     let agent = fixture.create_test_agent("Test Agent".to_string(), "Test Cluster".to_string());
-    let stack = fixture.create_test_stack("Test Stack".to_string(), None, fixture.admin_generator.id);
-    let deployment_object = fixture.create_test_deployment_object(stack.id, "test yaml".to_string(), false);
-    let event = fixture.create_test_agent_event(&agent, &deployment_object, "TEST", "SUCCESS", Some("Test message"));
+    let stack =
+        fixture.create_test_stack("Test Stack".to_string(), None, fixture.admin_generator.id);
+    let deployment_object =
+        fixture.create_test_deployment_object(stack.id, "test yaml".to_string(), false);
+    let event = fixture.create_test_agent_event(
+        &agent,
+        &deployment_object,
+        "TEST",
+        "SUCCESS",
+        Some("Test message"),
+    );
 
     let response = app
         .oneshot(

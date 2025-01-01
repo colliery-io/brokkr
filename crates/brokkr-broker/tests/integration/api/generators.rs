@@ -6,14 +6,17 @@ use axum::{
 use brokkr_models::models::generator::{Generator, NewGenerator};
 use tower::ServiceExt;
 
-
 #[tokio::test]
 async fn test_list_generators_admin_success() {
     let fixture = TestFixture::new();
     let app = fixture.create_test_router().with_state(fixture.dal.clone());
     let admin_pak = fixture.admin_pak.clone();
 
-    fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
+    fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
 
     let response = app
         .oneshot(
@@ -37,7 +40,8 @@ async fn test_list_generators_admin_success() {
 async fn test_list_generators_non_admin_forbidden() {
     let fixture = TestFixture::new();
     let app = fixture.create_test_router().with_state(fixture.dal.clone());
-    let (_, generator_pak) = fixture.create_test_generator_with_pak("Test Generator".to_string(), None);
+    let (_, generator_pak) =
+        fixture.create_test_generator_with_pak("Test Generator".to_string(), None);
 
     let response = app
         .oneshot(
@@ -91,7 +95,11 @@ async fn test_get_generator_admin_success() {
     let app = fixture.create_test_router().with_state(fixture.dal.clone());
     let admin_pak = fixture.admin_pak.clone();
 
-    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
 
     let response = app
         .oneshot(
@@ -115,7 +123,8 @@ async fn test_get_generator_admin_success() {
 async fn test_get_generator_self_success() {
     let fixture = TestFixture::new();
     let app = fixture.create_test_router().with_state(fixture.dal.clone());
-    let (generator, generator_pak) = fixture.create_test_generator_with_pak("Test Generator".to_string(), None);
+    let (generator, generator_pak) =
+        fixture.create_test_generator_with_pak("Test Generator".to_string(), None);
 
     let response = app
         .oneshot(
@@ -141,7 +150,11 @@ async fn test_update_generator_admin_success() {
     let app = fixture.create_test_router().with_state(fixture.dal.clone());
     let admin_pak = fixture.admin_pak.clone();
 
-    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
 
     let mut updated_generator = generator.clone();
     updated_generator.name = "Updated Generator".to_string();
@@ -153,7 +166,9 @@ async fn test_update_generator_admin_success() {
                 .uri(format!("/api/v1/generators/{}", generator.id))
                 .header("Authorization", format!("Bearer {}", admin_pak))
                 .header("Content-Type", "application/json")
-                .body(Body::from(serde_json::to_string(&updated_generator).unwrap()))
+                .body(Body::from(
+                    serde_json::to_string(&updated_generator).unwrap(),
+                ))
                 .unwrap(),
         )
         .await
@@ -171,7 +186,11 @@ async fn test_delete_generator_admin_success() {
     let app = fixture.create_test_router().with_state(fixture.dal.clone());
     let admin_pak = fixture.admin_pak.clone();
 
-    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
 
     let response = app
         .oneshot(
@@ -192,7 +211,8 @@ async fn test_delete_generator_admin_success() {
 async fn test_delete_generator_self_success() {
     let fixture = TestFixture::new();
     let app = fixture.create_test_router().with_state(fixture.dal.clone());
-    let (generator, generator_pak) = fixture.create_test_generator_with_pak("Test Generator".to_string(), None);
+    let (generator, generator_pak) =
+        fixture.create_test_generator_with_pak("Test Generator".to_string(), None);
 
     let response = app
         .oneshot(
@@ -252,7 +272,11 @@ async fn test_create_generator_unauthorized() {
 async fn test_get_generator_unauthorized() {
     let fixture = TestFixture::new();
     let app = fixture.create_test_router().with_state(fixture.dal.clone());
-    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
 
     let response = app
         .oneshot(
@@ -272,7 +296,11 @@ async fn test_get_generator_unauthorized() {
 async fn test_update_generator_unauthorized() {
     let fixture = TestFixture::new();
     let app = fixture.create_test_router().with_state(fixture.dal.clone());
-    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
 
     let response = app
         .oneshot(
@@ -293,7 +321,11 @@ async fn test_update_generator_unauthorized() {
 async fn test_delete_generator_unauthorized() {
     let fixture = TestFixture::new();
     let app = fixture.create_test_router().with_state(fixture.dal.clone());
-    let generator = fixture.create_test_generator("Test Generator".to_string(), None, "test_api_key_hash".to_string());
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
 
     let response = app
         .oneshot(

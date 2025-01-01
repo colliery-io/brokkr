@@ -30,6 +30,6 @@ jobs:
           path: target
           key: ${{ runner.os }}-rust-build-${{ github.sha }}
           restore-keys: |
-            ${{ runner.os }}-rust-build-
+            ${{ runner.os }}-rust-build-${{ github.sha }}
       - name: Run unit tests
-        run: angreal tests unit
+        run: angreal tests unit all

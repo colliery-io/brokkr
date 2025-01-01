@@ -4,13 +4,15 @@
 //! the broker, including admin key management and shutdown procedures.
 
 use brokkr_models::schema::admin_role;
+use brokkr_utils::logging::prelude::*;
 use chrono::Utc;
 use diesel::prelude::*;
 use std::fs;
+use std::path::Path;
 use tokio::sync::oneshot;
 use uuid::Uuid;
-
 pub mod pak;
+use brokkr_utils::config::Settings;
 
 /// Handles the shutdown process for the broker.
 ///
@@ -42,8 +44,11 @@ pub struct NewAdminKey {
 ///
 /// This function is called when the broker starts for the first time and
 /// sets up the initial admin key.
-pub fn first_startup(conn: &mut PgConnection) -> Result<(), Box<dyn std::error::Error>> {
-    upsert_admin(conn)
+pub fn first_startup(
+    conn: &mut PgConnection,
+    config: &Settings,
+) -> Result<(), Box<dyn std::error::Error>> {
+    upsert_admin(conn, config)
 }
 
 /// Creates a new PAK (Privileged Access Key) and its hash.
@@ -64,8 +69,31 @@ fn create_pak() -> Result<(String, String), Box<dyn std::error::Error>> {
 /// This function creates or updates the admin key in the database,
 /// creates or updates the associated admin generator, and writes
 /// the PAK to a temporary file.
-pub fn upsert_admin(conn: &mut PgConnection) -> Result<(), Box<dyn std::error::Error>> {
-    let (pak, hash) = create_pak()?;
+pub fn upsert_admin(
+    conn: &mut PgConnection,
+    config: &Settings,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let pak_hash = match &config.broker.pak_hash {
+        Some(hash) if !hash.is_empty() => {
+            // Validate the provided hash
+            if !validate_pak_hash(hash) {
+                return Err("Invalid PAK hash provided in configuration".into());
+            }
+            hash.clone()
+        }
+        _ => {
+            // Generate new PAK and hash
+            let (pak, hash) = create_pak()?;
+
+            // Write PAK to temporary file
+            info!("Writing PAK to temporary file");
+            let key_path = Path::new("/tmp/brokkr-keys/key.txt");
+            fs::create_dir_all(key_path.parent().unwrap())?;
+            fs::write(key_path, pak)?;
+
+            hash
+        }
+    };
 
     // Update or insert admin key
     let existing_admin_key = admin_role::table
@@ -75,16 +103,14 @@ pub fn upsert_admin(conn: &mut PgConnection) -> Result<(), Box<dyn std::error::E
 
     match existing_admin_key {
         Some(id) => {
-            // Update existing admin key
             diesel::update(admin_role::table.find(id))
-                .set(admin_role::pak_hash.eq(hash.clone()))
+                .set(admin_role::pak_hash.eq(&pak_hash))
                 .execute(conn)?;
         }
         None => {
-            // Insert new admin key
             diesel::insert_into(admin_role::table)
                 .values(&NewAdminKey {
-                    pak_hash: hash.clone(),
+                    pak_hash: pak_hash.clone(),
                 })
                 .execute(conn)?;
         }
@@ -100,28 +126,29 @@ pub fn upsert_admin(conn: &mut PgConnection) -> Result<(), Box<dyn std::error::E
 
     match existing_admin_generator {
         Some(id) => {
-            // Update existing Admin Generator
             diesel::update(generators::table.find(id))
                 .set((
-                    generators::pak_hash.eq(hash.clone()),
+                    generators::pak_hash.eq(&pak_hash),
                     generators::description.eq("Linked to Admin PAK"),
                 ))
                 .execute(conn)?;
         }
         None => {
-            // Insert new Admin Generator
             diesel::insert_into(generators::table)
                 .values((
                     generators::name.eq("admin-generator"),
                     generators::description.eq("Linked to Admin PAK"),
-                    generators::pak_hash.eq(hash.clone()),
+                    generators::pak_hash.eq(&pak_hash),
                 ))
                 .execute(conn)?;
         }
     }
 
-    // Write PAK to temporary file
-    fs::write("/tmp/key.txt", pak)?;
-
     Ok(())
+}
+
+fn validate_pak_hash(hash: &str) -> bool {
+    // Implement hash validation logic here
+    // For example, check if it's a valid SHA-256 hash
+    hash.len() == 64 && hash.chars().all(|c| c.is_ascii_hexdigit())
 }

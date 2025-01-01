@@ -1,0 +1,29 @@
+# .dockerignore
+
+# Version control
+.git
+.gitignore
+
+# Build artifacts
+target/
+
+# Development and CI/CD files
+.github/
+.angreal/
+.vscode/
+.idea/
+
+
+# Documentation
+*.md
+LICENSE
+
+# Docker files (optional, depending on your build process)
+docker/
+
+# Rust-specific
+Cargo.lock
+
+# Miscellaneous
+.env
+*.log

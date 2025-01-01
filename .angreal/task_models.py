@@ -4,7 +4,7 @@ import os
 import subprocess
 
 
-models = angreal.command_group(name="models", about="commands for `brokkr-models`")
+models = angreal.command_group(name="models", about="commands for testing our core data model")
 
 
 
@@ -18,10 +18,12 @@ brokkr_models_dir = os.path.join(
 
 @models()
 @angreal.command(name="schema", about="generate `src/schema.rs` given current available migrations")
-def schema():
-    docker_down()
-    docker_clean()
-    docker_up()
+@angreal.argument(name="skip_docker", long="skip-docker", required=False, help="Skip docker compose up", takes_value=False, is_flag=True)
+def schema(skip_docker: bool):
+    if not skip_docker:
+        docker_down()
+        docker_clean()
+        docker_up()
     subprocess.run("diesel migration run"
                     , cwd=brokkr_models_dir, shell=True)
     subprocess.run("diesel print-schema > src/schema.rs"
@@ -35,63 +37,63 @@ TEST_SQL_SCRIPT = """
 
 -- Stage 1: Insert sample data into the generators table
 INSERT INTO generators (name, description, pak_hash)
-VALUES 
+VALUES
 ('Generator1', 'First test generator', 'gen_hash1'),
 ('Generator2', 'Second test generator', 'gen_hash2');
 
 -- Stage 2: Insert sample data into the stacks table
 INSERT INTO stacks (name, description, generator_id)
-VALUES 
+VALUES
 ('Stack1', 'First test stack', (SELECT id FROM generators WHERE name = 'Generator1')),
 ('Stack2', 'Second test stack', (SELECT id FROM generators WHERE name = 'Generator2'));
 
 -- Stage 3: Insert sample data into the agents table
 INSERT INTO agents (name, cluster_name, status, pak_hash)
-VALUES 
+VALUES
 ('Agent1', 'Cluster1', 'ACTIVE', 'hash1'),
 ('Agent2', 'Cluster2', 'INACTIVE', 'hash2');
 
 -- Stage 4: Create deployment objects for the stacks
 INSERT INTO deployment_objects (stack_id, yaml_content, yaml_checksum, submitted_at, is_deletion_marker)
-VALUES 
+VALUES
 ((SELECT id FROM stacks WHERE name = 'Stack1'), 'yaml: content1', 'checksum1', CURRENT_TIMESTAMP, FALSE),
 ((SELECT id FROM stacks WHERE name = 'Stack2'), 'yaml: content2', 'checksum2', CURRENT_TIMESTAMP, FALSE);
 
 -- Stage 5: Create agent_targets to associate agents with stacks
 INSERT INTO agent_targets (agent_id, stack_id)
-VALUES 
+VALUES
 ((SELECT id FROM agents WHERE name = 'Agent1'), (SELECT id FROM stacks WHERE name = 'Stack1')),
 ((SELECT id FROM agents WHERE name = 'Agent2'), (SELECT id FROM stacks WHERE name = 'Stack2'));
 
 -- Stage 6: Add labels and annotations to stacks
 INSERT INTO stack_labels (stack_id, label)
-VALUES 
+VALUES
 ((SELECT id FROM stacks WHERE name = 'Stack1'), 'label1'),
 ((SELECT id FROM stacks WHERE name = 'Stack2'), 'label2');
 
 INSERT INTO stack_annotations (stack_id, key, value)
-VALUES 
+VALUES
 ((SELECT id FROM stacks WHERE name = 'Stack1'), 'key1', 'value1'),
 ((SELECT id FROM stacks WHERE name = 'Stack2'), 'key2', 'value2');
 
 -- Stage 7: Add labels and annotations to agents
 INSERT INTO agent_labels (agent_id, label)
-VALUES 
+VALUES
 ((SELECT id FROM agents WHERE name = 'Agent1'), 'agent_label1'),
 ((SELECT id FROM agents WHERE name = 'Agent2'), 'agent_label2');
 
 INSERT INTO agent_annotations (agent_id, key, value)
-VALUES 
+VALUES
 ((SELECT id FROM agents WHERE name = 'Agent1'), 'agent_key1', 'agent_value1'),
 ((SELECT id FROM agents WHERE name = 'Agent2'), 'agent_key2', 'agent_value2');
 
 -- Stage 8: Create agent events
 INSERT INTO agent_events (agent_id, deployment_object_id, event_type, status, message)
-VALUES 
-((SELECT id FROM agents WHERE name = 'Agent1'), 
+VALUES
+((SELECT id FROM agents WHERE name = 'Agent1'),
  (SELECT id FROM deployment_objects WHERE stack_id = (SELECT id FROM stacks WHERE name = 'Stack1') LIMIT 1),
  'DEPLOYMENT', 'SUCCESS', 'Deployment successful'),
-((SELECT id FROM agents WHERE name = 'Agent2'), 
+((SELECT id FROM agents WHERE name = 'Agent2'),
  (SELECT id FROM deployment_objects WHERE stack_id = (SELECT id FROM stacks WHERE name = 'Stack2') LIMIT 1),
  'DEPLOYMENT', 'FAILURE', 'Deployment failed');
 
@@ -120,8 +122,8 @@ DO $$
 DECLARE
     error_message TEXT;
 BEGIN
-    UPDATE deployment_objects 
-    SET yaml_content = 'modified content' 
+    UPDATE deployment_objects
+    SET yaml_content = 'modified content'
     WHERE stack_id = (SELECT id FROM stacks WHERE name = 'Stack2');
 
     RAISE EXCEPTION 'Test failed: Deployment object modification was allowed';
@@ -181,14 +183,47 @@ SELECT * FROM agent_events WHERE event_type = 'DEPLOYMENT';
 SELECT * FROM generators WHERE name = 'Generator1';
 """
 
+@models()
+@angreal.command(name="migrations", about="run all migrations + redo to ensure"
+                 " up and down work as intended. ")
+@angreal.argument(name="skip_docker", long="skip-docker", required=False, help="Skip docker compose up", takes_value=False, is_flag=True)
+def migration_tests(skip_docker: bool = False):
+    """
+    """
+    brokkr_models_dir = os.path.join(
+        angreal.get_root(),
+        '..',
+        "crates",
+        "brokkr-models"
+        )
+    if not skip_docker:
+        docker_down()
+        docker_clean()
+        docker_up()
+
+    try:
+        os.environ["DATABASE_URL"] = "postgres://brokkr:brokkr@localhost:5432/brokkr"
+        result = subprocess.run(
+            [
+                "diesel migration run && diesel migration redo -a"
+            ], cwd=brokkr_models_dir, shell=True, check=True
+        )
+        return result.returncode
+    finally:
+        if not skip_docker:
+            docker_down()
+            docker_clean()
 
 
 @models()
 @angreal.command(name="test")
-def test():
-    docker_down()
-    docker_clean()
-    docker_up()
+@angreal.argument(name="skip_docker", long="skip-docker", required=False, help="Skip docker compose up", takes_value=False, is_flag=True)
+def test(skip_docker: bool = False):
+    if not skip_docker:
+        docker_down()
+        docker_clean()
+        docker_up()
+
     import subprocess
     import tempfile
 

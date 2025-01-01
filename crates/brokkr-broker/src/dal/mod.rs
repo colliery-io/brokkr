@@ -91,7 +91,7 @@ impl DAL {
         AgentsDAL { dal: self }
     }
 
-    /// Provides access to the Agent Anotations Data Access Layer.
+    /// Provides access to the Agent Annotations Data Access Layer.
     ///
     /// # Returns
     ///
@@ -136,7 +136,7 @@ impl DAL {
         StackLabelsDAL { dal: self }
     }
 
-    /// Provides access to the Stack Anotations Data Access Layer.
+    /// Provides access to the Stack Annotations Data Access Layer.
     ///
     /// # Returns
     ///

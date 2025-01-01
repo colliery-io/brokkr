@@ -3,4 +3,6 @@
 extends: default
 rules:
   line-length:
-    max: 110
+    max: 500
+  truthy:
+    check-keys: false

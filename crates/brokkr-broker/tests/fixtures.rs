@@ -24,7 +24,6 @@ use brokkr_models::models::{
 use brokkr_utils::Settings;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use dotenv::dotenv;
-use std::env;
 use uuid::Uuid;
 
 /// Embedded migrations for the test database.
@@ -76,10 +75,8 @@ impl TestFixture {
     /// * It fails to run migrations
     pub fn new() -> Self {
         dotenv().ok();
-        let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-
-        let connection_pool = create_shared_connection_pool(&database_url, "brokkr", 5);
         let settings = Settings::new(None).expect("Failed to load settings");
+        let connection_pool = create_shared_connection_pool(&settings.database.url, "brokkr", 5);
         // Run migrations
         let mut conn = connection_pool
             .pool
@@ -90,16 +87,13 @@ impl TestFixture {
         conn.run_pending_migrations(MIGRATIONS)
             .expect("Failed to run migrations");
 
+        // this initializes the PAK controller and runs the initial startup logic for the broker
         utils::pak::create_pak_controller(Some(&settings))
             .expect("Failed to create PAK controller");
-        utils::first_startup(&mut conn).expect("Failed to run first startup");
+        utils::first_startup(&mut conn, &settings).expect("Failed to run first startup");
 
         // Read the admin PAK from the temporary file
-        let admin_pak_path = std::env::temp_dir().join("/tmp/key.txt");
-        let admin_pak = std::fs::read_to_string(admin_pak_path)
-            .expect("Failed to read admin PAK from temporary file")
-            .trim()
-            .to_string();
+        let admin_pak = "brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8".to_string();
 
         let dal = DAL::new(connection_pool.pool.clone());
 
@@ -363,11 +357,23 @@ impl TestFixture {
             .expect("Failed to update pak_hash")
     }
 
-    pub fn create_test_generator_with_pak(&self, name: String, description: Option<String>) -> (Generator, String) {
+    pub fn create_test_generator_with_pak(
+        &self,
+        name: String,
+        description: Option<String>,
+    ) -> (Generator, String) {
         let (pak, hash) = utils::pak::create_pak().expect("Failed to create PAK");
-        let new_generator = NewGenerator::new(name, description).expect("Failed to create NewGenerator");
-        let generator = self.dal.generators().create(&new_generator).expect("Failed to create generator");
-        self.dal.generators().update_pak_hash(generator.id, hash).expect("Failed to update PAK hash");
+        let new_generator =
+            NewGenerator::new(name, description).expect("Failed to create NewGenerator");
+        let generator = self
+            .dal
+            .generators()
+            .create(&new_generator)
+            .expect("Failed to create generator");
+        self.dal
+            .generators()
+            .update_pak_hash(generator.id, hash)
+            .expect("Failed to update PAK hash");
         (generator, pak)
     }
 

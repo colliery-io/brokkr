@@ -15,7 +15,7 @@ jobs:
           POSTGRES_USER: brokkr
           POSTGRES_PASSWORD: brokkr
           POSTGRES_DB: brokkr
-        ports: 
+        ports:
           - 5432:5432
         options: >-
           --health-cmd pg_isready
@@ -26,43 +26,33 @@ jobs:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
-    # - name: Check for file changes
-    #   uses: dorny/paths-filter@v2
-    #   id: changes
-    #   with:
-    #     filters: |
-    #       data_model:
-    #         - '**crates/brokkr-model/**'
       - name: Set up Python
-      # if: steps.changes.outputs.data_model == 'true'
         uses: actions/setup-python@v4
         with:
           python-version: 3.x
       - name: Install angreal
-      # if: steps.changes.outputs.data_model == 'true'
         run: |
           python -m pip install --upgrade pip
           pip install angreal
       - name: Set up Rust
-      # if: steps.changes.outputs.data_model == 'true'
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
           toolchain: stable
           override: true
+
+      - name: Diesel install
+        run: cargo install diesel_cli
       - name: Cache build
-      # if: steps.changes.outputs.data_model == 'true'
         uses: actions/cache@v3
         with:
           path: target
           key: ${{ runner.os }}-rust-build-${{ github.sha }}
           restore-keys: |
-            ${{ runner.os }}-rust-build-
-      - name: Run data model tests
-      # if: steps.changes.outputs.data_model == 'true'
-        run: angreal models test
+            ${{ runner.os }}-rust-build-${{ github.sha }}
+      - name: Run data models test
+        run: angreal models test --skip-docker
         working-directory: ${{ inputs.data-model-path }}
       - name: Run migration tests
-      # if: steps.changes.outputs.data_model == 'true'
-        run: angreal tests migrations
+        run: angreal models  migrations --skip-docker
         working-directory: ${{ inputs.data-model-path }}

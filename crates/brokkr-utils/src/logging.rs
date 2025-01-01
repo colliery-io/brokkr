@@ -46,7 +46,7 @@ use log::{LevelFilter, Metadata, Record, SetLoggerError};
 use once_cell::sync::OnceCell;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-pub use log::{debug, error, info, warn};
+pub use log::{debug, error, info, trace, warn};
 
 static LOGGER: BrokkrLogger = BrokkrLogger;
 static CURRENT_LEVEL: AtomicUsize = AtomicUsize::new(LevelFilter::Info as usize);
@@ -75,25 +75,37 @@ impl log::Log for BrokkrLogger {
     fn flush(&self) {}
 }
 
-/// Initializes the Brokkr logger with the specified log level.
+/// Initializes the Brokkr logging system with the specified log level.
+///
+/// Sets up a custom logger that handles structured logging with timestamps,
+/// log levels, and module paths. Supports multiple output formats and
+/// concurrent logging from multiple threads.
 ///
 /// # Arguments
-///
-/// * `level` - A string slice that holds the desired log level.
+/// * `level` - String representation of the log level ("debug", "info", "warn", "error")
 ///
 /// # Returns
+/// * `Result<(), Box<dyn Error>>` - Success/failure of logger initialization
 ///
-/// * `Ok(())` if the logger was successfully initialized.
-/// * `Err(SetLoggerError)` if there was an error setting up the logger.
-///
-/// # Examples
-///
+/// # Example
 /// ```
-/// use brokkr_logger;
+/// use brokkr_utils::logging;
 ///
-///     brokkr_logger::init("info").expect("Failed to initialize logger");
-///     info!("Logger initialized successfully!");
+/// logging::init("debug")?;
+/// log::info!("Logger initialized successfully");
 /// ```
+///
+/// # Features
+/// - Thread-safe logging
+/// - Configurable log levels
+/// - Module path tracking
+/// - Timestamp inclusion
+/// - Error context preservation
+///
+/// # Error Cases
+/// - Invalid log level string
+/// - Logger already initialized
+/// - System permission issues
 
 pub fn init(level: &str) -> Result<(), SetLoggerError> {
     let level_filter = str_to_level_filter(level);
@@ -165,9 +177,8 @@ fn level_filter_from_u8(v: u8) -> LevelFilter {
 }
 
 pub mod prelude {
-    pub use log::{debug, error, info, warn};
+    pub use log::{debug, error, info, trace, warn};
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;

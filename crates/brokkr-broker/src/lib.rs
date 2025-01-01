@@ -12,6 +12,7 @@
 //! - **Extensible**: Designed with modularity in mind, allowing for easy integration of additional features.
 //!
 pub mod api;
+pub mod cli;
 pub mod dal;
 pub mod db;
 pub mod utils;
