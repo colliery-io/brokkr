@@ -76,15 +76,15 @@ services:
     command: >
       sh -c "
         # Wait for kubeconfig to be ready and accessible
-        while [ ! -f /tmp/brokkr-keys/kubeconfig.yaml ] || [ ! -s /tmp/brokkr-keys/kubeconfig.yaml ]; do
+        while [ ! -f /tmp/brokkr-keys/kubeconfig.yaml ] ; do
           echo 'Waiting for kubeconfig to be ready...'
-          sleep 2
+          sleep 10
         done
 
         # Wait for agent PAK to be ready
-        while [ ! -f /tmp/brokkr-keys/agent.pak ] || [ ! -s /tmp/brokkr-keys/agent.pak ]; do
+        while [ ! -f /tmp/brokkr-keys/agent.pak ] ; do
           echo 'Waiting for agent PAK to be ready...'
-          sleep 2
+          sleep 10
         done
 
         # Export PAK and start agent

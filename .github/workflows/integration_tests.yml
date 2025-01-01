@@ -40,4 +40,4 @@ jobs:
           compose-file: ".angreal/files/docker-compose.yaml"
           test-command: angreal tests integration all
       - name: Execute integration tests
-        run: angreal tests integration all --skip-docker
+        run: angreal tests integration --skip-docker all

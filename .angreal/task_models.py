@@ -18,7 +18,7 @@ brokkr_models_dir = os.path.join(
 
 @models()
 @angreal.command(name="schema", about="generate `src/schema.rs` given current available migrations")
-@angreal.argument(name="skip_docker", required=False, help="Skip docker compose up", takes_value=False, is_flag=True)
+@angreal.argument(name="skip_docker", long="skip-docker", required=False, help="Skip docker compose up", takes_value=False, is_flag=True)
 def schema(skip_docker: bool):
     if not skip_docker:
         docker_down()
@@ -186,7 +186,7 @@ SELECT * FROM generators WHERE name = 'Generator1';
 @models()
 @angreal.command(name="migrations", about="run all migrations + redo to ensure"
                  " up and down work as intended. ")
-@angreal.argument(name="skip_docker", required=False, help="Skip docker compose up", takes_value=False, is_flag=True)
+@angreal.argument(name="skip_docker", long="skip-docker", required=False, help="Skip docker compose up", takes_value=False, is_flag=True)
 def migration_tests(skip_docker: bool = False):
     """
     """
@@ -217,7 +217,7 @@ def migration_tests(skip_docker: bool = False):
 
 @models()
 @angreal.command(name="test")
-@angreal.argument(name="skip_docker", required=False, help="Skip docker compose up", takes_value=False, is_flag=True)
+@angreal.argument(name="skip_docker", long="skip-docker", required=False, help="Skip docker compose up", takes_value=False, is_flag=True)
 def test(skip_docker: bool = False):
     if not skip_docker:
         docker_down()
