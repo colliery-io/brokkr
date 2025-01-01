@@ -18,10 +18,12 @@ brokkr_models_dir = os.path.join(
 
 @models()
 @angreal.command(name="schema", about="generate `src/schema.rs` given current available migrations")
-def schema():
-    docker_down()
-    docker_clean()
-    docker_up()
+@angreal.option(name="skip_docker", about="skip docker up/down")
+def schema(skip_docker: bool):
+    if not skip_docker:
+        docker_down()
+        docker_clean()
+        docker_up()
     subprocess.run("diesel migration run"
                     , cwd=brokkr_models_dir, shell=True)
     subprocess.run("diesel print-schema > src/schema.rs"
@@ -184,7 +186,8 @@ SELECT * FROM generators WHERE name = 'Generator1';
 @models()
 @angreal.command(name="migrations", about="run all migrations + redo to ensure"
                  " up and down work as intended. ")
-def migration_tests():
+@angreal.option(name="skip_docker", about="skip docker up/down")
+def migration_tests(skip_docker: bool):
     """
     """
     brokkr_models_dir = os.path.join(
@@ -193,9 +196,10 @@ def migration_tests():
         "crates",
         "brokkr-models"
         )
-    docker_down()
-    docker_clean()
-    docker_up()
+    if not skip_docker:
+        docker_down()
+        docker_clean()
+        docker_up()
 
     try:
         os.environ["DATABASE_URL"] = "postgres://brokkr:brokkr@localhost:5432/brokkr"
@@ -206,16 +210,20 @@ def migration_tests():
         )
         return result.returncode
     finally:
-        docker_down()
-        docker_clean()
+        if not skip_docker:
+            docker_down()
+            docker_clean()
 
 
 @models()
 @angreal.command(name="test")
-def test():
-    docker_down()
-    docker_clean()
-    docker_up()
+@angreal.option(name="skip_docker", about="skip docker up/down")
+def test(skip_docker: bool):
+    if not skip_docker:
+        docker_down()
+        docker_clean()
+        docker_up()
+
     import subprocess
     import tempfile
 
