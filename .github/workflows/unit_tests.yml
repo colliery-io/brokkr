@@ -32,8 +32,8 @@ jobs:
         uses: actions/cache@v3
         with:
           path: target
-          key: ${{ runner.os }}-rust-build-${{ github.sha }}
+          key: ${{ runner.os }}-rust-build-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
           restore-keys: |
-            ${{ runner.os }}-rust-build-${{ github.sha }}
+            ${{ runner.os }}-rust-build-
       - name: Run unit tests
         run: angreal tests unit ${{ matrix.crate }}

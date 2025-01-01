@@ -4,7 +4,6 @@ on:
   workflow_call:
 env:
   CARGO_TERM_COLOR: always
-  DATABASE_URL: postgres://brokkr:brokkr@localhost:5432/brokkr
 jobs:
   integration_tests:
     runs-on: ubuntu-latest
@@ -35,9 +34,9 @@ jobs:
         uses: actions/cache@v3
         with:
           path: target
-          key: ${{ runner.os }}-rust-build-${{ github.sha }}
+          key: ${{ runner.os }}-rust-build-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
           restore-keys: |
-            ${{ runner.os }}-rust-build-${{ github.sha }}
+            ${{ runner.os }}-rust-build-
       - name: Docker Compose Cache
         uses: actions/cache@v3
         with:
