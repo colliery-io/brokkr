@@ -1,42 +1,49 @@
-use axum::Server;
-use std::net::SocketAddr;
-use tokio;
+//! Brokkr Broker CLI application
+//!
+//! This module provides the command-line interface for the Brokkr Broker application.
+//! It includes functionality for serving the broker, rotating keys, and managing the application.
 
-use brokkr_broker::api;
-use brokkr_broker::dal::DAL;
+use brokkr_broker::cli::{parse_cli, Commands, CreateSubcommands, RotateSubcommands};
 
-use brokkr_broker::db::create_shared_connection_pool;
-
-
+use brokkr_broker::utils;
 use brokkr_utils::config::Settings;
-use brokkr_utils::logging::prelude::*;
 
+use brokkr_broker::cli::commands;
+
+/// Main function to run the Brokkr Broker application
+///
+/// This function initializes the application, parses command-line arguments,
+/// and executes the appropriate command based on user input.
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let cli = parse_cli();
+
     // Load configuration
     let config = Settings::new(None).expect("Failed to load configuration");
 
     // Initialize logger
     brokkr_utils::logging::init(&config.log.level).expect("Failed to initialize logger");
 
-    info!("Starting application");
-    let connection_pool = create_shared_connection_pool(&config.database.url, "brokkr", 5);
-    let dal = DAL::new(connection_pool.pool.clone());    
+    // Create PAK controller
+    let _ =
+        utils::pak::create_pak_controller(Some(&config)).expect("Failed to create PAK controller");
 
-    
-
-    // Configure API routes
-    let app = api::configure_api_routes(dal);
-
-    // Set up the server address
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
-
-    info!("Starting server on {}", addr);
-
-    // Start the server
-    match Server::bind(&addr).serve(app.into_make_service()).await {
-        Ok(_) => info!("Server shut down gracefully"),
-        Err(e) => error!("Server error: {}", e),
+    // Execute the appropriate command
+    match cli.command {
+        Commands::Serve => commands::serve(&config).await?,
+        Commands::Create(create_commands) => match create_commands.command {
+            CreateSubcommands::Agent { name, cluster_name } => {
+                commands::create_agent(&config, name, cluster_name)?
+            }
+            CreateSubcommands::Generator { name, description } => {
+                commands::create_generator(&config, name, description)?
+            }
+        },
+        Commands::Rotate(rotate_commands) => match rotate_commands.command {
+            RotateSubcommands::Admin => commands::rotate_admin(&config)?,
+            RotateSubcommands::Agent { uuid } => commands::rotate_agent_key(&config, uuid)?,
+            RotateSubcommands::Generator { uuid } => commands::rotate_generator_key(&config, uuid)?,
+        },
     }
+    Ok(())
 }
-

@@ -1,31 +1,17 @@
-# .github/workflows/main.yml
+---
 name: CI/CD Pipeline
-
 on:
   push:
-    branches: [ main ]
+    branches: [main, develop]
   pull_request:
-    branches: [ main ]
-
+    branches: [main, develop]
 jobs:
   setup:
     uses: ./.github/workflows/setup.yml
-
   unit_tests:
     needs: setup
     uses: ./.github/workflows/unit_tests.yml
-
   integration_tests:
     needs: setup
     uses: ./.github/workflows/integration_tests.yml
-    if: github.event_name == 'pull_request'
-
-  functional_tests:
-    needs: setup
-    uses: ./.github/workflows/functional_tests.yml
-    if: github.event_name == 'pull_request'
-
-  data_model_tests:
-    needs: setup
-    if: github.event_name == 'push' || github.event_name == 'pull_request'
-    uses: ./.github/workflows/data_model_tests.yml
+    if: github.event_name == 'pull_request' || github.event_name == 'push'

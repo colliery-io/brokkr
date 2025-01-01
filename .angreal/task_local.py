@@ -3,8 +3,8 @@ from utils import docker_up,docker_down, docker_clean, cwd
 import subprocess
 
 
-local = angreal.command_group(name="local", about="dev commands for"
-                                 " local development")
+local = angreal.command_group(name="local", about="commands for"
+                                 " local development environment")
 
 
 
@@ -52,4 +52,3 @@ def docs():
             "cargo doc --open --no-deps --document-private-items"
         ], cwd=cwd, shell=True
     )
-    

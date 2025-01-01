@@ -28,7 +28,7 @@
 //!    ```
 //!
 //! ## Log Levels
-//! 
+//!
 //! The available log levels are:
 //! - "off": Turn off all logging
 //! - "error": Log only errors
@@ -42,31 +42,29 @@
 //! This logger is designed to be thread-safe and can handle concurrent logging
 //! operations and log level changes from multiple threads.
 
-use log::{ LevelFilter, Metadata, Record, SetLoggerError};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use log::{LevelFilter, Metadata, Record, SetLoggerError};
 use once_cell::sync::OnceCell;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
-
-pub use log::{debug, error, info, warn};
-
+pub use log::{debug, error, info, trace, warn};
 
 static LOGGER: BrokkrLogger = BrokkrLogger;
 static CURRENT_LEVEL: AtomicUsize = AtomicUsize::new(LevelFilter::Info as usize);
 static INIT: OnceCell<()> = OnceCell::new();
-
-
 
 /// Custom logger for the Brokkr application
 pub struct BrokkrLogger;
 
 impl log::Log for BrokkrLogger {
     fn enabled(&self, metadata: &Metadata) -> bool {
-        metadata.level() <= level_filter_from_u8(CURRENT_LEVEL.load(Ordering::Relaxed).try_into().unwrap())
+        metadata.level()
+            <= level_filter_from_u8(CURRENT_LEVEL.load(Ordering::Relaxed).try_into().unwrap())
     }
 
     fn log(&self, record: &Record) {
         if self.enabled(record.metadata()) {
-            eprintln!("{} - {}: {}", 
+            eprintln!(
+                "{} - {}: {}",
                 chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
                 record.level(),
                 record.args()
@@ -77,31 +75,41 @@ impl log::Log for BrokkrLogger {
     fn flush(&self) {}
 }
 
-/// Initializes the Brokkr logger with the specified log level.
+/// Initializes the Brokkr logging system with the specified log level.
+///
+/// Sets up a custom logger that handles structured logging with timestamps,
+/// log levels, and module paths. Supports multiple output formats and
+/// concurrent logging from multiple threads.
 ///
 /// # Arguments
-///
-/// * `level` - A string slice that holds the desired log level.
+/// * `level` - String representation of the log level ("debug", "info", "warn", "error")
 ///
 /// # Returns
+/// * `Result<(), Box<dyn Error>>` - Success/failure of logger initialization
 ///
-/// * `Ok(())` if the logger was successfully initialized.
-/// * `Err(SetLoggerError)` if there was an error setting up the logger.
-///
-/// # Examples
-///
+/// # Example
 /// ```
-/// use brokkr_logger;
+/// use brokkr_utils::logging;
 ///
-/// fn main() {
-///     brokkr_logger::init("info").expect("Failed to initialize logger");
-///     info!("Logger initialized successfully!");
-/// }
+/// logging::init("debug")?;
+/// log::info!("Logger initialized successfully");
 /// ```
+///
+/// # Features
+/// - Thread-safe logging
+/// - Configurable log levels
+/// - Module path tracking
+/// - Timestamp inclusion
+/// - Error context preservation
+///
+/// # Error Cases
+/// - Invalid log level string
+/// - Logger already initialized
+/// - System permission issues
 
 pub fn init(level: &str) -> Result<(), SetLoggerError> {
     let level_filter = str_to_level_filter(level);
-    
+
     INIT.get_or_init(|| {
         log::set_logger(&LOGGER)
             .map(|()| log::set_max_level(LevelFilter::Trace))
@@ -129,17 +137,13 @@ pub fn init(level: &str) -> Result<(), SetLoggerError> {
 /// ```
 /// use brokkr_logger;
 ///
-/// fn main() {
 ///     brokkr_logger::init("info").expect("Failed to initialize logger");
 ///     info!("This will be logged");
-///     
+///
 ///     brokkr_logger::update_log_level("warn").expect("Failed to update log level");
 ///     info!("This will not be logged");
 ///     warn!("But this will be logged");
-/// }
 /// ```
-
-
 
 pub fn update_log_level(level: &str) -> Result<(), String> {
     let new_level = str_to_level_filter(level);
@@ -172,20 +176,17 @@ fn level_filter_from_u8(v: u8) -> LevelFilter {
     }
 }
 
-
 pub mod prelude {
-    pub use log::{debug, info, warn, error};
+    pub use log::{debug, error, info, trace, warn};
 }
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use log::LevelFilter;
     use std::sync::mpsc;
-    use std::time::Instant;
     use std::thread;
     use std::time::Duration;
+    use std::time::Instant;
 
     #[test]
     /// Verifies that the logger initializes correctly with the specified log level.
@@ -196,7 +197,10 @@ mod tests {
     /// 3. Verifies that the current log level is set to Info
     fn test_init() {
         assert!(init("info").is_ok());
-        assert_eq!(CURRENT_LEVEL.load(Ordering::Relaxed), LevelFilter::Info as usize);
+        assert_eq!(
+            CURRENT_LEVEL.load(Ordering::Relaxed),
+            LevelFilter::Info as usize
+        );
     }
 
     #[test]
@@ -208,12 +212,18 @@ mod tests {
     /// 3. Updates the log level to "warn" and verifies the change
     fn test_update_log_level() {
         init("info").expect("Failed to initialize logger");
-        
+
         assert!(update_log_level("debug").is_ok());
-        assert_eq!(CURRENT_LEVEL.load(Ordering::Relaxed), LevelFilter::Debug as usize);
-        
+        assert_eq!(
+            CURRENT_LEVEL.load(Ordering::Relaxed),
+            LevelFilter::Debug as usize
+        );
+
         assert!(update_log_level("warn").is_ok());
-        assert_eq!(CURRENT_LEVEL.load(Ordering::Relaxed), LevelFilter::Warn as usize);
+        assert_eq!(
+            CURRENT_LEVEL.load(Ordering::Relaxed),
+            LevelFilter::Warn as usize
+        );
     }
 
     #[test]
@@ -224,10 +234,16 @@ mod tests {
     /// 2. Tries to update to another invalid level, expecting no change
     fn test_invalid_log_level() {
         assert!(init("invalid_level").is_ok());
-        assert_eq!(CURRENT_LEVEL.load(Ordering::Relaxed), LevelFilter::Info as usize);
-        
+        assert_eq!(
+            CURRENT_LEVEL.load(Ordering::Relaxed),
+            LevelFilter::Info as usize
+        );
+
         assert!(update_log_level("another_invalid_level").is_ok());
-        assert_eq!(CURRENT_LEVEL.load(Ordering::Relaxed), LevelFilter::Info as usize);
+        assert_eq!(
+            CURRENT_LEVEL.load(Ordering::Relaxed),
+            LevelFilter::Info as usize
+        );
     }
 
     #[test]
@@ -235,9 +251,10 @@ mod tests {
     ///
     /// This test initializes the logger at the debug level and calls each log macro.
     /// It doesn't verify the output, only that the calls don't cause errors.
+    #[allow(clippy::assertions_on_constants)]
     fn test_log_macros() {
         init("debug").expect("Failed to initialize logger");
-        
+
         debug!("This is a debug message");
         info!("This is an info message");
         warn!("This is a warning message");
@@ -291,7 +308,8 @@ mod tests {
                         }
                     }
 
-                    tx.send((log_operations, level_changes, max_log_time)).expect("Failed to send result");
+                    tx.send((log_operations, level_changes, max_log_time))
+                        .expect("Failed to send result");
                 })
             })
             .collect();
@@ -317,9 +335,16 @@ mod tests {
         println!("Max time for a single log operation: {:?}", max_log_time);
 
         // Check that no single log operation took an unusually long time (adjust threshold as needed)
-        assert!(max_log_time < Duration::from_millis(10), "A log operation took too long: {:?}", max_log_time);
+        assert!(
+            max_log_time < Duration::from_millis(10),
+            "A log operation took too long: {:?}",
+            max_log_time
+        );
 
         // Verify that the total operation count is correct
-        assert_eq!(total_log_operations + total_level_changes, thread_count * operations_per_thread);
+        assert_eq!(
+            total_log_operations + total_level_changes,
+            thread_count * operations_per_thread
+        );
     }
 }

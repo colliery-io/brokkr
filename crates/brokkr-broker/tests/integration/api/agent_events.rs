@@ -1,126 +1,240 @@
-use axum::{
-    body::Body,
-    http::{Request, StatusCode, Method},
-};
-use brokkr_models::models::agent_events::AgentEvent;
-
-use tower::ServiceExt;
-
-
 use crate::fixtures::TestFixture;
-use crate::fixtures::{create_test_stack, create_test_agent, create_test_deployment_object, create_test_agent_event};
+use axum::{
+    body::{to_bytes, Body},
+    http::{Request, StatusCode},
+};
+use brokkr_models::models::agent_events::NewAgentEvent;
+use tower::ServiceExt;
+use uuid::Uuid;
 
 #[tokio::test]
-async fn test_create_agent_event() {
+async fn test_list_agent_events_success() {
     let fixture = TestFixture::new();
-    let app = fixture.create_test_router();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+    let admin_pak = fixture.admin_pak.clone();
 
-    let stack = create_test_stack(&app).await;
-    let agent = create_test_agent(&app).await;
-    let deployment_object = create_test_deployment_object(&app, stack.id).await;
+    // Create a test agent and event
+    let agent = fixture.create_test_agent("Test Agent".to_string(), "Test Cluster".to_string());
+    let stack =
+        fixture.create_test_stack("Test Stack".to_string(), None, fixture.admin_generator.id);
+    let deployment_object =
+        fixture.create_test_deployment_object(stack.id, "test yaml".to_string(), false);
+    fixture.create_test_agent_event(
+        &agent,
+        &deployment_object,
+        "TEST",
+        "SUCCESS",
+        Some("Test message"),
+    );
 
-    let created_event = create_test_agent_event(&app, agent.id, deployment_object.id).await;
-    
-    assert!(!created_event.id.is_nil());
-    assert_eq!(created_event.event_type, "TEST_EVENT");
-    assert_eq!(created_event.status, "SUCCESS");
-    assert_eq!(created_event.agent_id, agent.id);
-    assert_eq!(created_event.deployment_object_id, deployment_object.id);
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/agent-events")
+                .header("Authorization", format!("Bearer {}", admin_pak))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let events: Vec<serde_json::Value> = serde_json::from_slice(&body).unwrap();
+    assert!(!events.is_empty());
 }
 
 #[tokio::test]
-async fn test_get_agent_event() {
+async fn test_list_agent_events_unauthorized_non_existent_pak() {
     let fixture = TestFixture::new();
-    let app = fixture.create_test_router();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
 
-    let stack = create_test_stack(&app).await;
-    let agent = create_test_agent(&app).await;
-    let deployment_object = create_test_deployment_object(&app, stack.id).await;
-    let created_event = create_test_agent_event(&app, agent.id, deployment_object.id).await;
-
-    let get_response = app
-        .clone()
+    let response = app
         .oneshot(
             Request::builder()
-                .method(Method::GET)
-                .uri(&format!("/agent-events/{}", created_event.id))
+                .method("GET")
+                .uri("/api/v1/agent-events")
+                .header("Authorization", "Bearer non_existent_pak")
                 .body(Body::empty())
                 .unwrap(),
         )
         .await
         .unwrap();
 
-    assert_eq!(get_response.status(), StatusCode::OK);
-
-    let body = hyper::body::to_bytes(get_response.into_body()).await.unwrap();
-    let retrieved_event: AgentEvent = serde_json::from_slice(&body).unwrap();
-    assert_eq!(retrieved_event.id, created_event.id);
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
 #[tokio::test]
-async fn test_list_agent_events() {
+async fn test_list_agent_events_unauthorized_no_pak() {
     let fixture = TestFixture::new();
-    let app = fixture.create_test_router();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
 
-    let stack = create_test_stack(&app).await;
-    let agent = create_test_agent(&app).await;
-    let deployment_object = create_test_deployment_object(&app, stack.id).await;
-    let created_event = create_test_agent_event(&app, agent.id, deployment_object.id).await;
-
-    let list_response = app
-        .clone()
+    let response = app
         .oneshot(
             Request::builder()
-                .method(Method::GET)
-                .uri(&format!("/agent-events?stack_id={}&agent_id={}", stack.id, agent.id))
+                .method("GET")
+                .uri("/api/v1/agent-events")
                 .body(Body::empty())
                 .unwrap(),
         )
         .await
         .unwrap();
 
-    assert_eq!(list_response.status(), StatusCode::OK);
-
-    let body = hyper::body::to_bytes(list_response.into_body()).await.unwrap();
-    let events: Vec<AgentEvent> = serde_json::from_slice(&body).unwrap();
-    assert!(events.iter().any(|e| e.id == created_event.id));
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
 #[tokio::test]
-async fn test_soft_delete_agent_event() {
+async fn test_create_agent_event_unauthorized_non_existent_pak() {
     let fixture = TestFixture::new();
-    let app = fixture.create_test_router();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
 
-    let stack = create_test_stack(&app).await;
-    let agent = create_test_agent(&app).await;
-    let deployment_object = create_test_deployment_object(&app, stack.id).await;
-    let created_event = create_test_agent_event(&app, agent.id, deployment_object.id).await;
+    let new_event = NewAgentEvent {
+        agent_id: Uuid::new_v4(),
+        deployment_object_id: Uuid::new_v4(),
+        event_type: "TEST".to_string(),
+        status: "SUCCESS".to_string(),
+        message: Some("Test message".to_string()),
+    };
 
-    let delete_response = app
-        .clone()
+    let response = app
         .oneshot(
             Request::builder()
-                .method(Method::DELETE)
-                .uri(&format!("/agent-events/{}", created_event.id))
+                .method("POST")
+                .uri("/api/v1/agent-events")
+                .header("Authorization", "Bearer non_existent_pak")
+                .header("Content-Type", "application/json")
+                .body(Body::from(serde_json::to_string(&new_event).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn test_create_agent_event_unauthorized_no_pak() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+
+    let new_event = NewAgentEvent {
+        agent_id: Uuid::new_v4(),
+        deployment_object_id: Uuid::new_v4(),
+        event_type: "TEST".to_string(),
+        status: "SUCCESS".to_string(),
+        message: Some("Test message".to_string()),
+    };
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/agent-events")
+                .header("Content-Type", "application/json")
+                .body(Body::from(serde_json::to_string(&new_event).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn test_get_agent_event_success() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+    let admin_pak = fixture.admin_pak.clone();
+
+    let agent = fixture.create_test_agent("Test Agent".to_string(), "Test Cluster".to_string());
+    let stack =
+        fixture.create_test_stack("Test Stack".to_string(), None, fixture.admin_generator.id);
+    let deployment_object =
+        fixture.create_test_deployment_object(stack.id, "test yaml".to_string(), false);
+    let event = fixture.create_test_agent_event(
+        &agent,
+        &deployment_object,
+        "TEST",
+        "SUCCESS",
+        Some("Test message"),
+    );
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/api/v1/agent-events/{}", event.id))
+                .header("Authorization", format!("Bearer {}", admin_pak))
                 .body(Body::empty())
                 .unwrap(),
         )
         .await
         .unwrap();
 
-    assert_eq!(delete_response.status(), StatusCode::NO_CONTENT);
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let fetched_event: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(fetched_event["id"], event.id.to_string());
+}
 
-    // Verify the event is soft deleted
-    let get_deleted_response = app
+#[tokio::test]
+async fn test_get_agent_event_unauthorized_non_existent_pak() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+
+    let response = app
         .oneshot(
             Request::builder()
-                .method(Method::GET)
-                .uri(&format!("/agent-events/{}", created_event.id))
+                .method("GET")
+                .uri(format!("/api/v1/agent-events/{}", Uuid::new_v4()))
+                .header("Authorization", "Bearer non_existent_pak")
                 .body(Body::empty())
                 .unwrap(),
         )
         .await
         .unwrap();
 
-    assert_eq!(get_deleted_response.status(), StatusCode::NOT_FOUND);
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn test_get_agent_event_unauthorized_no_pak() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/api/v1/agent-events/{}", Uuid::new_v4()))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn test_get_agent_event_not_found() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+    let admin_pak = fixture.admin_pak.clone();
+
+    let non_existent_id = Uuid::new_v4();
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/api/v1/agent-events/{}", non_existent_id))
+                .header("Authorization", format!("Bearer {}", admin_pak))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }

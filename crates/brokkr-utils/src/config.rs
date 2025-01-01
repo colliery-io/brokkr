@@ -20,6 +20,35 @@
 //! - In a configuration file: Use the appropriate key (e.g., `database.url = "new_value"`)
 //! - Using environment variables: Set the variable with the "BROKKR__" prefix and "__" as separators
 //!   (e.g., `BROKKR__DATABASE__URL=new_value`)
+//!
+//! # Available Environment Variables
+//!
+//! The following environment variables can be used to configure Brokkr:
+//!
+//! - `BROKKR__DATABASE__URL`: Sets the database connection URL
+//!   Default: "postgres://brokkr:brokkr@localhost:5432/brokkr"
+//!
+//! - `BROKKR__LOG__LEVEL`: Sets the log level for the application
+//!   Default: "debug"
+//!   Possible values: "trace", "debug", "info", "warn", "error"
+//!
+//! - `BROKKR__PAK__PREFIX`: Sets the prefix for PAKs (Pre-Authentication Keys)
+//!   Default: "brokkr"
+//!
+//! - `BROKKR__PAK__RNG`: Sets the random number generator type for PAK generation
+//!   Default: "osrng"
+//!
+//! - `BROKKR__PAK__DIGEST`: Sets the digest algorithm for PAK generation
+//!   Default: 8
+//!
+//! - `BROKKR__PAK__SHORT_TOKEN_LENGTH`: Sets the length of short PAK tokens
+//!   Default: 8
+//!
+//! - `BROKKR__PAK__LONG_TOKEN_LENGTH`: Sets the length of long PAK tokens
+//!   Default: 24
+//!
+//! - `BROKKR__PAK__SHORT_TOKEN_PREFIX`: Sets the prefix for short PAK tokens
+//!   Default: "BR"
 
 use config::{Config, ConfigError, Environment, File};
 use serde::Deserialize;
@@ -35,6 +64,42 @@ pub struct Settings {
     pub database: Database,
     /// Logging configuration
     pub log: Log,
+    /// PAK configuration
+    pub pak: PAK,
+    /// Agent configuration
+    pub agent: Agent,
+    /// Broker configuration
+    pub broker: Broker,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct Broker {
+    /// PAK Hash
+    pub pak_hash: Option<String>,
+}
+
+/// Represents the agent configuration
+#[derive(Debug, Deserialize, Clone)]
+#[allow(unused)]
+pub struct Agent {
+    /// Broker URL
+    pub broker_url: String,
+    /// Polling interval in seconds
+    pub polling_interval: u64,
+    /// Kubeconfig path
+    pub kubeconfig_path: Option<String>,
+    /// Max number of retries
+    pub max_retries: u32,
+    /// PAK
+    pub pak: String,
+    /// Agent name
+    pub agent_name: String,
+    /// Cluster name
+    pub cluster_name: String,
+    /// Max number of retries for event messages
+    pub max_event_message_retries: usize,
+    /// Delay between event message retries in seconds
+    pub event_message_retry_delay: u64,
 }
 
 /// Represents the database configuration
@@ -50,6 +115,39 @@ pub struct Database {
 pub struct Log {
     /// Log level (e.g., "info", "debug", "warn", "error")
     pub level: String,
+}
+
+/// Represents the PAK configuration
+#[derive(Debug, Deserialize, Clone)]
+pub struct PAK {
+    /// PAK prefix
+    pub prefix: Option<String>,
+    /// Digest algorithm for PAK
+    pub digest: Option<String>,
+    /// RNG type for PAK
+    pub rng: Option<String>,
+    /// Short token length for PAK
+    pub short_token_length: Option<usize>,
+    /// Short token length as a string
+    pub short_token_length_str: Option<String>,
+    /// Prefix for short tokens
+    pub short_token_prefix: Option<String>,
+    /// Long token length for PAK
+    pub long_token_length: Option<usize>,
+    /// Long token length as a string
+    pub long_token_length_str: Option<String>,
+}
+
+impl PAK {
+    /// Convert short token length to string
+    pub fn short_length_as_str(&mut self) {
+        self.short_token_length_str = self.short_token_length.map(|v| v.to_string());
+    }
+
+    /// Convert long token length to string
+    pub fn long_length_as_str(&mut self) {
+        self.long_token_length_str = self.long_token_length.map(|v| v.to_string());
+    }
 }
 
 impl Settings {

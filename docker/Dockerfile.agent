@@ -1,0 +1,39 @@
+# Stage 1: Build the application
+FROM rust:1.83-slim-bookworm AS builder
+
+# Set the working directory
+WORKDIR /usr/src/brokkr-agent
+
+# Install necessary dependencies
+RUN apt-get update && apt-get install -y \
+    libssl-dev \
+    pkg-config \
+    libpq-dev \
+    libc6 \
+    libc6-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy the Cargo.toml and Cargo.lock files
+COPY . ./
+
+
+RUN cargo build --bin brokkr-agent --release
+
+# Stage 2: Create the final image
+FROM debian:bookworm-slim AS broker-agent
+RUN apt-get update && apt-get install -y \
+    libssl-dev \
+    pkg-config \
+    libpq-dev \
+    libc6 \
+    libc6-dev \
+    && rm -rf /var/lib/apt/lists/*
+# Set the working directory
+WORKDIR /usr/local/bin
+
+# Copy the built binary from the builder stage
+COPY --from=builder /usr/src/brokkr-agent/target/release/brokkr-agent .
+
+RUN chmod +x brokkr-agent
+# Command to run the application
+ENTRYPOINT ["./brokkr-agent"]

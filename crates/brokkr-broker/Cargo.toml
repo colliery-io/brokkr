@@ -1,6 +1,6 @@
 [package]
 name = "brokkr-broker"
-version = "0.1.0"
+version = "0.0.0"
 edition = "2021"
 
 [lib]
@@ -17,8 +17,10 @@ brokkr-utils = { path = "../brokkr-utils" }
 
 axum  = { workspace=true }
 tokio  = { workspace=true }
+clap = { workspace = true, features = ["derive", "env"] }
 r2d2  = { workspace=true }
 r2d2_postgres  = { workspace=true }
+prefixed-api-key = { workspace=true }
 postgres  = { workspace=true }
 diesel  = { workspace=true }
 diesel_migrations = { workspace=true }
@@ -26,16 +28,11 @@ dotenv  = { workspace=true }
 uuid  = { workspace=true }
 url  = { workspace=true }
 chrono  = { workspace=true }
+once_cell = { workspace=true }
+rand_core = { workspace=true }
+rand = { workspace=true }
+sha2 = { workspace=true }
 serde  = { workspace=true }
-
-
-
-
-
-
-[dev-dependencies]
-tokio = { version = "1.0", features = ["full", "test-util"] }
-axum = "0.6"
-hyper = { version = "0.14", features = ["full"] }
-tower = "0.4"
-serde_json = "1.0"
+hyper = { workspace=true }
+tower = { workspace=true }
+serde_json = { workspace=true }

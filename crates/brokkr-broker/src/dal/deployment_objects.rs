@@ -1,19 +1,21 @@
-// src/dal/deployment_objects.rs
-
-//! This module provides a Data Access Layer (DAL) for managing DeploymentObject entities in the database.
+//! Data Access Layer for DeploymentObject operations.
 //!
-//! It uses Diesel ORM for database operations and includes functionality for creating,
-//! retrieving, updating, and soft-deleting deployment objects.
+//! This module provides functionality to interact with deployment objects in the database,
+//! including creating, retrieving, listing, and soft-deleting deployment objects.
 
+use crate::dal::DAL;
+use brokkr_models::models::agent_targets::AgentTarget;
+use brokkr_models::models::deployment_objects::{DeploymentObject, NewDeploymentObject};
+use brokkr_models::schema::agent_targets;
+use brokkr_models::schema::deployment_objects;
+use chrono::Utc;
 use diesel::prelude::*;
 use uuid::Uuid;
-use brokkr_models::models::deployment_objects::{DeploymentObject, NewDeploymentObject};
-use crate::dal::DAL;
 
-/// Represents the Data Access Layer for DeploymentObject-related operations.
+/// Data Access Layer for DeploymentObject operations.
 pub struct DeploymentObjectsDAL<'a> {
     /// Reference to the main DAL instance.
-    pub(crate) dal: &'a DAL,
+    pub dal: &'a DAL,
 }
 
 impl<'a> DeploymentObjectsDAL<'a> {
@@ -21,111 +23,251 @@ impl<'a> DeploymentObjectsDAL<'a> {
     ///
     /// # Arguments
     ///
-    /// * `new_deployment_object` - A reference to the NewDeploymentObject struct containing the object details.
+    /// * `new_deployment_object` - A reference to the NewDeploymentObject struct containing the deployment object details.
     ///
     /// # Returns
     ///
-    /// Returns a QueryResult containing the created DeploymentObject on success, or an error on failure.
-    pub fn create(&self, new_deployment_object: &NewDeploymentObject) -> QueryResult<DeploymentObject> {
-        use brokkr_models::schema::deployment_objects::dsl::*;
-
+    /// Returns a Result containing the created DeploymentObject on success, or a diesel::result::Error on failure.
+    pub fn create(
+        &self,
+        new_deployment_object: &NewDeploymentObject,
+    ) -> Result<DeploymentObject, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
-
-        diesel::insert_into(deployment_objects)
+        diesel::insert_into(deployment_objects::table)
             .values(new_deployment_object)
             .get_result(conn)
     }
 
-    /// Retrieves a deployment object by its UUID.
+    /// Retrieves a non-deleted deployment object by its UUID.
     ///
     /// # Arguments
     ///
-    /// * `object_uuid` - The UUID of the deployment object to retrieve.
+    /// * `deployment_object_uuid` - The UUID of the deployment object to retrieve.
     ///
     /// # Returns
     ///
-    /// Returns a QueryResult containing the DeploymentObject if found, or an error if not found or on failure.
-    pub fn get_by_id(&self, object_uuid: Uuid) -> QueryResult<DeploymentObject> {
-        use brokkr_models::schema::deployment_objects::dsl::*;
-
+    /// Returns a Result containing an Option<DeploymentObject> if found (and not deleted), or a diesel::result::Error on failure.
+    pub fn get(
+        &self,
+        deployment_object_uuid: Uuid,
+    ) -> Result<Option<DeploymentObject>, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
-
-        deployment_objects.filter(id.eq(object_uuid)).first(conn)
+        deployment_objects::table
+            .filter(deployment_objects::id.eq(deployment_object_uuid))
+            .filter(deployment_objects::deleted_at.is_null())
+            .first(conn)
+            .optional()
     }
 
-    /// Retrieves all deployment objects for a given stack, ordered by sequence_id.
+    /// Retrieves a deployment object by its UUID, including deleted objects.
     ///
     /// # Arguments
     ///
-    /// * `stack_id_param` - The UUID of the stack to retrieve deployment objects for.
+    /// * `deployment_object_uuid` - The UUID of the deployment object to retrieve.
     ///
     /// # Returns
     ///
-    /// Returns a QueryResult containing a Vec of DeploymentObjects for the given stack on success, or an error on failure.
-    pub fn get_by_stack_id(&self, stack_uuid: Uuid) -> QueryResult<Vec<DeploymentObject>> {
-        use brokkr_models::schema::deployment_objects::dsl::*;
-
+    /// Returns a Result containing an Option<DeploymentObject> if found (including deleted objects), or a diesel::result::Error on failure.
+    pub fn get_including_deleted(
+        &self,
+        deployment_object_uuid: Uuid,
+    ) -> Result<Option<DeploymentObject>, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
-
-        deployment_objects
-            .filter(stack_id.eq(stack_uuid))
-            .order(sequence_id.asc())
-            .load(conn)
+        deployment_objects::table
+            .filter(deployment_objects::id.eq(deployment_object_uuid))
+            .first(conn)
+            .optional()
     }
 
-    /// Updates an existing deployment object.
+    /// Lists all non-deleted deployment objects for a specific stack.
     ///
     /// # Arguments
     ///
-    /// * `object_uuid` - The UUID of the deployment object to update.
-    /// * `updated_object` - A reference to the DeploymentObject struct containing the updated details.
+    /// * `stack_id` - The UUID of the stack to list deployment objects for.
     ///
     /// # Returns
     ///
-    /// Returns a QueryResult containing the updated DeploymentObject on success, or an error on failure.
-    pub fn update(&self, object_uuid: Uuid, updated_object: &DeploymentObject) -> QueryResult<DeploymentObject> {
-        use brokkr_models::schema::deployment_objects::dsl::*;
-
+    /// Returns a Result containing a Vec of all non-deleted DeploymentObjects for the specified stack on success, or a diesel::result::Error on failure.
+    pub fn list_for_stack(
+        &self,
+        stack_id: Uuid,
+    ) -> Result<Vec<DeploymentObject>, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        deployment_objects::table
+            .filter(deployment_objects::stack_id.eq(stack_id))
+            .filter(deployment_objects::deleted_at.is_null())
+            .order(deployment_objects::sequence_id.desc())
+            .load::<DeploymentObject>(conn)
+    }
 
-        diesel::update(deployment_objects.filter(id.eq(object_uuid)))
-            .set(updated_object)
-            .get_result(conn)
+    /// Lists all deployment objects for a specific stack, including deleted ones.
+    ///
+    /// # Arguments
+    ///
+    /// * `stack_id` - The UUID of the stack to list deployment objects for.
+    ///
+    /// # Returns
+    ///
+    /// Returns a Result containing a Vec of all DeploymentObjects for the specified stack (including deleted ones) on success, or a diesel::result::Error on failure.
+    pub fn list_all_for_stack(
+        &self,
+        stack_id: Uuid,
+    ) -> Result<Vec<DeploymentObject>, diesel::result::Error> {
+        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        deployment_objects::table
+            .filter(deployment_objects::stack_id.eq(stack_id))
+            .order(deployment_objects::sequence_id.desc())
+            .load::<DeploymentObject>(conn)
     }
 
     /// Soft deletes a deployment object by setting its deleted_at timestamp to the current time.
     ///
     /// # Arguments
     ///
-    /// * `object_uuid` - The UUID of the deployment object to soft delete.
+    /// * `deployment_object_uuid` - The UUID of the deployment object to soft delete.
     ///
     /// # Returns
     ///
-    /// Returns a QueryResult containing the soft-deleted DeploymentObject on success, or an error on failure.
-    pub fn soft_delete(&self, object_uuid: Uuid) -> QueryResult<DeploymentObject> {
-        use brokkr_models::schema::deployment_objects::dsl::*;
-        use diesel::dsl::now;
-
+    /// Returns a Result containing the number of affected rows (0 or 1) on success, or a diesel::result::Error on failure.
+    pub fn soft_delete(
+        &self,
+        deployment_object_uuid: Uuid,
+    ) -> Result<usize, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
-
-        diesel::update(deployment_objects.filter(id.eq(object_uuid)))
-            .set(deleted_at.eq(now))
-            .get_result(conn)
+        diesel::update(
+            deployment_objects::table.filter(deployment_objects::id.eq(deployment_object_uuid)),
+        )
+        .set(deployment_objects::deleted_at.eq(Utc::now()))
+        .execute(conn)
     }
 
-    /// Retrieves all active (non-deleted) deployment objects, ordered by sequence_id.
+    /// Retrieves the latest non-deleted deployment object for a specific stack.
+    ///
+    /// # Arguments
+    ///
+    /// * `stack_id` - The UUID of the stack to retrieve the latest deployment object for.
     ///
     /// # Returns
     ///
-    /// Returns a QueryResult containing a Vec of active DeploymentObjects on success, or an error on failure.
-    pub fn get_active(&self) -> QueryResult<Vec<DeploymentObject>> {
-        use brokkr_models::schema::deployment_objects::dsl::*;
+    /// Returns a Result containing an Option<DeploymentObject> if found, or a diesel::result::Error on failure.
+    pub fn get_latest_for_stack(
+        &self,
+        stack_id: Uuid,
+    ) -> Result<Option<DeploymentObject>, diesel::result::Error> {
+        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        deployment_objects::table
+            .filter(deployment_objects::stack_id.eq(stack_id))
+            .filter(deployment_objects::deleted_at.is_null())
+            .order(deployment_objects::sequence_id.desc())
+            .first(conn)
+            .optional()
+    }
 
+    /// Retrieves a list of undeployed objects for an agent based on its responsibilities.
+    ///
+    /// This method performs the following steps:
+    /// 1. Get the list of stacks the agent is responsible for
+    /// 2. Get all deployment objects for these stacks
+    /// 3. Filter out objects that have been deployed (have corresponding agent events)
+    /// 4. Sort by sequence_id in descending order
+    ///
+    /// # Arguments
+    ///
+    /// * `agent_id` - The UUID of the agent to get undeployed objects for.
+    ///
+    /// # Returns
+    ///
+    /// Returns a Result containing a Vec of DeploymentObjects that are undeployed for the agent,
+    /// sorted by sequence_id in descending order (most recent first), or a diesel::result::Error on failure.
+    pub fn get_undeployed_objects_for_agent(
+        &self,
+        agent_id: Uuid,
+    ) -> Result<Vec<DeploymentObject>, diesel::result::Error> {
+        // Step 1: Get the list of stacks the agent is responsible for
+        let responsible_stacks = self.dal.stacks().get_associated_stacks(agent_id)?;
+
+        // Step 2: Get all deployment objects for these stacks
+        let mut all_objects = Vec::new();
+        for stack in responsible_stacks {
+            let stack_objects = self.list_for_stack(stack.id)?;
+            all_objects.extend(stack_objects);
+        }
+
+        // Step 3: Filter out objects that have been deployed (have corresponding agent events)
+        let deployed_object_ids = self
+            .dal
+            .agent_events()
+            .get_events(None, Some(agent_id))?
+            .into_iter()
+            .map(|event| event.deployment_object_id)
+            .collect::<Vec<Uuid>>();
+
+        let undeployed_objects = all_objects
+            .into_iter()
+            .filter(|obj| !deployed_object_ids.contains(&obj.id))
+            .collect::<Vec<DeploymentObject>>();
+
+        // Step 4: Sort by sequence_id in descending order
+        let mut sorted_undeployed_objects = undeployed_objects;
+        sorted_undeployed_objects.sort_by(|a, b| b.sequence_id.cmp(&a.sequence_id));
+
+        Ok(sorted_undeployed_objects)
+    }
+
+    /// Searches for deployment objects by checksum.
+    ///
+    /// # Arguments
+    ///
+    /// * `checksum` - The checksum to search for.
+    ///
+    /// # Returns
+    ///
+    /// Returns a Result containing a Vec of DeploymentObjects that match the checksum,
+    /// or a diesel::result::Error on failure.
+    pub fn search(
+        &self,
+        yaml_checksum: &str,
+    ) -> Result<Vec<DeploymentObject>, diesel::result::Error> {
+        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        deployment_objects::table
+            .filter(deployment_objects::yaml_checksum.eq(yaml_checksum))
+            .filter(deployment_objects::deleted_at.is_null())
+            .order(deployment_objects::sequence_id.desc())
+            .load::<DeploymentObject>(conn)
+    }
+
+    /// Retrieves applicable deployment objects for a given agent.
+    ///
+    /// This method fetches deployment objects based on the agent's targets and filters out deleted objects.
+    /// The results are sorted by sequence_id in descending order.
+    ///
+    /// # Arguments
+    ///
+    /// * `agent_id` - The UUID of the agent to retrieve applicable deployment objects for.
+    ///
+    /// # Returns
+    ///
+    /// Returns a Result containing a Vec of DeploymentObjects that are applicable for the agent,
+    /// sorted by sequence_id in descending order (most recent first), or a diesel::result::Error on failure.
+    pub fn get_applicable_deployment_objects(
+        &self,
+        agent_id: Uuid,
+    ) -> Result<Vec<DeploymentObject>, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
 
-        deployment_objects
-            .filter(deleted_at.is_null())
-            .order(sequence_id.asc())
-            .load(conn)
+        let agent_targets = agent_targets::table
+            .filter(agent_targets::agent_id.eq(agent_id))
+            .load::<AgentTarget>(conn)?;
+
+        let applicable_objects = deployment_objects::table
+            .filter(
+                deployment_objects::stack_id
+                    .eq_any(agent_targets.iter().map(|target| target.stack_id)),
+            )
+            .filter(deployment_objects::deleted_at.is_null())
+            .order(deployment_objects::sequence_id.desc())
+            .load::<DeploymentObject>(conn)?;
+
+        Ok(applicable_objects)
     }
 }

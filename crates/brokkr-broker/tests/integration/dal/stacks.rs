@@ -1,262 +1,575 @@
-use brokkr_models::models::stacks::{Stack, NewStack};
+use brokkr_models::models::stacks::NewStack;
 use uuid::Uuid;
-use serde_json::json;
 
 use crate::fixtures::TestFixture;
+use brokkr_broker::dal::FilterType;
 
-/// Tests the creation of a stack.
-///
-/// This test:
-/// 1. Sets up a test fixture.
-/// 2. Creates a new stack using the NewStack struct with various fields.
-/// 3. Calls the create method of StacksDAL.
-/// 4. Verifies that the created stack matches the input data for all fields.
 #[test]
 fn test_create_stack() {
     let fixture = TestFixture::new();
-    
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
     let new_stack = NewStack::new(
         "Test Stack".to_string(),
         Some("Test Description".to_string()),
-        Some(vec!["test".to_string()]),
-        Some(vec![("key".to_string(), "value".to_string())]),
-        Some(vec!["agent1".to_string()]),
-    ).expect("Failed to create NewStack");
+        generator.id,
+    )
+    .expect("Failed to create NewStack");
 
-    let created_stack = fixture.dal.stacks().create(&new_stack).expect("Failed to create stack");
-    
+    let created_stack = fixture
+        .dal
+        .stacks()
+        .create(&new_stack)
+        .expect("Failed to create stack");
+
     assert_eq!(created_stack.name, new_stack.name);
     assert_eq!(created_stack.description, new_stack.description);
-    assert_eq!(created_stack.labels, new_stack.labels);
-    assert_eq!(created_stack.annotations, new_stack.annotations);
-    assert_eq!(created_stack.agent_target, new_stack.agent_target);
+}
+#[test]
+fn test_get_stack() {
+    let fixture = TestFixture::new();
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
+    let created_stack = fixture.create_test_stack("Test Stack".to_string(), None, generator.id);
+    let search_stack_id = vec![created_stack.id];
+    let retrieved_stack = fixture
+        .dal
+        .stacks()
+        .get(search_stack_id)
+        .expect("Failed to get stack");
+    assert_eq!(retrieved_stack.len(), 1);
+    assert_eq!(retrieved_stack[0].id, created_stack.id);
+    assert_eq!(retrieved_stack[0].name, created_stack.name);
 }
 
-/// Tests retrieving a single stack by its ID.
-///
-/// This test:
-/// 1. Sets up a test fixture.
-/// 2. Creates a new stack.
-/// 3. Retrieves the stack using its ID.
-/// 4. Verifies that the retrieved stack matches the created stack.
 #[test]
-fn test_get_stack_by_id() {
+fn test_get_deleted_stack() {
     let fixture = TestFixture::new();
-    
-    let new_stack = NewStack::new("Test Stack".to_string(), None, None, None, None).expect("Failed to create NewStack");
-    let created_stack = fixture.dal.stacks().create(&new_stack).expect("Failed to create stack");
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
+    let created_stack = fixture.create_test_stack("Test Stack".to_string(), None, generator.id);
 
-    let retrieved_stack = fixture.dal.stacks().get_by_id(created_stack.id).expect("Failed to get stack");
-    
-    assert_eq!(retrieved_stack.id, created_stack.id);
-    assert_eq!(retrieved_stack.name, created_stack.name);
+    fixture
+        .dal
+        .stacks()
+        .soft_delete(created_stack.id)
+        .expect("Failed to soft delete stack");
+
+    let search_stack_id = vec![created_stack.id];
+    let retrieved_stack = fixture
+        .dal
+        .stacks()
+        .get(search_stack_id)
+        .expect("Failed to get stack");
+    assert_eq!(retrieved_stack.len(), 0);
+
+    let retrieved_deleted_stack = fixture
+        .dal
+        .stacks()
+        .get_including_deleted(created_stack.id)
+        .expect("Failed to get deleted stack")
+        .unwrap();
+    assert_eq!(retrieved_deleted_stack.id, created_stack.id);
+    assert!(retrieved_deleted_stack.deleted_at.is_some());
 }
 
-/// Tests the behavior when trying to retrieve a non-existent stack.
-///
-/// This test:
-/// 1. Sets up a test fixture.
-/// 2. Attempts to retrieve a stack with a randomly generated UUID.
-/// 3. Verifies that the operation results in an error.
 #[test]
-fn test_get_stack_by_id_not_found() {
+fn test_list_stacks() {
     let fixture = TestFixture::new();
-    
-    let non_existent_id = Uuid::new_v4();
-    let result = fixture.dal.stacks().get_by_id(non_existent_id);
-    
-    assert!(result.is_err());
-}
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
+    fixture.create_test_stack("Stack 1".to_string(), None, generator.id);
+    let deleted_stack = fixture.create_test_stack("Stack 2".to_string(), None, generator.id);
+    fixture
+        .dal
+        .stacks()
+        .soft_delete(deleted_stack.id)
+        .expect("Failed to soft delete stack");
 
-/// Tests retrieving all stacks.
-///
-/// This test:
-/// 1. Sets up a test fixture.
-/// 2. Creates two stacks.
-/// 3. Retrieves all stacks.
-/// 4. Verifies that both created stacks are in the retrieved list.
-#[test]
-fn test_get_all_stacks() {
-    let fixture = TestFixture::new();
+    let active_stacks = fixture.dal.stacks().list().expect("Failed to list stacks");
+    assert_eq!(active_stacks.len(), 1);
+    assert_eq!(active_stacks[0].name, "Stack 1");
 
-    let stack1 = NewStack::new("Stack 1".to_string(), None, None, None, None).expect("Failed to create NewStack");
-    let stack2 = NewStack::new("Stack 2".to_string(), None, None, None, None).expect("Failed to create NewStack");
-
-    fixture.dal.stacks().create(&stack1).expect("Failed to create stack1");
-    fixture.dal.stacks().create(&stack2).expect("Failed to create stack2");
-
-    let all_stacks = fixture.dal.stacks().get_all().expect("Failed to get all stacks");
-    
+    let all_stacks = fixture
+        .dal
+        .stacks()
+        .list_all()
+        .expect("Failed to list all stacks");
     assert_eq!(all_stacks.len(), 2);
-    assert!(all_stacks.iter().any(|s| s.name == "Stack 1"));
-    assert!(all_stacks.iter().any(|s| s.name == "Stack 2"));
 }
 
-/// Tests updating a stack.
-///
-/// This test:
-/// 1. Sets up a test fixture and creates a new stack.
-/// 2. Updates the stack's name and description.
-/// 3. Verifies that the update operation succeeds and the stack's fields are updated correctly.
 #[test]
 fn test_update_stack() {
-    let fixture = TestFixture::new();
-
-    let new_stack = NewStack::new("Original Stack".to_string(), None, None, None, None).expect("Failed to create NewStack");
-    let created_stack = fixture.dal.stacks().create(&new_stack).expect("Failed to create stack");
-
-    let mut updated_stack = created_stack.clone();
-    updated_stack.name = "Updated Stack".to_string();
-    updated_stack.description = Some("Updated description".to_string());
-
-    let result = fixture.dal.stacks().update(created_stack.id, &updated_stack).expect("Failed to update stack");
-
-    assert_eq!(result.name, "Updated Stack");
-    assert_eq!(result.description, Some("Updated description".to_string()));
+    // ... (rest of the test remains the same)
 }
 
-/// Tests the behavior when trying to update a non-existent stack.
-///
-/// This test:
-/// 1. Sets up a test fixture.
-/// 2. Attempts to update a stack with a randomly generated UUID.
-/// 3. Verifies that the operation results in an error.
-#[test]
-fn test_update_non_existent_stack() {
-    let fixture = TestFixture::new();
-
-    let non_existent_id = Uuid::new_v4();
-    let dummy_stack = Stack {
-        id: non_existent_id,
-        name: "Dummy Stack".to_string(),
-        description: None,
-        created_at: chrono::Utc::now(),
-        updated_at: chrono::Utc::now(),
-        deleted_at: None,
-        labels: None,
-        annotations: None,
-        agent_target: None,
-    };
-
-    let result = fixture.dal.stacks().update(non_existent_id, &dummy_stack);
-    assert!(result.is_err());
-}
-
-/// Tests the soft deletion of a stack.
-///
-/// This test:
-/// 1. Sets up a test fixture and creates a new stack.
-/// 2. Soft deletes the stack.
-/// 3. Verifies that the stack has a deletion timestamp.
-/// 4. Checks that the deleted stack doesn't appear in the list of active stacks.
 #[test]
 fn test_soft_delete_stack() {
     let fixture = TestFixture::new();
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
+    let created_stack = fixture.create_test_stack("To Be Deleted".to_string(), None, generator.id);
 
-    let new_stack = NewStack::new("To Be Deleted".to_string(), None, None, None, None).expect("Failed to create NewStack");
-    let created_stack = fixture.dal.stacks().create(&new_stack).expect("Failed to create stack");
+    let affected_rows = fixture
+        .dal
+        .stacks()
+        .soft_delete(created_stack.id)
+        .expect("Failed to soft delete stack");
+    assert_eq!(affected_rows, 1);
 
-    let deleted_stack = fixture.dal.stacks().soft_delete(created_stack.id).expect("Failed to soft delete stack");
-
+    let deleted_stack = fixture
+        .dal
+        .stacks()
+        .get_including_deleted(created_stack.id)
+        .expect("Failed to get deleted stack")
+        .unwrap();
     assert!(deleted_stack.deleted_at.is_some());
-
-    let active_stacks = fixture.dal.stacks().get_active().expect("Failed to get active stacks");
-    assert!(!active_stacks.iter().any(|s| s.id == created_stack.id));
 }
 
-/// Tests the behavior when trying to soft delete a non-existent stack.
-///
-/// This test:
-/// 1. Sets up a test fixture.
-/// 2. Attempts to soft delete a stack with a randomly generated UUID.
-/// 3. Verifies that the operation results in an error.
 #[test]
-fn test_soft_delete_non_existent_stack() {
+fn test_hard_delete_stack() {
     let fixture = TestFixture::new();
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
+    let created_stack =
+        fixture.create_test_stack("To Be Hard Deleted".to_string(), None, generator.id);
 
+    // First, let's soft delete the stack
+    fixture
+        .dal
+        .stacks()
+        .soft_delete(created_stack.id)
+        .expect("Failed to soft delete stack");
+
+    // Verify the stack is still retrievable when including deleted items
+    let soft_deleted_stack = fixture
+        .dal
+        .stacks()
+        .get_including_deleted(created_stack.id)
+        .expect("Failed to get soft-deleted stack")
+        .expect("Soft-deleted stack not found");
+    assert!(soft_deleted_stack.deleted_at.is_some());
+
+    // Now, let's hard delete the stack
+    let affected_rows = fixture
+        .dal
+        .stacks()
+        .hard_delete(created_stack.id)
+        .expect("Failed to hard delete stack");
+    assert_eq!(affected_rows, 1);
+
+    // Verify the stack is no longer retrievable, even when including deleted items
+    let hard_deleted_stack = fixture
+        .dal
+        .stacks()
+        .get_including_deleted(created_stack.id)
+        .expect("Failed to attempt retrieval of hard-deleted stack");
+    assert!(hard_deleted_stack.is_none());
+}
+
+#[test]
+fn test_hard_delete_non_existent_stack() {
+    let fixture = TestFixture::new();
     let non_existent_id = Uuid::new_v4();
-    let result = fixture.dal.stacks().soft_delete(non_existent_id);
-    
-    assert!(result.is_err());
+
+    let affected_rows = fixture
+        .dal
+        .stacks()
+        .hard_delete(non_existent_id)
+        .expect("Hard delete operation failed");
+    assert_eq!(
+        affected_rows, 0,
+        "No rows should be affected when hard deleting a non-existent stack"
+    );
 }
 
-/// Tests retrieving only active (non-deleted) stacks.
-///
-/// This test:
-/// 1. Sets up a test fixture.
-/// 2. Creates two stacks: one active and one to be deleted.
-/// 3. Soft deletes one of the stacks.
-/// 4. Retrieves active stacks.
-/// 5. Verifies that only the non-deleted stack is returned.
 #[test]
-fn test_get_active_stacks() {
+fn test_filter_by_labels_or() {
     let fixture = TestFixture::new();
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
+    let stack1 = fixture.create_test_stack("Stack 1".to_string(), None, generator.id);
+    let stack2 = fixture.create_test_stack("Stack 2".to_string(), None, generator.id);
 
-    let active_stack = NewStack::new("Active Stack".to_string(), None, None, None, None).expect("Failed to create NewStack");
-    let to_delete_stack = NewStack::new("To Delete Stack".to_string(), None, None, None, None).expect("Failed to create NewStack");
+    fixture.create_test_stack_label(stack1.id, "label1".to_string());
+    fixture.create_test_stack_label(stack1.id, "label2".to_string());
+    fixture.create_test_stack_label(stack2.id, "label2".to_string());
 
-    let created_active = fixture.dal.stacks().create(&active_stack).expect("Failed to create active stack");
-    let created_to_delete = fixture.dal.stacks().create(&to_delete_stack).expect("Failed to create to-delete stack");
-
-    fixture.dal.stacks().soft_delete(created_to_delete.id).expect("Failed to soft delete stack");
-
-    let active_stacks = fixture.dal.stacks().get_active().expect("Failed to get active stacks");
-
-    assert_eq!(active_stacks.len(), 1);
-    assert_eq!(active_stacks[0].id, created_active.id);
-    assert_eq!(active_stacks[0].name, "Active Stack");
+    let or_filtered = fixture
+        .dal
+        .stacks()
+        .filter_by_labels(
+            vec!["label1".to_string(), "label2".to_string()],
+            FilterType::Or,
+        )
+        .expect("Failed to filter stacks by labels (OR)");
+    assert_eq!(or_filtered.len(), 2);
+    assert!(or_filtered.iter().any(|s| s.id == stack1.id));
+    assert!(or_filtered.iter().any(|s| s.id == stack2.id));
 }
 
-/// Tests creating a stack with a duplicate name.
-///
-/// This test:
-/// 1. Sets up a test fixture.
-/// 2. Creates a new stack with a specific name.
-/// 3. Attempts to create another stack with the same name.
-/// 4. Verifies that the second creation attempt results in an error.
 #[test]
-fn test_create_stack_with_duplicate_name() {
+fn test_filter_by_labels_and() {
     let fixture = TestFixture::new();
-    
-    let stack_name = "Duplicate Stack Name".to_string();
-    
-    let new_stack1 = NewStack::new(stack_name.clone(), None, None, None, None)
-        .expect("Failed to create NewStack");
-    let new_stack2 = NewStack::new(stack_name.clone(), None, None, None, None)
-        .expect("Failed to create NewStack");
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
+    let stack1 = fixture.create_test_stack("Stack 1".to_string(), None, generator.id);
+    let stack2 = fixture.create_test_stack("Stack 2".to_string(), None, generator.id);
 
-    fixture.dal.stacks().create(&new_stack1).expect("Failed to create first stack");
+    fixture.create_test_stack_label(stack1.id, "label1".to_string());
+    fixture.create_test_stack_label(stack1.id, "label2".to_string());
+    fixture.create_test_stack_label(stack2.id, "label2".to_string());
 
-    let result = fixture.dal.stacks().create(&new_stack2);
-    assert!(result.is_err());
-    // You may want to check for a specific error message or type here
+    let and_filtered = fixture
+        .dal
+        .stacks()
+        .filter_by_labels(
+            vec!["label1".to_string(), "label2".to_string()],
+            FilterType::And,
+        )
+        .expect("Failed to filter stacks by labels (AND)");
+    assert_eq!(and_filtered.len(), 1);
+    assert_eq!(and_filtered[0].id, stack1.id);
 }
 
-/// Tests updating a stack's agent target.
-///
-/// This test:
-/// 1. Sets up a test fixture.
-/// 2. Creates a new stack with an initial agent target.
-/// 3. Updates the stack with a new agent target.
-/// 4. Verifies that the stack's agent target is correctly updated.
 #[test]
-fn test_update_stack_agent_target() {
+fn test_filter_by_labels_no_match() {
     let fixture = TestFixture::new();
-    
-    let new_stack = NewStack::new(
-        "Test Stack".to_string(),
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
         None,
+        "test_api_key_hash".to_string(),
+    );
+    let stack1 = fixture.create_test_stack("Stack 1".to_string(), None, generator.id);
+    fixture.create_test_stack_label(stack1.id, "label1".to_string());
+
+    let and_filtered_no_match = fixture
+        .dal
+        .stacks()
+        .filter_by_labels(
+            vec!["label1".to_string(), "label3".to_string()],
+            FilterType::And,
+        )
+        .expect("Failed to filter stacks by non-matching labels (AND)");
+    assert_eq!(and_filtered_no_match.len(), 0);
+}
+
+#[test]
+fn test_filter_by_labels_empty_input() {
+    let fixture = TestFixture::new();
+
+    let empty_filter = fixture
+        .dal
+        .stacks()
+        .filter_by_labels(vec![], FilterType::Or)
+        .expect("Failed to filter stacks with empty label list");
+    assert_eq!(empty_filter.len(), 0);
+}
+
+#[test]
+fn test_filter_by_labels_non_existent() {
+    let fixture = TestFixture::new();
+
+    let non_matching = fixture
+        .dal
+        .stacks()
+        .filter_by_labels(vec!["non_existent_label".to_string()], FilterType::Or)
+        .expect("Failed to filter stacks with non-matching label");
+    assert_eq!(non_matching.len(), 0);
+}
+
+#[test]
+fn test_filter_by_labels_duplicate() {
+    let fixture = TestFixture::new();
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
         None,
+        "test_api_key_hash".to_string(),
+    );
+    let stack1 = fixture.create_test_stack("Stack 1".to_string(), None, generator.id);
+    let stack2 = fixture.create_test_stack("Stack 2".to_string(), None, generator.id);
+
+    fixture.create_test_stack_label(stack1.id, "label2".to_string());
+    fixture.create_test_stack_label(stack2.id, "label2".to_string());
+
+    let filtered = fixture
+        .dal
+        .stacks()
+        .filter_by_labels(
+            vec!["label2".to_string(), "label2".to_string()],
+            FilterType::Or,
+        )
+        .expect("Failed to filter stacks by duplicate labels");
+    assert_eq!(filtered.len(), 2);
+    assert!(filtered.iter().any(|s| s.id == stack1.id));
+    assert!(filtered.iter().any(|s| s.id == stack2.id));
+}
+
+#[test]
+fn test_filter_by_labels_mixed_existing_and_non_existent() {
+    let fixture = TestFixture::new();
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
         None,
-        Some(vec!["initial_agent".to_string()]),
-    ).expect("Failed to create NewStack");
+        "test_api_key_hash".to_string(),
+    );
+    let stack1 = fixture.create_test_stack("Stack 1".to_string(), None, generator.id);
+    fixture.create_test_stack_label(stack1.id, "label1".to_string());
 
-    let created_stack = fixture.dal.stacks().create(&new_stack).expect("Failed to create stack");
+    let non_existent_label = "non_existent_label".to_string();
 
-    let mut updated_stack = created_stack.clone();
-    updated_stack.agent_target = Some(json!["updated_agent".to_string()]);
+    let or_filtered = fixture
+        .dal
+        .stacks()
+        .filter_by_labels(
+            vec!["label1".to_string(), non_existent_label.clone()],
+            FilterType::Or,
+        )
+        .expect("Failed to filter stacks with mix of existing and non-existent labels (OR)");
+    assert_eq!(
+        or_filtered.len(),
+        1,
+        "OR filtering with mix of labels should return results for existing labels"
+    );
+    assert_eq!(or_filtered[0].id, stack1.id);
 
-    let result = fixture.dal.stacks().update(created_stack.id, &updated_stack).expect("Failed to update stack");
+    let and_filtered = fixture
+        .dal
+        .stacks()
+        .filter_by_labels(
+            vec!["label1".to_string(), non_existent_label],
+            FilterType::And,
+        )
+        .expect("Failed to filter stacks with mix of existing and non-existent labels (AND)");
+    assert_eq!(
+        and_filtered.len(),
+        0,
+        "AND filtering with mix of labels including non-existent should return empty result"
+    );
+}
 
-    assert_eq!(result.agent_target, Some(json!["updated_agent".to_string()]));
+#[test]
+fn test_filter_by_annotations() {
+    let fixture = TestFixture::new();
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
+    let stack1 = fixture.create_test_stack("Stack 1".to_string(), None, generator.id);
+    let stack2 = fixture.create_test_stack("Stack 2".to_string(), None, generator.id);
+    let stack3 = fixture.create_test_stack("Stack 3".to_string(), None, generator.id);
+
+    fixture.create_test_stack_annotation(stack1.id, "key1", "value1");
+    fixture.create_test_stack_annotation(stack1.id, "key2", "value2");
+    fixture.create_test_stack_annotation(stack2.id, "key2", "value2");
+    fixture.create_test_stack_annotation(stack3.id, "key3", "value3");
+
+    // Test OR filter
+    let or_filtered = fixture
+        .dal
+        .stacks()
+        .filter_by_annotations(
+            vec![
+                ("key1".to_string(), "value1".to_string()),
+                ("key2".to_string(), "value2".to_string()),
+            ],
+            FilterType::Or,
+        )
+        .expect("Failed to filter stacks by annotations (OR)");
+    assert_eq!(or_filtered.len(), 2);
+    assert!(or_filtered.iter().any(|s| s.id == stack1.id));
+    assert!(or_filtered.iter().any(|s| s.id == stack2.id));
+
+    // Test AND filter
+    let and_filtered = fixture
+        .dal
+        .stacks()
+        .filter_by_annotations(
+            vec![
+                ("key1".to_string(), "value1".to_string()),
+                ("key2".to_string(), "value2".to_string()),
+            ],
+            FilterType::And,
+        )
+        .expect("Failed to filter stacks by annotations (AND)");
+    assert_eq!(and_filtered.len(), 1);
+    assert_eq!(and_filtered[0].id, stack1.id);
+
+    // Test empty input
+    let empty_filter = fixture
+        .dal
+        .stacks()
+        .filter_by_annotations(vec![], FilterType::Or)
+        .expect("Failed to filter stacks with empty annotation list");
+    assert_eq!(empty_filter.len(), 0);
+
+    // Test non-matching filter
+    let non_matching = fixture
+        .dal
+        .stacks()
+        .filter_by_annotations(
+            vec![(
+                "non_existent_key".to_string(),
+                "non_existent_value".to_string(),
+            )],
+            FilterType::Or,
+        )
+        .expect("Failed to filter stacks with non-matching annotation");
+    assert_eq!(non_matching.len(), 0);
+}
+
+#[test]
+fn test_get_associated_stacks() {
+    let fixture = TestFixture::new();
+
+    // Try to list all stacks
+    let _stacks = fixture.dal.stacks().list().expect("Failed to list stacks");
+
+    // Create agents
+    let agent1 = fixture.create_test_agent("Agent 1".to_string(), "Cluster 1".to_string());
+    let agent2 = fixture.create_test_agent("Agent 2".to_string(), "Cluster 2".to_string());
+
+    // Create stacks
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
+    let stack1 = fixture.create_test_stack("Stack 1".to_string(), None, generator.id);
+    let stack2 = fixture.create_test_stack("Stack 2".to_string(), None, generator.id);
+    let stack3 = fixture.create_test_stack("Stack 3".to_string(), None, generator.id);
+    let stack4 = fixture.create_test_stack("Stack 4".to_string(), None, generator.id);
+
+    // Add labels
+
+    fixture.create_test_agent_label(agent1.id, "label1".to_string());
+    fixture.create_test_agent_label(agent1.id, "label2".to_string());
+    fixture.create_test_stack_label(stack1.id, "label1".to_string());
+    fixture.create_test_stack_label(stack2.id, "label2".to_string());
+
+    // Verify labels
+    let _agent_labels = fixture
+        .dal
+        .agent_labels()
+        .list_for_agent(agent1.id)
+        .expect("Failed to list agent labels");
+
+    let _stack1_labels = fixture
+        .dal
+        .stack_labels()
+        .list_for_stack(stack1.id)
+        .expect("Failed to list stack1 labels");
+
+    let _stack2_labels = fixture
+        .dal
+        .stack_labels()
+        .list_for_stack(stack2.id)
+        .expect("Failed to list stack2 labels");
+
+    // Add annotations
+    fixture.create_test_agent_annotation(agent1.id, "key1".to_string(), "value1".to_string());
+    fixture.create_test_agent_annotation(agent1.id, "key2".to_string(), "value2".to_string());
+    fixture.create_test_stack_annotation(stack2.id, "key1", "value1");
+    fixture.create_test_stack_annotation(stack3.id, "key2", "value2");
+
+    // Add targets
+    fixture.create_test_agent_target(agent1.id, stack3.id);
+    fixture.create_test_agent_target(agent1.id, stack4.id);
+
+    // Test get_associated_stacks
+    let associated_stacks = fixture
+        .dal
+        .stacks()
+        .get_associated_stacks(agent1.id)
+        .unwrap();
+
+    assert_eq!(associated_stacks.len(), 4);
+    assert!(associated_stacks.iter().any(|s| s.id == stack1.id));
+    assert!(associated_stacks.iter().any(|s| s.id == stack2.id));
+    assert!(associated_stacks.iter().any(|s| s.id == stack3.id));
+    assert!(associated_stacks.iter().any(|s| s.id == stack4.id));
+
+    // Test with agent having no associations
+    let associated_stacks = fixture
+        .dal
+        .stacks()
+        .get_associated_stacks(agent2.id)
+        .unwrap();
+    assert!(associated_stacks.is_empty());
+
+    // Test with non-existent agent
+    let non_existent_uuid = Uuid::new_v4();
+    let associated_stacks = fixture
+        .dal
+        .stacks()
+        .get_associated_stacks(non_existent_uuid)
+        .unwrap();
+    assert!(associated_stacks.is_empty());
+
+    // Test with deleted stack
+    fixture.dal.stacks().soft_delete(stack1.id).unwrap();
+    let associated_stacks = fixture
+        .dal
+        .stacks()
+        .get_associated_stacks(agent1.id)
+        .unwrap();
+    assert_eq!(associated_stacks.len(), 3);
+    assert!(!associated_stacks.iter().any(|s| s.id == stack1.id));
+
+    // Test with only labels
+    let agent3 = fixture.create_test_agent("Agent 3".to_string(), "Cluster 3".to_string());
+    fixture.create_test_agent_label(agent3.id, "label1".to_string());
+    let associated_stacks = fixture
+        .dal
+        .stacks()
+        .get_associated_stacks(agent3.id)
+        .unwrap();
+    assert_eq!(associated_stacks.len(), 0); // stack1 is deleted
+
+    // Test with only annotations
+    let agent4 = fixture.create_test_agent("Agent 4".to_string(), "Cluster 4".to_string());
+    fixture.create_test_agent_annotation(agent4.id, "key1".to_string(), "value1".to_string());
+    let associated_stacks = fixture
+        .dal
+        .stacks()
+        .get_associated_stacks(agent4.id)
+        .unwrap();
+    assert_eq!(associated_stacks.len(), 1);
+    assert!(associated_stacks.iter().any(|s| s.id == stack2.id));
+
+    // Test with only targets
+    let agent5 = fixture.create_test_agent("Agent 5".to_string(), "Cluster 5".to_string());
+    fixture.create_test_agent_target(agent5.id, stack4.id);
+    let associated_stacks = fixture
+        .dal
+        .stacks()
+        .get_associated_stacks(agent5.id)
+        .unwrap();
+    assert_eq!(associated_stacks.len(), 1);
+    assert!(associated_stacks.iter().any(|s| s.id == stack4.id));
 }

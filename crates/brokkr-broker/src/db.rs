@@ -2,8 +2,8 @@
 //!
 //! It uses the diesel and r2d2 crates to manage database connections efficiently.
 
-use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
+use diesel::PgConnection;
 use url::Url;
 
 /// Represents a pool of PostgreSQL database connections.
@@ -33,7 +33,11 @@ pub struct ConnectionPool {
 /// This function will panic if:
 /// * The base URL is invalid
 /// * The connection pool creation fails
-pub fn create_shared_connection_pool(base_url: &str, database_name: &str, max_size: u32) -> ConnectionPool {
+pub fn create_shared_connection_pool(
+    base_url: &str,
+    database_name: &str,
+    max_size: u32,
+) -> ConnectionPool {
     // Parse the base URL and set the database name
     let mut url = Url::parse(base_url).expect("Invalid base URL");
     url.set_path(database_name);

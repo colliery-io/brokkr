@@ -17,7 +17,7 @@ repos:
       - id: clippy
   - repo: https://github.com/charliermarsh/ruff-pre-commit
     # Ruff version.
-    rev: 'v0.4.4'
+    rev: v0.4.4
     hooks:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]
@@ -36,5 +36,4 @@ repos:
         language: python
         types: [text]
         exclude: ^docs/themes/.*$
-        args:
-          - --ignore-words=.spelling_wordlist.txt
+        args: [--ignore-words=.spelling_wordlist.txt]

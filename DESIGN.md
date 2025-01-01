@@ -2,14 +2,14 @@
 # Rust Workspace Design Documentation
 
 #### 1. **`brokkr-models` Crate:**
-   - **Purpose:** 
+   - **Purpose:**
      - Define core data structures, traits, and utilities.
      - Include serialization, validation, and any other common traits associated with the models.
-   - **Public:** 
+   - **Public:**
      - Expose all models and related traits/utilities for use by other crates.
 
 #### 2. **`brokkr-broker` Crate ):**
-   - **Purpose:** 
+   - **Purpose:**
      - Serve as the main application server, exposing HTTP/REST/gRPC endpoints.
      - Implement complex business logic, orchestrating multiple DAO calls.
      - Handle all database interactions, including CRUD operations and data migrations.
@@ -26,7 +26,7 @@
        - **Utilities:** Import shared utilities such as configuration management, logging, and error handling from the `brokkr-utils` crate.
 
 #### 3. **`brokkr-agent` Crate:**
-   - **Purpose:** 
+   - **Purpose:**
      - Implement agent-specific logic, to apply events to the k8s cluster..
      - Communicate with the broker to determine actions and possibly report status.
    - **Public:**
@@ -36,7 +36,7 @@
      - Utilize shared utilities from the `brokkr-utils` crate for consistency and reusability.
 
 #### 4. **`admin_interface` Crate:**
-   - **Purpose:** 
+   - **Purpose:**
      - Provide a TUI/GUI for monitoring and managing the broker, agents, and overall system state.
    - **Public:**
      - Expose the administration interface for user interaction.
@@ -45,7 +45,7 @@
      - Leverage utilities from the `brokkr-utils` crate, such as logging and configuration management.
 
 #### 5. **`brokkr-utils` Crate:**
-   - **Purpose:** 
+   - **Purpose:**
      - Provide common utilities and interfaces that can be shared across the entire workspace to ensure consistency and reduce duplication.
    - **Components:**
      - **Configuration Management:** Centralized configuration handling, possibly using libraries like `config` or `serde`, to manage environment variables, configuration files, and runtime settings.
@@ -59,4 +59,3 @@
 - **`brokkr-agent` Crate(s):** Interacts with the broker to perform tasks and make decisions, utilizing shared utilities from the `brokkr-utils` crate.
 - **`admin_interface` Crate:** Interfaces with the broker and possibly agents to provide monitoring and control features, making use of utilities from the `brokkr-utils` crate.
 - **`brokkr-utils` Crate:** Provides a set of common utilities (configuration management, logging, error handling, etc.) used by the broker, agents, and administration interface to ensure consistency and reduce redundancy across the workspace.
-

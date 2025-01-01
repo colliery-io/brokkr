@@ -1,63 +1,61 @@
 //! # Data Access Layer (DAL) Module
 //!
-//! This module provides a centralized Data Access Layer for managing database operations.
+//! This module provides an abstraction layer for database operations in the Brokkr Broker.
+//! It includes structures and methods for interacting with various data entities such as
+//! agents, stacks, deployment objects, and more.
 //!
-//! ## Design
+//! ## Main Structures
 //!
-//! The DAL is structured as follows:
-//!
-//! 1. A main `DAL` struct that holds a connection pool and provides access to entity-specific DALs.
-//! 2. Separate modules for each entity (agents, agent_events, stacks, deployment_objects).
-//! 3. Entity-specific DAL structs (e.g., `AgentsDAL`, `StacksDAL`) that handle database operations
-//!    for their respective entities.
-//!
-//! This design allows for:
-//! - Centralized management of database connections.
-//! - Separation of concerns for different entities.
-//! - Easy extension for new entities.
+//! - `DAL`: The main Data Access Layer struct that provides access to all sub-DALs.
+//! - `FilterType`: An enum used for specifying filter types in queries.
 //!
 //! ## Usage
 //!
-//!
-//! 1. Create a DAL instance with a database connection pool:
-//!
-//! ```rust
-//! use crate::db::create_shared_connection_pool;
-//! use crade::dal::DAL;
-//!
-//! let database_url = "postgres://username:password@localhost/database_name";
-//! let connection_pool = create_shared_connection_pool(&database_url, "brokkr", 5);
-//! let dal = DAL::new(connection_pool.pool.clone());
-//! ```
-//!
-//! 2. Use the DAL to perform database operations:
+//! To use the DAL in your code:
 //!
 //! ```rust
-//! // Perform operations on agents
-//! let agents = dal.agents().list_agents().await?;
+//! use brokkr_broker::dal::DAL;
+//! use brokkr_broker::db::create_shared_connection_pool;
 //!
-//! // Perform operations on stacks
-//! let stack = dal.stacks().create_stack(new_stack).await?;
+//! let pool = create_shared_connection_pool("database_url", "app_name", 5);
+//! let dal = DAL::new(pool);
 //!
-//! // Perform operations on deployment objects
-//! let objects = dal.deployment_objects().list_objects(stack_id).await?;
+//! // Now you can use dal to access various data operations
+//! let agents = dal.agents().list().expect("Failed to list agents");
 //! ```
-//!
-//! Each entity-specific DAL provides methods for common database operations like
-//! create, read, update, and delete (CRUD).
 
-use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
+use diesel::PgConnection;
 
-mod agents;
-mod agent_events;
-mod stacks;
-mod deployment_objects;
+pub mod agents;
+use agents::AgentsDAL;
 
-pub use stacks::StacksDAL;
-pub use deployment_objects::DeploymentObjectsDAL;
-pub use agents::AgentsDAL;
-pub use agent_events::AgentEventsDAL;
+pub mod agent_annotations;
+use agent_annotations::AgentAnnotationsDAL;
+
+pub mod agent_events;
+use agent_events::AgentEventsDAL;
+
+pub mod agent_labels;
+use agent_labels::AgentLabelsDAL;
+
+pub mod agent_targets;
+use agent_targets::AgentTargetsDAL;
+
+pub mod stacks;
+use stacks::StacksDAL;
+
+pub mod stack_annotations;
+use stack_annotations::StackAnnotationsDAL;
+
+pub mod stack_labels;
+use stack_labels::StackLabelsDAL;
+
+pub mod deployment_objects;
+use deployment_objects::DeploymentObjectsDAL;
+
+pub mod generators;
+use generators::GeneratorsDAL;
 
 /// The main Data Access Layer struct.
 ///
@@ -93,6 +91,15 @@ impl DAL {
         AgentsDAL { dal: self }
     }
 
+    /// Provides access to the Agent Annotations Data Access Layer.
+    ///
+    /// # Returns
+    ///
+    /// An instance of AgentAnontationsDAL.
+    pub fn agent_annotations(&self) -> AgentAnnotationsDAL {
+        AgentAnnotationsDAL { dal: self }
+    }
+
     /// Provides access to the Agent Events Data Access Layer.
     ///
     /// # Returns
@@ -100,6 +107,42 @@ impl DAL {
     /// An instance of AgentEventsDAL.
     pub fn agent_events(&self) -> AgentEventsDAL {
         AgentEventsDAL { dal: self }
+    }
+
+    /// Provides access to the Agent Labels Data Access Layer.
+    ///
+    /// # Returns
+    ///
+    /// An instance of AgentLabelsDAL.
+    pub fn agent_labels(&self) -> AgentLabelsDAL {
+        AgentLabelsDAL { dal: self }
+    }
+
+    /// Provides access to the Agent Targets Data Access Layer.
+    ///
+    /// # Returns
+    ///
+    /// An instance of AgentTargetssDAL.
+    pub fn agent_targets(&self) -> AgentTargetsDAL {
+        AgentTargetsDAL { dal: self }
+    }
+
+    /// Provides access to the Stack Labels Data Access Layer.
+    ///
+    /// # Returns
+    ///
+    /// An instance of StackLabelsDAL.
+    pub fn stack_labels(&self) -> StackLabelsDAL {
+        StackLabelsDAL { dal: self }
+    }
+
+    /// Provides access to the Stack Annotations Data Access Layer.
+    ///
+    /// # Returns
+    ///
+    /// An instance of StackAnontationsDAL.
+    pub fn stack_annotations(&self) -> StackAnnotationsDAL {
+        StackAnnotationsDAL { dal: self }
     }
 
     /// Provides access to the Stacks Data Access Layer.
@@ -119,4 +162,19 @@ impl DAL {
     pub fn deployment_objects(&self) -> DeploymentObjectsDAL {
         DeploymentObjectsDAL { dal: self }
     }
+
+    /// Provides access to the Generators Data Access Layer.
+    ///
+    /// # Returns
+    ///
+    /// An instance of GeneratorsDal.
+    pub fn generators(&self) -> GeneratorsDAL {
+        GeneratorsDAL { dal: self }
+    }
+}
+
+#[derive(PartialEq)]
+pub enum FilterType {
+    And,
+    Or,
 }
