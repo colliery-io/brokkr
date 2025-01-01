@@ -70,7 +70,7 @@ fn create_busybox_deployment_json(name: &str, namespace: &str) -> serde_json::Va
 /// Panics if unable to create the client or discovery instance
 async fn setup() -> (K8sClient, Discovery) {
     // Initialize k8s client using the kubeconfig from the k3s container
-    let client = create_k8s_client(Some("/tmp/brokkr-keys/kubeconfig.yaml"))
+    let client = create_k8s_client(Some("/tmp/brokkr-keys/kubeconfig.local.yaml"))
         .await
         .unwrap();
 

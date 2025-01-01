@@ -69,7 +69,7 @@ services:
       - BROKKR__AGENT__BROKER_URL=http://brokkr-broker:3000
       - BROKKR__AGENT__AGENT_NAME=brokkr-integration-test-agent
       - BROKKR__AGENT__CLUSTER_NAME=brokkr-dev-integration-cluster
-      - BROKKR__AGENT__KUBECONFIG_PATH=/tmp/brokkr-keys/kubeconfig.yaml
+      - BROKKR__AGENT__KUBECONFIG_PATH=/tmp/brokkr-keys/kubeconfig.docker.yaml
     volumes:
       - /tmp/brokkr-keys:/tmp/brokkr-keys
     entrypoint: []
@@ -95,6 +95,9 @@ services:
           echo 'Waiting for Kubernetes API to be accessible...'
           sleep 5
         fi
+
+        # Switch to docker context before starting
+        KUBECONFIG=/tmp/brokkr-keys/kubeconfig.yaml kubectl config use-context docker
 
         env && cat /tmp/brokkr-keys/agent.pak && ./brokkr-agent start
       "
@@ -132,9 +135,15 @@ services:
     command: >
       sh -c '
         apk add --no-cache sed &&
-        export KUBECONFIG=/tmp/brokkr-keys/kubeconfig.yaml &&
-        # Only update the server URL
-        sed -i "s|server: https://127.0.0.1:6443|server: https://brokkr-dev-k3s-1:6443|g" /tmp/brokkr-keys/kubeconfig.yaml
+        # Create local kubeconfig
+        cp /tmp/brokkr-keys/kubeconfig.yaml /tmp/brokkr-keys/kubeconfig.local.yaml &&
+        sed -i "s|server: https://127.0.0.1:6443|server: https://localhost:6443|g" /tmp/brokkr-keys/kubeconfig.local.yaml &&
+
+        # Create docker kubeconfig
+        cp /tmp/brokkr-keys/kubeconfig.yaml /tmp/brokkr-keys/kubeconfig.docker.yaml &&
+        sed -i "s|server: https://127.0.0.1:6443|server: https://brokkr-dev-k3s-1:6443|g" /tmp/brokkr-keys/kubeconfig.docker.yaml
+
+        # Sleep to ensure files written
         sleep 5
       '
 

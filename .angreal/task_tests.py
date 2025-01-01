@@ -87,8 +87,8 @@ def integration_tests(crate_name: str, test_filter: str = "", skip_docker: bool 
                 print(f"Integration tests failed for {crate} with return code {rc}")
         else:
             rc = run_integration_tests(crate_name, test_filter)
-
-        input("Press Enter to shutdown containers and clean up...")
+        if not skip_docker:
+            input("Press Enter to shutdown containers and clean up...")
     finally:
         if not skip_docker:
             docker_down()
