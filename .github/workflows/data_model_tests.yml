@@ -40,6 +40,8 @@ jobs:
           profile: minimal
           toolchain: stable
           override: true
+
+      - name: Diesel install
         run: cargo install diesel_cli
       - name: Cache build
         uses: actions/cache@v3
