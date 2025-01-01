@@ -1,4 +1,32 @@
-/// Module for handling Kubernetes object creation and manipulation.
+//! # Kubernetes Objects Module
+//!
+//! Handles the creation and manipulation of Kubernetes objects from YAML definitions.
+//!
+//! ## Constants
+//!
+//! ```rust
+//! pub static STACK_LABEL: &str = "k8s.brokkr.io/stack";
+//! pub static CHECKSUM_ANNOTATION: &str = "k8s.brokkr.io/deployment-checksum";
+//! pub static LAST_CONFIG_ANNOTATION: &str = "k8s.brokkr.io/last-config-applied";
+//! pub static DEPLOYMENT_OBJECT_ID_LABEL: &str = "brokkr.io/deployment-object-id";
+//! ```
+//!
+//! ## Object Creation
+//!
+//! ```rust
+//! pub fn create_k8s_objects(
+//!     deployment_object: DeploymentObject,
+//! ) -> Result<Vec<DynamicObject>, Box<dyn std::error::Error>>
+//! ```
+//!
+//! Creates Kubernetes objects from YAML content with proper annotations and labels.
+//!
+//! ## Features
+//!
+//! - Multi-document YAML support
+//! - Automatic resource ordering
+//! - Metadata injection
+//! - Object validation
 use crate::utils;
 use brokkr_models::models::deployment_objects::DeploymentObject;
 use kube::api::DynamicObject;

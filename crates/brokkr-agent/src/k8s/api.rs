@@ -1,5 +1,37 @@
+//! # Kubernetes API Module
+//!
+//! This module provides functionality for interacting with the Kubernetes API server.
+//!
+//! ## Key Components
+//!
+//! ### Client Creation
+//! ```rust
+//! pub async fn create_k8s_client(kubeconfig_path: Option<&str>) -> Result<K8sClient, Error>
+//! ```
+//! Creates a Kubernetes client using either in-cluster config or a provided kubeconfig path.
+//!
+//! ### Object Management
+//! ```rust
+//! pub async fn apply_k8s_objects(objects: &[DynamicObject], client: K8sClient) -> Result<(), Error>
+//! ```
+//! Applies Kubernetes objects to the cluster with proper ordering and validation.
+//!
+//! ## Error Handling
+//!
+//! The module implements comprehensive error handling for:
+//! - API server connectivity issues
+//! - Object validation failures
+//! - Permission errors
+//! - Resource conflicts
+//!
+//! ## Resource Ordering
+//!
+//! Objects are applied in the following order:
+//! 1. Namespaces
+//! 2. CustomResourceDefinitions
+//! 3. Other resources
+
 use backoff::ExponentialBackoffBuilder;
-/// Kubernetes API interaction module for applying, deleting, and querying Kubernetes objects.
 use brokkr_utils::logging::prelude::*;
 use k8s_openapi::api::core::v1::Namespace;
 use kube::api::DynamicObject;
@@ -174,27 +206,27 @@ pub async fn apply_k8s_objects(
     Ok(())
 }
 
-/// Creates a dynamic API client for interacting with Kubernetes resources.
+/// Creates a dynamic Kubernetes API client for a specific resource type
 ///
 /// # Arguments
-/// * `ar` - ApiResource describing the resource type
-/// * `caps` - API capabilities for the resource
-/// * `client` - Kubernetes client
-/// * `ns` - Optional namespace for namespaced resources
-/// * `all` - Whether to operate across all namespaces
+/// * `ar` - ApiResource describing the Kubernetes resource type
+/// * `caps` - Capabilities of the API (e.g., list, watch, etc.)
+/// * `client` - Kubernetes client instance
+/// * `namespace` - Optional namespace to scope the API to
+/// * `all_namespaces` - Whether to operate across all namespaces
 ///
 /// # Returns
-/// * `Api<DynamicObject>` - Dynamic API client for the resource
+/// An Api<DynamicObject> instance configured for the specified resource type
 pub fn dynamic_api(
     ar: ApiResource,
     caps: ApiCapabilities,
     client: K8sClient,
-    ns: Option<&str>,
-    all: bool,
+    namespace: Option<&str>,
+    all_namespaces: bool,
 ) -> Api<DynamicObject> {
-    if caps.scope == Scope::Cluster || all {
+    if caps.scope == Scope::Cluster || all_namespaces {
         Api::all_with(client, &ar)
-    } else if let Some(namespace) = ns {
+    } else if let Some(namespace) = namespace {
         Api::namespaced_with(client, namespace, &ar)
     } else {
         Api::default_namespaced_with(client, &ar)

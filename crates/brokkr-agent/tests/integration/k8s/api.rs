@@ -59,6 +59,15 @@ fn create_busybox_deployment_json(name: &str, namespace: &str) -> serde_json::Va
     })
 }
 
+/// Sets up a test environment with a Kubernetes client and Discovery
+///
+/// # Returns
+/// A tuple containing:
+/// * K8sClient - Configured Kubernetes client
+/// * Discovery - Discovery instance for API resource information
+///
+/// # Panics
+/// Panics if unable to create the client or discovery instance
 async fn setup() -> (K8sClient, Discovery) {
     // Initialize k8s client using the kubeconfig from the k3s container
     let client = create_k8s_client(Some("/tmp/brokkr-keys/kubeconfig.yaml"))
@@ -82,6 +91,14 @@ async fn setup() -> (K8sClient, Discovery) {
     (client, discovery)
 }
 
+/// Cleans up test resources in the specified namespace
+///
+/// # Arguments
+/// * `client` - Kubernetes client to use for cleanup
+/// * `namespace` - Namespace containing resources to clean up
+///
+/// # Panics
+/// Panics if cleanup operations fail
 async fn cleanup(client: &K8sClient, namespace: &str) {
     // Delete test namespace if it exists
     let ns_api = Api::<Namespace>::all(client.clone());

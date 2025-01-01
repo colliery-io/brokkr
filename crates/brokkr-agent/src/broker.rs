@@ -1,4 +1,85 @@
-/// Module for interacting with the Brokkr broker service.
+//! # Broker Communication Module
+//!
+//! Handles all communication between the agent and the Brokkr broker service.
+//!
+//! ## Core Functions
+//!
+//! ### Broker Health Check
+//! ```rust
+//! pub async fn wait_for_broker_ready(config: &Settings)
+//! ```
+//! Waits for the broker service to become available, implementing exponential backoff.
+//!
+//! ### Agent Authentication
+//! ```rust
+//! pub async fn verify_agent_pak(config: &Settings) -> Result<(), Box<dyn std::error::Error>>
+//! ```
+//! Verifies the agent's Pre-shared Authentication Key (PAK) with the broker.
+//!
+//! ### Deployment Management
+//! ```rust
+//! pub async fn fetch_and_process_deployment_objects(
+//!     config: &Settings,
+//!     client: &Client,
+//!     agent: &Agent,
+//! ) -> Result<Vec<DeploymentObject>, Box<dyn std::error::Error>>
+//! ```
+//! Fetches and processes deployment objects from the broker.
+//!
+//! ## Communication Flow
+//!
+//! ```mermaid
+//! sequenceDiagram
+//!     participant Agent
+//!     participant Broker
+//!
+//!     Agent->>Broker: Health Check (/readyz)
+//!     Broker-->>Agent: 200 OK
+//!
+//!     Agent->>Broker: Verify PAK
+//!     Broker-->>Agent: PAK Status
+//!
+//!     loop Deployment Processing
+//!         Agent->>Broker: Fetch Deployments
+//!         Broker-->>Agent: Deployment Objects
+//!         Agent->>Broker: Report Status
+//!     end
+//! ```
+//!
+//! ## Error Handling
+//!
+//! The module implements robust error handling for:
+//! - Network connectivity issues
+//! - Authentication failures
+//! - Invalid deployment objects
+//! - Broker service unavailability
+//!
+//! ## Event Reporting
+//!
+//! ```rust
+//! pub async fn send_success_event(
+//!     config: &Settings,
+//!     client: &Client,
+//!     agent: &Agent,
+//!     deployment_id: Uuid,
+//!     message: Option<String>,
+//! ) -> Result<(), Box<dyn std::error::Error>>
+//! ```
+//! Reports deployment status back to the broker.
+//!
+//! ### Failure Event
+//! ```rust
+//! pub async fn send_failure_event(
+//!     config: &Settings,
+//!     client: &Client,
+//!     agent: &Agent,
+//!     deployment_id: Uuid,
+//!     error_message: String,
+//! ) -> Result<(), Box<dyn std::error::Error>>
+//! ```
+//! Reports deployment failure back to the broker.
+//!
+//!
 use brokkr_models::models::agent_events::NewAgentEvent;
 use brokkr_models::models::agents::Agent;
 use brokkr_models::models::deployment_objects::DeploymentObject;
@@ -153,15 +234,20 @@ pub async fn fetch_agent_details(
     }
 }
 
-/// Fetches applicable deployment objects from the broker for the given agent.
+/// Fetches and processes deployment objects from the Kubernetes cluster
 ///
 /// # Arguments
-/// * `config` - Application settings containing broker configuration
-/// * `client` - HTTP client for making requests to the broker
-/// * `agent` - Agent details
+/// * `config` - Application settings containing configuration parameters
+/// * `client` - HTTP client for making API requests
+/// * `agent` - Agent instance containing runtime context
 ///
 /// # Returns
-/// * `Result<Vec<DeploymentObject>, Box<dyn std::error::Error>>` - List of applicable deployment objects or error
+/// * `Result<Vec<DeploymentObject>>` - A vector of processed deployment objects if successful
+///
+/// # Errors
+/// Returns an error if:
+/// * Failed to fetch deployments from the cluster
+/// * Failed to process deployment objects
 pub async fn fetch_and_process_deployment_objects(
     config: &Settings,
     client: &Client,

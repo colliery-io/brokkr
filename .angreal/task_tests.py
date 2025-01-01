@@ -66,7 +66,7 @@ def unit_tests(crate_name: str, test_filter: str = ""):
 @angreal.command(name="integration", about="run integration tests for a specific crate")
 @angreal.argument(name="test_filter", required=False, help="Filter for specific tests or modules")
 @angreal.argument(name="crate_name", required=True, help= f"Name of the crate to test ({CRATES + ['all']})")
-@angreal.option(name="skip_docker", required=False, help="Skip docker compose up")
+@angreal.argument(name="skip_docker", required=False, help="Skip docker compose up", takes_value=False, is_flag=True)
 def integration_tests(crate_name: str, test_filter: str = "", skip_docker: bool = False):
     """Run integration tests for a specific crate."""
     if not skip_docker:

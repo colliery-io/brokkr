@@ -5,6 +5,7 @@ edition = "2024"
 rust-version = "1.8"
 
 [workspace.dependencies]
+    aquamarine = { version = "0.1.0"}
     axum = { version = "0.7.5", features = [] }
     chrono = { version = "0.4", features = ["serde"] }
     config = { version = "0.13.1", features = [] }

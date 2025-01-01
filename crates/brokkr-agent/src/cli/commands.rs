@@ -1,3 +1,57 @@
+//! # CLI Commands Module
+//!
+//! Implements the command-line interface for the Brokkr agent.
+//!
+//! ## Main Command
+//!
+//! ```rust
+//! pub async fn start() -> Result<(), Box<dyn std::error::Error>>
+//! ```
+//!
+//! The primary entry point for the agent, which:
+//! 1. Loads configuration
+//! 2. Initializes logging
+//! 3. Verifies broker connectivity
+//! 4. Starts the main processing loop
+//!
+//! ## Startup Sequence
+//!
+//! ```mermaid
+//! flowchart TD
+//!     A[Load Config] --> B[Init Logger]
+//!     B --> C[Wait for Broker]
+//!     C --> D[Verify PAK]
+//!     D --> E[Create HTTP Client]
+//!     E --> F[Fetch Agent Details]
+//!     F --> G[Start Main Loop]
+//!
+//!     G --> H{Process Deployments}
+//!     H --> I[Apply Objects]
+//!     I --> J[Report Status]
+//!     J --> H
+//! ```
+//!
+//! ## Signal Handling
+//!
+//! The module implements graceful shutdown handling:
+//! - Catches SIGTERM/SIGINT signals
+//! - Completes in-progress deployments
+//! - Performs cleanup operations
+//!
+//! ## Configuration
+//!
+//! Supports configuration through:
+//! - Environment variables
+//! - Configuration files
+//! - Command line arguments
+//!
+//! ## Logging
+//!
+//! Implements structured logging with:
+//! - Multiple log levels
+//! - JSON output format
+//! - Contextual information
+
 use crate::{broker, k8s};
 use brokkr_utils::config::Settings;
 use brokkr_utils::logging::prelude::*;

@@ -17,6 +17,13 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 static FIXTURE: OnceCell<Arc<Mutex<TestFixture>>> = OnceCell::new();
 
+/// Gets or initializes a test fixture singleton
+///
+/// This function ensures only one test fixture exists across all tests,
+/// initializing it if necessary.
+///
+/// # Returns
+/// An Arc<Mutex<TestFixture>> pointing to the shared test fixture instance
 pub async fn get_or_init_fixture() -> Arc<Mutex<TestFixture>> {
     FIXTURE
         .get_or_init(|| Arc::new(Mutex::new(TestFixture::new())))
@@ -36,6 +43,7 @@ pub struct TestFixture {
 }
 
 impl TestFixture {
+    /// Creates a new TestFixture instance with default values
     pub fn new() -> Self {
         INIT.call_once(|| {});
 
@@ -56,6 +64,10 @@ impl TestFixture {
         test_fixture
     }
 
+    /// Initializes the test fixture by setting up necessary resources
+    ///
+    /// # Panics
+    /// Panics if initialization fails
     pub async fn initialize(&mut self) {
         if self.initialized {
             return;
@@ -109,10 +121,22 @@ impl TestFixture {
         self.create_stack("agent-integration-test-stack").await;
     }
 
+    /// Waits for the broker to become available
+    ///
+    /// # Panics
+    /// Panics if the broker doesn't become available within the timeout period
     pub async fn wait_for_broker(&self) {
         broker::wait_for_broker_ready(&self.agent_settings).await;
     }
 
+    /// Creates a new generator resource
+    ///
+    /// # Arguments
+    /// * `name` - Name of the generator
+    /// * `description` - Optional description for the generator
+    ///
+    /// # Panics
+    /// Panics if generator creation fails
     pub async fn create_generator(&mut self, name: String, description: Option<String>) {
         let new_generator = NewGenerator { name, description };
 
@@ -157,6 +181,13 @@ impl TestFixture {
         self.generator_pak = Some(pak);
     }
 
+    /// Creates a new stack resource
+    ///
+    /// # Arguments
+    /// * `name` - Name of the stack
+    ///
+    /// # Panics
+    /// Panics if stack creation fails
     pub async fn create_stack(&mut self, stack_name: &str) {
         let new_stack = NewStack::new(
             stack_name.to_string(),
@@ -217,6 +248,16 @@ impl TestFixture {
         assert_eq!(response.status(), reqwest::StatusCode::OK);
     }
 
+    /// Creates a new deployment from YAML content
+    ///
+    /// # Arguments
+    /// * `yaml_content` - YAML string containing deployment configuration
+    ///
+    /// # Returns
+    /// The created DeploymentObject
+    ///
+    /// # Panics
+    /// Panics if deployment creation fails
     pub async fn create_deployment(&self, yaml_content: String) -> DeploymentObject {
         let new_deployment_object = NewDeploymentObject::new(
             self.stack.as_ref().expect("Stack not created").id,
