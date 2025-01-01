@@ -8,6 +8,10 @@ env:
 jobs:
   integration_tests:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        crate: [brokkr-agent, brokkr-broker]
+      fail-fast: false
     steps:
       - uses: actions/checkout@v3
         with:
@@ -34,10 +38,15 @@ jobs:
           key: ${{ runner.os }}-rust-build-${{ github.sha }}
           restore-keys: |
             ${{ runner.os }}-rust-build-${{ github.sha }}
+      - name: Docker Compose Cache
+        uses: actions/cache@v3
+        with:
+          path: ~/.docker
+          key: ${{ runner.os }}-docker-${{ hashFiles('.angreal/files/docker-compose.yaml') }}
       - name: docker compose up
         uses: hoverkraft-tech/compose-action@v2.0.1
         with:
           compose-file: ".angreal/files/docker-compose.yaml"
-          test-command: angreal tests integration all
+          test-command: angreal tests integration ${{ matrix.crate }}
       - name: Execute integration tests
-        run: angreal tests integration --skip-docker all
+        run: angreal tests integration --skip-docker ${{ matrix.crate }}

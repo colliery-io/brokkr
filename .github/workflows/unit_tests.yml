@@ -5,6 +5,10 @@ on:
 jobs:
   unit_tests:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        crate: [brokkr-agent, brokkr-broker, brokkr-models, brokkr-utils]
+      fail-fast: false
     steps:
       - uses: actions/checkout@v3
         with:
@@ -32,4 +36,4 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-rust-build-${{ github.sha }}
       - name: Run unit tests
-        run: angreal tests unit all
+        run: angreal tests unit ${{ matrix.crate }}

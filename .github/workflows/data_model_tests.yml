@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:13
+        image: postgres:15-alpine
         env:
           POSTGRES_USER: brokkr
           POSTGRES_PASSWORD: brokkr
@@ -19,21 +19,47 @@ jobs:
           - 5432:5432
         options: >-
           --health-cmd pg_isready
-          --health-interval 10s
+          --health-interval 1s
           --health-timeout 5s
-          --health-retries 5
+          --health-retries 60
+
     steps:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
+
+      - uses: actions/cache@v3
+        id: python-cache
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: 3.x
+          cache: 'pip'
+
       - name: Install angreal
+        if: steps.python-cache.outputs.cache-hit != 'true'
         run: |
           python -m pip install --upgrade pip
           pip install angreal
+
+      - name: Rust Cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin/diesel
+            target
+          key: ${{ runner.os }}-cargo-diesel-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-diesel-
+
       - name: Set up Rust
         uses: actions-rs/toolchain@v1
         with:
@@ -41,18 +67,23 @@ jobs:
           toolchain: stable
           override: true
 
-      - name: Diesel install
-        run: cargo install diesel_cli
-      - name: Cache build
-        uses: actions/cache@v3
-        with:
-          path: target
-          key: ${{ runner.os }}-rust-build-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-rust-build-${{ github.sha }}
+      - name: Install Diesel CLI
+        if: steps.cargo-cache.outputs.cache-hit != 'true'
+        run: cargo install diesel_cli --no-default-features --features postgres
+
       - name: Run data models test
         run: angreal models test --skip-docker
         working-directory: ${{ inputs.data-model-path }}
+
       - name: Run migration tests
-        run: angreal models  migrations --skip-docker
+        run: angreal models migrations --skip-docker
         working-directory: ${{ inputs.data-model-path }}
+
+      - name: Upload test logs
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: data-model-test-logs
+          path: |
+            target/debug/deps/*data_model*.log
+            target/debug/deps/*migration*.log

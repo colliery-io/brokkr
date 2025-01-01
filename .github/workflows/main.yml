@@ -2,7 +2,7 @@
 name: CI/CD Pipeline
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
     branches: [main, develop]
 jobs:
@@ -14,8 +14,7 @@ jobs:
   integration_tests:
     needs: setup
     uses: ./.github/workflows/integration_tests.yml
-    if: github.event_name == 'pull_request'
-# data_model_tests:
-#   needs: setup
-#   if: github.event_name == 'push' || github.event_name == 'pull_request'
-#   uses: ./.github/workflows/data_model_tests.yml
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+  data_model_tests:
+    needs: setup
+    uses: ./.github/workflows/data_model_tests.yml
