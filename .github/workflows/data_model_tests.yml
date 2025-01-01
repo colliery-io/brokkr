@@ -46,7 +46,7 @@ jobs:
           path: target
           key: ${{ runner.os }}-rust-build-${{ github.sha }}
           restore-keys: |
-            ${{ runner.os }}-rust-build-
+            ${{ runner.os }}-rust-build-${{ github.sha }}
       - name: Run data models test
         run: angreal models test
         working-directory: ${{ inputs.data-model-path }}

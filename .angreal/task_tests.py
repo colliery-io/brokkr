@@ -57,7 +57,7 @@ def unit_tests(crate_name: str, test_filter: str = ""):
             print(f"Unit tests failed for {crate} with return code {rc}")
     else:
         rc = run_unit_tests(crate_name, test_filter)
-    
+
     return rc
 
 
@@ -65,11 +65,12 @@ def unit_tests(crate_name: str, test_filter: str = ""):
 @angreal.command(name="integration", about="run integration tests for a specific crate")
 @angreal.argument(name="test_filter", required=False, help="Filter for specific tests or modules")
 @angreal.argument(name="crate_name", required=True, help= f"Name of the crate to test ({CRATES + ['all']})")
-def integration_tests(crate_name: str, test_filter: str = ""):
+@angreal.option(name="skip_docker", required=False, help="Skip docker compose up")
+def integration_tests(crate_name: str, test_filter: str = "", skip_docker: bool = False):
     """Run integration tests for a specific crate."""
-    docker_down()
-    docker_clean()
-    docker_up()
+    if not skip_docker:
+        docker_clean()
+        docker_up()
     print("Waiting for applications to come up and be stable, this may take a while...grab a coffee!")
     time.sleep(180)
 
@@ -84,9 +85,10 @@ def integration_tests(crate_name: str, test_filter: str = ""):
                 print(f"Integration tests failed for {crate} with return code {rc}")
         else:
             rc = run_integration_tests(crate_name, test_filter)
-        
+
         input("Press Enter to shutdown containers and clean up...")
     finally:
-        docker_down()
-        docker_clean()
+        if not skip_docker:
+            docker_down()
+            docker_clean()
         return rc
