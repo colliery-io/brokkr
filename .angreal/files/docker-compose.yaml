@@ -146,6 +146,22 @@ services:
         sleep 60
       '
 
+  brokkr-ui:
+    build:
+      context: ../..
+      dockerfile: docker/Dockerfile.ui
+    ports:
+      - "3001:3001"
+    depends_on:
+      brokkr-broker:
+        condition: service_healthy
+    environment:
+      - REACT_APP_BROKER_URL=http://localhost:3000
+      - PORT=3001
+      - REACT_APP_ADMIN_PAK=brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8
+    volumes:
+      - brokkr-keys:/tmp/brokkr-keys
+
 volumes:
   brokkr-postgres-data:
   k3s-data:

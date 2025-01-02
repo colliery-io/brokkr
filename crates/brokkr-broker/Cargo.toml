@@ -35,4 +35,5 @@ sha2 = { workspace=true }
 serde  = { workspace=true }
 hyper = { workspace=true }
 tower = { workspace=true }
+tower-http = { workspace=true }
 serde_json = { workspace=true }
