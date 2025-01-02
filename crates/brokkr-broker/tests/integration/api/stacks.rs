@@ -3,7 +3,7 @@ use axum::{
     http::{Request, StatusCode},
 };
 use brokkr_models::models::{
-    deployment_objects::NewDeploymentObject,
+    deployment_objects::DeploymentObject,
     stack_annotations::NewStackAnnotation,
     stacks::{NewStack, Stack},
 };
@@ -434,12 +434,10 @@ async fn test_create_deployment_object() {
     );
     let stack = fixture.create_test_stack("Test Stack".to_string(), None, generator.id);
 
-    let new_deployment_object = NewDeploymentObject {
-        stack_id: stack.id,
-        yaml_content: "test yaml".to_string(),
-        yaml_checksum: "test checksum".to_string(),
-        is_deletion_marker: false,
-    };
+    let payload = serde_json::json!({
+        "yaml_content": "test yaml",
+        "is_deletion_marker": false
+    });
 
     let response = app
         .oneshot(
@@ -448,9 +446,7 @@ async fn test_create_deployment_object() {
                 .uri(format!("/api/v1/stacks/{}/deployment-objects", stack.id))
                 .header("Content-Type", "application/json")
                 .header("Authorization", &admin_pak)
-                .body(Body::from(
-                    serde_json::to_string(&new_deployment_object).unwrap(),
-                ))
+                .body(Body::from(serde_json::to_string(&payload).unwrap()))
                 .unwrap(),
         )
         .await
@@ -459,12 +455,11 @@ async fn test_create_deployment_object() {
     assert_eq!(response.status(), StatusCode::OK);
 
     let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-
-    assert_eq!(json["stack_id"], stack.id.to_string());
-    assert_eq!(json["yaml_content"], "test yaml");
-    assert_eq!(json["yaml_checksum"], "test checksum");
-    assert_eq!(json["is_deletion_marker"], false);
+    let created_object: DeploymentObject = serde_json::from_slice(&body).unwrap();
+    assert_eq!(created_object.stack_id, stack.id);
+    assert_eq!(created_object.yaml_content, "test yaml");
+    assert!(!created_object.is_deletion_marker);
+    assert!(!created_object.yaml_checksum.is_empty());
 }
 
 #[tokio::test]

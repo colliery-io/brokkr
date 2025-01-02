@@ -16,18 +16,25 @@ RUN apt-get update && apt-get install -y \
 # Copy the Cargo.toml and Cargo.lock files
 COPY . ./
 
-
 RUN cargo build --bin brokkr-agent --release
 
 # Stage 2: Create the final image
 FROM debian:bookworm-slim AS broker-agent
+
+# Install dependencies and kubectl
 RUN apt-get update && apt-get install -y \
     libssl-dev \
     pkg-config \
     libpq-dev \
     libc6 \
     libc6-dev \
-    && rm -rf /var/lib/apt/lists/*
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" \
+    && chmod +x kubectl \
+    && mv kubectl /usr/local/bin/
+
 # Set the working directory
 WORKDIR /usr/local/bin
 
@@ -35,5 +42,6 @@ WORKDIR /usr/local/bin
 COPY --from=builder /usr/src/brokkr-agent/target/release/brokkr-agent .
 
 RUN chmod +x brokkr-agent
+
 # Command to run the application
 ENTRYPOINT ["./brokkr-agent"]

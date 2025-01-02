@@ -27,6 +27,15 @@ api.interceptors.response.use(response => {
   return Promise.reject(error);
 });
 
+// Helper function to calculate SHA-256 hash
+const calculateSHA256 = async (str) => {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(str);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+};
+
 export const getAgents = async () => {
   try {
     const response = await api.get('/api/v1/agents');
@@ -49,10 +58,12 @@ export const getStacks = async () => {
 
 export const createDeploymentObject = async (stackId, yamlContent, isDeletionMarker = false) => {
   try {
+    const yamlChecksum = await calculateSHA256(yamlContent);
     const response = await api.post(`/api/v1/stacks/${stackId}/deployment-objects`, {
-      stack_id: stackId,
       yaml_content: yamlContent,
-      is_deletion_marker: isDeletionMarker
+      yaml_checksum: yamlChecksum,
+      is_deletion_marker: isDeletionMarker,
+      sequence_id: null  // The server will assign this
     });
     return response.data;
   } catch (error) {
@@ -107,6 +118,16 @@ export const getAgent = async (id) => {
   }
 };
 
+export const updateAgent = async (id, data) => {
+  try {
+    const response = await api.put(`/api/v1/agents/${id}`, data);
+    return response.data;
+  } catch (error) {
+    console.error(`Failed to update agent ${id}:`, error);
+    throw error;
+  }
+};
+
 export const getAgentEvents = async (id, limit = 50) => {
   try {
     const response = await api.get(`/api/v1/agents/${id}/events?limit=${limit}`);
@@ -129,7 +150,10 @@ export const getAgentLabels = async (agentId) => {
 
 export const addAgentLabel = async (agentId, label) => {
   try {
-    const response = await api.post(`/api/v1/agents/${agentId}/labels`, JSON.stringify(label), {
+    const response = await api.post(`/api/v1/agents/${agentId}/labels`, {
+      agent_id: agentId,
+      label: label
+    }, {
       headers: {
         'Content-Type': 'application/json'
       }
@@ -302,6 +326,80 @@ export const removeStackAnnotation = async (stackId, key) => {
     await api.delete(`/api/v1/stacks/${stackId}/annotations/${key}`);
   } catch (error) {
     console.error('Failed to remove stack annotation:', error);
+    throw error;
+  }
+};
+
+// Stack Management
+export const getStack = async (id) => {
+  try {
+    const response = await api.get(`/api/v1/stacks/${id}`);
+    return response.data;
+  } catch (error) {
+    console.error(`Failed to fetch stack ${id}:`, error);
+    throw error;
+  }
+};
+
+export const updateStack = async (id, data) => {
+  try {
+    const response = await api.put(`/api/v1/stacks/${id}`, data);
+    return response.data;
+  } catch (error) {
+    console.error(`Failed to update stack ${id}:`, error);
+    throw error;
+  }
+};
+
+// Stack Deployment Objects
+export const getStackDeploymentObjects = async (stackId) => {
+  try {
+    const response = await api.get(`/api/v1/stacks/${stackId}/deployment-objects`);
+    return response.data;
+  } catch (error) {
+    console.error('Failed to fetch deployment objects:', error);
+    throw error;
+  }
+};
+
+export const getDeploymentObject = async (deploymentId) => {
+  try {
+    const response = await api.get(`/api/v1/deployment-objects/${deploymentId}`);
+    return response.data;
+  } catch (error) {
+    console.error('Failed to fetch deployment object:', error);
+    throw error;
+  }
+};
+
+export const getAgentTargets = async (agentId) => {
+  try {
+    const response = await api.get(`/api/v1/agents/${agentId}/targets`);
+    return response.data;
+  } catch (error) {
+    console.error('Failed to fetch agent targets:', error);
+    throw error;
+  }
+};
+
+export const addAgentTarget = async (agentId, stackId) => {
+  try {
+    const response = await api.post(`/api/v1/agents/${agentId}/targets`, {
+      agent_id: agentId,
+      stack_id: stackId
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Failed to add agent target:', error);
+    throw error;
+  }
+};
+
+export const removeAgentTarget = async (agentId, stackId) => {
+  try {
+    await api.delete(`/api/v1/agents/${agentId}/targets/${stackId}`);
+  } catch (error) {
+    console.error('Failed to remove agent target:', error);
     throw error;
   }
 };

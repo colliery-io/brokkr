@@ -75,6 +75,8 @@ services:
     entrypoint: []
     command: >
       sh -c "
+        echo 'Container Starting.'
+
         # Wait for kubeconfig to be ready and accessible
         while [ ! -f /tmp/brokkr-keys/kubeconfig.yaml ] ; do
           echo 'Waiting for kubeconfig to be ready...'
@@ -88,15 +90,22 @@ services:
         done
 
         # Export PAK and start agent
-        export BROKKR__AGENT__PAK=$(cat /tmp/brokkr-keys/agent.pak)
+        export BROKKR__AGENT__PAK=$$(cat /tmp/brokkr-keys/agent.pak)
 
-        # Verify kubeconfig is valid
-        if ! KUBECONFIG=/tmp/brokkr-keys/kubeconfig.yaml kubectl get nodes > /dev/null 2>&1; then
-          echo 'Waiting for Kubernetes API to be accessible...'
+        # Wait for Kubernetes API to be fully accessible with retries
+        max_retries=30
+        retry_count=0
+        while ! KUBECONFIG=/tmp/brokkr-keys/kubeconfig.docker.yaml kubectl get nodes > /dev/null 2>&1; do
+          retry_count=$$((retry_count + 1))
+          if [ $$retry_count -eq $$max_retries ]; then
+            echo 'Timed out waiting for Kubernetes API to become accessible'
+            exit 1
+          fi
+          echo 'Waiting for Kubernetes API to be accessible... (attempt '$$retry_count' of '$$max_retries')'
           sleep 5
-        fi
+        done
 
-
+        echo 'Kubernetes API is accessible, starting agent...'
         env && cat /tmp/brokkr-keys/agent.pak && ./brokkr-agent start
       "
 
@@ -162,12 +171,24 @@ services:
     volumes:
       - brokkr-keys:/tmp/brokkr-keys
 
+  copy-keys:
+    image: alpine
+    volumes:
+      - brokkr-keys:/source:ro
+      - /tmp/brokkr-keys:/destination
+    command: >
+      sh -c "
+        mkdir -p /destination &&
+        cp -r /source/* /destination/ &&
+        chmod -R 777 /destination/
+      "
+    depends_on:
+      init-agent:
+        condition: service_completed_successfully
+      init-kubeconfig:
+        condition: service_completed_successfully
+
 volumes:
   brokkr-postgres-data:
   k3s-data:
   brokkr-keys:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: /tmp/brokkr-keys

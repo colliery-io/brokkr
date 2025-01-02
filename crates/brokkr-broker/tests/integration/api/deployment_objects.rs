@@ -423,12 +423,10 @@ async fn test_create_deployment_object_with_generator_pak() {
     );
     let stack = fixture.create_test_stack("Test Stack".to_string(), None, generator.id);
 
-    let new_deployment_object = NewDeploymentObject {
-        stack_id: stack.id,
-        yaml_content: "test yaml".to_string(),
-        yaml_checksum: "test checksum".to_string(),
-        is_deletion_marker: false,
-    };
+    let payload = serde_json::json!({
+        "yaml_content": "test yaml",
+        "is_deletion_marker": false
+    });
 
     let (generator_pak, generator_hash) = create_pak().unwrap();
     fixture
@@ -444,9 +442,7 @@ async fn test_create_deployment_object_with_generator_pak() {
                 .uri(format!("/api/v1/stacks/{}/deployment-objects", stack.id))
                 .header("Content-Type", "application/json")
                 .header("Authorization", &generator_pak)
-                .body(Body::from(
-                    serde_json::to_string(&new_deployment_object).unwrap(),
-                ))
+                .body(Body::from(serde_json::to_string(&payload).unwrap()))
                 .unwrap(),
         )
         .await

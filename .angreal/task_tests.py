@@ -1,7 +1,6 @@
 import angreal # type: ignore
 import subprocess
 from utils import docker_up,docker_down,cwd, docker_clean
-import time
 test = angreal.command_group(name="tests", about="commands for test suites")
 
 
@@ -72,8 +71,6 @@ def integration_tests(crate_name: str, test_filter: str = "", skip_docker: bool 
     if not skip_docker:
         docker_clean()
         docker_up()
-        print("Waiting for applications to come up and be stable, this may take a while...grab a coffee!")
-        time.sleep(180)
 
     rc = None
     return_codes = []
