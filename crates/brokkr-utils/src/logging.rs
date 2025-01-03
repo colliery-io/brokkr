@@ -64,11 +64,9 @@ impl log::Log for BrokkrLogger {
     fn log(&self, record: &Record) {
         if self.enabled(record.metadata()) {
             eprintln!(
-                "{} - {} [{}:{}] - {}",
+                "{} - {}: {}",
                 chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
                 record.level(),
-                record.module_path().unwrap_or("unknown"),
-                record.line().unwrap_or(0),
                 record.args()
             );
         }
