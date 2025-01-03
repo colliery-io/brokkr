@@ -1,6 +1,7 @@
 import angreal # type: ignore
 import subprocess
 from utils import docker_up,docker_down,cwd, docker_clean
+import time
 test = angreal.command_group(name="tests", about="commands for test suites")
 
 
@@ -72,6 +73,8 @@ def integration_tests(crate_name: str, test_filter: str = "", skip_docker: bool 
         docker_clean()
         docker_up()
 
+    time.sleep(120)
+    print("Sleeping for 120 seconds, waiting for services to stabilize - get some coffee")
     rc = None
     return_codes = []
     try:

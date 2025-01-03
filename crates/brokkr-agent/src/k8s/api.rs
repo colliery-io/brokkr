@@ -32,21 +32,26 @@
 //! 3. Other resources
 
 use crate::k8s::objects::verify_object_ownership;
+use crate::k8s::objects::{CHECKSUM_ANNOTATION, STACK_LABEL};
 use backoff::ExponentialBackoffBuilder;
 use brokkr_utils::logging::prelude::*;
 use k8s_openapi::api::core::v1::Namespace;
+use kube::api::DeleteParams;
 use kube::api::DynamicObject;
 use kube::api::GroupVersionKind;
 use kube::api::Patch;
 use kube::api::PatchParams;
+use kube::core::TypeMeta;
 use kube::discovery::ApiCapabilities;
 use kube::discovery::ApiResource;
 use kube::discovery::Scope;
 use kube::Api;
+use kube::Client;
 use kube::Client as K8sClient;
 use kube::Discovery;
 use kube::Error as KubeError;
 use kube::ResourceExt;
+use std::collections::HashMap;
 use std::time::Duration;
 use uuid::Uuid;
 
@@ -135,8 +140,8 @@ where
 pub async fn apply_k8s_objects(
     k8s_objects: &[DynamicObject],
     k8s_client: K8sClient,
+    patch_params: PatchParams,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let patch_params = PatchParams::apply("brokkr-controller");
     let discovery = Discovery::new(k8s_client.clone())
         .run()
         .await
@@ -178,7 +183,7 @@ pub async fn apply_k8s_objects(
             let data = serde_json::to_value(k8s_object)?;
             let patch_params = patch_params.clone();
             let name = k8s_object.name_any();
-            let name_for_error = name.clone(); // Clone for error handling
+            let name_for_error = name.clone();
 
             with_retries(
                 move || {
@@ -257,6 +262,7 @@ pub async fn get_all_objects_by_annotation(
         .await
         .expect("Failed to create discovery client");
 
+    // Search through all API groups and resources
     for group in discovery.groups() {
         for (ar, caps) in group.recommended_resources() {
             let api: Api<DynamicObject> =
@@ -264,14 +270,28 @@ pub async fn get_all_objects_by_annotation(
 
             match api.list(&Default::default()).await {
                 Ok(list) => {
-                    // Filter objects by annotation
-                    let matching_objects = list.items.into_iter().filter(|obj| {
-                        obj.metadata
-                            .annotations
-                            .as_ref()
-                            .and_then(|annotations| annotations.get(annotation_key))
-                            .map_or(false, |value| value == annotation_value)
-                    });
+                    let matching_objects = list
+                        .items
+                        .into_iter()
+                        .filter(|obj| {
+                            obj.metadata
+                                .annotations
+                                .as_ref()
+                                .and_then(|annotations| annotations.get(annotation_key))
+                                .map_or(false, |value| value == annotation_value)
+                        })
+                        .map(|mut obj| {
+                            // Set TypeMeta directly
+                            obj.types = Some(TypeMeta {
+                                api_version: if ar.group.is_empty() {
+                                    ar.version.clone()
+                                } else {
+                                    format!("{}/{}", ar.group, ar.version)
+                                },
+                                kind: ar.kind.clone(),
+                            });
+                            obj
+                        });
                     results.extend(matching_objects);
                 }
                 Err(e) => warn!("Error listing resources for {:?}: {:?}", ar, e),
@@ -488,6 +508,7 @@ pub async fn validate_k8s_objects(
 pub async fn safe_apply_k8s_objects(
     k8s_objects: &[DynamicObject],
     k8s_client: K8sClient,
+    patch_params: PatchParams,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Validate all objects first
     if let Err(e) = validate_k8s_objects(k8s_objects, k8s_client.clone()).await {
@@ -497,87 +518,189 @@ pub async fn safe_apply_k8s_objects(
 
     // If validation succeeds, proceed with actual apply
     info!("Pre-apply validation successful, proceeding with apply");
-    apply_k8s_objects(k8s_objects, k8s_client).await
+    apply_k8s_objects(k8s_objects, k8s_client, patch_params).await
 }
 
-/// Applies a list of Kubernetes objects to the cluster with rollback capability.
+/// Reconciles the target state of Kubernetes objects for a stack.
 ///
-/// This function tracks the state of objects before applying changes and attempts
-/// to rollback to the previous state if any apply operations fail.
+/// This function:
+/// 1. Captures the original state of existing objects
+/// 2. Applies the new desired state
+/// 3. Prunes any objects that are no longer part of the desired state but belong to the same stack
+/// 4. Rolls back all changes if any part of the reconciliation fails
 ///
 /// # Arguments
-/// * `k8s_objects` - List of DynamicObjects to apply
+/// * `k8s_objects` - List of DynamicObjects representing the desired state
 /// * `k8s_client` - Kubernetes client for API interactions
-/// * `patch_params` - Parameters for the patch operation
 ///
 /// # Returns
 /// * `Result<(), Box<dyn std::error::Error>>` - Success or error with message
-pub async fn apply_k8s_objects_with_rollback(
-    k8s_objects: &[DynamicObject],
-    k8s_client: K8sClient,
+pub async fn reconcile_target_state(
+    objects: &[DynamicObject],
+    client: Client,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let patch_params = PatchParams::apply("brokkr-controller");
+    if objects.is_empty() {
+        debug!("No objects to reconcile");
+        return Ok(());
+    }
 
-    // Store original states for potential rollback
-    let mut original_states = Vec::new();
-    let discovery = Discovery::new(k8s_client.clone())
-        .run()
-        .await
-        .expect("Failed to create discovery client");
+    // Get stack ID from first object's annotations
+    let stack_id = objects
+        .first()
+        .and_then(|obj| obj.metadata.annotations.as_ref())
+        .and_then(|anns| anns.get(STACK_LABEL))
+        .ok_or_else(|| format!("{} annotation missing from object", STACK_LABEL))?;
 
-    // Capture original states
-    for k8s_object in k8s_objects {
-        if let Some((ar, caps)) = discovery.resolve_gvk(&GroupVersionKind::try_from(
-            k8s_object.types.as_ref().unwrap(),
-        )?) {
-            let api = dynamic_api(
-                ar,
-                caps,
-                k8s_client.clone(),
-                k8s_object.metadata.namespace.as_deref(),
-                false,
-            );
-            if let Ok(existing) = api.get(&k8s_object.name_any()).await {
-                original_states.push(existing);
+    // Keep track of resources we want to retain
+    let mut keep_resources: HashMap<String, String> = HashMap::new();
+
+    // First apply all resources with server-side apply
+    info!("Applying {} resources", objects.len());
+    for object in objects {
+        let mut params = PatchParams::apply("brokkr-controller");
+        params.force = true; // Force apply to handle conflicts
+
+        // Create resource key for tracking
+        let kind = object
+            .types
+            .as_ref()
+            .map(|t| t.kind.clone())
+            .unwrap_or_default();
+        let namespace = object
+            .metadata
+            .namespace
+            .as_deref()
+            .unwrap_or("default")
+            .to_string();
+        let name = object.metadata.name.as_deref().unwrap_or("").to_string();
+        let key = format!("{}:{}:{}", kind, namespace, name);
+
+        debug!("Processing object with key: {}", key);
+
+        // Store checksum for later comparison
+        if let Some(checksum) = object
+            .metadata
+            .annotations
+            .as_ref()
+            .and_then(|anns| anns.get(CHECKSUM_ANNOTATION))
+        {
+            debug!("Storing checksum {} for key {}", checksum, key);
+            keep_resources.insert(key.clone(), checksum.clone());
+        } else {
+            warn!("No checksum annotation found for object {}", key);
+        }
+
+        // Apply the object
+        debug!("Applying object {}", key);
+        match apply_k8s_objects(&[object.clone()], client.clone(), params).await {
+            Ok(_) => debug!("Successfully applied {}", key),
+            Err(e) => {
+                error!("Failed to apply {}: {}", key, e);
+                return Err(e);
             }
         }
     }
 
-    // Attempt to apply all objects
-    match safe_apply_k8s_objects(k8s_objects, k8s_client.clone()).await {
-        Ok(_) => Ok(()),
-        Err(e) => {
-            error!("Apply failed, attempting rollback: {}", e);
+    // Get existing resources with this stack ID
+    debug!("Fetching existing resources for stack {}", stack_id);
+    let existing = get_all_objects_by_annotation(&client, STACK_LABEL, stack_id).await?;
+    debug!("Found {} existing resources", existing.len());
 
-            // Attempt rollback with same patch_params
-            for original in original_states {
-                if let Some((ar, caps)) = discovery.resolve_gvk(&GroupVersionKind::try_from(
-                    original.types.as_ref().unwrap(),
-                )?) {
+    // Prune resources that are no longer needed
+    let discovery = Discovery::new(client.clone()).run().await?;
+
+    for existing_obj in existing {
+        // Get the GVK first to ensure we have the correct kind
+        let kind = if let Some(tm) = &existing_obj.types {
+            if let Ok(gvk) = GroupVersionKind::try_from(tm) {
+                gvk.kind
+            } else {
+                existing_obj
+                    .types
+                    .as_ref()
+                    .map(|t| t.kind.clone())
+                    .unwrap_or_default()
+            }
+        } else {
+            String::new()
+        };
+
+        let namespace = existing_obj
+            .metadata
+            .namespace
+            .as_deref()
+            .unwrap_or("default")
+            .to_string();
+        let name = existing_obj
+            .metadata
+            .name
+            .as_deref()
+            .unwrap_or("")
+            .to_string();
+        let key = format!("{}:{}:{}", kind, namespace, name);
+
+        debug!("Checking existing object with key: {}", key);
+
+        let should_delete = match (
+            keep_resources.get(&key),
+            existing_obj
+                .metadata
+                .annotations
+                .as_ref()
+                .and_then(|anns| anns.get(CHECKSUM_ANNOTATION)),
+        ) {
+            (Some(keep), Some(existing)) => {
+                debug!(
+                    "Comparing checksums - keep: {}, existing: {}",
+                    keep, existing
+                );
+                keep != existing
+            }
+            (None, _) => {
+                debug!("No keep checksum found for key {}", key);
+                true
+            }
+            (_, None) => {
+                debug!("No existing checksum found for key {}", key);
+                true
+            }
+        };
+
+        debug!("Should delete {}: {}", key, should_delete);
+
+        if should_delete {
+            if let Some(gvk) = existing_obj.types.as_ref() {
+                let gvk = GroupVersionKind::try_from(gvk)?;
+                if let Some((ar, caps)) = discovery.resolve_gvk(&gvk) {
                     let api = dynamic_api(
                         ar,
                         caps,
-                        k8s_client.clone(),
-                        original.metadata.namespace.as_deref(),
+                        client.clone(),
+                        existing_obj.metadata.namespace.as_deref(),
                         false,
                     );
-                    let data = serde_json::to_value(&original)?;
-                    if let Err(rollback_err) = api
-                        .patch(&original.name_any(), &patch_params, &Patch::Apply(data))
-                        .await
-                    {
-                        error!(
-                            "Rollback failed for {}: {}",
-                            original.name_any(),
-                            rollback_err
+
+                    if let Some(name) = existing_obj.metadata.name.as_ref() {
+                        info!(
+                            "Deleting {}/{} in ns {:?}",
+                            gvk.kind, name, existing_obj.metadata.namespace
                         );
+                        match api.delete(name, &DeleteParams::default()).await {
+                            Ok(_) => debug!("Successfully deleted {}", key),
+                            Err(e) => {
+                                error!("Failed to delete {}: {}", key, e);
+                                return Err(Box::new(e));
+                            }
+                        }
                     }
                 }
             }
-
-            Err(e)
+        } else {
+            debug!("Keeping object {}", key);
         }
     }
+
+    Ok(())
 }
 
 /// Creates a Kubernetes client using either a provided kubeconfig path or default configuration.

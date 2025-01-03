@@ -98,27 +98,44 @@ use uuid::Uuid;
 pub async fn wait_for_broker_ready(config: &Settings) {
     let client = Client::new();
     let readyz_url = format!("{}/readyz", config.agent.broker_url);
+    info!(
+        "Starting broker readiness check at endpoint: {}",
+        readyz_url
+    );
 
     for attempt in 1..=config.agent.max_retries {
         match client.get(&readyz_url).send().await {
             Ok(response) => {
                 if response.status().is_success() {
-                    info!("Broker is ready!");
+                    info!("Broker service is ready and responding at: {}", readyz_url);
                     return;
                 }
+                warn!(
+                    "Broker not ready at {} (attempt {}/{}): status code {}",
+                    readyz_url,
+                    attempt,
+                    config.agent.max_retries,
+                    response.status()
+                );
             }
             Err(e) => {
-                warn!("Error connecting to broker (attempt {}): {:?}", attempt, e);
+                warn!(
+                    "Failed to connect to broker at {} (attempt {}/{}): {}",
+                    readyz_url, attempt, config.agent.max_retries, e
+                );
             }
         }
         if attempt < config.agent.max_retries {
-            info!("Waiting for broker to be ready (attempt {})", attempt);
+            debug!(
+                "Waiting 1 second before next broker readiness check (attempt {}/{})",
+                attempt, config.agent.max_retries
+            );
             sleep(Duration::from_secs(1)).await;
         }
     }
     error!(
-        "Failed to connect to broker after {} attempts. Exiting.",
-        config.agent.max_retries
+        "Failed to establish connection with broker at {} after {} attempts. Exiting.",
+        readyz_url, config.agent.max_retries
     );
     std::process::exit(1);
 }
@@ -132,7 +149,7 @@ pub async fn wait_for_broker_ready(config: &Settings) {
 /// * `Result<(), Box<dyn std::error::Error>>` - Success or error with message
 pub async fn verify_agent_pak(config: &Settings) -> Result<(), Box<dyn std::error::Error>> {
     let url = format!("{}/api/v1/auth/pak", config.agent.broker_url);
-    debug!("Verifying agent PAK at {}", url);
+    info!("Initiating PAK verification for agent at endpoint: {}", url);
 
     let response = reqwest::Client::new()
         .post(&url)
@@ -142,24 +159,27 @@ pub async fn verify_agent_pak(config: &Settings) -> Result<(), Box<dyn std::erro
         .send()
         .await
         .map_err(|e| {
-            error!("Failed to send PAK verification request: {}", e);
+            error!("Failed to send PAK verification request to {}: {}", url, e);
             Box::new(e) as Box<dyn std::error::Error>
         })?;
 
     match response.status() {
         StatusCode::OK => {
-            info!("Successfully verified agent PAK");
+            info!("Successfully verified agent PAK with broker at: {}", url);
             Ok(())
         }
         StatusCode::UNAUTHORIZED => {
-            error!("Agent PAK verification failed: unauthorized");
+            error!(
+                "Agent PAK verification failed: unauthorized access at {}",
+                url
+            );
             Err("Invalid agent PAK".into())
         }
         status => {
             let error_body = response.text().await.unwrap_or_default();
             error!(
-                "PAK verification failed with status {}: {}",
-                status, error_body
+                "PAK verification failed at {} with status {}: {}",
+                url, status, error_body
             );
             Err(format!(
                 "PAK verification failed. Status: {}, Body: {}",
@@ -186,7 +206,10 @@ pub async fn fetch_agent_details(
         "{}/api/v1/agents/?name={}&cluster_name={}",
         config.agent.broker_url, config.agent.agent_name, config.agent.cluster_name
     );
-    debug!("Fetching agent details from {}", url);
+    info!(
+        "Fetching agent details for agent '{}' in cluster '{}' from: {}",
+        config.agent.agent_name, config.agent.cluster_name, url
+    );
 
     let response = client
         .get(&url)
@@ -194,36 +217,40 @@ pub async fn fetch_agent_details(
         .send()
         .await
         .map_err(|e| {
-            error!("Failed to fetch agent details: {}", e);
+            error!("Failed to fetch agent details from {}: {}", url, e);
             Box::new(e) as Box<dyn std::error::Error>
         })?;
 
     match response.status() {
         StatusCode::OK => {
             let agent: Agent = response.json().await.map_err(|e| {
-                error!("Failed to deserialize agent details: {}", e);
+                error!(
+                    "Failed to deserialize agent details response from {}: {}",
+                    url, e
+                );
                 Box::new(e) as Box<dyn std::error::Error>
             })?;
 
             info!(
-                "Successfully fetched details for agent {} in cluster {}",
-                agent.name, agent.cluster_name
+                "Successfully fetched details for agent '{}' (ID: {}) in cluster '{}'",
+                agent.name, agent.id, agent.cluster_name
             );
+            debug!("Agent details: {:?}", agent);
 
             Ok(agent)
         }
         StatusCode::NOT_FOUND => {
             error!(
-                "Agent not found: name={}, cluster={}",
-                config.agent.agent_name, config.agent.cluster_name
+                "Agent not found at {}: name='{}', cluster='{}'",
+                url, config.agent.agent_name, config.agent.cluster_name
             );
             Err("Agent not found".into())
         }
         status => {
             let error_body = response.text().await.unwrap_or_default();
             error!(
-                "Failed to fetch agent details. Status {}: {}",
-                status, error_body
+                "Failed to fetch agent details from {}. Status {}: {}",
+                url, status, error_body
             );
             Err(format!(
                 "Failed to fetch agent details. Status: {}, Body: {}",

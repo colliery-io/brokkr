@@ -125,7 +125,7 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
                     Ok(objects) => {
                         for obj in objects {
                             let k8s_objects = k8s::objects::create_k8s_objects(obj.clone(),agent.id)?;
-                            match k8s::api::apply_k8s_objects_with_rollback(&k8s_objects, k8s_client.clone()).await {
+                            match k8s::api::reconcile_target_state(&k8s_objects, k8s_client.clone()).await {
                                 Ok(_) => {
                                     info!("Successfully applied Kubernetes objects");
                                     if let Err(e) = broker::send_success_event(
