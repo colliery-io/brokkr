@@ -476,3 +476,101 @@ async fn test_reconcile_object_pruning() {
 
     cleanup(&client, &test_namespace).await;
 }
+
+#[tokio::test]
+async fn test_reconcile_empty_object_list() {
+    let test_namespace = "test-reconcile-empty";
+    let agent_id = Uuid::new_v4();
+    let stack_id = "test-stack-empty";
+    let initial_checksum = "initial-checksum";
+    let empty_checksum = "empty-state-checksum";
+
+    // Test setup
+    let (client, _discovery) = setup().await;
+    setup_namespace(&client, test_namespace, &agent_id).await;
+
+    // Create initial objects
+    let initial_objects = vec![
+        serde_json::json!({
+            "apiVersion": "v1",
+            "kind": "ConfigMap",
+            "metadata": {
+                "name": "config-1",
+                "namespace": test_namespace,
+                "annotations": {
+                    STACK_LABEL: stack_id,
+                    CHECKSUM_ANNOTATION: initial_checksum,
+                    BROKKR_AGENT_OWNER_ANNOTATION: agent_id.to_string()
+                }
+            },
+            "data": {
+                "key1": "value1"
+            }
+        }),
+        serde_json::json!({
+            "apiVersion": "v1",
+            "kind": "ConfigMap",
+            "metadata": {
+                "name": "config-2",
+                "namespace": test_namespace,
+                "annotations": {
+                    STACK_LABEL: stack_id,
+                    CHECKSUM_ANNOTATION: initial_checksum,
+                    BROKKR_AGENT_OWNER_ANNOTATION: agent_id.to_string()
+                }
+            },
+            "data": {
+                "key2": "value2"
+            }
+        }),
+    ];
+
+    let initial_objects: Vec<DynamicObject> = initial_objects
+        .into_iter()
+        .map(|obj| serde_json::from_value(obj).unwrap())
+        .collect();
+
+    // Apply initial objects
+    let result =
+        reconcile_target_state(&initial_objects, client.clone(), stack_id, initial_checksum).await;
+    assert!(result.is_ok(), "Initial reconciliation should succeed");
+
+    // Verify initial objects exist
+    let cm_api = Api::<ConfigMap>::namespaced(client.clone(), test_namespace);
+    let cm1 = cm_api
+        .get("config-1")
+        .await
+        .expect("Failed to get config-1");
+    assert_eq!(
+        cm1.data.unwrap().get("key1").unwrap(),
+        "value1",
+        "config-1 should exist with correct value"
+    );
+    let cm2 = cm_api
+        .get("config-2")
+        .await
+        .expect("Failed to get config-2");
+    assert_eq!(
+        cm2.data.unwrap().get("key2").unwrap(),
+        "value2",
+        "config-2 should exist with correct value"
+    );
+
+    // Reconcile with empty object list (should delete everything)
+    let empty_objects: Vec<DynamicObject> = vec![];
+    let result =
+        reconcile_target_state(&empty_objects, client.clone(), stack_id, empty_checksum).await;
+    assert!(result.is_ok(), "Empty reconciliation should succeed");
+
+    // Verify all objects are deleted
+    assert!(
+        wait_for_deletion(&cm_api, "config-1", 10).await,
+        "config-1 should be deleted"
+    );
+    assert!(
+        wait_for_deletion(&cm_api, "config-2", 10).await,
+        "config-2 should be deleted"
+    );
+
+    cleanup(&client, test_namespace).await;
+}

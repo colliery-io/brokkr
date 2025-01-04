@@ -558,97 +558,78 @@ pub async fn reconcile_target_state(
         stack_id, checksum
     );
 
-    if objects.is_empty() {
-        println!("No objects to reconcile, returning early");
-        debug!("No objects to reconcile");
-        return Ok(());
-    }
+    // If we have objects to apply, validate them first
+    if !objects.is_empty() {
+        println!("Validating {} objects", objects.len());
+        if let Err(e) = validate_k8s_objects(objects, client.clone()).await {
+            println!("Validation failed: {}", e);
+            return Err(e);
+        }
+        println!("All objects validated successfully");
 
-    // First validate all objects to ensure they are valid
-    println!("Validating {} objects", objects.len());
-    if let Err(e) = validate_k8s_objects(objects, client.clone()).await {
-        println!("Validation failed: {}", e);
-        return Err(e);
-    }
-    println!("All objects validated successfully");
+        // Apply all resources with server-side apply
+        info!("Applying {} resources", objects.len());
+        for object in objects {
+            let kind = object
+                .types
+                .as_ref()
+                .map(|t| t.kind.clone())
+                .unwrap_or_default();
+            let namespace = object
+                .metadata
+                .namespace
+                .as_deref()
+                .unwrap_or("default")
+                .to_string();
+            let name = object.metadata.name.as_deref().unwrap_or("").to_string();
+            let key = format!("{}:{}@{}", kind, name, namespace);
 
-    // Get existing resources with this stack ID
-    println!("Fetching existing resources for stack {}", stack_id);
-    let mut existing = get_all_objects_by_annotation(&client, STACK_LABEL, stack_id).await?;
-    println!("Found {} existing resources", existing.len());
+            println!(
+                "Processing object: kind={}, namespace={}, name={}",
+                kind, namespace, name
+            );
 
-    // Apply all resources with server-side apply
-    info!("Applying {} resources", objects.len());
-    for object in objects {
-        let kind = object
-            .types
-            .as_ref()
-            .map(|t| t.kind.clone())
-            .unwrap_or_default();
-        let namespace = object
-            .metadata
-            .namespace
-            .as_deref()
-            .unwrap_or("default")
-            .to_string();
-        let name = object.metadata.name.as_deref().unwrap_or("").to_string();
-        let key = format!("{}:{}@{}", kind, name, namespace);
+            // Prepare object with annotations
+            let mut object = object.clone();
+            let annotations = object
+                .metadata
+                .annotations
+                .get_or_insert_with(BTreeMap::new);
+            annotations.insert(STACK_LABEL.to_string(), stack_id.to_string());
+            annotations.insert(CHECKSUM_ANNOTATION.to_string(), checksum.to_string());
 
-        println!(
-            "Processing object: kind={}, namespace={}, name={}",
-            kind, namespace, name
-        );
+            let mut params = PatchParams::apply("brokkr-controller");
+            params.force = true;
 
-        // Prepare object with annotations
-        let mut object = object.clone();
-        let annotations = object
-            .metadata
-            .annotations
-            .get_or_insert_with(BTreeMap::new);
-        annotations.insert(STACK_LABEL.to_string(), stack_id.to_string());
-        annotations.insert(CHECKSUM_ANNOTATION.to_string(), checksum.to_string());
+            if let Some(gvk) = object.types.as_ref() {
+                let gvk = GroupVersionKind::try_from(gvk)?;
+                if let Some((ar, caps)) = Discovery::new(client.clone())
+                    .run()
+                    .await?
+                    .resolve_gvk(&gvk)
+                {
+                    let api = dynamic_api(ar, caps, client.clone(), Some(&namespace), false);
 
-        let mut params = PatchParams::apply("brokkr-controller");
-        params.force = true;
-
-        if let Some(gvk) = object.types.as_ref() {
-            let gvk = GroupVersionKind::try_from(gvk)?;
-            if let Some((ar, caps)) = Discovery::new(client.clone())
-                .run()
-                .await?
-                .resolve_gvk(&gvk)
-            {
-                let api = dynamic_api(ar, caps, client.clone(), Some(&namespace), false);
-
-                let patch = Patch::Apply(&object);
-                match api.patch(&name, &params, &patch).await {
-                    Ok(_) => {
-                        println!("Successfully applied {}", key);
-                        // Update our list of existing objects with the newly applied one
-                        if let Some(pos) = existing.iter().position(|obj| {
-                            obj.types
-                                .as_ref()
-                                .map(|t| t.kind.clone())
-                                .unwrap_or_default()
-                                == kind
-                                && obj.metadata.namespace.as_deref().unwrap_or("default")
-                                    == namespace
-                                && obj.metadata.name.as_deref().unwrap_or("") == name
-                        }) {
-                            existing[pos] = object.clone();
-                        } else {
-                            existing.push(object.clone());
+                    let patch = Patch::Apply(&object);
+                    match api.patch(&name, &params, &patch).await {
+                        Ok(_) => println!("Successfully applied {}", key),
+                        Err(e) => {
+                            println!("Failed to apply {}: {}", key, e);
+                            error!("Failed to apply {}: {}", key, e);
+                            return Err(Box::new(e));
                         }
-                    }
-                    Err(e) => {
-                        println!("Failed to apply {}: {}", key, e);
-                        error!("Failed to apply {}: {}", key, e);
-                        return Err(Box::new(e));
                     }
                 }
             }
         }
+    } else {
+        println!("No objects in desired state, will remove all existing objects in stack");
     }
+
+    // Get existing resources with this stack ID after applying changes
+    println!("Fetching existing resources for stack {}", stack_id);
+    let existing = get_all_objects_by_annotation(&client, STACK_LABEL, stack_id).await?;
+    println!("Found {} existing resources", existing.len());
 
     // Prune objects that are no longer in the desired state
     for existing_obj in existing {
