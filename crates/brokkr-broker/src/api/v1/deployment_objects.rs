@@ -86,12 +86,15 @@ async fn get_deployment_object(
                         if let Some(stack) = stacks.first() {
                             if stack.generator_id == generator_id {
                                 info!(
-                                    "Generator {} accessed deployment object with ID: {}",
-                                    generator_id, id
+                                    "Generator '{}' (id: {}) accessed deployment object '{}' (id: {})",
+                                    stack.name, generator_id, object.yaml_content, id
                                 );
                                 Ok(Json(object))
                             } else {
-                                warn!("Generator {} attempted to access unauthorized deployment object with ID: {}", generator_id, id);
+                                warn!(
+                                    "Generator '{}' (id: {}) attempted unauthorized access to deployment object '{}' (id: {}) owned by generator {}",
+                                    stack.name, generator_id, object.yaml_content, id, stack.generator_id
+                                );
                                 Err((
                                     axum::http::StatusCode::FORBIDDEN,
                                     Json(
@@ -100,7 +103,10 @@ async fn get_deployment_object(
                                 ))
                             }
                         } else {
-                            warn!("Stack not found for deployment object with ID: {}", id);
+                            warn!(
+                                "Stack not found for deployment object '{}' (id: {}, stack_id: {})",
+                                object.yaml_content, id, object.stack_id
+                            );
                             Err((
                                 axum::http::StatusCode::NOT_FOUND,
                                 Json(
@@ -111,8 +117,8 @@ async fn get_deployment_object(
                     }
                     Err(e) => {
                         error!(
-                            "Failed to fetch stack for deployment object with ID {}: {:?}",
-                            id, e
+                            "Database error while fetching stack for deployment object '{}' (id: {}, stack_id: {}): {:?}",
+                            object.yaml_content, id, object.stack_id, e
                         );
                         Err((
                             axum::http::StatusCode::INTERNAL_SERVER_ERROR,

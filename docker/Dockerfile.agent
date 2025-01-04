@@ -1,10 +1,21 @@
-# Stage 1: Build the application
-FROM rust:1.83-slim-bookworm AS builder
+# Stage 1: Plan the build
+FROM rust:1.83-slim-bookworm AS planner
+WORKDIR /app
 
-# Set the working directory
-WORKDIR /usr/src/brokkr-agent
+# Install cargo-chef
+RUN cargo install cargo-chef
 
-# Install necessary dependencies
+# Copy all files needed for dependency planning
+COPY . .
+
+# Create the recipe for dependencies
+RUN cargo chef prepare --recipe-path recipe.json
+
+# Stage 2: Cache dependencies
+FROM rust:1.83-slim-bookworm AS cacher
+WORKDIR /app
+
+# Install build dependencies
 RUN apt-get update && apt-get install -y \
     libssl-dev \
     pkg-config \
@@ -13,15 +24,42 @@ RUN apt-get update && apt-get install -y \
     libc6-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy the Cargo.toml and Cargo.lock files
-COPY . ./
+# Install cargo-chef
+RUN cargo install cargo-chef
 
+# Copy the recipe from the planner
+COPY --from=planner /app/recipe.json recipe.json
+
+# Build dependencies only
+RUN cargo chef cook --release --recipe-path recipe.json
+
+# Stage 3: Build the application
+FROM rust:1.83-slim-bookworm AS builder
+WORKDIR /app
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    libssl-dev \
+    pkg-config \
+    libpq-dev \
+    libc6 \
+    libc6-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy the cached dependencies
+COPY --from=cacher /app/target target
+COPY --from=cacher /usr/local/cargo /usr/local/cargo
+
+# Copy the source code
+COPY . .
+
+# Build the application
 RUN cargo build --bin brokkr-agent --release
 
-# Stage 2: Create the final image
+# Stage 4: Create the final image
 FROM debian:bookworm-slim AS broker-agent
 
-# Install dependencies and kubectl
+# Install runtime dependencies and kubectl in a single layer
 RUN apt-get update && apt-get install -y \
     libssl-dev \
     pkg-config \
@@ -30,17 +68,17 @@ RUN apt-get update && apt-get install -y \
     libc6-dev \
     curl \
     ca-certificates \
-    && rm -rf /var/lib/apt/lists/* \
     && curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" \
     && chmod +x kubectl \
-    && mv kubectl /usr/local/bin/
+    && mv kubectl /usr/local/bin/ \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set the working directory
 WORKDIR /usr/local/bin
 
 # Copy the built binary from the builder stage
-COPY --from=builder /usr/src/brokkr-agent/target/release/brokkr-agent .
-
+COPY --from=builder /app/target/release/brokkr-agent .
 RUN chmod +x brokkr-agent
 
 # Command to run the application

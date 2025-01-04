@@ -142,13 +142,17 @@ pub async fn apply_k8s_objects(
     k8s_client: K8sClient,
     patch_params: PatchParams,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    info!("Applying {} Kubernetes objects", k8s_objects.len());
+
     let discovery = Discovery::new(k8s_client.clone())
         .run()
         .await
-        .expect("Failed to create discovery client");
+        .map_err(|e| {
+            error!("Failed to create Kubernetes discovery client: {}", e);
+            e
+        })?;
 
     for k8s_object in k8s_objects {
-        info!("Processing k8s object: {:?}", k8s_object);
         let default_namespace = &"default".to_string();
         let namespace = k8s_object
             .metadata
@@ -160,36 +164,36 @@ pub async fn apply_k8s_objects(
             GroupVersionKind::try_from(tm)?
         } else {
             error!(
-                "Cannot apply object without valid TypeMeta {:?}",
-                k8s_object
+                "Cannot apply object without valid TypeMeta for object named '{}'",
+                k8s_object.name_any()
             );
             return Err(format!(
-                "Cannot apply object without valid TypeMeta {:?}",
-                k8s_object
+                "Cannot apply object without valid TypeMeta for object named '{}'",
+                k8s_object.name_any()
             )
             .into());
         };
 
-        let _name = k8s_object.name_any();
-
         if let Some((ar, caps)) = discovery.resolve_gvk(&gvk) {
             let api = dynamic_api(ar, caps, k8s_client.clone(), Some(namespace), false);
             info!(
-                "Applying {:?}: \n{:?}",
+                "Applying {} '{}' in namespace '{}'",
                 gvk.kind,
-                serde_yaml::to_string(&k8s_object)?
+                k8s_object.name_any(),
+                namespace
             );
+            debug!("Object content:\n{}", serde_yaml::to_string(&k8s_object)?);
 
             let data = serde_json::to_value(k8s_object)?;
-            let patch_params = patch_params.clone();
             let name = k8s_object.name_any();
             let name_for_error = name.clone();
+            let patch_params = patch_params.clone();
 
             with_retries(
                 move || {
                     let api = api.clone();
-                    let data = data.clone();
                     let name = name.clone();
+                    let data = data.clone();
                     let patch_params = patch_params.clone();
                     async move { api.patch(&name, &patch_params, &Patch::Apply(data)).await }
                 },
@@ -198,18 +202,37 @@ pub async fn apply_k8s_objects(
             .await
             .map_err(|e| {
                 error!(
-                    "Apply failed for {:?} '{}': {:?}",
-                    gvk.kind, name_for_error, e
+                    "Failed to apply {} '{}' in namespace '{}': {}",
+                    gvk.kind, name_for_error, namespace, e
                 );
                 e
             })?;
 
-            info!("Successfully applied {:?} '{}'", gvk.kind, name_for_error);
+            info!(
+                "Successfully applied {} '{}' in namespace '{}'",
+                gvk.kind, name_for_error, namespace
+            );
         } else {
-            error!("Unable to resolve GVK {:?}", gvk);
-            return Err("Unable to resolve GVK".into());
+            error!(
+                "Failed to resolve GroupVersionKind for {} '{}' in namespace '{}'",
+                gvk.kind,
+                k8s_object.name_any(),
+                namespace
+            );
+            return Err(format!(
+                "Failed to resolve GroupVersionKind for {} '{}' in namespace '{}'",
+                gvk.kind,
+                k8s_object.name_any(),
+                namespace
+            )
+            .into());
         }
     }
+
+    info!(
+        "Successfully applied all {} Kubernetes objects",
+        k8s_objects.len()
+    );
     Ok(())
 }
 
@@ -316,6 +339,10 @@ pub async fn delete_k8s_objects(
     k8s_client: K8sClient,
     agent_id: &Uuid,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    info!(
+        "Starting deletion of {} Kubernetes objects",
+        k8s_objects.len()
+    );
     let discovery = Discovery::new(k8s_client.clone())
         .run()
         .await
@@ -325,8 +352,9 @@ pub async fn delete_k8s_objects(
         // Verify ownership before attempting deletion
         if !verify_object_ownership(k8s_object, agent_id) {
             error!(
-                "Cannot delete object '{}' as it is not owned by agent {}",
+                "Cannot delete object '{}' (kind: {}) as it is not owned by agent {}",
                 k8s_object.name_any(),
+                k8s_object.types.as_ref().map_or("unknown", |t| &t.kind),
                 agent_id
             );
             return Err(format!(
@@ -336,7 +364,7 @@ pub async fn delete_k8s_objects(
             .into());
         }
 
-        info!("Processing k8s object for deletion: {:?}", k8s_object);
+        debug!("Processing k8s object for deletion: {:?}", k8s_object);
         let default_namespace = &"default".to_string();
         let namespace = k8s_object
             .metadata
@@ -348,8 +376,8 @@ pub async fn delete_k8s_objects(
             GroupVersionKind::try_from(tm)?
         } else {
             error!(
-                "Cannot delete object without valid TypeMeta {:?}",
-                k8s_object
+                "Cannot delete object '{}' without valid TypeMeta",
+                k8s_object.name_any()
             );
             return Err(format!(
                 "Cannot delete object without valid TypeMeta {:?}",
@@ -357,12 +385,15 @@ pub async fn delete_k8s_objects(
             )
             .into());
         };
-        let _name = k8s_object.name_any();
+
         if let Some((ar, caps)) = discovery.resolve_gvk(&gvk) {
             let api = dynamic_api(ar, caps, k8s_client.clone(), Some(namespace), false);
             let name = k8s_object.name_any();
-            let name_for_error = name.clone(); // Clone for error handling
-            info!("Deleting {:?}: {}", gvk.kind, name);
+            let name_for_error = name.clone();
+            info!(
+                "Deleting {} '{}' in namespace '{}'",
+                gvk.kind, name, namespace
+            );
 
             with_retries(
                 move || {
@@ -375,15 +406,23 @@ pub async fn delete_k8s_objects(
             .await
             .map_err(|e| {
                 error!(
-                    "Delete failed for {:?} '{}': {:?}",
-                    gvk.kind, name_for_error, e
+                    "Failed to delete {} '{}' in namespace '{}': {}",
+                    gvk.kind, name_for_error, namespace, e
                 );
                 e
             })?;
 
-            info!("Successfully deleted {:?} '{}'", gvk.kind, name_for_error);
+            info!(
+                "Successfully deleted {} '{}' in namespace '{}'",
+                gvk.kind, name_for_error, namespace
+            );
         }
     }
+
+    info!(
+        "Successfully deleted all {} Kubernetes objects",
+        k8s_objects.len()
+    );
     Ok(())
 }
 
@@ -715,7 +754,10 @@ pub async fn create_k8s_client(
 ) -> Result<K8sClient, Box<dyn std::error::Error>> {
     // Set KUBECONFIG environment variable if path is provided
     if let Some(path) = kubeconfig_path {
+        info!("Setting KUBECONFIG environment variable to: {}", path);
         std::env::set_var("KUBECONFIG", path);
+    } else {
+        info!("Using default Kubernetes configuration");
     }
 
     let client = K8sClient::try_default()
@@ -724,11 +766,13 @@ pub async fn create_k8s_client(
 
     // Verify cluster connectivity by attempting to list namespaces
     let ns_api = Api::<Namespace>::all(client.clone());
-    ns_api
-        .list(&Default::default())
-        .await
-        .map_err(|e| format!("Failed to connect to Kubernetes cluster: {}", e))?;
+    match ns_api.list(&Default::default()).await {
+        Ok(_) => info!("Successfully connected to Kubernetes cluster and verified API access"),
+        Err(e) => {
+            error!("Failed to verify Kubernetes cluster connectivity: {}", e);
+            return Err(format!("Failed to connect to Kubernetes cluster: {}", e).into());
+        }
+    }
 
-    info!("Successfully connected to Kubernetes cluster");
     Ok(client)
 }
