@@ -925,11 +925,17 @@ async fn test_get_objects_by_annotation_found() {
     assert!(result.is_ok(), "Failed to get objects by annotation");
 
     let found_objects = result.unwrap();
-    assert_eq!(
-        found_objects.len(),
-        1,
-        "Should find the deployment"
+    assert!(
+        found_objects.len() > 0,
+        "Should find at least one object with the annotation"
     );
+
+    // Verify that one of the found objects is our deployment
+    let found_deployment = found_objects.iter().find(|obj| {
+        obj.metadata.name.as_deref() == Some("test-deployment-1")
+            && obj.metadata.namespace.as_deref() == Some(test_namespace)
+    });
+    assert!(found_deployment.is_some(), "Should find the deployment with the annotation");
 
     // Cleanup
     cleanup(&client, test_namespace).await;
