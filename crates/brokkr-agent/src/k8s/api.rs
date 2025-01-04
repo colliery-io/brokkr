@@ -32,7 +32,7 @@
 //! 3. Other resources
 
 use crate::k8s::objects::verify_object_ownership;
-use crate::k8s::objects::{BROKKR_AGENT_OWNER_ANNOTATION, CHECKSUM_ANNOTATION, STACK_LABEL};
+use crate::k8s::objects::{CHECKSUM_ANNOTATION, STACK_LABEL};
 use backoff::ExponentialBackoffBuilder;
 use brokkr_utils::logging::prelude::*;
 use k8s_openapi::api::core::v1::Namespace;
@@ -51,7 +51,7 @@ use kube::Client as K8sClient;
 use kube::Discovery;
 use kube::Error as KubeError;
 use kube::ResourceExt;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::time::Duration;
 use uuid::Uuid;
 
