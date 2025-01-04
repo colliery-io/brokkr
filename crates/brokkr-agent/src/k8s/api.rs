@@ -32,7 +32,7 @@
 //! 3. Other resources
 
 use crate::k8s::objects::verify_object_ownership;
-use crate::k8s::objects::{CHECKSUM_ANNOTATION, STACK_LABEL};
+use crate::k8s::objects::{BROKKR_AGENT_OWNER_ANNOTATION, CHECKSUM_ANNOTATION, STACK_LABEL};
 use backoff::ExponentialBackoffBuilder;
 use brokkr_utils::logging::prelude::*;
 use k8s_openapi::api::core::v1::Namespace;
@@ -51,7 +51,7 @@ use kube::Client as K8sClient;
 use kube::Discovery;
 use kube::Error as KubeError;
 use kube::ResourceExt;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::time::Duration;
 use uuid::Uuid;
 
@@ -480,6 +480,7 @@ pub async fn validate_k8s_objects(
                 Ok(data) => {
                     let mut patch_params = PatchParams::apply("validation");
                     patch_params = patch_params.dry_run();
+                    patch_params.force = true;
 
                     match api
                         .patch(&k8s_object.name_any(), &patch_params, &Patch::Apply(data))
@@ -532,34 +533,6 @@ pub async fn validate_k8s_objects(
     }
 }
 
-/// Applies a list of Kubernetes objects to the cluster with validation.
-///
-/// This function first validates all objects using dry-run, then applies them
-/// only if all validations pass. This ensures atomic behavior across multiple objects.
-///
-/// # Arguments
-/// * `k8s_objects` - List of DynamicObjects to apply
-/// * `k8s_client` - Kubernetes client for API interactions
-/// * `patch_params` - Parameters for the patch operation
-///
-/// # Returns
-/// * `Result<(), Box<dyn std::error::Error>>` - Success or error with message
-pub async fn safe_apply_k8s_objects(
-    k8s_objects: &[DynamicObject],
-    k8s_client: K8sClient,
-    patch_params: PatchParams,
-) -> Result<(), Box<dyn std::error::Error>> {
-    // Validate all objects first
-    if let Err(e) = validate_k8s_objects(k8s_objects, k8s_client.clone()).await {
-        error!("Pre-apply validation failed: {}", e);
-        return Err(e);
-    }
-
-    // If validation succeeds, proceed with actual apply
-    info!("Pre-apply validation successful, proceeding with apply");
-    apply_k8s_objects(k8s_objects, k8s_client, patch_params).await
-}
-
 /// Reconciles the target state of Kubernetes objects for a stack.
 ///
 /// This function:
@@ -577,29 +550,36 @@ pub async fn safe_apply_k8s_objects(
 pub async fn reconcile_target_state(
     objects: &[DynamicObject],
     client: Client,
+    stack_id: &str,
+    checksum: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    println!(
+        "Starting reconciliation with stack_id={}, checksum={}",
+        stack_id, checksum
+    );
+
     if objects.is_empty() {
+        println!("No objects to reconcile, returning early");
         debug!("No objects to reconcile");
         return Ok(());
     }
 
-    // Get stack ID from first object's annotations
-    let stack_id = objects
-        .first()
-        .and_then(|obj| obj.metadata.annotations.as_ref())
-        .and_then(|anns| anns.get(STACK_LABEL))
-        .ok_or_else(|| format!("{} annotation missing from object", STACK_LABEL))?;
+    // First validate all objects to ensure they are valid
+    println!("Validating {} objects", objects.len());
+    if let Err(e) = validate_k8s_objects(objects, client.clone()).await {
+        println!("Validation failed: {}", e);
+        return Err(e);
+    }
+    println!("All objects validated successfully");
 
-    // Keep track of resources we want to retain
-    let mut keep_resources: HashMap<String, String> = HashMap::new();
+    // Get existing resources with this stack ID
+    println!("Fetching existing resources for stack {}", stack_id);
+    let mut existing = get_all_objects_by_annotation(&client, STACK_LABEL, stack_id).await?;
+    println!("Found {} existing resources", existing.len());
 
-    // First apply all resources with server-side apply
+    // Apply all resources with server-side apply
     info!("Applying {} resources", objects.len());
     for object in objects {
-        let mut params = PatchParams::apply("brokkr-controller");
-        params.force = true; // Force apply to handle conflicts
-
-        // Create resource key for tracking
         let kind = object
             .types
             .as_ref()
@@ -612,58 +592,71 @@ pub async fn reconcile_target_state(
             .unwrap_or("default")
             .to_string();
         let name = object.metadata.name.as_deref().unwrap_or("").to_string();
-        let key = format!("{}:{}:{}", kind, namespace, name);
+        let key = format!("{}:{}@{}", kind, name, namespace);
 
-        debug!("Processing object with key: {}", key);
+        println!(
+            "Processing object: kind={}, namespace={}, name={}",
+            kind, namespace, name
+        );
 
-        // Store checksum for later comparison
-        if let Some(checksum) = object
+        // Prepare object with annotations
+        let mut object = object.clone();
+        let annotations = object
             .metadata
             .annotations
-            .as_ref()
-            .and_then(|anns| anns.get(CHECKSUM_ANNOTATION))
-        {
-            debug!("Storing checksum {} for key {}", checksum, key);
-            keep_resources.insert(key.clone(), checksum.clone());
-        } else {
-            warn!("No checksum annotation found for object {}", key);
-        }
+            .get_or_insert_with(BTreeMap::new);
+        annotations.insert(STACK_LABEL.to_string(), stack_id.to_string());
+        annotations.insert(CHECKSUM_ANNOTATION.to_string(), checksum.to_string());
 
-        // Apply the object
-        debug!("Applying object {}", key);
-        match apply_k8s_objects(&[object.clone()], client.clone(), params).await {
-            Ok(_) => debug!("Successfully applied {}", key),
-            Err(e) => {
-                error!("Failed to apply {}: {}", key, e);
-                return Err(e);
+        let mut params = PatchParams::apply("brokkr-controller");
+        params.force = true;
+
+        if let Some(gvk) = object.types.as_ref() {
+            let gvk = GroupVersionKind::try_from(gvk)?;
+            if let Some((ar, caps)) = Discovery::new(client.clone())
+                .run()
+                .await?
+                .resolve_gvk(&gvk)
+            {
+                let api = dynamic_api(ar, caps, client.clone(), Some(&namespace), false);
+
+                let patch = Patch::Apply(&object);
+                match api.patch(&name, &params, &patch).await {
+                    Ok(_) => {
+                        println!("Successfully applied {}", key);
+                        // Update our list of existing objects with the newly applied one
+                        if let Some(pos) = existing.iter().position(|obj| {
+                            obj.types
+                                .as_ref()
+                                .map(|t| t.kind.clone())
+                                .unwrap_or_default()
+                                == kind
+                                && obj.metadata.namespace.as_deref().unwrap_or("default")
+                                    == namespace
+                                && obj.metadata.name.as_deref().unwrap_or("") == name
+                        }) {
+                            existing[pos] = object.clone();
+                        } else {
+                            existing.push(object.clone());
+                        }
+                    }
+                    Err(e) => {
+                        println!("Failed to apply {}: {}", key, e);
+                        error!("Failed to apply {}: {}", key, e);
+                        return Err(Box::new(e));
+                    }
+                }
             }
         }
     }
 
-    // Get existing resources with this stack ID
-    debug!("Fetching existing resources for stack {}", stack_id);
-    let existing = get_all_objects_by_annotation(&client, STACK_LABEL, stack_id).await?;
-    debug!("Found {} existing resources", existing.len());
-
-    // Prune resources that are no longer needed
-    let discovery = Discovery::new(client.clone()).run().await?;
-
+    // Prune objects that are no longer in the desired state
     for existing_obj in existing {
-        // Get the GVK first to ensure we have the correct kind
-        let kind = if let Some(tm) = &existing_obj.types {
-            if let Ok(gvk) = GroupVersionKind::try_from(tm) {
-                gvk.kind
-            } else {
-                existing_obj
-                    .types
-                    .as_ref()
-                    .map(|t| t.kind.clone())
-                    .unwrap_or_default()
-            }
-        } else {
-            String::new()
-        };
-
+        let kind = existing_obj
+            .types
+            .as_ref()
+            .map(|t| t.kind.clone())
+            .unwrap_or_default();
         let namespace = existing_obj
             .metadata
             .namespace
@@ -676,69 +669,53 @@ pub async fn reconcile_target_state(
             .as_deref()
             .unwrap_or("")
             .to_string();
-        let key = format!("{}:{}:{}", kind, namespace, name);
+        let key = format!("{}:{}@{}", kind, name, namespace);
 
-        debug!("Checking existing object with key: {}", key);
-
-        let should_delete = match (
-            keep_resources.get(&key),
-            existing_obj
-                .metadata
-                .annotations
-                .as_ref()
-                .and_then(|anns| anns.get(CHECKSUM_ANNOTATION)),
-        ) {
-            (Some(keep), Some(existing)) => {
-                debug!(
-                    "Comparing checksums - keep: {}, existing: {}",
-                    keep, existing
-                );
-                keep != existing
+        // Skip if object has owner references
+        if let Some(owner_refs) = &existing_obj.metadata.owner_references {
+            if !owner_refs.is_empty() {
+                println!("Skipping object {} with owner references", key);
+                continue;
             }
-            (None, _) => {
-                debug!("No keep checksum found for key {}", key);
-                true
-            }
-            (_, None) => {
-                debug!("No existing checksum found for key {}", key);
-                true
-            }
-        };
+        }
 
-        debug!("Should delete {}: {}", key, should_delete);
+        // Delete if checksum doesn't match the new checksum
+        let existing_checksum = existing_obj
+            .metadata
+            .annotations
+            .as_ref()
+            .and_then(|anns| anns.get(CHECKSUM_ANNOTATION))
+            .map_or("".to_string(), |v| v.to_string());
 
-        if should_delete {
+        if existing_checksum != checksum {
+            println!(
+                "Deleting object {} (checksum mismatch: {} != {})",
+                key, existing_checksum, checksum
+            );
             if let Some(gvk) = existing_obj.types.as_ref() {
                 let gvk = GroupVersionKind::try_from(gvk)?;
-                if let Some((ar, caps)) = discovery.resolve_gvk(&gvk) {
-                    let api = dynamic_api(
-                        ar,
-                        caps,
-                        client.clone(),
-                        existing_obj.metadata.namespace.as_deref(),
-                        false,
-                    );
-
-                    if let Some(name) = existing_obj.metadata.name.as_ref() {
-                        info!(
-                            "Deleting {}/{} in ns {:?}",
-                            gvk.kind, name, existing_obj.metadata.namespace
-                        );
-                        match api.delete(name, &DeleteParams::default()).await {
-                            Ok(_) => debug!("Successfully deleted {}", key),
-                            Err(e) => {
-                                error!("Failed to delete {}: {}", key, e);
-                                return Err(Box::new(e));
-                            }
+                if let Some((ar, caps)) = Discovery::new(client.clone())
+                    .run()
+                    .await?
+                    .resolve_gvk(&gvk)
+                {
+                    let api = dynamic_api(ar, caps, client.clone(), Some(&namespace), false);
+                    match api.delete(&name, &DeleteParams::default()).await {
+                        Ok(_) => println!("Successfully deleted {}", key),
+                        Err(e) => {
+                            println!("Failed to delete {}: {}", key, e);
+                            error!("Failed to delete {}: {}", key, e);
+                            return Err(Box::new(e));
                         }
                     }
                 }
             }
         } else {
-            debug!("Keeping object {}", key);
+            println!("Keeping object {} (checksum matches: {})", key, checksum);
         }
     }
 
+    println!("Reconciliation completed successfully");
     Ok(())
 }
 

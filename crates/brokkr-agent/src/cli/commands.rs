@@ -125,7 +125,12 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
                     Ok(objects) => {
                         for obj in objects {
                             let k8s_objects = k8s::objects::create_k8s_objects(obj.clone(),agent.id)?;
-                            match k8s::api::reconcile_target_state(&k8s_objects, k8s_client.clone()).await {
+                            match k8s::api::reconcile_target_state(
+                                &k8s_objects,
+                                k8s_client.clone(),
+                                &obj.stack_id.to_string(),
+                                &obj.yaml_checksum,
+                            ).await {
                                 Ok(_) => {
                                     info!("Successfully applied {} Kubernetes objects for deployment object {} in agent '{}' (id: {})",
                                         k8s_objects.len(), obj.id, agent.name, agent.id);
