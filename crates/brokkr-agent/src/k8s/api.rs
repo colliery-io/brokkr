@@ -553,19 +553,19 @@ pub async fn reconcile_target_state(
     stack_id: &str,
     checksum: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    println!(
+    info!(
         "Starting reconciliation with stack_id={}, checksum={}",
         stack_id, checksum
     );
 
     // If we have objects to apply, validate them first
     if !objects.is_empty() {
-        println!("Validating {} objects", objects.len());
+        debug!("Validating {} objects", objects.len());
         if let Err(e) = validate_k8s_objects(objects, client.clone()).await {
-            println!("Validation failed: {}", e);
+            error!("Validation failed: {}", e);
             return Err(e);
         }
-        println!("All objects validated successfully");
+        debug!("All objects validated successfully");
 
         // Apply all resources with server-side apply
         info!("Applying {} resources", objects.len());
@@ -584,7 +584,7 @@ pub async fn reconcile_target_state(
             let name = object.metadata.name.as_deref().unwrap_or("").to_string();
             let key = format!("{}:{}@{}", kind, name, namespace);
 
-            println!(
+            debug!(
                 "Processing object: kind={}, namespace={}, name={}",
                 kind, namespace, name
             );
@@ -612,9 +612,8 @@ pub async fn reconcile_target_state(
 
                     let patch = Patch::Apply(&object);
                     match api.patch(&name, &params, &patch).await {
-                        Ok(_) => println!("Successfully applied {}", key),
+                        Ok(_) => debug!("Successfully applied {}", key),
                         Err(e) => {
-                            println!("Failed to apply {}: {}", key, e);
                             error!("Failed to apply {}: {}", key, e);
                             return Err(Box::new(e));
                         }
@@ -623,13 +622,13 @@ pub async fn reconcile_target_state(
             }
         }
     } else {
-        println!("No objects in desired state, will remove all existing objects in stack");
+        info!("No objects in desired state, will remove all existing objects in stack");
     }
 
     // Get existing resources with this stack ID after applying changes
-    println!("Fetching existing resources for stack {}", stack_id);
+    debug!("Fetching existing resources for stack {}", stack_id);
     let existing = get_all_objects_by_annotation(&client, STACK_LABEL, stack_id).await?;
-    println!("Found {} existing resources", existing.len());
+    debug!("Found {} existing resources", existing.len());
 
     // Prune objects that are no longer in the desired state
     for existing_obj in existing {
@@ -655,7 +654,7 @@ pub async fn reconcile_target_state(
         // Skip if object has owner references
         if let Some(owner_refs) = &existing_obj.metadata.owner_references {
             if !owner_refs.is_empty() {
-                println!("Skipping object {} with owner references", key);
+                debug!("Skipping object {} with owner references", key);
                 continue;
             }
         }
@@ -669,7 +668,7 @@ pub async fn reconcile_target_state(
             .map_or("".to_string(), |v| v.to_string());
 
         if existing_checksum != checksum {
-            println!(
+            info!(
                 "Deleting object {} (checksum mismatch: {} != {})",
                 key, existing_checksum, checksum
             );
@@ -682,9 +681,8 @@ pub async fn reconcile_target_state(
                 {
                     let api = dynamic_api(ar, caps, client.clone(), Some(&namespace), false);
                     match api.delete(&name, &DeleteParams::default()).await {
-                        Ok(_) => println!("Successfully deleted {}", key),
+                        Ok(_) => debug!("Successfully deleted {}", key),
                         Err(e) => {
-                            println!("Failed to delete {}: {}", key, e);
                             error!("Failed to delete {}: {}", key, e);
                             return Err(Box::new(e));
                         }
@@ -692,11 +690,11 @@ pub async fn reconcile_target_state(
                 }
             }
         } else {
-            println!("Keeping object {} (checksum matches: {})", key, checksum);
+            debug!("Keeping object {} (checksum matches: {})", key, checksum);
         }
     }
 
-    println!("Reconciliation completed successfully");
+    info!("Reconciliation completed successfully");
     Ok(())
 }
 
