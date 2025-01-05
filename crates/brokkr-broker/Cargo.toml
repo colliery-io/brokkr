@@ -12,27 +12,30 @@ name = "brokkr-broker"
 path = "src/bin.rs"
 
 [dependencies]
+# Internal crates
 brokkr-models = { path = "../brokkr-models" }
 brokkr-utils = { path = "../brokkr-utils" }
 
-axum  = { workspace=true }
-tokio  = { workspace=true }
+# External dependencies
+axum = { workspace = true }
+chrono = { workspace = true }
 clap = { workspace = true, features = ["derive", "env"] }
-r2d2  = { workspace=true }
-r2d2_postgres  = { workspace=true }
-prefixed-api-key = { workspace=true }
-postgres  = { workspace=true }
-diesel  = { workspace=true }
-diesel_migrations = { workspace=true }
-dotenv  = { workspace=true }
-uuid  = { workspace=true }
-url  = { workspace=true }
-chrono  = { workspace=true }
-once_cell = { workspace=true }
-rand_core = { workspace=true }
-rand = { workspace=true }
-sha2 = { workspace=true }
-serde  = { workspace=true }
-hyper = { workspace=true }
-tower = { workspace=true }
-serde_json = { workspace=true }
+diesel = { workspace = true }
+diesel_migrations = { workspace = true }
+dotenv = { workspace = true }
+hyper = { workspace = true }
+once_cell = { workspace = true }
+postgres = { workspace = true }
+prefixed-api-key = { workspace = true }
+r2d2 = { workspace = true }
+r2d2_postgres = { workspace = true }
+rand = { workspace = true }
+rand_core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+tokio = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+url = { workspace = true }
+uuid = { workspace = true }

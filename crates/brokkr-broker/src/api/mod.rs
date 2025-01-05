@@ -152,6 +152,7 @@ pub mod v1;
 use crate::dal::DAL;
 use axum::{response::IntoResponse, routing::get, Router};
 use hyper::StatusCode;
+use tower_http::cors::{Any, CorsLayer};
 
 /// Configures and returns the main application router with all API routes
 ///
@@ -167,11 +168,18 @@ use hyper::StatusCode;
 /// Returns a configured `Router` instance that includes all API routes and middleware.
 
 pub fn configure_api_routes(dal: DAL) -> Router<DAL> {
+    // Configure CORS
+    let cors = CorsLayer::new()
+        .allow_methods(Any)
+        .allow_headers(Any)
+        .allow_origin(Any);
+
     Router::new()
         .nest("/api/v1", v1::routes(dal))
         .route("/healthz", get(healthz))
         .route("/readyz", get(readyz))
         .route("/metrics", get(metrics))
+        .layer(cors)
 }
 
 /// Health check endpoint handler
@@ -201,12 +209,11 @@ async fn readyz() -> impl IntoResponse {
 /// Metrics endpoint handler
 ///
 /// This handler responds to GET requests at the "/metrics" endpoint.
-/// It's used to retrieve metrics data.
+/// It's used to provide metrics about the API's operation.
 ///
 /// # Returns
 ///
-/// Returns a 200 OK status code with "Metrics data" in the body.
+/// Returns a 200 OK status code with metrics data in the body.
 async fn metrics() -> impl IntoResponse {
-    // Implement metrics collection and formatting here
-    (StatusCode::OK, "Metrics data")
+    (StatusCode::OK, "Metrics")
 }

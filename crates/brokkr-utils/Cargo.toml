@@ -4,13 +4,13 @@ version = "0.0.0"
 edition = "2021"
 
 [dependencies]
-serde = { workspace = true }
+chrono = { workspace = true }
 config = { workspace = true }
 diesel = { workspace = true }
 log = { workspace = true }
-chrono = { workspace = true }
 once_cell = { workspace = true }
+serde = { workspace = true }
 
 [dev-dependencies]
-tempfile = { workspace = true }
 rand = { workspace = true }
+tempfile = { workspace = true }

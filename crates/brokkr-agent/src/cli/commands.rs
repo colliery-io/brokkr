@@ -116,8 +116,8 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
         select! {
             _ = heartbeat_interval.tick() => {
                 match broker::send_heartbeat(&config, &client, &agent).await {
-                    Ok(_) => debug!("Heartbeat sent successfully"),
-                    Err(e) => error!("Failed to send heartbeat: {}", e),
+                    Ok(_) => debug!("Successfully sent heartbeat for agent '{}' (id: {})", agent.name, agent.id),
+                    Err(e) => error!("Failed to send heartbeat for agent '{}' (id: {}): {}", agent.name, agent.id, e),
                 }
             }
             _ = deployment_check_interval.tick() => {
@@ -125,9 +125,15 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
                     Ok(objects) => {
                         for obj in objects {
                             let k8s_objects = k8s::objects::create_k8s_objects(obj.clone(),agent.id)?;
-                            match k8s::api::apply_k8s_objects_with_rollback(&k8s_objects, k8s_client.clone()).await {
+                            match k8s::api::reconcile_target_state(
+                                &k8s_objects,
+                                k8s_client.clone(),
+                                &obj.stack_id.to_string(),
+                                &obj.yaml_checksum,
+                            ).await {
                                 Ok(_) => {
-                                    info!("Successfully applied Kubernetes objects");
+                                    info!("Successfully applied {} Kubernetes objects for deployment object {} in agent '{}' (id: {})",
+                                        k8s_objects.len(), obj.id, agent.name, agent.id);
                                     if let Err(e) = broker::send_success_event(
                                         &config,
                                         &client,
@@ -135,11 +141,13 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
                                         obj.id,
                                         None,
                                     ).await {
-                                        error!("Failed to send success event: {}", e);
+                                        error!("Failed to send success event for deployment {} in agent '{}' (id: {}): {}",
+                                            obj.id, agent.name, agent.id, e);
                                     }
                                 }
                                 Err(e) => {
-                                    error!("Failed to apply Kubernetes objects with rollback: {}", e);
+                                    error!("Failed to apply Kubernetes objects for deployment {} in agent '{}' (id: {}). Error: {}",
+                                        obj.id, agent.name, agent.id, e);
                                     if let Err(send_err) = broker::send_failure_event(
                                         &config,
                                         &client,
@@ -147,23 +155,28 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
                                         obj.id,
                                         e.to_string(),
                                     ).await {
-                                        error!("Failed to send failure event: {}", send_err);
+                                        error!("Failed to send failure event for deployment {} in agent '{}' (id: {}): {}",
+                                            obj.id, agent.name, agent.id, send_err);
                                     }
                                 }
                             }
                         }
                     }
-                    Err(e) => error!("Failed to fetch deployment objects: {}", e),
+                    Err(e) => error!("Failed to fetch deployment objects for agent '{}' (id: {}): {}",
+                        agent.name, agent.id, e),
                 }
             }
             _ = shutdown_rx.recv() => {
-                info!("Shutting down agent...");
+                info!("Initiating shutdown for agent '{}' (id: {})...", agent.name, agent.id);
                 break;
             }
         }
     }
 
-    info!("Agent shutdown complete");
+    info!(
+        "Shutdown complete for agent '{}' (id: {})",
+        agent.name, agent.id
+    );
 
     Ok(())
 }

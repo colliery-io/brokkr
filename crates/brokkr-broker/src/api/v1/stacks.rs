@@ -285,7 +285,7 @@ async fn create_deployment_object(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
     Path(stack_id): Path<Uuid>,
-    Json(new_object): Json<NewDeploymentObject>,
+    Json(payload): Json<serde_json::Value>,
 ) -> Result<Json<DeploymentObject>, (StatusCode, Json<serde_json::Value>)> {
     // Check if the user is an admin or the associated generator
     if !auth_payload.admin {
@@ -312,13 +312,25 @@ async fn create_deployment_object(
         }
     }
 
-    // Ensure the stack_id in the path matches the one in the new object
-    if new_object.stack_id != stack_id {
-        return Err((
+    // Extract required fields from payload
+    let yaml_content = payload["yaml_content"]
+        .as_str()
+        .ok_or((
             StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({"error": "Stack ID mismatch"})),
-        ));
-    }
+            Json(serde_json::json!({"error": "Missing or invalid yaml_content"})),
+        ))?
+        .to_string();
+
+    let is_deletion_marker = payload["is_deletion_marker"].as_bool().unwrap_or(false);
+
+    // Create new deployment object with proper hash calculation
+    let new_object =
+        NewDeploymentObject::new(stack_id, yaml_content, is_deletion_marker).map_err(|e| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": e})),
+            )
+        })?;
 
     // Create the deployment object
     match dal.deployment_objects().create(&new_object) {
