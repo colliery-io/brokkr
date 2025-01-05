@@ -362,12 +362,22 @@ export const getStackDeploymentObjects = async (stackId) => {
   }
 };
 
-export const getDeploymentObject = async (deploymentId) => {
+export const getDeploymentObject = async (id) => {
   try {
-    const response = await api.get(`/api/v1/deployment-objects/${deploymentId}`);
+    const response = await api.get(`/api/v1/deployment-objects/${id}`);
     return response.data;
   } catch (error) {
-    console.error('Failed to fetch deployment object:', error);
+    console.error(`Failed to fetch deployment object ${id}:`, error);
+    throw error;
+  }
+};
+
+export const getDeploymentEvents = async (deploymentObjectId) => {
+  try {
+    const response = await api.get(`/api/v1/agent-events?deployment_object_id=${deploymentObjectId}`);
+    return response.data;
+  } catch (error) {
+    console.error(`Failed to fetch events for deployment object ${deploymentObjectId}:`, error);
     throw error;
   }
 };

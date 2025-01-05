@@ -72,6 +72,76 @@ const TabPanel = ({ children, value, index }) => {
   );
 };
 
+// Add new EventsTab component
+const EventsTab = ({ events, loadingEvents, onClose }) => {
+  return (
+    <TableContainer component={Paper}>
+      <Table>
+        <TableHead>
+          <TableRow>
+            <TableCell>Timestamp</TableCell>
+            <TableCell>Event Type</TableCell>
+            <TableCell>Status</TableCell>
+            <TableCell>Deployment Object</TableCell>
+            <TableCell>Message</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {loadingEvents ? (
+            <TableRow>
+              <TableCell colSpan={5} align="center">
+                <CircularProgress />
+              </TableCell>
+            </TableRow>
+          ) : (
+            events.map((event, index) => (
+              <TableRow key={index}>
+                <TableCell>{new Date(event.created_at).toLocaleString()}</TableCell>
+                <TableCell>{event.event_type}</TableCell>
+                <TableCell>
+                  <Chip
+                    label={event.status}
+                    size="small"
+                    color={
+                      event.status === 'SUCCESS' ? 'success' :
+                      event.status === 'FAILURE' ? 'error' :
+                      event.status === 'IN_PROGRESS' ? 'primary' : 'default'
+                    }
+                  />
+                </TableCell>
+                <TableCell>
+                  {event.deployment_object_id && (
+                    <Link
+                      to={`/deployment-objects/${event.deployment_object_id}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onClose();
+                      }}
+                      style={{ textDecoration: 'none', color: '#1976d2' }}
+                    >
+                      {event.deployment_object_id}
+                    </Link>
+                  )}
+                </TableCell>
+                <TableCell style={{ whiteSpace: 'pre-wrap', maxWidth: '400px' }}>
+                  {event.message || '-'}
+                </TableCell>
+              </TableRow>
+            ))
+          )}
+          {!loadingEvents && events.length === 0 && (
+            <TableRow>
+              <TableCell colSpan={5} align="center">
+                <Typography color="text.secondary">No events recorded</Typography>
+              </TableCell>
+            </TableRow>
+          )}
+        </TableBody>
+      </Table>
+    </TableContainer>
+  );
+};
+
 const Agents = () => {
   const [agents, setAgents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -318,6 +388,8 @@ const Agents = () => {
                 <TableCell>Name</TableCell>
                 <TableCell>Cluster</TableCell>
                 <TableCell>Status</TableCell>
+                <TableCell>Labels</TableCell>
+                <TableCell>Annotations</TableCell>
                 <TableCell>Stack Targets</TableCell>
                 <TableCell>Last Seen</TableCell>
               </TableRow>
@@ -340,6 +412,26 @@ const Agents = () => {
                     />
                   </TableCell>
                   <TableCell>
+                    {agentDetails[agent.id]?.labels?.map((labelObj) => (
+                      <Chip
+                        key={labelObj.id}
+                        label={labelObj.label}
+                        size="small"
+                        style={{ margin: '2px' }}
+                      />
+                    ))}
+                  </TableCell>
+                  <TableCell>
+                    {agentDetails[agent.id]?.annotations?.map((annotation) => (
+                      <Chip
+                        key={annotation.key}
+                        label={`${annotation.key}=${annotation.value}`}
+                        size="small"
+                        style={{ margin: '2px' }}
+                      />
+                    ))}
+                  </TableCell>
+                  <TableCell>
                     {agentTargets[agent.id]?.map((target) => (
                       <Chip
                         key={target.stack_id}
@@ -351,7 +443,7 @@ const Agents = () => {
                       />
                     ))}
                   </TableCell>
-                  <TableCell>{new Date(agent.last_seen).toLocaleString()}</TableCell>
+                  <TableCell>{agent.last_heartbeat ? new Date(agent.last_heartbeat).toLocaleString() : 'Never'}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -362,7 +454,7 @@ const Agents = () => {
       <Dialog
         open={!!selectedAgent}
         onClose={handleCloseDialog}
-        maxWidth="md"
+        maxWidth="lg"
         fullWidth
       >
         {selectedAgent && (
@@ -370,8 +462,9 @@ const Agents = () => {
             <DialogTitle>
               Agent Details: {selectedAgent.name}
               <IconButton
+                aria-label="close"
                 onClick={handleCloseDialog}
-                style={{ position: 'absolute', right: 8, top: 8 }}
+                sx={{ position: 'absolute', right: 8, top: 8 }}
               >
                 <CloseIcon />
               </IconButton>
@@ -514,33 +607,7 @@ const Agents = () => {
               </TabPanel>
 
               <TabPanel value={selectedTab} index={4}>
-                <Box>
-                  <Typography variant="h6" gutterBottom>Event Log</Typography>
-                  {loadingEvents ? (
-                    <CircularProgress />
-                  ) : (
-                    <TableContainer component={Paper}>
-                      <Table>
-                        <TableHead>
-                          <TableRow>
-                            <TableCell>Timestamp</TableCell>
-                            <TableCell>Event Type</TableCell>
-                            <TableCell>Message</TableCell>
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {events.map((event, index) => (
-                            <TableRow key={index}>
-                              <TableCell>{new Date(event.timestamp).toLocaleString()}</TableCell>
-                              <TableCell>{event.event_type}</TableCell>
-                              <TableCell>{event.message}</TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </TableContainer>
-                  )}
-                </Box>
+                <EventsTab events={events} loadingEvents={loadingEvents} onClose={handleCloseDialog} />
               </TabPanel>
             </DialogContent>
           </>

@@ -22,6 +22,7 @@ import {
 import Agents from './components/Agents';
 import Stacks from './components/Stacks';
 import Admin from './components/Admin';
+import DeploymentObjectDetail from './components/DeploymentObjectDetail';
 
 const drawerWidth = 240;
 
@@ -74,6 +75,7 @@ function App() {
               <Route path="/agents" element={<Agents />} />
               <Route path="/stacks" element={<Stacks />} />
               <Route path="/admin" element={<Admin />} />
+              <Route path="/deployment-objects/:id" element={<DeploymentObjectDetail />} />
               <Route path="/" element={<Agents />} />
             </Routes>
           </Container>
