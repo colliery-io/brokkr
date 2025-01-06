@@ -935,7 +935,10 @@ async fn test_get_objects_by_annotation_found() {
         obj.metadata.name.as_deref() == Some("test-deployment-1")
             && obj.metadata.namespace.as_deref() == Some(test_namespace)
     });
-    assert!(found_deployment.is_some(), "Should find the deployment with the annotation");
+    assert!(
+        found_deployment.is_some(),
+        "Should find the deployment with the annotation"
+    );
 
     // Cleanup
     cleanup(&client, test_namespace).await;

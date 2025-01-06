@@ -417,18 +417,18 @@ const Stacks = () => {
                     {deploymentObjects.length > 0 ? (
                       <Box display="flex" alignItems="center">
                         <Link
-                          to={`/deployment-objects/${deploymentObjects[deploymentObjects.length - 1].id}`}
+                          to={`/deployment-objects/${deploymentObjects[0].id}`}
                           onClick={(e) => e.stopPropagation()}
                           style={{ textDecoration: 'none', marginRight: '8px' }}
                         >
                           <Typography variant="body2" color="primary">
-                            {deploymentObjects[deploymentObjects.length - 1].id}
+                            {deploymentObjects[0].id}
                           </Typography>
                         </Link>
                         <Chip
                           size="small"
-                          label={deploymentObjects[deploymentObjects.length - 1].is_deletion_marker ? 'Deletion' : 'Deployment'}
-                          color={deploymentObjects[deploymentObjects.length - 1].is_deletion_marker ? 'error' : 'primary'}
+                          label={deploymentObjects[0].is_deletion_marker ? 'Deletion' : 'Deployment'}
+                          color={deploymentObjects[0].is_deletion_marker ? 'error' : 'primary'}
                         />
                       </Box>
                     ) : (

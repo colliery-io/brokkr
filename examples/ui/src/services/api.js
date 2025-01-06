@@ -413,3 +413,23 @@ export const removeAgentTarget = async (agentId, stackId) => {
     throw error;
   }
 };
+
+export const getAgentApplicableDeploymentObjects = async (agentId) => {
+  try {
+    const response = await api.get(`/api/v1/agents/${agentId}/applicable-deployment-objects`);
+    return response.data;
+  } catch (error) {
+    console.error(`Failed to fetch applicable deployment objects for agent ${agentId}:`, error);
+    throw error;
+  }
+};
+
+export const getAgentAssociatedStacks = async (agentId) => {
+  try {
+    const response = await api.get(`/api/v1/agents/${agentId}/stacks`);
+    return response.data;
+  } catch (error) {
+    console.error(`Failed to fetch associated stacks for agent ${agentId}:`, error);
+    throw error;
+  }
+};

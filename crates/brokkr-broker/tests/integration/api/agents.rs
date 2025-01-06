@@ -11,7 +11,7 @@ use brokkr_models::models::agent_targets::NewAgentTarget;
 use brokkr_models::models::agents::Agent;
 use brokkr_models::models::agents::NewAgent;
 use brokkr_models::models::deployment_objects::DeploymentObject;
-use brokkr_models::models::stacks::NewStack;
+use brokkr_models::models::stacks::{NewStack, Stack};
 use std::ops::Not;
 use tower::ServiceExt;
 use uuid::Uuid;
@@ -1033,4 +1033,135 @@ async fn test_get_agent_by_name_and_cluster_name() {
 
     assert_eq!(agent.name, "test-agent");
     assert_eq!(agent.cluster_name, "test-cluster");
+}
+
+#[tokio::test]
+async fn test_get_agent_stacks() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+    let admin_pak = fixture.admin_pak.clone();
+
+    // Create test agents
+    let (agent, agent_pak) =
+        fixture.create_test_agent_with_pak("test-agent".to_string(), "test-cluster".to_string());
+    let (other_agent, other_agent_pak) =
+        fixture.create_test_agent_with_pak("other-agent".to_string(), "other-cluster".to_string());
+
+    // Create test stacks
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
+    let stack1 = fixture.create_test_stack("Stack 1".to_string(), None, generator.id);
+    let stack2 = fixture.create_test_stack("Stack 2".to_string(), None, generator.id);
+    let stack3 = fixture.create_test_stack("Stack 3".to_string(), None, generator.id);
+    let stack4 = fixture.create_test_stack("Stack 4".to_string(), None, generator.id);
+
+    // Create associations:
+    // 1. Direct target
+    let new_target = NewAgentTarget::new(agent.id, stack1.id).unwrap();
+    fixture.dal.agent_targets().create(&new_target).unwrap();
+
+    // 2. Label match
+    fixture.create_test_agent_label(agent.id, "env=prod".to_string());
+    fixture.create_test_stack_label(stack2.id, "env=prod".to_string());
+
+    // 3. Annotation match
+    fixture.create_test_agent_annotation(agent.id, "region".to_string(), "us-west".to_string());
+    fixture.create_test_stack_annotation(stack3.id, "region", "us-west");
+
+    // Test with admin PAK
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/api/v1/agents/{}/stacks", agent.id))
+                .header("Authorization", &admin_pak)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let stacks: Vec<Stack> = serde_json::from_slice(&body).unwrap();
+
+    // Should return stacks 1, 2, and 3 (not 4)
+    assert_eq!(stacks.len(), 3);
+    assert!(stacks.iter().any(|s| s.id == stack1.id)); // Direct target
+    assert!(stacks.iter().any(|s| s.id == stack2.id)); // Label match
+    assert!(stacks.iter().any(|s| s.id == stack3.id)); // Annotation match
+    assert!(!stacks.iter().any(|s| s.id == stack4.id)); // No association
+
+    // Test with agent's own PAK
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/api/v1/agents/{}/stacks", agent.id))
+                .header("Authorization", format!("Bearer {}", agent_pak))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let status = response.status();
+    if status != StatusCode::OK {
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        println!("Error response body: {}", String::from_utf8_lossy(&body));
+    }
+
+    assert_eq!(status, StatusCode::OK);
+
+    // Test with other agent's PAK (should be forbidden)
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/api/v1/agents/{}/stacks", agent.id))
+                .header("Authorization", format!("Bearer {}", other_agent_pak))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+    // Test with non-existent agent
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/api/v1/agents/{}/stacks", Uuid::new_v4()))
+                .header("Authorization", &admin_pak)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Test unauthorized access
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/api/v1/agents/{}/stacks", agent.id))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }

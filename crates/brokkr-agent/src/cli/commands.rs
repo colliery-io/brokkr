@@ -78,7 +78,7 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
     info!("HTTP client created");
 
     info!("Fetching agent details");
-    let agent = broker::fetch_agent_details(&config, &client).await?;
+    let mut agent = broker::fetch_agent_details(&config, &client).await?;
     info!(
         "Agent details fetched successfully for agent: {}",
         agent.name
@@ -116,11 +116,28 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
         select! {
             _ = heartbeat_interval.tick() => {
                 match broker::send_heartbeat(&config, &client, &agent).await {
-                    Ok(_) => debug!("Successfully sent heartbeat for agent '{}' (id: {})", agent.name, agent.id),
+                    Ok(_) => {
+                        debug!("Successfully sent heartbeat for agent '{}' (id: {})", agent.name, agent.id);
+                        // Fetch updated agent details after heartbeat
+                        match broker::fetch_agent_details(&config, &client).await {
+                            Ok(updated_agent) => {
+                                debug!("Successfully fetched updated agent details. Status: {}", updated_agent.status);
+                                agent = updated_agent;
+                            }
+                            Err(e) => error!("Failed to fetch updated agent details: {}", e),
+                        }
+                    },
                     Err(e) => error!("Failed to send heartbeat for agent '{}' (id: {}): {}", agent.name, agent.id, e),
                 }
             }
             _ = deployment_check_interval.tick() => {
+                // Skip deployment object requests if agent is inactive
+                if agent.status != "ACTIVE" {
+                    debug!("Agent '{}' (id: {}) is not active (status: {}), skipping deployment object requests",
+                        agent.name, agent.id, agent.status);
+                    continue;
+                }
+
                 match broker::fetch_and_process_deployment_objects(&config, &client, &agent).await {
                     Ok(objects) => {
                         for obj in objects {
