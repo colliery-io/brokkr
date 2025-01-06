@@ -14,7 +14,18 @@ use axum::{
 };
 use brokkr_models::models::generator::{Generator, NewGenerator};
 use brokkr_utils::logging::prelude::*;
+use serde::Serialize;
+use utoipa::ToSchema;
 use uuid::Uuid;
+
+/// Response for a successful generator creation
+#[derive(Serialize, ToSchema)]
+pub struct CreateGeneratorResponse {
+    /// The created generator
+    pub generator: Generator,
+    /// The Pre-Authentication Key for the generator
+    pub pak: String,
+}
 
 /// Creates and returns the router for generator endpoints.
 ///
@@ -31,6 +42,19 @@ pub fn routes() -> Router<DAL> {
         .route("/generators/:id", delete(delete_generator))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/generators",
+    responses(
+        (status = 200, description = "List all generators", body = Vec<Generator>),
+        (status = 403, description = "Forbidden - Admin access required"),
+        (status = 500, description = "Internal server error")
+    ),
+    security(
+        ("admin_pak" = [])
+    ),
+    tag = "generators"
+)]
 /// Lists all generators. Requires admin access.
 ///
 /// # Arguments
@@ -69,6 +93,21 @@ async fn list_generators(
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/generators",
+    request_body = NewGenerator,
+    responses(
+        (status = 201, description = "Generator created successfully", body = CreateGeneratorResponse),
+        (status = 403, description = "Forbidden - Admin access required"),
+        (status = 400, description = "Invalid generator data"),
+        (status = 500, description = "Internal server error")
+    ),
+    security(
+        ("admin_pak" = [])
+    ),
+    tag = "generators"
+)]
 /// Creates a new generator. Requires admin access.
 ///
 /// # Arguments
@@ -132,6 +171,24 @@ async fn create_generator(
     }
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/generators/{id}",
+    responses(
+        (status = 200, description = "Get generator by id", body = Generator),
+        (status = 403, description = "Forbidden - Unauthorized access"),
+        (status = 404, description = "Generator not found"),
+        (status = 500, description = "Internal server error")
+    ),
+    params(
+        ("id" = Uuid, Path, description = "Generator id")
+    ),
+    security(
+        ("admin_pak" = []),
+        ("generator_pak" = [])
+    ),
+    tag = "generators"
+)]
 /// Retrieves a specific generator by ID.
 ///
 /// # Arguments
@@ -179,6 +236,25 @@ async fn get_generator(
     }
 }
 
+#[utoipa::path(
+    put,
+    path = "/api/v1/generators/{id}",
+    request_body = Generator,
+    responses(
+        (status = 200, description = "Generator updated successfully", body = Generator),
+        (status = 403, description = "Forbidden - Unauthorized access"),
+        (status = 404, description = "Generator not found"),
+        (status = 500, description = "Internal server error")
+    ),
+    params(
+        ("id" = Uuid, Path, description = "Generator id")
+    ),
+    security(
+        ("admin_pak" = []),
+        ("generator_pak" = [])
+    ),
+    tag = "generators"
+)]
 /// Updates an existing generator.
 ///
 /// # Arguments
@@ -221,7 +297,25 @@ async fn update_generator(
     }
 }
 
-/// Soft deletes a generator.
+#[utoipa::path(
+    delete,
+    path = "/api/v1/generators/{id}",
+    responses(
+        (status = 204, description = "Generator deleted successfully"),
+        (status = 403, description = "Forbidden - Unauthorized access"),
+        (status = 404, description = "Generator not found"),
+        (status = 500, description = "Internal server error")
+    ),
+    params(
+        ("id" = Uuid, Path, description = "Generator id")
+    ),
+    security(
+        ("admin_pak" = []),
+        ("generator_pak" = [])
+    ),
+    tag = "generators"
+)]
+/// Deletes a generator.
 ///
 /// # Arguments
 ///

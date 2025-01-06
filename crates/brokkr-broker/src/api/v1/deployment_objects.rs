@@ -26,15 +26,31 @@ pub fn routes() -> Router<DAL> {
 
 /// Retrieves a deployment object by ID, with access control based on user role.
 ///
-/// # Arguments
-///
-/// * `dal` - The data access layer for database operations.
-/// * `auth_payload` - The authentication payload containing user role information.
-/// * `id` - The UUID of the deployment object to retrieve.
-///
-/// # Returns
-///
-/// A `Result` containing either the `DeploymentObject` as JSON or an error response.
+/// # Authorization
+/// Requires either:
+/// - Admin privileges
+/// - Agent associated with the deployment object's stack
+/// - Generator that owns the deployment object's stack
+#[utoipa::path(
+    get,
+    path = "/api/v1/deployment-objects/{id}",
+    tag = "deployment-objects",
+    params(
+        ("id" = Uuid, Path, description = "ID of the deployment object to retrieve"),
+    ),
+    responses(
+        (status = 200, description = "Successfully retrieved deployment object", body = DeploymentObject),
+        (status = 401, description = "Unauthorized - No valid PAK provided", body = serde_json::Value),
+        (status = 403, description = "Forbidden - PAK does not have required rights", body = serde_json::Value),
+        (status = 404, description = "Deployment object not found", body = serde_json::Value),
+        (status = 500, description = "Internal server error", body = serde_json::Value),
+    ),
+    security(
+        ("admin_pak" = []),
+        ("agent_pak" = []),
+        ("generator_pak" = []),
+    )
+)]
 async fn get_deployment_object(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -132,7 +148,7 @@ async fn get_deployment_object(
                     id
                 );
                 Err((
-                    axum::http::StatusCode::FORBIDDEN,
+                    axum::http::StatusCode::UNAUTHORIZED,
                     Json(serde_json::json!({"error": "Unauthorized access"})),
                 ))
             }

@@ -20,6 +20,15 @@ pub fn routes() -> Router<DAL> {
         .route("/agent-events/:id", get(get_agent_event))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/agent-events",
+    responses(
+        (status = 200, description = "List all agent events", body = Vec<AgentEvent>),
+        (status = 500, description = "Internal server error")
+    ),
+    tag = "agent-events"
+)]
 /// Retrieves a list of all agent events.
 ///
 /// # Arguments
@@ -48,6 +57,19 @@ async fn list_agent_events(
     }
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/agent-events/{id}",
+    responses(
+        (status = 200, description = "Get agent event by id", body = AgentEvent),
+        (status = 404, description = "Agent event not found"),
+        (status = 500, description = "Internal server error")
+    ),
+    params(
+        ("id" = Uuid, Path, description = "Agent event id")
+    ),
+    tag = "agent-events"
+)]
 /// Retrieves a specific agent event by its ID.
 ///
 /// # Arguments

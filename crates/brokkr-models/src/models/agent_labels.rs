@@ -26,6 +26,7 @@
 
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 /// Represents an agent label in the database.
@@ -41,6 +42,7 @@ use uuid::Uuid;
     Eq,
     PartialEq,
     Hash,
+    ToSchema,
 )]
 #[diesel(table_name = crate::schema::agent_labels)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
@@ -54,7 +56,7 @@ pub struct AgentLabel {
 }
 
 /// Represents a new agent label to be inserted into the database.
-#[derive(Insertable, Debug, Clone, Serialize, Deserialize)]
+#[derive(Insertable, Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[diesel(table_name = crate::schema::agent_labels)]
 pub struct NewAgentLabel {
     /// ID of the agent this label is associated with.
