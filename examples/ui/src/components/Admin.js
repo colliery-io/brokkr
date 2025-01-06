@@ -26,7 +26,7 @@ import {
   ContentCopy as CopyIcon,
   Refresh as RefreshIcon
 } from '@mui/icons-material';
-import { getAgents, getGenerators, createAgentPak, createGeneratorPak } from '../services/api';
+import { getAgents, getGenerators, createAgentPak, createGeneratorPak, rotateGeneratorPak, rotateAgentPak } from '../services/api';
 
 const TabPanel = ({ children, value, index }) => (
   <div hidden={value !== index} style={{ padding: '20px 0' }}>
@@ -132,6 +132,40 @@ const Admin = () => {
     navigator.clipboard.writeText(pak);
     setPakCopied(true);
     setSuccess('PAK copied to clipboard!');
+  };
+
+  const handleRotateGeneratorPak = async (generatorId) => {
+    try {
+      setLoading(true);
+      const response = await rotateGeneratorPak(generatorId);
+      setNewPak(response.pak);
+      setCreateDialog(true);
+      setPakCopied(false);
+      setSuccess('Generator PAK rotated successfully!');
+      fetchData(); // Refresh the list
+    } catch (err) {
+      setError('Failed to rotate PAK. Please try again.');
+      console.error('Error rotating PAK:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRotateAgentPak = async (agentId) => {
+    try {
+      setLoading(true);
+      const response = await rotateAgentPak(agentId);
+      setNewPak(response.pak);
+      setCreateDialog(true);
+      setPakCopied(false);
+      setSuccess('Agent PAK rotated successfully!');
+      fetchData(); // Refresh the list
+    } catch (err) {
+      setError('Failed to rotate PAK. Please try again.');
+      console.error('Error rotating PAK:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const renderPakDialog = () => (
@@ -279,20 +313,6 @@ const Admin = () => {
         <Typography variant="h5">
           PAK Management
         </Typography>
-        <Box display="flex" gap={2}>
-          <Tooltip title="Refresh">
-            <IconButton onClick={fetchData} disabled={loading}>
-              <RefreshIcon />
-            </IconButton>
-          </Tooltip>
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={handleCreatePak}
-          >
-            Create PAK
-          </Button>
-        </Box>
       </Box>
 
       {error && (
@@ -318,6 +338,16 @@ const Admin = () => {
         </Tabs>
 
         <TabPanel value={activeTab} index={0}>
+          <Box sx={{ mb: 2 }}>
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={handleCreatePak}
+            >
+              Create Agent PAK
+            </Button>
+          </Box>
+
           <List>
             {agents.length === 0 ? (
               <ListItem>
@@ -329,7 +359,21 @@ const Admin = () => {
             ) : (
               agents.map((agent) => (
                 <React.Fragment key={agent.id}>
-                  <ListItem>
+                  <ListItem
+                    secondaryAction={
+                      <Box>
+                        <Tooltip title="Rotate PAK">
+                          <IconButton
+                            edge="end"
+                            onClick={() => handleRotateAgentPak(agent.id)}
+                            disabled={loading}
+                          >
+                            <RefreshIcon />
+                          </IconButton>
+                        </Tooltip>
+                      </Box>
+                    }
+                  >
                     <ListItemText
                       primary={agent.name}
                       secondary={`Cluster: ${agent.cluster_name}`}
@@ -349,18 +393,43 @@ const Admin = () => {
         </TabPanel>
 
         <TabPanel value={activeTab} index={1}>
+          <Box sx={{ mb: 2 }}>
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={handleCreatePak}
+            >
+              Create Generator PAK
+            </Button>
+          </Box>
+
           <List>
-            {generators.length === 0 ? (
+            {loading ? (
               <ListItem>
-                <ListItemText
-                  primary="No generator PAKs found"
-                  secondary="Create a new generator PAK to get started"
-                />
+                <CircularProgress />
+              </ListItem>
+            ) : generators.length === 0 ? (
+              <ListItem>
+                <ListItemText primary="No generators found" />
               </ListItem>
             ) : (
               generators.map((generator) => (
                 <React.Fragment key={generator.id}>
-                  <ListItem>
+                  <ListItem
+                    secondaryAction={
+                      <Box>
+                        <Tooltip title="Rotate PAK">
+                          <IconButton
+                            edge="end"
+                            onClick={() => handleRotateGeneratorPak(generator.id)}
+                            disabled={loading}
+                          >
+                            <RefreshIcon />
+                          </IconButton>
+                        </Tooltip>
+                      </Box>
+                    }
+                  >
                     <ListItemText
                       primary={generator.name}
                       secondary={generator.description || 'No description'}

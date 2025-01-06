@@ -1165,3 +1165,129 @@ async fn test_get_agent_stacks() {
 
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
+
+#[tokio::test]
+async fn test_rotate_agent_pak_admin_success() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+    let admin_pak = fixture.admin_pak.clone();
+
+    let (agent, _) =
+        fixture.create_test_agent_with_pak("Test Agent".to_string(), "Test Cluster".to_string());
+    let original_pak_hash = agent.pak_hash.clone();
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/agents/{}/rotate-pak", agent.id))
+                .header("Authorization", format!("Bearer {}", admin_pak))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+    // Verify response structure
+    assert!(json["agent"].is_object());
+    assert!(json["pak"].is_string());
+
+    // Verify agent fields
+    assert_eq!(json["agent"]["id"], agent.id.to_string());
+    assert_eq!(json["agent"]["name"], "Test Agent");
+    assert_eq!(json["agent"]["cluster_name"], "Test Cluster");
+
+    // Verify PAK hash has changed
+    let updated_agent = fixture.dal.agents().get(agent.id).unwrap().unwrap();
+    assert_ne!(updated_agent.pak_hash, original_pak_hash);
+}
+
+#[tokio::test]
+async fn test_rotate_agent_pak_self_success() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+
+    // Create agent with PAK
+    let (agent, agent_pak) =
+        fixture.create_test_agent_with_pak("Test Agent".to_string(), "Test Cluster".to_string());
+    let original_pak_hash = agent.pak_hash.clone();
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/agents/{}/rotate-pak", agent.id))
+                .header("Authorization", format!("Bearer {}", agent_pak))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+    // Verify response structure
+    assert!(json["agent"].is_object());
+    assert!(json["pak"].is_string());
+
+    // Verify PAK hash has changed
+    let updated_agent = fixture.dal.agents().get(agent.id).unwrap().unwrap();
+    assert_ne!(updated_agent.pak_hash, original_pak_hash);
+}
+
+#[tokio::test]
+async fn test_rotate_agent_pak_unauthorized() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+
+    let test_agent =
+        fixture.create_test_agent("Test Agent".to_string(), "Test Cluster".to_string());
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/agents/{}/rotate-pak", test_agent.id))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn test_rotate_agent_pak_forbidden() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+
+    // Create two agents
+    let (agent1, _) =
+        fixture.create_test_agent_with_pak("Agent 1".to_string(), "Test Cluster".to_string());
+    let (agent2, agent2_pak) =
+        fixture.create_test_agent_with_pak("Agent 2".to_string(), "Test Cluster".to_string());
+
+    // Try to rotate agent1's PAK using agent2's PAK
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/agents/{}/rotate-pak", agent1.id))
+                .header("Authorization", format!("Bearer {}", agent2_pak))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}

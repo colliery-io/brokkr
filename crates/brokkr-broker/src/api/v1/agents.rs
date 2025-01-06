@@ -50,6 +50,7 @@ pub fn routes() -> Router<DAL> {
             get(get_applicable_deployment_objects),
         )
         .route("/agents/:id/stacks", get(get_associated_stacks))
+        .route("/agents/:id/rotate-pak", post(rotate_agent_pak))
 }
 
 /// Lists all agents.
@@ -1336,6 +1337,87 @@ async fn get_associated_stacks(
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to fetch associated stacks"})),
+            ))
+        }
+    }
+}
+
+/// Rotates the PAK for a specific agent.
+///
+/// # Authorization
+/// Requires either admin privileges or the current agent's PAK.
+#[utoipa::path(
+    post,
+    path = "/api/v1/agents/{id}/rotate-pak",
+    responses(
+        (status = 200, description = "Successfully rotated agent PAK", body = serde_json::Value),
+        (status = 403, description = "Forbidden - Unauthorized access"),
+        (status = 404, description = "Agent not found"),
+        (status = 500, description = "Internal server error")
+    ),
+    params(
+        ("id" = Uuid, Path, description = "Agent id")
+    ),
+    security(
+        ("admin_pak" = []),
+        ("agent_pak" = [])
+    ),
+    tag = "agents"
+)]
+async fn rotate_agent_pak(
+    State(dal): State<DAL>,
+    Extension(auth_payload): Extension<AuthPayload>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+    info!("Handling request to rotate PAK for agent with ID: {}", id);
+
+    // Check authorization - must be admin or the agent itself
+    if !auth_payload.admin && auth_payload.agent != Some(id) {
+        warn!(
+            "Unauthorized attempt to rotate PAK for agent with ID: {}",
+            id
+        );
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({"error": "Unauthorized access"})),
+        ));
+    }
+
+    // Verify agent exists
+    if let Err(e) = dal.agents().get(id) {
+        error!("Failed to fetch agent with ID {}: {:?}", id, e);
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "Failed to fetch agent"})),
+        ));
+    }
+
+    // Generate new PAK and hash
+    let (pak, pak_hash) = match crate::utils::pak::create_pak() {
+        Ok((pak, hash)) => (pak, hash),
+        Err(e) => {
+            error!("Failed to create new PAK: {:?}", e);
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Failed to create new PAK"})),
+            ));
+        }
+    };
+
+    // Update agent's PAK hash
+    match dal.agents().update_pak_hash(id, pak_hash) {
+        Ok(updated_agent) => {
+            info!("Successfully rotated PAK for agent with ID: {}", id);
+            Ok(Json(serde_json::json!({
+                "agent": updated_agent,
+                "pak": pak
+            })))
+        }
+        Err(e) => {
+            error!("Failed to update agent PAK hash: {:?}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Failed to update agent PAK hash"})),
             ))
         }
     }
