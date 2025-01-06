@@ -433,3 +433,23 @@ export const getAgentAssociatedStacks = async (agentId) => {
     throw error;
   }
 };
+
+export const rotateAgentPak = async (agentId) => {
+  try {
+    const response = await api.post(`/api/v1/agents/${agentId}/rotate-pak`);
+    return response.data;
+  } catch (error) {
+    console.error('Failed to rotate agent PAK:', error);
+    throw error;
+  }
+};
+
+export const rotateGeneratorPak = async (generatorId) => {
+  try {
+    const response = await api.post(`/api/v1/generators/${generatorId}/rotate-pak`);
+    return response.data;
+  } catch (error) {
+    console.error('Failed to rotate generator PAK:', error);
+    throw error;
+  }
+};

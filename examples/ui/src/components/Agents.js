@@ -36,7 +36,8 @@ import {
   Delete as DeleteIcon,
   Label as LabelIcon,
   Edit as EditIcon,
-  Close as CloseIcon
+  Close as CloseIcon,
+  ContentCopy as CopyIcon
 } from '@mui/icons-material';
 import {
   getAgents,

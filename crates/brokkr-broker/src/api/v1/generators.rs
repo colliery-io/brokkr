@@ -40,6 +40,7 @@ pub fn routes() -> Router<DAL> {
         .route("/generators/:id", get(get_generator))
         .route("/generators/:id", put(update_generator))
         .route("/generators/:id", delete(delete_generator))
+        .route("/generators/:id/rotate-pak", post(rotate_generator_pak))
 }
 
 #[utoipa::path(
@@ -350,6 +351,97 @@ async fn delete_generator(
             Err((
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to delete generator"})),
+            ))
+        }
+    }
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/generators/{id}/rotate-pak",
+    responses(
+        (status = 200, description = "Generator PAK rotated successfully", body = CreateGeneratorResponse),
+        (status = 403, description = "Forbidden - Unauthorized access"),
+        (status = 404, description = "Generator not found"),
+        (status = 500, description = "Internal server error")
+    ),
+    params(
+        ("id" = Uuid, Path, description = "Generator id")
+    ),
+    security(
+        ("admin_pak" = []),
+        ("generator_pak" = [])
+    ),
+    tag = "generators"
+)]
+/// Rotates the PAK for a specific generator.
+///
+/// # Arguments
+///
+/// * `dal` - The data access layer for database operations.
+/// * `auth_payload` - The authentication payload containing user role information.
+/// * `id` - The UUID of the generator to rotate PAK for.
+///
+/// # Returns
+///
+/// A `Result` containing either the updated `Generator` and its new PAK as JSON or an error response.
+async fn rotate_generator_pak(
+    State(dal): State<DAL>,
+    Extension(auth_payload): Extension<AuthPayload>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, (axum::http::StatusCode, Json<serde_json::Value>)> {
+    info!(
+        "Handling request to rotate PAK for generator with ID: {}",
+        id
+    );
+
+    // Check authorization - must be admin or the generator itself
+    if !auth_payload.admin && auth_payload.generator != Some(id) {
+        warn!(
+            "Unauthorized attempt to rotate PAK for generator with ID: {}",
+            id
+        );
+        return Err((
+            axum::http::StatusCode::FORBIDDEN,
+            Json(serde_json::json!({"error": "Unauthorized access"})),
+        ));
+    }
+
+    // Verify generator exists
+    if let Err(e) = dal.generators().get(id) {
+        error!("Failed to fetch generator with ID {}: {:?}", id, e);
+        return Err((
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "Failed to fetch generator"})),
+        ));
+    }
+
+    // Generate new PAK and hash
+    let (pak, pak_hash) = match pak::create_pak() {
+        Ok((pak, hash)) => (pak, hash),
+        Err(e) => {
+            error!("Failed to create new PAK: {:?}", e);
+            return Err((
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Failed to create new PAK"})),
+            ));
+        }
+    };
+
+    // Update generator's PAK hash
+    match dal.generators().update_pak_hash(id, pak_hash) {
+        Ok(updated_generator) => {
+            info!("Successfully rotated PAK for generator with ID: {}", id);
+            Ok(Json(serde_json::json!({
+                "generator": updated_generator,
+                "pak": pak
+            })))
+        }
+        Err(e) => {
+            error!("Failed to update generator PAK hash: {:?}", e);
+            Err((
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Failed to update generator PAK hash"})),
             ))
         }
     }
