@@ -7,313 +7,165 @@ use crate::api::v1::middleware::AuthPayload;
 use crate::dal::DAL;
 use axum::{
     extract::{Extension, Path, State},
-    http::StatusCode,
     routing::get,
     Json, Router,
 };
-use brokkr_models::models::deployment_objects::{DeploymentObject, NewDeploymentObject};
+use brokkr_models::models::deployment_objects::DeploymentObject;
+use brokkr_utils::logging::prelude::*;
 use uuid::Uuid;
 
+/// Creates and returns the router for deployment object endpoints.
+///
+/// # Returns
+///
+/// A `Router` instance configured with the deployment object routes.
 pub fn routes() -> Router<DAL> {
-    Router::new()
-        .route(
-            "/",
-            get(list_deployment_objects).post(create_deployment_object),
-        )
-        .route(
-            "/:id",
-            get(get_deployment_object).delete(delete_deployment_object),
-        )
+    info!("Setting up deployment object routes");
+    Router::new().route("/deployment-objects/:id", get(get_deployment_object))
 }
 
-/// Lists all deployment objects for a stack.
+/// Retrieves a deployment object by ID, with access control based on user role.
 ///
 /// # Authorization
-/// Requires admin privileges.
+/// Requires either:
+/// - Admin privileges
+/// - Agent associated with the deployment object's stack
+/// - Generator that owns the deployment object's stack
 #[utoipa::path(
     get,
-    path = "/stacks/{stack_id}/deployment-objects",
+    path = "/api/v1/deployment-objects/{id}",
     tag = "deployment-objects",
     params(
-        ("stack_id" = Uuid, Path, description = "ID of the stack to list deployment objects for"),
-    ),
-    responses(
-        (status = 200, description = "Successfully retrieved deployment objects", body = Vec<DeploymentObject>),
-        (status = 403, description = "Forbidden - PAK does not have required rights", body = serde_json::Value),
-        (status = 500, description = "Internal server error", body = serde_json::Value),
-    ),
-    security(
-        ("admin_pak" = []),
-    )
-)]
-pub async fn list_deployment_objects(
-    State(dal): State<DAL>,
-    Extension(auth_payload): Extension<AuthPayload>,
-    Path(stack_id): Path<Uuid>,
-) -> Result<Json<Vec<DeploymentObject>>, (StatusCode, Json<serde_json::Value>)> {
-    // Check if the user is an admin or the associated generator
-    if !auth_payload.admin {
-        let stack = dal.stacks().get(vec![stack_id]).map_err(|_| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": "Failed to fetch stack"})),
-            )
-        })?;
-
-        if stack.is_empty() {
-            return Err((
-                StatusCode::NOT_FOUND,
-                Json(serde_json::json!({"error": "Stack not found"})),
-            ));
-        }
-
-        let stack = &stack[0];
-        if auth_payload.generator != Some(stack.generator_id) {
-            return Err((
-                StatusCode::FORBIDDEN,
-                Json(serde_json::json!({"error": "Access denied"})),
-            ));
-        }
-    }
-
-    // Fetch deployment objects
-    match dal.deployment_objects().list_for_stack(stack_id) {
-        Ok(objects) => Ok(Json(objects)),
-        Err(_) => Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({"error": "Failed to fetch deployment objects"})),
-        )),
-    }
-}
-
-/// Creates a new deployment object.
-///
-/// # Authorization
-/// Requires admin privileges.
-#[utoipa::path(
-    post,
-    path = "/stacks/{stack_id}/deployment-objects",
-    tag = "deployment-objects",
-    params(
-        ("stack_id" = Uuid, Path, description = "ID of the stack to create a deployment object for"),
-    ),
-    request_body = NewDeploymentObject,
-    responses(
-        (status = 200, description = "Successfully created deployment object", body = DeploymentObject),
-        (status = 403, description = "Forbidden - PAK does not have required rights", body = serde_json::Value),
-        (status = 500, description = "Internal server error", body = serde_json::Value),
-    ),
-    security(
-        ("admin_pak" = []),
-    )
-)]
-pub async fn create_deployment_object(
-    State(dal): State<DAL>,
-    Extension(auth_payload): Extension<AuthPayload>,
-    Path(stack_id): Path<Uuid>,
-    Json(new_deployment_object): Json<NewDeploymentObject>,
-) -> Result<Json<DeploymentObject>, (StatusCode, Json<serde_json::Value>)> {
-    // Check if the user is an admin or the associated generator
-    if !auth_payload.admin {
-        let stack = dal.stacks().get(vec![stack_id]).map_err(|_| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": "Failed to fetch stack"})),
-            )
-        })?;
-
-        if stack.is_empty() {
-            return Err((
-                StatusCode::NOT_FOUND,
-                Json(serde_json::json!({"error": "Stack not found"})),
-            ));
-        }
-
-        let stack = &stack[0];
-        if auth_payload.generator != Some(stack.generator_id) {
-            return Err((
-                StatusCode::FORBIDDEN,
-                Json(serde_json::json!({"error": "Access denied"})),
-            ));
-        }
-    }
-
-    // Create new deployment object with proper hash calculation
-    let new_object = NewDeploymentObject::new(
-        stack_id,
-        new_deployment_object.yaml_content,
-        new_deployment_object.is_deletion_marker,
-    )
-    .map_err(|e| {
-        (
-            StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({"error": e})),
-        )
-    })?;
-
-    // Create the deployment object
-    match dal.deployment_objects().create(&new_object) {
-        Ok(object) => Ok(Json(object)),
-        Err(_) => Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({"error": "Failed to create deployment object"})),
-        )),
-    }
-}
-
-/// Retrieves a specific deployment object by ID.
-///
-/// # Authorization
-/// Requires admin privileges.
-#[utoipa::path(
-    get,
-    path = "/stacks/{stack_id}/deployment-objects/{id}",
-    tag = "deployment-objects",
-    params(
-        ("stack_id" = Uuid, Path, description = "ID of the stack the deployment object belongs to"),
         ("id" = Uuid, Path, description = "ID of the deployment object to retrieve"),
     ),
     responses(
         (status = 200, description = "Successfully retrieved deployment object", body = DeploymentObject),
+        (status = 401, description = "Unauthorized - No valid PAK provided", body = serde_json::Value),
         (status = 403, description = "Forbidden - PAK does not have required rights", body = serde_json::Value),
         (status = 404, description = "Deployment object not found", body = serde_json::Value),
         (status = 500, description = "Internal server error", body = serde_json::Value),
     ),
     security(
         ("admin_pak" = []),
+        ("agent_pak" = []),
+        ("generator_pak" = []),
     )
 )]
-pub async fn get_deployment_object(
+async fn get_deployment_object(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
-    Path((stack_id, id)): Path<(Uuid, Uuid)>,
-) -> Result<Json<DeploymentObject>, (StatusCode, Json<serde_json::Value>)> {
-    // Check if the user is an admin or the associated generator
-    if !auth_payload.admin {
-        let stack = dal.stacks().get(vec![stack_id]).map_err(|_| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": "Failed to fetch stack"})),
-            )
-        })?;
-
-        if stack.is_empty() {
-            return Err((
-                StatusCode::NOT_FOUND,
-                Json(serde_json::json!({"error": "Stack not found"})),
-            ));
-        }
-
-        let stack = &stack[0];
-        if auth_payload.generator != Some(stack.generator_id) {
-            return Err((
-                StatusCode::FORBIDDEN,
-                Json(serde_json::json!({"error": "Access denied"})),
-            ));
-        }
-    }
-
-    // Fetch deployment object
+    Path(id): Path<Uuid>,
+) -> Result<Json<DeploymentObject>, (axum::http::StatusCode, Json<serde_json::Value>)> {
+    info!("Handling request to get deployment object with ID: {}", id);
     match dal.deployment_objects().get(id) {
         Ok(Some(object)) => {
-            if object.stack_id != stack_id {
-                return Err((
-                    StatusCode::NOT_FOUND,
-                    Json(serde_json::json!({"error": "Deployment object not found"})),
-                ));
+            if auth_payload.admin {
+                info!("Admin user accessed deployment object with ID: {}", id);
+                Ok(Json(object))
+            } else if let Some(agent_id) = auth_payload.agent {
+                match dal.agent_targets().list_for_agent(agent_id) {
+                    Ok(targets) => {
+                        if targets
+                            .iter()
+                            .any(|target| target.stack_id == object.stack_id)
+                        {
+                            info!(
+                                "Agent {} accessed deployment object with ID: {}",
+                                agent_id, id
+                            );
+                            Ok(Json(object))
+                        } else {
+                            warn!("Agent {} attempted to access unauthorized deployment object with ID: {}", agent_id, id);
+                            Err((
+                                axum::http::StatusCode::FORBIDDEN,
+                                Json(
+                                    serde_json::json!({"error": "Agent is not associated with this deployment object"}),
+                                ),
+                            ))
+                        }
+                    }
+                    Err(e) => {
+                        error!(
+                            "Failed to fetch agent targets for agent {}: {:?}",
+                            agent_id, e
+                        );
+                        Err((
+                            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                            Json(serde_json::json!({"error": "Failed to fetch agent targets"})),
+                        ))
+                    }
+                }
+            } else if let Some(generator_id) = auth_payload.generator {
+                // Check if the generator is associated with the stack of this deployment object
+                match dal.stacks().get(vec![object.stack_id]) {
+                    Ok(stacks) => {
+                        if let Some(stack) = stacks.first() {
+                            if stack.generator_id == generator_id {
+                                info!(
+                                    "Generator '{}' (id: {}) accessed deployment object '{}' (id: {})",
+                                    stack.name, generator_id, object.yaml_content, id
+                                );
+                                Ok(Json(object))
+                            } else {
+                                warn!(
+                                    "Generator '{}' (id: {}) attempted unauthorized access to deployment object '{}' (id: {}) owned by generator {}",
+                                    stack.name, generator_id, object.yaml_content, id, stack.generator_id
+                                );
+                                Err((
+                                    axum::http::StatusCode::FORBIDDEN,
+                                    Json(
+                                        serde_json::json!({"error": "Generator is not associated with this deployment object"}),
+                                    ),
+                                ))
+                            }
+                        } else {
+                            warn!(
+                                "Stack not found for deployment object '{}' (id: {}, stack_id: {})",
+                                object.yaml_content, id, object.stack_id
+                            );
+                            Err((
+                                axum::http::StatusCode::NOT_FOUND,
+                                Json(
+                                    serde_json::json!({"error": "Stack not found for this deployment object"}),
+                                ),
+                            ))
+                        }
+                    }
+                    Err(e) => {
+                        error!(
+                            "Database error while fetching stack for deployment object '{}' (id: {}, stack_id: {}): {:?}",
+                            object.yaml_content, id, object.stack_id, e
+                        );
+                        Err((
+                            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                            Json(serde_json::json!({"error": "Failed to fetch stack information"})),
+                        ))
+                    }
+                }
+            } else {
+                warn!(
+                    "Unauthorized access attempt to deployment object with ID: {}",
+                    id
+                );
+                Err((
+                    axum::http::StatusCode::UNAUTHORIZED,
+                    Json(serde_json::json!({"error": "Unauthorized access"})),
+                ))
             }
-
-            Ok(Json(object))
         }
-        Ok(None) => Err((
-            StatusCode::NOT_FOUND,
-            Json(serde_json::json!({"error": "Deployment object not found"})),
-        )),
-        Err(_) => Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({"error": "Failed to fetch deployment object"})),
-        )),
-    }
-}
-
-/// Deletes a deployment object.
-///
-/// # Authorization
-/// Requires admin privileges.
-#[utoipa::path(
-    delete,
-    path = "/stacks/{stack_id}/deployment-objects/{id}",
-    tag = "deployment-objects",
-    params(
-        ("stack_id" = Uuid, Path, description = "ID of the stack the deployment object belongs to"),
-        ("id" = Uuid, Path, description = "ID of the deployment object to delete"),
-    ),
-    responses(
-        (status = 204, description = "Successfully deleted deployment object"),
-        (status = 403, description = "Forbidden - PAK does not have required rights", body = serde_json::Value),
-        (status = 404, description = "Deployment object not found", body = serde_json::Value),
-        (status = 500, description = "Internal server error", body = serde_json::Value),
-    ),
-    security(
-        ("admin_pak" = []),
-    )
-)]
-pub async fn delete_deployment_object(
-    State(dal): State<DAL>,
-    Extension(auth_payload): Extension<AuthPayload>,
-    Path((stack_id, id)): Path<(Uuid, Uuid)>,
-) -> Result<StatusCode, (StatusCode, Json<serde_json::Value>)> {
-    // Check if the user is an admin or the associated generator
-    if !auth_payload.admin {
-        let stack = dal.stacks().get(vec![stack_id]).map_err(|_| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": "Failed to fetch stack"})),
-            )
-        })?;
-
-        if stack.is_empty() {
-            return Err((
-                StatusCode::NOT_FOUND,
-                Json(serde_json::json!({"error": "Stack not found"})),
-            ));
+        Ok(None) => {
+            warn!("Deployment object not found with ID: {}", id);
+            Err((
+                axum::http::StatusCode::NOT_FOUND,
+                Json(serde_json::json!({"error": "Deployment object not found"})),
+            ))
         }
-
-        let stack = &stack[0];
-        if auth_payload.generator != Some(stack.generator_id) {
-            return Err((
-                StatusCode::FORBIDDEN,
-                Json(serde_json::json!({"error": "Access denied"})),
-            ));
+        Err(e) => {
+            error!("Failed to fetch deployment object with ID {}: {:?}", id, e);
+            Err((
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Failed to fetch deployment object"})),
+            ))
         }
-    }
-
-    // Verify the deployment object exists and belongs to the stack
-    match dal.deployment_objects().get(id) {
-        Ok(Some(object)) => {
-            if object.stack_id != stack_id {
-                return Err((
-                    StatusCode::NOT_FOUND,
-                    Json(serde_json::json!({"error": "Deployment object not found"})),
-                ));
-            }
-
-            // Delete the deployment object
-            match dal.deployment_objects().soft_delete(id) {
-                Ok(_) => Ok(StatusCode::NO_CONTENT),
-                Err(_) => Err((
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(serde_json::json!({"error": "Failed to delete deployment object"})),
-                )),
-            }
-        }
-        Ok(None) => Err((
-            StatusCode::NOT_FOUND,
-            Json(serde_json::json!({"error": "Deployment object not found"})),
-        )),
-        Err(_) => Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({"error": "Failed to fetch deployment object"})),
-        )),
     }
 }
