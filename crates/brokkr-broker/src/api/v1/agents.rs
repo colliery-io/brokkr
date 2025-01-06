@@ -18,6 +18,7 @@ use brokkr_models::models::agent_labels::{AgentLabel, NewAgentLabel};
 use brokkr_models::models::agent_targets::{AgentTarget, NewAgentTarget};
 use brokkr_models::models::agents::{Agent, NewAgent};
 use brokkr_models::models::deployment_objects::DeploymentObject;
+use brokkr_models::models::stacks::Stack;
 use brokkr_utils::logging::prelude::*;
 use serde::Deserialize;
 use serde_json::Value;
@@ -48,6 +49,7 @@ pub fn routes() -> Router<DAL> {
             "/agents/:id/applicable-deployment-objects",
             get(get_applicable_deployment_objects),
         )
+        .route("/agents/:id/stacks", get(get_associated_stacks))
 }
 
 /// Lists all agents.
@@ -942,6 +944,52 @@ async fn get_applicable_deployment_objects(
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to fetch applicable deployment objects"})),
+            ))
+        }
+    }
+}
+
+/// Retrieves all stacks associated with a specific agent based on targets, labels, and annotations.
+///
+/// # Authorization
+/// Requires admin privileges or matching agent ID.
+async fn get_associated_stacks(
+    State(dal): State<DAL>,
+    Extension(auth_payload): Extension<AuthPayload>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<Vec<Stack>>, (StatusCode, Json<serde_json::Value>)> {
+    info!(
+        "Handling request to get associated stacks for agent with ID: {}",
+        id
+    );
+    if !auth_payload.admin && auth_payload.agent != Some(id) {
+        warn!(
+            "Unauthorized attempt to get associated stacks for agent with ID: {}",
+            id
+        );
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({"error": "Unauthorized"})),
+        ));
+    }
+
+    match dal.stacks().get_associated_stacks(id) {
+        Ok(stacks) => {
+            info!(
+                "Successfully retrieved {} associated stacks for agent with ID: {}",
+                stacks.len(),
+                id
+            );
+            Ok(Json(stacks))
+        }
+        Err(e) => {
+            error!(
+                "Failed to fetch associated stacks for agent with ID {}: {:?}",
+                id, e
+            );
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Failed to fetch associated stacks"})),
             ))
         }
     }

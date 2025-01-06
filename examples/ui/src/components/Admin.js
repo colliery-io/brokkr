@@ -48,6 +48,8 @@ const Admin = () => {
     clusterName: ''
   });
   const [newPak, setNewPak] = useState(null);
+  const [pakCopied, setPakCopied] = useState(false);
+  const [showConfirmClose, setShowConfirmClose] = useState(false);
 
   const fetchData = async () => {
     try {
@@ -79,6 +81,19 @@ const Admin = () => {
       clusterName: ''
     });
     setNewPak(null);
+    setPakCopied(false);
+    setShowConfirmClose(false);
+  };
+
+  const handleCloseDialog = () => {
+    if (newPak && !pakCopied) {
+      setShowConfirmClose(true);
+    } else {
+      setCreateDialog(false);
+      setNewPak(null);
+      setPakCopied(false);
+      setShowConfirmClose(false);
+    }
   };
 
   const handleSubmit = async () => {
@@ -88,14 +103,25 @@ const Admin = () => {
 
       if (activeTab === 0) { // Agent PAK
         response = await createAgentPak(formData.name, formData.clusterName);
+        console.log('Agent PAK response:', response);
+        if (!response.initial_pak) {
+          throw new Error('No PAK received in response');
+        }
+        setNewPak(response.initial_pak);
       } else if (activeTab === 1) { // Generator PAK
         response = await createGeneratorPak(formData.name, formData.description);
+        console.log('Generator PAK response:', response);
+        if (!response.pak) {
+          throw new Error('No PAK received in response');
+        }
+        setNewPak(response.pak);
       }
 
-      setNewPak(response.pak);
+      setPakCopied(false);
       setSuccess(`${activeTab === 0 ? 'Agent' : 'Generator'} PAK created successfully!`);
       fetchData(); // Refresh the list
     } catch (err) {
+      console.error('Error creating PAK:', err);
       setError('Failed to create PAK. Please check your input and try again.');
     } finally {
       setLoading(false);
@@ -104,79 +130,139 @@ const Admin = () => {
 
   const handleCopyPak = (pak) => {
     navigator.clipboard.writeText(pak);
+    setPakCopied(true);
     setSuccess('PAK copied to clipboard!');
   };
 
   const renderPakDialog = () => (
-    <Dialog
-      open={createDialog}
-      onClose={() => !loading && setCreateDialog(false)}
-      maxWidth="sm"
-      fullWidth
-    >
-      <DialogTitle>
-        Create New {activeTab === 0 ? 'Agent' : 'Generator'} PAK
-      </DialogTitle>
-      <DialogContent>
-        <Box sx={{ pt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <TextField
-            label="Name"
-            value={formData.name}
-            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-            required
-            fullWidth
-          />
-          {activeTab === 0 ? (
+    <>
+      <Dialog
+        open={createDialog}
+        onClose={handleCloseDialog}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          Create New {activeTab === 0 ? 'Agent' : 'Generator'} PAK
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ pt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
             <TextField
-              label="Cluster Name"
-              value={formData.clusterName}
-              onChange={(e) => setFormData({ ...formData, clusterName: e.target.value })}
+              label="Name"
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               required
               fullWidth
+              disabled={!!newPak}
             />
-          ) : (
-            <TextField
-              label="Description"
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              multiline
-              rows={3}
-              fullWidth
-            />
-          )}
-          {newPak && (
-            <Alert
-              severity="success"
-              action={
-                <IconButton
-                  color="inherit"
-                  size="small"
-                  onClick={() => handleCopyPak(newPak)}
+            {activeTab === 0 ? (
+              <TextField
+                label="Cluster Name"
+                value={formData.clusterName}
+                onChange={(e) => setFormData({ ...formData, clusterName: e.target.value })}
+                required
+                fullWidth
+                disabled={!!newPak}
+              />
+            ) : (
+              <TextField
+                label="Description"
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                multiline
+                rows={3}
+                fullWidth
+                disabled={!!newPak}
+              />
+            )}
+            {newPak && (
+              <Box sx={{ mt: 2 }}>
+                <Alert
+                  severity="warning"
+                  sx={{ mb: 2 }}
                 >
-                  <CopyIcon />
-                </IconButton>
-              }
-            >
-              New PAK: {newPak}
-            </Alert>
-          )}
-        </Box>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={() => setCreateDialog(false)} disabled={loading}>
-          Close
-        </Button>
-        {!newPak && (
-          <Button
-            onClick={handleSubmit}
-            variant="contained"
-            disabled={loading || !formData.name || (activeTab === 0 && !formData.clusterName)}
-          >
-            {loading ? <CircularProgress size={24} /> : 'Create'}
+                  Please copy your PAK now. For security reasons, it will not be shown again.
+                </Alert>
+                <Paper
+                  sx={{
+                    p: 2,
+                    backgroundColor: (theme) => theme.palette.grey[100],
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between'
+                  }}
+                >
+                  <Typography
+                    component="code"
+                    sx={{
+                      fontFamily: 'monospace',
+                      fontSize: '1.1em',
+                      wordBreak: 'break-all'
+                    }}
+                  >
+                    {newPak}
+                  </Typography>
+                  <Tooltip title={pakCopied ? "Copied!" : "Copy to clipboard"}>
+                    <IconButton
+                      onClick={() => handleCopyPak(newPak)}
+                      color={pakCopied ? "success" : "default"}
+                    >
+                      <CopyIcon />
+                    </IconButton>
+                  </Tooltip>
+                </Paper>
+              </Box>
+            )}
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseDialog} disabled={loading}>
+            Close
           </Button>
-        )}
-      </DialogActions>
-    </Dialog>
+          {!newPak && (
+            <Button
+              onClick={handleSubmit}
+              variant="contained"
+              disabled={loading || !formData.name || (activeTab === 0 && !formData.clusterName)}
+            >
+              {loading ? <CircularProgress size={24} /> : 'Create'}
+            </Button>
+          )}
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={showConfirmClose}
+        onClose={() => setShowConfirmClose(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>
+          Warning
+        </DialogTitle>
+        <DialogContent>
+          <Typography>
+            You haven't copied the PAK yet. This PAK will not be shown again after closing. Are you sure you want to close?
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowConfirmClose(false)}>
+            Cancel
+          </Button>
+          <Button
+            onClick={() => {
+              setCreateDialog(false);
+              setShowConfirmClose(false);
+              setNewPak(null);
+              setPakCopied(false);
+            }}
+            color="error"
+          >
+            Close Anyway
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
   );
 
   if (loading && !agents.length && !generators.length) {

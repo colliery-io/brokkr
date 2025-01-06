@@ -51,7 +51,8 @@ import {
   addAgentTarget,
   removeAgentTarget,
   getStacks,
-  getAgentEvents
+  getAgentEvents,
+  getAgentAssociatedStacks
 } from '../services/api';
 import { Link } from 'react-router-dom';
 
@@ -69,6 +70,76 @@ const TabPanel = ({ children, value, index }) => {
     >
       {value === index && children}
     </div>
+  );
+};
+
+// Add new EventsTab component
+const EventsTab = ({ events, loadingEvents, onClose }) => {
+  return (
+    <TableContainer component={Paper}>
+      <Table>
+        <TableHead>
+          <TableRow>
+            <TableCell>Timestamp</TableCell>
+            <TableCell>Event Type</TableCell>
+            <TableCell>Status</TableCell>
+            <TableCell>Deployment Object</TableCell>
+            <TableCell>Message</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {loadingEvents ? (
+            <TableRow>
+              <TableCell colSpan={5} align="center">
+                <CircularProgress />
+              </TableCell>
+            </TableRow>
+          ) : (
+            events.map((event, index) => (
+              <TableRow key={index}>
+                <TableCell>{new Date(event.created_at).toLocaleString()}</TableCell>
+                <TableCell>{event.event_type}</TableCell>
+                <TableCell>
+                  <Chip
+                    label={event.status}
+                    size="small"
+                    color={
+                      event.status === 'SUCCESS' ? 'success' :
+                      event.status === 'FAILURE' ? 'error' :
+                      event.status === 'IN_PROGRESS' ? 'primary' : 'default'
+                    }
+                  />
+                </TableCell>
+                <TableCell>
+                  {event.deployment_object_id && (
+                    <Link
+                      to={`/deployment-objects/${event.deployment_object_id}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onClose();
+                      }}
+                      style={{ textDecoration: 'none', color: '#1976d2' }}
+                    >
+                      {event.deployment_object_id}
+                    </Link>
+                  )}
+                </TableCell>
+                <TableCell style={{ whiteSpace: 'pre-wrap', maxWidth: '400px' }}>
+                  {event.message || '-'}
+                </TableCell>
+              </TableRow>
+            ))
+          )}
+          {!loadingEvents && events.length === 0 && (
+            <TableRow>
+              <TableCell colSpan={5} align="center">
+                <Typography color="text.secondary">No events recorded</Typography>
+              </TableCell>
+            </TableRow>
+          )}
+        </TableBody>
+      </Table>
+    </TableContainer>
   );
 };
 
@@ -92,14 +163,16 @@ const Agents = () => {
   const [selectedStack, setSelectedStack] = useState('');
   const [events, setEvents] = useState([]);
   const [loadingEvents, setLoadingEvents] = useState(false);
+  const [associatedStacks, setAssociatedStacks] = useState({});
 
   const fetchAgentDetails = async (agentId) => {
     try {
-      const [labels, annotations, targets, eventData] = await Promise.all([
+      const [labels, annotations, targets, eventData, associated] = await Promise.all([
         getAgentLabels(agentId),
         getAgentAnnotations(agentId),
         getAgentTargets(agentId),
-        getAgentEvents(agentId)
+        getAgentEvents(agentId),
+        getAgentAssociatedStacks(agentId)
       ]);
       setAgentDetails(prevDetails => ({
         ...prevDetails,
@@ -108,6 +181,10 @@ const Agents = () => {
       setAgentTargets(prevTargets => ({
         ...prevTargets,
         [agentId]: targets
+      }));
+      setAssociatedStacks(prevAssociated => ({
+        ...prevAssociated,
+        [agentId]: associated
       }));
       setEvents(eventData);
     } catch (err) {
@@ -318,6 +395,8 @@ const Agents = () => {
                 <TableCell>Name</TableCell>
                 <TableCell>Cluster</TableCell>
                 <TableCell>Status</TableCell>
+                <TableCell>Labels</TableCell>
+                <TableCell>Annotations</TableCell>
                 <TableCell>Stack Targets</TableCell>
                 <TableCell>Last Seen</TableCell>
               </TableRow>
@@ -340,6 +419,26 @@ const Agents = () => {
                     />
                   </TableCell>
                   <TableCell>
+                    {agentDetails[agent.id]?.labels?.map((labelObj) => (
+                      <Chip
+                        key={labelObj.id}
+                        label={labelObj.label}
+                        size="small"
+                        style={{ margin: '2px' }}
+                      />
+                    ))}
+                  </TableCell>
+                  <TableCell>
+                    {agentDetails[agent.id]?.annotations?.map((annotation) => (
+                      <Chip
+                        key={annotation.key}
+                        label={`${annotation.key}=${annotation.value}`}
+                        size="small"
+                        style={{ margin: '2px' }}
+                      />
+                    ))}
+                  </TableCell>
+                  <TableCell>
                     {agentTargets[agent.id]?.map((target) => (
                       <Chip
                         key={target.stack_id}
@@ -351,7 +450,7 @@ const Agents = () => {
                       />
                     ))}
                   </TableCell>
-                  <TableCell>{new Date(agent.last_seen).toLocaleString()}</TableCell>
+                  <TableCell>{agent.last_heartbeat ? new Date(agent.last_heartbeat).toLocaleString() : 'Never'}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -362,7 +461,7 @@ const Agents = () => {
       <Dialog
         open={!!selectedAgent}
         onClose={handleCloseDialog}
-        maxWidth="md"
+        maxWidth="lg"
         fullWidth
       >
         {selectedAgent && (
@@ -370,8 +469,9 @@ const Agents = () => {
             <DialogTitle>
               Agent Details: {selectedAgent.name}
               <IconButton
+                aria-label="close"
                 onClick={handleCloseDialog}
-                style={{ position: 'absolute', right: 8, top: 8 }}
+                sx={{ position: 'absolute', right: 8, top: 8 }}
               >
                 <CloseIcon />
               </IconButton>
@@ -382,6 +482,7 @@ const Agents = () => {
                 <Tab label="Labels" />
                 <Tab label="Annotations" />
                 <Tab label="Stack Targets" />
+                <Tab label="Deployment Targets" />
                 <Tab label="Events" />
               </Tabs>
 
@@ -515,32 +616,89 @@ const Agents = () => {
 
               <TabPanel value={selectedTab} index={4}>
                 <Box>
-                  <Typography variant="h6" gutterBottom>Event Log</Typography>
-                  {loadingEvents ? (
-                    <CircularProgress />
-                  ) : (
-                    <TableContainer component={Paper}>
-                      <Table>
-                        <TableHead>
-                          <TableRow>
-                            <TableCell>Timestamp</TableCell>
-                            <TableCell>Event Type</TableCell>
-                            <TableCell>Message</TableCell>
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {events.map((event, index) => (
-                            <TableRow key={index}>
-                              <TableCell>{new Date(event.timestamp).toLocaleString()}</TableCell>
-                              <TableCell>{event.event_type}</TableCell>
-                              <TableCell>{event.message}</TableCell>
+                  <Typography variant="h6" gutterBottom>
+                    Stacks to Deploy
+                  </Typography>
+                  <TableContainer component={Paper} variant="outlined">
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Stack Name</TableCell>
+                          <TableCell>Status</TableCell>
+                          <TableCell>Last Deployment</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {associatedStacks[selectedAgent?.id]?.map((stack) => {
+                          const directTarget = agentTargets[selectedAgent?.id]?.some(
+                            target => target.stack_id === stack.id
+                          );
+                          const matchingLabels = agentDetails[selectedAgent?.id]?.labels
+                            ?.filter(label => stack.labels?.some(sl => sl.label === label.label))
+                            ?.map(l => l.label) || [];
+                          const matchingAnnotations = agentDetails[selectedAgent?.id]?.annotations
+                            ?.filter(ann => stack.annotations?.some(
+                              sa => sa.key === ann.key && sa.value === ann.value
+                            ))
+                            ?.map(a => `${a.key}=${a.value}`) || [];
+
+                          const associationTypes = [];
+                          if (directTarget) associationTypes.push('Direct Target');
+                          if (matchingLabels.length > 0) associationTypes.push(`Labels: ${matchingLabels.join(', ')}`);
+                          if (matchingAnnotations.length > 0) associationTypes.push(`Annotations: ${matchingAnnotations.join(', ')}`);
+
+                          return (
+                            <TableRow key={stack.id}>
+                              <TableCell>
+                                <Link
+                                  to={`/stacks/${stack.id}`}
+                                  onClick={(e) => e.stopPropagation()}
+                                  style={{ textDecoration: 'none' }}
+                                >
+                                  <Typography variant="body2" color="primary">
+                                    {stack.name}
+                                  </Typography>
+                                </Link>
+                              </TableCell>
+                              <TableCell>
+                                <Chip
+                                  size="small"
+                                  label={stack.deleted_at ? 'Deleted' : 'Active'}
+                                  color={stack.deleted_at ? 'error' : 'success'}
+                                />
+                              </TableCell>
+                              <TableCell>
+                                {stack.last_deployment_at ? (
+                                  new Date(stack.last_deployment_at).toLocaleString()
+                                ) : (
+                                  'Never'
+                                )}
+                              </TableCell>
                             </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </TableContainer>
-                  )}
+                          );
+                        })}
+                        {!associatedStacks[selectedAgent?.id]?.length && (
+                          <TableRow>
+                            <TableCell colSpan={4} align="center">
+                              <Typography color="text.secondary">
+                                No stacks targeted for deployment
+                              </Typography>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                  <Box mt={2}>
+                    <Typography variant="body2" color="text.secondary">
+                      This agent will attempt to deploy the latest deployment objects from these stacks. Stacks can be associated through direct targeting, matching labels, or matching annotations.
+                    </Typography>
+                  </Box>
                 </Box>
+              </TabPanel>
+
+              <TabPanel value={selectedTab} index={5}>
+                <EventsTab events={events} loadingEvents={loadingEvents} onClose={handleCloseDialog} />
               </TabPanel>
             </DialogContent>
           </>

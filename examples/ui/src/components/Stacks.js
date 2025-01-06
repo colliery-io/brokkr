@@ -52,6 +52,7 @@ import {
   getAgentTargets
 } from '../services/api';
 import Editor from "@monaco-editor/react";
+import { Link } from 'react-router-dom';
 
 const AUTO_REFRESH_INTERVAL = 10000; // 10 seconds
 
@@ -403,31 +404,33 @@ const Stacks = () => {
                   <TableCell>
                     <Stack direction="row" spacing={1}>
                       {stackDetails[stack.id]?.annotations?.map((annotation) => (
-                        <Tooltip
+                        <Chip
                           key={annotation.key}
-                          title={`${annotation.key}: ${annotation.value}`}
-                        >
-                          <Chip
-                            label={annotation.key}
-                            size="small"
-                          />
-                        </Tooltip>
+                          label={`${annotation.key}=${annotation.value}`}
+                          size="small"
+                          style={{ margin: '2px' }}
+                        />
                       ))}
                     </Stack>
                   </TableCell>
                   <TableCell>
                     {deploymentObjects.length > 0 ? (
-                      <Tooltip title="Click to edit last deployment">
-                        <IconButton
-                          size="small"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleEditLastDeployment();
-                          }}
+                      <Box display="flex" alignItems="center">
+                        <Link
+                          to={`/deployment-objects/${deploymentObjects[0].id}`}
+                          onClick={(e) => e.stopPropagation()}
+                          style={{ textDecoration: 'none', marginRight: '8px' }}
                         >
-                          <EditIcon />
-                        </IconButton>
-                      </Tooltip>
+                          <Typography variant="body2" color="primary">
+                            {deploymentObjects[0].id}
+                          </Typography>
+                        </Link>
+                        <Chip
+                          size="small"
+                          label={deploymentObjects[0].is_deletion_marker ? 'Deletion' : 'Deployment'}
+                          color={deploymentObjects[0].is_deletion_marker ? 'error' : 'primary'}
+                        />
+                      </Box>
                     ) : (
                       '-'
                     )}
@@ -481,8 +484,43 @@ const Stacks = () => {
               <Box sx={{ mb: 3 }}>
                 <Typography variant="subtitle1" gutterBottom>Basic Information</Typography>
                 <Typography><strong>Description:</strong> {selectedStack?.description || '-'}</Typography>
+                {deploymentObjects.length > 0 && (
+                  <Box mt={2}>
+                    <Typography variant="subtitle1" gutterBottom>Latest Deployment</Typography>
+                    <Box sx={{ bgcolor: 'background.paper', p: 2, borderRadius: 1 }}>
+                      <Box display="flex" alignItems="center" mb={1}>
+                        <Typography variant="body2" mr={1}>
+                          <strong>ID:</strong> {deploymentObjects[deploymentObjects.length - 1].id}
+                        </Typography>
+                        <Chip
+                          size="small"
+                          label={deploymentObjects[deploymentObjects.length - 1].is_deletion_marker ? 'Deletion' : 'Deployment'}
+                          color={deploymentObjects[deploymentObjects.length - 1].is_deletion_marker ? 'error' : 'primary'}
+                        />
+                      </Box>
+                      <Typography variant="body2" color="text.secondary" gutterBottom>
+                        Created at: {new Date(deploymentObjects[deploymentObjects.length - 1].created_at).toLocaleString()}
+                      </Typography>
+                      <Editor
+                        height="200px"
+                        defaultLanguage="yaml"
+                        value={deploymentObjects[deploymentObjects.length - 1].yaml_content}
+                        options={{
+                          readOnly: true,
+                          minimap: { enabled: false },
+                          scrollBeyondLastLine: false,
+                          wordWrap: "on"
+                        }}
+                      />
+                    </Box>
+                  </Box>
+                )}
               </Box>
+            </Box>
+          </TabPanel>
 
+          <TabPanel value={selectedTab} index={1}>
+            <Box>
               <Typography variant="h6" gutterBottom>
                 Labels
                 <IconButton size="small" onClick={() => setLabelDialogOpen(true)}>
@@ -502,7 +540,11 @@ const Stacks = () => {
                   <Typography color="text.secondary">No labels</Typography>
                 )}
               </Stack>
+            </Box>
+          </TabPanel>
 
+          <TabPanel value={selectedTab} index={2}>
+            <Box>
               <Typography variant="h6" gutterBottom>
                 Annotations
                 <IconButton size="small" onClick={() => setAnnotationDialogOpen(true)}>
@@ -546,7 +588,7 @@ const Stacks = () => {
             </Box>
           </TabPanel>
 
-          <TabPanel value={selectedTab} index={1}>
+          <TabPanel value={selectedTab} index={3}>
             <Box>
               <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
                 <Typography variant="h6">Deployment Objects</Typography>
@@ -563,7 +605,7 @@ const Stacks = () => {
                 <Table size="small">
                   <TableHead>
                     <TableRow>
-                      <TableCell>Sequence ID</TableCell>
+                      <TableCell>ID</TableCell>
                       <TableCell>Created At</TableCell>
                       <TableCell>Type</TableCell>
                       <TableCell>Actions</TableCell>
@@ -572,7 +614,17 @@ const Stacks = () => {
                   <TableBody>
                     {deploymentObjects.map((deployment) => (
                       <TableRow key={deployment.id}>
-                        <TableCell>{deployment.sequence_id}</TableCell>
+                        <TableCell>
+                          <Link
+                            to={`/deployment-objects/${deployment.id}`}
+                            onClick={(e) => e.stopPropagation()}
+                            style={{ textDecoration: 'none' }}
+                          >
+                            <Typography variant="body2" color="primary">
+                              {deployment.id}
+                            </Typography>
+                          </Link>
+                        </TableCell>
                         <TableCell>{new Date(deployment.created_at).toLocaleString()}</TableCell>
                         <TableCell>
                           <Chip
@@ -602,50 +654,6 @@ const Stacks = () => {
                       <TableRow>
                         <TableCell colSpan={4} align="center">
                           <Typography color="text.secondary">No deployment objects</Typography>
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            </Box>
-          </TabPanel>
-
-          <TabPanel value={selectedTab} index={2}>
-            <Box>
-              <Typography variant="h6" gutterBottom>
-                Agents Targeting This Stack
-              </Typography>
-
-              <TableContainer component={Paper} variant="outlined">
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Agent Name</TableCell>
-                      <TableCell>Cluster</TableCell>
-                      <TableCell>Status</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {targetingAgents.map((agent) => (
-                      <TableRow key={agent.id}>
-                        <TableCell>{agent.name}</TableCell>
-                        <TableCell>{agent.cluster_name}</TableCell>
-                        <TableCell>
-                          <Chip
-                            label={agent.status}
-                            color={agent.status === 'ACTIVE' ? 'success' : 'default'}
-                            size="small"
-                          />
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    {targetingAgents.length === 0 && (
-                      <TableRow>
-                        <TableCell colSpan={3} align="center">
-                          <Typography color="text.secondary">
-                            No agents are targeting this stack
-                          </Typography>
                         </TableCell>
                       </TableRow>
                     )}
