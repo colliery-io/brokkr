@@ -16,6 +16,7 @@ use brokkr_models::schema::admin_role;
 use brokkr_utils::logging::prelude::*;
 use diesel::prelude::*;
 use serde::Serialize;
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 /// Represents the authenticated entity's payload.
@@ -30,7 +31,7 @@ pub struct AuthPayload {
 }
 
 /// Represents the response structure for authentication information.
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct AuthResponse {
     /// Indicates if the authenticated entity is an admin.
     pub admin: bool,

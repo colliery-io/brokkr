@@ -16,6 +16,10 @@ path = "src/bin.rs"
 brokkr-models = { path = "../brokkr-models" }
 brokkr-utils = { path = "../brokkr-utils" }
 
+# OpenAPI dependencies
+utoipa = { workspace = true, features = ["axum_extras", "uuid", "chrono"] }
+utoipa-swagger-ui = { workspace = true, features = ["axum"] }
+
 # External dependencies
 axum = { workspace = true }
 chrono = { workspace = true }

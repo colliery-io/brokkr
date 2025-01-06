@@ -32,6 +32,7 @@
 use chrono::{DateTime, Utc};
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 /// Represents an agent event in the database.
@@ -47,32 +48,53 @@ use uuid::Uuid;
     Eq,
     PartialEq,
     Hash,
+    ToSchema,
 )]
 #[diesel(table_name = crate::schema::agent_events)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
+#[schema(example = json!({
+    "id": "123e4567-e89b-12d3-a456-426614174000",
+    "created_at": "2023-01-01T00:00:00Z",
+    "updated_at": "2023-01-01T00:00:00Z",
+    "deleted_at": null,
+    "agent_id": "123e4567-e89b-12d3-a456-426614174001",
+    "deployment_object_id": "123e4567-e89b-12d3-a456-426614174002",
+    "event_type": "DEPLOYMENT",
+    "status": "SUCCESS",
+    "message": "Deployment completed successfully"
+}))]
 pub struct AgentEvent {
     /// Unique identifier for the event.
+    #[schema(example = "123e4567-e89b-12d3-a456-426614174000")]
     pub id: Uuid,
     /// Timestamp when the event was created.
+    #[schema(example = "2023-01-01T00:00:00Z")]
     pub created_at: DateTime<Utc>,
     /// Timestamp when the event was last updated.
+    #[schema(example = "2023-01-01T00:00:00Z")]
     pub updated_at: DateTime<Utc>,
     /// Timestamp for soft deletion, if applicable.
+    #[schema(example = "null")]
     pub deleted_at: Option<DateTime<Utc>>,
     /// ID of the agent associated with this event.
+    #[schema(example = "123e4567-e89b-12d3-a456-426614174001")]
     pub agent_id: Uuid,
     /// ID of the deployment object associated with this event.
+    #[schema(example = "123e4567-e89b-12d3-a456-426614174002")]
     pub deployment_object_id: Uuid,
     /// Type of the event.
+    #[schema(example = "DEPLOYMENT")]
     pub event_type: String,
     /// Status of the event (e.g., "SUCCESS", "FAILURE", "IN_PROGRESS", "PENDING").
+    #[schema(example = "SUCCESS")]
     pub status: String,
     /// Optional message providing additional details about the event.
+    #[schema(example = "Deployment completed successfully")]
     pub message: Option<String>,
 }
 
 /// Represents a new agent event to be inserted into the database.
-#[derive(Insertable, Debug, Clone, Serialize, Deserialize)]
+#[derive(Insertable, Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[diesel(table_name = crate::schema::agent_events)]
 pub struct NewAgentEvent {
     /// ID of the agent associated with this event.

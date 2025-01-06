@@ -7,6 +7,9 @@ edition = "2021"
 # Internal crates
 brokkr-utils = { path = "../brokkr-utils" }
 
+# OpenAPI dependencies
+utoipa = { workspace = true, features = ["axum_extras", "uuid", "chrono"] }
+
 # External dependencies
 chrono = { workspace = true }
 diesel = { workspace = true }

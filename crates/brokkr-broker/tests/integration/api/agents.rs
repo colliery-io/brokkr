@@ -1044,7 +1044,7 @@ async fn test_get_agent_stacks() {
     // Create test agents
     let (agent, agent_pak) =
         fixture.create_test_agent_with_pak("test-agent".to_string(), "test-cluster".to_string());
-    let (other_agent, other_agent_pak) =
+    let (_other_agent, other_agent_pak) =
         fixture.create_test_agent_with_pak("other-agent".to_string(), "other-cluster".to_string());
 
     // Create test stacks

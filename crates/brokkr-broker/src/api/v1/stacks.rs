@@ -35,6 +35,23 @@ pub fn routes() -> Router<DAL> {
         .route("/stacks/:id/annotations/:key", delete(remove_annotation))
 }
 
+/// Lists all stacks.
+///
+/// # Authorization
+/// Requires admin privileges.
+#[utoipa::path(
+    get,
+    path = "/api/v1/stacks",
+    tag = "stacks",
+    responses(
+        (status = 200, description = "List of stacks", body = Vec<Stack>),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden - requires admin PAK"),
+    ),
+    security(
+        ("pak" = [])
+    )
+)]
 async fn list_stacks(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -63,6 +80,24 @@ async fn list_stacks(
     }
 }
 
+/// Creates a new stack.
+///
+/// # Authorization
+/// Requires admin privileges.
+#[utoipa::path(
+    post,
+    path = "/api/v1/stacks",
+    tag = "stacks",
+    request_body = NewStack,
+    responses(
+        (status = 201, description = "Stack created", body = Stack),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden - requires admin PAK"),
+    ),
+    security(
+        ("pak" = [])
+    )
+)]
 async fn create_stack(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -102,6 +137,27 @@ async fn create_stack(
     }
 }
 
+/// Gets a stack by ID.
+///
+/// # Authorization
+/// Requires admin privileges.
+#[utoipa::path(
+    get,
+    path = "/api/v1/stacks/{id}",
+    tag = "stacks",
+    params(
+        ("id" = Uuid, Path, description = "Stack ID")
+    ),
+    responses(
+        (status = 200, description = "Stack found", body = Stack),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden - requires admin PAK"),
+        (status = 404, description = "Stack not found"),
+    ),
+    security(
+        ("pak" = [])
+    )
+)]
 async fn get_stack(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -138,6 +194,28 @@ async fn get_stack(
     Ok(Json(stack.clone()))
 }
 
+/// Updates a stack.
+///
+/// # Authorization
+/// Requires admin privileges.
+#[utoipa::path(
+    put,
+    path = "/api/v1/stacks/{id}",
+    tag = "stacks",
+    params(
+        ("id" = Uuid, Path, description = "Stack ID")
+    ),
+    request_body = Stack,
+    responses(
+        (status = 200, description = "Stack updated", body = Stack),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden - requires admin PAK"),
+        (status = 404, description = "Stack not found"),
+    ),
+    security(
+        ("pak" = [])
+    )
+)]
 async fn update_stack(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -194,6 +272,27 @@ async fn update_stack(
     }
 }
 
+/// Deletes a stack.
+///
+/// # Authorization
+/// Requires admin privileges.
+#[utoipa::path(
+    delete,
+    path = "/api/v1/stacks/{id}",
+    tag = "stacks",
+    params(
+        ("id" = Uuid, Path, description = "Stack ID")
+    ),
+    responses(
+        (status = 204, description = "Stack deleted"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden - requires admin PAK"),
+        (status = 404, description = "Stack not found"),
+    ),
+    security(
+        ("pak" = [])
+    )
+)]
 async fn delete_stack(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,

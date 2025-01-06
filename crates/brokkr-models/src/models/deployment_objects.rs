@@ -35,6 +35,7 @@
 use chrono::{DateTime, Utc};
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 /// Represents a deployment object in the database.
@@ -50,6 +51,7 @@ use uuid::Uuid;
     Eq,
     PartialEq,
     Hash,
+    ToSchema,
 )]
 #[diesel(table_name = crate::schema::deployment_objects)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
@@ -77,7 +79,7 @@ pub struct DeploymentObject {
 }
 
 /// Represents a new deployment object to be inserted into the database.
-#[derive(Insertable, Debug, Clone, Serialize, Deserialize)]
+#[derive(Insertable, Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[diesel(table_name = crate::schema::deployment_objects)]
 pub struct NewDeploymentObject {
     /// ID of the stack this deployment object belongs to.

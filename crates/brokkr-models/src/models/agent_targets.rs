@@ -25,6 +25,7 @@
 
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 /// Represents an agent target in the database.
@@ -40,6 +41,7 @@ use uuid::Uuid;
     Eq,
     PartialEq,
     Hash,
+    ToSchema,
 )]
 #[diesel(table_name = crate::schema::agent_targets)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
@@ -53,7 +55,7 @@ pub struct AgentTarget {
 }
 
 /// Represents a new agent target to be inserted into the database.
-#[derive(Insertable, Debug, Clone, Serialize, Deserialize)]
+#[derive(Insertable, Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[diesel(table_name = crate::schema::agent_targets)]
 pub struct NewAgentTarget {
     /// ID of the agent to associate with a stack.

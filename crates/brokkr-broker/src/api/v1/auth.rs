@@ -17,6 +17,18 @@ pub fn routes() -> Router<DAL> {
 /// Verifies a PAK (Personal Access Key) and returns an AuthResponse.
 ///
 /// This function handles the authentication process for both admin and agent PAKs.
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/pak",
+    tag = "auth",
+    responses(
+        (status = 200, description = "PAK verified successfully", body = AuthResponse),
+        (status = 401, description = "Invalid PAK"),
+    ),
+    security(
+        ("pak" = [])
+    )
+)]
 async fn verify_pak(Extension(auth_payload): Extension<AuthPayload>) -> Json<AuthResponse> {
     Json(AuthResponse {
         admin: auth_payload.admin,
