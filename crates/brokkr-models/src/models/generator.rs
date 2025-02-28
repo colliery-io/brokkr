@@ -31,6 +31,7 @@
 use chrono::{DateTime, Utc};
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 /// Represents a generator in the Brokkr system.
@@ -46,6 +47,7 @@ use uuid::Uuid;
     Eq,
     PartialEq,
     Hash,
+    ToSchema,
 )]
 #[diesel(table_name = crate::schema::generators)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
@@ -72,7 +74,7 @@ pub struct Generator {
 }
 
 /// Represents the data required to create a new generator.
-#[derive(Insertable, Debug, Clone, Serialize, Deserialize)]
+#[derive(Insertable, Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[diesel(table_name = crate::schema::generators)]
 pub struct NewGenerator {
     /// Name of the new generator.

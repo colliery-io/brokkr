@@ -26,6 +26,7 @@
 
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 /// Represents an agent annotation in the database.
@@ -41,6 +42,7 @@ use uuid::Uuid;
     Eq,
     PartialEq,
     Hash,
+    ToSchema,
 )]
 #[diesel(table_name = crate::schema::agent_annotations)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
@@ -56,7 +58,7 @@ pub struct AgentAnnotation {
 }
 
 /// Represents a new agent annotation to be inserted into the database.
-#[derive(Insertable, Debug, Clone, Serialize, Deserialize)]
+#[derive(Insertable, Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[diesel(table_name = crate::schema::agent_annotations)]
 pub struct NewAgentAnnotation {
     /// ID of the agent this annotation belongs to.

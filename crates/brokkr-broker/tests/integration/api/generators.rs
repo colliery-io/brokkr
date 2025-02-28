@@ -340,3 +340,125 @@ async fn test_delete_generator_unauthorized() {
 
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
+
+#[tokio::test]
+async fn test_rotate_generator_pak_admin_success() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+    let admin_pak = fixture.admin_pak.clone();
+
+    let (generator, _) = fixture.create_test_generator_with_pak("Test Generator".to_string(), None);
+    let original_pak_hash = generator.pak_hash.clone();
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/generators/{}/rotate-pak", generator.id))
+                .header("Authorization", format!("Bearer {}", admin_pak))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+    // Verify response structure
+    assert!(json["generator"].is_object());
+    assert!(json["pak"].is_string());
+
+    // Verify generator fields
+    assert_eq!(json["generator"]["id"], generator.id.to_string());
+    assert_eq!(json["generator"]["name"], "Test Generator");
+
+    // Verify PAK hash has changed
+    let updated_generator = fixture.dal.generators().get(generator.id).unwrap().unwrap();
+    assert_ne!(updated_generator.pak_hash, original_pak_hash);
+}
+
+#[tokio::test]
+async fn test_rotate_generator_pak_self_success() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+
+    // Create generator with PAK
+    let (generator, generator_pak) =
+        fixture.create_test_generator_with_pak("Test Generator".to_string(), None);
+    let original_pak_hash = generator.pak_hash.clone();
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/generators/{}/rotate-pak", generator.id))
+                .header("Authorization", format!("Bearer {}", generator_pak))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+    // Verify response structure
+    assert!(json["generator"].is_object());
+    assert!(json["pak"].is_string());
+
+    // Verify PAK hash has changed
+    let updated_generator = fixture.dal.generators().get(generator.id).unwrap().unwrap();
+    assert_ne!(updated_generator.pak_hash, original_pak_hash);
+}
+
+#[tokio::test]
+async fn test_rotate_generator_pak_unauthorized() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+
+    let (generator, _) = fixture.create_test_generator_with_pak("Test Generator".to_string(), None);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/generators/{}/rotate-pak", generator.id))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn test_rotate_generator_pak_forbidden() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+
+    // Create two generators
+    let (generator1, _) = fixture.create_test_generator_with_pak("Generator 1".to_string(), None);
+    let (_generator2, generator2_pak) =
+        fixture.create_test_generator_with_pak("Generator 2".to_string(), None);
+
+    // Try to rotate generator1's PAK using generator2's PAK
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/generators/{}/rotate-pak", generator1.id))
+                .header("Authorization", format!("Bearer {}", generator2_pak))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}

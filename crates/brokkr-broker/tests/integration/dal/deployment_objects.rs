@@ -175,7 +175,7 @@ fn test_get_latest_deployment_object_for_stack() {
 }
 
 #[test]
-fn test_get_undeployed_objects_for_agent() {
+fn test_get_target_state_for_agent_incremental() {
     let fixture = TestFixture::new();
     let generator = fixture.create_test_generator(
         "Test Generator".to_string(),
@@ -213,80 +213,137 @@ fn test_get_undeployed_objects_for_agent() {
     // Create an agent event for object1 (simulating a deployed object)
     fixture.create_test_agent_event(&agent, &object1, "DEPLOY", "SUCCESS", None);
 
-    // Get undeployed objects for the agent
-    let undeployed_objects = fixture
+    // Get target state for the agent - incremental mode (default)
+    let target_state = fixture
         .dal
         .deployment_objects()
-        .get_undeployed_objects_for_agent(agent.id)
-        .expect("Failed to get undeployed objects for agent");
+        .get_target_state_for_agent(agent.id, false)
+        .expect("Failed to get target state for agent");
 
     // Verify the results
-    assert_eq!(undeployed_objects.len(), 2, "Expected 2 undeployed objects");
+    assert_eq!(target_state.len(), 2, "Expected 2 objects in target state");
 
-    // Check that object2 and object3 are in the undeployed objects list
-    let undeployed_ids: Vec<uuid::Uuid> = undeployed_objects.iter().map(|obj| obj.id).collect();
+    // Check that object2 and object3 are in the target state
+    let target_state_ids: Vec<uuid::Uuid> = target_state.iter().map(|obj| obj.id).collect();
     assert!(
-        undeployed_ids.contains(&object2.id),
-        "object2 should be undeployed"
+        target_state_ids.contains(&object2.id),
+        "object2 should be in target state"
     );
     assert!(
-        undeployed_ids.contains(&object3.id),
-        "object3 should be undeployed"
+        target_state_ids.contains(&object3.id),
+        "object3 should be in target state"
     );
-
-    // Check that object1 is not in the undeployed objects list
     assert!(
-        !undeployed_ids.contains(&object1.id),
-        "object1 should not be undeployed"
-    );
-
-    // Verify that the objects are sorted by sequence_id in descending order
-    assert!(
-        undeployed_objects[0].sequence_id > undeployed_objects[1].sequence_id,
-        "Undeployed objects should be sorted by sequence_id in descending order"
+        !target_state_ids.contains(&object1.id),
+        "object1 should not be in target state (already deployed)"
     );
 }
 
 #[test]
-fn test_get_undeployed_objects_for_agent_with_no_targets() {
-    let fixture = TestFixture::new();
-
-    // Create an agent without any targets
-    let agent =
-        fixture.create_test_agent("Agent No Targets".to_string(), "Test Cluster".to_string());
-
-    // Get undeployed objects for the agent
-    let undeployed_objects = fixture
-        .dal
-        .deployment_objects()
-        .get_undeployed_objects_for_agent(agent.id)
-        .expect("Failed to get undeployed objects for agent");
-
-    // Verify the results
-    assert!(
-        undeployed_objects.is_empty(),
-        "Expected no undeployed objects for agent without targets"
-    );
-}
-
-#[test]
-fn test_get_undeployed_objects_for_agent_with_all_deployed() {
+fn test_get_target_state_for_agent_full() {
     let fixture = TestFixture::new();
     let generator = fixture.create_test_generator(
         "Test Generator".to_string(),
         None,
         "test_api_key_hash".to_string(),
     );
-
     // Create an agent
-    let agent =
-        fixture.create_test_agent("Agent All Deployed".to_string(), "Test Cluster".to_string());
+    let agent = fixture.create_test_agent("Test Agent".to_string(), "Test Cluster".to_string());
 
-    // Create a stack and associate the agent with it
-    let stack = fixture.create_test_stack("Stack All Deployed".to_string(), None, generator.id);
+    // Create two stacks
+    let stack1 = fixture.create_test_stack("Stack 1".to_string(), None, generator.id);
+    let stack2 = fixture.create_test_stack("Stack 2".to_string(), None, generator.id);
+
+    // Associate the agent with both stacks
+    fixture.create_test_agent_target(agent.id, stack1.id);
+    fixture.create_test_agent_target(agent.id, stack2.id);
+
+    // Create deployment objects for both stacks
+    let object1 = fixture.create_test_deployment_object(
+        stack1.id,
+        "yaml_content: object1".to_string(),
+        false,
+    );
+    let object2 = fixture.create_test_deployment_object(
+        stack1.id,
+        "yaml_content: object2".to_string(),
+        false,
+    );
+    let object3 = fixture.create_test_deployment_object(
+        stack2.id,
+        "yaml_content: object3".to_string(),
+        false,
+    );
+
+    // Create an agent event for object1 (simulating a deployed object)
+    fixture.create_test_agent_event(&agent, &object1, "DEPLOY", "SUCCESS", None);
+
+    // Get target state for the agent - full mode
+    let full_target_state = fixture
+        .dal
+        .deployment_objects()
+        .get_target_state_for_agent(agent.id, true)
+        .expect("Failed to get full target state for agent");
+
+    // Verify the results
+    assert_eq!(
+        full_target_state.len(),
+        3,
+        "Expected 3 objects in full target state"
+    );
+
+    // Check that all objects are in the full target state
+    let full_target_state_ids: Vec<uuid::Uuid> =
+        full_target_state.iter().map(|obj| obj.id).collect();
+    assert!(
+        full_target_state_ids.contains(&object1.id),
+        "object1 should be in full target state"
+    );
+    assert!(
+        full_target_state_ids.contains(&object2.id),
+        "object2 should be in full target state"
+    );
+    assert!(
+        full_target_state_ids.contains(&object3.id),
+        "object3 should be in full target state"
+    );
+}
+
+#[test]
+fn test_get_target_state_for_agent_with_no_targets() {
+    let fixture = TestFixture::new();
+    // Create an agent with no targets
+    let agent = fixture.create_test_agent("Test Agent".to_string(), "Test Cluster".to_string());
+
+    // Get target state for the agent
+    let target_state = fixture
+        .dal
+        .deployment_objects()
+        .get_target_state_for_agent(agent.id, false)
+        .expect("Failed to get target state for agent");
+
+    // Verify the results
+    assert_eq!(target_state.len(), 0, "Expected 0 objects in target state");
+}
+
+#[test]
+fn test_get_target_state_for_agent_with_all_deployed_incremental() {
+    let fixture = TestFixture::new();
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
+    // Create an agent
+    let agent = fixture.create_test_agent("Test Agent".to_string(), "Test Cluster".to_string());
+
+    // Create a stack
+    let stack = fixture.create_test_stack("Stack 1".to_string(), None, generator.id);
+
+    // Associate the agent with the stack
     fixture.create_test_agent_target(agent.id, stack.id);
 
-    // Create deployment objects
+    // Create deployment objects for the stack
     let object1 =
         fixture.create_test_deployment_object(stack.id, "yaml_content: object1".to_string(), false);
     let object2 =
@@ -296,22 +353,61 @@ fn test_get_undeployed_objects_for_agent_with_all_deployed() {
     fixture.create_test_agent_event(&agent, &object1, "DEPLOY", "SUCCESS", None);
     fixture.create_test_agent_event(&agent, &object2, "DEPLOY", "SUCCESS", None);
 
-    // Get undeployed objects for the agent
-    let undeployed_objects = fixture
+    // Get target state for the agent - incremental mode
+    let target_state = fixture
         .dal
         .deployment_objects()
-        .get_undeployed_objects_for_agent(agent.id)
-        .expect("Failed to get undeployed objects for agent");
+        .get_target_state_for_agent(agent.id, false)
+        .expect("Failed to get target state for agent");
 
     // Verify the results
-    assert!(
-        undeployed_objects.is_empty(),
-        "Expected no undeployed objects when all are deployed"
+    assert_eq!(target_state.len(), 0, "Expected 0 objects in target state");
+}
+
+#[test]
+fn test_get_target_state_for_agent_with_all_deployed_full() {
+    let fixture = TestFixture::new();
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
+    // Create an agent
+    let agent = fixture.create_test_agent("Test Agent".to_string(), "Test Cluster".to_string());
+
+    // Create a stack
+    let stack = fixture.create_test_stack("Stack 1".to_string(), None, generator.id);
+
+    // Associate the agent with the stack
+    fixture.create_test_agent_target(agent.id, stack.id);
+
+    // Create deployment objects for the stack
+    let object1 =
+        fixture.create_test_deployment_object(stack.id, "yaml_content: object1".to_string(), false);
+    let object2 =
+        fixture.create_test_deployment_object(stack.id, "yaml_content: object2".to_string(), false);
+
+    // Create agent events for all objects (simulating all deployed)
+    fixture.create_test_agent_event(&agent, &object1, "DEPLOY", "SUCCESS", None);
+    fixture.create_test_agent_event(&agent, &object2, "DEPLOY", "SUCCESS", None);
+
+    // Get target state for the agent - full mode
+    let full_target_state = fixture
+        .dal
+        .deployment_objects()
+        .get_target_state_for_agent(agent.id, true)
+        .expect("Failed to get full target state for agent");
+
+    // Verify the results
+    assert_eq!(
+        full_target_state.len(),
+        2,
+        "Expected 2 objects in full target state"
     );
 }
 
 #[test]
-fn test_get_undeployed_objects_for_agent_with_deletion_markers() {
+fn test_get_target_state_for_agent_with_deletion_markers_incremental() {
     let fixture = TestFixture::new();
 
     // Create an agent
@@ -343,42 +439,106 @@ fn test_get_undeployed_objects_for_agent_with_deletion_markers() {
     // Create an agent event for object1 (simulating a deployed object)
     fixture.create_test_agent_event(&agent, &object1, "DEPLOY", "SUCCESS", None);
 
-    // Get undeployed objects for the agent
-    let undeployed_objects = fixture
+    // Get target state for the agent - incremental mode
+    let target_state = fixture
         .dal
         .deployment_objects()
-        .get_undeployed_objects_for_agent(agent.id)
-        .expect("Failed to get undeployed objects for agent");
+        .get_target_state_for_agent(agent.id, false)
+        .expect("Failed to get target state for agent");
 
     // Verify the results
     assert_eq!(
-        undeployed_objects.len(),
+        target_state.len(),
         2,
-        "Expected 2 undeployed objects (including deletion marker)"
+        "Expected 2 objects in target state (including deletion marker)"
     );
 
-    let undeployed_ids: Vec<uuid::Uuid> = undeployed_objects.iter().map(|obj| obj.id).collect();
+    let target_state_ids: Vec<uuid::Uuid> = target_state.iter().map(|obj| obj.id).collect();
     assert!(
-        undeployed_ids.contains(&object2.id),
-        "object2 should be undeployed"
+        target_state_ids.contains(&object2.id),
+        "object2 should be in target state"
     );
     assert!(
-        undeployed_ids.contains(&deletion_marker.id),
+        target_state_ids.contains(&deletion_marker.id),
         "deletion marker should be included"
     );
     assert!(
-        !undeployed_ids.contains(&object1.id),
-        "object1 should not be undeployed"
+        !target_state_ids.contains(&object1.id),
+        "object1 should not be in target state"
     );
 
     // Verify that the deletion marker is included and has the correct flag
-    let deletion_marker_result = undeployed_objects
+    let deletion_marker_result = target_state
         .iter()
         .find(|obj| obj.id == deletion_marker.id)
         .unwrap();
     assert!(
         deletion_marker_result.is_deletion_marker,
         "Deletion marker should have is_deletion_marker set to true"
+    );
+}
+
+#[test]
+fn test_get_target_state_for_agent_with_deletion_markers_full() {
+    let fixture = TestFixture::new();
+
+    // Create an agent
+    let agent = fixture.create_test_agent(
+        "Agent Deletion Markers".to_string(),
+        "Test Cluster".to_string(),
+    );
+
+    // Create a stack and associate the agent with it
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
+    let stack = fixture.create_test_stack("Stack Deletion Markers".to_string(), None, generator.id);
+    fixture.create_test_agent_target(agent.id, stack.id);
+
+    // Create deployment objects, including a deletion marker
+    let object1 =
+        fixture.create_test_deployment_object(stack.id, "yaml_content: object1".to_string(), false);
+    let object2 =
+        fixture.create_test_deployment_object(stack.id, "yaml_content: object2".to_string(), false);
+    let deletion_marker = fixture.create_test_deployment_object(
+        stack.id,
+        "yaml_content: deletion_marker".to_string(),
+        true,
+    );
+
+    // Create an agent event for object1 (simulating a deployed object)
+    fixture.create_test_agent_event(&agent, &object1, "DEPLOY", "SUCCESS", None);
+
+    // Get target state for the agent - full mode
+    let full_target_state = fixture
+        .dal
+        .deployment_objects()
+        .get_target_state_for_agent(agent.id, true)
+        .expect("Failed to get full target state for agent");
+
+    // Verify the results
+    assert_eq!(
+        full_target_state.len(),
+        3,
+        "Expected 3 objects in full target state (including deletion marker)"
+    );
+
+    // Check that all objects are in the full target state
+    let full_target_state_ids: Vec<uuid::Uuid> =
+        full_target_state.iter().map(|obj| obj.id).collect();
+    assert!(
+        full_target_state_ids.contains(&object1.id),
+        "object1 should be in full target state"
+    );
+    assert!(
+        full_target_state_ids.contains(&object2.id),
+        "object2 should be in full target state"
+    );
+    assert!(
+        full_target_state_ids.contains(&deletion_marker.id),
+        "deletion marker should be included in full target state"
     );
 }
 
@@ -445,7 +605,7 @@ fn test_search_deployment_objects_by_checksum() {
 }
 
 #[test]
-fn test_get_applicable_deployment_objects() {
+fn test_get_desired_state_for_agent() {
     let fixture = TestFixture::new();
 
     // Create an agent
@@ -481,37 +641,37 @@ fn test_get_applicable_deployment_objects() {
         false,
     );
 
-    // Get applicable deployment objects for the agent
-    let applicable_objects = fixture
+    // Get desired state for the agent
+    let desired_state = fixture
         .dal
         .deployment_objects()
-        .get_applicable_deployment_objects(agent.id)
-        .expect("Failed to get applicable deployment objects for agent");
+        .get_desired_state_for_agent(agent.id)
+        .expect("Failed to get desired state for agent");
 
     // Verify the results
-    assert_eq!(applicable_objects.len(), 3, "Expected 3 applicable objects");
+    assert_eq!(
+        desired_state.len(),
+        3,
+        "Expected 3 objects in desired state"
+    );
 
-    let object_ids: Vec<uuid::Uuid> = applicable_objects.iter().map(|obj| obj.id).collect();
+    let object_ids: Vec<uuid::Uuid> = desired_state.iter().map(|obj| obj.id).collect();
     assert!(
         object_ids.contains(&object1.id),
-        "object1 should be applicable"
+        "object1 should be in desired state"
     );
     assert!(
         object_ids.contains(&object2.id),
-        "object2 should be applicable"
+        "object2 should be in desired state"
     );
     assert!(
         object_ids.contains(&object3.id),
-        "object3 should be applicable"
+        "object3 should be in desired state"
     );
 
     // Verify that the objects are sorted by sequence_id in descending order
     assert!(
-        applicable_objects[0].sequence_id >= applicable_objects[1].sequence_id,
-        "Applicable objects should be sorted by sequence_id in descending order"
-    );
-    assert!(
-        applicable_objects[1].sequence_id >= applicable_objects[2].sequence_id,
-        "Applicable objects should be sorted by sequence_id in descending order"
+        desired_state[0].sequence_id >= desired_state[1].sequence_id,
+        "Objects should be sorted by sequence_id in descending order"
     );
 }

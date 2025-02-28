@@ -18,6 +18,7 @@ use brokkr_models::models::agent_labels::{AgentLabel, NewAgentLabel};
 use brokkr_models::models::agent_targets::{AgentTarget, NewAgentTarget};
 use brokkr_models::models::agents::{Agent, NewAgent};
 use brokkr_models::models::deployment_objects::DeploymentObject;
+use brokkr_models::models::stacks::Stack;
 use brokkr_utils::logging::prelude::*;
 use serde::Deserialize;
 use serde_json::Value;
@@ -31,7 +32,7 @@ pub fn routes() -> Router<DAL> {
         .route("/agents/", get(search_agent))
         .route(
             "/agents/:id",
-            get(get_agent_by_id).put(update_agent).delete(delete_agent),
+            get(get_agent).put(update_agent).delete(delete_agent),
         )
         .route("/agents/:id/events", get(list_events).post(create_event))
         .route("/agents/:id/labels", get(list_labels).post(add_label))
@@ -44,16 +45,28 @@ pub fn routes() -> Router<DAL> {
         .route("/agents/:id/targets", get(list_targets).post(add_target))
         .route("/agents/:id/targets/:stack_id", delete(remove_target))
         .route("/agents/:id/heartbeat", post(record_heartbeat))
-        .route(
-            "/agents/:id/applicable-deployment-objects",
-            get(get_applicable_deployment_objects),
-        )
+        .route("/agents/:id/target-state", get(get_target_state))
+        .route("/agents/:id/stacks", get(get_associated_stacks))
+        .route("/agents/:id/rotate-pak", post(rotate_agent_pak))
 }
 
 /// Lists all agents.
 ///
 /// # Authorization
 /// Requires admin privileges.
+#[utoipa::path(
+    get,
+    path = "/agents",
+    tag = "agents",
+    responses(
+        (status = 200, description = "Successfully retrieved agents", body = Vec<Agent>),
+        (status = 403, description = "Forbidden - PAK does not have required rights", body = serde_json::Value),
+        (status = 500, description = "Internal server error", body = serde_json::Value),
+    ),
+    security(
+        ("admin_pak" = []),
+    )
+)]
 async fn list_agents(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -86,6 +99,20 @@ async fn list_agents(
 ///
 /// # Authorization
 /// Requires admin privileges.
+#[utoipa::path(
+    post,
+    path = "/agents",
+    tag = "agents",
+    request_body = NewAgent,
+    responses(
+        (status = 200, description = "Successfully created agent", body = serde_json::Value),
+        (status = 403, description = "Forbidden - PAK does not have required rights", body = serde_json::Value),
+        (status = 500, description = "Internal server error", body = serde_json::Value),
+    ),
+    security(
+        ("admin_pak" = []),
+    )
+)]
 async fn create_agent(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -150,7 +177,25 @@ struct AgentQuery {
 ///
 /// # Authorization
 /// Requires admin privileges or matching agent ID.
-async fn get_agent_by_id(
+#[utoipa::path(
+    get,
+    path = "/agents/{id}",
+    tag = "agents",
+    params(
+        ("id" = Uuid, Path, description = "ID of the agent to retrieve"),
+    ),
+    responses(
+        (status = 200, description = "Successfully retrieved agent", body = Agent),
+        (status = 403, description = "Forbidden - PAK does not have required rights", body = serde_json::Value),
+        (status = 404, description = "Agent not found", body = serde_json::Value),
+        (status = 500, description = "Internal server error", body = serde_json::Value),
+    ),
+    security(
+        ("admin_pak" = []),
+        ("agent_pak" = []),
+    )
+)]
+async fn get_agent(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
     Path(id): Path<Uuid>,
@@ -190,6 +235,25 @@ async fn get_agent_by_id(
 ///
 /// # Authorization
 /// Requires admin privileges.
+#[utoipa::path(
+    get,
+    path = "/agents/",
+    tag = "agents",
+    params(
+        ("name" = Option<String>, Query, description = "Name of the agent to search for"),
+        ("cluster_name" = Option<String>, Query, description = "Name of the cluster to search in"),
+    ),
+    responses(
+        (status = 200, description = "Successfully found agent", body = Agent),
+        (status = 400, description = "Invalid request - missing name or cluster_name", body = serde_json::Value),
+        (status = 403, description = "Forbidden - PAK does not have required rights", body = serde_json::Value),
+        (status = 404, description = "Agent not found", body = serde_json::Value),
+        (status = 500, description = "Internal server error", body = serde_json::Value),
+    ),
+    security(
+        ("admin_pak" = []),
+    )
+)]
 async fn search_agent(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -245,6 +309,25 @@ async fn search_agent(
 ///
 /// # Authorization
 /// Requires admin privileges or matching agent ID.
+#[utoipa::path(
+    put,
+    path = "/agents/{id}",
+    tag = "agents",
+    params(
+        ("id" = Uuid, Path, description = "ID of the agent to update"),
+    ),
+    request_body = serde_json::Value,
+    responses(
+        (status = 200, description = "Successfully updated agent", body = Agent),
+        (status = 403, description = "Forbidden - PAK does not have required rights", body = serde_json::Value),
+        (status = 404, description = "Agent not found", body = serde_json::Value),
+        (status = 500, description = "Internal server error", body = serde_json::Value),
+    ),
+    security(
+        ("admin_pak" = []),
+        ("agent_pak" = []),
+    )
+)]
 async fn update_agent(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -307,6 +390,22 @@ async fn update_agent(
 ///
 /// # Authorization
 /// Requires admin privileges.
+#[utoipa::path(
+    delete,
+    path = "/agents/{id}",
+    tag = "agents",
+    params(
+        ("id" = Uuid, Path, description = "ID of the agent to delete"),
+    ),
+    responses(
+        (status = 204, description = "Successfully deleted agent"),
+        (status = 403, description = "Forbidden - PAK does not have required rights", body = serde_json::Value),
+        (status = 500, description = "Internal server error", body = serde_json::Value),
+    ),
+    security(
+        ("admin_pak" = []),
+    )
+)]
 async fn delete_agent(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -340,6 +439,23 @@ async fn delete_agent(
 ///
 /// # Authorization
 /// Requires admin privileges or matching agent ID.
+#[utoipa::path(
+    get,
+    path = "/agents/{id}/events",
+    tag = "agent-events",
+    params(
+        ("id" = Uuid, Path, description = "ID of the agent to list events for"),
+    ),
+    responses(
+        (status = 200, description = "Successfully retrieved agent events", body = Vec<AgentEvent>),
+        (status = 403, description = "Forbidden - PAK does not have required rights", body = serde_json::Value),
+        (status = 500, description = "Internal server error", body = serde_json::Value),
+    ),
+    security(
+        ("admin_pak" = []),
+        ("agent_pak" = []),
+    )
+)]
 async fn list_events(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -385,6 +501,24 @@ async fn list_events(
 ///
 /// # Authorization
 /// Requires admin privileges or matching agent ID.
+#[utoipa::path(
+    post,
+    path = "/agents/{id}/events",
+    tag = "agent-events",
+    params(
+        ("id" = Uuid, Path, description = "ID of the agent to create an event for"),
+    ),
+    request_body = NewAgentEvent,
+    responses(
+        (status = 200, description = "Successfully created agent event", body = AgentEvent),
+        (status = 403, description = "Forbidden - PAK does not have required rights", body = serde_json::Value),
+        (status = 500, description = "Internal server error", body = serde_json::Value),
+    ),
+    security(
+        ("admin_pak" = []),
+        ("agent_pak" = []),
+    )
+)]
 async fn create_event(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -422,6 +556,23 @@ async fn create_event(
 ///
 /// # Authorization
 /// Requires admin privileges or matching agent ID.
+#[utoipa::path(
+    get,
+    path = "/agents/{id}/labels",
+    tag = "agent-labels",
+    params(
+        ("id" = Uuid, Path, description = "ID of the agent to list labels for"),
+    ),
+    responses(
+        (status = 200, description = "Successfully retrieved agent labels", body = Vec<AgentLabel>),
+        (status = 403, description = "Forbidden - PAK does not have required rights", body = serde_json::Value),
+        (status = 500, description = "Internal server error", body = serde_json::Value),
+    ),
+    security(
+        ("admin_pak" = []),
+        ("agent_pak" = []),
+    )
+)]
 async fn list_labels(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -462,6 +613,24 @@ async fn list_labels(
 ///
 /// # Authorization
 /// Requires admin privileges or matching agent ID.
+#[utoipa::path(
+    post,
+    path = "/agents/{id}/labels",
+    tag = "agent-labels",
+    params(
+        ("id" = Uuid, Path, description = "ID of the agent to add the label to"),
+    ),
+    request_body = NewAgentLabel,
+    responses(
+        (status = 200, description = "Successfully added agent label", body = AgentLabel),
+        (status = 403, description = "Forbidden - PAK does not have required rights", body = serde_json::Value),
+        (status = 500, description = "Internal server error", body = serde_json::Value),
+    ),
+    security(
+        ("admin_pak" = []),
+        ("agent_pak" = []),
+    )
+)]
 async fn add_label(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -499,6 +668,25 @@ async fn add_label(
 ///
 /// # Authorization
 /// Requires admin privileges or matching agent ID.
+#[utoipa::path(
+    delete,
+    path = "/agents/{id}/labels/{label}",
+    tag = "agent-labels",
+    params(
+        ("id" = Uuid, Path, description = "ID of the agent to remove the label from"),
+        ("label" = String, Path, description = "The label to remove"),
+    ),
+    responses(
+        (status = 204, description = "Successfully removed agent label"),
+        (status = 403, description = "Forbidden - PAK does not have required rights", body = serde_json::Value),
+        (status = 404, description = "Label not found", body = serde_json::Value),
+        (status = 500, description = "Internal server error", body = serde_json::Value),
+    ),
+    security(
+        ("admin_pak" = []),
+        ("agent_pak" = []),
+    )
+)]
 async fn remove_label(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -563,6 +751,23 @@ async fn remove_label(
 ///
 /// # Authorization
 /// Requires admin privileges or matching agent ID.
+#[utoipa::path(
+    get,
+    path = "/agents/{id}/annotations",
+    tag = "agent-annotations",
+    params(
+        ("id" = Uuid, Path, description = "ID of the agent to list annotations for"),
+    ),
+    responses(
+        (status = 200, description = "Successfully retrieved agent annotations", body = Vec<AgentAnnotation>),
+        (status = 403, description = "Forbidden - PAK does not have required rights", body = serde_json::Value),
+        (status = 500, description = "Internal server error", body = serde_json::Value),
+    ),
+    security(
+        ("admin_pak" = []),
+        ("agent_pak" = []),
+    )
+)]
 async fn list_annotations(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -609,6 +814,24 @@ async fn list_annotations(
 ///
 /// # Authorization
 /// Requires admin privileges or matching agent ID.
+#[utoipa::path(
+    post,
+    path = "/agents/{id}/annotations",
+    tag = "agent-annotations",
+    params(
+        ("id" = Uuid, Path, description = "ID of the agent to add the annotation to"),
+    ),
+    request_body = NewAgentAnnotation,
+    responses(
+        (status = 200, description = "Successfully added agent annotation", body = AgentAnnotation),
+        (status = 403, description = "Forbidden - PAK does not have required rights", body = serde_json::Value),
+        (status = 500, description = "Internal server error", body = serde_json::Value),
+    ),
+    security(
+        ("admin_pak" = []),
+        ("agent_pak" = []),
+    )
+)]
 async fn add_annotation(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -649,6 +872,25 @@ async fn add_annotation(
 ///
 /// # Authorization
 /// Requires admin privileges or matching agent ID.
+#[utoipa::path(
+    delete,
+    path = "/agents/{id}/annotations/{key}",
+    tag = "agent-annotations",
+    params(
+        ("id" = Uuid, Path, description = "ID of the agent to remove the annotation from"),
+        ("key" = String, Path, description = "The key of the annotation to remove"),
+    ),
+    responses(
+        (status = 204, description = "Successfully removed agent annotation"),
+        (status = 403, description = "Forbidden - PAK does not have required rights", body = serde_json::Value),
+        (status = 404, description = "Annotation not found", body = serde_json::Value),
+        (status = 500, description = "Internal server error", body = serde_json::Value),
+    ),
+    security(
+        ("admin_pak" = []),
+        ("agent_pak" = []),
+    )
+)]
 async fn remove_annotation(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -716,6 +958,23 @@ async fn remove_annotation(
 ///
 /// # Authorization
 /// Requires admin privileges or matching agent ID.
+#[utoipa::path(
+    get,
+    path = "/agents/{id}/targets",
+    tag = "agent-targets",
+    params(
+        ("id" = Uuid, Path, description = "ID of the agent to list targets for"),
+    ),
+    responses(
+        (status = 200, description = "Successfully retrieved agent targets", body = Vec<AgentTarget>),
+        (status = 403, description = "Forbidden - PAK does not have required rights", body = serde_json::Value),
+        (status = 500, description = "Internal server error", body = serde_json::Value),
+    ),
+    security(
+        ("admin_pak" = []),
+        ("agent_pak" = []),
+    )
+)]
 async fn list_targets(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -756,6 +1015,24 @@ async fn list_targets(
 ///
 /// # Authorization
 /// Requires admin privileges or matching agent ID.
+#[utoipa::path(
+    post,
+    path = "/agents/{id}/targets",
+    tag = "agent-targets",
+    params(
+        ("id" = Uuid, Path, description = "ID of the agent to add the target to"),
+    ),
+    request_body = NewAgentTarget,
+    responses(
+        (status = 200, description = "Successfully added agent target", body = AgentTarget),
+        (status = 403, description = "Forbidden - PAK does not have required rights", body = serde_json::Value),
+        (status = 500, description = "Internal server error", body = serde_json::Value),
+    ),
+    security(
+        ("admin_pak" = []),
+        ("agent_pak" = []),
+    )
+)]
 async fn add_target(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -793,6 +1070,25 @@ async fn add_target(
 ///
 /// # Authorization
 /// Requires admin privileges or matching agent ID.
+#[utoipa::path(
+    delete,
+    path = "/agents/{id}/targets/{stack_id}",
+    tag = "agent-targets",
+    params(
+        ("id" = Uuid, Path, description = "ID of the agent to remove the target from"),
+        ("stack_id" = Uuid, Path, description = "ID of the stack to remove from the agent's targets"),
+    ),
+    responses(
+        (status = 204, description = "Successfully removed agent target"),
+        (status = 403, description = "Forbidden - PAK does not have required rights", body = serde_json::Value),
+        (status = 404, description = "Target not found", body = serde_json::Value),
+        (status = 500, description = "Internal server error", body = serde_json::Value),
+    ),
+    security(
+        ("admin_pak" = []),
+        ("agent_pak" = []),
+    )
+)]
 async fn remove_target(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -860,6 +1156,22 @@ async fn remove_target(
 ///
 /// # Authorization
 /// Requires matching agent ID.
+#[utoipa::path(
+    post,
+    path = "/agents/{id}/heartbeat",
+    tag = "agents",
+    params(
+        ("id" = Uuid, Path, description = "ID of the agent to record heartbeat for"),
+    ),
+    responses(
+        (status = 204, description = "Successfully recorded agent heartbeat"),
+        (status = 403, description = "Forbidden - PAK does not have required rights", body = serde_json::Value),
+        (status = 500, description = "Internal server error", body = serde_json::Value),
+    ),
+    security(
+        ("agent_pak" = []),
+    )
+)]
 async fn record_heartbeat(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -898,22 +1210,53 @@ async fn record_heartbeat(
     }
 }
 
-/// Retrieves applicable deployment objects for a specific agent.
+/// Defines query parameters for the target state endpoint
+#[derive(Deserialize, Default)]
+struct TargetStateParams {
+    /// Mode of operation: "incremental" (default) or "full"
+    mode: Option<String>,
+}
+
+/// Retrieves the target state (deployment objects that should be applied) for a specific agent.
+///
+/// # Query Parameters
+/// * `mode` - Optional. Specifies the mode of operation:
+///   * `incremental` (default) - Returns only objects that haven't been deployed yet
+///   * `full` - Returns all objects regardless of deployment status
 ///
 /// # Authorization
 /// Requires admin privileges or matching agent ID.
-async fn get_applicable_deployment_objects(
+#[utoipa::path(
+    get,
+    path = "/agents/{id}/target-state",
+    tag = "agents",
+    params(
+        ("id" = Uuid, Path, description = "ID of the agent to get target state for"),
+        ("mode" = Option<String>, Query, description = "Mode of operation: 'incremental' (default) or 'full'")
+    ),
+    responses(
+        (status = 200, description = "Successfully retrieved target state", body = Vec<DeploymentObject>),
+        (status = 403, description = "Forbidden - PAK does not have required rights", body = serde_json::Value),
+        (status = 500, description = "Internal server error", body = serde_json::Value),
+    ),
+    security(
+        ("admin_pak" = []),
+        ("agent_pak" = []),
+    )
+)]
+async fn get_target_state(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
     Path(id): Path<Uuid>,
+    Query(params): Query<TargetStateParams>,
 ) -> Result<Json<Vec<DeploymentObject>>, (StatusCode, Json<serde_json::Value>)> {
     info!(
-        "Handling request to get applicable deployment objects for agent with ID: {}",
+        "Handling request to get target state for agent with ID: {}",
         id
     );
     if !auth_payload.admin && auth_payload.agent != Some(id) {
         warn!(
-            "Unauthorized attempt to get applicable deployment objects for agent with ID: {}",
+            "Unauthorized attempt to get target state for agent with ID: {}",
             id
         );
         return Err((
@@ -922,13 +1265,21 @@ async fn get_applicable_deployment_objects(
         ));
     }
 
+    // Determine if we should include deployed objects based on query parameter
+    let include_deployed = params.mode.as_deref() == Some("full");
+    info!(
+        "Target state request mode is '{}', include_deployed={}",
+        params.mode.unwrap_or_else(|| "incremental".to_string()),
+        include_deployed
+    );
+
     match dal
         .deployment_objects()
-        .get_undeployed_objects_for_agent(id)
+        .get_target_state_for_agent(id, include_deployed)
     {
         Ok(objects) => {
             info!(
-                "Successfully retrieved {} applicable deployment objects for agent with ID: {}",
+                "Successfully retrieved {} objects in target state for agent with ID: {}",
                 objects.len(),
                 id
             );
@@ -936,12 +1287,156 @@ async fn get_applicable_deployment_objects(
         }
         Err(e) => {
             error!(
-                "Failed to fetch applicable deployment objects for agent with ID {}: {:?}",
+                "Failed to fetch target state for agent with ID {}: {:?}",
                 id, e
             );
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": "Failed to fetch applicable deployment objects"})),
+                Json(serde_json::json!({"error": "Failed to fetch target state"})),
+            ))
+        }
+    }
+}
+
+/// Retrieves all stacks associated with a specific agent based on targets, labels, and annotations.
+///
+/// # Authorization
+/// Requires admin privileges or matching agent ID.
+#[utoipa::path(
+    get,
+    path = "/agents/{id}/stacks",
+    tag = "agents",
+    params(
+        ("id" = Uuid, Path, description = "ID of the agent to get associated stacks for"),
+    ),
+    responses(
+        (status = 200, description = "Successfully retrieved associated stacks", body = Vec<Stack>),
+        (status = 403, description = "Forbidden - PAK does not have required rights", body = serde_json::Value),
+        (status = 500, description = "Internal server error", body = serde_json::Value),
+    ),
+    security(
+        ("admin_pak" = []),
+        ("agent_pak" = []),
+    )
+)]
+async fn get_associated_stacks(
+    State(dal): State<DAL>,
+    Extension(auth_payload): Extension<AuthPayload>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<Vec<Stack>>, (StatusCode, Json<serde_json::Value>)> {
+    info!(
+        "Handling request to get associated stacks for agent with ID: {}",
+        id
+    );
+    if !auth_payload.admin && auth_payload.agent != Some(id) {
+        warn!(
+            "Unauthorized attempt to get associated stacks for agent with ID: {}",
+            id
+        );
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({"error": "Unauthorized"})),
+        ));
+    }
+
+    match dal.stacks().get_associated_stacks(id) {
+        Ok(stacks) => {
+            info!(
+                "Successfully retrieved {} associated stacks for agent with ID: {}",
+                stacks.len(),
+                id
+            );
+            Ok(Json(stacks))
+        }
+        Err(e) => {
+            error!(
+                "Failed to fetch associated stacks for agent with ID {}: {:?}",
+                id, e
+            );
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Failed to fetch associated stacks"})),
+            ))
+        }
+    }
+}
+
+/// Rotates the PAK for a specific agent.
+///
+/// # Authorization
+/// Requires either admin privileges or the current agent's PAK.
+#[utoipa::path(
+    post,
+    path = "/api/v1/agents/{id}/rotate-pak",
+    responses(
+        (status = 200, description = "Successfully rotated agent PAK", body = serde_json::Value),
+        (status = 403, description = "Forbidden - Unauthorized access"),
+        (status = 404, description = "Agent not found"),
+        (status = 500, description = "Internal server error")
+    ),
+    params(
+        ("id" = Uuid, Path, description = "Agent id")
+    ),
+    security(
+        ("admin_pak" = []),
+        ("agent_pak" = [])
+    ),
+    tag = "agents"
+)]
+async fn rotate_agent_pak(
+    State(dal): State<DAL>,
+    Extension(auth_payload): Extension<AuthPayload>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+    info!("Handling request to rotate PAK for agent with ID: {}", id);
+
+    // Check authorization - must be admin or the agent itself
+    if !auth_payload.admin && auth_payload.agent != Some(id) {
+        warn!(
+            "Unauthorized attempt to rotate PAK for agent with ID: {}",
+            id
+        );
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({"error": "Unauthorized access"})),
+        ));
+    }
+
+    // Verify agent exists
+    if let Err(e) = dal.agents().get(id) {
+        error!("Failed to fetch agent with ID {}: {:?}", id, e);
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "Failed to fetch agent"})),
+        ));
+    }
+
+    // Generate new PAK and hash
+    let (pak, pak_hash) = match crate::utils::pak::create_pak() {
+        Ok((pak, hash)) => (pak, hash),
+        Err(e) => {
+            error!("Failed to create new PAK: {:?}", e);
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Failed to create new PAK"})),
+            ));
+        }
+    };
+
+    // Update agent's PAK hash
+    match dal.agents().update_pak_hash(id, pak_hash) {
+        Ok(updated_agent) => {
+            info!("Successfully rotated PAK for agent with ID: {}", id);
+            Ok(Json(serde_json::json!({
+                "agent": updated_agent,
+                "pak": pak
+            })))
+        }
+        Err(e) => {
+            error!("Failed to update agent PAK hash: {:?}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Failed to update agent PAK hash"})),
             ))
         }
     }

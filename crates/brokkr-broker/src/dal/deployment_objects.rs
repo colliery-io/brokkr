@@ -168,20 +168,22 @@ impl<'a> DeploymentObjectsDAL<'a> {
     /// This method performs the following steps:
     /// 1. Get the list of stacks the agent is responsible for
     /// 2. Get all deployment objects for these stacks
-    /// 3. Filter out objects that have been deployed (have corresponding agent events)
+    /// 3. Filter out objects that have been deployed (have corresponding agent events) if include_deployed is false
     /// 4. Sort by sequence_id in descending order
     ///
     /// # Arguments
     ///
     /// * `agent_id` - The UUID of the agent to get undeployed objects for.
+    /// * `include_deployed` - Whether to include objects that have already been deployed.
     ///
     /// # Returns
     ///
-    /// Returns a Result containing a Vec of DeploymentObjects that are undeployed for the agent,
+    /// Returns a Result containing a Vec of DeploymentObjects for the agent,
     /// sorted by sequence_id in descending order (most recent first), or a diesel::result::Error on failure.
-    pub fn get_undeployed_objects_for_agent(
+    pub fn get_target_state_for_agent(
         &self,
         agent_id: Uuid,
+        include_deployed: bool,
     ) -> Result<Vec<DeploymentObject>, diesel::result::Error> {
         // Step 1: Get the list of stacks the agent is responsible for
         let responsible_stacks = self.dal.stacks().get_associated_stacks(agent_id)?;
@@ -193,25 +195,29 @@ impl<'a> DeploymentObjectsDAL<'a> {
             all_objects.extend(stack_objects);
         }
 
-        // Step 3: Filter out objects that have been deployed (have corresponding agent events)
-        let deployed_object_ids = self
-            .dal
-            .agent_events()
-            .get_events(None, Some(agent_id))?
-            .into_iter()
-            .map(|event| event.deployment_object_id)
-            .collect::<Vec<Uuid>>();
+        // Step 3: Filter out objects that have been deployed (have corresponding agent events) if include_deployed is false
+        let objects = if include_deployed {
+            all_objects
+        } else {
+            let deployed_object_ids = self
+                .dal
+                .agent_events()
+                .get_events(None, Some(agent_id))?
+                .into_iter()
+                .map(|event| event.deployment_object_id)
+                .collect::<Vec<Uuid>>();
 
-        let undeployed_objects = all_objects
-            .into_iter()
-            .filter(|obj| !deployed_object_ids.contains(&obj.id))
-            .collect::<Vec<DeploymentObject>>();
+            all_objects
+                .into_iter()
+                .filter(|obj| !deployed_object_ids.contains(&obj.id))
+                .collect::<Vec<DeploymentObject>>()
+        };
 
         // Step 4: Sort by sequence_id in descending order
-        let mut sorted_undeployed_objects = undeployed_objects;
-        sorted_undeployed_objects.sort_by(|a, b| b.sequence_id.cmp(&a.sequence_id));
+        let mut sorted_objects = objects;
+        sorted_objects.sort_by(|a, b| b.sequence_id.cmp(&a.sequence_id));
 
-        Ok(sorted_undeployed_objects)
+        Ok(sorted_objects)
     }
 
     /// Searches for deployment objects by checksum.
@@ -249,7 +255,7 @@ impl<'a> DeploymentObjectsDAL<'a> {
     ///
     /// Returns a Result containing a Vec of DeploymentObjects that are applicable for the agent,
     /// sorted by sequence_id in descending order (most recent first), or a diesel::result::Error on failure.
-    pub fn get_applicable_deployment_objects(
+    pub fn get_desired_state_for_agent(
         &self,
         agent_id: Uuid,
     ) -> Result<Vec<DeploymentObject>, diesel::result::Error> {

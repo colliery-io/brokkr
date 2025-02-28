@@ -103,22 +103,33 @@ pub async fn wait_for_broker_ready(config: &Settings) {
         match client.get(&readyz_url).send().await {
             Ok(response) => {
                 if response.status().is_success() {
-                    info!("Broker is ready!");
+                    info!("Successfully connected to broker at {}", readyz_url);
                     return;
                 }
+                warn!(
+                    "Broker at {} returned non-success status: {}",
+                    readyz_url,
+                    response.status()
+                );
             }
             Err(e) => {
-                warn!("Error connecting to broker (attempt {}): {:?}", attempt, e);
+                warn!(
+                    "Failed to connect to broker at {} (attempt {}/{}): {:?}",
+                    readyz_url, attempt, config.agent.max_retries, e
+                );
             }
         }
         if attempt < config.agent.max_retries {
-            info!("Waiting for broker to be ready (attempt {})", attempt);
+            info!(
+                "Waiting for broker to be ready at {} (attempt {}/{})",
+                readyz_url, attempt, config.agent.max_retries
+            );
             sleep(Duration::from_secs(1)).await;
         }
     }
     error!(
-        "Failed to connect to broker after {} attempts. Exiting.",
-        config.agent.max_retries
+        "Failed to connect to broker at {} after {} attempts. Exiting.",
+        readyz_url, config.agent.max_retries
     );
     std::process::exit(1);
 }
@@ -254,7 +265,7 @@ pub async fn fetch_and_process_deployment_objects(
     agent: &Agent,
 ) -> Result<Vec<DeploymentObject>, Box<dyn std::error::Error>> {
     let url = format!(
-        "{}/api/v1/agents/{}/applicable-deployment-objects",
+        "{}/api/v1/agents/{}/target-state",
         config.agent.broker_url, agent.id
     );
 

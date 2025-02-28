@@ -72,8 +72,9 @@ def integration_tests(crate_name: str, test_filter: str = "", skip_docker: bool 
     if not skip_docker:
         docker_clean()
         docker_up()
-        print("Waiting for applications to come up and be stable, this may take a while...grab a coffee!")
-        time.sleep(180)
+
+    print("Sleeping for 30 seconds, waiting for services to stabilize - get some coffee")
+    time.sleep(30)
 
     rc = None
     return_codes = []
