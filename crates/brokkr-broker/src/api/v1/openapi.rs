@@ -44,6 +44,7 @@ use utoipa_swagger_ui::SwaggerUi;
         agents::update_agent,
         agents::delete_agent,
         agents::search_agent,
+        agents::get_target_state,
         deployment_objects::get_deployment_object,
         stacks::list_stacks,
         stacks::create_stack,

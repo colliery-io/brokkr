@@ -45,10 +45,7 @@ pub fn routes() -> Router<DAL> {
         .route("/agents/:id/targets", get(list_targets).post(add_target))
         .route("/agents/:id/targets/:stack_id", delete(remove_target))
         .route("/agents/:id/heartbeat", post(record_heartbeat))
-        .route(
-            "/agents/:id/applicable-deployment-objects",
-            get(get_applicable_deployment_objects),
-        )
+        .route("/agents/:id/target-state", get(get_target_state))
         .route("/agents/:id/stacks", get(get_associated_stacks))
         .route("/agents/:id/rotate-pak", post(rotate_agent_pak))
 }
@@ -1213,19 +1210,32 @@ async fn record_heartbeat(
     }
 }
 
-/// Retrieves applicable deployment objects for a specific agent.
+/// Defines query parameters for the target state endpoint
+#[derive(Deserialize, Default)]
+struct TargetStateParams {
+    /// Mode of operation: "incremental" (default) or "full"
+    mode: Option<String>,
+}
+
+/// Retrieves the target state (deployment objects that should be applied) for a specific agent.
+///
+/// # Query Parameters
+/// * `mode` - Optional. Specifies the mode of operation:
+///   * `incremental` (default) - Returns only objects that haven't been deployed yet
+///   * `full` - Returns all objects regardless of deployment status
 ///
 /// # Authorization
 /// Requires admin privileges or matching agent ID.
 #[utoipa::path(
     get,
-    path = "/agents/{id}/applicable-deployment-objects",
+    path = "/agents/{id}/target-state",
     tag = "agents",
     params(
-        ("id" = Uuid, Path, description = "ID of the agent to get deployment objects for"),
+        ("id" = Uuid, Path, description = "ID of the agent to get target state for"),
+        ("mode" = Option<String>, Query, description = "Mode of operation: 'incremental' (default) or 'full'")
     ),
     responses(
-        (status = 200, description = "Successfully retrieved applicable deployment objects", body = Vec<DeploymentObject>),
+        (status = 200, description = "Successfully retrieved target state", body = Vec<DeploymentObject>),
         (status = 403, description = "Forbidden - PAK does not have required rights", body = serde_json::Value),
         (status = 500, description = "Internal server error", body = serde_json::Value),
     ),
@@ -1234,18 +1244,19 @@ async fn record_heartbeat(
         ("agent_pak" = []),
     )
 )]
-async fn get_applicable_deployment_objects(
+async fn get_target_state(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
     Path(id): Path<Uuid>,
+    Query(params): Query<TargetStateParams>,
 ) -> Result<Json<Vec<DeploymentObject>>, (StatusCode, Json<serde_json::Value>)> {
     info!(
-        "Handling request to get applicable deployment objects for agent with ID: {}",
+        "Handling request to get target state for agent with ID: {}",
         id
     );
     if !auth_payload.admin && auth_payload.agent != Some(id) {
         warn!(
-            "Unauthorized attempt to get applicable deployment objects for agent with ID: {}",
+            "Unauthorized attempt to get target state for agent with ID: {}",
             id
         );
         return Err((
@@ -1254,13 +1265,21 @@ async fn get_applicable_deployment_objects(
         ));
     }
 
+    // Determine if we should include deployed objects based on query parameter
+    let include_deployed = params.mode.as_deref() == Some("full");
+    info!(
+        "Target state request mode is '{}', include_deployed={}",
+        params.mode.unwrap_or_else(|| "incremental".to_string()),
+        include_deployed
+    );
+
     match dal
         .deployment_objects()
-        .get_undeployed_objects_for_agent(id)
+        .get_target_state_for_agent(id, include_deployed)
     {
         Ok(objects) => {
             info!(
-                "Successfully retrieved {} applicable deployment objects for agent with ID: {}",
+                "Successfully retrieved {} objects in target state for agent with ID: {}",
                 objects.len(),
                 id
             );
@@ -1268,12 +1287,12 @@ async fn get_applicable_deployment_objects(
         }
         Err(e) => {
             error!(
-                "Failed to fetch applicable deployment objects for agent with ID {}: {:?}",
+                "Failed to fetch target state for agent with ID {}: {:?}",
                 id, e
             );
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": "Failed to fetch applicable deployment objects"})),
+                Json(serde_json::json!({"error": "Failed to fetch target state"})),
             ))
         }
     }
