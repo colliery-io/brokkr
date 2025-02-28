@@ -1058,6 +1058,7 @@ async fn test_get_target_state_full() {
     let body = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
     let body_json: Value = serde_json::from_slice(&body).unwrap();
 
+
     // Check response in full mode - should contain only the latest object
     let objects = body_json.as_array().unwrap();
     assert_eq!(
@@ -1065,6 +1066,7 @@ async fn test_get_target_state_full() {
         1,
         "Should contain only the latest object in full mode"
     );
+
 
     // Collect IDs for easier verification
     let ids: Vec<String> = objects
@@ -1080,6 +1082,7 @@ async fn test_get_target_state_full() {
     assert!(
         ids.contains(&object2.id.to_string()),
         "object2 (the latest) should be included in full mode"
+
     );
 }
 
@@ -1120,12 +1123,14 @@ async fn test_get_target_state_with_invalid_mode() {
     // either return a 400 Bad Request or fall back to the default mode (incremental)
     // Let's check both possibilities
 
+
     if resp.status() == StatusCode::BAD_REQUEST {
         // If API returns 400, the test passes as this is a valid response for invalid parameters
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
     } else {
         // If API falls back to default mode, verify we got a 200 OK
         assert_eq!(resp.status(), StatusCode::OK);
+
 
         // Check that the response contains the expected format
         let body = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
