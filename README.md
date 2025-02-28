@@ -31,10 +31,148 @@ graph TD
     B --> C[Database]
     B <--> D[Agent 1]
     B <--> E[Agent 2]
+    B <--> J[Agent 2a]
     B <--> F[Agent N]
     D --> G[Kubernetes Cluster 1]
     E --> H[Kubernetes Cluster 2]
+    J --> H[Kubernetes Cluster 2]
     F --> I[Kubernetes Cluster N]
+```
+
+## Message Flow
+
+Brokkr operates using a message-based system for distributing resources across clusters. The following sequence diagrams illustrate the flow of messages in different scenarios.
+
+### Agent-Broker Communication
+
+This diagram shows the communication flow between an agent and the broker:
+
+```mermaid
+sequenceDiagram
+    participant Agent
+    participant Broker
+    participant K8s as Kubernetes Cluster
+
+    Agent->>Broker: Health Check (/readyz)
+    Broker-->>Agent: 200 OK
+
+    Agent->>Broker: Verify PAK (Authentication)
+    Broker-->>Agent: PAK Status
+
+    loop Every polling interval
+        Agent->>Broker: Send Heartbeat
+        Broker-->>Agent: Acknowledge Heartbeat
+
+        Agent->>Broker: Fetch Deployments (target-state)
+        Broker-->>Agent: Deployment Objects
+
+        loop For each deployment object
+            Agent->>K8s: Validate Objects
+            K8s-->>Agent: Validation Result
+
+            Agent->>K8s: Apply Objects
+            K8s-->>Agent: Apply Result
+
+            alt Success
+                Agent->>Broker: Report Success Event
+            else Failure
+                Agent->>Broker: Report Failure Event
+            end
+        end
+    end
+```
+
+### Client-Broker API Interaction
+
+This diagram illustrates how users or external systems interact with the broker API:
+
+```mermaid
+sequenceDiagram
+    participant Client as Client/Admin
+    participant API as Broker API
+    participant DB as Database
+    participant Agent
+
+    Client->>API: Authenticate (PAK)
+    API-->>Client: Authentication Response
+
+    Client->>API: Create/Update Stack
+    API->>DB: Store Stack Data
+    DB-->>API: Confirmation
+    API-->>Client: Stack Created/Updated
+
+    Client->>API: Define Deployment Objects
+    API->>DB: Store Deployment Objects
+    DB-->>API: Confirmation
+    API-->>Client: Objects Stored
+
+    Client->>API: Create/Configure Agent
+    API->>DB: Store Agent Configuration
+    DB-->>API: Confirmation
+    API-->>Client: Agent PAK & Configuration
+
+    Note over Agent,API: Agent connects using PAK
+
+    Client->>API: Query Agent Status
+    API->>DB: Fetch Agent Status
+    DB-->>API: Agent Status Data
+    API-->>Client: Agent Status Response
+```
+
+### End-to-End Deployment Flow
+
+This diagram shows the complete flow of a deployment from creation to application in a Kubernetes cluster:
+
+```mermaid
+sequenceDiagram
+    participant User as User/Admin
+    participant Broker
+    participant DB as Database
+    participant Agent
+    participant K8s as Kubernetes Cluster
+
+    User->>Broker: Create Deployment Objects
+    Broker->>DB: Store Deployment Objects
+    DB-->>Broker: Confirmation
+    Broker-->>User: Objects Created
+
+    User->>Broker: Associate Objects with Agent(s)
+    Broker->>DB: Update Object Assignments
+    DB-->>Broker: Confirmation
+    Broker-->>User: Assignment Confirmed
+
+    loop Agent polling
+        Agent->>Broker: Send Heartbeat
+        Broker-->>Agent: Acknowledge
+
+        Agent->>Broker: Request Target State
+        Broker->>DB: Fetch Assigned Objects
+        DB-->>Broker: Deployment Objects
+        Broker-->>Agent: Deployment Objects
+
+        loop For each object
+            Agent->>K8s: Validate Kubernetes Resources
+            K8s-->>Agent: Validation Result
+
+            Agent->>K8s: Apply Resources
+            K8s-->>Agent: Application Result
+
+            alt Success
+                Agent->>Broker: Report Success Event
+                Broker->>DB: Record Success
+                DB-->>Broker: Confirmation
+            else Failure
+                Agent->>Broker: Report Failure Event
+                Broker->>DB: Record Failure
+                DB-->>Broker: Confirmation
+            end
+        end
+    end
+
+    User->>Broker: Query Deployment Status
+    Broker->>DB: Fetch Status
+    DB-->>Broker: Status Data
+    Broker-->>User: Deployment Status Report
 ```
 
 ## Getting Started

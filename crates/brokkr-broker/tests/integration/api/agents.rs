@@ -1058,9 +1058,13 @@ async fn test_get_target_state_full() {
     let body = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
     let body_json: Value = serde_json::from_slice(&body).unwrap();
 
-    // Check response in full mode - should contain both objects
+    // Check response in full mode - should contain only the latest object
     let objects = body_json.as_array().unwrap();
-    assert_eq!(objects.len(), 2, "Should contain both objects in full mode");
+    assert_eq!(
+        objects.len(),
+        1,
+        "Should contain only the latest object in full mode"
+    );
 
     // Collect IDs for easier verification
     let ids: Vec<String> = objects
@@ -1068,14 +1072,14 @@ async fn test_get_target_state_full() {
         .map(|obj| obj["id"].as_str().unwrap().to_string())
         .collect();
 
-    // Verify that both objects are included in the response
+    // Verify that only the latest object is included in the response
     assert!(
-        ids.contains(&object1.id.to_string()),
-        "object1 should be included in full mode"
+        !ids.contains(&object1.id.to_string()),
+        "object1 should not be included in full mode as it's not the latest"
     );
     assert!(
         ids.contains(&object2.id.to_string()),
-        "object2 should be included in full mode"
+        "object2 (the latest) should be included in full mode"
     );
 }
 
