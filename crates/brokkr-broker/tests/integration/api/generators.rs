@@ -444,7 +444,7 @@ async fn test_rotate_generator_pak_forbidden() {
 
     // Create two generators
     let (generator1, _) = fixture.create_test_generator_with_pak("Generator 1".to_string(), None);
-    let (generator2, generator2_pak) =
+    let (_generator2, generator2_pak) =
         fixture.create_test_generator_with_pak("Generator 2".to_string(), None);
 
     // Try to rotate generator1's PAK using generator2's PAK

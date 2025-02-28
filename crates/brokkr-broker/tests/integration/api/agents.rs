@@ -10,8 +10,8 @@ use brokkr_models::models::agent_labels::NewAgentLabel;
 use brokkr_models::models::agent_targets::NewAgentTarget;
 use brokkr_models::models::agents::Agent;
 use brokkr_models::models::agents::NewAgent;
-use brokkr_models::models::deployment_objects::DeploymentObject;
 use brokkr_models::models::stacks::{NewStack, Stack};
+use serde_json::Value;
 use std::ops::Not;
 use tower::ServiceExt;
 use uuid::Uuid;
@@ -951,56 +951,186 @@ async fn test_record_heartbeat() {
 }
 
 #[tokio::test]
-async fn test_get_applicable_deployment_objects() {
+async fn test_get_target_state_incremental() {
     let fixture = TestFixture::new();
     let app = fixture.create_test_router().with_state(fixture.dal.clone());
 
     // Create an agent
-    let (agent, pak) =
-        fixture.create_test_agent_with_pak("Test Agent".to_string(), "Test Cluster".to_string());
-    // Create a stack
-    let stack =
-        fixture.create_test_stack("Test Stack".to_string(), None, fixture.admin_generator.id);
+    let (agent, agent_pak) = fixture
+        .create_test_agent_with_pak("Agent Target State".to_string(), "Test Cluster".to_string());
+
+    // Create a stack and associate the agent with it
+    let stack = fixture.create_test_stack(
+        "Stack Target State".to_string(),
+        None,
+        fixture.admin_generator.id,
+    );
     fixture.create_test_agent_target(agent.id, stack.id);
 
-    // Create 4 deployment objects
-    let do1 =
+    // Create deployment objects
+    let object1 =
         fixture.create_test_deployment_object(stack.id, "yaml_content: object1".to_string(), false);
-    let do2 =
+    let object2 =
         fixture.create_test_deployment_object(stack.id, "yaml_content: object2".to_string(), false);
-    let do3 =
-        fixture.create_test_deployment_object(stack.id, "yaml_content: object3".to_string(), false);
-    let do4 =
-        fixture.create_test_deployment_object(stack.id, "yaml_content: object4".to_string(), false);
 
-    // Create 3 agent events: 1 success, 1 failure, 1 success
-    fixture.create_test_agent_event(&agent, &do1, "DEPLOY", "SUCCESS", None);
-    fixture.create_test_agent_event(&agent, &do2, "DEPLOY", "FAILURE", None);
-    fixture.create_test_agent_event(&agent, &do3, "DEPLOY", "SUCCESS", None);
+    // Create an agent event for object1 (simulating a deployed object)
+    fixture.create_test_agent_event(&agent, &object1, "DEPLOY", "SUCCESS", None);
 
-    // Get applicable deployment objects
-    let response = app
+    // Test incremental mode (default)
+    let resp = app
         .oneshot(
             Request::builder()
-                .method("GET")
                 .uri(format!(
-                    "/api/v1/agents/{}/applicable-deployment-objects",
-                    agent.id
+                    "/api/v1/agents/{}/target-state",
+                    agent.id.to_string()
                 ))
-                .header("Authorization", format!("Bearer {}", pak))
+                .method("GET")
+                .header("Authorization", format!("Bearer {}", agent_pak))
                 .body(Body::empty())
                 .unwrap(),
         )
         .await
         .unwrap();
 
-    assert_eq!(response.status(), StatusCode::OK);
-    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    let fetched_objects: Vec<DeploymentObject> = serde_json::from_slice(&body).unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
 
-    // It should match the last deployment object (do4)
-    assert_eq!(fetched_objects.len(), 1);
-    assert!(fetched_objects.iter().any(|obj| obj.id == do4.id));
+    let body = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let body_json: Value = serde_json::from_slice(&body).unwrap();
+
+    // Check response in incremental mode - should only contain object2
+    let objects = body_json.as_array().unwrap();
+    assert_eq!(
+        objects.len(),
+        1,
+        "Should only contain the undeployed object"
+    );
+    assert_eq!(
+        objects[0]["id"].as_str().unwrap(),
+        object2.id.to_string(),
+        "The undeployed object should be object2"
+    );
+}
+
+#[tokio::test]
+async fn test_get_target_state_full() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+
+    // Create an agent
+    let (agent, agent_pak) = fixture
+        .create_test_agent_with_pak("Agent Target State".to_string(), "Test Cluster".to_string());
+
+    // Create a stack and associate the agent with it
+    let stack = fixture.create_test_stack(
+        "Stack Target State".to_string(),
+        None,
+        fixture.admin_generator.id,
+    );
+    fixture.create_test_agent_target(agent.id, stack.id);
+
+    // Create deployment objects
+    let object1 =
+        fixture.create_test_deployment_object(stack.id, "yaml_content: object1".to_string(), false);
+    let object2 =
+        fixture.create_test_deployment_object(stack.id, "yaml_content: object2".to_string(), false);
+
+    // Create an agent event for object1 (simulating a deployed object)
+    fixture.create_test_agent_event(&agent, &object1, "DEPLOY", "SUCCESS", None);
+
+    // Test full mode
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/v1/agents/{}/target-state?mode=full",
+                    agent.id.to_string()
+                ))
+                .method("GET")
+                .header("Authorization", format!("Bearer {}", agent_pak))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let body = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let body_json: Value = serde_json::from_slice(&body).unwrap();
+
+    // Check response in full mode - should contain both objects
+    let objects = body_json.as_array().unwrap();
+    assert_eq!(objects.len(), 2, "Should contain both objects in full mode");
+
+    // Collect IDs for easier verification
+    let ids: Vec<String> = objects
+        .iter()
+        .map(|obj| obj["id"].as_str().unwrap().to_string())
+        .collect();
+
+    // Verify that both objects are included in the response
+    assert!(
+        ids.contains(&object1.id.to_string()),
+        "object1 should be included in full mode"
+    );
+    assert!(
+        ids.contains(&object2.id.to_string()),
+        "object2 should be included in full mode"
+    );
+}
+
+#[tokio::test]
+async fn test_get_target_state_with_invalid_mode() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+
+    // Create an agent
+    let (agent, agent_pak) = fixture
+        .create_test_agent_with_pak("Agent Invalid Mode".to_string(), "Test Cluster".to_string());
+
+    // Create a stack and associate the agent with it
+    let stack = fixture.create_test_stack(
+        "Stack Invalid Mode".to_string(),
+        None,
+        fixture.admin_generator.id,
+    );
+    fixture.create_test_agent_target(agent.id, stack.id);
+
+    // Test with invalid mode parameter
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/v1/agents/{}/target-state?mode=invalid",
+                    agent.id.to_string()
+                ))
+                .method("GET")
+                .header("Authorization", format!("Bearer {}", agent_pak))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    // The API should handle invalid mode gracefully - we expect it to
+    // either return a 400 Bad Request or fall back to the default mode (incremental)
+    // Let's check both possibilities
+
+    if resp.status() == StatusCode::BAD_REQUEST {
+        // If API returns 400, the test passes as this is a valid response for invalid parameters
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    } else {
+        // If API falls back to default mode, verify we got a 200 OK
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        // Check that the response contains the expected format
+        let body = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let body_json: Value = serde_json::from_slice(&body).unwrap();
+
+        // Verify the response contains an array (we don't check the exact content
+        // since we're just verifying the API handled the invalid parameter gracefully)
+        assert!(body_json.is_array(), "Response should be a JSON array");
+    }
 }
 
 #[tokio::test]
@@ -1273,7 +1403,7 @@ async fn test_rotate_agent_pak_forbidden() {
     // Create two agents
     let (agent1, _) =
         fixture.create_test_agent_with_pak("Agent 1".to_string(), "Test Cluster".to_string());
-    let (agent2, agent2_pak) =
+    let (_agent2, agent2_pak) =
         fixture.create_test_agent_with_pak("Agent 2".to_string(), "Test Cluster".to_string());
 
     // Try to rotate agent1's PAK using agent2's PAK
@@ -1290,4 +1420,45 @@ async fn test_rotate_agent_pak_forbidden() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn test_get_target_state_with_mismatched_auth() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+
+    // Create two agents
+    let (agent1, _) =
+        fixture.create_test_agent_with_pak("Agent 1".to_string(), "Test Cluster".to_string());
+
+    let (_, agent2_pak) =
+        fixture.create_test_agent_with_pak("Agent 2".to_string(), "Test Cluster".to_string());
+
+    // Create a stack and associate agent1 with it
+    let stack = fixture.create_test_stack(
+        "Stack Auth Test".to_string(),
+        None,
+        fixture.admin_generator.id,
+    );
+    fixture.create_test_agent_target(agent1.id, stack.id);
+
+    // Test with agent2's auth credentials when requesting agent1's target state
+    // This should be forbidden
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/v1/agents/{}/target-state?mode=full",
+                    agent1.id.to_string()
+                ))
+                .method("GET")
+                .header("Authorization", format!("Bearer {}", agent2_pak))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    // Verify we get a forbidden status
+    assert_eq!(resp.status(), StatusCode::FORBIDDEN);
 }

@@ -265,7 +265,7 @@ pub async fn fetch_and_process_deployment_objects(
     agent: &Agent,
 ) -> Result<Vec<DeploymentObject>, Box<dyn std::error::Error>> {
     let url = format!(
-        "{}/api/v1/agents/{}/applicable-deployment-objects",
+        "{}/api/v1/agents/{}/target-state",
         config.agent.broker_url, agent.id
     );
 
