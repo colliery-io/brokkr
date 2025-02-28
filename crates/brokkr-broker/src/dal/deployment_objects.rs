@@ -191,7 +191,7 @@ impl<'a> DeploymentObjectsDAL<'a> {
         // Step 2: Get all deployment objects for these stacks
         let mut all_objects = Vec::new();
         for stack in responsible_stacks {
-            let stack_objects = self.list_for_stack(stack.id)?;
+            let stack_objects = self.get_latest_for_stack(stack.id)?;
             all_objects.extend(stack_objects);
         }
 
