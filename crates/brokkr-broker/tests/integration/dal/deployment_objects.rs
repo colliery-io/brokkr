@@ -307,7 +307,6 @@ fn test_get_target_state_for_agent_full() {
     assert!(
         !full_target_state_ids.contains(&object1.id),
         "object1 should not be in full target state as it's not the latest"
-
     );
 }
 
@@ -356,7 +355,6 @@ fn test_get_target_state_for_agent_with_all_deployed_incremental() {
     // Create agent events for all objects (simulating all deployed)
     fixture.create_test_agent_event(&agent, &object1, "DEPLOY", "SUCCESS", None);
     fixture.create_test_agent_event(&agent, &object2, "DEPLOY", "SUCCESS", None);
-
 
     // Get target state for the agent - incremental mode
     let target_state = fixture
@@ -420,7 +418,6 @@ fn test_get_target_state_for_agent_with_all_deployed_full() {
     assert!(
         !full_target_state_ids.contains(&object1.id),
         "object1 should not be in full target state as it's not the latest"
-
     );
 }
 
@@ -467,15 +464,12 @@ fn test_get_target_state_for_agent_with_deletion_markers_incremental() {
     // Verify the results - now expecting only the latest object (which is the deletion marker)
     assert_eq!(
         target_state.len(),
-
         1,
         "Expected 1 object in target state (only the latest, which is the deletion marker)"
-
     );
 
     let target_state_ids: Vec<uuid::Uuid> = target_state.iter().map(|obj| obj.id).collect();
     assert!(
-
         !target_state_ids.contains(&object1.id),
         "object1 should not be in target state"
     );
@@ -486,7 +480,6 @@ fn test_get_target_state_for_agent_with_deletion_markers_incremental() {
     assert!(
         target_state_ids.contains(&deletion_marker.id),
         "deletion marker (the latest) should be included"
-
     );
 
     // Verify that the deletion marker is included and has the correct flag
@@ -565,77 +558,12 @@ fn test_get_target_state_for_agent_with_deletion_markers_full() {
 
     // Verify that the deletion marker has the correct flag
     let deletion_marker_result = full_target_state
-
         .iter()
         .find(|obj| obj.id == deletion_marker.id)
         .unwrap();
     assert!(
         deletion_marker_result.is_deletion_marker,
         "Deletion marker should have is_deletion_marker set to true"
-    );
-}
-
-#[test]
-fn test_get_target_state_for_agent_with_deletion_markers_full() {
-    let fixture = TestFixture::new();
-
-    // Create an agent
-    let agent = fixture.create_test_agent(
-        "Agent Deletion Markers".to_string(),
-        "Test Cluster".to_string(),
-    );
-
-    // Create a stack and associate the agent with it
-    let generator = fixture.create_test_generator(
-        "Test Generator".to_string(),
-        None,
-        "test_api_key_hash".to_string(),
-    );
-    let stack = fixture.create_test_stack("Stack Deletion Markers".to_string(), None, generator.id);
-    fixture.create_test_agent_target(agent.id, stack.id);
-
-    // Create deployment objects, including a deletion marker
-    let object1 =
-        fixture.create_test_deployment_object(stack.id, "yaml_content: object1".to_string(), false);
-    let object2 =
-        fixture.create_test_deployment_object(stack.id, "yaml_content: object2".to_string(), false);
-    let deletion_marker = fixture.create_test_deployment_object(
-        stack.id,
-        "yaml_content: deletion_marker".to_string(),
-        true,
-    );
-
-    // Create an agent event for object1 (simulating a deployed object)
-    fixture.create_test_agent_event(&agent, &object1, "DEPLOY", "SUCCESS", None);
-
-    // Get target state for the agent - full mode
-    let full_target_state = fixture
-        .dal
-        .deployment_objects()
-        .get_target_state_for_agent(agent.id, true)
-        .expect("Failed to get full target state for agent");
-
-    // Verify the results
-    assert_eq!(
-        full_target_state.len(),
-        3,
-        "Expected 3 objects in full target state (including deletion marker)"
-    );
-
-    // Check that all objects are in the full target state
-    let full_target_state_ids: Vec<uuid::Uuid> =
-        full_target_state.iter().map(|obj| obj.id).collect();
-    assert!(
-        full_target_state_ids.contains(&object1.id),
-        "object1 should be in full target state"
-    );
-    assert!(
-        full_target_state_ids.contains(&object2.id),
-        "object2 should be in full target state"
-    );
-    assert!(
-        full_target_state_ids.contains(&deletion_marker.id),
-        "deletion marker should be included in full target state"
     );
 }
 
