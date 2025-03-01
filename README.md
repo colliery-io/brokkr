@@ -354,13 +354,12 @@ angreal tests integration all --skip-docker
 
 ## License
 
-[License information]
+Provided under Elastic License 2.0. 
 
 ## Contributing
 
-[Contribution guidelines]
+Pull requests / Issues are welcome if you have a new feature you'd like to provide. 
+If you're looking for specific help in implementing or permission to use commercially, contact me to discuss. 
 
 ## Roadmap
 
-- [Future plans]
-- [Upcoming features]
