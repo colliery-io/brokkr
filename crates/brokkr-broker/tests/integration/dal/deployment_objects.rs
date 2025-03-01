@@ -233,6 +233,7 @@ fn test_get_target_state_for_agent_incremental() {
         target_state_ids.contains(&object3.id),
         "object3 should be in target state"
     );
+
     assert!(
         !target_state_ids.contains(&object1.id),
         "object1 should not be in target state (already deployed)"
@@ -285,27 +286,27 @@ fn test_get_target_state_for_agent_full() {
         .get_target_state_for_agent(agent.id, true)
         .expect("Failed to get full target state for agent");
 
-    // Verify the results
+    // Verify the results - now expecting only the latest objects per stack
     assert_eq!(
         full_target_state.len(),
-        3,
-        "Expected 3 objects in full target state"
+        2,
+        "Expected 2 objects in full target state (latest from each stack)"
     );
 
-    // Check that all objects are in the full target state
+    // Check that the latest objects from each stack are in the full target state
     let full_target_state_ids: Vec<uuid::Uuid> =
         full_target_state.iter().map(|obj| obj.id).collect();
     assert!(
-        full_target_state_ids.contains(&object1.id),
-        "object1 should be in full target state"
-    );
-    assert!(
         full_target_state_ids.contains(&object2.id),
-        "object2 should be in full target state"
+        "object2 (latest from stack1) should be in full target state"
     );
     assert!(
         full_target_state_ids.contains(&object3.id),
-        "object3 should be in full target state"
+        "object3 (latest from stack2) should be in full target state"
+    );
+    assert!(
+        !full_target_state_ids.contains(&object1.id),
+        "object1 should not be in full target state as it's not the latest"
     );
 }
 
@@ -327,6 +328,7 @@ fn test_get_target_state_for_agent_with_no_targets() {
 }
 
 #[test]
+
 fn test_get_target_state_for_agent_with_all_deployed_incremental() {
     let fixture = TestFixture::new();
     let generator = fixture.create_test_generator(
@@ -334,6 +336,7 @@ fn test_get_target_state_for_agent_with_all_deployed_incremental() {
         None,
         "test_api_key_hash".to_string(),
     );
+
     // Create an agent
     let agent = fixture.create_test_agent("Test Agent".to_string(), "Test Cluster".to_string());
 
@@ -398,11 +401,23 @@ fn test_get_target_state_for_agent_with_all_deployed_full() {
         .get_target_state_for_agent(agent.id, true)
         .expect("Failed to get full target state for agent");
 
-    // Verify the results
+    // Verify the results - now expecting only the latest object
     assert_eq!(
         full_target_state.len(),
-        2,
-        "Expected 2 objects in full target state"
+        1,
+        "Expected 1 object in full target state (only the latest)"
+    );
+
+    // Check that only the latest object is in the full target state
+    let full_target_state_ids: Vec<uuid::Uuid> =
+        full_target_state.iter().map(|obj| obj.id).collect();
+    assert!(
+        full_target_state_ids.contains(&object2.id),
+        "object2 (the latest) should be in full target state"
+    );
+    assert!(
+        !full_target_state_ids.contains(&object1.id),
+        "object1 should not be in full target state as it's not the latest"
     );
 }
 
@@ -446,25 +461,25 @@ fn test_get_target_state_for_agent_with_deletion_markers_incremental() {
         .get_target_state_for_agent(agent.id, false)
         .expect("Failed to get target state for agent");
 
-    // Verify the results
+    // Verify the results - now expecting only the latest object (which is the deletion marker)
     assert_eq!(
         target_state.len(),
-        2,
-        "Expected 2 objects in target state (including deletion marker)"
+        1,
+        "Expected 1 object in target state (only the latest, which is the deletion marker)"
     );
 
     let target_state_ids: Vec<uuid::Uuid> = target_state.iter().map(|obj| obj.id).collect();
     assert!(
-        target_state_ids.contains(&object2.id),
-        "object2 should be in target state"
+        !target_state_ids.contains(&object1.id),
+        "object1 should not be in target state"
+    );
+    assert!(
+        !target_state_ids.contains(&object2.id),
+        "object2 should not be in target state as it's not the latest"
     );
     assert!(
         target_state_ids.contains(&deletion_marker.id),
-        "deletion marker should be included"
-    );
-    assert!(
-        !target_state_ids.contains(&object1.id),
-        "object1 should not be in target state"
+        "deletion marker (the latest) should be included"
     );
 
     // Verify that the deletion marker is included and has the correct flag
@@ -518,27 +533,37 @@ fn test_get_target_state_for_agent_with_deletion_markers_full() {
         .get_target_state_for_agent(agent.id, true)
         .expect("Failed to get full target state for agent");
 
-    // Verify the results
+    // Verify the results - now expecting only the latest object (the deletion marker)
     assert_eq!(
         full_target_state.len(),
-        3,
-        "Expected 3 objects in full target state (including deletion marker)"
+        1,
+        "Expected 1 object in full target state (only the latest, which is the deletion marker)"
     );
 
-    // Check that all objects are in the full target state
+    // Check that only the latest object is in the full target state
     let full_target_state_ids: Vec<uuid::Uuid> =
         full_target_state.iter().map(|obj| obj.id).collect();
     assert!(
-        full_target_state_ids.contains(&object1.id),
-        "object1 should be in full target state"
+        !full_target_state_ids.contains(&object1.id),
+        "object1 should not be in full target state as it's not the latest"
     );
     assert!(
-        full_target_state_ids.contains(&object2.id),
-        "object2 should be in full target state"
+        !full_target_state_ids.contains(&object2.id),
+        "object2 should not be in full target state as it's not the latest"
     );
     assert!(
         full_target_state_ids.contains(&deletion_marker.id),
-        "deletion marker should be included in full target state"
+        "deletion marker (the latest) should be included in full target state"
+    );
+
+    // Verify that the deletion marker has the correct flag
+    let deletion_marker_result = full_target_state
+        .iter()
+        .find(|obj| obj.id == deletion_marker.id)
+        .unwrap();
+    assert!(
+        deletion_marker_result.is_deletion_marker,
+        "Deletion marker should have is_deletion_marker set to true"
     );
 }
 
