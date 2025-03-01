@@ -1,3 +1,9 @@
+/*
+ * Copyright (c) 2025 Dylan Storey
+ * Licensed under the Elastic License 2.0.
+ * See LICENSE file in the project root for full license text.
+ */
+
 use crate::api::v1::generators::CreateGeneratorResponse;
 use crate::api::v1::middleware::AuthResponse;
 use crate::api::v1::{agent_events, agents, auth, deployment_objects, generators, stacks};

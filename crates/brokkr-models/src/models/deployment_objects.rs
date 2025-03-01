@@ -1,3 +1,9 @@
+/*
+ * Copyright (c) 2025 Dylan Storey
+ * Licensed under the Elastic License 2.0.
+ * See LICENSE file in the project root for full license text.
+ */
+
 //! # Deployment Object Module
 //!
 //! This module defines structures and methods for managing deployment objects in the system.

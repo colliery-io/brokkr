@@ -1,3 +1,9 @@
+/*
+ * Copyright (c) 2025 Dylan Storey
+ * Licensed under the Elastic License 2.0.
+ * See LICENSE file in the project root for full license text.
+ */
+
 use brokkr_agent::k8s::api::{
     apply_k8s_objects, create_k8s_client, delete_k8s_objects, dynamic_api,
     get_all_objects_by_annotation, reconcile_target_state, validate_k8s_objects,

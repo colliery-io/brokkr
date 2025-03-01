@@ -1,3 +1,9 @@
+/*
+ * Copyright (c) 2025 Dylan Storey
+ * Licensed under the Elastic License 2.0.
+ * See LICENSE file in the project root for full license text.
+ */
+
 use brokkr_agent::k8s::objects::{
     self, CHECKSUM_ANNOTATION, DEPLOYMENT_OBJECT_ID_LABEL, LAST_CONFIG_ANNOTATION, STACK_LABEL,
 };

@@ -1,3 +1,9 @@
+/*
+ * Copyright (c) 2025 Dylan Storey
+ * Licensed under the Elastic License 2.0.
+ * See LICENSE file in the project root for full license text.
+ */
+
 //! # Data Access Layer (DAL) Module
 //!
 //! This module provides an abstraction layer for database operations in the Brokkr Broker.

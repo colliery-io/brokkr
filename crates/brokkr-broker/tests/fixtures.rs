@@ -1,3 +1,9 @@
+/*
+ * Copyright (c) 2025 Dylan Storey
+ * Licensed under the Elastic License 2.0.
+ * See LICENSE file in the project root for full license text.
+ */
+
 //! This module provides a test fixture for the Brokkr project.
 //!
 //! It includes functionality to set up a test database, run migrations,
