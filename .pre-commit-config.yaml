@@ -2,6 +2,19 @@
 # See https://pre-commit.com for more information
 # See https://pre-commit.com/hooks.html for more hooks
 repos:
+  - repo: https://github.com/Lucas-C/pre-commit-hooks
+    rev: v1.5.5
+    hooks:
+      - id: insert-license
+        files: \.rs$
+        args:
+          - --license-filepath
+          - LICENSE-HEADER.txt
+          - --comment-style
+          - /*| *| */
+          - --use-current-year
+          - --detect-license-in-X-top-lines=16
+
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.4.0
     hooks:
@@ -35,5 +48,5 @@ repos:
         name: Run codespell to check for common misspellings in files
         language: python
         types: [text]
-        exclude: ^docs/themes/.*$|\.js$|\.css$
+        exclude: ^docs/themes/.*$|\.js$|\.css|\.json$
         args: [--ignore-words=.spelling_wordlist.txt]
