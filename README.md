@@ -359,7 +359,7 @@ Provided under Elastic License 2.0.
 ## Contributing
 
 Pull requests / Issues are welcome if you have a new feature you'd like to provide. 
-If you're looking for specific help in implementing or permission to use commercially, contact me to discuss. 
+If you're looking for specific help in implementing or permission to use commercially, contact us to discuss. 
 
 ## Roadmap
 
