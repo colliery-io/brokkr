@@ -24,7 +24,7 @@ pub struct DeploymentObjectsDAL<'a> {
     pub dal: &'a DAL,
 }
 
-impl<'a> DeploymentObjectsDAL<'a> {
+impl DeploymentObjectsDAL<'_> {
     /// Creates a new deployment object in the database.
     ///
     /// # Arguments

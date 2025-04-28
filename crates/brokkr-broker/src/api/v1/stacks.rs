@@ -508,7 +508,7 @@ async fn add_label(
             return Err((
                 StatusCode::BAD_REQUEST,
                 Json(serde_json::json!({"error": e})),
-            ))
+            ));
         }
     };
 

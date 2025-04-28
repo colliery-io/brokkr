@@ -21,7 +21,7 @@ pub struct GeneratorsDAL<'a> {
     pub dal: &'a DAL,
 }
 
-impl<'a> GeneratorsDAL<'a> {
+impl GeneratorsDAL<'_> {
     /// Creates a new generator in the database.
     ///
     /// # Arguments

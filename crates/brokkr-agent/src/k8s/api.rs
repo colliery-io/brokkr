@@ -307,7 +307,7 @@ pub async fn get_all_objects_by_annotation(
                                 .annotations
                                 .as_ref()
                                 .and_then(|annotations| annotations.get(annotation_key))
-                                .map_or(false, |value| value == annotation_value)
+                                .is_some_and(|value| value == annotation_value)
                         })
                         .map(|mut obj| {
                             // Set TypeMeta directly

@@ -22,7 +22,7 @@ pub struct AgentLabelsDAL<'a> {
     pub dal: &'a DAL,
 }
 
-impl<'a> AgentLabelsDAL<'a> {
+impl AgentLabelsDAL<'_> {
     /// Creates a new agent label in the database.
     ///
     /// # Arguments

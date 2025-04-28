@@ -21,7 +21,7 @@ pub struct StackAnnotationsDAL<'a> {
     pub dal: &'a DAL,
 }
 
-impl<'a> StackAnnotationsDAL<'a> {
+impl StackAnnotationsDAL<'_> {
     /// Creates a new stack annotation in the database.
     ///
     /// # Arguments

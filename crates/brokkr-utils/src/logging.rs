@@ -112,7 +112,6 @@ impl log::Log for BrokkrLogger {
 /// - Invalid log level string
 /// - Logger already initialized
 /// - System permission issues
-
 pub fn init(level: &str) -> Result<(), SetLoggerError> {
     let level_filter = str_to_level_filter(level);
 
@@ -150,7 +149,6 @@ pub fn init(level: &str) -> Result<(), SetLoggerError> {
 ///     info!("This will not be logged");
 ///     warn!("But this will be logged");
 /// ```
-
 pub fn update_log_level(level: &str) -> Result<(), String> {
     let new_level = str_to_level_filter(level);
     CURRENT_LEVEL.store(new_level as usize, Ordering::Relaxed);

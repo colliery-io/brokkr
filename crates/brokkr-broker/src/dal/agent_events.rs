@@ -24,7 +24,7 @@ pub struct AgentEventsDAL<'a> {
     pub dal: &'a DAL,
 }
 
-impl<'a> AgentEventsDAL<'a> {
+impl AgentEventsDAL<'_> {
     /// Creates a new agent event in the database.
     ///
     /// # Arguments

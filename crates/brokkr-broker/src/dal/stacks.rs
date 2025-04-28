@@ -27,7 +27,7 @@ pub struct StacksDAL<'a> {
     pub dal: &'a DAL,
 }
 
-impl<'a> StacksDAL<'a> {
+impl StacksDAL<'_> {
     /// Creates a new stack in the database.
     ///
     /// # Arguments

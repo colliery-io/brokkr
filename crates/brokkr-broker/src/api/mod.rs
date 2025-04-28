@@ -54,19 +54,19 @@
 //!   - Required PAK: Admin PAK or matching Agent PAK.
 //! - `POST /api/v1/agents/:id/labels`: Adds a new label to a specific agent.
 //!   - Returns: Created AgentLabel object.
-//!   - Required PAK: Admin PAK or matching Agent PAK.
+//!   - Required PAK: Admin PAK only.
 //! - `DELETE /api/v1/agents/:id/labels/:label`: Removes a label from a specific agent.
 //!   - Returns: No content on success.
-//!   - Required PAK: Admin PAK or matching Agent PAK.
+//!   - Required PAK: Admin PAK only.
 //! - `GET /api/v1/agents/:id/annotations`: Lists annotations for a specific agent.
 //!   - Returns: Array of AgentAnnotation objects.
 //!   - Required PAK: Admin PAK or matching Agent PAK.
 //! - `POST /api/v1/agents/:id/annotations`: Adds a new annotation to a specific agent.
 //!   - Returns: Created AgentAnnotation object.
-//!   - Required PAK: Admin PAK or matching Agent PAK.
+//!   - Required PAK: Admin PAK only.
 //! - `DELETE /api/v1/agents/:id/annotations/:key`: Removes an annotation from a specific agent.
 //!   - Returns: No content on success.
-//!   - Required PAK: Admin PAK or matching Agent PAK.
+//!   - Required PAK: Admin PAK only.
 //! - `GET /api/v1/agents/:id/targets`: Lists targets for a specific agent.
 //!   - Returns: Array of AgentTarget objects.
 //!   - Required PAK: Admin PAK or matching Agent PAK.
@@ -171,7 +171,6 @@ use hyper::StatusCode;
 /// # Returns
 ///
 /// Returns a configured `Router` instance that includes all API routes and middleware.
-
 pub fn configure_api_routes(dal: DAL) -> Router<DAL> {
     Router::new()
         .merge(v1::routes(dal.clone()))

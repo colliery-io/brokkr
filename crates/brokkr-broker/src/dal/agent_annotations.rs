@@ -21,7 +21,7 @@ pub struct AgentAnnotationsDAL<'a> {
     pub dal: &'a DAL,
 }
 
-impl<'a> AgentAnnotationsDAL<'a> {
+impl AgentAnnotationsDAL<'_> {
     /// Creates a new agent annotation in the database.
     ///
     /// # Arguments

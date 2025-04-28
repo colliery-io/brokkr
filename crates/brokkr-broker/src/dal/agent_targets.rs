@@ -21,7 +21,7 @@ pub struct AgentTargetsDAL<'a> {
     pub dal: &'a DAL,
 }
 
-impl<'a> AgentTargetsDAL<'a> {
+impl AgentTargetsDAL<'_> {
     /// Creates a new agent target in the database.
     ///
     /// # Arguments

@@ -30,7 +30,7 @@ pub struct AgentsDAL<'a> {
     pub dal: &'a DAL,
 }
 
-impl<'a> AgentsDAL<'a> {
+impl AgentsDAL<'_> {
     /// Creates a new agent in the database.
     ///
     /// # Arguments
