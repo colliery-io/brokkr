@@ -1,3 +1,9 @@
+/*
+ * Copyright (c) 2025 Dylan Storey
+ * Licensed under the Elastic License 2.0.
+ * See LICENSE file in the project root for full license text.
+ */
+
 //! # Brokkr Logging Module
 //!
 //! This module provides a custom logging framework for the Brokkr application.
@@ -106,7 +112,6 @@ impl log::Log for BrokkrLogger {
 /// - Invalid log level string
 /// - Logger already initialized
 /// - System permission issues
-
 pub fn init(level: &str) -> Result<(), SetLoggerError> {
     let level_filter = str_to_level_filter(level);
 
@@ -144,7 +149,6 @@ pub fn init(level: &str) -> Result<(), SetLoggerError> {
 ///     info!("This will not be logged");
 ///     warn!("But this will be logged");
 /// ```
-
 pub fn update_log_level(level: &str) -> Result<(), String> {
     let new_level = str_to_level_filter(level);
     CURRENT_LEVEL.store(new_level as usize, Ordering::Relaxed);

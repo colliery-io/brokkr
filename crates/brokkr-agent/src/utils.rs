@@ -1,3 +1,9 @@
+/*
+ * Copyright (c) 2025 Dylan Storey
+ * Licensed under the Elastic License 2.0.
+ * See LICENSE file in the project root for full license text.
+ */
+
 /// Utility functions for the Brokkr agent.
 use serde::de::Deserialize;
 use std::error::Error;

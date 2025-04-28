@@ -1,3 +1,9 @@
+/*
+ * Copyright (c) 2025 Dylan Storey
+ * Licensed under the Elastic License 2.0.
+ * See LICENSE file in the project root for full license text.
+ */
+
 //! Data Access Layer for Stack operations.
 //!
 //! This module provides functionality to interact with the database for Stack-related operations,
@@ -21,7 +27,7 @@ pub struct StacksDAL<'a> {
     pub dal: &'a DAL,
 }
 
-impl<'a> StacksDAL<'a> {
+impl StacksDAL<'_> {
     /// Creates a new stack in the database.
     ///
     /// # Arguments

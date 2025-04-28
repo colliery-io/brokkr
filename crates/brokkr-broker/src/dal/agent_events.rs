@@ -1,3 +1,9 @@
+/*
+ * Copyright (c) 2025 Dylan Storey
+ * Licensed under the Elastic License 2.0.
+ * See LICENSE file in the project root for full license text.
+ */
+
 //! Data Access Layer for AgentEvent operations.
 //!
 //! This module provides functionality to interact with the agent_events table in the database.
@@ -18,7 +24,7 @@ pub struct AgentEventsDAL<'a> {
     pub dal: &'a DAL,
 }
 
-impl<'a> AgentEventsDAL<'a> {
+impl AgentEventsDAL<'_> {
     /// Creates a new agent event in the database.
     ///
     /// # Arguments

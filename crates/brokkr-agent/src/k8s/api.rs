@@ -1,3 +1,9 @@
+/*
+ * Copyright (c) 2025 Dylan Storey
+ * Licensed under the Elastic License 2.0.
+ * See LICENSE file in the project root for full license text.
+ */
+
 //! # Kubernetes API Module
 //!
 //! This module provides functionality for interacting with the Kubernetes API server.
@@ -301,7 +307,7 @@ pub async fn get_all_objects_by_annotation(
                                 .annotations
                                 .as_ref()
                                 .and_then(|annotations| annotations.get(annotation_key))
-                                .map_or(false, |value| value == annotation_value)
+                                .is_some_and(|value| value == annotation_value)
                         })
                         .map(|mut obj| {
                             // Set TypeMeta directly

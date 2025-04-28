@@ -1,3 +1,9 @@
+/*
+ * Copyright (c) 2025 Dylan Storey
+ * Licensed under the Elastic License 2.0.
+ * See LICENSE file in the project root for full license text.
+ */
+
 //! Agent management API endpoints.
 //!
 //! This module provides routes and handlers for managing agents, including CRUD operations,
@@ -612,7 +618,7 @@ async fn list_labels(
 /// Adds a new label to a specific agent.
 ///
 /// # Authorization
-/// Requires admin privileges or matching agent ID.
+/// Requires admin privileges.
 #[utoipa::path(
     post,
     path = "/agents/{id}/labels",
@@ -628,7 +634,6 @@ async fn list_labels(
     ),
     security(
         ("admin_pak" = []),
-        ("agent_pak" = []),
     )
 )]
 async fn add_label(
@@ -638,7 +643,7 @@ async fn add_label(
     Json(new_label): Json<NewAgentLabel>,
 ) -> Result<Json<AgentLabel>, (StatusCode, Json<serde_json::Value>)> {
     info!("Handling request to add label for agent with ID: {}", id);
-    if !auth_payload.admin && auth_payload.agent != Some(id) {
+    if !auth_payload.admin {
         warn!(
             "Unauthorized attempt to add label for agent with ID: {}",
             id
@@ -667,7 +672,7 @@ async fn add_label(
 /// Removes a label from a specific agent.
 ///
 /// # Authorization
-/// Requires admin privileges or matching agent ID.
+/// Requires admin privileges.
 #[utoipa::path(
     delete,
     path = "/agents/{id}/labels/{label}",
@@ -684,7 +689,6 @@ async fn add_label(
     ),
     security(
         ("admin_pak" = []),
-        ("agent_pak" = []),
     )
 )]
 async fn remove_label(
@@ -696,7 +700,7 @@ async fn remove_label(
         "Handling request to remove label '{}' from agent with ID: {}",
         label, id
     );
-    if !auth_payload.admin && auth_payload.agent != Some(id) {
+    if !auth_payload.admin {
         warn!(
             "Unauthorized attempt to remove label from agent with ID: {}",
             id
@@ -813,7 +817,7 @@ async fn list_annotations(
 /// Adds a new annotation to a specific agent.
 ///
 /// # Authorization
-/// Requires admin privileges or matching agent ID.
+/// Requires admin privileges.
 #[utoipa::path(
     post,
     path = "/agents/{id}/annotations",
@@ -829,7 +833,6 @@ async fn list_annotations(
     ),
     security(
         ("admin_pak" = []),
-        ("agent_pak" = []),
     )
 )]
 async fn add_annotation(
@@ -842,7 +845,7 @@ async fn add_annotation(
         "Handling request to add annotation for agent with ID: {}",
         id
     );
-    if !auth_payload.admin && auth_payload.agent != Some(id) {
+    if !auth_payload.admin {
         warn!(
             "Unauthorized attempt to add annotation for agent with ID: {}",
             id
@@ -871,7 +874,7 @@ async fn add_annotation(
 /// Removes an annotation from a specific agent.
 ///
 /// # Authorization
-/// Requires admin privileges or matching agent ID.
+/// Requires admin privileges.
 #[utoipa::path(
     delete,
     path = "/agents/{id}/annotations/{key}",
@@ -888,7 +891,6 @@ async fn add_annotation(
     ),
     security(
         ("admin_pak" = []),
-        ("agent_pak" = []),
     )
 )]
 async fn remove_annotation(
@@ -900,7 +902,7 @@ async fn remove_annotation(
         "Handling request to remove annotation '{}' from agent with ID: {}",
         key, id
     );
-    if !auth_payload.admin && auth_payload.agent != Some(id) {
+    if !auth_payload.admin {
         warn!(
             "Unauthorized attempt to remove annotation from agent with ID: {}",
             id

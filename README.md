@@ -195,30 +195,6 @@ Brokkr uses [Angreal](https://angreal.github.io/) as a task runner and project m
   pip install angreal
   ```
 
-#### Required Libraries
-
-- **macOS**
-  ```bash
-  brew install libpq
-
-  # you might need to do this if diesel fails
-  export LDFLAGS="-L/opt/homebrew/opt/libpq/lib"
-  export CPPFLAGS="-I/opt/homebrew/opt/libpq/include"
-  export PATH="/opt/homebrew/opt/libpq/bin:$PATH"
-  ```
-
-- **Linux**
-  ```bash
-  sudo apt-get install libpq-dev
-  ```
-
-#### Rust Toolchain Setup
-
-```bash
-cargo install cargo-binstall
-cargo binstall diesel_cli
-```
-
 ### Development Environment
 
 Angreal provides several commands to help manage the development environment:
@@ -249,11 +225,6 @@ angreal local rebuild broker
    ```bash
    git clone https://github.com/your-org/brokkr.git
    cd brokkr
-   ```
-
-2. Build the project
-   ```bash
-   cargo build --release
    ```
 
 ### Running with Docker
@@ -354,13 +325,12 @@ angreal tests integration all --skip-docker
 
 ## License
 
-[License information]
+Provided under Elastic License 2.0. 
 
 ## Contributing
 
-[Contribution guidelines]
+Pull requests / Issues are welcome if you have a new feature you'd like to provide. 
+If you're looking for specific help in implementing or permission to use commercially, contact us to discuss. 
 
 ## Roadmap
 
-- [Future plans]
-- [Upcoming features]

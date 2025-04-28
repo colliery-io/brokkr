@@ -1,3 +1,9 @@
+/*
+ * Copyright (c) 2025 Dylan Storey
+ * Licensed under the Elastic License 2.0.
+ * See LICENSE file in the project root for full license text.
+ */
+
 //! Data Access Layer for AgentTarget operations.
 //!
 //! This module provides functionality to interact with the agent_targets table
@@ -15,7 +21,7 @@ pub struct AgentTargetsDAL<'a> {
     pub dal: &'a DAL,
 }
 
-impl<'a> AgentTargetsDAL<'a> {
+impl AgentTargetsDAL<'_> {
     /// Creates a new agent target in the database.
     ///
     /// # Arguments

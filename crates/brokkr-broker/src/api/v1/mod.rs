@@ -1,3 +1,9 @@
+/*
+ * Copyright (c) 2025 Dylan Storey
+ * Licensed under the Elastic License 2.0.
+ * See LICENSE file in the project root for full license text.
+ */
+
 //! API v1 module for the Brokkr broker.
 //!
 //! This module defines the structure and routes for version 1 of the Brokkr API.

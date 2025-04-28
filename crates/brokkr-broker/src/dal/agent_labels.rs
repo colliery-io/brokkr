@@ -1,3 +1,9 @@
+/*
+ * Copyright (c) 2025 Dylan Storey
+ * Licensed under the Elastic License 2.0.
+ * See LICENSE file in the project root for full license text.
+ */
+
 //! Data Access Layer for AgentLabel operations.
 //!
 //! This module provides functionality to interact with the agent_labels table in the database.
@@ -16,7 +22,7 @@ pub struct AgentLabelsDAL<'a> {
     pub dal: &'a DAL,
 }
 
-impl<'a> AgentLabelsDAL<'a> {
+impl AgentLabelsDAL<'_> {
     /// Creates a new agent label in the database.
     ///
     /// # Arguments

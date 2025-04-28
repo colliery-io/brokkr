@@ -1,3 +1,9 @@
+/*
+ * Copyright (c) 2025 Dylan Storey
+ * Licensed under the Elastic License 2.0.
+ * See LICENSE file in the project root for full license text.
+ */
+
 //! Data Access Layer for Stack Annotation operations.
 //!
 //! This module provides functionality to interact with stack annotations in the database,
@@ -15,7 +21,7 @@ pub struct StackAnnotationsDAL<'a> {
     pub dal: &'a DAL,
 }
 
-impl<'a> StackAnnotationsDAL<'a> {
+impl StackAnnotationsDAL<'_> {
     /// Creates a new stack annotation in the database.
     ///
     /// # Arguments

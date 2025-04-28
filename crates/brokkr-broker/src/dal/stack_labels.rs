@@ -1,3 +1,9 @@
+/*
+ * Copyright (c) 2025 Dylan Storey
+ * Licensed under the Elastic License 2.0.
+ * See LICENSE file in the project root for full license text.
+ */
+
 //! Data Access Layer for Stack Label operations.
 //!
 //! This module provides functionality to interact with stack labels in the database,
@@ -15,7 +21,7 @@ pub struct StackLabelsDAL<'a> {
     pub dal: &'a DAL,
 }
 
-impl<'a> StackLabelsDAL<'a> {
+impl StackLabelsDAL<'_> {
     /// Creates a new stack label in the database.
     ///
     /// # Arguments

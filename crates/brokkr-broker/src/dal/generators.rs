@@ -1,3 +1,9 @@
+/*
+ * Copyright (c) 2025 Dylan Storey
+ * Licensed under the Elastic License 2.0.
+ * See LICENSE file in the project root for full license text.
+ */
+
 use crate::dal::DAL;
 use brokkr_models::models::generator::{Generator, NewGenerator};
 use brokkr_models::schema::generators;
@@ -15,7 +21,7 @@ pub struct GeneratorsDAL<'a> {
     pub dal: &'a DAL,
 }
 
-impl<'a> GeneratorsDAL<'a> {
+impl GeneratorsDAL<'_> {
     /// Creates a new generator in the database.
     ///
     /// # Arguments
