@@ -17,7 +17,7 @@ This guide will help you install Brokkr and set up your environment.
 ### Software Requirements
 - Operating System: Linux, macOS, or Windows
 - Rust toolchain (1.8+)
-- PostgreSQL database
+- PostgreSQL database (v12+)
 - Kubernetes cluster (v1.20+)
 - `kubectl` CLI tool
 - Docker (for container deployments)
@@ -53,29 +53,36 @@ angreal local rebuild agent
 angreal local rebuild ui
 ```
 
-## Initial Configuration
+## Initial Setup
 
-### Basic Setup
-1. Set up your environment variables:
+### 1. Database Setup
+1. Create a PostgreSQL database:
 ```bash
-# Database configuration
-export BROKKR__DATABASE__URL="postgres://brokkr:brokkr@localhost:5432/brokkr"
-
-# Logging configuration
-export BROKKR__LOG__LEVEL="debug"
-
-# Agent configuration
-export BROKKR__AGENT__BROKER_URL="http://localhost:3000"
-
-# Kubernetes configuration
-# Option 1: Use default kubeconfig location
-# The agent will look for kubeconfig at ~/.kube/config
-
-# Option 2: Specify a custom kubeconfig path
-export BROKKR__AGENT__KUBECONFIG_PATH="/path/to/your/kubeconfig"
+# Create the database and user
+createdb brokkr
+createuser -P brokkr  # You'll be prompted for a password
 ```
 
-2. Create an agent and get its PAK:
+2. Set the database URL:
+```bash
+export BROKKR__DATABASE__URL="postgres://brokkr:brokkr@localhost:5432/brokkr"
+```
+
+### 2. Broker Setup
+1. Start the broker:
+```bash
+./brokkr-broker serve
+```
+
+2. The broker will automatically:
+   - Run database migrations
+   - Create the initial admin role
+   - Generate the first admin PAK
+
+3. Save the admin PAK securely - you'll need it for administrative operations.
+
+### 3. Agent Setup
+1. Create an agent and get its PAK:
 ```bash
 # Create a new agent and generate its PAK
 curl -X POST http://localhost:3000/api/v1/agents \
@@ -90,35 +97,38 @@ curl -X POST http://localhost:3000/api/v1/agents \
 #   "status": "ACTIVE",
 #   "pak": "brokkr_BRxxxxxxxx_yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
 # }
-# Save the PAK securely - you'll need it to run the agent
 ```
 
-3. Set the agent's PAK:
+2. Configure the agent:
 ```bash
-# Replace <generated_pak> with the PAK from the previous step
+# Set the agent's PAK
 export BROKKR__AGENT__PAK="<generated_pak>"
+
+# Set the broker URL
+export BROKKR__AGENT__BROKER_URL="http://localhost:3000"
+
+# Set the agent name and cluster name
+export BROKKR__AGENT__NAME="production-agent"
+export BROKKR__AGENT__CLUSTER_NAME="production"
+
+# Optional: Set a custom kubeconfig path
+export BROKKR__AGENT__KUBECONFIG_PATH="/path/to/your/kubeconfig"
 ```
 
-4. Start the agent:
+3. Start the agent:
 ```bash
 ./brokkr-agent start
 ```
 
-5. Create a new stack:
+### 4. Stack Setup
+1. Create a new stack:
 ```bash
 curl -X POST http://localhost:3000/api/v1/stacks \
   -H "Content-Type: application/json" \
   -d '{"name": "my-stack", "description": "My first stack"}'
-
-# The response will include the stack's ID:
-# {
-#   "id": "uuid-here",
-#   "name": "my-stack",
-#   "description": "My first stack"
-# }
 ```
 
-6. Target the stack with your agent:
+2. Target the stack with your agent:
 ```bash
 # Replace <agent_id> and <stack_id> with the IDs from the previous steps
 curl -X POST http://localhost:3000/api/v1/agents/<agent_id>/targets \
@@ -126,24 +136,27 @@ curl -X POST http://localhost:3000/api/v1/agents/<agent_id>/targets \
   -d '{"agent_id": "<agent_id>", "stack_id": "<stack_id>"}'
 ```
 
-### Verifying the Installation
+## Verifying the Installation
+
+### 1. Check Broker Health
 ```bash
 # Check if the broker is running
-curl http://localhost:3000/health
+curl http://localhost:3000/healthz
 
 # Verify agent connection
 curl http://localhost:3000/api/v1/agents
+```
 
-# Verify stack targeting
-curl http://localhost:3000/api/v1/agents/<agent_id>/targets
-
+### 2. Verify Agent Connection
+```bash
 # The agent will automatically verify Kubernetes connectivity during startup
 # by attempting to list namespaces. If successful, you'll see a log message:
 # "Successfully connected to Kubernetes cluster and verified API access"
-# If there's an issue, the agent will fail to start with an error message
-# about cluster connectivity.
+```
 
-# Test the deployment system by creating a simple namespace
+### 3. Test Deployment
+```bash
+# Create a test namespace
 curl -X POST http://localhost:3000/api/v1/stacks/<stack_id>/deployment-objects \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <admin_pak>" \
@@ -155,7 +168,7 @@ curl -X POST http://localhost:3000/api/v1/stacks/<stack_id>/deployment-objects \
 # Verify the namespace was created
 kubectl get namespace test-namespace
 
-# Delete the test namespace using the agent
+# Clean up the test namespace
 curl -X POST http://localhost:3000/api/v1/stacks/<stack_id>/deployment-objects \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <admin_pak>" \
@@ -163,14 +176,11 @@ curl -X POST http://localhost:3000/api/v1/stacks/<stack_id>/deployment-objects \
     "yaml_content": "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: test-namespace",
     "is_deletion_marker": true
   }'
-
-# Verify the namespace was deleted
-kubectl get namespace test-namespace
 ```
 
 ## Next Steps
-- Follow our [Quick Start Guide](../quick-start) to deploy your first application
-- Learn about [Basic Concepts](../first-steps) in Brokkr
+- Follow our [Quick Start Guide](quick-start) to deploy your first application
+- Learn about [Basic Concepts](../explanation/core-concepts) in Brokkr
 - Configure [Environment Management](../../how-to/environment-management)
 
 ## Troubleshooting
@@ -184,3 +194,5 @@ kubectl get namespace test-namespace
 
 ### Getting Help
 - Check our [GitHub Issues](https://github.com/colliery-io/brokkr/issues)
+- Join our [Discord Community](https://discord.gg/brokkr)
+- Read the [Troubleshooting Guide](../../how-to/troubleshoot)

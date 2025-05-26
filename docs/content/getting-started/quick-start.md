@@ -12,6 +12,7 @@ This guide will help you deploy your first application using Brokkr. We'll creat
 - Completed the [Installation Guide](installation)
 - A running Kubernetes cluster
 - `kubectl` configured to access your cluster
+- Admin PAK from the broker setup
 
 ## Deploying Your First Application
 
@@ -22,6 +23,7 @@ First, let's create a stack to organize our deployment:
 ```bash
 curl -X POST http://localhost:3000/api/v1/stacks \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <admin_pak>" \
   -d '{
     "name": "quick-start-app",
     "description": "My first Brokkr deployment"
@@ -37,6 +39,7 @@ If you haven't already, target the stack with your agent:
 ```bash
 curl -X POST http://localhost:3000/api/v1/agents/<agent_id>/targets \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <admin_pak>" \
   -d '{
     "agent_id": "<agent_id>",
     "stack_id": "<stack_id>"
@@ -248,3 +251,5 @@ Now that you've deployed your first application with Brokkr, you can:
 
 - Learn about [Core Concepts](../../explanation/core-concepts) in Brokkr
 - Check out our [Tutorials](../../tutorials) for more advanced use cases
+- Read about [Best Practices](../../how-to/best-practices) for managing your deployments
+- Explore the [API Reference](../../reference/api) for more details on available endpoints

@@ -7,6 +7,9 @@
 //! # Brokkr Config Module
 //! This module provides a common configuration framework for our crates.
 //!
+//! For detailed configuration documentation, including environment variables,
+//! configuration file format, and best practices, see the [Configuration Guide](https://brokkr.io/getting-started/configuration).
+//!
 //! # Variable Naming Convention
 //!
 //! Variables in this configuration framework follow these naming conventions:

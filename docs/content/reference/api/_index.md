@@ -1,101 +1,76 @@
 ---
-title: "API Reference"
-description: "Complete API documentation for Brokkr"
-date: 2024-03-20
-weight: 5
+title: "Technical Reference"
+description: "Complete technical documentation for Brokkr"
+weight: 1
 ---
 
-# API Reference
+# Technical Reference
 
-Welcome to the API documentation. This section contains the complete API reference for Brokkr, automatically generated from the source code.
+This section provides comprehensive technical documentation for Brokkr, including API references, code documentation, and implementation details.
 
-## Quick Links
+## API Documentation
 
-- [Core Library](/api/brokkr/)
-- [Macros](/api/brokkr_macros/)
+The Brokkr API provides a comprehensive set of endpoints for managing deployments, agents, and system configuration. You can explore the complete API documentation in two ways:
 
-## Using the API Documentation
+### Interactive API Documentation
 
-The API documentation is generated directly from the source code using `rustdoc`. Each function, type, and module is documented with examples and detailed explanations.
+Our interactive Swagger UI provides a complete reference of all available endpoints, including:
+- Detailed request/response schemas
+- Authentication requirements
+- Example requests and responses
+- Interactive testing interface
 
-You can use the search functionality to quickly find specific items, or browse through the modules using the navigation menu.
+[View Interactive API Documentation](/openapi)
 
-## Cross-References
+### API Endpoints Overview
 
-Throughout the rest of the documentation, you'll find links to specific API items using the `{{</* api-link */>}}` shortcode. For example:
+The Brokkr API is organized into the following main sections:
 
-```markdown
-{{</* api-link path="brokkr::Config" */>}}
-```
+#### Health Check
+- `GET /health` - Check the health status of the broker
+- `GET /health/ready` - Check if the broker is ready to accept requests
 
-This will create a link to the `Config` type in the API documentation.
+#### Agent Management
+- `POST /v1/agents/register` - Register a new agent
+- `GET /v1/agents/{agent_id}` - Get agent details
+- `DELETE /v1/agents/{agent_id}` - Deregister an agent
 
-## Key Components
+#### Deployment Management
+- `POST /v1/deployments` - Create a new deployment
+- `GET /v1/deployments/{deployment_id}` - Get deployment details
+- `PUT /v1/deployments/{deployment_id}` - Update a deployment
+- `DELETE /v1/deployments/{deployment_id}` - Delete a deployment
 
-- [Configuration](/api/brokkr/config/) - Core configuration types
-- [Error Handling](/api/brokkr/error/) - Error types and utilities
-- [Core Traits](/api/brokkr/traits/) - Essential traits and implementations
+#### Event Management
+- `POST /v1/events` - Report a deployment event
+- `GET /v1/events/{deployment_id}` - Get events for a deployment
 
-## Common Patterns
+For detailed information about each endpoint, including request/response formats and examples, please refer to the [Interactive API Documentation](/openapi).
 
-### Configuration
-```rust
-use brokkr::Config;
+## Rust API Documentation
 
-let config = Config::default();
-```
+The Brokkr codebase is written in Rust and provides a rich set of APIs for both the Broker and Agent components. You can explore the complete Rust API documentation here:
 
-## Architecture
+[View Rust API Documentation](/api)
 
-The API is organized into several key modules:
+The Rust documentation includes:
+- Detailed module and function documentation
+- Type definitions and trait implementations
+- Code examples and usage patterns
+- Implementation details for core components
 
-- `core/` - Core functionality and types
-- `utils/` - Utility functions and helpers
-- `macros/` - Procedural macros
+### Key Components
 
-## Related Documentation
+#### Broker
+- API Server implementation
+- Database layer
+- Event system
+- Authentication and authorization
 
-- [Getting Started Guide](/getting-started/)
-- [Architecture Overview](/architecture/)
-- [Best Practices](/best-practices/)
+#### Agent
+- Kubernetes client
+- Broker communication
+- State management
+- Deployment orchestration
 
-## Working with Documentation
-
-The documentation system is managed through angreal commands. Here are the main commands:
-
-### Development
-
-To serve the documentation locally with live reload:
-```bash
-angreal docs serve
-```
-
-This command will:
-1. Generate the Rust API documentation
-2. Copy it to the Hugo static directory
-3. Start the Hugo development server
-4. Open the documentation at http://localhost:1313
-
-### Building for Production
-
-To build the complete documentation site:
-```bash
-angreal docs build
-```
-
-This will:
-1. Generate the Rust API documentation
-2. Copy it to the Hugo static directory
-3. Build the complete Hugo site
-4. Output the site to `docs/public/`
-
-## Troubleshooting
-
-If you encounter issues:
-
-1. Make sure all prerequisites are installed
-2. Check that the Hugo server is running
-3. Verify that rustdoc generation is working
-4. Check the Hugo server logs for any errors
-5. Ensure all paths in `api-link` shortcodes are correct
-6. Make sure your crate name in the shortcodes matches your actual crate name
+For detailed information about the Rust implementation, including module structure and function documentation, please refer to the [Rust API Documentation](/api).

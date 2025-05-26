@@ -4,9 +4,9 @@
  * See LICENSE file in the project root for full license text.
  */
 
-//! This module provides functionality for creating and managing a PostgreSQL connection pool.
+//! Database connection pool management using diesel and r2d2.
 //!
-//! It uses the diesel and r2d2 crates to manage database connections efficiently.
+//! For detailed documentation, see the [Brokkr Documentation](https://brokkr.io/explanation/components#database-module).
 
 use diesel::r2d2::{ConnectionManager, Pool};
 use diesel::PgConnection;
@@ -20,9 +20,6 @@ pub struct ConnectionPool {
 }
 
 /// Creates a shared connection pool for PostgreSQL databases.
-///
-/// This function constructs a URL from the provided base URL and database name,
-/// then creates a connection pool with the specified maximum size.
 ///
 /// # Arguments
 ///

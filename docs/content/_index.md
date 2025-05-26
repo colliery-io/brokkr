@@ -44,9 +44,9 @@ Discover everything Brokkr has to offer:
 
 {{< columns >}}
 
-### 🚀 [Quick Start](getting-started/quick-start)
+### 🚀 [Getting Started](getting-started/)
 
-Get up and running with Brokkr in minutes.
+Everything you need to install, configure, and get Brokkr running.
 
 <--->
 
@@ -56,15 +56,21 @@ Step-by-step guides to learn Brokkr's features.
 
 <--->
 
-### 📖 [Documentation](reference)
+### 🛠️ [How To Guides](how-to)
 
-Detailed technical documentation and API reference.
+Practical guides for common tasks and advanced usage.
 
 <--->
 
-### 📖 [Explanation](explanation)
+### 💬 [Discussion](explanation)
 
-Concepts and architectural decision articles.
+Concepts, architecture, and design decisions.
+
+<--->
+
+### 🦀 [Rust API Reference](/api/)
+
+Complete code-level documentation for Brokkr's Rust crates.
 
 {{< /columns >}}
 
