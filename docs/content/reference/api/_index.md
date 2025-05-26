@@ -2,7 +2,7 @@
 title: "API Reference"
 description: "Complete API documentation for Brokkr"
 date: 2024-03-20
-weight: 1
+weight: 5
 ---
 
 # API Reference
