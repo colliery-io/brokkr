@@ -1,4 +1,4 @@
 User-agent: *
 Disallow: /tags/*
 
-Sitemap: http://localhost:1313/sitemap.xml
+Sitemap: http://localhost:52634/sitemap.xml
