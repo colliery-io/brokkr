@@ -2181,7 +2181,7 @@
           "generator_id": {
             "type": "string",
             "format": "uuid",
-            "description": "Optional generator ID."
+            "description": "Generator that created this stack."
           },
           "name": {
             "type": "string",
@@ -2223,7 +2223,7 @@
           "generator_id": {
             "type": "string",
             "format": "uuid",
-            "description": "Optional generator ID."
+            "description": "Generator that created this stack."
           },
           "id": {
             "type": "string",
