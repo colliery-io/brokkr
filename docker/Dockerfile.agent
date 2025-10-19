@@ -59,6 +59,10 @@ RUN cargo build --bin brokkr-agent --release
 # Stage 4: Create the final image
 FROM debian:bookworm-slim AS broker-agent
 
+# Declare build arguments for multi-arch support
+ARG TARGETOS=linux
+ARG TARGETARCH=amd64
+
 # Install runtime dependencies and kubectl in a single layer
 RUN apt-get update && apt-get install -y \
     libssl-dev \
@@ -68,7 +72,7 @@ RUN apt-get update && apt-get install -y \
     libc6-dev \
     curl \
     ca-certificates \
-    && curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" \
+    && curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/${TARGETOS}/${TARGETARCH}/kubectl" \
     && chmod +x kubectl \
     && mv kubectl /usr/local/bin/ \
     && apt-get clean \
