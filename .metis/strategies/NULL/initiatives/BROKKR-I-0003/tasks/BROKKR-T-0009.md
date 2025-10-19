@@ -4,14 +4,14 @@ level: task
 title: "Add comprehensive configuration to broker chart"
 short_code: "BROKKR-T-0009"
 created_at: 2025-10-19T02:26:48.872074+00:00
-updated_at: 2025-10-19T11:51:14.002625+00:00
+updated_at: 2025-10-19T20:18:53.640764+00:00
 parent: BROKKR-I-0003
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/active"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -33,16 +33,18 @@ Extend the broker Helm chart with comprehensive configuration options for extern
 
 ## Acceptance Criteria
 
+## Acceptance Criteria
+
 ## Acceptance Criteria **\[REQUIRED\]**
 
-- \[ \] External PostgreSQL connection configuration (host, port, database, username)
-- \[ \] Resource requests and limits configurable via values.yaml
-- \[ \] Environment variable management with templating support
-- \[ \] Secrets management for database credentials with external secret support
-- \[ \] Replica count configuration for horizontal scaling
-- \[ \] Service type configuration (ClusterIP, LoadBalancer, NodePort)
-- \[ \] All configuration options documented in values.yaml with inline comments
-- \[ \] Chart installs successfully with both bundled and external PostgreSQL
+- \[x\] External PostgreSQL connection configuration (host, port, database, username)
+- \[x\] Resource requests and limits configurable via values.yaml
+- \[x\] Environment variable management with templating support (extraEnv)
+- \[x\] Secrets management for database credentials with external secret support (existingSecret)
+- \[x\] Replica count configuration for horizontal scaling
+- \[x\] Service type configuration (ClusterIP, LoadBalancer, NodePort)
+- \[x\] All configuration options documented in values.yaml with inline comments
+- \[x\] Chart installs successfully with both bundled and external PostgreSQL
 
 ## Implementation Notes **\[CONDITIONAL: Technical Task\]**
 
@@ -134,4 +136,25 @@ service:
 
 ## Status Updates **\[REQUIRED\]**
 
-*To be added during implementation*
+### 2025-10-19: Completed ✓
+
+All acceptance criteria completed:
+
+**Configuration Additions:**
+- Added `extraEnv` support for custom environment variables
+- Added `existingSecret` support for external secret management
+- Added comprehensive inline documentation to values.yaml
+
+**Implementation Details:**
+- Modified `templates/deployment.yaml` to support extraEnv and existingSecret
+- Modified `templates/secret.yaml` to conditionally create secret only when not using existingSecret
+- Modified `templates/configmap.yaml` to exclude database URL when using existingSecret
+- Enhanced values.yaml with detailed comments for all configuration options
+
+**Testing:**
+- Fixed kubeconfig.docker.yaml wait timing in test suite
+- Added external PostgreSQL testing to helm test suite
+- Verified broker chart works with both bundled and external PostgreSQL
+- All tests passing: `angreal helm test broker`
+
+The broker chart now supports production deployments with flexible configuration for external databases, secrets management, custom environment variables, and resource tuning.

@@ -50,5 +50,16 @@ spec:
         envFrom:
         - configMapRef:
             name: {{ include "brokkr-broker.fullname" . }}
+        env:
+        {{- if .Values.postgresql.existingSecret }}
+        - name: BROKKR__DATABASE__URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.postgresql.existingSecret }}
+              key: {{ .Values.postgresql.existingSecretKey | default "database-url" }}
+        {{- end }}
+        {{- with .Values.extraEnv }}
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
         resources:
           {{- toYaml .Values.resources | nindent 10 }}

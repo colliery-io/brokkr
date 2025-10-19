@@ -5,4 +5,6 @@ metadata:
   labels:
     {{- include "brokkr-broker.labels" . | nindent 4 }}
 data:
+  {{- if not .Values.postgresql.existingSecret }}
   BROKKR__DATABASE__URL: {{ printf "postgres://%s:%s@%s:%s/%s" .Values.postgresql.username .Values.postgresql.password (include "brokkr-broker.databaseHost" .) (.Values.postgresql.port | toString) .Values.postgresql.database | quote }}
+  {{- end }}
