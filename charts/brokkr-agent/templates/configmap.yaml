@@ -5,8 +5,8 @@ metadata:
   labels:
     {{- include "brokkr-agent.labels" . | nindent 4 }}
 data:
-  BROKER_URL: {{ .Values.broker.url | quote }}
-  AGENT_NAME: {{ .Values.broker.agentName | quote }}
-  CLUSTER_NAME: {{ .Values.broker.clusterName | quote }}
-  POLLING_INTERVAL: {{ .Values.agent.pollingInterval | quote }}
-  PAK: {{ .Values.broker.pak | quote }}
+  BROKKR__AGENT__BROKER_URL: {{ .Values.broker.url | quote }}
+  BROKKR__AGENT__AGENT_NAME: {{ .Values.broker.agentName | quote }}
+  BROKKR__AGENT__CLUSTER_NAME: {{ .Values.broker.clusterName | quote }}
+  BROKKR__AGENT__POLLING_INTERVAL: {{ .Values.agent.pollingInterval | quote }}
+  BROKKR__AGENT__PAK: {{ .Values.broker.pak | quote }}
