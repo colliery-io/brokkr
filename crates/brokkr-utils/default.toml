@@ -26,3 +26,4 @@ agent_name='DEFAULT'
 cluster_name='DEFAULT'
 max_event_message_retries = 2
 event_message_retry_delay = 5
+health_port = 8080

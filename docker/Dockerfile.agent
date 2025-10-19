@@ -74,12 +74,24 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+# Create non-root user with specific UID/GID
+RUN groupadd -g 10001 brokkr && \
+    useradd -r -u 10001 -g brokkr brokkr
+
 # Set the working directory
 WORKDIR /usr/local/bin
 
 # Copy the built binary from the builder stage
 COPY --from=builder /app/target/release/brokkr-agent .
-RUN chmod +x brokkr-agent
+RUN chmod +x brokkr-agent && \
+    chown brokkr:brokkr brokkr-agent && \
+    chown brokkr:brokkr kubectl
+
+# Switch to non-root user
+USER brokkr
+
+# Expose the health check port
+EXPOSE 8080
 
 # Command to run the application
 ENTRYPOINT ["./brokkr-agent"]

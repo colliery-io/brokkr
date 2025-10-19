@@ -109,6 +109,8 @@ pub struct Agent {
     pub max_event_message_retries: usize,
     /// Delay between event message retries in seconds
     pub event_message_retry_delay: u64,
+    /// Health check HTTP server port
+    pub health_port: Option<u16>,
 }
 
 /// Represents the database configuration
