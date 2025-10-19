@@ -12,7 +12,7 @@ broker:
   pak: ""
 
 agent:
-  pollingInterval: 30s
+  pollingInterval: 30
 
 rbac:
   create: true
