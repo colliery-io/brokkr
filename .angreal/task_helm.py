@@ -52,9 +52,32 @@ def verify_kubectl_connectivity():
     """Verify kubectl can connect to k3s cluster."""
     print("\nVerifying kubectl connectivity...")
 
-    # First check if kubeconfig files exist
-    print("Checking for kubeconfig files in volume...")
-    run_in_k8s_container("ls -la /keys/", "Listing kubeconfig files")
+    # Wait for kubeconfig.docker.yaml to exist
+    # The init-kubeconfig service sleeps for 60s to ensure files are written
+    print("Waiting for kubeconfig.docker.yaml to be created...")
+    max_wait = 70  # Wait up to 70 seconds for init-kubeconfig to complete
+    start_time = time.time()
+
+    while time.time() - start_time < max_wait:
+        result = subprocess.run([
+            "docker", "run", "--rm",
+            "--network", "brokkr-dev_default",
+            "-v", "brokkr-dev_brokkr-keys:/keys:ro",
+            "alpine/k8s:1.27.3",
+            "sh", "-c", "test -f /keys/kubeconfig.docker.yaml"
+        ], cwd=cwd, capture_output=True)
+
+        if result.returncode == 0:
+            print("kubeconfig.docker.yaml found!")
+            break
+
+        elapsed = int(time.time() - start_time)
+        print(f"Waiting for kubeconfig.docker.yaml... ({elapsed}s)")
+        time.sleep(5)
+    else:
+        # List what files are available
+        run_in_k8s_container("ls -la /keys/", "Available files in /keys")
+        raise Exception("Timeout waiting for kubeconfig.docker.yaml to be created")
 
     success = run_in_k8s_container(
         "kubectl get nodes",
@@ -223,40 +246,140 @@ def validate_health_endpoint(service_name, port, path, namespace="default"):
     return success
 
 
-def test_broker_chart(tag, registry, no_cleanup):
-    """Test the broker Helm chart."""
+def test_broker_chart(tag, registry, no_cleanup, test_external_db=False):
+    """Test the broker Helm chart.
+
+    Args:
+        tag: Image tag to test
+        registry: Container registry URL
+        no_cleanup: Skip cleanup after test
+        test_external_db: Test with external PostgreSQL instead of bundled
+    """
     release_name = "brokkr-broker-test"
     chart_name = "brokkr-broker"
+    external_db_release = None
 
-    # Setup image pull secret
-    setup_image_pull_secret(registry.split('/')[0])  # Extract hostname (ghcr.io)
+    try:
+        # Setup image pull secret
+        setup_image_pull_secret(registry.split('/')[0])  # Extract hostname (ghcr.io)
 
-    values = {
-        "image.tag": tag,
-        "image.repository": f"{registry}/brokkr-broker",
-        "image.pullSecrets[0].name": "ghcr-secret",
-        "postgresql.enabled": "true",  # Use bundled PostgreSQL for testing
-    }
+        if test_external_db:
+            # Deploy a standalone PostgreSQL as "external" database
+            print("\n" + "=" * 60)
+            print("Deploying external PostgreSQL for testing")
+            print("=" * 60)
 
-    # Install chart
-    if not helm_install(chart_name, release_name, values):
-        return False
+            external_db_release = "external-postgres"
+            external_db_values = {  # noqa: F841
+                "image.tag": "16-alpine",
+                "image.repository": "postgres",
+            }
 
-    # Wait for pods
-    if not wait_for_pods(release_name):
+            # Create a simple postgres deployment
+            postgres_manifest = f"""
+apiVersion: v1
+kind: Service
+metadata:
+  name: {external_db_release}
+spec:
+  ports:
+  - port: 5432
+  selector:
+    app: {external_db_release}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {external_db_release}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {external_db_release}
+  template:
+    metadata:
+      labels:
+        app: {external_db_release}
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:16-alpine
+        env:
+        - name: POSTGRES_DB
+          value: brokkr
+        - name: POSTGRES_USER
+          value: brokkr
+        - name: POSTGRES_PASSWORD
+          value: external-test-password
+        ports:
+        - containerPort: 5432
+"""
+
+            # Apply manifest
+            result = subprocess.run([
+                "docker", "run", "--rm",
+                "--network", "brokkr-dev_default",
+                "-v", "brokkr-dev_brokkr-keys:/keys:ro",
+                "-e", "KUBECONFIG=/keys/kubeconfig.docker.yaml",
+                "alpine/k8s:1.27.3",
+                "sh", "-c", f"cat <<'EOF' | kubectl apply -f -\n{postgres_manifest}\nEOF"
+            ], cwd=cwd)
+
+            if result.returncode != 0:
+                print("Failed to deploy external PostgreSQL")
+                return False
+
+            # Wait for PostgreSQL to be ready
+            print("Waiting for external PostgreSQL to be ready...")
+            time.sleep(15)
+
+            # Test broker with external database
+            values = {
+                "image.tag": tag,
+                "image.repository": f"{registry}/brokkr-broker",
+                "image.pullSecrets[0].name": "ghcr-secret",
+                "postgresql.enabled": "false",
+                "postgresql.host": external_db_release,
+                "postgresql.username": "brokkr",
+                "postgresql.password": "external-test-password",
+            }
+        else:
+            # Use bundled PostgreSQL
+            values = {
+                "image.tag": tag,
+                "image.repository": f"{registry}/brokkr-broker",
+                "image.pullSecrets[0].name": "ghcr-secret",
+                "postgresql.enabled": "true",
+            }
+
+        # Install chart
+        if not helm_install(chart_name, release_name, values):
+            return False
+
+        # Wait for pods
+        if not wait_for_pods(release_name):
+            if not no_cleanup:
+                helm_uninstall(release_name)
+            return False
+
+        # Validate health endpoints
+        health_passed = True
+        health_passed &= validate_health_endpoint(release_name, 3000, "/healthz")
+        health_passed &= validate_health_endpoint(release_name, 3000, "/readyz")
+
+        return health_passed
+
+    finally:
         if not no_cleanup:
             helm_uninstall(release_name)
-        return False
 
-    # Validate health endpoints
-    health_passed = True
-    health_passed &= validate_health_endpoint(release_name, 3000, "/healthz")
-    health_passed &= validate_health_endpoint(release_name, 3000, "/readyz")
-
-    if not no_cleanup:
-        helm_uninstall(release_name)
-
-    return health_passed
+            # Cleanup external database if deployed
+            if external_db_release:
+                print("\nCleaning up external PostgreSQL...")
+                run_in_k8s_container(
+                    f"kubectl delete deployment,service {external_db_release} --ignore-not-found",
+                    "Deleting external PostgreSQL"
+                )
 
 
 def create_agent_in_broker(broker_release_name, agent_name, cluster_name, namespace="default"):
@@ -478,10 +601,16 @@ def test_helm_chart(component, skip_docker=False, no_cleanup=False, tag="test", 
 
         if component in ["broker", "all"]:
             print("\n" + "=" * 60)
-            print("Testing broker chart")
+            print("Testing broker chart (bundled PostgreSQL)")
             print("=" * 60)
-            result = test_broker_chart(tag, registry, no_cleanup)
-            results.append(("broker", result))
+            result = test_broker_chart(tag, registry, no_cleanup, test_external_db=False)
+            results.append(("broker-bundled-db", result))
+
+            print("\n" + "=" * 60)
+            print("Testing broker chart (external PostgreSQL)")
+            print("=" * 60)
+            result = test_broker_chart(tag, registry, no_cleanup, test_external_db=True)
+            results.append(("broker-external-db", result))
 
         if component in ["agent", "all"]:
             print("\n" + "=" * 60)

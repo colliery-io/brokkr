@@ -1,19 +1,69 @@
 ---
+# Broker container image configuration
 image:
+  # Container registry and repository for the broker image
   repository: ghcr.io/colliery-io/brokkr-broker
+  # Image tag to deploy (use 'latest' for development, specific versions for production)
   tag: latest
+  # Image pull policy (IfNotPresent, Always, Never)
   pullPolicy: IfNotPresent
+  # Image pull secrets for private registries
+  # pullSecrets:
+  #   - name: ghcr-secret
+
+# Number of broker replicas to run
+# Note: Multiple replicas require session affinity or external session storage
 replicaCount: 1
+
+# Kubernetes Service configuration
 service:
+  # Service type: ClusterIP (internal), LoadBalancer (external), NodePort
   type: ClusterIP
+  # Service port for broker HTTP API
   port: 3000
+  # Additional service annotations (useful for LoadBalancer configuration)
+  # annotations:
+  #   service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+
+# PostgreSQL database configuration
 postgresql:
+  # enabled: true deploys a bundled PostgreSQL instance (development/testing)
+  # enabled: false uses an external PostgreSQL instance (production)
   enabled: true
+  # External database host (required when enabled=false)
   host: ''
+  # Database port
   port: 5432
+  # Database name
   database: brokkr
+  # Database username (not used when existingSecret is set)
   username: brokkr
+  # Database password (not used when existingSecret is set)
+  # WARNING: Do not commit production passwords to values files
   password: brokkr
+  # Use an existing Kubernetes secret for database credentials
+  # The secret should contain a key with the full database connection URL
+  # existingSecret: my-database-secret
+  existingSecret: ''
+  # Key name in existingSecret that contains the database URL
+  # Default: database-url
+  existingSecretKey: database-url
+
+# Additional environment variables to inject into broker pods
+# Useful for configuration not covered by standard values
+# extraEnv:
+#   - name: RUST_LOG
+#     value: "debug"
+#   - name: CUSTOM_CONFIG
+#     valueFrom:
+#       configMapKeyRef:
+#         name: my-config
+#         key: custom-value
+extraEnv: []
+
+# Resource requests and limits for broker pods
+# Requests: minimum guaranteed resources
+# Limits: maximum resources before throttling/eviction
 resources:
   requests:
     memory: 256Mi
@@ -21,6 +71,9 @@ resources:
   limits:
     memory: 512Mi
     cpu: 500m
+
+# Security context for broker pods
+# Run as non-root user for enhanced security
 securityContext:
   runAsNonRoot: true
   runAsUser: 10001
