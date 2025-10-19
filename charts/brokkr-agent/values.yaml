@@ -1,0 +1,36 @@
+image:
+  repository: ghcr.io/colliery-io/brokkr-agent
+  tag: latest
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+
+broker:
+  url: http://brokkr-broker:3000
+  agentName: ""
+  clusterName: ""
+  pak: ""
+
+agent:
+  pollingInterval: 30s
+
+rbac:
+  create: true
+  clusterWide: true
+
+serviceAccount:
+  create: true
+  name: ""
+
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "50m"
+  limits:
+    memory: "256Mi"
+    cpu: "200m"
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  fsGroup: 10001

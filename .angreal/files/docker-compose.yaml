@@ -124,6 +124,7 @@ services:
       - --cluster-init
       - --write-kubeconfig=/output/kubeconfig.yaml
       - --write-kubeconfig-mode=666
+      - --tls-san=brokkr-dev-k3s-1
     privileged: true
     environment:
       - K3S_TOKEN=brokkr-secret

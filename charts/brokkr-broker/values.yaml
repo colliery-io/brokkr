@@ -1,0 +1,27 @@
+---
+image:
+  repository: ghcr.io/colliery-io/brokkr-broker
+  tag: latest
+  pullPolicy: IfNotPresent
+replicaCount: 1
+service:
+  type: ClusterIP
+  port: 3000
+postgresql:
+  enabled: true
+  host: ''
+  port: 5432
+  database: brokkr
+  username: brokkr
+  password: brokkr
+resources:
+  requests:
+    memory: 256Mi
+    cpu: 100m
+  limits:
+    memory: 512Mi
+    cpu: 500m
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  fsGroup: 10001

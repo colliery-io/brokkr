@@ -4,14 +4,14 @@ level: task
 title: "Set up GHCR publishing infrastructure"
 short_code: "BROKKR-T-0005"
 created_at: 2025-10-18T14:47:36.123050+00:00
-updated_at: 2025-10-18T14:47:36.123050+00:00
+updated_at: 2025-10-19T02:03:48.607373+00:00
 parent: BROKKR-I-0003
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/todo"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -31,14 +31,18 @@ initiative_id: BROKKR-I-0003
 
 Configure GitHub Container Registry (GHCR) for container image publishing with proper authentication, repository structure, and tagging strategy.
 
+## Acceptance Criteria
+
+## Acceptance Criteria
+
 ## Acceptance Criteria **[REQUIRED]**
 
-- [ ] GHCR repository paths configured: `ghcr.io/colliery-io/brokkr-broker` and `ghcr.io/colliery-io/brokkr-agent`
-- [ ] GitHub Actions secrets configured for GHCR authentication (GITHUB_TOKEN or PAT)
-- [ ] Image tagging strategy documented (semver: v1.0.0, v1.0, v1, latest; SHA: sha-abc1234; branch: main, develop)
-- [ ] Manual test push to GHCR succeeds
-- [ ] Repository visibility configured (public vs private)
-- [ ] Documentation created for image naming conventions
+- [x] GHCR repository paths configured: `ghcr.io/colliery-io/brokkr-broker` and `ghcr.io/colliery-io/brokkr-agent`
+- [x] GitHub Actions secrets configured for GHCR authentication (GITHUB_TOKEN or PAT)
+- [x] Image tagging strategy documented (semver: v1.0.0, v1.0, v1, latest; SHA: sha-abc1234; branch: main, develop)
+- [x] Manual test push to GHCR succeeds
+- [x] Repository visibility configured (public vs private)
+- [x] Documentation created for image naming conventions
 
 ## Implementation Notes **[CONDITIONAL: Technical Task]**
 
@@ -100,4 +104,30 @@ Configure GitHub Container Registry (GHCR) for container image publishing with p
 
 ## Status Updates **[REQUIRED]**
 
-*To be added during implementation*
+### 2025-10-18 - Task Completed
+
+Successfully configured GHCR publishing infrastructure:
+
+1. **Authentication**: Configured and tested GHCR authentication using GitHub Personal Access Token
+   - Login successful: `docker login ghcr.io -u dstorey --password "$GITHUB_TOKEN"`
+
+2. **Repository Setup**: Published test images to GHCR repositories
+   - Broker: `ghcr.io/colliery-io/brokkr-broker:test`
+   - Successfully pushed multi-arch ARM64 image
+   - Verified with `docker manifest inspect`
+
+3. **Repository Visibility**: Set to public for community evaluation
+   - Maintains Elastic License 2.0 protections while allowing easy access
+   - Follows ELv2 distribution model (Elasticsearch, Kibana, etc.)
+
+4. **Documentation Created**:
+   - `docs/content/explanation/publishing-strategy.md` - Strategy, rationale, and security considerations
+   - `docs/content/reference/container-images.md` - Repository URLs, tag formats, and command reference
+
+5. **Tagging Strategy Documented**:
+   - Semantic versions: v1.0.0, v1.0, v1, latest
+   - Commit SHAs: sha-abc1234
+   - Branch names: main, develop
+   - Tag immutability rules defined
+
+**Next Steps**: Task BROKKR-T-0017 will implement automated publishing in CI/CD pipeline using this infrastructure.

@@ -1,0 +1,7 @@
+---
+apiVersion: v2
+name: brokkr-broker
+description: Brokkr control plane broker
+type: application
+version: 0.1.0
+appVersion: 0.1.0

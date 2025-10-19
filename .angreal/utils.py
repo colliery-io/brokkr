@@ -8,10 +8,20 @@ cwd = os.path.join(angreal.get_root(),'..')
 DOCKER_COMPOSE_FILE = os.path.join(angreal.get_root(),'files','docker-compose.yaml')
 
 
-def docker_up():
+def docker_up(services=None):
+    """Start docker compose services.
+
+    Args:
+        services: Optional list of specific services to start. If None, starts all services.
+    """
     os.makedirs('/tmp/brokkr-keys', exist_ok=True)
-    subprocess.run(f"docker compose  -f {DOCKER_COMPOSE_FILE} up --build -d --wait"
-                    , cwd=cwd, shell=True)
+
+    services_str = " ".join(services) if services else ""
+    subprocess.run(
+        f"docker compose -f {DOCKER_COMPOSE_FILE} up --build -d --wait {services_str}",
+        cwd=cwd,
+        shell=True
+    )
 
 def docker_down():
     subprocess.run([f"docker compose -f {DOCKER_COMPOSE_FILE} down" ]
