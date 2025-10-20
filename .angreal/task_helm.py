@@ -339,9 +339,9 @@ spec:
                 "image.repository": f"{registry}/brokkr-broker",
                 "image.pullSecrets[0].name": "ghcr-secret",
                 "postgresql.enabled": "false",
-                "postgresql.host": external_db_release,
-                "postgresql.username": "brokkr",
-                "postgresql.password": "external-test-password",
+                "postgresql.external.host": external_db_release,
+                "postgresql.external.username": "brokkr",
+                "postgresql.external.password": "external-test-password",
             }
         else:
             # Use bundled PostgreSQL
