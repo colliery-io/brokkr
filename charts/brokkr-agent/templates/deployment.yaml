@@ -11,6 +11,11 @@ spec:
       {{- include "brokkr-agent.selectorLabels" . | nindent 6 }}
   template:
     metadata:
+      {{- if .Values.apparmor.enabled }}
+      annotations:
+        # AppArmor profile for additional security (requires AppArmor-enabled cluster)
+        container.apparmor.security.beta.kubernetes.io/agent: {{ .Values.apparmor.profile }}
+      {{- end }}
       labels:
         {{- include "brokkr-agent.selectorLabels" . | nindent 8 }}
     spec:
@@ -20,13 +25,13 @@ spec:
       {{- end }}
       serviceAccountName: {{ include "brokkr-agent.serviceAccountName" . }}
       securityContext:
-        runAsNonRoot: {{ .Values.securityContext.runAsNonRoot }}
-        runAsUser: {{ .Values.securityContext.runAsUser }}
-        fsGroup: {{ .Values.securityContext.fsGroup }}
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
       - name: agent
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
+        securityContext:
+          {{- toYaml .Values.containerSecurityContext | nindent 10 }}
         args: ["start"]
         livenessProbe:
           httpGet:
@@ -47,5 +52,13 @@ spec:
         envFrom:
         - configMapRef:
             name: {{ include "brokkr-agent.fullname" . }}
+        volumeMounts:
+        # Writable /tmp directory (required for read-only root filesystem)
+        - name: tmp
+          mountPath: /tmp
         resources:
           {{- toYaml .Values.resources | nindent 10 }}
+      volumes:
+      # EmptyDir for temporary files
+      - name: tmp
+        emptyDir: {}

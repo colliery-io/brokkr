@@ -1,0 +1,141 @@
+---
+# Production Configuration for Brokkr Broker
+# ==========================================
+# This file contains production-ready settings with high availability,
+# security hardening, and external dependencies.
+#
+# Usage:
+#   helm install brokkr-broker . -f values/production.yaml
+#
+# IMPORTANT: Review and customize the following before deploying:
+#   - postgresql.external.host (your database endpoint)
+#   - ingress.hosts (your domain)
+#   - tls.certManager.issuer (your cert-manager issuer)
+
+# High Availability: Run 3 replicas for redundancy
+# Note: Ensure your load balancer supports session affinity or use external session storage
+replicaCount: 3
+
+# Image Configuration
+image:
+  repository: ghcr.io/colliery-io/brokkr-broker
+  # Production: Pin to a specific version tag, never use 'latest'
+  # Example: v1.0.0, v1.2.3, 2024.01.15
+  tag: "v1.0.0"
+  # IfNotPresent: Only pull if image is not cached (faster, more reliable)
+  pullPolicy: IfNotPresent
+
+# Service Configuration
+service:
+  # ClusterIP: Internal access only (ingress handles external traffic)
+  type: ClusterIP
+  port: 3000
+
+# PostgreSQL Configuration
+postgresql:
+  # Production: Use managed database service (AWS RDS, GCP Cloud SQL, Azure Database)
+  # Benefits: Automated backups, high availability, managed updates, better performance
+  enabled: false
+
+  external:
+    # REQUIRED: Your production database endpoint
+    # Examples:
+    #   - AWS RDS: mydb.abc123.us-east-1.rds.amazonaws.com
+    #   - GCP Cloud SQL: 10.x.x.x (via private IP)
+    #   - Azure: myserver.postgres.database.azure.com
+    host: 'postgres.production.example.com'
+    port: 5432
+    database: brokkr_prod
+    username: brokkr
+    # DO NOT set password here - use existingSecret instead
+
+  # REQUIRED: Create a Kubernetes secret with database credentials
+  # Example:
+  #   kubectl create secret generic brokkr-db-prod \
+  #     --from-literal=database-url='postgresql://user:pass@host:5432/brokkr_prod'
+  existingSecret: 'brokkr-db-prod'
+  existingSecretKey: 'database-url'
+
+# Resource Limits
+# Production workloads should have both requests and limits set
+resources:
+  # Requests: Guaranteed resources for the pod
+  requests:
+    memory: "512Mi"
+    cpu: "500m"
+  # Limits: Maximum resources before throttling/eviction
+  limits:
+    memory: "1Gi"
+    cpu: "1000m"
+
+# Security Context
+# Production security best practices
+securityContext:
+  # Run as non-root user
+  runAsNonRoot: true
+  runAsUser: 10001
+  fsGroup: 10001
+  # Seccomp profile for syscall filtering (Kubernetes 1.19+)
+  seccompProfile:
+    type: RuntimeDefault
+
+# TLS/SSL Configuration
+tls:
+  # Production: Always enable TLS
+  enabled: true
+
+  # Option 1: Use cert-manager for automatic certificate management (RECOMMENDED)
+  certManager:
+    enabled: true
+    # ClusterIssuer for Let's Encrypt production certificates
+    issuer: 'letsencrypt-prod'
+    issuerKind: 'ClusterIssuer'
+  # Option 2: Use existing TLS secret (if not using cert-manager)
+  # existingSecret: 'brokkr-tls-prod'
+
+# Ingress Configuration
+ingress:
+  # Production: Enable ingress for external access
+  enabled: true
+
+  # Ingress class (nginx, traefik, etc.)
+  className: 'nginx'
+
+  # Ingress annotations
+  annotations:
+    # Cert-manager: Automatically provision TLS certificates
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    # Force HTTPS redirects
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    # Security headers
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_set_headers "X-Frame-Options: DENY";
+      more_set_headers "X-Content-Type-Options: nosniff";
+      more_set_headers "X-XSS-Protection: 1; mode=block";
+    # Rate limiting (adjust based on your needs)
+    nginx.ingress.kubernetes.io/limit-rps: "100"
+
+  # Host configuration
+  hosts:
+    - host: brokkr.production.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+
+  # TLS configuration
+  # cert-manager will automatically populate this secret
+  tls:
+    - secretName: brokkr-tls-prod
+      hosts:
+        - brokkr.production.example.com
+
+# Additional Environment Variables
+# Use for production-specific configuration
+extraEnv:
+  # Set appropriate log level for production
+  - name: RUST_LOG
+    value: "info"
+  # Example: Configure connection pool size
+  # - name: DATABASE_POOL_SIZE
+  #   value: "20"

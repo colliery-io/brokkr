@@ -96,11 +96,11 @@ Database name
 Database port
 */}}
 {{- define "brokkr-broker.databasePort" -}}
-{{- if .Values.postgresql.enabled }}
+{{- if .Values.postgresql.enabled -}}
 5432
-{{- else }}
-{{- .Values.postgresql.external.port }}
-{{- end }}
+{{- else -}}
+{{- .Values.postgresql.external.port -}}
+{{- end -}}
 {{- end }}
 
 {{/*

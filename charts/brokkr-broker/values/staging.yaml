@@ -1,0 +1,128 @@
+---
+# Staging Configuration for Brokkr Broker
+# =========================================
+# This file contains staging settings that mirror production configuration
+# but with moderate resource allocation for testing and validation.
+#
+# Purpose:
+#   - Test production configurations before deploying to prod
+#   - Validate changes in production-like environment
+#   - Integration testing with production security settings
+#   - Performance testing with realistic resource constraints
+#
+# Usage:
+#   helm install brokkr-broker-staging . -f values/staging.yaml
+#
+# IMPORTANT: Review and customize the following before deploying:
+#   - postgresql.external.host (your staging database endpoint)
+#   - ingress.hosts (your staging domain)
+
+# Moderate Availability: 2 replicas for some redundancy
+# Sufficient to test HA behavior without full production overhead
+replicaCount: 2
+
+# Image Configuration
+image:
+  repository: ghcr.io/colliery-io/brokkr-broker
+  # Staging: Use release candidates or pre-release versions
+  # Examples: v1.0.0-rc1, v1.2.3-beta, 2024.01.15-staging
+  tag: "v1.0.0-rc1"
+  pullPolicy: IfNotPresent
+
+# Service Configuration
+service:
+  type: ClusterIP
+  port: 3000
+
+# PostgreSQL Configuration
+postgresql:
+  # Staging: Use external database (not bundled, but not necessarily managed)
+  # Options: Dedicated staging DB server, or separate database on shared instance
+  enabled: false
+
+  external:
+    # Staging database endpoint
+    # Can be a dedicated server or shared with other non-prod environments
+    host: 'postgres-staging.internal.example.com'
+    port: 5432
+    database: brokkr_staging
+    username: brokkr
+
+  # Use Kubernetes secret for staging credentials
+  # Example:
+  #   kubectl create secret generic brokkr-db-staging \
+  #     --from-literal=database-url='postgresql://user:pass@host:5432/brokkr_staging'
+  existingSecret: 'brokkr-db-staging'
+  existingSecretKey: 'database-url'
+
+# Resource Limits
+# Moderate resources - less than production but more than development
+# Allows realistic performance testing without full production cost
+resources:
+  requests:
+    memory: "256Mi"
+    cpu: "250m"
+  limits:
+    memory: "512Mi"
+    cpu: "500m"
+
+# Security Context
+# Full production security settings to catch issues early
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  fsGroup: 10001
+  # Enable seccomp to test compatibility
+  seccompProfile:
+    type: RuntimeDefault
+
+# TLS/SSL Configuration
+tls:
+  # Staging: Enable TLS to test certificate management
+  enabled: true
+
+  # Option 1: Use self-signed or internal CA certificates
+  # Allows testing TLS without external dependencies
+  existingSecret: 'brokkr-tls-staging'
+
+  # Option 2: Use cert-manager with staging issuer
+  # certManager:
+  #   enabled: true
+  #   issuer: 'letsencrypt-staging'
+  #   issuerKind: 'ClusterIssuer'
+
+# Ingress Configuration
+ingress:
+  # Staging: Enable ingress to test external access patterns
+  enabled: true
+
+  className: 'nginx'
+
+  # Staging-specific annotations
+  annotations:
+    # Optional: Use Let's Encrypt staging for testing cert-manager
+    # cert-manager.io/cluster-issuer: "letsencrypt-staging"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    # Basic auth for staging environment (optional)
+    # nginx.ingress.kubernetes.io/auth-type: basic
+    # nginx.ingress.kubernetes.io/auth-secret: staging-basic-auth
+
+  hosts:
+    - host: brokkr-staging.internal.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+
+  tls:
+    - secretName: brokkr-tls-staging
+      hosts:
+        - brokkr-staging.internal.example.com
+
+# Additional Environment Variables
+extraEnv:
+  # Staging: Use info level logging (between debug and production)
+  - name: RUST_LOG
+    value: "info"
+  # Example: Tag staging environment for observability
+  # - name: ENVIRONMENT
+  #   value: "staging"

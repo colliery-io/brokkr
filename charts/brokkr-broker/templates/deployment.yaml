@@ -11,6 +11,11 @@ spec:
       {{- include "brokkr-broker.selectorLabels" . | nindent 6 }}
   template:
     metadata:
+      {{- if .Values.apparmor.enabled }}
+      annotations:
+        # AppArmor profile for additional security (requires AppArmor-enabled cluster)
+        container.apparmor.security.beta.kubernetes.io/broker: {{ .Values.apparmor.profile }}
+      {{- end }}
       labels:
         {{- include "brokkr-broker.selectorLabels" . | nindent 8 }}
     spec:
@@ -19,13 +24,13 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       securityContext:
-        runAsNonRoot: {{ .Values.securityContext.runAsNonRoot }}
-        runAsUser: {{ .Values.securityContext.runAsUser }}
-        fsGroup: {{ .Values.securityContext.fsGroup }}
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
       - name: broker
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
+        securityContext:
+          {{- toYaml .Values.containerSecurityContext | nindent 10 }}
         args: ["serve"]
         ports:
         - name: http
@@ -59,18 +64,24 @@ spec:
               key: {{ .Values.postgresql.existingSecretKey | default "database-url" }}
         {{- end }}
         {{- with .Values.extraEnv }}
-          {{- toYaml . | nindent 10 }}
+        {{- toYaml . | nindent 8 }}
         {{- end }}
-        {{- if .Values.tls.enabled }}
         volumeMounts:
+        # Writable /tmp directory (required for read-only root filesystem)
+        - name: tmp
+          mountPath: /tmp
+        {{- if .Values.tls.enabled }}
         - name: tls-certs
           mountPath: /etc/tls
           readOnly: true
         {{- end }}
         resources:
           {{- toYaml .Values.resources | nindent 10 }}
-      {{- if .Values.tls.enabled }}
       volumes:
+      # EmptyDir for temporary files
+      - name: tmp
+        emptyDir: {}
+      {{- if .Values.tls.enabled }}
       - name: tls-certs
         secret:
           secretName: {{ include "brokkr-broker.tlsSecretName" . }}
