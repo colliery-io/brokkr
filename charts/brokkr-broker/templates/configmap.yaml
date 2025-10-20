@@ -8,3 +8,10 @@ data:
   {{- if not .Values.postgresql.existingSecret }}
   BROKKR__DATABASE__URL: {{ printf "postgres://%s:%s@%s:%s/%s" (include "brokkr-broker.databaseUsername" .) (include "brokkr-broker.databasePassword" .) (include "brokkr-broker.databaseHost" .) (include "brokkr-broker.databasePort" .) (include "brokkr-broker.databaseName" .) | quote }}
   {{- end }}
+  {{- if .Values.tls.enabled }}
+  BROKKR__TLS__ENABLED: "true"
+  BROKKR__TLS__CERT_PATH: "/etc/tls/tls.crt"
+  BROKKR__TLS__KEY_PATH: "/etc/tls/tls.key"
+  {{- else }}
+  BROKKR__TLS__ENABLED: "false"
+  {{- end }}

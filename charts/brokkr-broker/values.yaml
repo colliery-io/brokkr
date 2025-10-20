@@ -117,3 +117,59 @@ securityContext:
   runAsNonRoot: true
   runAsUser: 10001
   fsGroup: 10001
+
+# TLS/SSL configuration for secure communications
+tls:
+  # Enable TLS for the broker (requires certificates)
+  enabled: false
+
+  # Use an existing Kubernetes TLS secret
+  # The secret should be of type kubernetes.io/tls with tls.crt and tls.key
+  existingSecret: ''
+
+  # Provide certificates inline (base64 encoded)
+  # WARNING: Only use for testing. Production should use existingSecret or cert-manager
+  # To generate self-signed cert: openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  #   -keyout tls.key -out tls.crt -subj "/CN=brokkr.example.com"
+  cert: ''
+  key: ''
+
+  # Cert-manager integration for automatic certificate management
+  certManager:
+    # Enable cert-manager certificate generation
+    enabled: false
+    # Name of the cert-manager issuer to use
+    issuer: 'letsencrypt-prod'
+    # Issuer kind: Issuer or ClusterIssuer
+    issuerKind: 'ClusterIssuer'
+
+# Ingress configuration for external access
+ingress:
+  # Enable ingress resource creation
+  enabled: false
+
+  # Ingress class name (nginx, traefik, etc.)
+  # Required for Kubernetes 1.18+
+  className: 'nginx'
+
+  # Ingress annotations for additional configuration
+  # Common annotations:
+  #   cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  #   nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  #   nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+  annotations: {}
+
+  # Ingress host configuration
+  hosts:
+    - host: brokkr.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+
+  # TLS configuration for ingress
+  # If cert-manager is enabled, certificates will be automatically generated
+  # Otherwise, the secretName should reference an existing TLS secret
+  tls:
+    - secretName: brokkr-tls
+      hosts:
+        - brokkr.example.com
