@@ -74,15 +74,15 @@ jobs:
   build-release-images:
     name: Build Release Images
     needs: helm-tests
-    runs-on: ${{ matrix.platform == 'linux/arm64' && 'ubuntu-24.04-arm64' || 'ubuntu-latest' }}
-    permissions:
-      contents: read
-      packages: write
     strategy:
       fail-fast: false
       matrix:
         component: [broker, agent]
         platform: [linux/amd64, linux/arm64]
+    runs-on: ${{ matrix.platform == 'linux/arm64' && 'ubuntu-24.04-arm64' || 'ubuntu-latest' }}
+    permissions:
+      contents: read
+      packages: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
