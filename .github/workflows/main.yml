@@ -1,5 +1,5 @@
 ---
-name: CI/CD Pipeline
+name: Fast Code Validation
 on:
   push:
     branches: [main, develop]
@@ -11,8 +11,6 @@ jobs:
   unit_tests:
     needs: setup
     uses: ./.github/workflows/unit_tests.yml
-  helm_tests:
-    uses: ./.github/workflows/helm_tests.yml
   integration_tests:
     needs: setup
     uses: ./.github/workflows/integration_tests.yml

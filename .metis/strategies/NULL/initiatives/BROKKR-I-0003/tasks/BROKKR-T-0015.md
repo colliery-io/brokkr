@@ -441,13 +441,23 @@ create-manifest:
 - Created: docs/release-workflow.md
 - Modified: .github/workflows/main.yml
 
-**Architecture Decision: Angreal-First Approach**
+**Architecture Decision: Two-Pipeline Approach**
 
-After initial implementation, refactored all workflows to use angreal as the single source of truth:
-- helm_tests.yml now calls `angreal helm test` instead of direct helm commands
-- release.yml helm tests also use `angreal helm test`
-- Benefits: Local/CI parity, single test logic location, consistency with unit/integration tests
-- Tradeoff: Slower CI (full k3s deployment) but more comprehensive validation
+After user feedback, restructured into two parallel pipelines to ensure tests validate actual PR code:
+
+**Pipeline 1: Fast Code Validation (main.yml)**
+- setup → unit_tests + integration_tests
+- No image building, focuses on code quality
+- Fast feedback (~5-10 minutes)
+
+**Pipeline 2: Build & Deployment Tests (build-and-test.yml)**
+- build-images → merge-manifests → helm-tests → cleanup-pr-packages
+- Builds once, pushes to registry with PR tags, tests with those images
+- Validates actual PR code (not stale registry images)
+- Cleans up PR packages after tests pass
+- Runs when code/Dockerfiles change (~15-20 minutes)
+
+**Key Insight**: Previously helm tests used pre-existing registry images, creating false positives. New architecture builds PR-specific images first, then tests with those, ensuring validation of actual changes.
 
 **Action Version Updates:**
 - Updated all actions from v3 to v4 (checkout, cache, artifact upload/download)

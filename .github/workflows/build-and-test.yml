@@ -1,0 +1,260 @@
+---
+name: Build & Deployment Tests
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'broker/**'
+      - 'agent/**'
+      - 'models/**'
+      - 'utils/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'docker/Dockerfile.broker'
+      - 'docker/Dockerfile.agent'
+      - '.github/workflows/build-and-test.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'broker/**'
+      - 'agent/**'
+      - 'models/**'
+      - 'utils/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'docker/Dockerfile.broker'
+      - 'docker/Dockerfile.agent'
+      - '.github/workflows/build-and-test.yml'
+
+env:
+  REGISTRY: ghcr.io
+  REGISTRY_USER: ${{ github.actor }}
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-images:
+    name: Build Multi-Arch Images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        component: [broker, agent]
+        platform: [linux/amd64, linux/arm64]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ env.REGISTRY_USER }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Determine image tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "tag=pr-${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/brokkr-${{ matrix.component }}
+          tags: |
+            type=raw,value=${{ steps.tag.outputs.tag }}
+            type=sha,prefix=${{ steps.tag.outputs.tag }}-
+
+      - name: Get platform identifier
+        id: platform
+        run: |
+          PLATFORM_PAIR=${{ matrix.platform }}
+          PLATFORM_ARCH=${PLATFORM_PAIR#*/}
+          echo "arch=${PLATFORM_ARCH}" >> $GITHUB_OUTPUT
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/Dockerfile.${{ matrix.component }}
+          platforms: ${{ matrix.platform }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=build-${{ matrix.component }}-${{ steps.platform.outputs.arch }}
+          cache-to: type=gha,mode=max,scope=build-${{ matrix.component }}-${{ steps.platform.outputs.arch }}
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ github.repository_owner }}/brokkr-${{ matrix.component }},push-by-digest=true,name-canonical=true,push=true
+
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests/${{ matrix.component }}
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${{ matrix.component }}/${digest#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.component }}-${{ steps.platform.outputs.arch }}
+          path: /tmp/digests/${{ matrix.component }}/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge-manifests:
+    name: Create Multi-Arch Manifests
+    runs-on: ubuntu-latest
+    needs: build-images
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        component: [broker, agent]
+    outputs:
+      image-tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - name: Download amd64 digests
+        uses: actions/download-artifact@v4
+        with:
+          name: digests-${{ matrix.component }}-amd64
+          path: /tmp/digests/${{ matrix.component }}
+
+      - name: Download arm64 digests
+        uses: actions/download-artifact@v4
+        with:
+          name: digests-${{ matrix.component }}-arm64
+          path: /tmp/digests/${{ matrix.component }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ env.REGISTRY_USER }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Determine image tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "tag=pr-${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/brokkr-${{ matrix.component }}
+          tags: |
+            type=raw,value=${{ steps.tag.outputs.tag }}
+
+      - name: Create manifest list and push
+        working-directory: /tmp/digests/${{ matrix.component }}
+        run: |
+          docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf '${{ env.REGISTRY }}/${{ github.repository_owner }}/brokkr-${{ matrix.component }}@sha256:%s ' *)
+
+      - name: Inspect image
+        run: |
+          docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ github.repository_owner }}/brokkr-${{ matrix.component }}:${{ steps.tag.outputs.tag }}
+
+  helm-tests:
+    name: Helm Deployment Tests
+    runs-on: ubuntu-latest
+    needs: merge-manifests
+    strategy:
+      matrix:
+        component: [broker, agent]
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.x
+
+      - name: Install angreal
+        run: |
+          python -m pip install --upgrade pip
+          pip install angreal
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-rust-build-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-rust-build-
+
+      - name: Docker Compose Cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.docker
+          key: ${{ runner.os }}-docker-${{ hashFiles('.angreal/files/docker-compose.yaml') }}
+
+      - name: Create required directories
+        run: |
+          mkdir -p /tmp/brokkr-keys
+          chmod 777 /tmp/brokkr-keys
+
+      - name: Determine image tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "tag=pr-${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: docker compose up
+        uses: hoverkraft-tech/compose-action@v2.0.1
+        with:
+          compose-file: ".angreal/files/docker-compose.yaml"
+
+      - name: Execute helm chart tests
+        run: angreal helm test ${{ matrix.component }} --skip-docker --tag ${{ steps.tag.outputs.tag }} --registry ${{ env.REGISTRY }}/${{ github.repository_owner }}
+
+  cleanup-pr-packages:
+    name: Cleanup PR Packages
+    runs-on: ubuntu-latest
+    needs: helm-tests
+    if: github.event_name == 'pull_request' && success()
+    permissions:
+      packages: write
+    strategy:
+      matrix:
+        component: [broker, agent]
+    steps:
+      - name: Delete PR-tagged packages
+        run: |
+          TAG="pr-${{ github.event.pull_request.number }}"
+
+          # Delete the package version with this tag
+          gh api --method DELETE \
+            "/orgs/${{ github.repository_owner }}/packages/container/brokkr-${{ matrix.component }}/versions" \
+            -H "Accept: application/vnd.github+json" \
+            -f "names[]=${TAG}" || echo "Package ${TAG} not found or already deleted"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

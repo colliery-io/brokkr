@@ -177,24 +177,41 @@ This will NOT remove published images or charts, only the tag itself.
 
 ## CI/CD Workflows
 
-All CI/CD workflows use **angreal** as the single source of truth for test execution. This ensures parity between local testing and CI testing.
+Brokkr uses two parallel CI/CD pipelines for comprehensive validation:
 
-### helm_tests.yml
+### Pipeline 1: Fast Code Validation (main.yml)
 
-Runs on every PR and push to validate Helm charts via `angreal helm test`:
-- Deploys broker and agent charts to k3s cluster
-- Tests all RBAC modes and values files (production, development, staging)
-- Validates health endpoints and pod readiness
-- Full end-to-end deployment testing (same as running `angreal helm test all` locally)
-- **Note**: This is a comprehensive test that takes several minutes
+Runs on every push/PR for quick feedback (~5-10 minutes):
+- **setup**: Rust toolchain and dependency caching
+- **unit_tests**: Fast unit tests for all crates
+- **integration_tests**: Integration tests with docker-compose
 
-### build-images.yml
+No image building required - focuses on code quality.
 
-Builds multi-arch images on PR and push to main/develop:
-- Matrix build for broker/agent × amd64/arm64
-- Pushes to ghcr.io with branch tags (not version tags)
-- Uses GitHub Actions cache for faster builds
-- Runs only when Rust code or Dockerfiles change
+### Pipeline 2: Build & Deployment Tests (build-and-test.yml)
+
+Runs when code/Dockerfiles change (~15-20 minutes):
+
+1. **build-images**: Multi-arch (amd64 + arm64) container builds
+   - Tags images with `pr-{number}` for PRs or branch name for pushes
+   - Uses Docker Buildx with build-by-digest pattern
+   - GitHub Actions cache for faster builds
+
+2. **merge-manifests**: Combines platform-specific images
+   - Creates multi-arch manifest
+   - Pushes to ghcr.io with PR or branch tags
+
+3. **helm-tests**: Full k3s deployment validation via `angreal helm test`
+   - Uses images built in step 1 (actual PR code!)
+   - Deploys broker and agent charts to k3s cluster
+   - Tests all RBAC modes and values files
+   - Validates health endpoints and connectivity
+
+4. **cleanup-pr-packages**: Removes PR-tagged images (PRs only)
+   - Deletes temporary PR images after tests pass
+   - Keeps registry clean
+
+**Key Architecture**: Images are built once, pushed to registry, then tested - ensuring tests validate actual PR changes, not stale registry images.
 
 ### release.yml
 
@@ -209,12 +226,16 @@ Triggered by version tags:
 Before pushing a version tag, test locally using angreal to catch issues early:
 
 ```bash
-# Test Helm charts (same as CI runs)
-angreal helm test all
+# Build images (same as CI)
+angreal build multi-arch broker --tag test --platforms linux/amd64
+angreal build multi-arch agent --tag test --platforms linux/amd64
 
-# Build and test multi-arch images locally (optional)
-docker buildx build --platform linux/amd64,linux/arm64 -f Dockerfile.broker -t test:latest .
-docker buildx build --platform linux/amd64,linux/arm64 -f Dockerfile.agent -t test:latest .
+# Test Helm charts with built images (same as CI)
+angreal helm test all --tag test
+
+# Or build and test specific component
+angreal build multi-arch broker --tag test --platforms linux/amd64
+angreal helm test broker --tag test
 ```
 
 The CI workflows execute the same `angreal` commands, ensuring local/CI parity.
