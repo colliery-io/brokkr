@@ -11,8 +11,8 @@ on:
       - 'utils/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
-      - 'Dockerfile.broker'
-      - 'Dockerfile.agent'
+      - 'docker/Dockerfile.broker'
+      - 'docker/Dockerfile.agent'
       - '.github/workflows/build-images.yml'
   pull_request:
     branches: [main, develop]
@@ -23,8 +23,8 @@ on:
       - 'utils/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
-      - 'Dockerfile.broker'
-      - 'Dockerfile.agent'
+      - 'docker/Dockerfile.broker'
+      - 'docker/Dockerfile.agent'
       - '.github/workflows/build-images.yml'
 
 env:
@@ -82,7 +82,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./Dockerfile.${{ matrix.component }}
+          file: ./docker/Dockerfile.${{ matrix.component }}
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=build-${{ matrix.component }}-${{ steps.platform.outputs.arch }}

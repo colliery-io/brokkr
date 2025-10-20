@@ -56,6 +56,9 @@ jobs:
           mkdir -p /tmp/brokkr-keys
           chmod 777 /tmp/brokkr-keys
 
+      - name: Build container images for testing
+        run: angreal build multi-arch ${{ matrix.component }} --tag ${{ github.ref_name }} --platforms linux/amd64
+
       - name: docker compose up
         uses: hoverkraft-tech/compose-action@v2.0.1
         with:
@@ -115,7 +118,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./Dockerfile.${{ matrix.component }}
+          file: ./docker/Dockerfile.${{ matrix.component }}
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=build-${{ matrix.component }}-${{ steps.platform.outputs.arch }}

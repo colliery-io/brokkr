@@ -49,10 +49,13 @@ jobs:
           mkdir -p /tmp/brokkr-keys
           chmod 777 /tmp/brokkr-keys
 
+      - name: Build container images
+        run: angreal build multi-arch ${{ matrix.component }} --tag test --platforms linux/amd64
+
       - name: docker compose up
         uses: hoverkraft-tech/compose-action@v2.0.1
         with:
           compose-file: ".angreal/files/docker-compose.yaml"
 
       - name: Execute helm chart tests
-        run: angreal helm test ${{ matrix.component }} --skip-docker
+        run: angreal helm test ${{ matrix.component }} --skip-docker --tag test
