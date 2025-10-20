@@ -136,18 +136,31 @@ def setup_image_pull_secret(registry, namespace="default"):
         return False
 
 
-def helm_install(chart_name, release_name, values, namespace="default"):
-    """Install a Helm chart."""
+def helm_install(chart_name, release_name, values, namespace="default", values_file=None):
+    """Install a Helm chart.
+
+    Args:
+        chart_name: Name of the chart to install
+        release_name: Helm release name
+        values: Dict of values to set via --set
+        namespace: Kubernetes namespace
+        values_file: Optional path to values file (relative to project root)
+    """
     print("")
     print("=" * 60)
     print(f"Installing Helm chart: {chart_name}")
     print(f"Release name: {release_name}")
     print(f"Namespace: {namespace}")
+    if values_file:
+        print(f"Values file: {values_file}")
     print("=" * 60)
     print("")
 
     # Build helm install command with values
     values_args = " ".join([f"--set {k}={v}" for k, v in values.items()])
+
+    # Add values file if specified
+    values_file_arg = f"-f /{values_file}" if values_file else ""
 
     cmd = f"""
         helm install {release_name} /charts/{chart_name} \
@@ -155,6 +168,7 @@ def helm_install(chart_name, release_name, values, namespace="default"):
             --create-namespace \
             --wait \
             --timeout 10m \
+            {values_file_arg} \
             {values_args}
     """
 
@@ -455,6 +469,130 @@ def create_agent_in_broker(broker_release_name, agent_name, cluster_name, namesp
     return None
 
 
+def test_broker_with_values_file(tag, registry, no_cleanup, values_file_name):
+    """Test broker deployment using a specific values file.
+
+    Args:
+        tag: Image tag to test
+        registry: Container registry URL
+        no_cleanup: Skip cleanup after test
+        values_file_name: Name of values file (e.g., "production", "development", "staging")
+
+    Returns:
+        bool: True if test passed, False otherwise
+    """
+    release_name = f"brokkr-broker-test-{values_file_name}"
+    chart_name = "brokkr-broker"
+    values_file = f"charts/brokkr-broker/values/{values_file_name}.yaml"
+
+    try:
+        setup_image_pull_secret(registry.split('/')[0])
+
+        print(f"\nDeploying broker with {values_file_name}.yaml")
+
+        # Base values that override values file for test environment
+        broker_values = {
+            "image.tag": tag,
+            "image.repository": f"{registry}/brokkr-broker",
+            "image.pullSecrets[0].name": "ghcr-secret",
+        }
+
+        # For production/staging, override external DB to use bundled
+        if values_file_name in ["production", "staging"]:
+            print("Note: Overriding external DB settings for test environment")
+            broker_values["postgresql.enabled"] = "true"
+            broker_values["postgresql.existingSecret"] = ""  # Don't use external secret
+            broker_values["postgresql.auth.password"] = "testpassword"
+            broker_values["tls.enabled"] = "false"  # Disable TLS for testing
+            broker_values["ingress.enabled"] = "false"  # Disable ingress for testing
+
+        install_success = helm_install(
+            chart_name,
+            release_name,
+            broker_values,
+            values_file=values_file
+        )
+
+        if not install_success:
+            return False
+
+        if not wait_for_pods(release_name):
+            if not no_cleanup:
+                helm_uninstall(release_name)
+            return False
+
+        print(f"✓ Broker deployed successfully with {values_file_name}.yaml")
+        return True
+
+    finally:
+        if not no_cleanup:
+            helm_uninstall(release_name)
+
+
+def test_agent_with_values_file(tag, registry, no_cleanup, values_file_name, broker_release_name):
+    """Test agent deployment using a specific values file.
+
+    Args:
+        tag: Image tag to test
+        registry: Container registry URL
+        no_cleanup: Skip cleanup after test
+        values_file_name: Name of values file (e.g., "production", "development", "staging")
+        broker_release_name: Name of existing broker release
+
+    Returns:
+        bool: True if test passed, False otherwise
+    """
+    release_name = f"brokkr-agent-test-{values_file_name}"
+    chart_name = "brokkr-agent"
+    values_file = f"charts/brokkr-agent/values/{values_file_name}.yaml"
+
+    try:
+        print(f"\nDeploying agent with {values_file_name}.yaml")
+
+        # Create agent in broker
+        agent_name = f"test-agent-{values_file_name}"
+        pak = create_agent_in_broker(broker_release_name, agent_name, "test-cluster")
+
+        if not pak:
+            print("Failed to create agent and get PAK")
+            return False
+
+        broker_url = f"http://{broker_release_name}:3000"
+
+        # Base values that override values file for test environment
+        agent_values = {
+            "image.tag": tag,
+            "image.repository": f"{registry}/brokkr-agent",
+            "image.pullSecrets[0].name": "ghcr-secret",
+            "broker.url": broker_url,
+            "broker.agentName": agent_name,
+            "broker.clusterName": "test-cluster",
+            "broker.pak": pak,
+        }
+
+        install_success = helm_install(
+            chart_name,
+            release_name,
+            agent_values,
+            values_file=values_file
+        )
+
+        if not install_success:
+            return False
+
+        if not wait_for_pods(release_name):
+            if not no_cleanup:
+                helm_uninstall(release_name)
+            return False
+
+        print(f"✓ Agent deployed successfully with {values_file_name}.yaml")
+        return True
+
+    finally:
+        if not no_cleanup:
+            helm_uninstall(release_name)
+
+
 def deploy_test_broker(tag, registry):
     """Deploy a broker instance for agent testing and return the release name."""
     broker_release_name = "brokkr-broker-for-agent-test"
@@ -661,6 +799,15 @@ def test_helm_chart(component, skip_docker=False, no_cleanup=False, tag="test", 
             result = test_broker_chart(tag, registry, no_cleanup, test_external_db=True)
             results.append(("broker-external-db", result))
 
+            # Test broker values files
+            values_files = ["production", "development", "staging"]
+            for values_file in values_files:
+                print("\n" + "=" * 60)
+                print(f"Testing broker chart with {values_file}.yaml")
+                print("=" * 60)
+                result = test_broker_with_values_file(tag, registry, no_cleanup, values_file)
+                results.append((f"broker-values-{values_file}", result))
+
         if component in ["agent", "all"]:
             # Deploy broker once for all agent tests
             print("\n" + "=" * 60)
@@ -680,6 +827,15 @@ def test_helm_chart(component, skip_docker=False, no_cleanup=False, tag="test", 
                     print("=" * 60)
                     result = test_agent_chart(tag, registry, no_cleanup, rbac_mode=rbac_mode, broker_release_name=broker_release_name)
                     results.append((f"agent-rbac-{rbac_mode}", result))
+
+                # Test agent values files
+                values_files = ["production", "development", "staging"]
+                for values_file in values_files:
+                    print("\n" + "=" * 60)
+                    print(f"Testing agent chart with {values_file}.yaml")
+                    print("=" * 60)
+                    result = test_agent_with_values_file(tag, registry, no_cleanup, values_file, broker_release_name)
+                    results.append((f"agent-values-{values_file}", result))
 
                 # Cleanup broker after all agent tests
                 if not no_cleanup:

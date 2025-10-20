@@ -1,0 +1,117 @@
+---
+# Production Configuration for Brokkr Agent
+# ==========================================
+# This file contains production-ready settings for deploying the Brokkr agent
+# with full cluster-wide RBAC permissions for comprehensive inventory collection.
+#
+# Usage:
+#   helm install brokkr-agent . -f values/production.yaml \
+#     --set broker.agentName=prod-cluster-01 \
+#     --set broker.clusterName=production-us-east-1 \
+#     --set broker.pak=<pre-authenticated-key>
+#
+# IMPORTANT: Review and customize the following before deploying:
+#   - broker.url (your production broker endpoint)
+#   - broker.agentName (unique identifier for this agent)
+#   - broker.clusterName (cluster identifier)
+#   - broker.pak (pre-authenticated key from broker)
+
+# Image Configuration
+image:
+  repository: ghcr.io/colliery-io/brokkr-agent
+  # Production: Pin to a specific version tag, never use 'latest'
+  # Example: v1.0.0, v1.2.3, 2024.01.15
+  tag: "v1.0.0"
+  # IfNotPresent: Only pull if image is not cached
+  pullPolicy: IfNotPresent
+
+# Single replica is sufficient for agent
+# Multiple agents in same cluster should use different agentName values
+replicaCount: 1
+
+# Broker Connection Configuration
+broker:
+  # Production broker endpoint
+  # Examples:
+  #   - With ingress: https://brokkr.production.example.com
+  #   - Internal service: http://brokkr-broker.brokkr-system.svc.cluster.local:3000
+  url: "https://brokkr.production.example.com"
+
+  # Unique agent identifier (REQUIRED)
+  # Must match agent registered in broker
+  # Examples: prod-cluster-01, us-east-1-k8s, prod-gke-main
+  agentName: ""
+
+  # Cluster identifier (REQUIRED)
+  # Human-readable name for this Kubernetes cluster
+  # Examples: production-us-east-1, prod-gke-main, prod-eks-primary
+  clusterName: ""
+
+  # Pre-Authenticated Key (REQUIRED)
+  # Obtain from broker when registering agent
+  # SECURITY: Use --set flag or external secret, never commit to values file
+  pak: ""
+
+# Agent Behavior Configuration
+agent:
+  # Polling interval in seconds
+  # Production: 30-60 seconds balances responsiveness and broker load
+  pollingInterval: 30
+
+# RBAC Configuration
+rbac:
+  # Create RBAC resources
+  create: true
+
+  # Production: Use cluster-wide RBAC for full inventory visibility
+  # Allows agent to collect data about all namespaces and cluster resources
+  clusterWide: true
+
+  # Additional custom RBAC rules (if needed)
+  # Example: Add permissions for custom CRDs
+  # additionalRules:
+  #   - apiGroups: ["custom.io"]
+  #     resources: ["customresources"]
+  #     verbs: ["get", "list", "watch"]
+  additionalRules: []
+
+# Service Account
+serviceAccount:
+  # Create service account for agent
+  create: true
+  # Optional: Use custom service account name
+  # name: "brokkr-agent-prod"
+
+# Resource Limits
+# Production: Set appropriate limits based on cluster size
+# Larger clusters may need more resources for API calls and processing
+resources:
+  # Requests: Guaranteed resources
+  requests:
+    memory: "256Mi"
+    cpu: "100m"
+  # Limits: Maximum resources before throttling/eviction
+  limits:
+    memory: "512Mi"
+    cpu: "500m"
+
+# Security Context
+# Production security best practices
+securityContext:
+  # Run as non-root user
+  runAsNonRoot: true
+  runAsUser: 10001
+  fsGroup: 10001
+  # Seccomp profile for syscall filtering (Kubernetes 1.19+)
+  seccompProfile:
+    type: RuntimeDefault
+
+# Additional Environment Variables
+# Use for production-specific configuration
+extraEnv:
+  # Set appropriate log level for production
+  - name: RUST_LOG
+    value: "info"
+  # Example: Configure health check port
+  # - name: HEALTH_PORT
+  #   value: "8080"

@@ -4,14 +4,14 @@ level: task
 title: "Create comprehensive RBAC for agent"
 short_code: "BROKKR-T-0012"
 created_at: 2025-10-19T02:26:49.169147+00:00
-updated_at: 2025-10-20T01:06:11.894983+00:00
+updated_at: 2025-10-20T14:51:48.568029+00:00
 parent: BROKKR-I-0003
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/active"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -64,6 +64,8 @@ Define and document comprehensive RBAC permissions for the agent's control loop 
 - **Current Problems**: {What's difficult/slow/buggy now}
 - **Benefits of Fixing**: {What improves after refactoring}
 - **Risk Assessment**: {Risks of not addressing this}
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 
@@ -353,7 +355,15 @@ All acceptance criteria have been met. Comprehensive RBAC support has been imple
 - Namespace-scoped template rendering: Verified Role and RoleBinding with correct namespace, cluster-scoped resources excluded
 - Additional rules: Verified custom rules properly appended to RBAC template
 - RBAC disabled: Verified no RBAC resources created
-- Integration testing: Cluster-wide mode fully functional, namespace-scoped and disabled modes have correct RBAC but agent requires code changes to handle limited permissions
+- Integration testing: All three RBAC modes (cluster-wide, namespace-scoped, disabled) now pass successfully
+
+**Agent Fix (2025-10-20):**
+Fixed agent to handle missing RBAC permissions gracefully:
+- Replaced namespace listing connectivity check with apiserver_version() call
+- apiserver_version() doesn't require any RBAC permissions
+- Agent now starts successfully in all RBAC modes without requiring cluster-wide namespace access
+- Test infrastructure improved to deploy broker once and run all RBAC mode tests
+- All acceptance criteria now met with passing integration tests
 
 **Security Notes:**
 - Agent has read access to secrets (required for inventory but documented as high-risk)
