@@ -17,6 +17,13 @@ agent:
 rbac:
   create: true
   clusterWide: true
+  # Additional custom RBAC rules to append to the agent role
+  # Example:
+  # additionalRules:
+  #   - apiGroups: ["custom.io"]
+  #     resources: ["customresources"]
+  #     verbs: ["get", "list", "watch"]
+  additionalRules: []
 
 serviceAccount:
   create: true
