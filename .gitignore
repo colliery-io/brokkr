@@ -196,3 +196,8 @@ cython_debug/
 
 # Ignore Hugo and static site build output
 /docs/public
+
+# Helm dependency charts (like node_modules)
+# Keep Chart.lock but ignore downloaded chart tarballs
+charts/*/charts/
+*.tgz

@@ -53,8 +53,52 @@ Database host
 */}}
 {{- define "brokkr-broker.databaseHost" -}}
 {{- if .Values.postgresql.enabled }}
-{{- printf "%s-postgresql" (include "brokkr-broker.fullname" .) }}
+{{- printf "%s-postgresql" .Release.Name }}
 {{- else }}
-{{- .Values.postgresql.host }}
+{{- .Values.postgresql.external.host }}
+{{- end }}
+{{- end }}
+
+{{/*
+Database username
+*/}}
+{{- define "brokkr-broker.databaseUsername" -}}
+{{- if .Values.postgresql.enabled }}
+{{- .Values.postgresql.auth.username }}
+{{- else }}
+{{- .Values.postgresql.external.username }}
+{{- end }}
+{{- end }}
+
+{{/*
+Database password
+*/}}
+{{- define "brokkr-broker.databasePassword" -}}
+{{- if .Values.postgresql.enabled }}
+{{- .Values.postgresql.auth.password }}
+{{- else }}
+{{- .Values.postgresql.external.password }}
+{{- end }}
+{{- end }}
+
+{{/*
+Database name
+*/}}
+{{- define "brokkr-broker.databaseName" -}}
+{{- if .Values.postgresql.enabled }}
+{{- .Values.postgresql.auth.database }}
+{{- else }}
+{{- .Values.postgresql.external.database }}
+{{- end }}
+{{- end }}
+
+{{/*
+Database port
+*/}}
+{{- define "brokkr-broker.databasePort" -}}
+{{- if .Values.postgresql.enabled }}
+5432
+{{- else }}
+{{- .Values.postgresql.external.port }}
 {{- end }}
 {{- end }}
