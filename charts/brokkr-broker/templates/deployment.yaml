@@ -61,5 +61,18 @@ spec:
         {{- with .Values.extraEnv }}
           {{- toYaml . | nindent 10 }}
         {{- end }}
+        {{- if .Values.tls.enabled }}
+        volumeMounts:
+        - name: tls-certs
+          mountPath: /etc/tls
+          readOnly: true
+        {{- end }}
         resources:
           {{- toYaml .Values.resources | nindent 10 }}
+      {{- if .Values.tls.enabled }}
+      volumes:
+      - name: tls-certs
+        secret:
+          secretName: {{ include "brokkr-broker.tlsSecretName" . }}
+          defaultMode: 0400
+      {{- end }}
