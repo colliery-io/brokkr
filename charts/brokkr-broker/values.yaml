@@ -30,24 +30,63 @@ postgresql:
   # enabled: true deploys a bundled PostgreSQL instance (development/testing)
   # enabled: false uses an external PostgreSQL instance (production)
   enabled: true
-  # External database host (required when enabled=false)
-  host: ''
-  # Database port
-  port: 5432
-  # Database name
-  database: brokkr
-  # Database username (not used when existingSecret is set)
-  username: brokkr
-  # Database password (not used when existingSecret is set)
-  # WARNING: Do not commit production passwords to values files
-  password: brokkr
+
+  # External database configuration (used when enabled=false)
+  external:
+    # External database host (required when postgresql.enabled=false)
+    host: ''
+    # Database port
+    port: 5432
+    # Database name
+    database: brokkr
+    # Database username (not used when existingSecret is set)
+    username: brokkr
+    # Database password (not used when existingSecret is set)
+    # WARNING: Do not commit production passwords to values files
+    password: brokkr
+
   # Use an existing Kubernetes secret for database credentials
   # The secret should contain a key with the full database connection URL
+  # Applies to both bundled and external PostgreSQL
   # existingSecret: my-database-secret
   existingSecret: ''
   # Key name in existingSecret that contains the database URL
   # Default: database-url
   existingSecretKey: database-url
+
+  # Bitnami PostgreSQL subchart configuration (used when enabled=true)
+  # See https://github.com/bitnami/charts/tree/main/bitnami/postgresql for all options
+
+  auth:
+    # PostgreSQL username for broker application
+    username: brokkr
+    # PostgreSQL password for broker application
+    # WARNING: Override this in production with a secure value or use existingSecret
+    password: brokkr
+    # PostgreSQL database name
+    database: brokkr
+
+  # Primary PostgreSQL instance configuration
+  primary:
+    # Persistence configuration for PostgreSQL data
+    persistence:
+      # Enable persistent storage (recommended for production)
+      # Set to false for ephemeral storage (testing only - data lost on pod restart)
+      enabled: true
+      # Storage class to use for PVC
+      # Empty string uses cluster default storage class
+      storageClass: ""
+      # Size of persistent volume
+      size: 8Gi
+
+    # Resource requests and limits for PostgreSQL
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "250m"
+      limits:
+        memory: "512Mi"
+        cpu: "500m"
 
 # Additional environment variables to inject into broker pods
 # Useful for configuration not covered by standard values
