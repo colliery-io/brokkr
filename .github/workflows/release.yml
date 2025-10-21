@@ -85,7 +85,9 @@ jobs:
         uses: hoverkraft-tech/compose-action@v2.0.1
         with:
           compose-file: ".angreal/files/docker-compose.yaml"
-          services: "k3s init-kubeconfig"
+          services: |
+            k3s
+            init-kubeconfig
 
       - name: Execute helm chart tests
         run: angreal helm test ${{ matrix.component }} --skip-docker --tag ${{ github.ref_name }}
