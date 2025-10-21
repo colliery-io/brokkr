@@ -90,6 +90,8 @@ jobs:
             init-kubeconfig
 
       - name: Execute helm chart tests
+        env:
+          GITHUB_TOKEN: ${{ secrets.GHCR_TOKEN }}
         run: angreal helm test ${{ matrix.component }} --skip-docker --tag ${{ github.ref_name }}
 
   build-release-images:
