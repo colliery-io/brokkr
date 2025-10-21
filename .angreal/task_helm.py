@@ -1,5 +1,6 @@
 import angreal
 import subprocess
+import sys
 import time
 from utils import docker_up, docker_down, docker_clean, cwd
 import os
@@ -43,7 +44,7 @@ def run_in_k8s_container(cmd, description="Running command in k8s container"):
         "-e", "KUBECONFIG=/keys/kubeconfig.docker.yaml",
         "alpine/k8s:1.27.3",
         "sh", "-c", cmd
-    ], cwd=cwd)
+    ], cwd=cwd, capture_output=False)
 
     return result.returncode == 0
 
@@ -172,6 +173,18 @@ def helm_install(chart_name, release_name, values, namespace="default", values_f
             {values_args}
     """
 
+    # Debug: Check what's in the charts directory
+    print("\nDebug: Checking charts directory contents...")
+    run_in_k8s_container(
+        f"ls -la /charts/{chart_name}/",
+        "Listing chart directory"
+    )
+    run_in_k8s_container(
+        f"ls -la /charts/{chart_name}/charts/ 2>/dev/null || echo 'No charts subdirectory'",
+        "Listing chart dependencies"
+    )
+
+    print(f"\nHelm command: {cmd.strip()}")
     success = run_in_k8s_container(cmd, f"Installing {chart_name}")
 
     if not success:
@@ -774,7 +787,7 @@ def test_helm_chart(component, skip_docker=False, no_cleanup=False, tag="test", 
     if component not in valid_components:
         print(f"Error: Unknown component '{component}'")
         print(f"Valid components: {', '.join(valid_components)}")
-        return 1
+        sys.exit(1)
 
     try:
         # Setup k3s
@@ -872,8 +885,10 @@ def test_helm_chart(component, skip_docker=False, no_cleanup=False, tag="test", 
             docker_down()
             docker_clean()
 
-        # Return success only if all tests passed
-        return 0 if all(result for _, result in results) else 1
+        # Exit with error if any tests failed, otherwise return normally
+        if not all(result for _, result in results):
+            sys.exit(1)
+        # Success - let angreal handle normal completion
 
     except Exception as e:
         print(f"\nError during Helm testing: {e}")
@@ -881,4 +896,4 @@ def test_helm_chart(component, skip_docker=False, no_cleanup=False, tag="test", 
             print("Cleaning up docker environment...")
             docker_down()
             docker_clean()
-        return 1
+        sys.exit(1)
