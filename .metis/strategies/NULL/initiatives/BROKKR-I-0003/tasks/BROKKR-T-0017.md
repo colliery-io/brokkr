@@ -4,14 +4,14 @@ level: task
 title: "Add Helm installation guide to documentation"
 short_code: "BROKKR-T-0017"
 created_at: 2025-10-21T12:37:06.064872+00:00
-updated_at: 2025-10-21T12:37:06.064872+00:00
+updated_at: 2025-10-21T16:59:45.480721+00:00
 parent: BROKKR-I-0003
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/todo"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -31,19 +31,21 @@ initiative_id: BROKKR-I-0003
 
 Create comprehensive Helm-based installation documentation for both broker and agent components. Cover basic installation scenarios including development setup with bundled PostgreSQL and connecting agents to brokers. This is the primary installation method users will follow.
 
+## Acceptance Criteria
 
+## Acceptance Criteria
 
 ## Acceptance Criteria **[REQUIRED]**
 
-- [ ] Installation guide updated in `docs/content/getting-started/installation.md`
-- [ ] Development setup documented (broker with bundled PostgreSQL)
-- [ ] Agent installation documented (connecting to broker)
-- [ ] Prerequisites clearly listed (Kubernetes cluster, kubectl, Helm 3.8+)
-- [ ] Quick start example: working broker + agent in under 10 minutes
-- [ ] Common configuration options documented (database, TLS, resources)
-- [ ] Values file examples provided for different scenarios
-- [ ] Verification steps included (health checks, connectivity tests)
-- [ ] Link to Helm chart reference documentation
+- [x] Installation guide updated in `docs/content/getting-started/installation.md`
+- [x] Development setup documented (broker with bundled PostgreSQL)
+- [x] Agent installation documented (connecting to broker)
+- [x] Prerequisites clearly listed (Kubernetes cluster, kubectl, Helm 3.8+)
+- [x] Quick start example: working broker + agent in under 10 minutes
+- [x] Common configuration options documented (database, TLS, resources)
+- [x] Values file examples provided for different scenarios (references to existing files)
+- [x] Verification steps included (health checks, connectivity tests)
+- [x] Link to Helm chart reference documentation
 
 
 
@@ -160,4 +162,33 @@ Reference the existing values files created in T-0014:
 
 ## Status Updates **[REQUIRED]**
 
-*To be added during implementation*
+### 2025-10-21: Documentation Complete
+
+Successfully created comprehensive Helm installation guide:
+
+**Documentation Sections Added:**
+- Prerequisites verification (Kubernetes, kubectl, Helm 3.8+)
+- Quick Start guide: broker + agent installation in 5 steps
+- Detailed broker installation (bundled PostgreSQL and external database)
+- Agent installation with PAK generation instructions
+- Chart version management (releases and development builds)
+- Upgrade and uninstall procedures
+- Verification steps (health checks, connectivity tests, test deployments)
+- Configuration reference tables
+- Troubleshooting common issues
+- Building from source (for contributors)
+
+**Key Features:**
+- OCI registry installation from ghcr.io/colliery-io/charts
+- References to existing values files (development.yaml, staging.yaml, production.yaml)
+- Copy-paste ready examples
+- Expected output examples for verification
+- Links to chart values files on GitHub
+
+**User Guidance Improvements:**
+- Helm emphasized as primary/recommended installation method
+- Source builds moved to end as advanced/contributor option
+- Clear separation between development and production setups
+- Simplified configuration by referencing existing values files
+
+Skipped production and multi-cluster scenarios as requested.
