@@ -90,14 +90,27 @@ jobs:
             init-kubeconfig
 
       - name: Create GHCR image pull secret in k3s
-        env:
-          KUBECONFIG: /tmp/kubeconfig.docker.yaml
         run: |
-          kubectl create secret docker-registry ghcr-secret \
+          # Wait for kubeconfig to be created
+          timeout=30
+          elapsed=0
+          while [ ! -f /tmp/kubeconfig.docker.yaml ] && [ $elapsed -lt $timeout ]; do
+            echo "Waiting for kubeconfig..."
+            sleep 1
+            elapsed=$((elapsed + 1))
+          done
+
+          if [ ! -f /tmp/kubeconfig.docker.yaml ]; then
+            echo "Error: kubeconfig not found after ${timeout}s"
+            exit 1
+          fi
+
+          # Create image pull secret
+          kubectl --kubeconfig=/tmp/kubeconfig.docker.yaml create secret docker-registry ghcr-secret \
             --docker-server=${{ env.REGISTRY }} \
             --docker-username=${{ env.REGISTRY_USER }} \
             --docker-password=${{ secrets.GHCR_TOKEN }} \
-            --dry-run=client -o yaml | kubectl apply -f -
+            --dry-run=client -o yaml | kubectl --kubeconfig=/tmp/kubeconfig.docker.yaml apply -f -
 
       - name: Execute helm chart tests
         env:
