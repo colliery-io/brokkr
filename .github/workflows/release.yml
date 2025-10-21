@@ -90,29 +90,6 @@ jobs:
             init-kubeconfig
             copy-keys
 
-      - name: Create GHCR image pull secret in k3s
-        run: |
-          # Wait for kubeconfig to be created and copied to host
-          timeout=60
-          elapsed=0
-          while [ ! -f /tmp/brokkr-keys/kubeconfig.local.yaml ] && [ $elapsed -lt $timeout ]; do
-            echo "Waiting for kubeconfig..."
-            sleep 1
-            elapsed=$((elapsed + 1))
-          done
-
-          if [ ! -f /tmp/brokkr-keys/kubeconfig.local.yaml ]; then
-            echo "Error: kubeconfig not found after ${timeout}s"
-            exit 1
-          fi
-
-          # Create image pull secret (using local kubeconfig for host access)
-          kubectl --kubeconfig=/tmp/brokkr-keys/kubeconfig.local.yaml create secret docker-registry ghcr-secret \
-            --docker-server=${{ env.REGISTRY }} \
-            --docker-username=${{ env.REGISTRY_USER }} \
-            --docker-password=${{ secrets.GHCR_TOKEN }} \
-            --dry-run=client -o yaml | kubectl --kubeconfig=/tmp/brokkr-keys/kubeconfig.local.yaml apply -f -
-
       - name: Execute helm chart tests
         env:
           GITHUB_TOKEN: ${{ secrets.GHCR_TOKEN }}
