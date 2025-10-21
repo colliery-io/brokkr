@@ -1,5 +1,6 @@
 import angreal
 import subprocess
+import sys
 import time
 from utils import docker_up, docker_down, docker_clean, cwd
 import os
@@ -774,7 +775,7 @@ def test_helm_chart(component, skip_docker=False, no_cleanup=False, tag="test", 
     if component not in valid_components:
         print(f"Error: Unknown component '{component}'")
         print(f"Valid components: {', '.join(valid_components)}")
-        return 1
+        sys.exit(1)
 
     try:
         # Setup k3s
@@ -872,8 +873,9 @@ def test_helm_chart(component, skip_docker=False, no_cleanup=False, tag="test", 
             docker_down()
             docker_clean()
 
-        # Return success only if all tests passed
-        return 0 if all(result for _, result in results) else 1
+        # Exit with non-zero code if any tests failed
+        exit_code = 0 if all(result for _, result in results) else 1
+        sys.exit(exit_code)
 
     except Exception as e:
         print(f"\nError during Helm testing: {e}")
@@ -881,4 +883,4 @@ def test_helm_chart(component, skip_docker=False, no_cleanup=False, tag="test", 
             print("Cleaning up docker environment...")
             docker_down()
             docker_clean()
-        return 1
+        sys.exit(1)
