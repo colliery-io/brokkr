@@ -262,4 +262,4 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             -f "names[]=${TAG}" || echo "Package ${TAG} not found or already deleted"
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GHCR_TOKEN }}
