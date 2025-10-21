@@ -44,7 +44,7 @@ def run_in_k8s_container(cmd, description="Running command in k8s container"):
         "-e", "KUBECONFIG=/keys/kubeconfig.docker.yaml",
         "alpine/k8s:1.27.3",
         "sh", "-c", cmd
-    ], cwd=cwd)
+    ], cwd=cwd, capture_output=False)
 
     return result.returncode == 0
 
@@ -173,6 +173,7 @@ def helm_install(chart_name, release_name, values, namespace="default", values_f
             {values_args}
     """
 
+    print(f"\nHelm command: {cmd.strip()}")
     success = run_in_k8s_container(cmd, f"Installing {chart_name}")
 
     if not success:
