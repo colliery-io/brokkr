@@ -298,6 +298,12 @@ jobs:
         with:
           version: 'v3.12.0'
 
+      - name: Add Helm repositories
+        run: helm repo add bitnami https://charts.bitnami.com/bitnami
+
+      - name: Build Helm dependencies
+        run: helm dependency build charts/brokkr-${{ matrix.component }}
+
       - name: Log in to GHCR
         run: echo ${{ secrets.GHCR_TOKEN }} | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
 
@@ -338,6 +344,12 @@ jobs:
         uses: azure/setup-helm@v3
         with:
           version: 'v3.12.0'
+
+      - name: Add Helm repositories
+        run: helm repo add bitnami https://charts.bitnami.com/bitnami
+
+      - name: Build Helm dependencies
+        run: helm dependency build charts/brokkr-${{ matrix.component }}
 
       - name: Log in to GHCR
         run: echo ${{ secrets.GHCR_TOKEN }} | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
