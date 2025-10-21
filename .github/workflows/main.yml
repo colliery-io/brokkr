@@ -1,10 +1,15 @@
 ---
-name: CI/CD Pipeline
+name: Fast Code Validation
 on:
   push:
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   setup:
     uses: ./.github/workflows/setup.yml

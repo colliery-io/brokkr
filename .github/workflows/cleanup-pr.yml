@@ -1,0 +1,70 @@
+---
+name: Cleanup PR Artifacts
+
+on:
+  pull_request:
+    types: [closed]
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  cleanup-pr-artifacts:
+    name: Cleanup PR Artifacts
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    strategy:
+      matrix:
+        component: [broker, agent]
+    steps:
+      - name: Delete PR container images
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          PR_TAG="pr-${PR_NUMBER}"
+          PACKAGE_NAME="brokkr-${{ matrix.component }}"
+
+          echo "Cleaning up container images for PR #${PR_NUMBER}"
+
+          # List all versions and find the one with our PR tag
+          VERSIONS=$(gh api "/orgs/${{ github.repository_owner }}/packages/container/${PACKAGE_NAME}/versions" \
+            --jq ".[] | select(.metadata.container.tags[] | contains(\"${PR_TAG}\")) | .id")
+
+          if [ -n "$VERSIONS" ]; then
+            for VERSION_ID in $VERSIONS; do
+              echo "Deleting version ID: ${VERSION_ID}"
+              gh api --method DELETE \
+                "/orgs/${{ github.repository_owner }}/packages/container/${PACKAGE_NAME}/versions/${VERSION_ID}" \
+                && echo "Successfully deleted container image ${PR_TAG}" \
+                || echo "Failed to delete container image ${PR_TAG}"
+            done
+          else
+            echo "No container image found with tag ${PR_TAG}"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GHCR_TOKEN }}
+
+      - name: Delete PR Helm charts
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          CHART_PACKAGE="charts/brokkr-${{ matrix.component }}"
+
+          echo "Cleaning up Helm charts for PR #${PR_NUMBER}"
+
+          # List all chart versions and find ones matching 0.0.0-pr{number}.*
+          VERSIONS=$(gh api "/orgs/${{ github.repository_owner }}/packages/container/${CHART_PACKAGE}/versions" \
+            --jq ".[] | select(.metadata.container.tags[] | startswith(\"0.0.0-pr${PR_NUMBER}.\")) | .id")
+
+          if [ -n "$VERSIONS" ]; then
+            for VERSION_ID in $VERSIONS; do
+              echo "Deleting Helm chart version ID: ${VERSION_ID}"
+              gh api --method DELETE \
+                "/orgs/${{ github.repository_owner }}/packages/container/${CHART_PACKAGE}/versions/${VERSION_ID}" \
+                && echo "Successfully deleted Helm chart version" \
+                || echo "Failed to delete Helm chart version"
+            done
+          else
+            echo "No Helm charts found for PR #${PR_NUMBER}"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GHCR_TOKEN }}
