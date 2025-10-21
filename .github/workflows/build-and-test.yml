@@ -258,7 +258,7 @@ jobs:
           services: |
             k3s
             init-kubeconfig
-            copy-keys
+            copy-kubeconfig
 
       - name: Execute helm chart tests
         env:
