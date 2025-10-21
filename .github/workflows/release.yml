@@ -89,6 +89,16 @@ jobs:
             k3s
             init-kubeconfig
 
+      - name: Create GHCR image pull secret in k3s
+        env:
+          KUBECONFIG: /tmp/kubeconfig.docker.yaml
+        run: |
+          kubectl create secret docker-registry ghcr-secret \
+            --docker-server=${{ env.REGISTRY }} \
+            --docker-username=${{ env.REGISTRY_USER }} \
+            --docker-password=${{ secrets.GHCR_TOKEN }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+
       - name: Execute helm chart tests
         env:
           GITHUB_TOKEN: ${{ secrets.GHCR_TOKEN }}

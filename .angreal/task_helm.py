@@ -162,6 +162,9 @@ def helm_install(chart_name, release_name, values, namespace="default", values_f
     # Add values file if specified
     values_file_arg = f"-f /{values_file}" if values_file else ""
 
+    # Add imagePullSecrets for GHCR authentication
+    image_pull_secrets_arg = "--set image.pullSecrets[0].name=ghcr-secret"
+
     cmd = f"""
         helm install {release_name} /charts/{chart_name} \
             --namespace {namespace} \
@@ -169,6 +172,7 @@ def helm_install(chart_name, release_name, values, namespace="default", values_f
             --wait \
             --timeout 10m \
             {values_file_arg} \
+            {image_pull_secrets_arg} \
             {values_args}
     """
 
