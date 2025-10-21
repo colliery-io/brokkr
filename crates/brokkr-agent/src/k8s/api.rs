@@ -41,7 +41,6 @@ use crate::k8s::objects::verify_object_ownership;
 use crate::k8s::objects::{CHECKSUM_ANNOTATION, STACK_LABEL};
 use backoff::ExponentialBackoffBuilder;
 use brokkr_utils::logging::prelude::*;
-use k8s_openapi::api::core::v1::Namespace;
 use kube::api::DeleteParams;
 use kube::api::DynamicObject;
 use kube::api::GroupVersionKind;
@@ -726,10 +725,14 @@ pub async fn create_k8s_client(
         .await
         .map_err(|e| format!("Failed to create Kubernetes client: {}", e))?;
 
-    // Verify cluster connectivity by attempting to list namespaces
-    let ns_api = Api::<Namespace>::all(client.clone());
-    match ns_api.list(&Default::default()).await {
-        Ok(_) => info!("Successfully connected to Kubernetes cluster and verified API access"),
+    // Verify cluster connectivity using API server version (doesn't require RBAC permissions)
+    match client.apiserver_version().await {
+        Ok(version) => {
+            info!(
+                "Successfully connected to Kubernetes cluster (version: {}.{})",
+                version.major, version.minor
+            );
+        }
         Err(e) => {
             error!("Failed to verify Kubernetes cluster connectivity: {}", e);
             return Err(format!("Failed to connect to Kubernetes cluster: {}", e).into());

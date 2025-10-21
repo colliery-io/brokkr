@@ -196,6 +196,23 @@ services:
       init-kubeconfig:
         condition: service_completed_successfully
 
+  copy-kubeconfig:
+    image: alpine
+    volumes:
+      - brokkr-keys:/source:ro
+      - /tmp/brokkr-keys:/destination
+    command: >
+      sh -c "
+        mkdir -p /destination &&
+        cp /source/kubeconfig.yaml /destination/ &&
+        cp /source/kubeconfig.local.yaml /destination/ &&
+        cp /source/kubeconfig.docker.yaml /destination/ &&
+        chmod -R 777 /destination/
+      "
+    depends_on:
+      init-kubeconfig:
+        condition: service_completed_successfully
+
 volumes:
   brokkr-postgres-data:
   k3s-data:

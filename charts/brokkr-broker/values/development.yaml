@@ -1,0 +1,104 @@
+---
+# Development Configuration for Brokkr Broker
+# ============================================
+# This file contains development-friendly settings optimized for:
+#   - Quick deployment and iteration
+#   - Minimal resource usage
+#   - Easy debugging and testing
+#   - No external dependencies
+#
+# Usage:
+#   helm install brokkr-broker-dev . -f values/development.yaml
+#
+# WARNING: DO NOT USE IN PRODUCTION
+# This configuration prioritizes convenience over security and reliability.
+
+# Single Replica: Sufficient for local development
+replicaCount: 1
+
+# Image Configuration
+image:
+  repository: ghcr.io/colliery-io/brokkr-broker
+  # Development: Use latest to always get newest changes
+  tag: "latest"
+  # Always: Pull on every pod start to get fresh images
+  pullPolicy: Always
+
+# Service Configuration
+service:
+  # ClusterIP: Use kubectl port-forward for local access
+  # kubectl port-forward svc/brokkr-broker-dev 3000:3000
+  type: ClusterIP
+  port: 3000
+
+# PostgreSQL Configuration
+postgresql:
+  # Development: Use bundled PostgreSQL for convenience
+  # No need to set up external database
+  enabled: true
+
+  # Bundled PostgreSQL settings
+  auth:
+    username: brokkr
+    # Simple password for development (not a security concern locally)
+    password: devpassword
+    database: brokkr
+
+  primary:
+    persistence:
+      # Development: Disable persistence for faster cleanup
+      # Data is ephemeral - pod restart clears database
+      # Benefit: No need to manually clean up PVCs during testing
+      enabled: false
+
+    # Minimal resources for development database
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "200m"
+
+# Resource Limits
+# Minimal resources to maximize local cluster capacity
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "50m"
+  limits:
+    memory: "256Mi"
+    cpu: "200m"
+
+# Security Context
+# Relaxed for easier debugging, but still non-root
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  fsGroup: 10001
+  # Note: No seccompProfile for development (easier debugging with strace, etc.)
+
+# TLS/SSL Configuration
+tls:
+  # Development: Disable TLS for simplicity
+  # Access via http://localhost:3000 after port-forward
+  enabled: false
+
+# Ingress Configuration
+ingress:
+  # Development: Disable ingress, use port-forward instead
+  # kubectl port-forward svc/brokkr-broker-dev 3000:3000
+  enabled: false
+
+# Additional Environment Variables
+# Useful for development debugging
+extraEnv:
+  # Verbose logging for development
+  - name: RUST_LOG
+    value: "debug"
+  # Example: Enable development-only features
+  # - name: DEV_MODE
+  #   value: "true"
+  # Example: Disable connection pooling for easier debugging
+  # - name: DATABASE_POOL_SIZE
+  #   value: "1"

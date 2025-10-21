@@ -1,0 +1,106 @@
+---
+# Development Configuration for Brokkr Agent
+# ============================================
+# This file contains development-friendly settings optimized for:
+#   - Quick deployment and testing
+#   - Namespace-scoped RBAC (easier to test with less permissions)
+#   - Minimal resource usage
+#   - Fast iteration cycles
+#
+# Usage:
+#   helm install brokkr-agent-dev . -f values/development.yaml \
+#     --set broker.agentName=dev-test-agent \
+#     --set broker.clusterName=local-dev \
+#     --set broker.pak=<pre-authenticated-key>
+#
+# WARNING: DO NOT USE IN PRODUCTION
+# This configuration uses namespace-scoped RBAC and minimal resources.
+
+# Image Configuration
+image:
+  repository: ghcr.io/colliery-io/brokkr-agent
+  # Development: Use latest to always get newest changes
+  tag: "latest"
+  # Always: Pull on every pod start to get fresh images
+  pullPolicy: Always
+
+# Single replica
+replicaCount: 1
+
+# Broker Connection Configuration
+broker:
+  # Development broker endpoint
+  # Typically the broker running in the same cluster
+  # Use service name if broker is in same namespace:
+  #   url: http://brokkr-broker-dev:3000
+  # Use full DNS if in different namespace:
+  #   url: http://brokkr-broker-dev.default.svc.cluster.local:3000
+  # Use port-forward if broker is external:
+  #   kubectl port-forward svc/brokkr-broker-dev 3000:3000
+  #   url: http://localhost:3000
+  url: "http://brokkr-broker-dev:3000"
+
+  # Development agent name
+  # Use descriptive name for testing: dev-test-agent, local-dev, my-laptop
+  agentName: "dev-test-agent"
+
+  # Development cluster name
+  clusterName: "local-dev"
+
+  # Pre-Authenticated Key (REQUIRED)
+  # Get from broker during agent registration
+  pak: ""
+
+# Agent Behavior Configuration
+agent:
+  # Development: Shorter polling interval for faster testing
+  # See changes more quickly during development
+  pollingInterval: 10
+
+# RBAC Configuration
+rbac:
+  create: true
+
+  # Development: Use namespace-scoped RBAC
+  # Benefits:
+  #   - Test with limited permissions (catches permission issues early)
+  #   - Easier cleanup (just delete namespace)
+  #   - More restrictive for local testing
+  # Note: Agent will only see resources in its namespace
+  clusterWide: false
+
+  additionalRules: []
+
+# Service Account
+serviceAccount:
+  create: true
+  # Optional: Custom name for dev service account
+  # name: "brokkr-agent-dev"
+
+# Resource Limits
+# Minimal resources for development
+resources:
+  requests:
+    memory: "64Mi"
+    cpu: "25m"
+  limits:
+    memory: "128Mi"
+    cpu: "100m"
+
+# Security Context
+# Relaxed security for easier debugging
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  fsGroup: 10001
+  # Note: No seccompProfile in dev (easier debugging)
+
+# Additional Environment Variables
+# Useful for development debugging
+extraEnv:
+  # Verbose logging for development
+  - name: RUST_LOG
+    value: "debug"
+  # Example: Enable development-only features
+  # - name: DEV_MODE
+  #   value: "true"
