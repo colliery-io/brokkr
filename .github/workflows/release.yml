@@ -72,7 +72,19 @@ jobs:
         run: helm repo add bitnami https://charts.bitnami.com/bitnami
 
       - name: Build Helm dependencies
-        run: helm dependency build charts/brokkr-${{ matrix.component }}
+        run: |
+          # Build dependencies for the component being tested
+          helm dependency build charts/brokkr-${{ matrix.component }}
+          echo "Verifying ${{ matrix.component }} dependencies:"
+          ls -la charts/brokkr-${{ matrix.component }}/charts/ || echo "No charts subdirectory found!"
+
+          # Agent tests need broker chart too (to deploy broker for testing)
+          if [ "${{ matrix.component }}" = "agent" ]; then
+            echo "Building broker dependencies for agent testing..."
+            helm dependency build charts/brokkr-broker
+            echo "Verifying broker dependencies:"
+            ls -la charts/brokkr-broker/charts/ || echo "No broker charts subdirectory found!"
+          fi
 
       - name: Log in to Container Registry
         uses: docker/login-action@v3

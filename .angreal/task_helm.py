@@ -173,6 +173,17 @@ def helm_install(chart_name, release_name, values, namespace="default", values_f
             {values_args}
     """
 
+    # Debug: Check what's in the charts directory
+    print("\nDebug: Checking charts directory contents...")
+    run_in_k8s_container(
+        f"ls -la /charts/{chart_name}/",
+        "Listing chart directory"
+    )
+    run_in_k8s_container(
+        f"ls -la /charts/{chart_name}/charts/ 2>/dev/null || echo 'No charts subdirectory'",
+        "Listing chart dependencies"
+    )
+
     print(f"\nHelm command: {cmd.strip()}")
     success = run_in_k8s_container(cmd, f"Installing {chart_name}")
 
