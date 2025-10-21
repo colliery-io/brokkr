@@ -233,10 +233,11 @@ jobs:
             echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
           fi
 
-      - name: docker compose up
+      - name: docker compose up (k3s only)
         uses: hoverkraft-tech/compose-action@v2.0.1
         with:
           compose-file: ".angreal/files/docker-compose.yaml"
+          services: "k3s init-kubeconfig"
 
       - name: Execute helm chart tests
         run: angreal helm test ${{ matrix.component }} --skip-docker --tag ${{ steps.tag.outputs.tag }} --registry ${{ env.REGISTRY }}/${{ github.repository_owner }}
