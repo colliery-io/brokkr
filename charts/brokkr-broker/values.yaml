@@ -111,9 +111,96 @@ resources:
     memory: 512Mi
     cpu: 500m
 
-# Security context for broker pods
-# Run as non-root user for enhanced security
-securityContext:
+# AppArmor configuration
+# AppArmor provides additional security but requires AppArmor-enabled host
+apparmor:
+  # Enable AppArmor annotations (requires AppArmor support on cluster nodes)
+  enabled: false
+  # AppArmor profile to use (runtime/default is most common)
+  profile: runtime/default
+
+# Pod-level security context for broker
+# Controls security settings that apply to all containers in the pod
+podSecurityContext:
   runAsNonRoot: true
   runAsUser: 10001
+  runAsGroup: 10001
   fsGroup: 10001
+  # Seccomp profile for syscall filtering (Kubernetes 1.19+)
+  # Uncomment for production security hardening
+  # seccompProfile:
+  #   type: RuntimeDefault
+
+# Container-level security context for broker
+# Controls security settings specific to the broker container
+containerSecurityContext:
+  # Prevent privilege escalation
+  allowPrivilegeEscalation: false
+  # Enable read-only root filesystem for maximum security
+  # Note: Requires emptyDir volumes for /tmp and other writable paths
+  readOnlyRootFilesystem: false
+  runAsNonRoot: true
+  runAsUser: 10001
+  # Drop all Linux capabilities and add back only required ones
+  capabilities:
+    drop:
+      - ALL
+    # Uncomment if specific capabilities are needed
+    # add:
+    #   - NET_BIND_SERVICE
+
+# TLS/SSL configuration for secure communications
+tls:
+  # Enable TLS for the broker (requires certificates)
+  enabled: false
+
+  # Use an existing Kubernetes TLS secret
+  # The secret should be of type kubernetes.io/tls with tls.crt and tls.key
+  existingSecret: ''
+
+  # Provide certificates inline (base64 encoded)
+  # WARNING: Only use for testing. Production should use existingSecret or cert-manager
+  # To generate self-signed cert: openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  #   -keyout tls.key -out tls.crt -subj "/CN=brokkr.example.com"
+  cert: ''
+  key: ''
+
+  # Cert-manager integration for automatic certificate management
+  certManager:
+    # Enable cert-manager certificate generation
+    enabled: false
+    # Name of the cert-manager issuer to use
+    issuer: 'letsencrypt-prod'
+    # Issuer kind: Issuer or ClusterIssuer
+    issuerKind: 'ClusterIssuer'
+
+# Ingress configuration for external access
+ingress:
+  # Enable ingress resource creation
+  enabled: false
+
+  # Ingress class name (nginx, traefik, etc.)
+  # Required for Kubernetes 1.18+
+  className: 'nginx'
+
+  # Ingress annotations for additional configuration
+  # Common annotations:
+  #   cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  #   nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  #   nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+  annotations: {}
+
+  # Ingress host configuration
+  hosts:
+    - host: brokkr.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+
+  # TLS configuration for ingress
+  # If cert-manager is enabled, certificates will be automatically generated
+  # Otherwise, the secretName should reference an existing TLS secret
+  tls:
+    - secretName: brokkr-tls
+      hosts:
+        - brokkr.example.com

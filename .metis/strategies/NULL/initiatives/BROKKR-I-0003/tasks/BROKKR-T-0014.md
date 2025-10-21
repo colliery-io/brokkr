@@ -4,14 +4,14 @@ level: task
 title: "Create values files for deployment scenarios"
 short_code: "BROKKR-T-0014"
 created_at: 2025-10-19T02:26:49.681872+00:00
-updated_at: 2025-10-19T02:26:49.681872+00:00
+updated_at: 2025-10-20T15:11:22.861999+00:00
 parent: BROKKR-I-0003
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/todo"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -64,6 +64,10 @@ Create pre-configured values files for common deployment scenarios (production, 
 - **Current Problems**: {What's difficult/slow/buggy now}
 - **Benefits of Fixing**: {What improves after refactoring}
 - **Risk Assessment**: {Risks of not addressing this}
+
+## Acceptance Criteria
+
+## Acceptance Criteria
 
 ## Acceptance Criteria **[REQUIRED]**
 
@@ -382,4 +386,71 @@ These files are starting points. Create your own by:
 
 ## Status Updates **[REQUIRED]**
 
-*To be added during implementation*
+### Implementation Complete (2025-10-20)
+
+**Files Created:**
+
+Broker values files:
+- `charts/brokkr-broker/values/production.yaml` (4.3KB) - HA deployment with 3 replicas, external managed DB, TLS with cert-manager, full security hardening
+- `charts/brokkr-broker/values/development.yaml` (2.8KB) - Single replica, bundled ephemeral PostgreSQL, no TLS, minimal resources, debug logging
+- `charts/brokkr-broker/values/staging.yaml` (3.8KB) - 2 replicas, external DB, TLS, production-like security, moderate resources
+- `charts/brokkr-broker/values/README.md` (7.5KB) - Comprehensive usage guide with decision tree, troubleshooting, and examples
+
+Agent values files:
+- `charts/brokkr-agent/values/production.yaml` (3.6KB) - Cluster-wide RBAC, production resources, seccomp enabled, HTTPS broker connection
+- `charts/brokkr-agent/values/development.yaml` (2.9KB) - Namespace-scoped RBAC, minimal resources, faster polling, debug logging
+- `charts/brokkr-agent/values/staging.yaml` (3.0KB) - Cluster-wide RBAC, moderate resources, production-like security for testing
+- `charts/brokkr-agent/values/README.md` (12KB) - Detailed guide including PAK setup, RBAC comparison table, validation steps
+
+**Template Enhancements:**
+- Added seccompProfile support to broker deployment template (charts/brokkr-broker/templates/deployment.yaml)
+- Added seccompProfile support to agent deployment template (charts/brokkr-agent/templates/deployment.yaml)
+- Fixed extraEnv indentation bug in broker deployment template
+
+**Key Configuration Differences:**
+
+Production vs Development:
+- Replicas: 3 vs 1 (broker)
+- Database: External managed vs bundled ephemeral
+- TLS: Enabled with cert-manager vs disabled
+- Ingress: Enabled vs disabled (use port-forward)
+- Resources: 512Mi-1Gi vs 128Mi-256Mi memory
+- Image tag: Pinned version vs latest
+- Pull policy: IfNotPresent vs Always
+- Logging: Info vs debug level
+- Security: Full hardening (seccomp) vs relaxed
+- RBAC: Cluster-wide vs namespace-scoped (agent)
+
+Staging:
+- Middle ground between prod and dev
+- External DB but not necessarily managed
+- 2 replicas for some redundancy
+- TLS with self-signed/internal CA
+- Moderate resources for realistic testing
+- Full production security settings
+
+**Validation Results:**
+All 6 values files tested successfully with `helm template`:
+- ✓ broker production.yaml: VALID
+- ✓ broker development.yaml: VALID
+- ✓ broker staging.yaml: VALID
+- ✓ agent production.yaml: VALID
+- ✓ agent development.yaml: VALID
+- ✓ agent staging.yaml: VALID
+
+**Documentation Coverage:**
+- Decision guide explaining when to use each scenario
+- Before-deployment checklists for each scenario
+- Customization examples
+- Troubleshooting guides
+- Validation commands
+- Complete usage examples with required parameters
+
+**Acceptance Criteria Status:**
+- [x] values/production.yaml created for broker and agent with production-ready settings
+- [x] values/development.yaml created for broker and agent with dev-friendly settings
+- [x] values/staging.yaml created for broker and agent as middle ground
+- [x] All files thoroughly commented explaining each setting
+- [x] Documentation explaining when to use each values file
+- [x] Each scenario tested with successful deployment (helm template validation)
+- [x] README in values/ directory explaining the files

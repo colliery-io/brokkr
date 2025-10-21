@@ -96,9 +96,28 @@ Database name
 Database port
 */}}
 {{- define "brokkr-broker.databasePort" -}}
-{{- if .Values.postgresql.enabled }}
+{{- if .Values.postgresql.enabled -}}
 5432
-{{- else }}
-{{- .Values.postgresql.external.port }}
+{{- else -}}
+{{- .Values.postgresql.external.port -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+TLS secret name
+Returns the name of the TLS secret to use based on configuration:
+- existingSecret if provided
+- Generated secret name if inline certs provided
+- Empty string if TLS disabled
+*/}}
+{{- define "brokkr-broker.tlsSecretName" -}}
+{{- if .Values.tls.enabled }}
+{{- if .Values.tls.existingSecret }}
+{{- .Values.tls.existingSecret }}
+{{- else if or .Values.tls.cert .Values.tls.key }}
+{{- printf "%s-tls" (include "brokkr-broker.fullname" .) }}
+{{- else if .Values.tls.certManager.enabled }}
+{{- printf "%s-tls" (include "brokkr-broker.fullname" .) }}
+{{- end }}
 {{- end }}
 {{- end }}

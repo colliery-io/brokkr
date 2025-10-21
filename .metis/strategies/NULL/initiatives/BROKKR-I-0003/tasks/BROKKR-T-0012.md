@@ -4,14 +4,14 @@ level: task
 title: "Create comprehensive RBAC for agent"
 short_code: "BROKKR-T-0012"
 created_at: 2025-10-19T02:26:49.169147+00:00
-updated_at: 2025-10-19T02:26:49.169147+00:00
+updated_at: 2025-10-20T14:51:48.568029+00:00
 parent: BROKKR-I-0003
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/todo"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -65,16 +65,20 @@ Define and document comprehensive RBAC permissions for the agent's control loop 
 - **Benefits of Fixing**: {What improves after refactoring}
 - **Risk Assessment**: {Risks of not addressing this}
 
+## Acceptance Criteria
+
+## Acceptance Criteria
+
 ## Acceptance Criteria **[REQUIRED]**
 
-- [ ] Detailed ClusterRole with specific API groups and resources documented
-- [ ] Justification for each permission requirement documented
-- [ ] Configurable RBAC scope (cluster-wide vs namespace-scoped)
-- [ ] Role template for namespace-scoped deployments
-- [ ] Support for custom additional permissions via values.yaml
-- [ ] Documentation explaining why each permission is needed
-- [ ] Test agent can successfully read cluster resources
-- [ ] Test agent fails gracefully without required permissions
+- [x] Detailed ClusterRole with specific API groups and resources documented
+- [x] Justification for each permission requirement documented
+- [x] Configurable RBAC scope (cluster-wide vs namespace-scoped)
+- [x] Role template for namespace-scoped deployments
+- [x] Support for custom additional permissions via values.yaml
+- [x] Documentation explaining why each permission is needed
+- [x] Test agent can successfully read cluster resources
+- [x] Test agent fails gracefully without required permissions
 
 ## Test Cases **[CONDITIONAL: Testing Task]**
 
@@ -295,4 +299,82 @@ Create docs/explanation/rbac-permissions.md explaining:
 
 ## Status Updates **[REQUIRED]**
 
-*To be added during implementation*
+### 2025-10-19: Task Complete
+
+All acceptance criteria have been met. Comprehensive RBAC support has been implemented for the Brokkr agent Helm chart.
+
+**What Was Implemented:**
+
+1. **Enhanced RBAC Templates** (charts/brokkr-agent/templates/rbac.yaml)
+   - Expanded from basic permissions to comprehensive read-only access
+   - Supports both ClusterRole (cluster-wide) and Role (namespace-scoped)
+   - Includes permissions for:
+     - Core API: pods, namespaces, nodes, services, endpoints, configmaps, secrets, PVs, PVCs, events
+     - Apps API: deployments, statefulsets, daemonsets, replicasets (with status subresources)
+     - Batch API: jobs, cronjobs (with status subresources)
+     - Networking API: ingresses, networkpolicies
+     - RBAC API: roles, rolebindings, clusterroles, clusterrolebindings
+   - All permissions use read-only verbs: get, list, watch
+   - Conditional rendering based on rbac.clusterWide setting
+
+2. **Configuration Options** (charts/brokkr-agent/values.yaml)
+   - rbac.create: Enable/disable RBAC resource creation
+   - rbac.clusterWide: Toggle between ClusterRole and Role
+   - rbac.additionalRules: Support for custom RBAC rules (CRDs, vendor-specific APIs)
+
+3. **Comprehensive Documentation**
+   - charts/brokkr-agent/RBAC.md: Detailed permission justification document
+     - Explains why each API group/resource is needed
+     - Documents security implications of each permission
+     - Covers cluster-wide vs namespace-scoped trade-offs
+     - Provides testing and troubleshooting guidance
+     - Discusses future write permissions for Phase 3+
+   - charts/brokkr-agent/README.md: Complete chart documentation
+     - Installation examples for different RBAC modes
+     - Configuration reference
+     - Security considerations
+     - Troubleshooting guide
+
+4. **Automated Testing** (.angreal/task_helm.py)
+   - Added RBAC mode testing to agent test matrix
+   - Tests three configurations:
+     - cluster-wide: Full cluster visibility with ClusterRole
+     - namespace-scoped: Limited to release namespace with Role
+     - disabled: RBAC resource creation disabled
+   - Each mode validated with real k3s cluster deployment
+
+5. **Security Best Practices**
+   - Principle of least privilege: Only read operations in Phase 2
+   - Secret access documented with security implications and mitigation strategies
+   - Namespace-scoped option for multi-tenant environments
+   - Extensible via additionalRules for custom resources
+
+**Test Results:**
+- Helm lint: Passed
+- Cluster-wide template rendering: Verified ClusterRole and ClusterRoleBinding creation
+- Namespace-scoped template rendering: Verified Role and RoleBinding with correct namespace, cluster-scoped resources excluded
+- Additional rules: Verified custom rules properly appended to RBAC template
+- RBAC disabled: Verified no RBAC resources created
+- Integration testing: All three RBAC modes (cluster-wide, namespace-scoped, disabled) now pass successfully
+
+**Agent Fix (2025-10-20):**
+Fixed agent to handle missing RBAC permissions gracefully:
+- Replaced namespace listing connectivity check with apiserver_version() call
+- apiserver_version() doesn't require any RBAC permissions
+- Agent now starts successfully in all RBAC modes without requiring cluster-wide namespace access
+- Test infrastructure improved to deploy broker once and run all RBAC mode tests
+- All acceptance criteria now met with passing integration tests
+
+**Security Notes:**
+- Agent has read access to secrets (required for inventory but documented as high-risk)
+- RBAC.md provides detailed mitigation strategies for secret access concerns
+- Future write permissions will be opt-in and separately documented
+
+**Files Modified:**
+- charts/brokkr-agent/values.yaml
+- charts/brokkr-agent/templates/rbac.yaml
+- charts/brokkr-agent/RBAC.md (new)
+- charts/brokkr-agent/README.md (new)
+- .angreal/task_helm.py
+
+The implementation provides production-ready RBAC with flexibility for different deployment scenarios while maintaining security through comprehensive documentation and testing.
