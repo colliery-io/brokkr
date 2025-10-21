@@ -885,9 +885,10 @@ def test_helm_chart(component, skip_docker=False, no_cleanup=False, tag="test", 
             docker_down()
             docker_clean()
 
-        # Exit with non-zero code if any tests failed
-        exit_code = 0 if all(result for _, result in results) else 1
-        sys.exit(exit_code)
+        # Exit with error if any tests failed, otherwise return normally
+        if not all(result for _, result in results):
+            sys.exit(1)
+        # Success - let angreal handle normal completion
 
     except Exception as e:
         print(f"\nError during Helm testing: {e}")
