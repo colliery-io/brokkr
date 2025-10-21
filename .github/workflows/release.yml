@@ -242,6 +242,7 @@ jobs:
       url: https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}
     permissions:
       contents: write
+      packages: write
     steps:
       - uses: actions/checkout@v4
 
@@ -250,16 +251,33 @@ jobs:
         with:
           version: 'v3.12.0'
 
-      - name: Package Helm charts
-        run: |
-          mkdir -p /tmp/helm-packages
-          helm package charts/brokkr-broker -d /tmp/helm-packages --version ${GITHUB_REF_NAME#v}
-          helm package charts/brokkr-agent -d /tmp/helm-packages --version ${GITHUB_REF_NAME#v}
+      - name: Add Helm repositories
+        run: helm repo add bitnami https://charts.bitnami.com/bitnami
 
-      - name: Create GitHub Release
+      - name: Build Helm dependencies
+        run: |
+          helm dependency build charts/brokkr-broker
+          helm dependency build charts/brokkr-agent
+
+      - name: Log in to GHCR
+        run: echo ${{ secrets.GHCR_TOKEN }} | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Package and push Helm charts to OCI registry
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+
+          # Package broker chart
+          helm package charts/brokkr-broker --version ${VERSION} --app-version ${VERSION}
+          helm push brokkr-broker-${VERSION}.tgz oci://ghcr.io/${{ github.repository_owner }}/charts
+
+          # Package agent chart
+          helm package charts/brokkr-agent --version ${VERSION} --app-version ${VERSION}
+          helm push brokkr-agent-${VERSION}.tgz oci://ghcr.io/${{ github.repository_owner }}/charts
+
+      - name: Create GitHub Release with chart artifacts
         uses: softprops/action-gh-release@v2
         with:
-          files: /tmp/helm-packages/*.tgz
+          files: '*.tgz'
           generate_release_notes: true
           draft: false
           prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-beta') || contains(github.ref_name, '-alpha') }}

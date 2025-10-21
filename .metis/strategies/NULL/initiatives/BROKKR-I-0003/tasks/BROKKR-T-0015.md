@@ -4,14 +4,14 @@ level: task
 title: "Set up multi-arch CI/CD builds"
 short_code: "BROKKR-T-0015"
 created_at: 2025-10-19T02:26:49.988828+00:00
-updated_at: 2025-10-19T02:26:49.988828+00:00
+updated_at: 2025-10-21T12:22:55.767938+00:00
 parent: BROKKR-I-0003
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/todo"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -68,6 +68,10 @@ Create comprehensive GitHub Actions CI/CD workflows for:
 - **Current Problems**: {What's difficult/slow/buggy now}
 - **Benefits of Fixing**: {What improves after refactoring}
 - **Risk Assessment**: {Risks of not addressing this}
+
+## Acceptance Criteria
+
+## Acceptance Criteria
 
 ## Acceptance Criteria **[REQUIRED]**
 
