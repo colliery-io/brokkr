@@ -129,8 +129,6 @@ jobs:
     strategy:
       matrix:
         component: [broker, agent]
-    outputs:
-      image-tag: ${{ steps.tag.outputs.tag }}
     steps:
       - name: Download amd64 digests
         uses: actions/download-artifact@v4
@@ -313,7 +311,8 @@ jobs:
           # Helm requires semver format, so use 0.0.0-{branch}.{timestamp}
           TIMESTAMP=$(date +%Y%m%d%H%M%S)
           BRANCH_VERSION="0.0.0-${{ github.ref_name }}.${TIMESTAMP}"
-          IMAGE_TAG=${{ needs.merge-manifests.outputs.image-tag }}
+          # Image tag matches branch name for non-PR builds
+          IMAGE_TAG="${{ github.ref_name }}"
           echo "chart_version=${BRANCH_VERSION}" >> $GITHUB_OUTPUT
           echo "app_version=${IMAGE_TAG}" >> $GITHUB_OUTPUT
 
