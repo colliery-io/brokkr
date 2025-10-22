@@ -16,4 +16,5 @@ pub mod broker;
 pub mod cli;
 pub mod health;
 pub mod k8s;
+pub mod metrics;
 pub mod utils;

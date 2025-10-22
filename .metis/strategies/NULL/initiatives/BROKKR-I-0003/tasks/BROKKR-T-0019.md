@@ -4,14 +4,14 @@ level: task
 title: "Add monitoring and observability configuration"
 short_code: "BROKKR-T-0019"
 created_at: 2025-10-21T12:37:06.292444+00:00
-updated_at: 2025-10-21T12:37:06.292444+00:00
+updated_at: 2025-10-21T23:58:52.408227+00:00
 parent: BROKKR-I-0003
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/todo"
+  - "#phase/active"
 
 
 exit_criteria_met: false
@@ -33,7 +33,7 @@ Implement OpenTelemetry-based observability with Prometheus-compatible metrics e
 
 **See ADR-3** for the architectural decision to use OpenTelemetry instead of Prometheus-only metrics.
 
-
+## Acceptance Criteria
 
 ## Acceptance Criteria **[REQUIRED]**
 

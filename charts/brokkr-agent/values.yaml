@@ -74,3 +74,24 @@ containerSecurityContext:
     # Uncomment if specific capabilities are needed
     # add:
     #   - NET_BIND_SERVICE
+
+# Metrics and monitoring configuration
+metrics:
+  # Enable Prometheus metrics endpoint at /metrics
+  enabled: true
+
+  # ServiceMonitor configuration for Prometheus Operator
+  serviceMonitor:
+    # Enable ServiceMonitor CRD creation
+    # Requires Prometheus Operator to be installed in the cluster
+    enabled: false
+
+    # Scrape interval for Prometheus
+    interval: 30s
+
+    # Scrape timeout (must be shorter than interval)
+    # scrapeTimeout: 10s
+
+    # Additional labels for ServiceMonitor (for Prometheus selector matching)
+    # additionalLabels:
+    #   prometheus: kube-prometheus

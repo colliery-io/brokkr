@@ -156,6 +156,7 @@
 
 pub mod v1;
 use crate::dal::DAL;
+use crate::metrics;
 use axum::{response::IntoResponse, routing::get, Router};
 use hyper::StatusCode;
 
@@ -206,11 +207,16 @@ async fn readyz() -> impl IntoResponse {
 /// Metrics endpoint handler
 ///
 /// This handler responds to GET requests at the "/metrics" endpoint.
-/// It's used to provide metrics about the API's operation.
+/// It's used to provide Prometheus metrics about the broker's operation.
 ///
 /// # Returns
 ///
-/// Returns a 200 OK status code with metrics data in the body.
+/// Returns a 200 OK status code with Prometheus metrics in text format.
 async fn metrics() -> impl IntoResponse {
-    (StatusCode::OK, "Metrics")
+    let metrics_data = metrics::encode_metrics();
+    (
+        StatusCode::OK,
+        [("Content-Type", "text/plain; version=0.0.4")],
+        metrics_data,
+    )
 }
