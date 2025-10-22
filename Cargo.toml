@@ -30,6 +30,7 @@ log = { version = "0.4.14", features = [] }
 once_cell = { version = "1.19.0", features = [] }
 postgres = { version = "0.19", features = [] }
 prefixed-api-key = { version = "0.3.0", features = ["sha2"] }
+prometheus = { version = "0.13", features = [] }
 r2d2 = { version = "0.8", features = [] }
 r2d2_postgres = { version = "0.18", features = [] }
 rand = { version = "0.8", features = [] }

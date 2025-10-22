@@ -31,6 +31,7 @@ hyper = { workspace = true }
 once_cell = { workspace = true }
 postgres = { workspace = true }
 prefixed-api-key = { workspace = true }
+prometheus = { workspace = true }
 r2d2 = { workspace = true }
 r2d2_postgres = { workspace = true }
 rand = { workspace = true }
