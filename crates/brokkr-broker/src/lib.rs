@@ -16,4 +16,5 @@ pub mod api;
 pub mod cli;
 pub mod dal;
 pub mod db;
+pub mod metrics;
 pub mod utils;

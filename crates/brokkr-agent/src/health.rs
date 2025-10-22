@@ -25,6 +25,7 @@
 //! - Application version
 //! - Timestamp
 
+use crate::metrics;
 use axum::{extract::State, http::StatusCode, response::IntoResponse, routing::get, Json, Router};
 use brokkr_utils::logging::prelude::*;
 use kube::Client;
@@ -81,6 +82,7 @@ pub fn configure_health_routes(state: HealthState) -> Router {
         .route("/healthz", get(healthz))
         .route("/readyz", get(readyz))
         .route("/health", get(health))
+        .route("/metrics", get(metrics_handler))
         .with_state(state)
 }
 
@@ -178,4 +180,17 @@ async fn health(State(state): State<HealthState>) -> impl IntoResponse {
     };
 
     (status_code, Json(health_status))
+}
+
+/// Prometheus metrics endpoint
+///
+/// Returns Prometheus metrics in text exposition format.
+/// Metrics include broker polling, Kubernetes operations, and agent health.
+async fn metrics_handler() -> impl IntoResponse {
+    let metrics_data = metrics::encode_metrics();
+    (
+        StatusCode::OK,
+        [("Content-Type", "text/plain; version=0.0.4")],
+        metrics_data,
+    )
 }
