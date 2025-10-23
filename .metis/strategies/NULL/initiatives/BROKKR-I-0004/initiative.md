@@ -4,14 +4,14 @@ level: initiative
 title: "Multi-Tenant Database Architecture"
 short_code: "BROKKR-I-0004"
 created_at: 2025-10-22T00:02:38.961232+00:00
-updated_at: 2025-10-22T00:06:53.653895+00:00
+updated_at: 2025-10-22T18:16:47.607070+00:00
 parent: BROKKR-V-0001
 blocked_by: []
 archived: false
 
 tags:
   - "#initiative"
-  - "#phase/design"
+  - "#phase/active"
 
 
 exit_criteria_met: false
@@ -504,7 +504,7 @@ Create Helm chart template for schema provisioning job that runs before broker d
 - Example deployment configurations
 
 **Exit Criteria:**
-- [ ] ADR created and reviewed
+- [x] ADR created and reviewed (BROKKR-A-0004: Schema-Per-Tenant Multi-Tenancy Architecture)
 - [ ] Deployment examples added to documentation
 - [ ] Team briefed on multi-tenant architecture
 

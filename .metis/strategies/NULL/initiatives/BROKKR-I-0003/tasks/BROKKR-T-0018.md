@@ -4,14 +4,14 @@ level: task
 title: "Document health check endpoints"
 short_code: "BROKKR-T-0018"
 created_at: 2025-10-21T12:37:06.187390+00:00
-updated_at: 2025-10-21T12:37:06.187390+00:00
+updated_at: 2025-10-22T10:25:30.826183+00:00
 parent: BROKKR-I-0003
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/todo"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -31,18 +31,20 @@ initiative_id: BROKKR-I-0003
 
 Create comprehensive documentation for all health check endpoints (/healthz, /readyz, /health) for both broker and agent components. Include API specifications, response formats, Kubernetes probe configurations, and monitoring integration examples.
 
+## Acceptance Criteria
 
+## Acceptance Criteria
 
 ## Acceptance Criteria **[REQUIRED]**
 
-- [ ] Documentation created in `docs/content/reference/health-endpoints.md`
-- [ ] All three endpoints documented for both broker and agent (/healthz, /readyz, /health)
-- [ ] API specifications include: endpoint URL, HTTP method, response codes, response format
-- [ ] Example requests and responses provided for each endpoint
-- [ ] Kubernetes liveness and readiness probe configuration examples
-- [ ] Monitoring integration examples (Prometheus, Datadog, custom scripts)
-- [ ] Troubleshooting section for common health check issues
-- [ ] Performance impact notes (latency, frequency recommendations)
+- [x] Documentation created in `docs/content/reference/health-endpoints.md`
+- [x] All three endpoints documented for both broker and agent (/healthz, /readyz, /health)
+- [x] API specifications include: endpoint URL, HTTP method, response codes, response format
+- [x] Example requests and responses provided for each endpoint
+- [x] Kubernetes liveness and readiness probe configuration examples
+- [x] Monitoring integration examples (Prometheus, Datadog, custom scripts)
+- [x] Troubleshooting section for common health check issues
+- [x] Performance impact notes (latency, frequency recommendations)
 
 
 
@@ -232,4 +234,22 @@ fi
 
 ## Status Updates **[REQUIRED]**
 
-*To be added during implementation*
+### 2025-10-22 - Task Completed
+
+Created comprehensive health check endpoint documentation at `docs/content/reference/health-endpoints.md` covering:
+
+- All three health check endpoints (/healthz, /readyz, /health) for both broker and agent
+- Complete API specifications with actual implementation details verified from source code
+- Real example requests and responses for healthy and unhealthy states
+- Kubernetes probe configurations from actual Helm chart templates
+- Monitoring integration examples for Prometheus, Datadog, and custom scripts
+- Comprehensive troubleshooting section for common issues
+- Performance considerations and recommended probe intervals
+- Best practices for health check configuration
+
+Documentation is based on actual implementation from:
+- Broker: `crates/brokkr-broker/src/api/mod.rs`
+- Agent: `crates/brokkr-agent/src/health.rs`
+- Helm charts: `charts/brokkr-broker/templates/deployment.yaml` and `charts/brokkr-agent/templates/deployment.yaml`
+
+All acceptance criteria met.
