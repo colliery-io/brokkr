@@ -110,13 +110,48 @@ database:
 
 **Approach:** Each tenant gets completely separate PostgreSQL database.
 
+```
+postgres://localhost:5432/tenant_a
+postgres://localhost:5432/tenant_b
+postgres://localhost:5432/tenant_c
+```
+
 **Rejected because:**
-- Already possible with current architecture (no change needed)
-- Higher operational overhead (more databases to manage)
-- Less efficient resource utilization
-- More expensive at scale
-- Cannot share connection pools
+
+**Resource Overhead:**
+- Each database has its own system catalogs (pg_catalog tables)
+- Higher memory overhead per tenant
+- More file handles and connections consumed
+- 1000 tenants = 1000 databases with 1000 sets of system tables
+
+**Cost at Scale:**
+- Some cloud providers (RDS, Azure) charge per database
+- Can get expensive with many tenants
+- Example: 100 small tenants might cost same as 10 large ones
+
+**Connection Pooling Complexity:**
+- Need separate connection pool per tenant database
+- OR complex dynamic database switching logic
+- Cannot share connection pool across tenants efficiently
+
+**Migration Overhead:**
+- Must run migrations against EACH database separately
+- Provisioning new tenant requires full database creation (slower)
+- Backup/restore requires per-database operations
+
+**Operational Complexity:**
+- More databases to monitor, backup, and maintain
+- Scales linearly with tenant count
 - Schema-per-tenant provides same isolation with better efficiency
+
+**When database-per-tenant IS appropriate:**
+- Very few tenants (< 10)
+- Each tenant is very large
+- Extreme isolation requirements (PCI, HIPAA with physical separation)
+- Need to physically separate tenant data to different servers
+- Tenants have different SLAs or performance requirements
+
+**For Brokkr:** Our target is many small-to-medium tenants where operational efficiency and cost matter, making schema-per-tenant the better choice.
 
 ### Alternative 3: Dynamic Schema Routing (Option B)
 
@@ -142,6 +177,20 @@ database:
 - Schema-based approach is simpler and sufficient
 
 ## Rationale
+
+### Quick Comparison: Schema vs Database Per Tenant
+
+| Aspect | Schema-per-Tenant (Chosen) | Database-per-Tenant |
+|--------|---------------------------|---------------------|
+| **Resource Overhead** | Low (shared catalogs) | High (separate catalogs per DB) |
+| **Cost at Scale** | Linear with data size | Linear with tenant count |
+| **Connection Pooling** | Single shared pool | Pool per tenant or complex switching |
+| **Migrations** | Once, iterate schemas | Once per database |
+| **Backup/Restore** | Single backup for all | Separate backup per tenant |
+| **Tenant Provisioning** | Fast (CREATE SCHEMA) | Slower (CREATE DATABASE) |
+| **Cross-Tenant Analytics** | Easy (same DB) | Complex (requires dblink) |
+| **Isolation Strength** | Good (search_path) | Strongest (physical separation) |
+| **Best For** | Many small-medium tenants | Few large tenants |
 
 Schema-per-tenant was chosen for these reasons:
 
@@ -211,22 +260,45 @@ Benefits:
 
 ### 5. Flexible Deployment Patterns
 
-**Use case 1: Multi-environment**
+Schema-per-tenant **adds** flexibility without removing existing options. The broker is lightweight enough to run multiple instances cost-effectively.
+
+**Use case 1: Multi-environment (shared DB)**
 ```
 postgres://db:5432/brokkr_db?schema=dev
 postgres://db:5432/brokkr_db?schema=staging
 postgres://db:5432/brokkr_db?schema=prod
 ```
 
-**Use case 2: Multi-customer**
+**Use case 2: Multi-customer small tenants (shared DB)**
 ```
 postgres://db:5432/brokkr_db?schema=customer_a
 postgres://db:5432/brokkr_db?schema=customer_b
 postgres://db:5432/brokkr_db?schema=customer_c
 ```
 
-**Use case 3: Hybrid**
-Mix shared and dedicated databases as needed.
+**Use case 3: Large customers (dedicated DBs)**
+```
+# Customer X gets dedicated database
+postgres://db-customerx:5432/brokkr_db
+
+# Customer Y gets dedicated database
+postgres://db-customery:5432/brokkr_db
+```
+
+**Use case 4: Hybrid "Choose Your Own Adventure"**
+```
+# Small customers share a database with schemas
+postgres://shared-db:5432/brokkr_db?schema=customer_a
+postgres://shared-db:5432/brokkr_db?schema=customer_b
+
+# Enterprise customer gets dedicated database
+postgres://enterprise-db:5432/brokkr_db
+
+# Compliance-critical customer gets isolated everything
+postgres://hipaa-db:5432/brokkr_db  # On separate server
+```
+
+**Key insight:** You're not choosing schema-per-tenant OR database-per-tenant. You're gaining the ability to use schemas when it makes sense, while still being able to use dedicated databases when needed. The broker is cheap to run, so mix and match freely.
 
 ## Consequences
 
@@ -257,6 +329,14 @@ Mix shared and dedicated databases as needed.
 - Users choose single or multi-tenant
 - Can mix approaches (some tenants in shared DB, some dedicated)
 - Future-proof (can add dynamic routing later)
+
+**Not Either/Or - Choose Your Own Adventure:**
+- Schema-per-tenant doesn't prevent database-per-tenant
+- The broker is very inexpensive to run (lightweight binary)
+- Can easily run multiple broker instances, each with dedicated database
+- Mix strategies: shared database for small tenants, dedicated for large ones
+- Operators choose the right approach for each tenant's needs
+- This feature adds options, it doesn't remove any
 
 ### Negative
 

@@ -33,18 +33,15 @@ Implement the core database infrastructure to support schema-per-tenant multi-te
 
 **Phase:** Phase 1 - Database Infrastructure Foundation
 
-## Acceptance Criteria
-
-## Acceptance Criteria
-
 ## Acceptance Criteria **[REQUIRED]**
 
-- [x] Schema field added to ConnectionPool struct in `crates/brokkr-broker/src/db.rs`
-- [x] New constructor `create_shared_connection_pool_with_schema()` accepts optional schema parameter
-- [x] `get_connection_with_schema()` method correctly sets search_path when schema is configured
-- [x] `setup_schema()` function creates schema and runs migrations in schema context
-- [x] All unit tests passing for new methods (3/3 tests pass)
-- [x] Backward compatibility verified (schema=None works with existing behavior)
+- [ ] Schema field added to ConnectionPool struct in `crates/brokkr-broker/src/db.rs`
+- [ ] Existing `create_shared_connection_pool()` modified to accept optional schema parameter
+- [ ] `get_connection()` method (or pool.get() wrapper) automatically sets search_path when schema is configured
+- [ ] `setup_schema()` function creates schema and runs migrations in schema context
+- [ ] Schema name validation to prevent SQL injection
+- [ ] All unit tests passing for schema functionality
+- [ ] Backward compatibility verified (schema=None works with existing behavior)
 
 ## Implementation Notes **[CONDITIONAL: Technical Task]**
 
@@ -52,45 +49,79 @@ Implement the core database infrastructure to support schema-per-tenant multi-te
 
 **File: `crates/brokkr-broker/src/db.rs`**
 
+**Core Principle:** Modify existing method signatures rather than creating parallel "with_schema" versions. All methods are internal to the broker, so signature changes are acceptable.
+
 1. Add `schema` field to `ConnectionPool`:
 ```rust
 pub struct ConnectionPool {
     pub pool: Pool<ConnectionManager<PgConnection>>,
-    pub schema: Option<String>,  // NEW
+    pub schema: Option<String>,  // Store optional schema name
 }
 ```
 
-2. Add `create_shared_connection_pool_with_schema()` constructor:
+2. Modify existing `create_shared_connection_pool()` to accept schema:
 ```rust
-pub fn create_shared_connection_pool_with_schema(
+pub fn create_shared_connection_pool(
     base_url: &str,
     database_name: &str,
     max_size: u32,
-    schema: Option<&str>,
+    schema: Option<&str>,  // NEW PARAMETER
 ) -> ConnectionPool {
-    // Create pool as before
-    // Store schema in ConnectionPool
-}
-```
-
-3. Implement `get_connection_with_schema()` method:
-```rust
-pub fn get_connection_with_schema(&self) -> Result<Connection> {
-    let conn = self.pool.get()?;
-    if let Some(ref schema) = self.schema {
-        // Execute: SET search_path TO {schema}, public
-        conn.execute(&format!("SET search_path TO {}, public", schema))?;
+    // Build URL and create pool as before
+    ConnectionPool {
+        pool,
+        schema: schema.map(|s| s.to_string()),
     }
-    Ok(conn)
 }
 ```
 
-4. Implement `setup_schema()` for provisioning:
+3. Add `get_connection()` method to automatically handle search_path:
 ```rust
-pub fn setup_schema(&self, schema: &str) -> Result<()> {
-    // 1. CREATE SCHEMA IF NOT EXISTS
-    // 2. SET search_path
-    // 3. Run migrations in schema context
+impl ConnectionPool {
+    pub fn get_connection(&self) -> Result<PooledConnection<ConnectionManager<PgConnection>>, Error> {
+        let mut conn = self.pool.get()?;
+        if let Some(ref schema) = self.schema {
+            // Validate schema name to prevent SQL injection
+            validate_schema_name(schema)?;
+            // Set search_path for this connection
+            diesel::sql_query(format!("SET search_path TO {}, public", schema))
+                .execute(&mut conn)?;
+        }
+        Ok(conn)
+    }
+}
+```
+
+4. Add schema name validation:
+```rust
+fn validate_schema_name(schema: &str) -> Result<(), Error> {
+    // Schema names must start with letter, contain only alphanumeric and underscore
+    let re = regex::Regex::new(r"^[a-zA-Z][a-zA-Z0-9_]*$").unwrap();
+    if !re.is_match(schema) {
+        return Err(Error::InvalidSchemaName);
+    }
+    Ok(())
+}
+```
+
+5. Add `setup_schema()` for provisioning:
+```rust
+pub fn setup_schema(&self, schema: &str) -> Result<(), Error> {
+    validate_schema_name(schema)?;
+    let mut conn = self.pool.get()?;
+
+    // Create schema
+    diesel::sql_query(format!("CREATE SCHEMA IF NOT EXISTS {}", schema))
+        .execute(&mut conn)?;
+
+    // Run migrations in schema context
+    diesel::sql_query(format!("SET search_path TO {}, public", schema))
+        .execute(&mut conn)?;
+
+    // Run migrations using embedded_migrations or diesel_migrations
+    // (migration logic here)
+
+    Ok(())
 }
 ```
 
@@ -104,39 +135,20 @@ pub fn setup_schema(&self, schema: &str) -> Result<()> {
 
 ## Status Updates **[REQUIRED]**
 
-### 2025-10-22: Task Completed
+### 2025-10-22: Task Re-scoped for Simplicity
 
-**Implementation Summary:**
-- Added `schema: Option<String>` field to ConnectionPool struct
-- Implemented `create_shared_connection_pool_with_schema()` constructor
-- Implemented `get_connection_with_schema()` method with automatic SET search_path
-- Implemented `setup_schema()` for schema provisioning
-- Added `validate_schema_name()` function to prevent SQL injection (regex validation)
-- Added `regex` dependency to workspace and brokkr-broker crate
+**Approach Simplified:**
+- Rather than creating parallel "with_schema" methods, we're modifying existing method signatures
+- This is acceptable since all these methods are internal to the broker
+- Simpler API surface: `create_shared_connection_pool()` takes optional schema param
+- Simpler usage: `pool.get_connection()` automatically handles search_path
 
-**Testing:**
-- Unit tests: 3/3 passing (schema name validation)
-- Integration tests: 1/1 passing (`test_schema_per_tenant_integration`)
-  - Verified backward compatibility (schema=None)
-  - Verified schema provisioning creates schemas
-  - Verified search_path is set correctly
-  - Verified complete data isolation between tenant_a and tenant_b
-
-**Files Modified:**
-- `crates/brokkr-broker/src/db.rs`: Added 204 lines of code
-- `crates/brokkr-broker/tests/integration/db/mod.rs`: Added comprehensive integration tests
-- `Cargo.toml`: Added regex = "1.10" to workspace dependencies
-- `crates/brokkr-broker/Cargo.toml`: Added regex workspace dependency
-
-**Follow-up Work:**
-- Fixed unrelated test failure in `api::health::test_metrics_endpoint`
-  - Issue: CounterVec/HistogramVec metrics don't appear until used with label values
-  - Solution: Updated test to only check for gauge metrics that are always present
-  - Modified files: `crates/brokkr-broker/tests/integration/api/health.rs`
-
-**All Tests Passing:**
-- Unit tests: 6/6 passing (including 3 schema validation tests)
-- Integration tests: 198/198 passing (including new schema isolation tests)
+**Key Changes from Original Plan:**
+- `create_shared_connection_pool()` modified to accept `schema: Option<&str>` parameter
+- `get_connection()` method added to ConnectionPool (not `get_connection_with_schema`)
+- No duplicate API methods needed
 
 **Next Steps:**
-- BROKKR-T-0021: Migrate DAL layer to use schema-aware connections
+- Implement the simplified approach
+- Update all call sites to pass `None` for schema (backward compatibility)
+- Add integration tests for schema isolation

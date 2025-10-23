@@ -72,7 +72,7 @@ Update all DAL layer methods to use schema-aware connection acquisition, ensurin
 ## Acceptance Criteria **[REQUIRED]**
 
 - [ ] All DAL files updated: agents.rs, stacks.rs, generators.rs, deployment_objects.rs, agent_events.rs
-- [ ] No direct pool.get() calls remaining in DAL layer - all use get_connection_with_schema()
+- [ ] No direct pool.get() calls remaining in DAL layer - all use pool.get_connection()
 - [ ] Integration tests verify data isolation between schemas
 - [ ] All existing tests still passing
 - [ ] DAL method signatures unchanged (backward compatible)
@@ -127,16 +127,48 @@ Update all DAL layer methods to use schema-aware connection acquisition, ensurin
 
 ## Implementation Notes **[CONDITIONAL: Technical Task]**
 
-{Keep for technical tasks, delete for non-technical. Technical details, approach, or important considerations}
-
 ### Technical Approach
-{How this will be implemented}
+
+**Simple Pattern for DAL Migration:**
+
+Replace all instances of `pool.get()` with `pool.get_connection()` throughout the DAL layer.
+
+**Before:**
+```rust
+pub fn get_agent(pool: &ConnectionPool, id: Uuid) -> Result<Agent> {
+    let mut conn = pool.get()?;
+    agents::table.find(id).first(&mut conn)
+}
+```
+
+**After:**
+```rust
+pub fn get_agent(pool: &ConnectionPool, id: Uuid) -> Result<Agent> {
+    let mut conn = pool.get_connection()?;  // Automatically handles schema
+    agents::table.find(id).first(&mut conn)
+}
+```
+
+The `get_connection()` method automatically sets the search_path when a schema is configured, so no other changes are needed in DAL code.
+
+### Files to Update
+
+1. `crates/brokkr-broker/src/dal/agents.rs`
+2. `crates/brokkr-broker/src/dal/stacks.rs`
+3. `crates/brokkr-broker/src/dal/generators.rs`
+4. `crates/brokkr-broker/src/dal/deployment_objects.rs`
+5. `crates/brokkr-broker/src/dal/agent_events.rs`
+6. All other DAL modules with database access
 
 ### Dependencies
-{Other tasks or systems this depends on}
+
+Requires BROKKR-T-0020 (Database Infrastructure Foundation) to be completed first, which provides the `ConnectionPool::get_connection()` method.
 
 ### Risk Considerations
-{Technical risks and mitigation strategies}
+
+- Ensure ALL `pool.get()` calls are replaced - missing even one could cause cross-tenant data leakage
+- Use grep/search to verify no direct `pool.get()` calls remain
+- Integration tests must verify complete data isolation
 
 ## Status Updates **[REQUIRED]**
 

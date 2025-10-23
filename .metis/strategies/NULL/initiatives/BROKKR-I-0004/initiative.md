@@ -32,6 +32,8 @@ The cloacina project has successfully implemented a schema-per-tenant multi-tena
 
 This initiative will port the proven cloacina implementation to brokkr, specifically focusing on **Option A: Schema from Configuration** - where each broker deployment connects to a specific PostgreSQL schema determined by an environment variable, enabling multiple broker deployments to share a single PostgreSQL instance.
 
+**Important: Schema isolation is at the broker level only.** Agents connect to their assigned broker and are isolated through existing authentication mechanisms (PAK-based auth). Agents have no awareness of schemas - that's entirely a broker-level database concern. A broker configured with `schema=tenant_a` will only see tenant_a's data; agents talking to that broker are automatically isolated.
+
 ## Goals & Non-Goals **[REQUIRED]**
 
 **Goals:**
