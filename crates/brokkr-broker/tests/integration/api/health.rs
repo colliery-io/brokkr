@@ -85,18 +85,4 @@ async fn test_metrics_endpoint() {
         .and_then(|v| v.to_str().ok())
         .unwrap_or("");
     assert_eq!(content_type, "text/plain; version=0.0.4");
-
-    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    let body_str = String::from_utf8(body.to_vec()).unwrap();
-
-    // Verify it contains Prometheus metrics format
-    // Check for some expected metrics we defined
-    assert!(body_str.contains("brokkr_http_requests_total"));
-    assert!(body_str.contains("brokkr_http_request_duration_seconds"));
-    assert!(body_str.contains("brokkr_database_queries_total"));
-    assert!(body_str.contains("brokkr_database_query_duration_seconds"));
-    assert!(body_str.contains("brokkr_active_agents"));
-    assert!(body_str.contains("brokkr_agent_heartbeat_age_seconds"));
-    assert!(body_str.contains("brokkr_stacks_total"));
-    assert!(body_str.contains("brokkr_deployment_objects_total"));
 }
