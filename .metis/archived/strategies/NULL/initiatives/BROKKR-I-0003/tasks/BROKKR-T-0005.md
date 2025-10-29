@@ -7,7 +7,7 @@ created_at: 2025-10-18T14:47:36.123050+00:00
 updated_at: 2025-10-19T02:03:48.607373+00:00
 parent: BROKKR-I-0003
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -30,6 +30,8 @@ initiative_id: BROKKR-I-0003
 ## Objective **[REQUIRED]**
 
 Configure GitHub Container Registry (GHCR) for container image publishing with proper authentication, repository structure, and tagging strategy.
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

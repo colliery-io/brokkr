@@ -7,7 +7,7 @@ created_at: 2025-10-18T14:47:35.679703+00:00
 updated_at: 2025-10-18T19:23:03.505867+00:00
 parent: BROKKR-I-0003
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -30,6 +30,8 @@ initiative_id: BROKKR-I-0003
 ## Objective **[REQUIRED]**
 
 Update both broker and agent Dockerfiles to run as non-root user (UID/GID 10001:10001) to follow security best practices and meet production deployment requirements. Ensure all integration tests pass with the new configuration.
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

@@ -7,7 +7,7 @@ created_at: 2025-10-18T14:47:35.871478+00:00
 updated_at: 2025-10-19T01:17:58.588493+00:00
 parent: BROKKR-I-0003
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -30,6 +30,8 @@ initiative_id: BROKKR-I-0003
 ## Objective **[REQUIRED]**
 
 Add HTTP server capability to the agent (currently CLI-only) and implement health check endpoints matching the broker's pattern for Kubernetes liveness and readiness probes.
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

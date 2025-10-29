@@ -7,7 +7,7 @@ created_at: 2025-10-21T12:37:06.187390+00:00
 updated_at: 2025-10-22T10:25:30.826183+00:00
 parent: BROKKR-I-0003
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -30,6 +30,8 @@ initiative_id: BROKKR-I-0003
 ## Objective **[REQUIRED]**
 
 Create comprehensive documentation for all health check endpoints (/healthz, /readyz, /health) for both broker and agent components. Include API specifications, response formats, Kubernetes probe configurations, and monitoring integration examples.
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

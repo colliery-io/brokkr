@@ -580,3 +580,4 @@ At the end of Phase 6, evaluate Shipwright against these criteria:
 - Create new initiative: Custom BuildRequest + buildah operator
 - Preserve generic ephemeral work system (reusable regardless)
 - Leverage learnings from Shipwright evaluation
+cpd

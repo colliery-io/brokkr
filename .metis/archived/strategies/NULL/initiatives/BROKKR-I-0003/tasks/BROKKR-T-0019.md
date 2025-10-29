@@ -7,7 +7,7 @@ created_at: 2025-10-21T12:37:06.292444+00:00
 updated_at: 2025-10-22T10:23:06.530985+00:00
 parent: BROKKR-I-0003
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -32,6 +32,8 @@ initiative_id: BROKKR-I-0003
 Implement OpenTelemetry-based observability with Prometheus-compatible metrics endpoints for both broker and agent components. Enable vendor-agnostic monitoring that supports multiple observability backends while maintaining backward compatibility with Prometheus tooling.
 
 **See ADR-3** for the architectural decision to use OpenTelemetry instead of Prometheus-only metrics.
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

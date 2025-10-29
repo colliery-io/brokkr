@@ -7,7 +7,7 @@ created_at: 2025-10-18T14:47:35.971257+00:00
 updated_at: 2025-10-19T01:34:38.457125+00:00
 parent: BROKKR-I-0003
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -30,6 +30,8 @@ initiative_id: BROKKR-I-0003
 ## Objective **[REQUIRED]**
 
 Enable multi-architecture container image builds for AMD64 and ARM64 to support deployment on x86_64 servers, Apple Silicon, AWS Graviton, and other ARM-based infrastructure.
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

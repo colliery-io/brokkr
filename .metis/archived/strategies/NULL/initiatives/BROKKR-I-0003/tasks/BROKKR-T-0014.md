@@ -7,7 +7,7 @@ created_at: 2025-10-19T02:26:49.681872+00:00
 updated_at: 2025-10-20T15:11:22.861999+00:00
 parent: BROKKR-I-0003
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -64,6 +64,8 @@ Create pre-configured values files for common deployment scenarios (production, 
 - **Current Problems**: {What's difficult/slow/buggy now}
 - **Benefits of Fixing**: {What improves after refactoring}
 - **Risk Assessment**: {Risks of not addressing this}
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 
