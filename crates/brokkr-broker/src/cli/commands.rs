@@ -40,15 +40,27 @@ pub async fn serve(config: &Settings) -> Result<(), Box<dyn std::error::Error>> 
 
     // Create database connection pool
     info!("Creating database connection pool");
-    let connection_pool = create_shared_connection_pool(&config.database.url, "brokkr", 5);
+    let connection_pool = create_shared_connection_pool(
+        &config.database.url,
+        "brokkr",
+        5,
+        config.database.schema.as_deref(),
+    );
     info!("Database connection pool created successfully");
+
+    // Set up schema if configured (for multi-tenant deployments)
+    if let Some(ref schema) = config.database.schema {
+        info!("Setting up schema: {}", schema);
+        connection_pool
+            .setup_schema(schema)
+            .expect("Failed to set up schema");
+        info!("Schema '{}' set up successfully", schema);
+    }
 
     // Run pending migrations
     info!("Running pending database migrations");
-    let mut conn = connection_pool
-        .pool
-        .get()
-        .expect("Failed to get DB connection");
+    let mut conn = connection_pool.get().expect("Failed to get DB connection");
+
     conn.run_pending_migrations(MIGRATIONS)
         .expect("Failed to run migrations");
     info!("Database migrations completed successfully");
@@ -78,7 +90,7 @@ pub async fn serve(config: &Settings) -> Result<(), Box<dyn std::error::Error>> 
 
     // Initialize Data Access Layer
     info!("Initializing Data Access Layer");
-    let dal = DAL::new(connection_pool.pool.clone());
+    let dal = DAL::new(connection_pool.clone());
 
     // Configure API routes
     info!("Configuring API routes");
@@ -125,8 +137,13 @@ pub fn rotate_admin(config: &Settings) -> Result<(), Box<dyn std::error::Error>>
 pub fn rotate_agent_key(config: &Settings, uuid: Uuid) -> Result<(), Box<dyn std::error::Error>> {
     info!("Rotating agent key");
 
-    let pool = create_shared_connection_pool(&config.database.url, "brokkr", 1);
-    let dal = DAL::new(pool.pool.clone());
+    let pool = create_shared_connection_pool(
+        &config.database.url,
+        "brokkr",
+        1,
+        config.database.schema.as_deref(),
+    );
+    let dal = DAL::new(pool.clone());
 
     let agent = dal.agents().get(uuid)?.ok_or("Agent not found")?;
     let new_pak_hash = utils::pak::create_pak()?.1;
@@ -142,8 +159,13 @@ pub fn rotate_generator_key(
 ) -> Result<(), Box<dyn std::error::Error>> {
     info!("Rotating generator key");
 
-    let pool = create_shared_connection_pool(&config.database.url, "brokkr", 1);
-    let dal = DAL::new(pool.pool.clone());
+    let pool = create_shared_connection_pool(
+        &config.database.url,
+        "brokkr",
+        1,
+        config.database.schema.as_deref(),
+    );
+    let dal = DAL::new(pool.clone());
 
     let generator = dal.generators().get(uuid)?.ok_or("Generator not found")?;
 
@@ -165,8 +187,13 @@ pub fn create_agent(
 ) -> Result<(), Box<dyn std::error::Error>> {
     info!("Creating new agent: {}", name);
 
-    let pool = create_shared_connection_pool(&config.database.url, "brokkr", 1);
-    let dal = DAL::new(pool.pool.clone());
+    let pool = create_shared_connection_pool(
+        &config.database.url,
+        "brokkr",
+        1,
+        config.database.schema.as_deref(),
+    );
+    let dal = DAL::new(pool.clone());
 
     let new_agent = NewAgent::new(name, cluster_name)
         .map_err(|e| format!("Failed to create NewAgent: {}", e))?;
@@ -193,8 +220,13 @@ pub fn create_generator(
 ) -> Result<(), Box<dyn std::error::Error>> {
     info!("Creating new generator: {}", name);
 
-    let pool = create_shared_connection_pool(&config.database.url, "brokkr", 1);
-    let dal = DAL::new(pool.pool.clone());
+    let pool = create_shared_connection_pool(
+        &config.database.url,
+        "brokkr",
+        1,
+        config.database.schema.as_deref(),
+    );
+    let dal = DAL::new(pool.clone());
 
     let new_generator = NewGenerator::new(name, description)
         .map_err(|e| format!("Failed to create NewGenerator: {}", e))?;

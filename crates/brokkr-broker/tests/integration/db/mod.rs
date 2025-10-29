@@ -64,7 +64,7 @@ fn test_connection_pool_integration() {
     // Create connection pool for test database
     let max_size: usize = 10;
     let test_pool =
-        create_shared_connection_pool(base_url_without_db, &test_db_name, max_size as u32);
+        create_shared_connection_pool(base_url_without_db, &test_db_name, max_size as u32, None);
     let test_pool = Arc::new(test_pool);
 
     // Run tests

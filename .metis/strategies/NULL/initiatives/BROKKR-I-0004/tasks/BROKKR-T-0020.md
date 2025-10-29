@@ -4,14 +4,14 @@ level: task
 title: "Implement database infrastructure foundation for schema-per-tenant"
 short_code: "BROKKR-T-0020"
 created_at: 2025-10-22T17:41:21.232834+00:00
-updated_at: 2025-10-22T22:41:23.549920+00:00
+updated_at: 2025-10-29T16:20:10.289069+00:00
 parent: BROKKR-I-0004
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/todo"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -33,6 +33,10 @@ Implement the core database infrastructure to support schema-per-tenant multi-te
 
 **Phase:** Phase 1 - Database Infrastructure Foundation
 
+## Acceptance Criteria
+
+## Acceptance Criteria
+
 ## Acceptance Criteria **[REQUIRED]**
 
 - [ ] Schema field added to ConnectionPool struct in `crates/brokkr-broker/src/db.rs`
@@ -49,7 +53,7 @@ Implement the core database infrastructure to support schema-per-tenant multi-te
 
 **File: `crates/brokkr-broker/src/db.rs`**
 
-**Core Principle:** Modify existing method signatures rather than creating parallel "with_schema" versions. All methods are internal to the broker, so signature changes are acceptable.
+**Core Principle:** Extend existing methods directly - no parallel versions or backward compatibility concerns needed since this is internal broker code.
 
 1. Add `schema` field to `ConnectionPool`:
 ```rust
@@ -75,22 +79,28 @@ pub fn create_shared_connection_pool(
 }
 ```
 
-3. Add `get_connection()` method to automatically handle search_path:
+3. Add `get_connection()` method on ConnectionPool that wraps `pool.get()` and automatically sets search_path:
 ```rust
 impl ConnectionPool {
-    pub fn get_connection(&self) -> Result<PooledConnection<ConnectionManager<PgConnection>>, Error> {
+    pub fn get_connection(&self) -> Result<PooledConnection<ConnectionManager<PgConnection>>, r2d2::Error> {
         let mut conn = self.pool.get()?;
         if let Some(ref schema) = self.schema {
             // Validate schema name to prevent SQL injection
-            validate_schema_name(schema)?;
+            validate_schema_name(schema).expect("Invalid schema name");
             // Set search_path for this connection
             diesel::sql_query(format!("SET search_path TO {}, public", schema))
-                .execute(&mut conn)?;
+                .execute(&mut conn)
+                .expect("Failed to set search_path");
         }
         Ok(conn)
     }
 }
 ```
+
+This approach is cleanest because:
+- Single point of schema handling
+- Transparent to DAL layer (just change `pool.get()` to `pool.get_connection()`)
+- No need for per-query schema management
 
 4. Add schema name validation:
 ```rust
