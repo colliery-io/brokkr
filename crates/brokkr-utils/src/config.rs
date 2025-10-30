@@ -37,6 +37,10 @@
 //! - `BROKKR__DATABASE__URL`: Sets the database connection URL
 //!   Default: "postgres://brokkr:brokkr@localhost:5432/brokkr"
 //!
+//! - `BROKKR__DATABASE__SCHEMA`: Sets the PostgreSQL schema for multi-tenant isolation
+//!   Default: None (uses public schema)
+//!   Example: "tenant_acme"
+//!
 //! - `BROKKR__LOG__LEVEL`: Sets the log level for the application
 //!   Default: "debug"
 //!   Possible values: "trace", "debug", "info", "warn", "error"
@@ -119,6 +123,8 @@ pub struct Agent {
 pub struct Database {
     /// Database connection URL
     pub url: String,
+    /// Optional schema name for multi-tenant isolation
+    pub schema: Option<String>,
 }
 
 /// Represents the logging configuration

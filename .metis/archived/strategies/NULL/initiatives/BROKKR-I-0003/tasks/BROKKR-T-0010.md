@@ -7,7 +7,7 @@ created_at: 2025-10-19T02:26:48.964233+00:00
 updated_at: 2025-10-20T00:35:18.620656+00:00
 parent: BROKKR-I-0003
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -30,6 +30,8 @@ initiative_id: BROKKR-I-0003
 ## Objective **[REQUIRED]**
 
 Replace the basic PostgreSQL StatefulSet from Phase 1 with a production-ready PostgreSQL subchart dependency, adding persistence options, backup configuration, and proper lifecycle management for bundled database deployments.
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

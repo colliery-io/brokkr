@@ -22,7 +22,7 @@ LICENSE
 docker/
 
 # Rust-specific
-Cargo.lock
+# Cargo.lock is now included for deterministic builds
 
 # Miscellaneous
 .env

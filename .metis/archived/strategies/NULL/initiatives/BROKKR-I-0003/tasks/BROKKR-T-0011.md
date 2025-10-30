@@ -7,7 +7,7 @@ created_at: 2025-10-19T02:26:49.060095+00:00
 updated_at: 2025-10-20T00:51:24.887283+00:00
 parent: BROKKR-I-0003
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -30,6 +30,8 @@ initiative_id: BROKKR-I-0003
 ## Objective **[REQUIRED]**
 
 Add TLS/SSL configuration support to the broker Helm chart, including certificate secret management, Ingress configuration with TLS termination, and environment variables for enabling HTTPS in the broker application.
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

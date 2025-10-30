@@ -7,7 +7,7 @@ created_at: 2025-10-21T12:37:05.985434+00:00
 updated_at: 2025-10-21T16:39:07.960162+00:00
 parent: BROKKR-I-0003
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -30,6 +30,8 @@ initiative_id: BROKKR-I-0003
 ## Objective **\[REQUIRED\]**
 
 Set up OCI-based Helm chart publishing to GHCR with automated packaging, versioning, and distribution via the release workflow. Keep  current GitHub Release .tgz artifacts  while also setting up a modern OCI registry distribution.
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

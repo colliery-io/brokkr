@@ -7,7 +7,7 @@ created_at: 2025-10-18T14:47:35.755921+00:00
 updated_at: 2025-10-19T01:00:01.474888+00:00
 parent: BROKKR-I-0003
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -30,6 +30,8 @@ initiative_id: BROKKR-I-0003
 ## Objective **[REQUIRED]**
 
 Enhance the broker's health check endpoints to follow Kubernetes best practices with proper dependency checking and detailed status reporting.
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

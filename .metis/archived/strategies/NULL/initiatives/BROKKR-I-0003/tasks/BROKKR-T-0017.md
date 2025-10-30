@@ -7,7 +7,7 @@ created_at: 2025-10-21T12:37:06.064872+00:00
 updated_at: 2025-10-21T16:59:45.480721+00:00
 parent: BROKKR-I-0003
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -30,6 +30,8 @@ initiative_id: BROKKR-I-0003
 ## Objective **[REQUIRED]**
 
 Create comprehensive Helm-based installation documentation for both broker and agent components. Cover basic installation scenarios including development setup with bundled PostgreSQL and connecting agents to brokers. This is the primary installation method users will follow.
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

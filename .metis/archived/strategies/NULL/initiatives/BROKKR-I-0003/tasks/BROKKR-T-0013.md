@@ -7,7 +7,7 @@ created_at: 2025-10-19T02:26:49.406890+00:00
 updated_at: 2025-10-20T15:32:10.293149+00:00
 parent: BROKKR-I-0003
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -30,6 +30,8 @@ initiative_id: BROKKR-I-0003
 ## Objective **[REQUIRED]**
 
 Enhance Helm chart security by adding comprehensive pod and container security contexts to all templates, including non-root enforcement, read-only filesystems, capability dropping, and seccomp profiles to meet security best practices and restricted PSS standards.
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

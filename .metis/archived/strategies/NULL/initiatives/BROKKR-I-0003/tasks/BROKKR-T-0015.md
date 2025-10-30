@@ -7,7 +7,7 @@ created_at: 2025-10-19T02:26:49.988828+00:00
 updated_at: 2025-10-21T12:22:55.767938+00:00
 parent: BROKKR-I-0003
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -68,6 +68,8 @@ Create comprehensive GitHub Actions CI/CD workflows for:
 - **Current Problems**: {What's difficult/slow/buggy now}
 - **Benefits of Fixing**: {What improves after refactoring}
 - **Risk Assessment**: {Risks of not addressing this}
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 
