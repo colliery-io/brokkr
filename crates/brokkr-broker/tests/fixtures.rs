@@ -82,7 +82,8 @@ impl TestFixture {
     pub fn new() -> Self {
         dotenv().ok();
         let settings = Settings::new(None).expect("Failed to load settings");
-        let connection_pool = create_shared_connection_pool(&settings.database.url, "brokkr", 5);
+        let connection_pool =
+            create_shared_connection_pool(&settings.database.url, "brokkr", 5, None);
         // Run migrations
         let mut conn = connection_pool
             .pool
@@ -101,7 +102,7 @@ impl TestFixture {
         // Read the admin PAK from the temporary file
         let admin_pak = "brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8".to_string();
 
-        let dal = DAL::new(connection_pool.pool.clone());
+        let dal = DAL::new(connection_pool.clone());
 
         // Fetch the admin generator
         let admin_generator = dal

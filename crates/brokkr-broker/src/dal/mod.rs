@@ -30,8 +30,7 @@
 //! let agents = dal.agents().list().expect("Failed to list agents");
 //! ```
 
-use diesel::r2d2::{ConnectionManager, Pool};
-use diesel::PgConnection;
+use crate::db::ConnectionPool;
 
 pub mod agents;
 use agents::AgentsDAL;
@@ -70,8 +69,8 @@ use generators::GeneratorsDAL;
 /// implementations for different entities.
 #[derive(Clone)]
 pub struct DAL {
-    /// A connection pool for PostgreSQL database connections.
-    pub pool: Pool<ConnectionManager<PgConnection>>,
+    /// A connection pool for PostgreSQL database connections with schema support.
+    pub pool: ConnectionPool,
 }
 
 impl DAL {
@@ -79,12 +78,12 @@ impl DAL {
     ///
     /// # Arguments
     ///
-    /// * `pool` - A connection pool for PostgreSQL database connections.
+    /// * `pool` - A connection pool for PostgreSQL database connections with schema support.
     ///
     /// # Returns
     ///
     /// A new DAL instance.
-    pub fn new(pool: Pool<ConnectionManager<PgConnection>>) -> Self {
+    pub fn new(pool: ConnectionPool) -> Self {
         DAL { pool }
     }
 

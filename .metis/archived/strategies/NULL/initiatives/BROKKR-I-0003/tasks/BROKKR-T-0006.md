@@ -7,7 +7,7 @@ created_at: 2025-10-18T14:47:36.299249+00:00
 updated_at: 2025-10-19T02:22:51.380076+00:00
 parent: BROKKR-I-0003
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -30,6 +30,8 @@ initiative_id: BROKKR-I-0003
 ## Objective **[REQUIRED]**
 
 Create foundational Helm chart for broker with deployment, service, configuration, and optional bundled PostgreSQL support for Phase 1 validation.
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

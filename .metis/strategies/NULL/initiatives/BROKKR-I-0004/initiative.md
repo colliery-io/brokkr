@@ -4,14 +4,14 @@ level: initiative
 title: "Multi-Tenant Database Architecture"
 short_code: "BROKKR-I-0004"
 created_at: 2025-10-22T00:02:38.961232+00:00
-updated_at: 2025-10-22T00:06:53.653895+00:00
+updated_at: 2025-10-22T18:16:47.607070+00:00
 parent: BROKKR-V-0001
 blocked_by: []
 archived: false
 
 tags:
   - "#initiative"
-  - "#phase/design"
+  - "#phase/active"
 
 
 exit_criteria_met: false
@@ -31,6 +31,8 @@ Currently, brokkr requires a dedicated PostgreSQL database per deployment instan
 The cloacina project has successfully implemented a schema-per-tenant multi-tenancy pattern that enables multiple application instances to share a single PostgreSQL server while maintaining complete data isolation through PostgreSQL schemas. Each tenant's data lives in its own schema, with `SET search_path` automatically routing queries to the correct tenant without requiring application-level filtering.
 
 This initiative will port the proven cloacina implementation to brokkr, specifically focusing on **Option A: Schema from Configuration** - where each broker deployment connects to a specific PostgreSQL schema determined by an environment variable, enabling multiple broker deployments to share a single PostgreSQL instance.
+
+**Important: Schema isolation is at the broker level only.** Agents connect to their assigned broker and are isolated through existing authentication mechanisms (PAK-based auth). Agents have no awareness of schemas - that's entirely a broker-level database concern. A broker configured with `schema=tenant_a` will only see tenant_a's data; agents talking to that broker are automatically isolated.
 
 ## Goals & Non-Goals **[REQUIRED]**
 
@@ -504,7 +506,7 @@ Create Helm chart template for schema provisioning job that runs before broker d
 - Example deployment configurations
 
 **Exit Criteria:**
-- [ ] ADR created and reviewed
+- [x] ADR created and reviewed (BROKKR-A-0004: Schema-Per-Tenant Multi-Tenancy Architecture)
 - [ ] Deployment examples added to documentation
 - [ ] Team briefed on multi-tenant architecture
 

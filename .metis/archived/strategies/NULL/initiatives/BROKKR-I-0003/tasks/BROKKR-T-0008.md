@@ -7,7 +7,7 @@ created_at: 2025-10-18T14:47:36.700012+00:00
 updated_at: 2025-10-19T11:45:29.995442+00:00
 parent: BROKKR-I-0003
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -30,6 +30,8 @@ initiative_id: BROKKR-I-0003
 ## Objective **[REQUIRED]**
 
 Comprehensive end-to-end validation of all Phase 1 deliverables: non-root containers, health endpoints, multi-arch images, and Helm charts working together in a real Kubernetes environment.
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

@@ -7,7 +7,7 @@ created_at: 2025-10-19T02:26:48.872074+00:00
 updated_at: 2025-10-19T20:18:53.640764+00:00
 parent: BROKKR-I-0003
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -30,6 +30,8 @@ initiative_id: BROKKR-I-0003
 ## Objective **\[REQUIRED\]**
 
 Extend the broker Helm chart with comprehensive configuration options for external PostgreSQL, resources, environment variables, secrets, and scaling to support production deployments.
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 
