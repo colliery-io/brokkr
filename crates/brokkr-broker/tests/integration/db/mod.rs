@@ -4,6 +4,8 @@
  * See LICENSE file in the project root for full license text.
  */
 
+mod multi_tenant;
+
 use brokkr_utils::Settings;
 use diesel::deserialize::QueryableByName;
 use diesel::prelude::*;
