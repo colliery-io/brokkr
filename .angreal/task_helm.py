@@ -562,11 +562,15 @@ spec:
         print("Validating multi-tenant broker health")
         print("=" * 60)
 
+        # Service names follow pattern: {release-name}-brokkr-broker
+        service_a = f"{broker_a_release}-brokkr-broker"
+        service_b = f"{broker_b_release}-brokkr-broker"
+
         health_passed = True
-        health_passed &= validate_health_endpoint(broker_a_release, 3000, "/healthz")
-        health_passed &= validate_health_endpoint(broker_a_release, 3000, "/readyz")
-        health_passed &= validate_health_endpoint(broker_b_release, 3000, "/healthz")
-        health_passed &= validate_health_endpoint(broker_b_release, 3000, "/readyz")
+        health_passed &= validate_health_endpoint(service_a, 3000, "/healthz")
+        health_passed &= validate_health_endpoint(service_a, 3000, "/readyz")
+        health_passed &= validate_health_endpoint(service_b, 3000, "/healthz")
+        health_passed &= validate_health_endpoint(service_b, 3000, "/readyz")
 
         if health_passed:
             print("\n✓ Multi-tenant schema isolation test passed")
