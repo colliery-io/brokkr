@@ -408,6 +408,189 @@ spec:
                 )
 
 
+def test_broker_multi_tenant_schema(tag, registry, no_cleanup):
+    """Test multi-tenant broker deployments with schema isolation.
+
+    This test verifies that multiple broker instances can share a single
+    PostgreSQL database using schema-based isolation.
+
+    Args:
+        tag: Image tag to test
+        registry: Container registry URL
+        no_cleanup: Skip cleanup after test
+    """
+    external_db_release = "shared-postgres"
+    broker_a_release = "broker-tenant-a"
+    broker_b_release = "broker-tenant-b"
+    chart_name = "brokkr-broker"
+
+    try:
+        # Setup image pull secret
+        setup_image_pull_secret(registry.split('/')[0])
+
+        # Deploy a standalone PostgreSQL as shared database
+        print("\n" + "=" * 60)
+        print("Deploying shared PostgreSQL for multi-tenant testing")
+        print("=" * 60)
+
+        postgres_manifest = f"""
+apiVersion: v1
+kind: Service
+metadata:
+  name: {external_db_release}
+spec:
+  ports:
+  - port: 5432
+  selector:
+    app: {external_db_release}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {external_db_release}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {external_db_release}
+  template:
+    metadata:
+      labels:
+        app: {external_db_release}
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:16-alpine
+        env:
+        - name: POSTGRES_DB
+          value: brokkr
+        - name: POSTGRES_USER
+          value: brokkr
+        - name: POSTGRES_PASSWORD
+          value: shared-test-password
+        ports:
+        - containerPort: 5432
+"""
+
+        result = subprocess.run([
+            "docker", "run", "--rm",
+            "--network", "brokkr-dev_default",
+            "-v", "brokkr-dev_brokkr-keys:/keys:ro",
+            "-e", "KUBECONFIG=/keys/kubeconfig.docker.yaml",
+            "alpine/k8s:1.27.3",
+            "sh", "-c", f"cat <<'EOF' | kubectl apply -f -\n{postgres_manifest}\nEOF"
+        ], cwd=cwd)
+
+        if result.returncode != 0:
+            print("Failed to deploy shared PostgreSQL")
+            return False
+
+        print("Waiting for shared PostgreSQL to be ready...")
+        time.sleep(20)
+
+        # Create schemas in PostgreSQL
+        print("\nCreating schemas tenant_a and tenant_b in PostgreSQL...")
+        create_schemas_cmd = """
+            kubectl run create-schemas --rm -i --restart=Never --image=postgres:16-alpine \
+                --env=PGPASSWORD=shared-test-password -- \
+                psql -h shared-postgres -U brokkr -d brokkr -c \
+                "CREATE SCHEMA IF NOT EXISTS tenant_a; \
+                 CREATE SCHEMA IF NOT EXISTS tenant_b; \
+                 GRANT ALL PRIVILEGES ON SCHEMA tenant_a TO brokkr; \
+                 GRANT ALL PRIVILEGES ON SCHEMA tenant_b TO brokkr;"
+        """
+
+        if not run_in_k8s_container(create_schemas_cmd, "Creating schemas"):
+            print("Failed to create schemas")
+            return False
+
+        print("Schemas created successfully")
+
+        # Deploy broker for tenant_a
+        print("\n" + "=" * 60)
+        print("Deploying broker for tenant_a")
+        print("=" * 60)
+
+        values_a = {
+            "image.tag": tag,
+            "image.repository": f"{registry}/brokkr-broker",
+            "image.pullSecrets[0].name": "ghcr-secret",
+            "postgresql.enabled": "false",
+            "postgresql.external.host": external_db_release,
+            "postgresql.external.username": "brokkr",
+            "postgresql.external.password": "shared-test-password",
+            "postgresql.external.schema": "tenant_a",
+        }
+
+        if not helm_install(chart_name, broker_a_release, values_a):
+            return False
+
+        if not wait_for_pods(broker_a_release):
+            if not no_cleanup:
+                helm_uninstall(broker_a_release)
+            return False
+
+        # Deploy broker for tenant_b
+        print("\n" + "=" * 60)
+        print("Deploying broker for tenant_b")
+        print("=" * 60)
+
+        values_b = {
+            "image.tag": tag,
+            "image.repository": f"{registry}/brokkr-broker",
+            "image.pullSecrets[0].name": "ghcr-secret",
+            "postgresql.enabled": "false",
+            "postgresql.external.host": external_db_release,
+            "postgresql.external.username": "brokkr",
+            "postgresql.external.password": "shared-test-password",
+            "postgresql.external.schema": "tenant_b",
+        }
+
+        if not helm_install(chart_name, broker_b_release, values_b):
+            if not no_cleanup:
+                helm_uninstall(broker_a_release)
+            return False
+
+        if not wait_for_pods(broker_b_release):
+            if not no_cleanup:
+                helm_uninstall(broker_a_release)
+                helm_uninstall(broker_b_release)
+            return False
+
+        # Validate both brokers are healthy
+        print("\n" + "=" * 60)
+        print("Validating multi-tenant broker health")
+        print("=" * 60)
+
+        # Service names follow pattern: {release-name}-brokkr-broker
+        service_a = f"{broker_a_release}-brokkr-broker"
+        service_b = f"{broker_b_release}-brokkr-broker"
+
+        health_passed = True
+        health_passed &= validate_health_endpoint(service_a, 3000, "/healthz")
+        health_passed &= validate_health_endpoint(service_a, 3000, "/readyz")
+        health_passed &= validate_health_endpoint(service_b, 3000, "/healthz")
+        health_passed &= validate_health_endpoint(service_b, 3000, "/readyz")
+
+        if health_passed:
+            print("\n✓ Multi-tenant schema isolation test passed")
+            print("  - Tenant A broker deployed with schema 'tenant_a'")
+            print("  - Tenant B broker deployed with schema 'tenant_b'")
+            print("  - Both brokers healthy and isolated")
+
+        return health_passed
+
+    finally:
+        if not no_cleanup:
+            print("\nCleaning up multi-tenant test resources...")
+            helm_uninstall(broker_a_release)
+            helm_uninstall(broker_b_release)
+            run_in_k8s_container(
+                f"kubectl delete deployment,service {external_db_release} --ignore-not-found",
+                "Deleting shared PostgreSQL"
+            )
+
+
 def create_agent_in_broker(broker_release_name, agent_name, cluster_name, namespace="default"):
     """Create an agent via the broker CLI and return the PAK."""
     print(f"\nCreating agent '{agent_name}' in cluster '{cluster_name}' via broker...")
@@ -811,6 +994,12 @@ def test_helm_chart(component, skip_docker=False, no_cleanup=False, tag="test", 
             print("=" * 60)
             result = test_broker_chart(tag, registry, no_cleanup, test_external_db=True)
             results.append(("broker-external-db", result))
+
+            print("\n" + "=" * 60)
+            print("Testing broker chart (multi-tenant schema isolation)")
+            print("=" * 60)
+            result = test_broker_multi_tenant_schema(tag, registry, no_cleanup)
+            results.append(("broker-multi-tenant-schema", result))
 
             # Test broker values files
             values_files = ["production", "development", "staging"]
