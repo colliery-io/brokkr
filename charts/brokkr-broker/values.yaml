@@ -44,6 +44,11 @@ postgresql:
     # Database password (not used when existingSecret is set)
     # WARNING: Do not commit production passwords to values files
     password: brokkr
+    # PostgreSQL schema for multi-tenant deployments (optional)
+    # When set, the broker will use this schema for data isolation
+    # Leave empty for default (public) schema
+    # Example: 'tenant_a', 'customer_1', 'dev', 'staging', 'prod'
+    schema: ''
 
   # Use an existing Kubernetes secret for database credentials
   # The secret should contain a key with the full database connection URL

@@ -83,6 +83,83 @@ The secret should contain a key with the full PostgreSQL connection URL:
 postgres://username:password@host:port/database
 ```
 
+#### Multi-Tenant Deployments (Schema Isolation)
+
+For multi-tenant deployments, multiple broker instances can share a single PostgreSQL database by using different schemas. Each broker instance operates in complete isolation within its own PostgreSQL schema.
+
+**Use Cases:**
+- Multiple environments (dev/staging/prod) sharing one database
+- Multi-customer SaaS deployments with data isolation
+- Cost-efficient infrastructure with PostgreSQL-enforced isolation
+
+**Configuration:**
+
+```yaml
+postgresql:
+  enabled: false
+  external:
+    host: shared-postgres.example.com
+    port: 5432
+    database: brokkr
+    username: brokkr
+    password: secure-password
+    schema: tenant_a  # Schema for data isolation
+```
+
+**Example: Multi-Environment Setup**
+
+Deploy three broker instances to different namespaces, all using the same PostgreSQL:
+
+```bash
+# Development environment
+helm install dev-broker charts/brokkr-broker \
+  --namespace dev \
+  --set postgresql.enabled=false \
+  --set postgresql.external.host=shared-postgres.example.com \
+  --set postgresql.external.schema=brokkr_dev
+
+# Staging environment
+helm install staging-broker charts/brokkr-broker \
+  --namespace staging \
+  --set postgresql.enabled=false \
+  --set postgresql.external.host=shared-postgres.example.com \
+  --set postgresql.external.schema=brokkr_staging
+
+# Production environment
+helm install prod-broker charts/brokkr-broker \
+  --namespace production \
+  --set postgresql.enabled=false \
+  --set postgresql.external.host=shared-postgres.example.com \
+  --set postgresql.external.schema=brokkr_prod
+```
+
+**Schema Provisioning:**
+
+Each schema must be created before the broker starts. The broker will automatically run migrations within its configured schema:
+
+```sql
+-- Connect to PostgreSQL as admin
+CREATE SCHEMA IF NOT EXISTS brokkr_dev;
+CREATE SCHEMA IF NOT EXISTS brokkr_staging;
+CREATE SCHEMA IF NOT EXISTS brokkr_prod;
+
+-- Grant permissions to broker user
+GRANT ALL PRIVILEGES ON SCHEMA brokkr_dev TO brokkr;
+GRANT ALL PRIVILEGES ON SCHEMA brokkr_staging TO brokkr;
+GRANT ALL PRIVILEGES ON SCHEMA brokkr_prod TO brokkr;
+```
+
+**Data Isolation:**
+
+- Each broker sees only its own schema's data
+- PostgreSQL enforces isolation at the schema level
+- No application-level filtering required
+- Impossible to accidentally query across tenants
+
+**Backward Compatibility:**
+
+When `schema` is not set (or empty string), the broker uses the default `public` schema. This maintains compatibility with existing single-tenant deployments.
+
 ### TLS/SSL Configuration
 
 The chart supports multiple methods for configuring TLS certificates.
@@ -241,6 +318,7 @@ securityContext:
 | `postgresql.external.database` | string | `"brokkr"` | Database name |
 | `postgresql.external.username` | string | `"brokkr"` | Database username |
 | `postgresql.external.password` | string | `"brokkr"` | Database password |
+| `postgresql.external.schema` | string | `""` | PostgreSQL schema for multi-tenant isolation |
 | `postgresql.existingSecret` | string | `""` | Existing secret for database URL |
 | `tls.enabled` | bool | `false` | Enable TLS/SSL |
 | `tls.existingSecret` | string | `""` | Existing TLS secret name |
@@ -305,6 +383,43 @@ helm install prod-broker charts/brokkr-broker \
   --set ingress.enabled=true \
   --set ingress.className=nginx \
   --set ingress.hosts[0].host=broker.example.com
+```
+
+### Multi-Tenant Setup (Schema Isolation)
+
+Deploy multiple broker instances sharing a single PostgreSQL database with schema-based isolation:
+
+```bash
+# Create database secret (shared by all tenants)
+kubectl create secret generic shared-db-secret \
+  --from-literal=database-url='postgres://brokkr:password@postgres.example.com:5432/brokkr'
+
+# Deploy tenant A broker
+helm install tenant-a-broker charts/brokkr-broker \
+  --namespace tenant-a \
+  --set postgresql.enabled=false \
+  --set postgresql.external.schema=tenant_a \
+  --set postgresql.existingSecret=shared-db-secret \
+  --set ingress.enabled=true \
+  --set ingress.hosts[0].host=tenant-a.example.com
+
+# Deploy tenant B broker
+helm install tenant-b-broker charts/brokkr-broker \
+  --namespace tenant-b \
+  --set postgresql.enabled=false \
+  --set postgresql.external.schema=tenant_b \
+  --set postgresql.existingSecret=shared-db-secret \
+  --set ingress.enabled=true \
+  --set ingress.hosts[0].host=tenant-b.example.com
+```
+
+**Note:** Ensure schemas are created in PostgreSQL before deploying:
+
+```sql
+CREATE SCHEMA IF NOT EXISTS tenant_a;
+CREATE SCHEMA IF NOT EXISTS tenant_b;
+GRANT ALL PRIVILEGES ON SCHEMA tenant_a TO brokkr;
+GRANT ALL PRIVILEGES ON SCHEMA tenant_b TO brokkr;
 ```
 
 ## Troubleshooting

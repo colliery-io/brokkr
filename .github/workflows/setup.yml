@@ -34,7 +34,7 @@ jobs:
             ${{ runner.os }}-cargo-
 
       - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.90
         with:
           components: rustfmt, clippy
 
