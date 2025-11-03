@@ -7,7 +7,7 @@ created_at: 2025-10-22T17:41:21.232834+00:00
 updated_at: 2025-10-29T16:20:10.289069+00:00
 parent: BROKKR-I-0004
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -32,6 +32,8 @@ initiative_id: BROKKR-I-0004
 Implement the core database infrastructure to support schema-per-tenant multi-tenancy. This includes adding schema awareness to the ConnectionPool, implementing automatic search_path configuration, and creating schema provisioning utilities.
 
 **Phase:** Phase 1 - Database Infrastructure Foundation
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

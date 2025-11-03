@@ -4,14 +4,14 @@ level: task
 title: "Create schema management and provisioning tooling"
 short_code: "BROKKR-T-0024"
 created_at: 2025-10-22T17:41:21.735068+00:00
-updated_at: 2025-10-22T17:41:21.735068+00:00
+updated_at: 2025-11-03T00:31:28.609661+00:00
 parent: BROKKR-I-0004
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
-  - "#phase/todo"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -68,6 +68,12 @@ Create schema management and provisioning utilities, including documentation and
 - **Current Problems**: {What's difficult/slow/buggy now}
 - **Benefits of Fixing**: {What improves after refactoring}
 - **Risk Assessment**: {Risks of not addressing this}
+
+## Acceptance Criteria
+
+## Acceptance Criteria
+
+## Acceptance Criteria
 
 ## Acceptance Criteria **[REQUIRED]**
 

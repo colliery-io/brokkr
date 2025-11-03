@@ -1,17 +1,17 @@
 ---
-id: integrate-schema-support-into-helm
+id: migrate-dal-layer-to-use-schema
 level: task
-title: "Integrate schema support into Helm charts"
-short_code: "BROKKR-T-0023"
-created_at: 2025-10-22T17:41:21.588811+00:00
-updated_at: 2025-10-22T17:41:21.588811+00:00
+title: "Migrate DAL layer to use schema-aware connections"
+short_code: "BROKKR-T-0021"
+created_at: 2025-10-22T17:41:21.334830+00:00
+updated_at: 2025-10-29T16:35:07.724736+00:00
 parent: BROKKR-I-0004
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
-  - "#phase/todo"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -19,7 +19,7 @@ strategy_id: NULL
 initiative_id: BROKKR-I-0004
 ---
 
-# Integrate schema support into Helm charts
+# Migrate DAL layer to use schema-aware connections
 
 *This template includes sections for various types of tasks. Delete sections that don't apply to your specific use case.*
 
@@ -29,11 +29,11 @@ initiative_id: BROKKR-I-0004
 
 ## Objective **[REQUIRED]**
 
-Add schema configuration support to brokkr-broker Helm chart, enabling multi-tenant deployments via values.yaml.
+Update all DAL layer methods to use schema-aware connection acquisition, ensuring all database queries execute in the correct schema context.
 
-**Phase:** Phase 4 - Helm Chart Integration
+**Phase:** Phase 2 - DAL Layer Migration
 
-**Dependencies:** Requires BROKKR-T-0022 (Configuration and Initialization) to be completed first.
+**Dependencies:** Requires BROKKR-T-0020 (Database Infrastructure Foundation) to be completed first.
 
 ## Backlog Item Details **[CONDITIONAL: Backlog Item]**
 
@@ -69,12 +69,19 @@ Add schema configuration support to brokkr-broker Helm chart, enabling multi-ten
 - **Benefits of Fixing**: {What improves after refactoring}
 - **Risk Assessment**: {Risks of not addressing this}
 
+## Acceptance Criteria
+
+## Acceptance Criteria
+
+## Acceptance Criteria
+
 ## Acceptance Criteria **[REQUIRED]**
 
-- [ ] Helm values support database.schema configuration
-- [ ] BROKKR__DATABASE__SCHEMA environment variable properly templated in deployment
-- [ ] Documentation updated with multi-tenant deployment examples
-- [ ] Tested deployment with and without schema configuration
+- [ ] All DAL files updated: agents.rs, stacks.rs, generators.rs, deployment_objects.rs, agent_events.rs
+- [ ] No direct pool.get() calls remaining in DAL layer - all use pool.get_connection()
+- [ ] Integration tests verify data isolation between schemas
+- [ ] All existing tests still passing
+- [ ] DAL method signatures unchanged (backward compatible)
 
 ## Test Cases **[CONDITIONAL: Testing Task]**
 
@@ -126,16 +133,48 @@ Add schema configuration support to brokkr-broker Helm chart, enabling multi-ten
 
 ## Implementation Notes **[CONDITIONAL: Technical Task]**
 
-{Keep for technical tasks, delete for non-technical. Technical details, approach, or important considerations}
-
 ### Technical Approach
-{How this will be implemented}
+
+**Simple Pattern for DAL Migration:**
+
+Replace all instances of `pool.get()` with `pool.get_connection()` throughout the DAL layer.
+
+**Before:**
+```rust
+pub fn get_agent(pool: &ConnectionPool, id: Uuid) -> Result<Agent> {
+    let mut conn = pool.get()?;
+    agents::table.find(id).first(&mut conn)
+}
+```
+
+**After:**
+```rust
+pub fn get_agent(pool: &ConnectionPool, id: Uuid) -> Result<Agent> {
+    let mut conn = pool.get_connection()?;  // Automatically handles schema
+    agents::table.find(id).first(&mut conn)
+}
+```
+
+The `get_connection()` method automatically sets the search_path when a schema is configured, so no other changes are needed in DAL code.
+
+### Files to Update
+
+1. `crates/brokkr-broker/src/dal/agents.rs`
+2. `crates/brokkr-broker/src/dal/stacks.rs`
+3. `crates/brokkr-broker/src/dal/generators.rs`
+4. `crates/brokkr-broker/src/dal/deployment_objects.rs`
+5. `crates/brokkr-broker/src/dal/agent_events.rs`
+6. All other DAL modules with database access
 
 ### Dependencies
-{Other tasks or systems this depends on}
+
+Requires BROKKR-T-0020 (Database Infrastructure Foundation) to be completed first, which provides the `ConnectionPool::get_connection()` method.
 
 ### Risk Considerations
-{Technical risks and mitigation strategies}
+
+- Ensure ALL `pool.get()` calls are replaced - missing even one could cause cross-tenant data leakage
+- Use grep/search to verify no direct `pool.get()` calls remain
+- Integration tests must verify complete data isolation
 
 ## Status Updates **[REQUIRED]**
 

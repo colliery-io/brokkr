@@ -1,13 +1,13 @@
 ---
-id: migrate-dal-layer-to-use-schema
+id: add-schema-configuration-and
 level: task
-title: "Migrate DAL layer to use schema-aware connections"
-short_code: "BROKKR-T-0021"
-created_at: 2025-10-22T17:41:21.334830+00:00
-updated_at: 2025-10-29T16:35:07.724736+00:00
+title: "Add schema configuration and broker initialization"
+short_code: "BROKKR-T-0022"
+created_at: 2025-10-22T17:41:21.456647+00:00
+updated_at: 2025-11-03T00:31:34.517804+00:00
 parent: BROKKR-I-0004
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -19,7 +19,7 @@ strategy_id: NULL
 initiative_id: BROKKR-I-0004
 ---
 
-# Migrate DAL layer to use schema-aware connections
+# Add schema configuration and broker initialization
 
 *This template includes sections for various types of tasks. Delete sections that don't apply to your specific use case.*
 
@@ -29,11 +29,11 @@ initiative_id: BROKKR-I-0004
 
 ## Objective **[REQUIRED]**
 
-Update all DAL layer methods to use schema-aware connection acquisition, ensuring all database queries execute in the correct schema context.
+Add schema configuration support to brokkr-utils config module and update broker initialization to pass schema to connection pool.
 
-**Phase:** Phase 2 - DAL Layer Migration
+**Phase:** Phase 3 - Configuration and Initialization
 
-**Dependencies:** Requires BROKKR-T-0020 (Database Infrastructure Foundation) to be completed first.
+**Dependencies:** Requires BROKKR-T-0021 (DAL Layer Migration) to be completed first.
 
 ## Backlog Item Details **[CONDITIONAL: Backlog Item]**
 
@@ -73,13 +73,14 @@ Update all DAL layer methods to use schema-aware connection acquisition, ensurin
 
 ## Acceptance Criteria
 
+## Acceptance Criteria
+
 ## Acceptance Criteria **[REQUIRED]**
 
-- [ ] All DAL files updated: agents.rs, stacks.rs, generators.rs, deployment_objects.rs, agent_events.rs
-- [ ] No direct pool.get() calls remaining in DAL layer - all use pool.get_connection()
-- [ ] Integration tests verify data isolation between schemas
-- [ ] All existing tests still passing
-- [ ] DAL method signatures unchanged (backward compatible)
+- [ ] Configuration accepts schema parameter in Database struct
+- [ ] BROKKR__DATABASE__SCHEMA environment variable properly parsed
+- [ ] Broker initializes with schema configuration passed to connection pool
+- [ ] Default behavior (no schema) works correctly (backward compatible)
 
 ## Test Cases **[CONDITIONAL: Testing Task]**
 
@@ -131,48 +132,16 @@ Update all DAL layer methods to use schema-aware connection acquisition, ensurin
 
 ## Implementation Notes **[CONDITIONAL: Technical Task]**
 
+{Keep for technical tasks, delete for non-technical. Technical details, approach, or important considerations}
+
 ### Technical Approach
-
-**Simple Pattern for DAL Migration:**
-
-Replace all instances of `pool.get()` with `pool.get_connection()` throughout the DAL layer.
-
-**Before:**
-```rust
-pub fn get_agent(pool: &ConnectionPool, id: Uuid) -> Result<Agent> {
-    let mut conn = pool.get()?;
-    agents::table.find(id).first(&mut conn)
-}
-```
-
-**After:**
-```rust
-pub fn get_agent(pool: &ConnectionPool, id: Uuid) -> Result<Agent> {
-    let mut conn = pool.get_connection()?;  // Automatically handles schema
-    agents::table.find(id).first(&mut conn)
-}
-```
-
-The `get_connection()` method automatically sets the search_path when a schema is configured, so no other changes are needed in DAL code.
-
-### Files to Update
-
-1. `crates/brokkr-broker/src/dal/agents.rs`
-2. `crates/brokkr-broker/src/dal/stacks.rs`
-3. `crates/brokkr-broker/src/dal/generators.rs`
-4. `crates/brokkr-broker/src/dal/deployment_objects.rs`
-5. `crates/brokkr-broker/src/dal/agent_events.rs`
-6. All other DAL modules with database access
+{How this will be implemented}
 
 ### Dependencies
-
-Requires BROKKR-T-0020 (Database Infrastructure Foundation) to be completed first, which provides the `ConnectionPool::get_connection()` method.
+{Other tasks or systems this depends on}
 
 ### Risk Considerations
-
-- Ensure ALL `pool.get()` calls are replaced - missing even one could cause cross-tenant data leakage
-- Use grep/search to verify no direct `pool.get()` calls remain
-- Integration tests must verify complete data isolation
+{Technical risks and mitigation strategies}
 
 ## Status Updates **[REQUIRED]**
 
