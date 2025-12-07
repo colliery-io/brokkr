@@ -17,6 +17,7 @@ use std::fs;
 use std::path::Path;
 use tokio::sync::oneshot;
 use uuid::Uuid;
+pub mod matching;
 pub mod pak;
 use brokkr_utils::config::Settings;
 
