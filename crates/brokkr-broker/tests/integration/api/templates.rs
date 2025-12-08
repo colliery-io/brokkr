@@ -12,7 +12,6 @@ use serde_json::json;
 use tower::ServiceExt;
 
 use crate::fixtures::TestFixture;
-use brokkr_broker::utils::pak::create_pak;
 
 const TEST_TEMPLATE_CONTENT: &str = r#"apiVersion: v1
 kind: ConfigMap
@@ -36,7 +35,7 @@ async fn test_create_template() {
     let app = fixture.create_test_router().with_state(fixture.dal.clone());
     let admin_pak = fixture.admin_pak.clone();
 
-    let (generator, _) = fixture.create_test_generator_with_pak("Test Generator".to_string(), None);
+    let (_generator, _) = fixture.create_test_generator_with_pak("Test Generator".to_string(), None);
 
     let payload = json!({
         "name": "test-template",
@@ -720,7 +719,7 @@ async fn test_generator_cannot_access_other_generator_template() {
 
     let (generator1, _) =
         fixture.create_test_generator_with_pak("Generator 1".to_string(), None);
-    let (generator2, generator2_pak) =
+    let (_generator2, generator2_pak) =
         fixture.create_test_generator_with_pak("Generator 2".to_string(), None);
 
     // Create template owned by generator1

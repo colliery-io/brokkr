@@ -165,6 +165,27 @@ impl TemplatesDAL<'_> {
         stack_templates::table.load::<StackTemplate>(conn)
     }
 
+    /// Lists all non-deleted stack templates for a specific generator.
+    ///
+    /// # Arguments
+    ///
+    /// * `generator_id` - The UUID of the generator to filter by.
+    ///
+    /// # Returns
+    ///
+    /// Returns a Result containing a Vec of StackTemplates belonging to the generator,
+    /// or a diesel::result::Error on failure.
+    pub fn list_by_generator(
+        &self,
+        generator_id: Uuid,
+    ) -> Result<Vec<StackTemplate>, diesel::result::Error> {
+        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        stack_templates::table
+            .filter(stack_templates::deleted_at.is_null())
+            .filter(stack_templates::generator_id.eq(Some(generator_id)))
+            .load::<StackTemplate>(conn)
+    }
+
     /// Gets the latest version of a template by name and generator_id.
     ///
     /// # Arguments

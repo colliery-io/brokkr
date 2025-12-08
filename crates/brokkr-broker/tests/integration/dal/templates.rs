@@ -102,7 +102,7 @@ fn test_list_templates() {
     let templates = fixture
         .dal
         .templates()
-        .list(None)
+        .list()
         .expect("Failed to list templates");
 
     assert!(templates.len() >= 2);
@@ -136,7 +136,7 @@ fn test_list_templates_by_generator() {
     let templates = fixture
         .dal
         .templates()
-        .list(Some(generator.id))
+        .list_by_generator(generator.id)
         .expect("Failed to list templates");
 
     assert_eq!(templates.len(), 1);
@@ -202,7 +202,7 @@ fn test_get_latest_version() {
     let latest = fixture
         .dal
         .templates()
-        .get_latest_version(None, "versioned".to_string())
+        .get_latest_version(None, "versioned")
         .expect("Failed to get latest version")
         .expect("Latest version not found");
 
@@ -228,7 +228,7 @@ fn test_list_versions() {
     let versions = fixture
         .dal
         .templates()
-        .list_versions(None, "multi-version".to_string())
+        .list_versions(None, "multi-version")
         .expect("Failed to list versions");
 
     assert_eq!(versions.len(), 3);
