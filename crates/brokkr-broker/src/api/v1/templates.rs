@@ -483,6 +483,23 @@ async fn delete_template(
 }
 
 /// Lists labels for a template.
+#[utoipa::path(
+    get,
+    path = "/api/v1/templates/{id}/labels",
+    tag = "templates",
+    params(
+        ("id" = Uuid, Path, description = "Template ID")
+    ),
+    responses(
+        (status = 200, description = "List of labels", body = Vec<TemplateLabel>),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Template not found"),
+    ),
+    security(
+        ("pak" = [])
+    )
+)]
 async fn list_labels(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -536,6 +553,25 @@ async fn list_labels(
 }
 
 /// Adds a label to a template.
+#[utoipa::path(
+    post,
+    path = "/api/v1/templates/{id}/labels",
+    tag = "templates",
+    params(
+        ("id" = Uuid, Path, description = "Template ID")
+    ),
+    request_body = String,
+    responses(
+        (status = 200, description = "Label added", body = TemplateLabel),
+        (status = 400, description = "Invalid label"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Template not found"),
+    ),
+    security(
+        ("pak" = [])
+    )
+)]
 async fn add_label(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -585,6 +621,24 @@ async fn add_label(
 }
 
 /// Removes a label from a template.
+#[utoipa::path(
+    delete,
+    path = "/api/v1/templates/{id}/labels/{label}",
+    tag = "templates",
+    params(
+        ("id" = Uuid, Path, description = "Template ID"),
+        ("label" = String, Path, description = "Label to remove")
+    ),
+    responses(
+        (status = 204, description = "Label removed"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Template or label not found"),
+    ),
+    security(
+        ("pak" = [])
+    )
+)]
 async fn remove_label(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -642,6 +696,23 @@ async fn remove_label(
 }
 
 /// Lists annotations for a template.
+#[utoipa::path(
+    get,
+    path = "/api/v1/templates/{id}/annotations",
+    tag = "templates",
+    params(
+        ("id" = Uuid, Path, description = "Template ID")
+    ),
+    responses(
+        (status = 200, description = "List of annotations", body = Vec<TemplateAnnotation>),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Template not found"),
+    ),
+    security(
+        ("pak" = [])
+    )
+)]
 async fn list_annotations(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -704,6 +775,25 @@ pub struct AddAnnotationRequest {
 }
 
 /// Adds an annotation to a template.
+#[utoipa::path(
+    post,
+    path = "/api/v1/templates/{id}/annotations",
+    tag = "templates",
+    params(
+        ("id" = Uuid, Path, description = "Template ID")
+    ),
+    request_body = AddAnnotationRequest,
+    responses(
+        (status = 200, description = "Annotation added", body = TemplateAnnotation),
+        (status = 400, description = "Invalid annotation"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Template not found"),
+    ),
+    security(
+        ("pak" = [])
+    )
+)]
 async fn add_annotation(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -754,6 +844,24 @@ async fn add_annotation(
 }
 
 /// Removes an annotation from a template.
+#[utoipa::path(
+    delete,
+    path = "/api/v1/templates/{id}/annotations/{key}",
+    tag = "templates",
+    params(
+        ("id" = Uuid, Path, description = "Template ID"),
+        ("key" = String, Path, description = "Annotation key to remove")
+    ),
+    responses(
+        (status = 204, description = "Annotation removed"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Template or annotation not found"),
+    ),
+    security(
+        ("pak" = [])
+    )
+)]
 async fn remove_annotation(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
