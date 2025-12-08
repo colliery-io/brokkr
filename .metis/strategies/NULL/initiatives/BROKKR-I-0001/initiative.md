@@ -1,7 +1,7 @@
 ---
-id: ephemeral-work-system-with
+id: work-system-with
 level: initiative
-title: "Ephemeral Work System with Shipwright Build Integration"
+title: "Work System with Shipwright Build Integration"
 short_code: "BROKKR-I-0001"
 created_at: 2025-10-08T14:59:07.902259+00:00
 updated_at: 2025-10-22T14:45:23.097831+00:00
@@ -17,25 +17,25 @@ tags:
 exit_criteria_met: false
 estimated_complexity: M
 strategy_id: NULL
-initiative_id: ephemeral-work-system-with
+initiative_id: work-system-with
 ---
 
-# Ephemeral Work System with Shipwright Build Integration
+# Work System with Shipwright Build Integration
 
 ## Context **\[REQUIRED\]**
 
 Brokkr currently provides environment-aware control plane functionality for distributing Kubernetes objects across clusters via agent/broker architecture. We wish to extend our current capabilities with: 
 
 1. **Native container image building**: Users must rely on external CI/CD systems for image builds before deploying through Brokkr
-2. **Generic ephemeral work management**: No system exists for one-time, non-persistent operations (builds, tests, backups, etc.)
+2. **Generic work management**: No system exists for one-time, non-persistent operations (builds, tests, backups, etc.)
 
 This initiative addresses both needs by:
 
-- Creating a generic “work" system for managing transient operations separate from persistent deployment state
-- Integrating Shipwright Build (CNCF Sandbox project) as the first ephemeral work type for production-ready container builds
+- Creating a generic "work" system for managing transient operations separate from persistent deployment state
+- Integrating Shipwright Build (CNCF Sandbox project) as the first work type for production-ready container builds
 - Leveraging existing agent/broker work distribution patterns (matching stacks/deployment objects model)
 - Completing the deployment pipeline within Brokkr's architecture
-- Establishing patterns for future ephemeral work types (test runs, backup operations, migrations, etc.)
+- Establishing patterns for future work types (test runs, backup operations, migrations, etc.)
 
 **Architectural Decisions**:
 
@@ -45,14 +45,14 @@ This initiative addresses both needs by:
 
 3. **Two-Table Database Design**: The database is split into `work_queue` (transient message queue for active work) and `work_execution_log` (permanent audit trail). This separation optimizes queue operations while maintaining complete execution history for monitoring and analytics.
 
-The generic ephemeral work system remains valuable regardless of build implementation, as it will support future work types beyond builds (tests, backups, migrations, etc.).
+The generic work system remains valuable regardless of build implementation, as it will support future work types beyond builds (tests, backups, migrations, etc.).
 
 ## Goals & Non-Goals **\[REQUIRED\]**
 
 **Goals:**
 
-- Design and implement generic ephemeral work system in broker (reusable for builds, tests, backups, etc.)
-- Integrate Shipwright Build as first ephemeral work type for production-ready container builds
+- Design and implement generic work system in broker (reusable for builds, tests, backups, etc.)
+- Integrate Shipwright Build as first work type for production-ready container builds
 - Support git-based build sources, multi-architecture builds,
 - Leverage broker work queue with retry logic (exponential backoff, stale claim detection)
 - Enable work targeting via existing label/annotation patterns (matching stack targeting)
@@ -64,7 +64,7 @@ The generic ephemeral work system remains valuable regardless of build implement
 - Replace external CI/CD systems entirely (complement, not replace)
 - Build custom buildah operator initially (Shipwright provides this, custom operator remains option if needed)
 - Support non-Shipwright build tools in initial implementation
-- Implement all possible ephemeral work types now (builds only, extensible design for future)
+- Implement all possible work types now (builds only, extensible design for future)
 - Any functionality outside of image build + push
 
 ## Requirements **\[CONDITIONAL: Requirements-Heavy Initiative\]**
@@ -79,7 +79,7 @@ The generic ephemeral work system remains valuable regardless of build implement
 
 - **Functional Requirements**:
 
-  - REQ-001: Broker must provide generic ephemeral work queue system (reusable across work types)
+  - REQ-001: Broker must provide generic work queue system (reusable across work types)
   - REQ-002: Agent clusters must have Shipwright Build and Tekton installed as prerequisites
   - REQ-003: Agent must create and monitor Work CRD instances that wrap user-provided templates
   - REQ-004: System must support work targeting matching stack pattern (via broker targets table)
@@ -104,7 +104,7 @@ The generic ephemeral work system remains valuable regardless of build implement
 - **Actor**: Platform Engineer
 - **Scenario**:
   1. Engineer submits build work to broker API with Shipwright Build spec (git repository URL, target registry)
-  2. Broker creates ephemeral work item and determines target agents based on labels
+  2. Broker creates work item and determines target agents based on labels
   3. Agent polls broker, claims the work item
   4. Agent creates Shipwright Build and BuildRun resources in its cluster
   5. Shipwright + Tekton execute build: clone git repo, run buildah via ClusterBuildStrategy, push to registry
@@ -129,7 +129,7 @@ The generic ephemeral work system remains valuable regardless of build implement
 - **Actor**: Operations Team
 - **Scenario**:
   1. Team submits BuildRequest via broker API with labels targeting GPU-enabled agents
-  2. Broker populates ephemeral_work_targets table with agents matching labels
+  2. Broker populates work_targets table with agents matching labels
   3. Only GPU-capable agents can claim this work
   4. Build executes on appropriate infrastructure with GPU access
 - **Expected Outcome**: Build executes on correctly-resourced infrastructure
@@ -138,7 +138,7 @@ The generic ephemeral work system remains valuable regardless of build implement
 
 ### Overview
 
-This initiative introduces a generic ephemeral work system using a Kubernetes-native CRD-controller pattern:
+This initiative introduces a generic work system using a Kubernetes-native CRD-controller pattern:
 
 1. **Work Queue (Broker)**: Lightweight message queue + audit log for routing work to agents
 2. **Work CRD**: Custom resource (`brokkr.io/v1alpha1/Work`) that wraps user-provided templates (Shipwright Build, etc.)
@@ -247,7 +247,7 @@ This initiative introduces a generic ephemeral work system using a Kubernetes-na
 8. **Stale claim detection (broker-side)**
 
    - If agent crashes before creating Work CRD:
-     - Broker detects: claimed_at + claim_timeout_seconds &lt; NOW()
+     - Broker detects: claimed_at + claim_timeout_seconds < NOW()
      - Broker resets `work_queue` record to status=PENDING
      - Different agent can claim and retry
    - If agent created Work CRD but crashed:
@@ -462,7 +462,7 @@ spec:
 
 ### Broker API Endpoints
 
-Reusable generic ephemeral work endpoints:
+Reusable generic work endpoints:
 
 - `POST /api/v1/work` - Create new work item (with target labels)
 - `GET /api/v1/agents/{id}/work/pending` - Get claimable work for agent
@@ -533,8 +533,8 @@ build_retention_failed = "24h"
 
 ### Unit Testing
 
-- **Strategy**: Test ephemeral work queue logic, Shipwright Build/BuildRun creation, status mapping
-- **Coverage Target**: 80% coverage for ephemeral work module components
+- **Strategy**: Test work queue logic, Shipwright Build/BuildRun creation, status mapping
+- **Coverage Target**: 80% coverage for work queue module components
 - **Tools**: Rust built-in test framework, mock Kubernetes API responses for Shipwright resources
 
 ### Integration Testing
@@ -570,7 +570,7 @@ build_retention_failed = "24h"
 - Reduces implementation time by 40% (5-6 weeks saved)
 - Eliminates long-term maintenance burden (CNCF/Red Hat/IBM maintained)
 - Battle-tested: used by IBM Cloud Code Engine, OpenShift Builds v2
-- Generic ephemeral work system still provides value for future work types (tests, backups, etc.) **Tradeoffs**: Requires Tekton dependency, operational complexity of external components
+- Generic work system still provides value for future work types (tests, backups, etc.) **Tradeoffs**: Requires Tekton dependency, operational complexity of external components
 
 ### 2. Custom BuildRequest + buildah Operator Sidecar
 
@@ -597,7 +597,7 @@ build_retention_failed = "24h"
 
 ### 6. Build Results as Deployment Objects
 
-**Approach**: Treat build outputs as deployment objects in existing stack system **Rejected**: Builds are ephemeral operations, not persistent deployment state, requires separate queue management
+**Approach**: Treat build outputs as deployment objects in existing stack system **Rejected**: Builds are transient operations, not persistent deployment state, requires separate queue management
 
 ## Implementation Plan **\[REQUIRED\]**
 
