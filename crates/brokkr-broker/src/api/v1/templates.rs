@@ -11,6 +11,7 @@
 
 use crate::api::v1::middleware::AuthPayload;
 use crate::dal::DAL;
+use crate::utils::templating;
 use axum::{
     extract::{Extension, Path, State},
     http::StatusCode,
@@ -84,26 +85,6 @@ fn can_modify_template(auth: &AuthPayload, template: &StackTemplate) -> bool {
     }
 }
 
-/// Validates Tera template syntax.
-fn validate_tera_syntax(template_content: &str) -> Result<(), String> {
-    let mut tera = tera::Tera::default();
-    tera.add_raw_template("validation_test", template_content)
-        .map_err(|e| format!("Invalid Tera syntax: {}", e))?;
-    Ok(())
-}
-
-/// Validates JSON Schema syntax.
-fn validate_json_schema(schema: &str) -> Result<(), String> {
-    let value: serde_json::Value =
-        serde_json::from_str(schema).map_err(|e| format!("Invalid JSON: {}", e))?;
-
-    // Just validate it's a valid JSON object that could be a schema
-    if !value.is_object() {
-        return Err("JSON Schema must be an object".to_string());
-    }
-
-    Ok(())
-}
 
 /// Lists all templates.
 ///
@@ -218,20 +199,20 @@ async fn create_template(
     };
 
     // Validate Tera syntax
-    if let Err(e) = validate_tera_syntax(&request.template_content) {
+    if let Err(e) = templating::validate_tera_syntax(&request.template_content) {
         warn!("Template validation failed: {}", e);
         return Err((
             StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({"error": e})),
+            Json(serde_json::json!({"error": e.to_string()})),
         ));
     }
 
     // Validate JSON Schema
-    if let Err(e) = validate_json_schema(&request.parameters_schema) {
+    if let Err(e) = templating::validate_json_schema(&request.parameters_schema) {
         warn!("JSON Schema validation failed: {}", e);
         return Err((
             StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({"error": e})),
+            Json(serde_json::json!({"error": e.to_string()})),
         ));
     }
 
@@ -390,20 +371,20 @@ async fn update_template(
     }
 
     // Validate Tera syntax
-    if let Err(e) = validate_tera_syntax(&request.template_content) {
+    if let Err(e) = templating::validate_tera_syntax(&request.template_content) {
         warn!("Template validation failed: {}", e);
         return Err((
             StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({"error": e})),
+            Json(serde_json::json!({"error": e.to_string()})),
         ));
     }
 
     // Validate JSON Schema
-    if let Err(e) = validate_json_schema(&request.parameters_schema) {
+    if let Err(e) = templating::validate_json_schema(&request.parameters_schema) {
         warn!("JSON Schema validation failed: {}", e);
         return Err((
             StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({"error": e})),
+            Json(serde_json::json!({"error": e.to_string()})),
         ));
     }
 

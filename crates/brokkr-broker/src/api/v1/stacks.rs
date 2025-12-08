@@ -6,6 +6,7 @@
 
 use crate::dal::DAL;
 use crate::utils::matching::template_matches_stack;
+use crate::utils::templating;
 
 use crate::api::v1::middleware::AuthPayload;
 use axum::{
@@ -939,64 +940,27 @@ async fn instantiate_template(
     }
 
     // 7. Validate parameters against JSON Schema (400 on invalid)
-    let schema_value: serde_json::Value =
-        serde_json::from_str(&template.parameters_schema).map_err(|e| {
-            error!("Invalid JSON Schema in template: {:?}", e);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": "Template has invalid JSON Schema"})),
-            )
-        })?;
-
-    let compiled_schema = jsonschema::JSONSchema::compile(&schema_value).map_err(|e| {
-        error!("Failed to compile JSON Schema: {:?}", e);
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({"error": format!("Template has invalid JSON Schema: {}", e)})),
-        )
-    })?;
-
-    if !compiled_schema.is_valid(&request.parameters) {
-        let errors: Vec<String> = compiled_schema
-            .validate(&request.parameters)
-            .err()
-            .map(|e| e.into_iter().map(|err| err.to_string()).collect())
-            .unwrap_or_default();
-        warn!("Parameter validation failed: {:?}", errors);
+    if let Err(errors) = templating::validate_parameters(&template.parameters_schema, &request.parameters) {
+        let error_messages: Vec<String> = errors.iter().map(|e| e.to_string()).collect();
+        warn!("Parameter validation failed: {:?}", error_messages);
         return Err((
             StatusCode::BAD_REQUEST,
             Json(serde_json::json!({
                 "error": "Invalid parameters",
-                "validation_errors": errors,
+                "validation_errors": error_messages,
             })),
         ));
     }
 
     // 8. Render template with Tera (400 on render error)
-    let mut tera = tera::Tera::default();
-    tera.add_raw_template("template", &template.template_content)
+    let rendered_yaml = templating::render_template(&template.template_content, &request.parameters)
         .map_err(|e| {
-            error!("Failed to parse template: {:?}", e);
+            error!("Failed to render template: {:?}", e);
             (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": format!("Template parse error: {}", e)})),
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": e.to_string()})),
             )
         })?;
-
-    let mut context = tera::Context::new();
-    if let serde_json::Value::Object(params) = &request.parameters {
-        for (key, value) in params {
-            context.insert(key, value);
-        }
-    }
-
-    let rendered_yaml = tera.render("template", &context).map_err(|e| {
-        error!("Failed to render template: {:?}", e);
-        (
-            StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({"error": format!("Template render error: {}", e)})),
-        )
-    })?;
 
     // 9. Create DeploymentObject
     let new_deployment_object =
