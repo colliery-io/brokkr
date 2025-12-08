@@ -232,10 +232,10 @@ fn test_list_versions() {
         .expect("Failed to list versions");
 
     assert_eq!(versions.len(), 3);
-    // Should be ordered by version
-    assert_eq!(versions[0].version, 1);
+    // Should be ordered by version descending (newest first)
+    assert_eq!(versions[0].version, 3);
     assert_eq!(versions[1].version, 2);
-    assert_eq!(versions[2].version, 3);
+    assert_eq!(versions[2].version, 1);
 }
 
 #[test]
