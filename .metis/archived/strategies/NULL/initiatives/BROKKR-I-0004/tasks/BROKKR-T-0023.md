@@ -1,17 +1,17 @@
 ---
-id: add-schema-configuration-and
+id: integrate-schema-support-into-helm
 level: task
-title: "Add schema configuration and broker initialization"
-short_code: "BROKKR-T-0022"
-created_at: 2025-10-22T17:41:21.456647+00:00
-updated_at: 2025-10-22T17:41:21.456647+00:00
+title: "Integrate schema support into Helm charts"
+short_code: "BROKKR-T-0023"
+created_at: 2025-10-22T17:41:21.588811+00:00
+updated_at: 2025-11-03T00:31:33.483521+00:00
 parent: BROKKR-I-0004
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
-  - "#phase/todo"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -19,7 +19,7 @@ strategy_id: NULL
 initiative_id: BROKKR-I-0004
 ---
 
-# Add schema configuration and broker initialization
+# Integrate schema support into Helm charts
 
 *This template includes sections for various types of tasks. Delete sections that don't apply to your specific use case.*
 
@@ -29,11 +29,11 @@ initiative_id: BROKKR-I-0004
 
 ## Objective **[REQUIRED]**
 
-Add schema configuration support to brokkr-utils config module and update broker initialization to pass schema to connection pool.
+Add schema configuration support to brokkr-broker Helm chart, enabling multi-tenant deployments via values.yaml.
 
-**Phase:** Phase 3 - Configuration and Initialization
+**Phase:** Phase 4 - Helm Chart Integration
 
-**Dependencies:** Requires BROKKR-T-0021 (DAL Layer Migration) to be completed first.
+**Dependencies:** Requires BROKKR-T-0022 (Configuration and Initialization) to be completed first.
 
 ## Backlog Item Details **[CONDITIONAL: Backlog Item]**
 
@@ -69,12 +69,18 @@ Add schema configuration support to brokkr-utils config module and update broker
 - **Benefits of Fixing**: {What improves after refactoring}
 - **Risk Assessment**: {Risks of not addressing this}
 
+## Acceptance Criteria
+
+## Acceptance Criteria
+
+## Acceptance Criteria
+
 ## Acceptance Criteria **[REQUIRED]**
 
-- [ ] Configuration accepts schema parameter in Database struct
-- [ ] BROKKR__DATABASE__SCHEMA environment variable properly parsed
-- [ ] Broker initializes with schema configuration passed to connection pool
-- [ ] Default behavior (no schema) works correctly (backward compatible)
+- [ ] Helm values support database.schema configuration
+- [ ] BROKKR__DATABASE__SCHEMA environment variable properly templated in deployment
+- [ ] Documentation updated with multi-tenant deployment examples
+- [ ] Tested deployment with and without schema configuration
 
 ## Test Cases **[CONDITIONAL: Testing Task]**
 

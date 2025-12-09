@@ -453,3 +453,143 @@ export const rotateGeneratorPak = async (generatorId) => {
     throw error;
   }
 };
+
+// Templates
+export const getTemplates = async () => {
+  try {
+    const response = await api.get('/api/v1/templates');
+    return response.data;
+  } catch (error) {
+    console.error('Failed to fetch templates:', error);
+    throw error;
+  }
+};
+
+export const getTemplate = async (id) => {
+  try {
+    const response = await api.get(`/api/v1/templates/${id}`);
+    return response.data;
+  } catch (error) {
+    console.error(`Failed to fetch template ${id}:`, error);
+    throw error;
+  }
+};
+
+export const createTemplate = async (name, description, templateContent, parametersSchema) => {
+  try {
+    const response = await api.post('/api/v1/templates', {
+      name,
+      description,
+      template_content: templateContent,
+      parameters_schema: parametersSchema
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Failed to create template:', error);
+    throw error;
+  }
+};
+
+export const updateTemplate = async (id, description, templateContent, parametersSchema) => {
+  try {
+    const response = await api.put(`/api/v1/templates/${id}`, {
+      description,
+      template_content: templateContent,
+      parameters_schema: parametersSchema
+    });
+    return response.data;
+  } catch (error) {
+    console.error(`Failed to update template ${id}:`, error);
+    throw error;
+  }
+};
+
+export const deleteTemplate = async (id) => {
+  try {
+    await api.delete(`/api/v1/templates/${id}`);
+  } catch (error) {
+    console.error(`Failed to delete template ${id}:`, error);
+    throw error;
+  }
+};
+
+// Template Labels
+export const getTemplateLabels = async (templateId) => {
+  try {
+    const response = await api.get(`/api/v1/templates/${templateId}/labels`);
+    return response.data;
+  } catch (error) {
+    console.error('Failed to fetch template labels:', error);
+    throw error;
+  }
+};
+
+export const addTemplateLabel = async (templateId, label) => {
+  try {
+    const response = await api.post(`/api/v1/templates/${templateId}/labels`, JSON.stringify(label), {
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Failed to add template label:', error);
+    throw error;
+  }
+};
+
+export const removeTemplateLabel = async (templateId, label) => {
+  try {
+    await api.delete(`/api/v1/templates/${templateId}/labels/${label}`);
+  } catch (error) {
+    console.error('Failed to remove template label:', error);
+    throw error;
+  }
+};
+
+// Template Annotations
+export const getTemplateAnnotations = async (templateId) => {
+  try {
+    const response = await api.get(`/api/v1/templates/${templateId}/annotations`);
+    return response.data;
+  } catch (error) {
+    console.error('Failed to fetch template annotations:', error);
+    throw error;
+  }
+};
+
+export const addTemplateAnnotation = async (templateId, key, value) => {
+  try {
+    const response = await api.post(`/api/v1/templates/${templateId}/annotations`, {
+      key,
+      value
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Failed to add template annotation:', error);
+    throw error;
+  }
+};
+
+export const removeTemplateAnnotation = async (templateId, key) => {
+  try {
+    await api.delete(`/api/v1/templates/${templateId}/annotations/${key}`);
+  } catch (error) {
+    console.error('Failed to remove template annotation:', error);
+    throw error;
+  }
+};
+
+// Template Instantiation
+export const instantiateTemplate = async (stackId, templateId, parameters) => {
+  try {
+    const response = await api.post(`/api/v1/stacks/${stackId}/deployment-objects/from-template`, {
+      template_id: templateId,
+      parameters
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Failed to instantiate template:', error);
+    throw error;
+  }
+};

@@ -11,3 +11,4 @@ mod deployment_objects;
 mod generators;
 mod health;
 mod stacks;
+mod templates;

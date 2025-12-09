@@ -62,6 +62,21 @@ use deployment_objects::DeploymentObjectsDAL;
 pub mod generators;
 use generators::GeneratorsDAL;
 
+pub mod templates;
+use templates::TemplatesDAL;
+
+pub mod template_labels;
+use template_labels::TemplateLabelsDAL;
+
+pub mod template_annotations;
+use template_annotations::TemplateAnnotationsDAL;
+
+pub mod template_targets;
+use template_targets::TemplateTargetsDAL;
+
+pub mod rendered_deployment_objects;
+use rendered_deployment_objects::RenderedDeploymentObjectsDAL;
+
 /// The main Data Access Layer struct.
 ///
 /// This struct serves as the central point for database operations,
@@ -175,6 +190,51 @@ impl DAL {
     /// An instance of GeneratorsDal.
     pub fn generators(&self) -> GeneratorsDAL {
         GeneratorsDAL { dal: self }
+    }
+
+    /// Provides access to the Templates Data Access Layer.
+    ///
+    /// # Returns
+    ///
+    /// An instance of TemplatesDAL.
+    pub fn templates(&self) -> TemplatesDAL {
+        TemplatesDAL { dal: self }
+    }
+
+    /// Provides access to the Template Labels Data Access Layer.
+    ///
+    /// # Returns
+    ///
+    /// An instance of TemplateLabelsDAL.
+    pub fn template_labels(&self) -> TemplateLabelsDAL {
+        TemplateLabelsDAL { dal: self }
+    }
+
+    /// Provides access to the Template Annotations Data Access Layer.
+    ///
+    /// # Returns
+    ///
+    /// An instance of TemplateAnnotationsDAL.
+    pub fn template_annotations(&self) -> TemplateAnnotationsDAL {
+        TemplateAnnotationsDAL { dal: self }
+    }
+
+    /// Provides access to the Template Targets Data Access Layer.
+    ///
+    /// # Returns
+    ///
+    /// An instance of TemplateTargetsDAL.
+    pub fn template_targets(&self) -> TemplateTargetsDAL {
+        TemplateTargetsDAL { dal: self }
+    }
+
+    /// Provides access to the Rendered Deployment Objects Data Access Layer.
+    ///
+    /// # Returns
+    ///
+    /// An instance of RenderedDeploymentObjectsDAL.
+    pub fn rendered_deployment_objects(&self) -> RenderedDeploymentObjectsDAL {
+        RenderedDeploymentObjectsDAL { dal: self }
     }
 }
 

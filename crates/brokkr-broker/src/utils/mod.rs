@@ -17,7 +17,9 @@ use std::fs;
 use std::path::Path;
 use tokio::sync::oneshot;
 use uuid::Uuid;
+pub mod matching;
 pub mod pak;
+pub mod templating;
 use brokkr_utils::config::Settings;
 
 /// Handles the shutdown process for the broker.

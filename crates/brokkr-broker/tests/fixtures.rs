@@ -25,7 +25,10 @@ use brokkr_models::models::{
     generator::{Generator, NewGenerator},
     stack_annotations::{NewStackAnnotation, StackAnnotation},
     stack_labels::{NewStackLabel, StackLabel},
+    stack_templates::StackTemplate,
     stacks::{NewStack, Stack},
+    template_annotations::{NewTemplateAnnotation, TemplateAnnotation},
+    template_labels::{NewTemplateLabel, TemplateLabel},
 };
 use brokkr_utils::Settings;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
@@ -401,6 +404,77 @@ impl TestFixture {
             .update_pak_hash(agent.id, hash)
             .expect("Failed to update PAK hash");
         (agent, pak)
+    }
+
+    /// Creates a new stack template for testing purposes.
+    ///
+    /// # Arguments
+    ///
+    /// * `generator_id` - Optional generator ID. NULL means system template.
+    /// * `name` - The name of the template.
+    /// * `description` - An optional description for the template.
+    /// * `template_content` - The Tera template content.
+    /// * `parameters_schema` - The JSON Schema for parameters.
+    ///
+    /// # Returns
+    ///
+    /// Returns the created StackTemplate on success, or panics on failure.
+    pub fn create_test_template(
+        &self,
+        generator_id: Option<Uuid>,
+        name: String,
+        description: Option<String>,
+        template_content: String,
+        parameters_schema: String,
+    ) -> StackTemplate {
+        self.dal
+            .templates()
+            .create_new_version(generator_id, name, description, template_content, parameters_schema)
+            .expect("Failed to create template")
+    }
+
+    /// Creates a new template label for testing purposes.
+    ///
+    /// # Arguments
+    ///
+    /// * `template_id` - The UUID of the template to associate the label with.
+    /// * `label` - The label text.
+    ///
+    /// # Returns
+    ///
+    /// Returns the created TemplateLabel on success, or panics on failure.
+    pub fn create_test_template_label(&self, template_id: Uuid, label: String) -> TemplateLabel {
+        let new_label =
+            NewTemplateLabel::new(template_id, label).expect("Failed to create NewTemplateLabel");
+        self.dal
+            .template_labels()
+            .create(&new_label)
+            .expect("Failed to create template label")
+    }
+
+    /// Creates a new template annotation for testing purposes.
+    ///
+    /// # Arguments
+    ///
+    /// * `template_id` - The UUID of the template to associate the annotation with.
+    /// * `key` - The key for the annotation.
+    /// * `value` - The value for the annotation.
+    ///
+    /// # Returns
+    ///
+    /// Returns the created TemplateAnnotation on success, or panics on failure.
+    pub fn create_test_template_annotation(
+        &self,
+        template_id: Uuid,
+        key: &str,
+        value: &str,
+    ) -> TemplateAnnotation {
+        let new_annotation = NewTemplateAnnotation::new(template_id, key.to_string(), value.to_string())
+            .expect("Failed to create NewTemplateAnnotation");
+        self.dal
+            .template_annotations()
+            .create(&new_annotation)
+            .expect("Failed to create template annotation")
     }
 
     fn reset_database(&self) {
