@@ -1,0 +1,9 @@
+dependencies:
+- name: tekton-pipelines
+  repository: https://openfunction.github.io/charts/
+  version: 0.37.2
+- name: shipwright-build
+  repository: https://openfunction.github.io/charts/
+  version: 0.10.0
+digest: sha256:20603fc8ac21076b0289bae678557824e3203156cbb2da6fe86844c0d059e21b
+generated: "2025-12-10T11:26:06.229303-05:00"

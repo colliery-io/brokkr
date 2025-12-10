@@ -98,6 +98,33 @@ rules:
   - list
   - watch
 
+{{- if .Values.shipwright.enabled }}
+# Shipwright Build API - container image builds
+# Agent needs to create BuildRuns and watch their status
+- apiGroups: ["shipwright.io"]
+  resources:
+  - builds
+  - buildruns
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+
+# Shipwright Build strategies (read-only)
+- apiGroups: ["shipwright.io"]
+  resources:
+  - buildstrategies
+  - clusterbuildstrategies
+  verbs:
+  - get
+  - list
+  - watch
+{{- end }}
+
 {{- with .Values.rbac.additionalRules }}
 {{ toYaml . }}
 {{- end }}
