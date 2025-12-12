@@ -764,6 +764,8 @@ def test_agent_with_values_file(tag, registry, no_cleanup, values_file_name, bro
             "broker.agentName": agent_name,
             "broker.clusterName": "test-cluster",
             "broker.pak": pak,
+            # Disable Shipwright in CI tests (requires K8s >= 1.29)
+            "shipwright.enabled": "false",
         }
 
         install_success = helm_install(
@@ -871,6 +873,8 @@ def test_agent_chart(tag, registry, no_cleanup, rbac_mode="cluster-wide", broker
             "broker.agentName": agent_name,
             "broker.clusterName": "test-cluster",
             "broker.pak": pak,
+            # Disable Shipwright in CI tests (requires K8s >= 1.29)
+            "shipwright.enabled": "false",
         }
 
         # Configure RBAC based on mode
