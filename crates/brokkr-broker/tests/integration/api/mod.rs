@@ -12,3 +12,4 @@ mod generators;
 mod health;
 mod stacks;
 mod templates;
+mod work_orders;

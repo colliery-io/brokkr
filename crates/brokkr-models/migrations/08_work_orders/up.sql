@@ -3,13 +3,12 @@
 -- Architecture: Two-table design separating active work routing from permanent audit logging
 
 -- =============================================================================
--- WORK ORDER STATUS ENUM
+-- WORK ORDER STATUS
 -- =============================================================================
--- Work order queue states:
+-- Work order queue states (stored as VARCHAR(20) for Diesel compatibility):
 --   PENDING: Ready to be claimed by an agent
 --   CLAIMED: Currently being processed by an agent
 --   RETRY_PENDING: Failed but waiting for retry backoff period
-CREATE TYPE work_order_status AS ENUM ('PENDING', 'CLAIMED', 'RETRY_PENDING');
 
 -- =============================================================================
 -- WORK ORDERS TABLE (Active Queue)
@@ -30,8 +29,8 @@ CREATE TABLE work_orders (
     -- Multi-document YAML content (e.g., Build + WorkOrder definitions)
     yaml_content TEXT NOT NULL,
 
-    -- Queue state management
-    status work_order_status NOT NULL DEFAULT 'PENDING',
+    -- Queue state management (PENDING, CLAIMED, RETRY_PENDING)
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
     claimed_by UUID REFERENCES agents(id) ON DELETE SET NULL,
     claimed_at TIMESTAMP WITH TIME ZONE,
 
