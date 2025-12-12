@@ -42,7 +42,7 @@ def run_in_k8s_container(cmd, description="Running command in k8s container"):
         "-v", f"{os.path.join(cwd, 'charts')}:/charts:ro",
         "-v", "brokkr-dev_brokkr-keys:/keys:ro",
         "-e", "KUBECONFIG=/keys/kubeconfig.docker.yaml",
-        "alpine/k8s:1.27.3",
+        "alpine/k8s:1.30.10",
         "sh", "-c", cmd
     ], cwd=cwd, capture_output=False)
 
@@ -64,7 +64,7 @@ def verify_kubectl_connectivity():
             "docker", "run", "--rm",
             "--network", "brokkr-dev_default",
             "-v", "brokkr-dev_brokkr-keys:/keys:ro",
-            "alpine/k8s:1.27.3",
+            "alpine/k8s:1.30.10",
             "sh", "-c", "test -f /keys/kubeconfig.docker.yaml"
         ], cwd=cwd, capture_output=True)
 
@@ -125,7 +125,7 @@ def setup_image_pull_secret(registry, namespace="default"):
         "-v", "brokkr-dev_brokkr-keys:/keys:ro",
         "-e", "KUBECONFIG=/keys/kubeconfig.docker.yaml",
         "-e", f"GITHUB_TOKEN={github_token}",
-        "alpine/k8s:1.27.3",
+        "alpine/k8s:1.30.10",
         "sh", "-c", cmd
     ], cwd=cwd)
 
@@ -235,7 +235,7 @@ def wait_for_pods(release_name, namespace="default", timeout=300):
             "--network", "brokkr-dev_default",
             "-v", "brokkr-dev_brokkr-keys:/keys:ro",
             "-e", "KUBECONFIG=/keys/kubeconfig.docker.yaml",
-            "alpine/k8s:1.27.3",
+            "alpine/k8s:1.30.10",
             "sh", "-c", cmd
         ], capture_output=True, text=True, cwd=cwd)
 
@@ -347,7 +347,7 @@ spec:
                 "--network", "brokkr-dev_default",
                 "-v", "brokkr-dev_brokkr-keys:/keys:ro",
                 "-e", "KUBECONFIG=/keys/kubeconfig.docker.yaml",
-                "alpine/k8s:1.27.3",
+                "alpine/k8s:1.30.10",
                 "sh", "-c", f"cat <<'EOF' | kubectl apply -f -\n{postgres_manifest}\nEOF"
             ], cwd=cwd)
 
@@ -477,7 +477,7 @@ spec:
             "--network", "brokkr-dev_default",
             "-v", "brokkr-dev_brokkr-keys:/keys:ro",
             "-e", "KUBECONFIG=/keys/kubeconfig.docker.yaml",
-            "alpine/k8s:1.27.3",
+            "alpine/k8s:1.30.10",
             "sh", "-c", f"cat <<'EOF' | kubectl apply -f -\n{postgres_manifest}\nEOF"
         ], cwd=cwd)
 
@@ -608,7 +608,7 @@ def create_agent_in_broker(broker_release_name, agent_name, cluster_name, namesp
         "--network", "brokkr-dev_default",
         "-v", "brokkr-dev_brokkr-keys:/keys:ro",
         "-e", "KUBECONFIG=/keys/kubeconfig.docker.yaml",
-        "alpine/k8s:1.27.3",
+        "alpine/k8s:1.30.10",
         "sh", "-c", get_pod_cmd
     ], capture_output=True, text=True, cwd=cwd)
 
@@ -630,7 +630,7 @@ def create_agent_in_broker(broker_release_name, agent_name, cluster_name, namesp
         "--network", "brokkr-dev_default",
         "-v", "brokkr-dev_brokkr-keys:/keys:ro",
         "-e", "KUBECONFIG=/keys/kubeconfig.docker.yaml",
-        "alpine/k8s:1.27.3",
+        "alpine/k8s:1.30.10",
         "sh", "-c", create_agent_cmd
     ], capture_output=True, text=True, cwd=cwd)
 
@@ -1065,7 +1065,7 @@ def test_helm_chart(component, skip_docker=False, no_cleanup=False, tag="test", 
             print("  docker run --rm -it --network brokkr-dev_default \\")
             print("    -v brokkr-dev_brokkr-keys:/keys:ro \\")
             print("    -e KUBECONFIG=/keys/kubeconfig.docker.yaml \\")
-            print("    alpine/k8s:1.27.3 sh")
+            print("    alpine/k8s:1.30.10 sh")
             print("  # Then inside container:")
             print("  kubectl get pods")
             print("  helm list")

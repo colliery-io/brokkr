@@ -118,7 +118,7 @@ services:
 
 
   k3s:
-    image: rancher/k3s:v1.27.3-k3s1
+    image: rancher/k3s:v1.30.10-k3s1
     command:
       - server
       - --cluster-init

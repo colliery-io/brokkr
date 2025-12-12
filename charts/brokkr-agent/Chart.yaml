@@ -4,7 +4,8 @@ description: Brokkr Kubernetes cluster agent
 type: application
 version: 0.1.0
 appVersion: "0.1.0"
-# Note: Shipwright integration (when enabled) requires Kubernetes >= 1.29
+# Shipwright integration (when enabled) requires Kubernetes >= 1.29
+kubeVersion: ">=1.29.0-0"
 
 dependencies:
   - name: tekton-pipelines
