@@ -1,0 +1,115 @@
+{{- if and .Values.shipwright.enabled .Values.shipwright.installSampleStrategies }}
+# Sample ClusterBuildStrategies for Shipwright
+# These provide out-of-the-box build capabilities using buildah
+# Source: https://github.com/shipwright-io/build/blob/main/samples/v1beta1/buildstrategy/buildah/buildstrategy_buildah_cr.yaml
+---
+apiVersion: shipwright.io/v1beta1
+kind: ClusterBuildStrategy
+metadata:
+  name: buildah
+  labels:
+    {{- include "brokkr-agent.labels" . | nindent 4 }}
+spec:
+  steps:
+    - name: build
+      image: quay.io/containers/buildah:v1.35.0
+      workingDir: $(params.shp-source-root)
+      securityContext:
+        capabilities:
+          add:
+            - "SETFCAP"
+      command:
+        - /bin/bash
+      args:
+        - -c
+        - |
+          set -euo pipefail
+
+          # Parse extra args (format: --arg1=value1,--arg2=value2)
+          IFS=',' read -ra BUILD_ARGS <<< "$(params.build-args)"
+          IFS=',' read -ra REGISTRIES_INSECURE <<< "$(params.registries-insecure)"
+          IFS=',' read -ra REGISTRIES_BLOCK <<< "$(params.registries-block)"
+
+          STORAGE_DRIVER="${STORAGE_DRIVER:-overlay}"
+
+          buildah_cmd="buildah --storage-driver=${STORAGE_DRIVER}"
+
+          for arg in "${REGISTRIES_INSECURE[@]}"; do
+            if [ -n "$arg" ]; then
+              buildah_cmd="$buildah_cmd --registries-conf-append=insecure=$arg"
+            fi
+          done
+
+          for arg in "${REGISTRIES_BLOCK[@]}"; do
+            if [ -n "$arg" ]; then
+              buildah_cmd="$buildah_cmd --registries-conf-append=block=$arg"
+            fi
+          done
+
+          # Build the image
+          build_cmd="$buildah_cmd bud --format=$(params.format) --tls-verify=$(params.tls-verify)"
+
+          for arg in "${BUILD_ARGS[@]}"; do
+            if [ -n "$arg" ]; then
+              build_cmd="$build_cmd --build-arg $arg"
+            fi
+          done
+
+          build_cmd="$build_cmd -f $(params.dockerfile) -t $(params.shp-output-image) $(params.context)"
+
+          echo "Running: $build_cmd"
+          eval "$build_cmd"
+
+          # Push the image
+          push_cmd="$buildah_cmd push --tls-verify=$(params.tls-verify) --digestfile=$(results.shp-image-digest.path)"
+          push_cmd="$push_cmd $(params.shp-output-image)"
+
+          echo "Running: $push_cmd"
+          eval "$push_cmd"
+
+          # Get image size
+          buildah_cmd images --format '{{.Size}}' $(params.shp-output-image) | head -1 > $(results.shp-image-size.path)
+      env:
+        - name: HOME
+          value: /tekton/home
+        - name: STORAGE_DRIVER
+          value: vfs
+      resources:
+        limits:
+          memory: 4Gi
+        requests:
+          cpu: 250m
+          memory: 256Mi
+  parameters:
+    - name: build-args
+      description: "Build arguments (format: ARG1=value1,ARG2=value2)"
+      type: string
+      default: ""
+    - name: registries-insecure
+      description: "Insecure registries (comma-separated)"
+      type: string
+      default: ""
+    - name: registries-block
+      description: "Blocked registries (comma-separated)"
+      type: string
+      default: ""
+    - name: dockerfile
+      description: "Path to Dockerfile"
+      type: string
+      default: "Dockerfile"
+    - name: context
+      description: "Build context path"
+      type: string
+      default: "."
+    - name: tls-verify
+      description: "Verify TLS certificates"
+      type: string
+      default: "true"
+    - name: format
+      description: "Image format (oci or docker)"
+      type: string
+      default: "oci"
+  securityContext:
+    runAsUser: 0
+    runAsGroup: 0
+{{- end }}

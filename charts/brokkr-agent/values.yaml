@@ -5,6 +5,17 @@ image:
 
 replicaCount: 1
 
+# Shipwright Build integration for container image builds
+# When enabled, installs Shipwright Build and Tekton Pipelines as dependencies
+shipwright:
+  # Enable Shipwright Build integration (includes Tekton Pipelines)
+  # Set to false if Shipwright/Tekton are already installed or not needed
+  enabled: true
+
+  # Install sample ClusterBuildStrategies (buildah, kaniko, etc.)
+  # Recommended for most deployments
+  installSampleStrategies: true
+
 broker:
   url: http://brokkr-broker:3000
   agentName: ""

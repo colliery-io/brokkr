@@ -1,23 +1,23 @@
 ---
-id: work-system-with
+id: work-system-with-shipwright-build
 level: initiative
 title: "Work System with Shipwright Build Integration"
 short_code: "BROKKR-I-0001"
 created_at: 2025-10-08T14:59:07.902259+00:00
-updated_at: 2025-10-22T14:45:23.097831+00:00
-parent:
+updated_at: 2025-12-12T21:17:27.995965+00:00
+parent: 
 blocked_by: []
 archived: false
 
 tags:
   - "#initiative"
-  - "#phase/discovery"
+  - "#phase/decompose"
 
 
 exit_criteria_met: false
 estimated_complexity: M
 strategy_id: NULL
-initiative_id: work-system-with
+initiative_id: work-system-with-shipwright-build
 ---
 
 # Work System with Shipwright Build Integration
@@ -39,11 +39,17 @@ This initiative addresses both needs by:
 
 **Architectural Decisions**:
 
-1. **Shipwright Integration**: Rather than building a custom buildah operator from scratch, this initiative adopts a hybrid approach using Shipwright Build, a mature CNCF project with v1beta1 API stability. Shipwright provides production-ready build capabilities (multi-arch, vulnerability scanning, comprehensive retry logic) while reducing implementation time by 40% and eliminating long-term maintenance burden.
+1. **Shipwright Integration**: Rather than building a custom buildah operator from scratch, this initiative leverages Shipwright Build, a mature CNCF project with v1beta1 API stability. Shipwright provides production-ready build capabilities (multi-arch, vulnerability scanning) and ships with its own controller/operator - we don't need to build one. The agent simply creates Shipwright BuildRun resources and watches their status.
 
-2. **CRD-Controller Pattern**: The system uses a Kubernetes-native controller pattern with a Brokkr Work CRD (`brokkr.io/v1alpha1/Work`) that wraps user-provided CRD templates. The Work CRD controller handles retry logic via reconciliation loops, making the system resilient to agent failures and aligned with Kubernetes best practices. The broker becomes a lightweight message queue + audit log rather than a state machine.
+2. **Vendored Shipwright with Opt-Out**: The brokkr-agent helm chart includes Shipwright Build as a vendored dependency (subchart), enabled by default. Users who already have Shipwright installed or don't need build capabilities can disable it via `shipwright.enabled: false` in their values. This provides a batteries-included experience while maintaining flexibility for advanced deployments.
 
-3. **Two-Table Database Design**: The database is split into `work_queue` (transient message queue for active work) and `work_execution_log` (permanent audit trail). This separation optimizes queue operations while maintaining complete execution history for monitoring and analytics.
+3. **Thin WorkOrder CRD**: The `brokkr.io/v1alpha1/WorkOrder` CRD is a lightweight wrapper that references existing Shipwright Build resources and adds retry policy. It does NOT embed templates - instead it references a Build by name. This avoids YAML-in-YAML complexity and lets users manage Shipwright Builds separately.
+
+4. **Multi-Document YAML Pattern**: Users submit work as multi-doc YAML with the Shipwright Build definition first, then the WorkOrder trigger last. The agent's existing sequential apply behavior ensures the Build exists before the WorkOrder references it.
+
+5. **Broker-Side Retry Logic**: Retry policy lives in the broker's `work_orders` table, not in a CRD controller. When a build fails, the agent reports to the broker, which handles retry scheduling. This keeps the agent simple and centralizes retry logic.
+
+6. **Two-Table Database Design**: The database uses `work_orders` (active work routing) and `work_order_log` (permanent audit trail). This separation optimizes queue operations while maintaining complete execution history.
 
 The generic work system remains valuable regardless of build implementation, as it will support future work types beyond builds (tests, backups, migrations, etc.).
 
@@ -79,23 +85,24 @@ The generic work system remains valuable regardless of build implementation, as 
 
 - **Functional Requirements**:
 
-  - REQ-001: Broker must provide generic work queue system (reusable across work types)
+  - REQ-001: Broker must provide work order system with routing and retry management
   - REQ-002: Agent clusters must have Shipwright Build and Tekton installed as prerequisites
-  - REQ-003: Agent must create and monitor Work CRD instances that wrap user-provided templates
-  - REQ-004: System must support work targeting matching stack pattern (via broker targets table)
+  - REQ-003: Agent must apply multi-doc YAML (Build + WorkOrder) and create BuildRuns
+  - REQ-004: System must support work order targeting matching stack pattern (via broker targets table)
   - REQ-005: Built images must be publishable to container registries with secret-based auth via Shipwright
-  - REQ-006: Work CRD controller must implement retry logic via reconciliation loops (max retries, exponential backoff)
-  - REQ-007: System must distinguish permanent vs retryable failures
-  - REQ-008: Work CRD controller must watch wrapped template status and map to Work CRD status
+  - REQ-006: Broker must implement retry logic (max retries, exponential backoff, retry scheduling)
+  - REQ-007: Agent must watch BuildRun status and report success/failure to broker
+  - REQ-008: WorkOrder CRD must reference Shipwright Build by name (not embed templates)
 
 - **Non-Functional Requirements**:
 
-  - NFR-001: Agent implements Work CRD controller pattern with reconciliation loops
+  - NFR-001: Agent is a thin translation layer (no controller, no reconciliation loops)
   - NFR-002: Builds support both rootless and rootful modes via Shipwright BuildStrategy configuration
-  - NFR-003: Work queue must handle concurrent operations from multiple agents (atomic claim operations)
+  - NFR-003: Work order queue must handle concurrent operations from multiple agents (atomic claim operations)
   - NFR-004: Registry and git credentials managed securely via Kubernetes secrets (Shipwright pattern)
-  - NFR-005: Completed work moved to execution log after broker receives completion report
+  - NFR-005: Completed work orders moved to log after broker receives completion report
   - NFR-006: Shipwright and Tekton installation documented with version requirements (Tekton v0.59+, Shipwright v0.17.0+)
+  - NFR-007: Multi-doc YAML must be applied sequentially (Build before WorkOrder)
 
 ## Use Cases **\[CONDITIONAL: User-Facing Initiative\]**
 
@@ -138,147 +145,162 @@ The generic work system remains valuable regardless of build implementation, as 
 
 ### Overview
 
-This initiative introduces a generic work system using a Kubernetes-native CRD-controller pattern:
+This initiative introduces a generic work system with a simplified architecture that leverages Shipwright's existing operator:
 
-1. **Work Queue (Broker)**: Lightweight message queue + audit log for routing work to agents
-2. **Work CRD**: Custom resource (`brokkr.io/v1alpha1/Work`) that wraps user-provided templates (Shipwright Build, etc.)
-3. **Work CRD Controller (Agent)**: Kubernetes controller with reconciliation loops handling retry logic and template execution
-4. **Shipwright Integration**: First work type using Shipwright Build (v1beta1) for production-ready container builds
-5. **Two-Table Database**: Separation of transient queue (`work_queue`) and permanent audit trail (`work_execution_log`)
+1. **Work Orders (Broker)**: Two-table design with `work_orders` for routing and `work_order_log` for audit trail
+2. **WorkOrder CRD**: Thin custom resource (`brokkr.io/v1alpha1/WorkOrder`) that references Shipwright Builds and adds retry policy
+3. **Agent as Translation Layer**: Agent claims work from broker, applies multi-doc YAML (Build + WorkOrder), creates BuildRun, watches status, reports back
+4. **Shipwright Operator**: Handles all build execution - we don't build a controller, we use theirs
+5. **Broker-Side Retries**: Retry logic centralized in broker, agent just reports success/failure
 
 ### Component Architecture
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│  Kubernetes Cluster (Agent)                                      │
-│                                                                  │
-│  ┌────────────────────────┐         ┌──────────────────────┐    │
-│  │  Brokkr Agent Pod      │         │  Work CRD Controller │    │
-│  │  (single container)    │         │  (in agent process)  │    │
-│  │                        │         │                      │    │
-│  │  - Poll broker queue   │─────┐   │  - Reconcile Work    │    │
-│  │  - Claim work          │     │   │    CRDs              │    │
-│  │  - Create Work CRD     │─────┼──→│  - Apply template    │    │
-│  │  - Report completion   │     │   │    (e.g., Build)     │    │
-│  │                        │     │   │  - Watch template    │    │
-│  └────────────────────────┘     │   │    status            │    │
-│              │                  │   │  - Retry logic       │    │
-│              │                  │   │  - Update Work CRD   │    │
-│              ▼                  │   │    status            │    │
-│    ┌──────────────────────┐    │   └──────────────────────┘    │
-│    │  Work CRD            │◄───┘             │                  │
-│    │  brokkr.io/v1alpha1  │                  ▼                  │
-│    │                      │       ┌──────────────────────┐      │
-│    │  spec:               │       │  Template CRD        │      │
-│    │    workType: build   │       │  (e.g., Shipwright   │      │
-│    │    maxRetries: 3     │       │   Build/BuildRun)    │      │
-│    │    template: {...}   │◄──────│                      │      │
-│    │  status:             │       │  - Tekton executes   │      │
-│    │    phase: Running    │       │  - Git clone         │      │
-│    │    retries: 1        │       │  - Buildah build     │      │
-│    └──────────────────────┘       │  - Registry push     │      │
-│                                   └──────────────────────┘      │
-│                                                                  │
-│                      Kubernetes API                             │
-└──────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│  Broker                                                             │
+│  ┌─────────────────┐  ┌──────────────────┐  ┌───────────────────┐  │
+│  │  work_orders    │  │ work_order_log   │  │ work_order_targets│  │
+│  │  (active queue) │  │ (audit trail)    │  │ (agent routing)   │  │
+│  └─────────────────┘  └──────────────────┘  └───────────────────┘  │
+│           │                    ▲                                    │
+│           │ claim              │ complete                           │
+│           ▼                    │                                    │
+└─────────────────────────────────────────────────────────────────────┘
+                    │                    ▲
+                    │ poll/claim         │ report
+                    ▼                    │
+┌─────────────────────────────────────────────────────────────────────┐
+│  Kubernetes Cluster (Agent)                                         │
+│                                                                     │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │  Brokkr Agent (thin translation layer)                      │   │
+│  │  1. Poll broker for pending work                            │   │
+│  │  2. Claim work order                                        │   │
+│  │  3. Apply multi-doc YAML (Build + WorkOrder) sequentially   │   │
+│  │  4. Create BuildRun from WorkOrder.spec.buildRef            │   │
+│  │  5. Watch BuildRun.status until terminal                    │   │
+│  │  6. Report success/failure to broker                        │   │
+│  └─────────────────────────────────────────────────────────────┘   │
+│           │                              ▲                          │
+│           │ apply                        │ watch status             │
+│           ▼                              │                          │
+│  ┌────────────────┐  ┌────────────────┐  ┌────────────────────┐    │
+│  │ Build (SW)     │  │ WorkOrder      │  │ BuildRun (SW)      │    │
+│  │ (template)     │  │ (trigger)      │  │ (execution)        │    │
+│  │                │  │                │  │                    │    │
+│  │ - git source   │◄─│ - buildRef     │  │ - created by agent │    │
+│  │ - strategy     │  │ - retryPolicy  │  │ - watched by agent │    │
+│  │ - output       │  │ - serviceAcct  │  │                    │    │
+│  └────────────────┘  └────────────────┘  └────────────────────┘    │
+│                                                   │                 │
+│                                                   ▼                 │
+│                                          ┌────────────────┐         │
+│                                          │ Shipwright     │         │
+│                                          │ Controller     │         │
+│                                          │ (handles all   │         │
+│                                          │ build logic)   │         │
+│                                          └────────────────┘         │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
 **Key Advantages:**
 
-- Kubernetes-native controller pattern with reconciliation loops
-- Work CRD handles retry logic, broker becomes lightweight queue
-- Resilient to agent restarts (Work CRDs persist in cluster)
-- Aligned with Kubernetes best practices (controller-runtime pattern)
-- Broker simplified to message routing + audit logging
+- No custom controller needed - Shipwright operator handles build execution
+- Agent is a thin translation layer, not a complex controller
+- Broker-side retry logic keeps agent simple and stateless
+- Multi-doc YAML leverages existing agent apply behavior (sequential, waits between objects)
+- WorkOrder references Build by name - no YAML-in-YAML embedding
 
-### Sequence Flow (Work CRD Pattern)
+### Sequence Flow
 
 1. **User submits work to broker**
 
-   - POST `/api/v1/work` with template spec (e.g., Shipwright Build YAML) and target labels
-   - Broker wraps template in Work CRD spec with metadata (workType, maxRetries, claimTimeout)
-   - Broker inserts into `work_queue` table with status=PENDING
-   - Broker populates targeting based on label matching
+   - POST `/api/v1/work-orders` with multi-doc YAML (Build definition + WorkOrder trigger) and target labels
+   - Broker stores YAML content in `work_orders` table with status=PENDING
+   - Broker populates `work_order_targets` based on label matching
 
-2. **Agent claims work from queue**
+2. **Agent claims work order**
 
-   - Agent polls: GET `/api/v1/agents/{id}/work/pending`
-   - Broker returns work where agent matches targets and status=PENDING
-   - Agent claims via: POST `/api/v1/work/{id}/claim`
-   - Broker atomically updates `work_queue`: status=CLAIMED, claimed_by=agent_id, claimed_at=NOW()
+   - Agent polls: GET `/api/v1/agents/{id}/work-orders/pending`
+   - Broker returns work orders where agent matches targets and status=PENDING
+   - Agent claims via: POST `/api/v1/work-orders/{id}/claim`
+   - Broker atomically updates: status=CLAIMED, claimed_by=agent_id, claimed_at=NOW()
 
-3. **Agent creates Work CRD in cluster**
+3. **Agent applies multi-doc YAML**
 
-   - Agent creates Work CRD (`brokkr.io/v1alpha1/Work`) in cluster
-   - Work CRD spec contains: workType, maxRetries, template (embedded user YAML)
-   - Work CRD controller begins reconciliation
+   - Agent parses multi-doc YAML into ordered list of K8s objects
+   - Agent applies sequentially using existing `apply_k8s_objects()`:
+     - First: Shipwright Build (the reusable template)
+     - Last: WorkOrder (the trigger with retry policy)
+   - Each object is applied and awaited before the next (existing behavior)
 
-4. **Work CRD controller executes template**
+4. **Agent creates BuildRun**
 
-   - Controller extracts template from Work CRD spec
-   - Controller applies template to cluster (e.g., Shipwright Build + BuildRun)
-   - Controller watches template status (e.g., BuildRun.status.conditions)
-   - If template execution fails and retries remain:
-     - Controller increments Work.status.retries
-     - Controller calculates exponential backoff delay
-     - Controller re-applies template after delay
+   - Agent reads WorkOrder.spec.buildRef to get Build name
+   - Agent creates Shipwright BuildRun referencing the Build
+   - Agent begins watching BuildRun.status
 
-5. **Template executes (Shipwright example)**
+5. **Shipwright executes build**
 
    - Shipwright controller watches BuildRun, creates Tekton TaskRun
    - Tekton executes buildah: clone git repo, run build, push to registry
-   - Shipwright updates BuildRun.status with results
+   - Shipwright updates BuildRun.status with results (digest, size, git info)
 
-6. **Work CRD controller updates Work status**
+6. **Agent reports completion to broker**
 
-   - Controller watches template completion (e.g., BuildRun Succeeded=True/False)
-   - Controller updates Work.status.phase (Succeeded/Failed)
-   - Controller updates Work.status.message with results (e.g., image digest)
-   - Controller updates Work.status.retries with final count
+   - Agent watches BuildRun.status.conditions until terminal (Succeeded/Failed)
+   - Agent extracts results: image digest, failure details, etc.
+   - Agent reports: POST `/api/v1/work-orders/{id}/complete` with status and message
+   - Broker moves record from `work_orders` to `work_order_log`
 
-7. **Agent reports completion to broker**
+7. **Broker handles retry (on failure)**
 
-   - Agent watches Work CRD status
-   - When Work.status.phase is terminal (Succeeded/Failed):
-     - Agent reports: POST `/api/v1/work/{id}/complete` with status, retries, message
-   - Broker moves record from `work_queue` to `work_execution_log`
-   - `work_execution_log` captures: success boolean, retries_attempted, result_message
+   - If agent reports failure and retries remain:
+     - Broker increments retry_count in `work_orders`
+     - Broker calculates next_retry_after with exponential backoff
+     - Broker resets status=PENDING after backoff period
+     - Same or different agent can claim and retry
+   - If max retries exceeded:
+     - Broker moves to `work_order_log` with success=false
 
 8. **Stale claim detection (broker-side)**
 
-   - If agent crashes before creating Work CRD:
-     - Broker detects: claimed_at + claim_timeout_seconds < NOW()
-     - Broker resets `work_queue` record to status=PENDING
-     - Different agent can claim and retry
-   - If agent created Work CRD but crashed:
-     - Work CRD controller continues execution (CRD persists in cluster)
-     - Agent can resume watching Work CRD on restart
+   - Background job detects: claimed_at + claim_timeout_seconds < NOW()
+   - Broker resets `work_orders` record to status=PENDING
+   - Different agent can claim and retry
 
 ## Detailed Design **\[REQUIRED\]**
 
 ### Broker Database Schema
 
-Two-table design separating transient queue operations from permanent audit logging:
+Two-table design separating active work routing from permanent audit logging:
 
 ```sql
--- work_queue: Transient message queue for active work routing
-CREATE TABLE work_queue (
+-- work_orders: Active work routing and retry management
+CREATE TABLE work_orders (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     work_type VARCHAR(50) NOT NULL,  -- 'build', 'test', etc.
-    crd_spec TEXT NOT NULL,  -- Work CRD YAML (contains template + metadata)
+    yaml_content TEXT NOT NULL,  -- Multi-doc YAML (Build + WorkOrder)
 
-    -- Queue state (PENDING or CLAIMED only)
-    status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+    -- Queue state
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDING',  -- PENDING, CLAIMED, RETRY_PENDING
     claimed_by UUID REFERENCES agents(id),
     claimed_at TIMESTAMP WITH TIME ZONE,
-    claim_timeout_seconds INTEGER NOT NULL DEFAULT 3600
+    claim_timeout_seconds INTEGER NOT NULL DEFAULT 3600,
+
+    -- Retry management (broker-side)
+    max_retries INTEGER NOT NULL DEFAULT 3,
+    retry_count INTEGER NOT NULL DEFAULT 0,
+    backoff_seconds INTEGER NOT NULL DEFAULT 60,
+    next_retry_after TIMESTAMP WITH TIME ZONE
 );
 
--- work_execution_log: Permanent audit trail of completed work
-CREATE TABLE work_execution_log (
-    id UUID PRIMARY KEY,  -- Matches work_queue.id
+-- work_order_log: Permanent audit trail of completed work
+CREATE TABLE work_order_log (
+    id UUID PRIMARY KEY,  -- Matches work_orders.id
     work_type VARCHAR(50) NOT NULL,
 
     -- Timestamps
@@ -289,110 +311,117 @@ CREATE TABLE work_execution_log (
     -- Execution details
     claimed_by UUID REFERENCES agents(id),
     success BOOLEAN NOT NULL,
-    retries_attempted INTEGER,  -- Reported by agent from Work CRD status
+    retries_attempted INTEGER NOT NULL DEFAULT 0,
     result_message TEXT,  -- Image digest, error details, etc.
 
-    -- Optional: store CRD spec for debugging (can be omitted to save space)
-    crd_spec TEXT
+    -- Store YAML for debugging/reconstruction
+    yaml_content TEXT
 );
 
--- Work targeting (mirrors stack targeting pattern)
-CREATE TABLE work_targets (
+-- Work order targeting (mirrors stack targeting pattern)
+CREATE TABLE work_order_targets (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    work_id UUID NOT NULL,  -- References work_queue.id OR work_execution_log.id
+    work_order_id UUID NOT NULL,  -- References work_orders.id
     agent_id UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
-    UNIQUE(work_id, agent_id)
+    UNIQUE(work_order_id, agent_id)
 );
 
--- Indexes for work_queue (optimized for fast queue operations)
-CREATE INDEX idx_work_queue_status ON work_queue(status);
-CREATE INDEX idx_work_queue_type ON work_queue(work_type);
-CREATE INDEX idx_work_queue_claimed_by ON work_queue(claimed_by);
-CREATE INDEX idx_work_queue_stale_claims ON work_queue(claimed_at, claim_timeout_seconds)
+-- Indexes for work_orders (optimized for queue operations)
+CREATE INDEX idx_work_orders_status ON work_orders(status);
+CREATE INDEX idx_work_orders_type ON work_orders(work_type);
+CREATE INDEX idx_work_orders_claimed_by ON work_orders(claimed_by);
+CREATE INDEX idx_work_orders_stale_claims ON work_orders(claimed_at, claim_timeout_seconds)
     WHERE status = 'CLAIMED';
+CREATE INDEX idx_work_orders_retry ON work_orders(next_retry_after)
+    WHERE status = 'RETRY_PENDING';
 
--- Indexes for work_execution_log (optimized for analytics queries)
-CREATE INDEX idx_work_execution_log_type ON work_execution_log(work_type);
-CREATE INDEX idx_work_execution_log_success ON work_execution_log(success);
-CREATE INDEX idx_work_execution_log_completed_at ON work_execution_log(completed_at);
-CREATE INDEX idx_work_execution_log_claimed_by ON work_execution_log(claimed_by);
+-- Indexes for work_order_log (optimized for analytics)
+CREATE INDEX idx_work_order_log_type ON work_order_log(work_type);
+CREATE INDEX idx_work_order_log_success ON work_order_log(success);
+CREATE INDEX idx_work_order_log_completed_at ON work_order_log(completed_at);
 
--- Indexes for work_targets
-CREATE INDEX idx_work_targets_work ON work_targets(work_id);
-CREATE INDEX idx_work_targets_agent ON work_targets(agent_id);
+-- Indexes for work_order_targets
+CREATE INDEX idx_work_order_targets_order ON work_order_targets(work_order_id);
+CREATE INDEX idx_work_order_targets_agent ON work_order_targets(agent_id);
 ```
 
 **Key Design Decisions:**
 
-- **Two-table separation**: `work_queue` for routing, `work_execution_log` for audit trail
-- **Simplified queue states**: Only PENDING and CLAIMED (no retry states in broker)
-- **CRD spec contains Work CRD YAML**: Includes template + metadata (maxRetries, workType)
-- **Retry logic in Work CRD**: Controller handles retries, not broker database
-- **Agent reports retries**: `retries_attempted` populated from Work.status.retries
-- **Stale claim detection**: Broker detects timeout, resets to PENDING
-- **Move on completion**: Record moves from work_queue to work_execution_log
-- **Targeting persists**: work_targets remains for both active and completed work
+- **Two-table separation**: `work_orders` for active routing, `work_order_log` for audit trail
+- **Broker-side retry logic**: `max_retries`, `retry_count`, `backoff_seconds`, `next_retry_after` in broker
+- **Multi-doc YAML storage**: `yaml_content` stores Build + WorkOrder as submitted
+- **Three queue states**: PENDING (ready to claim), CLAIMED (in progress), RETRY_PENDING (waiting for backoff)
+- **Stale claim detection**: Background job resets CLAIMED → PENDING on timeout
+- **Move on completion**: Record moves from `work_orders` to `work_order_log`
 
-### Work CRD Specification
+### WorkOrder CRD Specification
 
-The Brokkr Work CRD wraps user-provided templates and manages execution with retry logic:
+The WorkOrder CRD is a thin wrapper that references existing Shipwright Builds and adds retry policy:
 
 ```yaml
 apiVersion: brokkr.io/v1alpha1
-kind: Work
+kind: WorkOrder
 metadata:
   name: build-my-app-abc123
   namespace: brokkr-agent
 spec:
   workType: build  # Type discriminator for different work handlers
-  maxRetries: 3
-  claimTimeout: 3600  # Seconds before broker can reclaim
-  template:  # User-provided template (embedded YAML)
-    apiVersion: shipwright.io/v1beta1
-    kind: Build
-    metadata:
-      name: my-app-build
-    spec:
-      source:
-        type: Git
-        git:
-          url: https://github.com/org/repo
-          revision: main
-      strategy:
-        name: buildah
-        kind: ClusterBuildStrategy
-      output:
-        image: registry.example.com/my-app:latest
-        pushSecret: registry-credentials
-
+  retryPolicy:
+    maxRetries: 3
+    backoffSeconds: 60
+  buildRef:
+    name: my-app-build  # References existing Shipwright Build
+  serviceAccount: builder-sa  # Optional: override default SA for BuildRun
 status:
-  phase: Running  # Pending, Running, Succeeded, Failed
-  retries: 1
-  message: "Image built successfully: sha256:abc123..."
-  startTime: "2025-11-02T10:00:00Z"
-  completionTime: "2025-11-02T10:05:23Z"
-  conditions:
-    - type: TemplateApplied
-      status: "True"
-      lastTransitionTime: "2025-11-02T10:00:05Z"
-    - type: TemplateSucceeded
-      status: "True"
-      reason: BuildCompleted
-      message: "BuildRun succeeded"
-      lastTransitionTime: "2025-11-02T10:05:23Z"
+  phase: Pending  # Pending, Running, Succeeded, Failed
+  message: ""
+  buildRunName: ""  # Name of created BuildRun (set by agent)
 ```
 
-**Work CRD Controller Behavior:**
+**Multi-Document YAML Pattern:**
 
-1. **Reconciliation**: Controller watches Work CRDs, extracts template, applies to cluster
-2. **Status Watching**: Controller watches template status (e.g., BuildRun.status.conditions)
-3. **Retry Logic**: On failure, if `status.retries < spec.maxRetries`:
-   - Increment `status.retries`
-   - Calculate exponential backoff: `delay = 2^retries * base_delay`
-   - Requeue reconciliation after delay
-   - Re-apply template
-4. **Completion**: Update `status.phase` (Succeeded/Failed), extract results from template
-5. **Agent Integration**: Agent watches Work.status.phase, reports to broker when terminal
+Users submit work as multi-doc YAML with Build first, WorkOrder last:
+
+```yaml
+# Document 1: Shipwright Build (applied first, ensures template exists)
+apiVersion: shipwright.io/v1beta1
+kind: Build
+metadata:
+  name: my-app-build
+spec:
+  source:
+    type: Git
+    git:
+      url: https://github.com/org/repo
+      revision: main
+  strategy:
+    name: buildah
+    kind: ClusterBuildStrategy
+  output:
+    image: registry.example.com/my-app:latest
+    pushSecret: registry-credentials
+---
+# Document 2: WorkOrder (applied last, triggers the build)
+apiVersion: brokkr.io/v1alpha1
+kind: WorkOrder
+metadata:
+  name: build-my-app-abc123
+spec:
+  workType: build
+  retryPolicy:
+    maxRetries: 3
+    backoffSeconds: 60
+  buildRef:
+    name: my-app-build
+```
+
+**Agent Behavior (no controller needed):**
+
+1. Agent applies multi-doc YAML sequentially (existing `apply_k8s_objects()` behavior)
+2. Agent reads WorkOrder.spec.buildRef to get Build name
+3. Agent creates BuildRun referencing the Build
+4. Agent watches BuildRun.status until terminal
+5. Agent reports success/failure to broker (broker handles retries)
 
 ### Shipwright Build Specification
 
@@ -462,72 +491,65 @@ spec:
 
 ### Broker API Endpoints
 
-Reusable generic work endpoints:
+Work order management endpoints:
 
-- `POST /api/v1/work` - Create new work item (with target labels)
-- `GET /api/v1/agents/{id}/work/pending` - Get claimable work for agent
-  - Query params: `?type=<work_type>` (optional, filter by work type: 'build', 'test', etc.)
-- `POST /api/v1/work/{id}/claim` - Atomically claim work
-- `POST /api/v1/work/{id}/complete` - Report completion/failure
-- `GET /api/v1/work/{id}` - Get work item details
-- `GET /api/v1/work` - List/query work items
-  - Query params: `?type=<work_type>&status=<status>&agent_id=<agent_id>` (all optional filters)
-- `DELETE /api/v1/work/{id}` - Cancel/delete work
+- `POST /api/v1/work-orders` - Create new work order (with multi-doc YAML and target labels)
+- `GET /api/v1/work-orders` - List/query work orders
+  - Query params: `?type=<work_type>&status=<status>&agent_id=<agent_id>` (all optional)
+- `GET /api/v1/work-orders/{id}` - Get work order details
+- `DELETE /api/v1/work-orders/{id}` - Cancel/delete work order
+
+Agent-facing endpoints:
+
+- `GET /api/v1/agents/{id}/work-orders/pending` - Get claimable work orders for agent
+  - Query params: `?type=<work_type>` (optional, filter by work type)
+- `POST /api/v1/work-orders/{id}/claim` - Atomically claim work order
+- `POST /api/v1/work-orders/{id}/complete` - Report completion/failure
+  - Body: `{ success: bool, message: string }` (e.g., image digest or error details)
+
+Work order log endpoints:
+
+- `GET /api/v1/work-order-log` - Query completed work orders
+  - Query params: `?type=<work_type>&success=<bool>&agent_id=<agent_id>&from=<timestamp>&to=<timestamp>`
+- `GET /api/v1/work-order-log/{id}` - Get completed work order details
 
 ### Agent Components
 
-**Agent Work Queue Module** (`crates/brokkr-agent/src/work_queue/mod.rs`):
+**Work Order Module** (`crates/brokkr-agent/src/work_orders/mod.rs`):
 
-- Poll broker for pending work from work_queue
-- Claim work items atomically
-- Create Work CRDs in cluster from claimed work
-- Watch Work CRD status for completion
-- Report completion to broker (moves work_queue → work_execution_log)
+- Poll broker for pending work orders
+- Claim work orders atomically
+- Apply multi-doc YAML using existing `apply_k8s_objects()`
+- Execute work based on workType (build handler for Shipwright)
+- Report completion to broker
 
-**Work CRD Controller** (`crates/brokkr-agent/src/work_crd/controller.rs`):
+**Build Handler** (`crates/brokkr-agent/src/work_orders/build.rs`):
 
-- Reconciliation loop watching Work CRDs
-- Extract template from Work.spec.template
-- Apply template to cluster using existing `apply_k8s_objects()`
-- Watch template status (e.g., BuildRun.status.conditions)
-- Implement retry logic with exponential backoff
-- Update Work.status.phase, Work.status.retries, Work.status.message
-- Handle different work types via type discriminator
-
-**Work Type Handlers** (`crates/brokkr-agent/src/work_crd/handlers/`):
-
-- `build.rs`: Shipwright Build/BuildRun handler
-  - Parse BuildRun status conditions
-  - Extract image digest, size, git commit from BuildRun.status
-  - Map Shipwright failure reasons to retry decisions
-  - Classify permanent vs retryable failures
-- `mod.rs`: Handler registry for work type routing
+- Read WorkOrder.spec.buildRef to get Build name
+- Create Shipwright BuildRun referencing the Build
+- Watch BuildRun.status.conditions until terminal (Succeeded/Failed)
+- Extract results: image digest, git commit, failure details
+- Return success/failure to work order module
 
 **Agent Configuration** (add to existing Settings):
 
 ```toml
-[agent.work_queue]
+[agent.work_orders]
 enabled = true
 poll_interval_seconds = 30
+namespace = "brokkr-agent"  # Where WorkOrder CRDs and BuildRuns are created
 
-[agent.work_crd]
-namespace = "brokkr-agent"  # Where Work CRDs are created
-reconcile_interval_seconds = 10
-retry_base_delay_seconds = 60  # Base for exponential backoff
-
-[agent.work_crd.build]
+[agent.work_orders.build]
 service_account = "builder-sa"  # ServiceAccount for BuildRuns
 default_timeout = "15m"
-build_retention_succeeded = "1h"
-build_retention_failed = "24h"
 ```
 
 **Deployment Model:**
 
-- Agent remains single-container
-- Work CRD controller runs within agent process (no sidecar)
-- Shipwright + Tekton installed separately in cluster
-- Work CRDs managed by agent's controller implementation
+- Agent remains single-container (no sidecar, no controller)
+- Agent is a thin translation layer: broker work order → K8s resources → status back to broker
+- Shipwright + Tekton installed separately in cluster (prerequisites)
+- Retry logic handled by broker, not agent
 
 ## Testing Strategy **\[CONDITIONAL: Separate Testing Initiative\]**
 
@@ -601,160 +623,134 @@ build_retention_failed = "24h"
 
 ## Implementation Plan **\[REQUIRED\]**
 
-### Phase 1: Work Queue System (2-3 weeks)
+### Phase 1: Broker Work Order System (2 weeks)
 
-- Create work_queue, work_execution_log, and work_targets tables (migration 07)
-- Implement broker DAL for work queue operations
+- Create `work_orders`, `work_order_log`, and `work_order_targets` tables (migration 08)
+- Implement broker DAL for work order operations
   - Atomic claim operations
+  - Retry management (increment count, calculate backoff, reset to PENDING)
   - Stale claim detection (timeout-based)
-  - Move work_queue → work_execution_log on completion
-- Add generic work queue API endpoints (reusable for all work types)
-- Implement work targeting logic (reuse stack targeting patterns)
-- Add stale claim detection background job
+  - Move `work_orders` → `work_order_log` on completion
+- Add work order API endpoints
+- Implement work order targeting logic (reuse stack targeting patterns)
+- Add background jobs: stale claim detection, retry scheduling
 
 **Deliverables:**
 
-- Database migration 07 with two-table design
+- Database migration with two-table design
 - Broker DAL module with queue + audit log operations
-- API endpoints: POST /work, GET /agents/{id}/work/pending, POST /work/{id}/claim, POST /work/{id}/complete
-- Work targeting query matching stack pattern
-- Stale claim detection background job
+- API endpoints: POST /work-orders, GET /agents/{id}/work-orders/pending, POST /work-orders/{id}/claim, POST /work-orders/{id}/complete
+- Work order targeting query matching stack pattern
+- Background jobs for stale claims and retry scheduling
 
-**Architecture Changes:**
+### Phase 2: WorkOrder CRD & Agent Integration (2 weeks)
 
-- Removed retry state tracking from broker (retry_count, next_retry_after, FAILED_RETRYABLE status)
-- Simplified to PENDING/CLAIMED queue states
-- Added execution log table for permanent audit trail
-
-### Phase 2: Work CRD Definition & Agent Queue Integration (2-3 weeks)
-
-- Define Work CRD schema (`brokkr.io/v1alpha1/Work`) with kube-rs custom resource
-  - Spec: workType, maxRetries, claimTimeout, template
-  - Status: phase, retries, message, startTime, completionTime, conditions
-- Create work_queue module in agent (`crates/brokkr-agent/src/work_queue/`)
-  - Poll broker for pending work
-  - Claim work atomically
-  - Create Work CRDs in cluster
-  - Watch Work CRD status for completion
+- Define WorkOrder CRD schema (`brokkr.io/v1alpha1/WorkOrder`) with kube-rs
+  - Spec: workType, retryPolicy, buildRef, serviceAccount
+  - Status: phase, message, buildRunName
+- Create work_orders module in agent (`crates/brokkr-agent/src/work_orders/`)
+  - Poll broker for pending work orders
+  - Claim work orders atomically
+  - Apply multi-doc YAML using existing `apply_k8s_objects()`
+  - Dispatch to work type handlers
   - Report completion to broker
 
 **Deliverables:**
 
-- Work CRD definition with kube-rs custom resource derive
-- Agent work_queue module with broker polling
-- Work CRD creation from broker work items
-- Work CRD status watching
-- Completion reporting (moves work_queue → work_execution_log)
+- WorkOrder CRD definition with kube-rs custom resource derive
+- Agent work_orders module with broker polling
+- Multi-doc YAML parsing and sequential application
+- Work type dispatch framework
+- Completion reporting to broker
 
-**Architecture Changes:**
+### Phase 3: Build Handler & Shipwright Integration (2 weeks)
 
-- Work CRD becomes central execution primitive
-- Agent creates CRDs, controller executes them
-- Broker becomes message queue, CRD handles execution
-
-### Phase 3: Work CRD Controller & Build Handler (2-3 weeks)
-
-- Implement Work CRD controller (`crates/brokkr-agent/src/work_crd/controller.rs`)
-  - Reconciliation loop using kube-rs runtime
-  - Extract template from Work.spec.template
-  - Apply template using existing `apply_k8s_objects()`
-  - Watch template status
-  - Retry logic with exponential backoff
-  - Update Work.status.phase, retries, message
-- Implement build handler (`crates/brokkr-agent/src/work_crd/handlers/build.rs`)
-  - Watch BuildRun status conditions
-  - Extract image digest, size, git commit from BuildRun.status
-  - Map Shipwright failure reasons to retry decisions
-  - Classify permanent vs retryable failures
-- Kubernetes client support for Shipwright CRDs (kube-rs custom resources)
+- Implement build handler (`crates/brokkr-agent/src/work_orders/build.rs`)
+  - Read WorkOrder.spec.buildRef to get Build name
+  - Create Shipwright BuildRun referencing the Build
+  - Watch BuildRun.status.conditions until terminal
+  - Extract results: image digest, git commit, failure details
+- Add Shipwright CRD types to agent (Build, BuildRun)
+- Update WorkOrder.status with BuildRun name
 
 **Deliverables:**
 
-- Work CRD controller with reconciliation loop
-- Build handler for Shipwright Build/BuildRun templates
-- Retry logic in controller (exponential backoff)
-- Template status watching framework
-- Work.status updates with execution results
+- Build handler for Shipwright integration
+- BuildRun creation and status watching
+- Result extraction (digest, git info, errors)
+- Shipwright CRD type definitions
 
-**Architecture Changes:**
-
-- Controller handles retry logic, not broker
-- Template application uses existing agent functionality
-- Work CRD persists across agent restarts
-
-### Phase 4: Documentation & Cluster Prerequisites (1 week) - CHANGED from 1-2 weeks
+### Phase 4: Documentation & Prerequisites (1 week)
 
 - Document Shipwright + Tekton installation requirements
-  - Tekton Pipelines v0.59+ installation steps
-  - Shipwright Build v0.17.0+ installation steps
+  - Tekton Pipelines v0.59+ installation
+  - Shipwright Build v0.17.0+ installation
   - buildah ClusterBuildStrategy installation
 - Document builder-sa ServiceAccount setup with RBAC
-- Document git and registry secret configuration (Shipwright pattern)
-- Create example Shipwright Build YAML for common scenarios
-- Document agent configuration for Shipwright integration
-- Update Brokkr Helm charts with Shipwright prerequisites documentation
+- Document git and registry secret configuration
+- Create example multi-doc YAML for common build scenarios
+- Document multi-doc YAML ordering requirements (Build first, WorkOrder last)
 
 **Deliverables:**
 
-- Installation guide for Shipwright + Tekton on agent clusters
-- ServiceAccount and RBAC manifests for builds
-- Example Build/BuildRun specifications
-- Troubleshooting guide for common Shipwright issues
-- Agent configuration documentation
+- Installation guide for Shipwright + Tekton
+- ServiceAccount and RBAC manifests
+- Example Build + WorkOrder specifications
+- Troubleshooting guide
 
-**NO LONGER NEEDED:**
-
-- ~~Buildah-operator sidecar Dockerfile~~
-- ~~Multi-container agent pod manifests~~
-- ~~Sidecar deployment patterns~~
-
-### Phase 5: Integration Testing & Failure Scenarios (1-2 weeks)
+### Phase 5: Testing & Validation (1-2 weeks)
 
 - Integration tests with real Shipwright builds in kind cluster
-- Test Work CRD controller retry logic
+- Test broker retry logic
   - Verify exponential backoff calculation
-  - Verify maxRetries enforcement
-  - Verify Work.status.retries tracking
-- Test BuildRun failure classification
-  - PERMANENT: BuildStrategyNotFound, InvalidImage, InvalidDockerfile
-  - RETRYABLE: ImagePushFailed, GitRemoteFailed, timeout errors
+  - Verify max_retries enforcement
+  - Verify retry_count tracking
 - Test stale claim detection and recovery
-- Test agent restart scenarios (Work CRD persistence)
-- End-to-end testing: broker → agent → Work CRD → BuildRun → registry
+- End-to-end testing: broker → agent → Build + WorkOrder → BuildRun → registry
+- Test multi-doc YAML ordering validation
 
 **Deliverables:**
 
 - Integration test suite with kind cluster
-- Failure scenario test coverage
-- Work CRD controller retry validation
+- Retry logic validation
 - Stale claim recovery validation
-- Documentation of retry behavior and failure classification
+- End-to-end test coverage
 
-### Phase 6: Performance Testing & Final Documentation (1-2 weeks)
+### Phase 6: Helm Charts & Final Polish (1 week)
 
-- Unit tests for work queue system and Work CRD controller
-- Performance testing: concurrent builds, multiple agents, Work CRD overhead
-- Test advanced Shipwright features: multi-arch builds, vulnerability scanning
-- Performance benchmarks: Work CRD reconciliation latency, queue throughput
-- Helm chart updates (agent deployment with Work CRD RBAC)
-- Complete documentation: deployment guide, troubleshooting, API examples
+- Unit tests for work order DAL and agent module
+- Helm chart updates for WorkOrder CRD and RBAC
+- Add Shipwright Build as vendored subchart dependency in brokkr-agent
+  - Configure `shipwright.enabled: true` by default (opt-out pattern)
+  - Include Tekton Pipelines as transitive dependency
+  - Add values schema for Shipwright configuration passthrough
+- OpenAPI documentation for work order endpoints
+- Performance benchmarks: queue throughput, build latency
 
 **Deliverables:**
 
-- Unit test suite (work queue DAL, Work CRD controller, build handler)
-- Performance benchmarks and resource usage analysis
-- Helm chart with Work CRD and Shipwright support
-- Complete documentation (installation, configuration, troubleshooting)
-- API documentation with Work CRD examples
+- Unit test suite
+- Helm chart updates with vendored Shipwright subchart
+- Shipwright opt-out configuration (`shipwright.enabled: false`)
+- API documentation
+- Performance benchmarks
 
-**Total Estimated Timeline**: 9-13 weeks (increased from 8-10 due to CRD controller implementation)
+**Total Estimated Timeline**: 7-9 weeks (reduced from 9-13 due to simplified architecture)
 
 ### Dependencies Between Phases
 
-- Phase 2 depends on Phase 1 (needs work queue system in broker)
-- Phase 3 depends on Phase 2 (needs Work CRD definition and agent queue integration)
-- Phase 4 can be developed in parallel with Phase 3 (documentation work)
-- Phase 5 depends on Phases 1-3 (needs complete system for integration testing)
-- Phase 6 depends on Phases 1-5 (performance testing and final documentation)
+- Phase 2 depends on Phase 1 (needs work order system in broker)
+- Phase 3 depends on Phase 2 (needs WorkOrder CRD and agent framework)
+- Phase 4 can be developed in parallel with Phase 2-3 (documentation)
+- Phase 5 depends on Phases 1-3 (needs complete system)
+- Phase 6 depends on Phases 1-5 (final polish)
 
 **Critical Path:** Phase 1 → Phase 2 → Phase 3 → Phase 5 → Phase 6
+
+### Key Simplifications from Original Design
+
+- **No CRD controller**: Agent is a thin translation layer, not a reconciliation controller
+- **Broker-side retries**: Retry logic centralized in broker, not distributed to CRD
+- **Reference pattern**: WorkOrder references Build by name, no YAML embedding
+- **Existing apply behavior**: Leverages sequential multi-doc YAML application already in agent
+- **Shipwright operator**: Handles all build execution - we just create BuildRuns and watch status

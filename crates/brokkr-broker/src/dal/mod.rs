@@ -77,6 +77,9 @@ use template_targets::TemplateTargetsDAL;
 pub mod rendered_deployment_objects;
 use rendered_deployment_objects::RenderedDeploymentObjectsDAL;
 
+pub mod work_orders;
+use work_orders::WorkOrdersDAL;
+
 /// The main Data Access Layer struct.
 ///
 /// This struct serves as the central point for database operations,
@@ -235,6 +238,15 @@ impl DAL {
     /// An instance of RenderedDeploymentObjectsDAL.
     pub fn rendered_deployment_objects(&self) -> RenderedDeploymentObjectsDAL {
         RenderedDeploymentObjectsDAL { dal: self }
+    }
+
+    /// Provides access to the Work Orders Data Access Layer.
+    ///
+    /// # Returns
+    ///
+    /// An instance of WorkOrdersDAL.
+    pub fn work_orders(&self) -> WorkOrdersDAL {
+        WorkOrdersDAL { dal: self }
     }
 }
 

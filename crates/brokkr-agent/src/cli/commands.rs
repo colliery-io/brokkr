@@ -58,7 +58,7 @@
 //! - JSON output format
 //! - Contextual information
 
-use crate::{broker, health, k8s};
+use crate::{broker, health, k8s, work_orders};
 use brokkr_utils::config::Settings;
 use brokkr_utils::logging::prelude::*;
 use reqwest::Client;
@@ -143,6 +143,7 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
     let mut heartbeat_interval = interval(Duration::from_secs(config.agent.polling_interval));
     let mut deployment_check_interval =
         interval(Duration::from_secs(config.agent.polling_interval));
+    let mut work_order_interval = interval(Duration::from_secs(config.agent.polling_interval));
 
     // Main control loop
     while running.load(Ordering::SeqCst) {
@@ -225,6 +226,28 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
                     }
                     Err(e) => error!("Failed to fetch deployment objects for agent '{}' (id: {}): {}",
                         agent.name, agent.id, e),
+                }
+            }
+            _ = work_order_interval.tick() => {
+                // Skip work order processing if agent is inactive
+                if agent.status != "ACTIVE" {
+                    debug!("Agent '{}' (id: {}) is not active (status: {}), skipping work order processing",
+                        agent.name, agent.id, agent.status);
+                    continue;
+                }
+
+                // Process pending work orders
+                match work_orders::process_pending_work_orders(&config, &client, &k8s_client, &agent).await {
+                    Ok(count) => {
+                        if count > 0 {
+                            info!("Processed {} work orders for agent '{}' (id: {})",
+                                count, agent.name, agent.id);
+                        }
+                    }
+                    Err(e) => {
+                        error!("Failed to process work orders for agent '{}' (id: {}): {}",
+                            agent.name, agent.id, e);
+                    }
                 }
             }
             _ = shutdown_rx.recv() => {

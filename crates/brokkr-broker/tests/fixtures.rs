@@ -29,6 +29,9 @@ use brokkr_models::models::{
     stacks::{NewStack, Stack},
     template_annotations::{NewTemplateAnnotation, TemplateAnnotation},
     template_labels::{NewTemplateLabel, TemplateLabel},
+    work_order_annotations::{NewWorkOrderAnnotation, WorkOrderAnnotation},
+    work_order_labels::{NewWorkOrderLabel, WorkOrderLabel},
+    work_orders::{NewWorkOrder, NewWorkOrderTarget, WorkOrder, WorkOrderTarget, WORK_TYPE_BUILD},
 };
 use brokkr_utils::Settings;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
@@ -475,6 +478,102 @@ impl TestFixture {
             .template_annotations()
             .create(&new_annotation)
             .expect("Failed to create template annotation")
+    }
+
+    /// Creates a new work order for testing purposes.
+    ///
+    /// # Arguments
+    ///
+    /// * `work_type` - The type of work (e.g., "build").
+    /// * `yaml_content` - The YAML content for the work order.
+    ///
+    /// # Returns
+    ///
+    /// Returns the created WorkOrder on success, or panics on failure.
+    pub fn create_test_work_order(&self, work_type: &str, yaml_content: &str) -> WorkOrder {
+        let new_work_order = NewWorkOrder::new(
+            work_type.to_string(),
+            yaml_content.to_string(),
+            None,
+            None,
+            None,
+        )
+        .expect("Failed to create NewWorkOrder");
+        self.dal
+            .work_orders()
+            .create(&new_work_order)
+            .expect("Failed to create work order")
+    }
+
+    /// Creates a new work order target for testing purposes.
+    ///
+    /// # Arguments
+    ///
+    /// * `work_order_id` - The UUID of the work order.
+    /// * `agent_id` - The UUID of the agent.
+    ///
+    /// # Returns
+    ///
+    /// Returns the created WorkOrderTarget on success, or panics on failure.
+    pub fn create_test_work_order_target(
+        &self,
+        work_order_id: Uuid,
+        agent_id: Uuid,
+    ) -> WorkOrderTarget {
+        let new_target = NewWorkOrderTarget::new(work_order_id, agent_id)
+            .expect("Failed to create NewWorkOrderTarget");
+        self.dal
+            .work_orders()
+            .add_target(&new_target)
+            .expect("Failed to create work order target")
+    }
+
+    /// Creates a new work order label for testing purposes.
+    ///
+    /// # Arguments
+    ///
+    /// * `work_order_id` - The UUID of the work order.
+    /// * `label` - The label string.
+    ///
+    /// # Returns
+    ///
+    /// Returns the created WorkOrderLabel on success, or panics on failure.
+    pub fn create_test_work_order_label(
+        &self,
+        work_order_id: Uuid,
+        label: &str,
+    ) -> WorkOrderLabel {
+        let new_label = NewWorkOrderLabel::new(work_order_id, label.to_string())
+            .expect("Failed to create NewWorkOrderLabel");
+        self.dal
+            .work_orders()
+            .add_label(&new_label)
+            .expect("Failed to create work order label")
+    }
+
+    /// Creates a new work order annotation for testing purposes.
+    ///
+    /// # Arguments
+    ///
+    /// * `work_order_id` - The UUID of the work order.
+    /// * `key` - The annotation key.
+    /// * `value` - The annotation value.
+    ///
+    /// # Returns
+    ///
+    /// Returns the created WorkOrderAnnotation on success, or panics on failure.
+    pub fn create_test_work_order_annotation(
+        &self,
+        work_order_id: Uuid,
+        key: &str,
+        value: &str,
+    ) -> WorkOrderAnnotation {
+        let new_annotation = NewWorkOrderAnnotation::new(work_order_id, key.to_string(), value.to_string())
+            .expect("Failed to create NewWorkOrderAnnotation");
+        self.dal
+            .work_orders()
+            .add_annotation(&new_annotation)
+            .expect("Failed to create work order annotation")
     }
 
     fn reset_database(&self) {
