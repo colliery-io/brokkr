@@ -90,8 +90,29 @@ pub struct CreateWorkOrderRequest {
     /// Claim timeout in seconds (default: 3600).
     #[serde(default)]
     pub claim_timeout_seconds: Option<i32>,
-    /// Target agent IDs that can claim this work order.
-    pub target_agent_ids: Vec<Uuid>,
+    /// Optional targeting configuration. At least one targeting method must be specified.
+    #[serde(default)]
+    pub targeting: Option<WorkOrderTargeting>,
+    /// DEPRECATED: Use targeting.agent_ids instead. Target agent IDs that can claim this work order.
+    #[serde(default)]
+    pub target_agent_ids: Option<Vec<Uuid>>,
+}
+
+/// Targeting configuration for work orders.
+/// Work orders can be targeted using any combination of hard targets (agent IDs),
+/// labels, or annotations. Matching uses OR logic - an agent is eligible if it
+/// matches ANY of the specified targeting criteria.
+#[derive(Debug, Default, Deserialize, Serialize, ToSchema)]
+pub struct WorkOrderTargeting {
+    /// Direct agent IDs that can claim this work order (hard targets).
+    #[serde(default)]
+    pub agent_ids: Option<Vec<Uuid>>,
+    /// Labels that agents must have (OR logic - agent needs any one of these labels).
+    #[serde(default)]
+    pub labels: Option<Vec<String>>,
+    /// Annotations that agents must have (OR logic - agent needs any one of these key-value pairs).
+    #[serde(default)]
+    pub annotations: Option<std::collections::HashMap<String, String>>,
 }
 
 /// Request body for claiming a work order.
@@ -227,11 +248,28 @@ async fn create_work_order(
         ));
     }
 
-    // Validate request
-    if request.target_agent_ids.is_empty() {
+    // Extract targeting from either the new targeting field or deprecated target_agent_ids
+    let targeting = request.targeting.unwrap_or_default();
+    let legacy_agent_ids = request.target_agent_ids.unwrap_or_default();
+
+    // Combine agent IDs from both sources (for backwards compatibility)
+    let agent_ids: Vec<Uuid> = targeting
+        .agent_ids
+        .unwrap_or_default()
+        .into_iter()
+        .chain(legacy_agent_ids)
+        .collect();
+
+    let labels = targeting.labels.unwrap_or_default();
+    let annotations = targeting.annotations.unwrap_or_default();
+
+    // Validate that at least one targeting method is specified
+    if agent_ids.is_empty() && labels.is_empty() && annotations.is_empty() {
         return Err((
             StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({"error": "At least one target agent ID is required"})),
+            Json(serde_json::json!({
+                "error": "At least one targeting method must be specified (agent_ids, labels, or annotations)"
+            })),
         ));
     }
 
@@ -263,18 +301,43 @@ async fn create_work_order(
         }
     };
 
-    // Add targets
-    if let Err(e) = dal
-        .work_orders()
-        .add_targets(work_order.id, &request.target_agent_ids)
-    {
-        error!("Failed to add work order targets: {:?}", e);
-        // Clean up the work order
-        let _ = dal.work_orders().delete(work_order.id);
-        return Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({"error": "Failed to add work order targets"})),
-        ));
+    // Add hard targets (agent IDs)
+    if !agent_ids.is_empty() {
+        if let Err(e) = dal.work_orders().add_targets(work_order.id, &agent_ids) {
+            error!("Failed to add work order targets: {:?}", e);
+            let _ = dal.work_orders().delete(work_order.id);
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Failed to add work order targets"})),
+            ));
+        }
+    }
+
+    // Add labels
+    if !labels.is_empty() {
+        if let Err(e) = dal.work_orders().add_labels(work_order.id, &labels) {
+            error!("Failed to add work order labels: {:?}", e);
+            let _ = dal.work_orders().delete(work_order.id);
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Failed to add work order labels"})),
+            ));
+        }
+    }
+
+    // Add annotations
+    if !annotations.is_empty() {
+        if let Err(e) = dal
+            .work_orders()
+            .add_annotations(work_order.id, &annotations)
+        {
+            error!("Failed to add work order annotations: {:?}", e);
+            let _ = dal.work_orders().delete(work_order.id);
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Failed to add work order annotations"})),
+            ));
+        }
     }
 
     info!("Successfully created work order with ID: {}", work_order.id);

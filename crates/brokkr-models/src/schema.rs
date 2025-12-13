@@ -251,6 +251,28 @@ diesel::table! {
     }
 }
 
+diesel::table! {
+    work_order_labels (id) {
+        id -> Uuid,
+        work_order_id -> Uuid,
+        #[max_length = 64]
+        label -> Varchar,
+        created_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    work_order_annotations (id) {
+        id -> Uuid,
+        work_order_id -> Uuid,
+        #[max_length = 64]
+        key -> Varchar,
+        #[max_length = 64]
+        value -> Varchar,
+        created_at -> Timestamptz,
+    }
+}
+
 diesel::joinable!(agent_annotations -> agents (agent_id));
 diesel::joinable!(agent_events -> agents (agent_id));
 diesel::joinable!(agent_events -> deployment_objects (deployment_object_id));
@@ -272,6 +294,8 @@ diesel::joinable!(work_orders -> agents (claimed_by));
 diesel::joinable!(work_order_log -> agents (claimed_by));
 diesel::joinable!(work_order_targets -> work_orders (work_order_id));
 diesel::joinable!(work_order_targets -> agents (agent_id));
+diesel::joinable!(work_order_labels -> work_orders (work_order_id));
+diesel::joinable!(work_order_annotations -> work_orders (work_order_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
     admin_role,
@@ -292,6 +316,8 @@ diesel::allow_tables_to_appear_in_same_query!(
     template_labels,
     template_targets,
     work_orders,
+    work_order_annotations,
+    work_order_labels,
     work_order_log,
     work_order_targets,
 );

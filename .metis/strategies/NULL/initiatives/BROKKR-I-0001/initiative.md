@@ -1,23 +1,23 @@
 ---
-id: work-system-with
+id: work-system-with-shipwright-build
 level: initiative
 title: "Work System with Shipwright Build Integration"
 short_code: "BROKKR-I-0001"
 created_at: 2025-10-08T14:59:07.902259+00:00
-updated_at: 2025-10-22T14:45:23.097831+00:00
-parent:
+updated_at: 2025-12-12T21:17:27.995965+00:00
+parent: 
 blocked_by: []
 archived: false
 
 tags:
   - "#initiative"
-  - "#phase/discovery"
+  - "#phase/decompose"
 
 
 exit_criteria_met: false
 estimated_complexity: M
 strategy_id: NULL
-initiative_id: work-system-with
+initiative_id: work-system-with-shipwright-build
 ---
 
 # Work System with Shipwright Build Integration

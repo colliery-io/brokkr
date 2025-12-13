@@ -19,4 +19,6 @@ pub mod stacks;
 pub mod template_annotations;
 pub mod template_labels;
 pub mod template_targets;
+pub mod work_order_annotations;
+pub mod work_order_labels;
 pub mod work_orders;

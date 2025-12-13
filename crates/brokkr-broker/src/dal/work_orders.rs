@@ -24,13 +24,19 @@
 //! are considered stale and can be reclaimed by other agents.
 
 use crate::dal::DAL;
+use brokkr_models::models::work_order_annotations::{NewWorkOrderAnnotation, WorkOrderAnnotation};
+use brokkr_models::models::work_order_labels::{NewWorkOrderLabel, WorkOrderLabel};
 use brokkr_models::models::work_orders::{
     NewWorkOrder, NewWorkOrderLog, NewWorkOrderTarget, WorkOrder, WorkOrderLog, WorkOrderTarget,
     WORK_ORDER_STATUS_CLAIMED, WORK_ORDER_STATUS_PENDING, WORK_ORDER_STATUS_RETRY_PENDING,
 };
-use brokkr_models::schema::{work_order_log, work_order_targets, work_orders};
+use brokkr_models::schema::{
+    agent_annotations, agent_labels, work_order_annotations, work_order_labels, work_order_log,
+    work_order_targets, work_orders,
+};
 use chrono::{Duration, Utc};
 use diesel::prelude::*;
+use std::collections::HashSet;
 use uuid::Uuid;
 
 /// Data Access Layer for WorkOrder operations.
@@ -145,7 +151,10 @@ impl WorkOrdersDAL<'_> {
     ///
     /// A work order is claimable if:
     /// - Status is PENDING
-    /// - Agent is in the work_order_targets for this work order
+    /// - At least one of the following conditions is met (OR logic):
+    ///   - Agent is in the work_order_targets (hard targets)
+    ///   - Agent has a label matching any of the work order's labels
+    ///   - Agent has an annotation matching any of the work order's annotations
     ///
     /// # Arguments
     ///
@@ -162,9 +171,66 @@ impl WorkOrdersDAL<'_> {
     ) -> Result<Vec<WorkOrder>, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
 
-        let mut query = work_orders::table
-            .inner_join(work_order_targets::table)
+        // Get agent's labels
+        let agent_label_list: Vec<String> = agent_labels::table
+            .filter(agent_labels::agent_id.eq(agent_id))
+            .select(agent_labels::label)
+            .load::<String>(conn)?;
+
+        // Get agent's annotations
+        let agent_annotation_list: Vec<(String, String)> = agent_annotations::table
+            .filter(agent_annotations::agent_id.eq(agent_id))
+            .select((agent_annotations::key, agent_annotations::value))
+            .load::<(String, String)>(conn)?;
+
+        let mut matching_work_order_ids: HashSet<Uuid> = HashSet::new();
+
+        // 1. Get work orders where agent is a hard target
+        let hard_target_ids: Vec<Uuid> = work_order_targets::table
+            .inner_join(work_orders::table)
             .filter(work_order_targets::agent_id.eq(agent_id))
+            .filter(work_orders::status.eq(WORK_ORDER_STATUS_PENDING))
+            .select(work_orders::id)
+            .load::<Uuid>(conn)?;
+
+        matching_work_order_ids.extend(hard_target_ids);
+
+        // 2. Get work orders with labels matching agent's labels (OR logic)
+        if !agent_label_list.is_empty() {
+            let label_matched_ids: Vec<Uuid> = work_order_labels::table
+                .inner_join(work_orders::table)
+                .filter(work_order_labels::label.eq_any(&agent_label_list))
+                .filter(work_orders::status.eq(WORK_ORDER_STATUS_PENDING))
+                .select(work_orders::id)
+                .load::<Uuid>(conn)?;
+
+            matching_work_order_ids.extend(label_matched_ids);
+        }
+
+        // 3. Get work orders with annotations matching agent's annotations (OR logic)
+        if !agent_annotation_list.is_empty() {
+            for (key, value) in &agent_annotation_list {
+                let annotation_matched_ids: Vec<Uuid> = work_order_annotations::table
+                    .inner_join(work_orders::table)
+                    .filter(work_order_annotations::key.eq(key))
+                    .filter(work_order_annotations::value.eq(value))
+                    .filter(work_orders::status.eq(WORK_ORDER_STATUS_PENDING))
+                    .select(work_orders::id)
+                    .load::<Uuid>(conn)?;
+
+                matching_work_order_ids.extend(annotation_matched_ids);
+            }
+        }
+
+        if matching_work_order_ids.is_empty() {
+            return Ok(vec![]);
+        }
+
+        // Load and filter the matching work orders
+        let ids: Vec<Uuid> = matching_work_order_ids.into_iter().collect();
+
+        let mut query = work_orders::table
+            .filter(work_orders::id.eq_any(&ids))
             .filter(work_orders::status.eq(WORK_ORDER_STATUS_PENDING))
             .into_boxed();
 
@@ -173,7 +239,6 @@ impl WorkOrdersDAL<'_> {
         }
 
         query
-            .select(work_orders::all_columns)
             .order(work_orders::created_at.asc())
             .load::<WorkOrder>(conn)
     }
@@ -183,7 +248,10 @@ impl WorkOrdersDAL<'_> {
     /// This operation will only succeed if:
     /// - The work order exists
     /// - The work order status is PENDING
-    /// - The agent is in the work_order_targets for this work order
+    /// - At least one of the following conditions is met (OR logic):
+    ///   - Agent is in the work_order_targets (hard targets)
+    ///   - Agent has a label matching any of the work order's labels
+    ///   - Agent has an annotation matching any of the work order's annotations
     ///
     /// # Arguments
     ///
@@ -201,14 +269,10 @@ impl WorkOrdersDAL<'_> {
     ) -> Result<WorkOrder, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
 
-        // First verify the agent is a valid target for this work order
-        let target_exists: bool = work_order_targets::table
-            .filter(work_order_targets::work_order_id.eq(work_order_id))
-            .filter(work_order_targets::agent_id.eq(agent_id))
-            .select(diesel::dsl::count_star().gt(0))
-            .first(conn)?;
+        // Check if agent is authorized via any targeting mechanism (OR logic)
+        let is_authorized = self.is_agent_authorized_for_work_order(conn, work_order_id, agent_id)?;
 
-        if !target_exists {
+        if !is_authorized {
             return Err(diesel::result::Error::NotFound);
         }
 
@@ -225,6 +289,72 @@ impl WorkOrdersDAL<'_> {
             work_orders::claimed_at.eq(now),
         ))
         .get_result(conn)
+    }
+
+    /// Checks if an agent is authorized to claim a work order using any targeting mechanism.
+    ///
+    /// Returns true if the agent matches via hard targets, labels, or annotations.
+    fn is_agent_authorized_for_work_order(
+        &self,
+        conn: &mut diesel::pg::PgConnection,
+        work_order_id: Uuid,
+        agent_id: Uuid,
+    ) -> Result<bool, diesel::result::Error> {
+        // 1. Check hard targets
+        let target_exists: bool = work_order_targets::table
+            .filter(work_order_targets::work_order_id.eq(work_order_id))
+            .filter(work_order_targets::agent_id.eq(agent_id))
+            .select(diesel::dsl::count_star().gt(0))
+            .first(conn)?;
+
+        if target_exists {
+            return Ok(true);
+        }
+
+        // 2. Check label matching
+        // Get the work order's labels
+        let work_order_label_list: Vec<String> = work_order_labels::table
+            .filter(work_order_labels::work_order_id.eq(work_order_id))
+            .select(work_order_labels::label)
+            .load::<String>(conn)?;
+
+        if !work_order_label_list.is_empty() {
+            // Check if agent has any of these labels
+            let agent_has_label: i64 = agent_labels::table
+                .filter(agent_labels::agent_id.eq(agent_id))
+                .filter(agent_labels::label.eq_any(&work_order_label_list))
+                .select(diesel::dsl::count_star())
+                .first(conn)?;
+
+            if agent_has_label > 0 {
+                return Ok(true);
+            }
+        }
+
+        // 3. Check annotation matching
+        // Get the work order's annotations
+        let work_order_annotation_list: Vec<(String, String)> = work_order_annotations::table
+            .filter(work_order_annotations::work_order_id.eq(work_order_id))
+            .select((work_order_annotations::key, work_order_annotations::value))
+            .load::<(String, String)>(conn)?;
+
+        if !work_order_annotation_list.is_empty() {
+            // Check if agent has any of these key-value pairs
+            for (key, value) in &work_order_annotation_list {
+                let agent_has_annotation: i64 = agent_annotations::table
+                    .filter(agent_annotations::agent_id.eq(agent_id))
+                    .filter(agent_annotations::key.eq(key))
+                    .filter(agent_annotations::value.eq(value))
+                    .select(diesel::dsl::count_star())
+                    .first(conn)?;
+
+                if agent_has_annotation > 0 {
+                    return Ok(true);
+                }
+            }
+        }
+
+        Ok(false)
     }
 
     /// Releases a claimed work order back to PENDING status.
@@ -573,5 +703,196 @@ impl WorkOrdersDAL<'_> {
         }
 
         query.load::<WorkOrderLog>(conn)
+    }
+
+    // =========================================================================
+    // WORK ORDER LABELS OPERATIONS
+    // =========================================================================
+
+    /// Adds a label to a work order.
+    ///
+    /// # Arguments
+    ///
+    /// * `new_label` - The new label to add.
+    ///
+    /// # Returns
+    ///
+    /// Returns the created WorkOrderLabel on success, or a diesel::result::Error on failure.
+    pub fn add_label(
+        &self,
+        new_label: &NewWorkOrderLabel,
+    ) -> Result<WorkOrderLabel, diesel::result::Error> {
+        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        diesel::insert_into(work_order_labels::table)
+            .values(new_label)
+            .get_result(conn)
+    }
+
+    /// Adds multiple labels to a work order.
+    ///
+    /// # Arguments
+    ///
+    /// * `work_order_id` - The UUID of the work order.
+    /// * `labels` - A slice of label strings to add.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of labels added on success, or a diesel::result::Error on failure.
+    pub fn add_labels(
+        &self,
+        work_order_id: Uuid,
+        labels: &[String],
+    ) -> Result<usize, diesel::result::Error> {
+        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+
+        let new_labels: Vec<NewWorkOrderLabel> = labels
+            .iter()
+            .filter_map(|label| NewWorkOrderLabel::new(work_order_id, label.clone()).ok())
+            .collect();
+
+        diesel::insert_into(work_order_labels::table)
+            .values(&new_labels)
+            .execute(conn)
+    }
+
+    /// Lists all labels for a work order.
+    ///
+    /// # Arguments
+    ///
+    /// * `work_order_id` - The UUID of the work order.
+    ///
+    /// # Returns
+    ///
+    /// Returns a Vec of WorkOrderLabels on success, or a diesel::result::Error on failure.
+    pub fn list_labels(
+        &self,
+        work_order_id: Uuid,
+    ) -> Result<Vec<WorkOrderLabel>, diesel::result::Error> {
+        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        work_order_labels::table
+            .filter(work_order_labels::work_order_id.eq(work_order_id))
+            .load::<WorkOrderLabel>(conn)
+    }
+
+    /// Removes a label from a work order.
+    ///
+    /// # Arguments
+    ///
+    /// * `work_order_id` - The UUID of the work order.
+    /// * `label` - The label to remove.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of labels removed on success, or a diesel::result::Error on failure.
+    pub fn remove_label(
+        &self,
+        work_order_id: Uuid,
+        label: &str,
+    ) -> Result<usize, diesel::result::Error> {
+        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        diesel::delete(
+            work_order_labels::table
+                .filter(work_order_labels::work_order_id.eq(work_order_id))
+                .filter(work_order_labels::label.eq(label)),
+        )
+        .execute(conn)
+    }
+
+    // =========================================================================
+    // WORK ORDER ANNOTATIONS OPERATIONS
+    // =========================================================================
+
+    /// Adds an annotation to a work order.
+    ///
+    /// # Arguments
+    ///
+    /// * `new_annotation` - The new annotation to add.
+    ///
+    /// # Returns
+    ///
+    /// Returns the created WorkOrderAnnotation on success, or a diesel::result::Error on failure.
+    pub fn add_annotation(
+        &self,
+        new_annotation: &NewWorkOrderAnnotation,
+    ) -> Result<WorkOrderAnnotation, diesel::result::Error> {
+        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        diesel::insert_into(work_order_annotations::table)
+            .values(new_annotation)
+            .get_result(conn)
+    }
+
+    /// Adds multiple annotations to a work order.
+    ///
+    /// # Arguments
+    ///
+    /// * `work_order_id` - The UUID of the work order.
+    /// * `annotations` - A HashMap of key-value pairs to add.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of annotations added on success, or a diesel::result::Error on failure.
+    pub fn add_annotations(
+        &self,
+        work_order_id: Uuid,
+        annotations: &std::collections::HashMap<String, String>,
+    ) -> Result<usize, diesel::result::Error> {
+        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+
+        let new_annotations: Vec<NewWorkOrderAnnotation> = annotations
+            .iter()
+            .filter_map(|(key, value)| {
+                NewWorkOrderAnnotation::new(work_order_id, key.clone(), value.clone()).ok()
+            })
+            .collect();
+
+        diesel::insert_into(work_order_annotations::table)
+            .values(&new_annotations)
+            .execute(conn)
+    }
+
+    /// Lists all annotations for a work order.
+    ///
+    /// # Arguments
+    ///
+    /// * `work_order_id` - The UUID of the work order.
+    ///
+    /// # Returns
+    ///
+    /// Returns a Vec of WorkOrderAnnotations on success, or a diesel::result::Error on failure.
+    pub fn list_annotations(
+        &self,
+        work_order_id: Uuid,
+    ) -> Result<Vec<WorkOrderAnnotation>, diesel::result::Error> {
+        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        work_order_annotations::table
+            .filter(work_order_annotations::work_order_id.eq(work_order_id))
+            .load::<WorkOrderAnnotation>(conn)
+    }
+
+    /// Removes an annotation from a work order.
+    ///
+    /// # Arguments
+    ///
+    /// * `work_order_id` - The UUID of the work order.
+    /// * `key` - The annotation key.
+    /// * `value` - The annotation value.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of annotations removed on success, or a diesel::result::Error on failure.
+    pub fn remove_annotation(
+        &self,
+        work_order_id: Uuid,
+        key: &str,
+        value: &str,
+    ) -> Result<usize, diesel::result::Error> {
+        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        diesel::delete(
+            work_order_annotations::table
+                .filter(work_order_annotations::work_order_id.eq(work_order_id))
+                .filter(work_order_annotations::key.eq(key))
+                .filter(work_order_annotations::value.eq(value)),
+        )
+        .execute(conn)
     }
 }

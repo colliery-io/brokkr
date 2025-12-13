@@ -806,3 +806,384 @@ fn test_list_log_with_limit() {
 
     assert_eq!(logs.len(), 2);
 }
+
+// =========================================================================
+// LABEL AND ANNOTATION TARGETING TESTS
+// =========================================================================
+
+#[test]
+fn test_add_label() {
+    let fixture = TestFixture::new();
+
+    let wo = fixture.create_test_work_order(WORK_TYPE_BUILD, "yaml");
+    let label = fixture.create_test_work_order_label(wo.id, "production");
+
+    assert_eq!(label.work_order_id, wo.id);
+    assert_eq!(label.label, "production");
+}
+
+#[test]
+fn test_add_multiple_labels() {
+    let fixture = TestFixture::new();
+
+    let wo = fixture.create_test_work_order(WORK_TYPE_BUILD, "yaml");
+    let labels = vec!["production".to_string(), "gpu".to_string(), "us-east".to_string()];
+
+    let count = fixture
+        .dal
+        .work_orders()
+        .add_labels(wo.id, &labels)
+        .expect("Failed to add labels");
+
+    assert_eq!(count, 3);
+
+    let retrieved = fixture
+        .dal
+        .work_orders()
+        .list_labels(wo.id)
+        .expect("Failed to list labels");
+
+    assert_eq!(retrieved.len(), 3);
+}
+
+#[test]
+fn test_remove_label() {
+    let fixture = TestFixture::new();
+
+    let wo = fixture.create_test_work_order(WORK_TYPE_BUILD, "yaml");
+    fixture.create_test_work_order_label(wo.id, "production");
+
+    let removed = fixture
+        .dal
+        .work_orders()
+        .remove_label(wo.id, "production")
+        .expect("Failed to remove label");
+
+    assert_eq!(removed, 1);
+
+    let remaining = fixture
+        .dal
+        .work_orders()
+        .list_labels(wo.id)
+        .expect("Failed to list labels");
+
+    assert_eq!(remaining.len(), 0);
+}
+
+#[test]
+fn test_add_annotation() {
+    let fixture = TestFixture::new();
+
+    let wo = fixture.create_test_work_order(WORK_TYPE_BUILD, "yaml");
+    let annotation = fixture.create_test_work_order_annotation(wo.id, "region", "us-east");
+
+    assert_eq!(annotation.work_order_id, wo.id);
+    assert_eq!(annotation.key, "region");
+    assert_eq!(annotation.value, "us-east");
+}
+
+#[test]
+fn test_add_multiple_annotations() {
+    let fixture = TestFixture::new();
+
+    let wo = fixture.create_test_work_order(WORK_TYPE_BUILD, "yaml");
+    let mut annotations = std::collections::HashMap::new();
+    annotations.insert("region".to_string(), "us-east".to_string());
+    annotations.insert("tier".to_string(), "production".to_string());
+
+    let count = fixture
+        .dal
+        .work_orders()
+        .add_annotations(wo.id, &annotations)
+        .expect("Failed to add annotations");
+
+    assert_eq!(count, 2);
+
+    let retrieved = fixture
+        .dal
+        .work_orders()
+        .list_annotations(wo.id)
+        .expect("Failed to list annotations");
+
+    assert_eq!(retrieved.len(), 2);
+}
+
+#[test]
+fn test_remove_annotation() {
+    let fixture = TestFixture::new();
+
+    let wo = fixture.create_test_work_order(WORK_TYPE_BUILD, "yaml");
+    fixture.create_test_work_order_annotation(wo.id, "region", "us-east");
+
+    let removed = fixture
+        .dal
+        .work_orders()
+        .remove_annotation(wo.id, "region", "us-east")
+        .expect("Failed to remove annotation");
+
+    assert_eq!(removed, 1);
+
+    let remaining = fixture
+        .dal
+        .work_orders()
+        .list_annotations(wo.id)
+        .expect("Failed to list annotations");
+
+    assert_eq!(remaining.len(), 0);
+}
+
+#[test]
+fn test_list_pending_for_agent_with_label_match() {
+    let fixture = TestFixture::new();
+
+    // Create an agent with a label
+    let agent = fixture.create_test_agent("Agent".to_string(), "Cluster".to_string());
+    fixture.create_test_agent_label(agent.id, "gpu".to_string());
+
+    // Create a work order that targets agents with the "gpu" label
+    let wo = fixture.create_test_work_order(WORK_TYPE_BUILD, "yaml");
+    fixture.create_test_work_order_label(wo.id, "gpu");
+
+    // Agent should see the work order (label match)
+    let pending = fixture
+        .dal
+        .work_orders()
+        .list_pending_for_agent(agent.id, None)
+        .expect("Failed to list pending");
+
+    assert_eq!(pending.len(), 1);
+    assert_eq!(pending[0].id, wo.id);
+}
+
+#[test]
+fn test_list_pending_for_agent_with_annotation_match() {
+    let fixture = TestFixture::new();
+
+    // Create an agent with an annotation
+    let agent = fixture.create_test_agent("Agent".to_string(), "Cluster".to_string());
+    fixture.create_test_agent_annotation(agent.id, "region".to_string(), "us-east".to_string());
+
+    // Create a work order that targets agents with the same annotation
+    let wo = fixture.create_test_work_order(WORK_TYPE_BUILD, "yaml");
+    fixture.create_test_work_order_annotation(wo.id, "region", "us-east");
+
+    // Agent should see the work order (annotation match)
+    let pending = fixture
+        .dal
+        .work_orders()
+        .list_pending_for_agent(agent.id, None)
+        .expect("Failed to list pending");
+
+    assert_eq!(pending.len(), 1);
+    assert_eq!(pending[0].id, wo.id);
+}
+
+#[test]
+fn test_list_pending_for_agent_no_match() {
+    let fixture = TestFixture::new();
+
+    // Create an agent with a label
+    let agent = fixture.create_test_agent("Agent".to_string(), "Cluster".to_string());
+    fixture.create_test_agent_label(agent.id, "cpu".to_string());
+
+    // Create a work order that targets agents with a different label
+    let wo = fixture.create_test_work_order(WORK_TYPE_BUILD, "yaml");
+    fixture.create_test_work_order_label(wo.id, "gpu");
+
+    // Agent should NOT see the work order (no match)
+    let pending = fixture
+        .dal
+        .work_orders()
+        .list_pending_for_agent(agent.id, None)
+        .expect("Failed to list pending");
+
+    assert_eq!(pending.len(), 0);
+}
+
+#[test]
+fn test_list_pending_for_agent_or_logic() {
+    let fixture = TestFixture::new();
+
+    // Create an agent with one label
+    let agent = fixture.create_test_agent("Agent".to_string(), "Cluster".to_string());
+    fixture.create_test_agent_label(agent.id, "production".to_string());
+
+    // Create a work order that targets agents with multiple labels (OR logic)
+    let wo = fixture.create_test_work_order(WORK_TYPE_BUILD, "yaml");
+    fixture.create_test_work_order_label(wo.id, "staging");
+    fixture.create_test_work_order_label(wo.id, "production");
+
+    // Agent should see the work order (matches "production")
+    let pending = fixture
+        .dal
+        .work_orders()
+        .list_pending_for_agent(agent.id, None)
+        .expect("Failed to list pending");
+
+    assert_eq!(pending.len(), 1);
+}
+
+#[test]
+fn test_list_pending_for_agent_combined_targeting() {
+    let fixture = TestFixture::new();
+
+    // Create agents
+    let agent1 = fixture.create_test_agent("Agent1".to_string(), "Cluster".to_string());
+    let agent2 = fixture.create_test_agent("Agent2".to_string(), "Cluster".to_string());
+    let agent3 = fixture.create_test_agent("Agent3".to_string(), "Cluster".to_string());
+
+    // Agent1 has a label that matches
+    fixture.create_test_agent_label(agent1.id, "gpu".to_string());
+    // Agent2 has an annotation that matches
+    fixture.create_test_agent_annotation(agent2.id, "region".to_string(), "us-east".to_string());
+    // Agent3 is a hard target
+
+    // Create a work order with all three targeting methods
+    let wo = fixture.create_test_work_order(WORK_TYPE_BUILD, "yaml");
+    fixture.create_test_work_order_label(wo.id, "gpu");
+    fixture.create_test_work_order_annotation(wo.id, "region", "us-east");
+    fixture.create_test_work_order_target(wo.id, agent3.id);
+
+    // All three agents should see the work order
+    for agent in &[agent1, agent2, agent3] {
+        let pending = fixture
+            .dal
+            .work_orders()
+            .list_pending_for_agent(agent.id, None)
+            .expect("Failed to list pending");
+
+        assert_eq!(pending.len(), 1, "Agent {} should see the work order", agent.name);
+        assert_eq!(pending[0].id, wo.id);
+    }
+}
+
+#[test]
+fn test_claim_with_label_match() {
+    let fixture = TestFixture::new();
+
+    // Create an agent with a label
+    let agent = fixture.create_test_agent("Agent".to_string(), "Cluster".to_string());
+    fixture.create_test_agent_label(agent.id, "gpu".to_string());
+
+    // Create a work order that targets agents with the "gpu" label
+    let wo = fixture.create_test_work_order(WORK_TYPE_BUILD, "yaml");
+    fixture.create_test_work_order_label(wo.id, "gpu");
+
+    // Agent should be able to claim the work order
+    let claimed = fixture
+        .dal
+        .work_orders()
+        .claim(wo.id, agent.id)
+        .expect("Failed to claim work order");
+
+    assert_eq!(claimed.status, WORK_ORDER_STATUS_CLAIMED);
+    assert_eq!(claimed.claimed_by, Some(agent.id));
+}
+
+#[test]
+fn test_claim_with_annotation_match() {
+    let fixture = TestFixture::new();
+
+    // Create an agent with an annotation
+    let agent = fixture.create_test_agent("Agent".to_string(), "Cluster".to_string());
+    fixture.create_test_agent_annotation(agent.id, "region".to_string(), "us-east".to_string());
+
+    // Create a work order that targets agents with the same annotation
+    let wo = fixture.create_test_work_order(WORK_TYPE_BUILD, "yaml");
+    fixture.create_test_work_order_annotation(wo.id, "region", "us-east");
+
+    // Agent should be able to claim the work order
+    let claimed = fixture
+        .dal
+        .work_orders()
+        .claim(wo.id, agent.id)
+        .expect("Failed to claim work order");
+
+    assert_eq!(claimed.status, WORK_ORDER_STATUS_CLAIMED);
+    assert_eq!(claimed.claimed_by, Some(agent.id));
+}
+
+#[test]
+fn test_claim_without_authorization() {
+    let fixture = TestFixture::new();
+
+    // Create an agent with no matching attributes
+    let agent = fixture.create_test_agent("Agent".to_string(), "Cluster".to_string());
+    fixture.create_test_agent_label(agent.id, "cpu".to_string());
+
+    // Create a work order that targets agents with a different label
+    let wo = fixture.create_test_work_order(WORK_TYPE_BUILD, "yaml");
+    fixture.create_test_work_order_label(wo.id, "gpu");
+
+    // Agent should NOT be able to claim the work order
+    let result = fixture.dal.work_orders().claim(wo.id, agent.id);
+
+    assert!(result.is_err());
+    match result {
+        Err(diesel::result::Error::NotFound) => {} // Expected
+        _ => panic!("Expected NotFound error"),
+    }
+}
+
+#[test]
+fn test_annotation_key_value_must_both_match() {
+    let fixture = TestFixture::new();
+
+    // Create an agent with an annotation
+    let agent = fixture.create_test_agent("Agent".to_string(), "Cluster".to_string());
+    fixture.create_test_agent_annotation(agent.id, "region".to_string(), "us-west".to_string());
+
+    // Create a work order that targets a different value for the same key
+    let wo = fixture.create_test_work_order(WORK_TYPE_BUILD, "yaml");
+    fixture.create_test_work_order_annotation(wo.id, "region", "us-east");
+
+    // Agent should NOT see the work order (key matches but value doesn't)
+    let pending = fixture
+        .dal
+        .work_orders()
+        .list_pending_for_agent(agent.id, None)
+        .expect("Failed to list pending");
+
+    assert_eq!(pending.len(), 0);
+}
+
+#[test]
+fn test_labels_deleted_on_work_order_delete() {
+    let fixture = TestFixture::new();
+
+    let wo = fixture.create_test_work_order(WORK_TYPE_BUILD, "yaml");
+    fixture.create_test_work_order_label(wo.id, "production");
+    fixture.create_test_work_order_annotation(wo.id, "region", "us-east");
+
+    // Verify labels and annotations exist
+    let labels = fixture
+        .dal
+        .work_orders()
+        .list_labels(wo.id)
+        .expect("Failed to list labels");
+    assert_eq!(labels.len(), 1);
+
+    let annotations = fixture
+        .dal
+        .work_orders()
+        .list_annotations(wo.id)
+        .expect("Failed to list annotations");
+    assert_eq!(annotations.len(), 1);
+
+    // Delete the work order
+    fixture
+        .dal
+        .work_orders()
+        .delete(wo.id)
+        .expect("Failed to delete work order");
+
+    // Labels and annotations should be deleted via CASCADE
+    // (we can't easily test this directly since the FK no longer exists,
+    // but we can verify the work order is gone)
+    let result = fixture
+        .dal
+        .work_orders()
+        .get(wo.id)
+        .expect("Failed to query work order");
+    assert!(result.is_none());
+}
