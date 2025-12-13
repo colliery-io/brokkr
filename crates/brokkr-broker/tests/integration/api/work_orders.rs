@@ -85,11 +85,12 @@ async fn test_create_work_order() {
 }
 
 #[tokio::test]
-async fn test_create_work_order_no_targets() {
+async fn test_create_work_order_empty_targets() {
     let fixture = TestFixture::new();
     let app = fixture.create_test_router().with_state(fixture.dal.clone());
     let admin_pak = fixture.admin_pak.clone();
 
+    // Empty target_agent_ids with no other targeting = bad request
     let request_body = serde_json::json!({
         "work_type": WORK_TYPE_BUILD,
         "yaml_content": "apiVersion: v1\nkind: ConfigMap",
@@ -683,4 +684,398 @@ async fn test_list_work_order_log_forbidden() {
     .await;
 
     assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+// =============================================================================
+// LABEL/ANNOTATION TARGETING API TESTS
+// =============================================================================
+
+#[tokio::test]
+async fn test_create_work_order_with_labels() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+    let admin_pak = fixture.admin_pak.clone();
+
+    let request_body = serde_json::json!({
+        "work_type": WORK_TYPE_BUILD,
+        "yaml_content": "apiVersion: v1\nkind: ConfigMap",
+        "targeting": {
+            "labels": ["gpu", "production"]
+        }
+    });
+
+    let (status, body) = make_request(
+        app,
+        "POST",
+        "/api/v1/work-orders",
+        Some(&admin_pak),
+        Some(serde_json::to_string(&request_body).unwrap()),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::CREATED);
+
+    let json: Value = serde_json::from_slice(&body).unwrap();
+    let work_order_id: Uuid = json["id"].as_str().unwrap().parse().unwrap();
+
+    // Verify labels were added
+    let labels = fixture
+        .dal
+        .work_orders()
+        .list_labels(work_order_id)
+        .expect("Failed to list labels");
+
+    assert_eq!(labels.len(), 2);
+    let label_values: Vec<&str> = labels.iter().map(|l| l.label.as_str()).collect();
+    assert!(label_values.contains(&"gpu"));
+    assert!(label_values.contains(&"production"));
+}
+
+#[tokio::test]
+async fn test_create_work_order_with_annotations() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+    let admin_pak = fixture.admin_pak.clone();
+
+    let request_body = serde_json::json!({
+        "work_type": WORK_TYPE_BUILD,
+        "yaml_content": "apiVersion: v1\nkind: ConfigMap",
+        "targeting": {
+            "annotations": {
+                "region": "us-east",
+                "tier": "production"
+            }
+        }
+    });
+
+    let (status, body) = make_request(
+        app,
+        "POST",
+        "/api/v1/work-orders",
+        Some(&admin_pak),
+        Some(serde_json::to_string(&request_body).unwrap()),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::CREATED);
+
+    let json: Value = serde_json::from_slice(&body).unwrap();
+    let work_order_id: Uuid = json["id"].as_str().unwrap().parse().unwrap();
+
+    // Verify annotations were added
+    let annotations = fixture
+        .dal
+        .work_orders()
+        .list_annotations(work_order_id)
+        .expect("Failed to list annotations");
+
+    assert_eq!(annotations.len(), 2);
+}
+
+#[tokio::test]
+async fn test_create_work_order_with_combined_targeting() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+    let admin_pak = fixture.admin_pak.clone();
+
+    let agent = fixture.create_test_agent("Test Agent".to_string(), "Test Cluster".to_string());
+
+    let request_body = serde_json::json!({
+        "work_type": WORK_TYPE_BUILD,
+        "yaml_content": "apiVersion: v1\nkind: ConfigMap",
+        "targeting": {
+            "agent_ids": [agent.id],
+            "labels": ["gpu"],
+            "annotations": {"region": "us-east"}
+        }
+    });
+
+    let (status, body) = make_request(
+        app,
+        "POST",
+        "/api/v1/work-orders",
+        Some(&admin_pak),
+        Some(serde_json::to_string(&request_body).unwrap()),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::CREATED);
+
+    let json: Value = serde_json::from_slice(&body).unwrap();
+    let work_order_id: Uuid = json["id"].as_str().unwrap().parse().unwrap();
+
+    // Verify all targeting was added
+    let targets = fixture
+        .dal
+        .work_orders()
+        .list_targets(work_order_id)
+        .expect("Failed to list targets");
+    assert_eq!(targets.len(), 1);
+
+    let labels = fixture
+        .dal
+        .work_orders()
+        .list_labels(work_order_id)
+        .expect("Failed to list labels");
+    assert_eq!(labels.len(), 1);
+
+    let annotations = fixture
+        .dal
+        .work_orders()
+        .list_annotations(work_order_id)
+        .expect("Failed to list annotations");
+    assert_eq!(annotations.len(), 1);
+}
+
+#[tokio::test]
+async fn test_create_work_order_no_targeting_fails() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+    let admin_pak = fixture.admin_pak.clone();
+
+    // No targeting at all
+    let request_body = serde_json::json!({
+        "work_type": WORK_TYPE_BUILD,
+        "yaml_content": "apiVersion: v1\nkind: ConfigMap"
+    });
+
+    let (status, body) = make_request(
+        app,
+        "POST",
+        "/api/v1/work-orders",
+        Some(&admin_pak),
+        Some(serde_json::to_string(&request_body).unwrap()),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    let json: Value = serde_json::from_slice(&body).unwrap();
+    assert!(json["error"]
+        .as_str()
+        .unwrap()
+        .contains("targeting method must be specified"));
+}
+
+#[tokio::test]
+async fn test_create_work_order_empty_targeting_fails() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+    let admin_pak = fixture.admin_pak.clone();
+
+    // Empty targeting block
+    let request_body = serde_json::json!({
+        "work_type": WORK_TYPE_BUILD,
+        "yaml_content": "apiVersion: v1\nkind: ConfigMap",
+        "targeting": {}
+    });
+
+    let (status, body) = make_request(
+        app,
+        "POST",
+        "/api/v1/work-orders",
+        Some(&admin_pak),
+        Some(serde_json::to_string(&request_body).unwrap()),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    let json: Value = serde_json::from_slice(&body).unwrap();
+    assert!(json["error"]
+        .as_str()
+        .unwrap()
+        .contains("targeting method must be specified"));
+}
+
+#[tokio::test]
+async fn test_create_work_order_legacy_target_agent_ids() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+    let admin_pak = fixture.admin_pak.clone();
+
+    let agent = fixture.create_test_agent("Test Agent".to_string(), "Test Cluster".to_string());
+
+    // Use legacy target_agent_ids field
+    let request_body = serde_json::json!({
+        "work_type": WORK_TYPE_BUILD,
+        "yaml_content": "apiVersion: v1\nkind: ConfigMap",
+        "target_agent_ids": [agent.id]
+    });
+
+    let (status, _) = make_request(
+        app,
+        "POST",
+        "/api/v1/work-orders",
+        Some(&admin_pak),
+        Some(serde_json::to_string(&request_body).unwrap()),
+    )
+    .await;
+
+    // Should still work for backwards compatibility
+    assert_eq!(status, StatusCode::CREATED);
+}
+
+#[tokio::test]
+async fn test_list_pending_with_label_targeting() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+
+    let (agent, agent_pak) =
+        fixture.create_test_agent_with_pak("Test Agent".to_string(), "Test Cluster".to_string());
+
+    // Add label to agent
+    fixture.create_test_agent_label(agent.id, "gpu".to_string());
+
+    // Create work order targeting "gpu" label
+    let wo = fixture.create_test_work_order(WORK_TYPE_BUILD, "yaml");
+    fixture.create_test_work_order_label(wo.id, "gpu");
+
+    let (status, body) = make_request(
+        app,
+        "GET",
+        &format!("/api/v1/agents/{}/work-orders/pending", agent.id),
+        Some(&agent_pak),
+        None,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+
+    let json: Vec<WorkOrder> = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json.len(), 1);
+    assert_eq!(json[0].id, wo.id);
+}
+
+#[tokio::test]
+async fn test_list_pending_with_annotation_targeting() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+
+    let (agent, agent_pak) =
+        fixture.create_test_agent_with_pak("Test Agent".to_string(), "Test Cluster".to_string());
+
+    // Add annotation to agent
+    fixture.create_test_agent_annotation(agent.id, "region".to_string(), "us-east".to_string());
+
+    // Create work order targeting "region=us-east" annotation
+    let wo = fixture.create_test_work_order(WORK_TYPE_BUILD, "yaml");
+    fixture.create_test_work_order_annotation(wo.id, "region", "us-east");
+
+    let (status, body) = make_request(
+        app,
+        "GET",
+        &format!("/api/v1/agents/{}/work-orders/pending", agent.id),
+        Some(&agent_pak),
+        None,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+
+    let json: Vec<WorkOrder> = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json.len(), 1);
+    assert_eq!(json[0].id, wo.id);
+}
+
+#[tokio::test]
+async fn test_claim_with_label_targeting() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+
+    let (agent, agent_pak) =
+        fixture.create_test_agent_with_pak("Test Agent".to_string(), "Test Cluster".to_string());
+
+    // Add label to agent
+    fixture.create_test_agent_label(agent.id, "gpu".to_string());
+
+    // Create work order targeting "gpu" label (no hard target)
+    let work_order = fixture.create_test_work_order(WORK_TYPE_BUILD, "yaml");
+    fixture.create_test_work_order_label(work_order.id, "gpu");
+
+    let request_body = serde_json::json!({
+        "agent_id": agent.id
+    });
+
+    let (status, body) = make_request(
+        app,
+        "POST",
+        &format!("/api/v1/work-orders/{}/claim", work_order.id),
+        Some(&agent_pak),
+        Some(serde_json::to_string(&request_body).unwrap()),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+
+    let json: WorkOrder = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json.status, "CLAIMED");
+    assert_eq!(json.claimed_by, Some(agent.id));
+}
+
+#[tokio::test]
+async fn test_claim_with_annotation_targeting() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+
+    let (agent, agent_pak) =
+        fixture.create_test_agent_with_pak("Test Agent".to_string(), "Test Cluster".to_string());
+
+    // Add annotation to agent
+    fixture.create_test_agent_annotation(agent.id, "region".to_string(), "us-east".to_string());
+
+    // Create work order targeting "region=us-east" annotation (no hard target)
+    let work_order = fixture.create_test_work_order(WORK_TYPE_BUILD, "yaml");
+    fixture.create_test_work_order_annotation(work_order.id, "region", "us-east");
+
+    let request_body = serde_json::json!({
+        "agent_id": agent.id
+    });
+
+    let (status, body) = make_request(
+        app,
+        "POST",
+        &format!("/api/v1/work-orders/{}/claim", work_order.id),
+        Some(&agent_pak),
+        Some(serde_json::to_string(&request_body).unwrap()),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+
+    let json: WorkOrder = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json.status, "CLAIMED");
+    assert_eq!(json.claimed_by, Some(agent.id));
+}
+
+#[tokio::test]
+async fn test_claim_with_no_matching_targeting() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+
+    let (agent, agent_pak) =
+        fixture.create_test_agent_with_pak("Test Agent".to_string(), "Test Cluster".to_string());
+
+    // Agent has "cpu" label
+    fixture.create_test_agent_label(agent.id, "cpu".to_string());
+
+    // Create work order targeting "gpu" label (agent doesn't have it)
+    let work_order = fixture.create_test_work_order(WORK_TYPE_BUILD, "yaml");
+    fixture.create_test_work_order_label(work_order.id, "gpu");
+
+    let request_body = serde_json::json!({
+        "agent_id": agent.id
+    });
+
+    let (status, _) = make_request(
+        app,
+        "POST",
+        &format!("/api/v1/work-orders/{}/claim", work_order.id),
+        Some(&agent_pak),
+        Some(serde_json::to_string(&request_body).unwrap()),
+    )
+    .await;
+
+    // Should fail - agent doesn't match any targeting
+    assert_eq!(status, StatusCode::NOT_FOUND);
 }
