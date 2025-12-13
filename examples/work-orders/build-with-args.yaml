@@ -1,0 +1,78 @@
+# Container Build with Custom Arguments
+#
+# This example demonstrates how to pass build arguments, customize
+# the Dockerfile path, and configure registry output.
+#
+# Prerequisites:
+#   - Registry credentials secret (see private-repo-build.yaml for setup)
+#
+# Usage:
+#   curl -X POST http://localhost:3000/api/v1/work-orders \
+#     -H "Content-Type: application/json" \
+#     -H "Authorization: Bearer <ADMIN_PAK>" \
+#     -d '{
+#       "work_type": "build",
+#       "yaml_content": "<contents of this file>",
+#       "max_retries": 3,
+#       "backoff_seconds": 120,
+#       "targeting": {"labels": ["capability=builder"]}
+#     }'
+
+apiVersion: shipwright.io/v1beta1
+kind: Build
+metadata:
+  name: myapp-build
+  labels:
+    app: myapp
+    version: v1.2.3
+spec:
+  # Source code location
+  source:
+    type: Git
+    git:
+      url: https://github.com/your-org/your-app
+      revision: v1.2.3  # Can be branch, tag, or commit SHA
+    contextDir: "."
+
+  # Build strategy
+  strategy:
+    name: buildah
+    kind: ClusterBuildStrategy
+
+  # Build parameters (passed to the strategy)
+  paramValues:
+    # Path to Dockerfile (relative to contextDir)
+    - name: dockerfile
+      value: "./Dockerfile.production"
+
+    # Build arguments (comma-separated ARG=value pairs)
+    - name: build-args
+      value: "APP_VERSION=1.2.3,BUILD_DATE=2024-01-15,GO_VERSION=1.21"
+
+    # Image format (oci or docker)
+    - name: format
+      value: "oci"
+
+    # TLS verification for registry
+    - name: tls-verify
+      value: "true"
+
+  # Output image destination
+  output:
+    image: ghcr.io/your-org/your-app:v1.2.3
+    # Secret containing registry credentials
+    # Create with: kubectl create secret docker-registry registry-creds ...
+    pushSecret: registry-creds
+    # OCI annotations added to the image
+    annotations:
+      org.opencontainers.image.source: "https://github.com/your-org/your-app"
+      org.opencontainers.image.version: "1.2.3"
+      org.opencontainers.image.revision: "abc123"
+
+  # Build timeout
+  timeout: 30m
+
+  # Retention policy
+  retention:
+    ttlAfterSucceeded: 6h
+    ttlAfterFailed: 48h

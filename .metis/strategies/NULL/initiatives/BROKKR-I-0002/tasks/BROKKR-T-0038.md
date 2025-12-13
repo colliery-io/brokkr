@@ -4,14 +4,14 @@ level: task
 title: "Add OpenAPI documentation for template endpoints"
 short_code: "BROKKR-T-0038"
 created_at: 2025-12-07T17:58:03.819158+00:00
-updated_at: 2025-12-07T17:58:03.819158+00:00
+updated_at: 2025-12-13T03:24:45.167615+00:00
 parent: BROKKR-I-0002
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/todo"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -28,6 +28,10 @@ initiative_id: BROKKR-I-0002
 ## Objective
 
 Add comprehensive OpenAPI documentation for all template-related endpoints using utoipa annotations, ensuring they appear correctly in the Swagger UI.
+
+## Acceptance Criteria
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

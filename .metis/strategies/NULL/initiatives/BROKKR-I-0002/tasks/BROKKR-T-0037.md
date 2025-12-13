@@ -4,14 +4,14 @@ level: task
 title: "Write integration tests for template system"
 short_code: "BROKKR-T-0037"
 created_at: 2025-12-07T17:58:03.755634+00:00
-updated_at: 2025-12-07T17:58:03.755634+00:00
+updated_at: 2025-12-13T03:24:45.115883+00:00
 parent: BROKKR-I-0002
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/todo"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -28,6 +28,10 @@ initiative_id: BROKKR-I-0002
 ## Objective
 
 Write comprehensive integration tests covering the full template lifecycle: creation, label management, and instantiation into deployment objects.
+
+## Acceptance Criteria
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

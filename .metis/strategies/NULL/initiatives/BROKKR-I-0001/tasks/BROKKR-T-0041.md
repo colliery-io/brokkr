@@ -4,14 +4,14 @@ level: task
 title: "Create example Build and WorkOrder YAML specifications"
 short_code: "BROKKR-T-0041"
 created_at: 2025-12-12T21:17:37.638992+00:00
-updated_at: 2025-12-12T21:17:37.638992+00:00
+updated_at: 2025-12-13T04:11:56.711892+00:00
 parent: BROKKR-I-0001
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/todo"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -64,6 +64,10 @@ initiative_id: BROKKR-I-0001
 - **Current Problems**: {What's difficult/slow/buggy now}
 - **Benefits of Fixing**: {What improves after refactoring}
 - **Risk Assessment**: {Risks of not addressing this}
+
+## Acceptance Criteria
+
+## Acceptance Criteria
 
 ## Acceptance Criteria **[REQUIRED]**
 

@@ -4,14 +4,14 @@ level: task
 title: "Implement template-to-stack label matching validation"
 short_code: "BROKKR-T-0034"
 created_at: 2025-12-07T17:57:55.691184+00:00
-updated_at: 2025-12-07T23:15:21.693088+00:00
+updated_at: 2025-12-13T03:02:01.280037+00:00
 parent: BROKKR-I-0002
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/active"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -28,6 +28,8 @@ initiative_id: BROKKR-I-0002
 ## Objective
 
 Implement validation logic to check if a template's labels/annotations are compatible with a target stack before instantiation. This prevents deploying templates to incompatible stacks.
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 
