@@ -58,14 +58,16 @@
 //! - JSON output format
 //! - Contextual information
 
-use crate::{broker, k8s};
+use crate::{broker, health, k8s, work_orders};
 use brokkr_utils::config::Settings;
 use brokkr_utils::logging::prelude::*;
 use reqwest::Client;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::SystemTime;
 use tokio::select;
 use tokio::signal::ctrl_c;
+use tokio::sync::RwLock;
 use tokio::time::{interval, Duration};
 
 pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
@@ -96,6 +98,31 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
         .await
         .expect("Failed to create Kubernetes client");
 
+    // Initialize health state for health endpoints
+    let broker_status = Arc::new(RwLock::new(health::BrokerStatus {
+        connected: true,
+        last_heartbeat: None,
+    }));
+    let health_state = health::HealthState {
+        k8s_client: k8s_client.clone(),
+        broker_status: broker_status.clone(),
+        start_time: SystemTime::now(),
+    };
+
+    // Start health check HTTP server
+    let health_port = config.agent.health_port.unwrap_or(8080);
+    info!("Starting health check server on port {}", health_port);
+    let health_router = health::configure_health_routes(health_state);
+    let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", health_port))
+        .await
+        .expect("Failed to bind health check server");
+
+    let _health_server = tokio::spawn(async move {
+        axum::serve(listener, health_router)
+            .await
+            .expect("Health check server failed");
+    });
+
     info!("Starting main control loop");
     let running = Arc::new(AtomicBool::new(true));
     let r = running.clone();
@@ -116,6 +143,7 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
     let mut heartbeat_interval = interval(Duration::from_secs(config.agent.polling_interval));
     let mut deployment_check_interval =
         interval(Duration::from_secs(config.agent.polling_interval));
+    let mut work_order_interval = interval(Duration::from_secs(config.agent.polling_interval));
 
     // Main control loop
     while running.load(Ordering::SeqCst) {
@@ -124,6 +152,12 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
                 match broker::send_heartbeat(&config, &client, &agent).await {
                     Ok(_) => {
                         debug!("Successfully sent heartbeat for agent '{}' (id: {})", agent.name, agent.id);
+                        // Update broker status for health endpoints
+                        {
+                            let mut status = broker_status.write().await;
+                            status.connected = true;
+                            status.last_heartbeat = Some(chrono::Utc::now().to_rfc3339());
+                        }
                         // Fetch updated agent details after heartbeat
                         match broker::fetch_agent_details(&config, &client).await {
                             Ok(updated_agent) => {
@@ -133,7 +167,12 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
                             Err(e) => error!("Failed to fetch updated agent details: {}", e),
                         }
                     },
-                    Err(e) => error!("Failed to send heartbeat for agent '{}' (id: {}): {}", agent.name, agent.id, e),
+                    Err(e) => {
+                        error!("Failed to send heartbeat for agent '{}' (id: {}): {}", agent.name, agent.id, e);
+                        // Update broker status for health endpoints
+                        let mut status = broker_status.write().await;
+                        status.connected = false;
+                    }
                 }
             }
             _ = deployment_check_interval.tick() => {
@@ -187,6 +226,28 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
                     }
                     Err(e) => error!("Failed to fetch deployment objects for agent '{}' (id: {}): {}",
                         agent.name, agent.id, e),
+                }
+            }
+            _ = work_order_interval.tick() => {
+                // Skip work order processing if agent is inactive
+                if agent.status != "ACTIVE" {
+                    debug!("Agent '{}' (id: {}) is not active (status: {}), skipping work order processing",
+                        agent.name, agent.id, agent.status);
+                    continue;
+                }
+
+                // Process pending work orders
+                match work_orders::process_pending_work_orders(&config, &client, &k8s_client, &agent).await {
+                    Ok(count) => {
+                        if count > 0 {
+                            info!("Processed {} work orders for agent '{}' (id: {})",
+                                count, agent.name, agent.id);
+                        }
+                    }
+                    Err(e) => {
+                        error!("Failed to process work orders for agent '{}' (id: {}): {}",
+                            agent.name, agent.id, e);
+                    }
                 }
             }
             _ = shutdown_rx.recv() => {

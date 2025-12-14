@@ -1,0 +1,374 @@
+---
+name: Build & Deployment Tests
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'broker/**'
+      - 'agent/**'
+      - 'models/**'
+      - 'utils/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'docker/Dockerfile.broker'
+      - 'docker/Dockerfile.agent'
+      - 'charts/**'
+      - '.github/workflows/build-and-test.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'broker/**'
+      - 'agent/**'
+      - 'models/**'
+      - 'utils/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'docker/Dockerfile.broker'
+      - 'docker/Dockerfile.agent'
+      - 'charts/**'
+      - '.github/workflows/build-and-test.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  REGISTRY_USER: ${{ github.actor }}
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-images:
+    name: Build Multi-Arch Images
+    strategy:
+      fail-fast: false
+      matrix:
+        component: [broker, agent]
+        platform: [linux/amd64, linux/arm64]
+    runs-on: ${{ matrix.platform == 'linux/arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        if: matrix.platform != 'linux/arm64'
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ env.REGISTRY_USER }}
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      - name: Determine image tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "tag=pr-${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/brokkr-${{ matrix.component }}
+          tags: |
+            type=raw,value=${{ steps.tag.outputs.tag }}
+            type=sha,prefix=${{ steps.tag.outputs.tag }}-
+
+      - name: Get platform identifier
+        id: platform
+        run: |
+          PLATFORM_PAIR=${{ matrix.platform }}
+          PLATFORM_ARCH=${PLATFORM_PAIR#*/}
+          echo "arch=${PLATFORM_ARCH}" >> $GITHUB_OUTPUT
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/Dockerfile.${{ matrix.component }}
+          platforms: ${{ matrix.platform }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=build-${{ matrix.component }}-${{ steps.platform.outputs.arch }}
+          cache-to: type=gha,mode=max,scope=build-${{ matrix.component }}-${{ steps.platform.outputs.arch }}
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ github.repository_owner }}/brokkr-${{ matrix.component }},push-by-digest=true,name-canonical=true,push=true
+
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests/${{ matrix.component }}
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${{ matrix.component }}/${digest#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.component }}-${{ steps.platform.outputs.arch }}
+          path: /tmp/digests/${{ matrix.component }}/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge-manifests:
+    name: Create Multi-Arch Manifests
+    runs-on: ubuntu-latest
+    needs: build-images
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        component: [broker, agent]
+    steps:
+      - name: Download amd64 digests
+        uses: actions/download-artifact@v4
+        with:
+          name: digests-${{ matrix.component }}-amd64
+          path: /tmp/digests/${{ matrix.component }}
+
+      - name: Download arm64 digests
+        uses: actions/download-artifact@v4
+        with:
+          name: digests-${{ matrix.component }}-arm64
+          path: /tmp/digests/${{ matrix.component }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ env.REGISTRY_USER }}
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      - name: Determine image tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "tag=pr-${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/brokkr-${{ matrix.component }}
+          tags: |
+            type=raw,value=${{ steps.tag.outputs.tag }}
+
+      - name: Create manifest list and push
+        working-directory: /tmp/digests/${{ matrix.component }}
+        run: |
+          docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf '${{ env.REGISTRY }}/${{ github.repository_owner }}/brokkr-${{ matrix.component }}@sha256:%s ' *)
+
+      - name: Inspect image
+        run: |
+          docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ github.repository_owner }}/brokkr-${{ matrix.component }}:${{ steps.tag.outputs.tag }}
+
+  helm-tests:
+    name: Helm Deployment Tests
+    runs-on: ubuntu-latest
+    needs: merge-manifests
+    strategy:
+      matrix:
+        component: [broker, agent]
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install angreal
+        run: |
+          python -m pip install --upgrade pip
+          pip install angreal
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@1.90
+
+      - name: Cache build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-rust-build-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-rust-build-
+
+      - name: Docker Compose Cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.docker
+          key: ${{ runner.os }}-docker-${{ hashFiles('.angreal/files/docker-compose.yaml') }}
+
+      - name: Create required directories
+        run: |
+          mkdir -p /tmp/brokkr-keys
+          chmod 777 /tmp/brokkr-keys
+
+      - name: Determine image tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "tag=pr-${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: 'v3.12.0'
+
+      - name: Add Helm repositories
+        run: |
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo add openfunction https://openfunction.github.io/charts/
+
+      - name: Build Helm dependencies
+        run: |
+          # Build dependencies for the component being tested
+          helm dependency build charts/brokkr-${{ matrix.component }}
+          echo "Verifying ${{ matrix.component }} dependencies:"
+          ls -la charts/brokkr-${{ matrix.component }}/charts/ || echo "No charts subdirectory found!"
+
+          # Agent tests need broker chart too (to deploy broker for testing)
+          if [ "${{ matrix.component }}" = "agent" ]; then
+            echo "Building broker dependencies for agent testing..."
+            helm dependency build charts/brokkr-broker
+            echo "Verifying broker dependencies:"
+            ls -la charts/brokkr-broker/charts/ || echo "No broker charts subdirectory found!"
+          fi
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ env.REGISTRY_USER }}
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      - name: docker compose up (k3s only)
+        uses: hoverkraft-tech/compose-action@v2.0.1
+        with:
+          compose-file: ".angreal/files/docker-compose.yaml"
+          services: |
+            k3s
+            init-kubeconfig
+            copy-kubeconfig
+
+      - name: Execute helm chart tests
+        env:
+          GITHUB_TOKEN: ${{ secrets.GHCR_TOKEN }}
+        run: angreal helm test ${{ matrix.component }} --skip-docker --tag ${{ steps.tag.outputs.tag }} --registry ${{ env.REGISTRY }}/${{ github.repository_owner }}
+
+  publish-dev-charts:
+    name: Publish Development Helm Charts
+    needs: helm-tests
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        component: [broker, agent]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: 'v3.12.0'
+
+      - name: Add Helm repositories
+        run: |
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo add openfunction https://openfunction.github.io/charts/
+
+      - name: Build Helm dependencies
+        run: helm dependency build charts/brokkr-${{ matrix.component }}
+
+      - name: Log in to GHCR
+        run: echo ${{ secrets.GHCR_TOKEN }} | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Determine chart version
+        id: version
+        run: |
+          # Helm requires semver format, so use 0.0.0-{branch}.{timestamp}
+          TIMESTAMP=$(date +%Y%m%d%H%M%S)
+          BRANCH_VERSION="0.0.0-${{ github.ref_name }}.${TIMESTAMP}"
+          # Image tag matches branch name for non-PR builds
+          IMAGE_TAG="${{ github.ref_name }}"
+          echo "chart_version=${BRANCH_VERSION}" >> $GITHUB_OUTPUT
+          echo "app_version=${IMAGE_TAG}" >> $GITHUB_OUTPUT
+
+      - name: Package and push chart
+        run: |
+          helm package charts/brokkr-${{ matrix.component }} \
+            --version ${{ steps.version.outputs.chart_version }} \
+            --app-version ${{ steps.version.outputs.app_version }}
+
+          helm push brokkr-${{ matrix.component }}-${{ steps.version.outputs.chart_version }}.tgz \
+            oci://ghcr.io/${{ github.repository_owner }}/charts
+
+  publish-pr-charts:
+    name: Publish PR Helm Charts
+    needs: helm-tests
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        component: [broker, agent]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: 'v3.12.0'
+
+      - name: Add Helm repositories
+        run: |
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo add openfunction https://openfunction.github.io/charts/
+
+      - name: Build Helm dependencies
+        run: helm dependency build charts/brokkr-${{ matrix.component }}
+
+      - name: Log in to GHCR
+        run: echo ${{ secrets.GHCR_TOKEN }} | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Package and push PR chart
+        run: |
+          # Helm requires semver format, so use 0.0.0-pr{number}.{timestamp}
+          TIMESTAMP=$(date +%Y%m%d%H%M%S)
+          PR_VERSION="0.0.0-pr${{ github.event.pull_request.number }}.${TIMESTAMP}"
+          APP_VERSION="pr-${{ github.event.pull_request.number }}"
+
+          helm package charts/brokkr-${{ matrix.component }} \
+            --version ${PR_VERSION} \
+            --app-version ${APP_VERSION}
+
+          helm push brokkr-${{ matrix.component }}-${PR_VERSION}.tgz \
+            oci://ghcr.io/${{ github.repository_owner }}/charts

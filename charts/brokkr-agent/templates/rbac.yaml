@@ -1,0 +1,157 @@
+{{- if .Values.rbac.create -}}
+apiVersion: rbac.authorization.k8s.io/v1
+{{- if .Values.rbac.clusterWide }}
+kind: ClusterRole
+{{- else }}
+kind: Role
+{{- end }}
+metadata:
+  name: {{ include "brokkr-agent.fullname" . }}
+  {{- if not .Values.rbac.clusterWide }}
+  namespace: {{ .Release.Namespace }}
+  {{- end }}
+  labels:
+    {{- include "brokkr-agent.labels" . | nindent 4 }}
+rules:
+# Core API - cluster inventory and monitoring
+- apiGroups: [""]
+  resources:
+  - pods
+  - pods/log
+  - pods/status
+  {{- if .Values.rbac.clusterWide }}
+  - namespaces
+  - nodes
+  {{- end }}
+  - services
+  - endpoints
+  - configmaps
+  - secrets
+  {{- if .Values.rbac.clusterWide }}
+  - persistentvolumes
+  {{- end }}
+  - persistentvolumeclaims
+  verbs:
+  - get
+  - list
+  - watch
+
+# Apps API - workload inventory
+- apiGroups: ["apps"]
+  resources:
+  - deployments
+  - deployments/status
+  - statefulsets
+  - statefulsets/status
+  - daemonsets
+  - daemonsets/status
+  - replicasets
+  - replicasets/status
+  verbs:
+  - get
+  - list
+  - watch
+
+# Batch API - job inventory
+- apiGroups: ["batch"]
+  resources:
+  - jobs
+  - jobs/status
+  - cronjobs
+  - cronjobs/status
+  verbs:
+  - get
+  - list
+  - watch
+
+# Networking API - network policy inventory
+- apiGroups: ["networking.k8s.io"]
+  resources:
+  - ingresses
+  - ingresses/status
+  - networkpolicies
+  verbs:
+  - get
+  - list
+  - watch
+
+# RBAC API - security posture assessment
+- apiGroups: ["rbac.authorization.k8s.io"]
+  resources:
+  - roles
+  - rolebindings
+  {{- if .Values.rbac.clusterWide }}
+  - clusterroles
+  - clusterrolebindings
+  {{- end }}
+  verbs:
+  - get
+  - list
+  - watch
+
+# Events - change tracking and debugging
+- apiGroups: [""]
+  resources:
+  - events
+  verbs:
+  - get
+  - list
+  - watch
+
+{{- if .Values.shipwright.enabled }}
+# Shipwright Build API - container image builds
+# Agent needs to create BuildRuns and watch their status
+- apiGroups: ["shipwright.io"]
+  resources:
+  - builds
+  - buildruns
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+
+# Shipwright Build strategies (read-only)
+- apiGroups: ["shipwright.io"]
+  resources:
+  - buildstrategies
+  - clusterbuildstrategies
+  verbs:
+  - get
+  - list
+  - watch
+{{- end }}
+
+{{- with .Values.rbac.additionalRules }}
+{{ toYaml . }}
+{{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+{{- if .Values.rbac.clusterWide }}
+kind: ClusterRoleBinding
+{{- else }}
+kind: RoleBinding
+{{- end }}
+metadata:
+  name: {{ include "brokkr-agent.fullname" . }}
+  {{- if not .Values.rbac.clusterWide }}
+  namespace: {{ .Release.Namespace }}
+  {{- end }}
+  labels:
+    {{- include "brokkr-agent.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  {{- if .Values.rbac.clusterWide }}
+  kind: ClusterRole
+  {{- else }}
+  kind: Role
+  {{- end }}
+  name: {{ include "brokkr-agent.fullname" . }}
+subjects:
+- kind: ServiceAccount
+  name: {{ include "brokkr-agent.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
+{{- end }}

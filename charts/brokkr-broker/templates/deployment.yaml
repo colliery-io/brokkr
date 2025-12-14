@@ -1,0 +1,89 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "brokkr-broker.fullname" . }}
+  labels:
+    {{- include "brokkr-broker.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "brokkr-broker.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- if .Values.apparmor.enabled }}
+      annotations:
+        # AppArmor profile for additional security (requires AppArmor-enabled cluster)
+        container.apparmor.security.beta.kubernetes.io/broker: {{ .Values.apparmor.profile }}
+      {{- end }}
+      labels:
+        {{- include "brokkr-broker.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+      - name: broker
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        securityContext:
+          {{- toYaml .Values.containerSecurityContext | nindent 10 }}
+        args: ["serve"]
+        ports:
+        - name: http
+          containerPort: 3000
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        envFrom:
+        - configMapRef:
+            name: {{ include "brokkr-broker.fullname" . }}
+        env:
+        {{- if .Values.postgresql.existingSecret }}
+        - name: BROKKR__DATABASE__URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.postgresql.existingSecret }}
+              key: {{ .Values.postgresql.existingSecretKey | default "database-url" }}
+        {{- end }}
+        {{- with .Values.extraEnv }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        volumeMounts:
+        # Writable /tmp directory (required for read-only root filesystem)
+        - name: tmp
+          mountPath: /tmp
+        {{- if .Values.tls.enabled }}
+        - name: tls-certs
+          mountPath: /etc/tls
+          readOnly: true
+        {{- end }}
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+      volumes:
+      # EmptyDir for temporary files
+      - name: tmp
+        emptyDir: {}
+      {{- if .Values.tls.enabled }}
+      - name: tls-certs
+        secret:
+          secretName: {{ include "brokkr-broker.tlsSecretName" . }}
+          defaultMode: 0400
+      {{- end }}

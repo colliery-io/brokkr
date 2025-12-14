@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "brokkr-agent.fullname" . }}
+  labels:
+    {{- include "brokkr-agent.labels" . | nindent 4 }}
+data:
+  BROKKR__AGENT__BROKER_URL: {{ .Values.broker.url | quote }}
+  BROKKR__AGENT__AGENT_NAME: {{ .Values.broker.agentName | quote }}
+  BROKKR__AGENT__CLUSTER_NAME: {{ .Values.broker.clusterName | quote }}
+  BROKKR__AGENT__POLLING_INTERVAL: {{ .Values.agent.pollingInterval | quote }}
+  BROKKR__AGENT__PAK: {{ .Values.broker.pak | quote }}

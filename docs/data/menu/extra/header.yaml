@@ -1,0 +1,6 @@
+---
+- name: GitHub
+  ref: https://github.com/colliery-io/brokkr
+  icon: gdoc_github
+  weight: 10
+  external: true

@@ -1,0 +1,47 @@
+# Simple Container Build Example
+#
+# This example builds a container image from a public Git repository
+# and pushes it to a container registry.
+#
+# Usage:
+#   curl -X POST http://localhost:3000/api/v1/work-orders \
+#     -H "Content-Type: application/json" \
+#     -H "Authorization: Bearer <ADMIN_PAK>" \
+#     -d '{
+#       "work_type": "build",
+#       "yaml_content": "<contents of this file>",
+#       "targeting": {"labels": ["env=dev"]}
+#     }'
+
+apiVersion: shipwright.io/v1beta1
+kind: Build
+metadata:
+  name: sample-go-build
+  labels:
+    app: sample-go
+spec:
+  # Source code location
+  source:
+    type: Git
+    git:
+      url: https://github.com/shipwright-io/sample-go
+      revision: main
+    contextDir: docker-build
+
+  # Build strategy (buildah is included with brokkr-agent)
+  strategy:
+    name: buildah
+    kind: ClusterBuildStrategy
+
+  # Output image destination
+  # Using ttl.sh for ephemeral images (auto-deleted after 24h)
+  output:
+    image: ttl.sh/brokkr-sample-go:latest
+
+  # Build timeout (optional, default: 30m)
+  timeout: 15m
+
+  # Retention policy for BuildRuns
+  retention:
+    ttlAfterSucceeded: 1h
+    ttlAfterFailed: 24h

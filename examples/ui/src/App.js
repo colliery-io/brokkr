@@ -17,10 +17,12 @@ import {
 import {
   Computer as AgentIcon,
   Storage as StackIcon,
-  AdminPanelSettings as AdminIcon
+  AdminPanelSettings as AdminIcon,
+  Description as TemplateIcon
 } from '@mui/icons-material';
 import Agents from './components/Agents';
 import Stacks from './components/Stacks';
+import Templates from './components/Templates';
 import Admin from './components/Admin';
 import DeploymentObjectDetail from './components/DeploymentObjectDetail';
 
@@ -60,6 +62,10 @@ function App() {
                 <ListItemIcon><StackIcon /></ListItemIcon>
                 <ListItemText primary="Stacks" />
               </ListItem>
+              <ListItem button component={Link} to="/templates">
+                <ListItemIcon><TemplateIcon /></ListItemIcon>
+                <ListItemText primary="Templates" />
+              </ListItem>
               <Divider sx={{ my: 2 }} />
               <ListItem button component={Link} to="/admin">
                 <ListItemIcon><AdminIcon /></ListItemIcon>
@@ -74,6 +80,7 @@ function App() {
             <Routes>
               <Route path="/agents" element={<Agents />} />
               <Route path="/stacks" element={<Stacks />} />
+              <Route path="/templates" element={<Templates />} />
               <Route path="/admin" element={<Admin />} />
               <Route path="/deployment-objects/:id" element={<DeploymentObjectDetail />} />
               <Route path="/" element={<Agents />} />

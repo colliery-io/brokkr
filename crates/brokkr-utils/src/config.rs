@@ -7,6 +7,9 @@
 //! # Brokkr Config Module
 //! This module provides a common configuration framework for our crates.
 //!
+//! For detailed configuration documentation, including environment variables,
+//! configuration file format, and best practices, see the [Configuration Guide](https://brokkr.io/getting-started/configuration).
+//!
 //! # Variable Naming Convention
 //!
 //! Variables in this configuration framework follow these naming conventions:
@@ -33,6 +36,10 @@
 //!
 //! - `BROKKR__DATABASE__URL`: Sets the database connection URL
 //!   Default: "postgres://brokkr:brokkr@localhost:5432/brokkr"
+//!
+//! - `BROKKR__DATABASE__SCHEMA`: Sets the PostgreSQL schema for multi-tenant isolation
+//!   Default: None (uses public schema)
+//!   Example: "tenant_acme"
 //!
 //! - `BROKKR__LOG__LEVEL`: Sets the log level for the application
 //!   Default: "debug"
@@ -106,6 +113,8 @@ pub struct Agent {
     pub max_event_message_retries: usize,
     /// Delay between event message retries in seconds
     pub event_message_retry_delay: u64,
+    /// Health check HTTP server port
+    pub health_port: Option<u16>,
 }
 
 /// Represents the database configuration
@@ -114,6 +123,8 @@ pub struct Agent {
 pub struct Database {
     /// Database connection URL
     pub url: String,
+    /// Optional schema name for multi-tenant isolation
+    pub schema: Option<String>,
 }
 
 /// Represents the logging configuration

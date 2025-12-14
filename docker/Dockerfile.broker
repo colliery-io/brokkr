@@ -1,5 +1,5 @@
 # Stage 1: Plan the build
-FROM rust:1.83-slim-bookworm AS planner
+FROM rust:1.90-slim-bookworm AS planner
 WORKDIR /app
 
 # Install cargo-chef
@@ -12,7 +12,7 @@ COPY . .
 RUN cargo chef prepare --recipe-path recipe.json
 
 # Stage 2: Cache dependencies
-FROM rust:1.83-slim-bookworm AS cacher
+FROM rust:1.90-slim-bookworm AS cacher
 WORKDIR /app
 
 # Install build dependencies
@@ -34,7 +34,7 @@ COPY --from=planner /app/recipe.json recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json
 
 # Stage 3: Build the application
-FROM rust:1.83-slim-bookworm AS builder
+FROM rust:1.90-slim-bookworm AS builder
 WORKDIR /app
 
 # Install build dependencies

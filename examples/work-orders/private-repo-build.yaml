@@ -1,0 +1,88 @@
+# Container Build from Private Repository
+#
+# This example demonstrates building from a private Git repository
+# with authentication, and pushing to a private container registry.
+#
+# Prerequisites:
+#
+#   1. Create Git credentials secret:
+#      kubectl create secret generic git-creds \
+#        --from-literal=username=<github-username> \
+#        --from-literal=password=<github-token>
+#
+#   2. Create registry credentials secret:
+#      kubectl create secret docker-registry registry-creds \
+#        --docker-server=ghcr.io \
+#        --docker-username=<username> \
+#        --docker-password=<token> \
+#        --docker-email=<email>
+#
+# Usage:
+#   curl -X POST http://localhost:3000/api/v1/work-orders \
+#     -H "Content-Type: application/json" \
+#     -H "Authorization: Bearer <ADMIN_PAK>" \
+#     -d '{
+#       "work_type": "build",
+#       "yaml_content": "<contents of this file>",
+#       "targeting": {
+#         "annotations": {"environment": "production"}
+#       }
+#     }'
+
+apiVersion: shipwright.io/v1beta1
+kind: Build
+metadata:
+  name: private-app-build
+  labels:
+    app: private-app
+    team: platform
+spec:
+  # Private Git repository with authentication
+  source:
+    type: Git
+    git:
+      url: https://github.com/your-org/private-repo
+      revision: main
+      # Reference to secret containing Git credentials
+      cloneSecret: git-creds
+    contextDir: "."
+
+  # Build strategy
+  strategy:
+    name: buildah
+    kind: ClusterBuildStrategy
+
+  # Build parameters
+  paramValues:
+    - name: dockerfile
+      value: "./Dockerfile"
+
+  # Output to private registry with authentication
+  output:
+    image: ghcr.io/your-org/private-app:latest
+    # Reference to secret containing registry credentials
+    pushSecret: registry-creds
+
+  timeout: 20m
+
+  retention:
+    ttlAfterSucceeded: 2h
+    ttlAfterFailed: 24h
+
+---
+# Alternative: SSH-based Git authentication
+#
+# If you prefer SSH authentication for Git:
+#
+#   1. Create SSH key secret:
+#      kubectl create secret generic git-ssh-creds \
+#        --from-file=ssh-privatekey=/path/to/id_rsa \
+#        --from-file=known_hosts=/path/to/known_hosts
+#
+#   2. Use the SSH URL format:
+#      source:
+#        type: Git
+#        git:
+#          url: git@github.com:your-org/private-repo.git
+#          revision: main
+#          cloneSecret: git-ssh-creds

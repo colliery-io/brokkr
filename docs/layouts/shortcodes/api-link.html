@@ -1,0 +1,26 @@
+{{- $path := .Get "path" -}}
+{{- if not $path -}}
+    {{- errorf "api-link shortcode requires a 'path' parameter" -}}
+{{- end -}}
+
+{{- /* Convert Rust path to URL format */ -}}
+{{- $url := $path | replaceRE "::" "/" -}}
+{{- $url := printf "/api/%s/index.html" $url -}}
+{{- $display := .Get "display" | default $path -}}
+
+<a href="{{ $url }}" class="api-link">{{ $display }}</a>
+
+<style>
+.api-link {
+    color: #0366d6;
+    text-decoration: none;
+    font-family: monospace;
+    padding: 0.1em 0.3em;
+    border-radius: 3px;
+    background-color: #f6f8fa;
+}
+
+.api-link:hover {
+    text-decoration: underline;
+}
+</style>

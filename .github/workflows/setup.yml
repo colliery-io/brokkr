@@ -6,9 +6,9 @@ jobs:
   setup:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - uses: actions/cache@v3
+      - uses: actions/cache@v4
         id: python-cache
         with:
           path: ~/.cache/pip
@@ -23,7 +23,7 @@ jobs:
           pip install angreal
 
       - name: Rust Cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
@@ -34,15 +34,9 @@ jobs:
             ${{ runner.os }}-cargo-
 
       - name: Set up Rust
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@1.90
         with:
-          profile: minimal
-          toolchain: stable
-          override: true
           components: rustfmt, clippy
 
       - name: Build workspace
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --workspace --all-targets
+        run: cargo build --workspace --all-targets

@@ -1,0 +1,2301 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "brokkr-broker",
+    "description": "",
+    "license": {
+      "name": ""
+    },
+    "version": "0.0.0"
+  },
+  "paths": {
+    "/agents": {
+      "get": {
+        "tags": [
+          "agents"
+        ],
+        "summary": "Lists all agents.",
+        "description": "# Authorization\nRequires admin privileges.",
+        "operationId": "list_agents",
+        "responses": {
+          "200": {
+            "description": "Successfully retrieved agents",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Agent"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - PAK does not have required rights",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "admin_pak": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "agents"
+        ],
+        "summary": "Creates a new agent.",
+        "description": "# Authorization\nRequires admin privileges.",
+        "operationId": "create_agent",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewAgent"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successfully created agent",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - PAK does not have required rights",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "admin_pak": []
+          }
+        ]
+      }
+    },
+    "/agents/": {
+      "get": {
+        "tags": [
+          "agents"
+        ],
+        "summary": "Searches for an agent by name and cluster name.",
+        "description": "# Authorization\nRequires admin privileges.",
+        "operationId": "search_agent",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "query",
+            "description": "Name of the agent to search for",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cluster_name",
+            "in": "query",
+            "description": "Name of the cluster to search in",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successfully found agent",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Agent"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request - missing name or cluster_name",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - PAK does not have required rights",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "404": {
+            "description": "Agent not found",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "admin_pak": []
+          }
+        ]
+      }
+    },
+    "/agents/{id}": {
+      "get": {
+        "tags": [
+          "agents"
+        ],
+        "summary": "Retrieves a specific agent by ID.",
+        "description": "# Authorization\nRequires admin privileges or matching agent ID.",
+        "operationId": "get_agent",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "ID of the agent to retrieve",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successfully retrieved agent",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Agent"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - PAK does not have required rights",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "404": {
+            "description": "Agent not found",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "admin_pak": []
+          },
+          {
+            "agent_pak": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "agents"
+        ],
+        "summary": "Updates an existing agent.",
+        "description": "# Authorization\nRequires admin privileges or matching agent ID.",
+        "operationId": "update_agent",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "ID of the agent to update",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successfully updated agent",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Agent"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - PAK does not have required rights",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "404": {
+            "description": "Agent not found",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "admin_pak": []
+          },
+          {
+            "agent_pak": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "agents"
+        ],
+        "summary": "Soft deletes an agent.",
+        "description": "# Authorization\nRequires admin privileges.",
+        "operationId": "delete_agent",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "ID of the agent to delete",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successfully deleted agent"
+          },
+          "403": {
+            "description": "Forbidden - PAK does not have required rights",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "admin_pak": []
+          }
+        ]
+      }
+    },
+    "/agents/{id}/annotations": {
+      "get": {
+        "tags": [
+          "agent-annotations"
+        ],
+        "summary": "Lists annotations for a specific agent.",
+        "description": "# Authorization\nRequires admin privileges or matching agent ID.",
+        "operationId": "list_annotations",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "ID of the agent to list annotations for",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successfully retrieved agent annotations",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AgentAnnotation"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - PAK does not have required rights",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "admin_pak": []
+          },
+          {
+            "agent_pak": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "agent-annotations"
+        ],
+        "summary": "Adds a new annotation to a specific agent.",
+        "description": "# Authorization\nRequires admin privileges.",
+        "operationId": "add_annotation",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "ID of the agent to add the annotation to",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewAgentAnnotation"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successfully added agent annotation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentAnnotation"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - PAK does not have required rights",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "admin_pak": []
+          }
+        ]
+      }
+    },
+    "/agents/{id}/annotations/{key}": {
+      "delete": {
+        "tags": [
+          "agent-annotations"
+        ],
+        "summary": "Removes an annotation from a specific agent.",
+        "description": "# Authorization\nRequires admin privileges.",
+        "operationId": "remove_annotation",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "ID of the agent to remove the annotation from",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "description": "The key of the annotation to remove",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successfully removed agent annotation"
+          },
+          "403": {
+            "description": "Forbidden - PAK does not have required rights",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "404": {
+            "description": "Annotation not found",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "admin_pak": []
+          }
+        ]
+      }
+    },
+    "/agents/{id}/labels": {
+      "get": {
+        "tags": [
+          "agent-labels"
+        ],
+        "summary": "Lists labels for a specific agent.",
+        "description": "# Authorization\nRequires admin privileges or matching agent ID.",
+        "operationId": "list_labels",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "ID of the agent to list labels for",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successfully retrieved agent labels",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AgentLabel"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - PAK does not have required rights",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "admin_pak": []
+          },
+          {
+            "agent_pak": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "agent-labels"
+        ],
+        "summary": "Adds a new label to a specific agent.",
+        "description": "# Authorization\nRequires admin privileges.",
+        "operationId": "add_label",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "ID of the agent to add the label to",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewAgentLabel"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successfully added agent label",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentLabel"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - PAK does not have required rights",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "admin_pak": []
+          }
+        ]
+      }
+    },
+    "/agents/{id}/labels/{label}": {
+      "delete": {
+        "tags": [
+          "agent-labels"
+        ],
+        "summary": "Removes a label from a specific agent.",
+        "description": "# Authorization\nRequires admin privileges.",
+        "operationId": "remove_label",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "ID of the agent to remove the label from",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "label",
+            "in": "path",
+            "description": "The label to remove",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successfully removed agent label"
+          },
+          "403": {
+            "description": "Forbidden - PAK does not have required rights",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "404": {
+            "description": "Label not found",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "admin_pak": []
+          }
+        ]
+      }
+    },
+    "/agents/{id}/target-state": {
+      "get": {
+        "tags": [
+          "agents"
+        ],
+        "summary": "Retrieves the target state (deployment objects that should be applied) for a specific agent.",
+        "description": "# Query Parameters\n* `mode` - Optional. Specifies the mode of operation:\n  * `incremental` (default) - Returns only objects that haven't been deployed yet\n  * `full` - Returns all objects regardless of deployment status\n\n# Authorization\nRequires admin privileges or matching agent ID.",
+        "operationId": "get_target_state",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "ID of the agent to get target state for",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "mode",
+            "in": "query",
+            "description": "Mode of operation: 'incremental' (default) or 'full'",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successfully retrieved target state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DeploymentObject"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - PAK does not have required rights",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "admin_pak": []
+          },
+          {
+            "agent_pak": []
+          }
+        ]
+      }
+    },
+    "/agents/{id}/targets": {
+      "get": {
+        "tags": [
+          "agent-targets"
+        ],
+        "summary": "Lists targets for a specific agent.",
+        "description": "# Authorization\nRequires admin privileges or matching agent ID.",
+        "operationId": "list_targets",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "ID of the agent to list targets for",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successfully retrieved agent targets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AgentTarget"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - PAK does not have required rights",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "admin_pak": []
+          },
+          {
+            "agent_pak": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "agent-targets"
+        ],
+        "summary": "Adds a new target to a specific agent.",
+        "description": "# Authorization\nRequires admin privileges or matching agent ID.",
+        "operationId": "add_target",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "ID of the agent to add the target to",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewAgentTarget"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successfully added agent target",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentTarget"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - PAK does not have required rights",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "admin_pak": []
+          },
+          {
+            "agent_pak": []
+          }
+        ]
+      }
+    },
+    "/agents/{id}/targets/{stack_id}": {
+      "delete": {
+        "tags": [
+          "agent-targets"
+        ],
+        "summary": "Removes a target from a specific agent.",
+        "description": "# Authorization\nRequires admin privileges or matching agent ID.",
+        "operationId": "remove_target",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "ID of the agent to remove the target from",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "stack_id",
+            "in": "path",
+            "description": "ID of the stack to remove from the agent's targets",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successfully removed agent target"
+          },
+          "403": {
+            "description": "Forbidden - PAK does not have required rights",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "404": {
+            "description": "Target not found",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "admin_pak": []
+          },
+          {
+            "agent_pak": []
+          }
+        ]
+      }
+    },
+    "/api/v1/agent-events": {
+      "get": {
+        "tags": [
+          "agent-events"
+        ],
+        "summary": "Retrieves a list of all agent events.",
+        "description": "# Arguments\n* `State(dal)` - The data access layer state.\n* `Extension(_auth_payload)` - Authentication payload (unused but required).\n\n# Returns\nA JSON response containing a vector of AgentEvents or an error.",
+        "operationId": "list_agent_events",
+        "responses": {
+          "200": {
+            "description": "List all agent events",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AgentEvent"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/v1/agent-events/{id}": {
+      "get": {
+        "tags": [
+          "agent-events"
+        ],
+        "summary": "Retrieves a specific agent event by its ID.",
+        "description": "# Arguments\n* `State(dal)` - The data access layer state.\n* `Extension(_auth_payload)` - Authentication payload (unused but required).\n* `Path(id)` - The UUID of the agent event to retrieve.\n\n# Returns\nA JSON response containing the requested AgentEvent or an error.",
+        "operationId": "get_agent_event",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Agent event id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Get agent event by id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentEvent"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Agent event not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/pak": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Verifies a PAK (Personal Access Key) and returns an AuthResponse.",
+        "description": "This function handles the authentication process for both admin and agent PAKs.",
+        "operationId": "verify_pak",
+        "responses": {
+          "200": {
+            "description": "PAK verified successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid PAK"
+          }
+        },
+        "security": [
+          {
+            "pak": []
+          }
+        ]
+      }
+    },
+    "/api/v1/deployment-objects/{id}": {
+      "get": {
+        "tags": [
+          "deployment-objects"
+        ],
+        "summary": "Retrieves a deployment object by ID, with access control based on user role.",
+        "description": "# Authorization\nRequires either:\n- Admin privileges\n- Agent associated with the deployment object's stack\n- Generator that owns the deployment object's stack",
+        "operationId": "get_deployment_object",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "ID of the deployment object to retrieve",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successfully retrieved deployment object",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentObject"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - No valid PAK provided",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - PAK does not have required rights",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "404": {
+            "description": "Deployment object not found",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "admin_pak": []
+          },
+          {
+            "agent_pak": []
+          },
+          {
+            "generator_pak": []
+          }
+        ]
+      }
+    },
+    "/api/v1/generators": {
+      "get": {
+        "tags": [
+          "generators"
+        ],
+        "summary": "Lists all generators. Requires admin access.",
+        "description": "# Arguments\n\n* `dal` - The data access layer for database operations.\n* `auth_payload` - The authentication payload containing user role information.\n\n# Returns\n\nA `Result` containing either a list of `Generator`s as JSON or an error response.",
+        "operationId": "list_generators",
+        "responses": {
+          "200": {
+            "description": "List all generators",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Generator"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - Admin access required"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "admin_pak": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "generators"
+        ],
+        "summary": "Creates a new generator. Requires admin access.",
+        "description": "# Arguments\n\n* `dal` - The data access layer for database operations.\n* `auth_payload` - The authentication payload containing user role information.\n* `new_generator` - The data for the new generator to be created.\n\n# Returns\n\nA `Result` containing either the created `Generator` and its PAK as JSON or an error response.",
+        "operationId": "create_generator",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewGenerator"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Generator created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateGeneratorResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid generator data"
+          },
+          "403": {
+            "description": "Forbidden - Admin access required"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "admin_pak": []
+          }
+        ]
+      }
+    },
+    "/api/v1/generators/{id}": {
+      "get": {
+        "tags": [
+          "generators"
+        ],
+        "summary": "Retrieves a specific generator by ID.",
+        "description": "# Arguments\n\n* `dal` - The data access layer for database operations.\n* `auth_payload` - The authentication payload containing user role information.\n* `id` - The UUID of the generator to retrieve.\n\n# Returns\n\nA `Result` containing either the `Generator` as JSON or an error response.",
+        "operationId": "get_generator",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Generator id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Get generator by id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Generator"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - Unauthorized access"
+          },
+          "404": {
+            "description": "Generator not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "admin_pak": []
+          },
+          {
+            "generator_pak": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "generators"
+        ],
+        "summary": "Updates an existing generator.",
+        "description": "# Arguments\n\n* `dal` - The data access layer for database operations.\n* `auth_payload` - The authentication payload containing user role information.\n* `id` - The UUID of the generator to update.\n* `updated_generator` - The updated generator data.\n\n# Returns\n\nA `Result` containing either the updated `Generator` as JSON or an error response.",
+        "operationId": "update_generator",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Generator id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Generator"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Generator updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Generator"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - Unauthorized access"
+          },
+          "404": {
+            "description": "Generator not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "admin_pak": []
+          },
+          {
+            "generator_pak": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "generators"
+        ],
+        "summary": "Deletes a generator.",
+        "description": "# Arguments\n\n* `dal` - The data access layer for database operations.\n* `auth_payload` - The authentication payload containing user role information.\n* `id` - The UUID of the generator to delete.\n\n# Returns\n\nA `Result` containing either a success status code or an error response.",
+        "operationId": "delete_generator",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Generator id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Generator deleted successfully"
+          },
+          "403": {
+            "description": "Forbidden - Unauthorized access"
+          },
+          "404": {
+            "description": "Generator not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "admin_pak": []
+          },
+          {
+            "generator_pak": []
+          }
+        ]
+      }
+    },
+    "/api/v1/stacks": {
+      "get": {
+        "tags": [
+          "stacks"
+        ],
+        "summary": "Lists all stacks.",
+        "description": "# Authorization\nRequires admin privileges.",
+        "operationId": "list_stacks",
+        "responses": {
+          "200": {
+            "description": "List of stacks",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Stack"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden - requires admin PAK"
+          }
+        },
+        "security": [
+          {
+            "pak": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "stacks"
+        ],
+        "summary": "Creates a new stack.",
+        "description": "# Authorization\nRequires admin privileges.",
+        "operationId": "create_stack",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewStack"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Stack created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Stack"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden - requires admin PAK"
+          }
+        },
+        "security": [
+          {
+            "pak": []
+          }
+        ]
+      }
+    },
+    "/api/v1/stacks/{id}": {
+      "get": {
+        "tags": [
+          "stacks"
+        ],
+        "summary": "Gets a stack by ID.",
+        "description": "# Authorization\nRequires admin privileges.",
+        "operationId": "get_stack",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Stack ID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Stack found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Stack"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden - requires admin PAK"
+          },
+          "404": {
+            "description": "Stack not found"
+          }
+        },
+        "security": [
+          {
+            "pak": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "stacks"
+        ],
+        "summary": "Updates a stack.",
+        "description": "# Authorization\nRequires admin privileges.",
+        "operationId": "update_stack",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Stack ID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Stack"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Stack updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Stack"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden - requires admin PAK"
+          },
+          "404": {
+            "description": "Stack not found"
+          }
+        },
+        "security": [
+          {
+            "pak": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "stacks"
+        ],
+        "summary": "Deletes a stack.",
+        "description": "# Authorization\nRequires admin privileges.",
+        "operationId": "delete_stack",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Stack ID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Stack deleted"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden - requires admin PAK"
+          },
+          "404": {
+            "description": "Stack not found"
+          }
+        },
+        "security": [
+          {
+            "pak": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Agent": {
+        "type": "object",
+        "description": "Represents an agent in the database.",
+        "required": [
+          "id",
+          "created_at",
+          "updated_at",
+          "name",
+          "cluster_name",
+          "status"
+        ],
+        "properties": {
+          "cluster_name": {
+            "type": "string",
+            "description": "Name of the cluster the agent belongs to."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp when the agent was created."
+          },
+          "deleted_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Timestamp for soft deletion, if applicable."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique identifier for the agent."
+          },
+          "last_heartbeat": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Timestamp of the last heartbeat received from the agent."
+          },
+          "name": {
+            "type": "string",
+            "description": "Name of the agent."
+          },
+          "status": {
+            "type": "string",
+            "description": "Current status of the agent."
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp when the agent was last updated."
+          }
+        }
+      },
+      "AgentAnnotation": {
+        "type": "object",
+        "description": "Represents an agent annotation in the database.",
+        "required": [
+          "id",
+          "agent_id",
+          "key",
+          "value"
+        ],
+        "properties": {
+          "agent_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID of the agent this annotation belongs to."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique identifier for the annotation."
+          },
+          "key": {
+            "type": "string",
+            "description": "Key of the annotation (max 64 characters, no whitespace)."
+          },
+          "value": {
+            "type": "string",
+            "description": "Value of the annotation (max 64 characters, no whitespace)."
+          }
+        }
+      },
+      "AgentEvent": {
+        "type": "object",
+        "description": "Represents an agent event in the database.",
+        "required": [
+          "id",
+          "created_at",
+          "updated_at",
+          "agent_id",
+          "deployment_object_id",
+          "event_type",
+          "status"
+        ],
+        "properties": {
+          "agent_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID of the agent associated with this event.",
+            "example": "123e4567-e89b-12d3-a456-426614174001"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp when the event was created.",
+            "example": "2023-01-01T00:00:00Z"
+          },
+          "deleted_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Timestamp for soft deletion, if applicable.",
+            "example": "null"
+          },
+          "deployment_object_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID of the deployment object associated with this event.",
+            "example": "123e4567-e89b-12d3-a456-426614174002"
+          },
+          "event_type": {
+            "type": "string",
+            "description": "Type of the event.",
+            "example": "DEPLOYMENT"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique identifier for the event.",
+            "example": "123e4567-e89b-12d3-a456-426614174000"
+          },
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional message providing additional details about the event.",
+            "example": "Deployment completed successfully"
+          },
+          "status": {
+            "type": "string",
+            "description": "Status of the event (e.g., \"SUCCESS\", \"FAILURE\", \"IN_PROGRESS\", \"PENDING\").",
+            "example": "SUCCESS"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp when the event was last updated.",
+            "example": "2023-01-01T00:00:00Z"
+          }
+        },
+        "example": {
+          "agent_id": "123e4567-e89b-12d3-a456-426614174001",
+          "created_at": "2023-01-01T00:00:00Z",
+          "deleted_at": null,
+          "deployment_object_id": "123e4567-e89b-12d3-a456-426614174002",
+          "event_type": "DEPLOYMENT",
+          "id": "123e4567-e89b-12d3-a456-426614174000",
+          "message": "Deployment completed successfully",
+          "status": "SUCCESS",
+          "updated_at": "2023-01-01T00:00:00Z"
+        }
+      },
+      "AgentLabel": {
+        "type": "object",
+        "description": "Represents an agent label in the database.",
+        "required": [
+          "id",
+          "agent_id",
+          "label"
+        ],
+        "properties": {
+          "agent_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID of the agent this label is associated with."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique identifier for the agent label."
+          },
+          "label": {
+            "type": "string",
+            "description": "The label text (max 64 characters, no whitespace)."
+          }
+        }
+      },
+      "AgentTarget": {
+        "type": "object",
+        "description": "Represents an agent target in the database.",
+        "required": [
+          "id",
+          "agent_id",
+          "stack_id"
+        ],
+        "properties": {
+          "agent_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID of the agent associated with this target."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique identifier for the agent target."
+          },
+          "stack_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID of the stack associated with this target."
+          }
+        }
+      },
+      "AuthResponse": {
+        "type": "object",
+        "description": "Represents the response structure for authentication information.",
+        "required": [
+          "admin"
+        ],
+        "properties": {
+          "admin": {
+            "type": "boolean",
+            "description": "Indicates if the authenticated entity is an admin."
+          },
+          "agent": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The string representation of the agent's UUID, if applicable."
+          },
+          "generator": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The string representation of the generator's UUID, if applicable."
+          }
+        }
+      },
+      "CreateGeneratorResponse": {
+        "type": "object",
+        "description": "Response for a successful generator creation",
+        "required": [
+          "generator",
+          "pak"
+        ],
+        "properties": {
+          "generator": {
+            "$ref": "#/components/schemas/Generator",
+            "description": "The created generator"
+          },
+          "pak": {
+            "type": "string",
+            "description": "The Pre-Authentication Key for the generator"
+          }
+        }
+      },
+      "DeploymentObject": {
+        "type": "object",
+        "description": "Represents a deployment object in the database.",
+        "required": [
+          "id",
+          "created_at",
+          "updated_at",
+          "sequence_id",
+          "stack_id",
+          "yaml_content",
+          "yaml_checksum",
+          "submitted_at",
+          "is_deletion_marker"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp when the deployment object was created."
+          },
+          "deleted_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Timestamp for soft deletion, if applicable."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique identifier for the deployment object."
+          },
+          "is_deletion_marker": {
+            "type": "boolean",
+            "description": "Indicates if this object marks a deletion."
+          },
+          "sequence_id": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Auto-incrementing sequence number for ordering."
+          },
+          "stack_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID of the stack this deployment object belongs to."
+          },
+          "submitted_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp when the deployment was submitted."
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp when the deployment object was last updated."
+          },
+          "yaml_checksum": {
+            "type": "string",
+            "description": "SHA-256 checksum of the YAML content."
+          },
+          "yaml_content": {
+            "type": "string",
+            "description": "YAML content of the deployment."
+          }
+        }
+      },
+      "Generator": {
+        "type": "object",
+        "description": "Represents a generator in the Brokkr system.",
+        "required": [
+          "id",
+          "created_at",
+          "updated_at",
+          "name",
+          "is_active"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp of when the generator was created."
+          },
+          "deleted_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Timestamp of when the generator was deleted, if applicable."
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional description of the generator."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique identifier for the generator."
+          },
+          "is_active": {
+            "type": "boolean",
+            "description": "Indicates whether the generator is currently active."
+          },
+          "last_active_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Timestamp of when the generator was last active."
+          },
+          "name": {
+            "type": "string",
+            "description": "Name of the generator."
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp of when the generator was last updated."
+          }
+        }
+      },
+      "NewAgent": {
+        "type": "object",
+        "description": "Represents a new agent to be inserted into the database.",
+        "required": [
+          "name",
+          "cluster_name"
+        ],
+        "properties": {
+          "cluster_name": {
+            "type": "string",
+            "description": "Name of the cluster the agent belongs to."
+          },
+          "name": {
+            "type": "string",
+            "description": "Name of the agent."
+          }
+        }
+      },
+      "NewAgentAnnotation": {
+        "type": "object",
+        "description": "Represents a new agent annotation to be inserted into the database.",
+        "required": [
+          "agent_id",
+          "key",
+          "value"
+        ],
+        "properties": {
+          "agent_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID of the agent this annotation belongs to."
+          },
+          "key": {
+            "type": "string",
+            "description": "Key of the annotation (max 64 characters, no whitespace)."
+          },
+          "value": {
+            "type": "string",
+            "description": "Value of the annotation (max 64 characters, no whitespace)."
+          }
+        }
+      },
+      "NewAgentLabel": {
+        "type": "object",
+        "description": "Represents a new agent label to be inserted into the database.",
+        "required": [
+          "agent_id",
+          "label"
+        ],
+        "properties": {
+          "agent_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID of the agent this label is associated with."
+          },
+          "label": {
+            "type": "string",
+            "description": "The label text (max 64 characters, no whitespace)."
+          }
+        }
+      },
+      "NewAgentTarget": {
+        "type": "object",
+        "description": "Represents a new agent target to be inserted into the database.",
+        "required": [
+          "agent_id",
+          "stack_id"
+        ],
+        "properties": {
+          "agent_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID of the agent to associate with a stack."
+          },
+          "stack_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID of the stack to associate with an agent."
+          }
+        }
+      },
+      "NewDeploymentObject": {
+        "type": "object",
+        "description": "Represents a new deployment object to be inserted into the database.",
+        "required": [
+          "stack_id",
+          "yaml_content",
+          "yaml_checksum",
+          "is_deletion_marker"
+        ],
+        "properties": {
+          "is_deletion_marker": {
+            "type": "boolean",
+            "description": "Indicates if this object marks a deletion."
+          },
+          "stack_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID of the stack this deployment object belongs to."
+          },
+          "yaml_checksum": {
+            "type": "string",
+            "description": "SHA-256 checksum of the YAML content."
+          },
+          "yaml_content": {
+            "type": "string",
+            "description": "YAML content of the deployment."
+          }
+        }
+      },
+      "NewGenerator": {
+        "type": "object",
+        "description": "Represents the data required to create a new generator.",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional description of the new generator."
+          },
+          "name": {
+            "type": "string",
+            "description": "Name of the new generator."
+          }
+        }
+      },
+      "NewStack": {
+        "type": "object",
+        "description": "Represents a new stack to be inserted into the database.",
+        "required": [
+          "name",
+          "generator_id"
+        ],
+        "properties": {
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional description of the stack."
+          },
+          "generator_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Generator that created this stack."
+          },
+          "name": {
+            "type": "string",
+            "description": "Name of the stack."
+          }
+        }
+      },
+      "Stack": {
+        "type": "object",
+        "description": "Represents a stack in the database.",
+        "required": [
+          "id",
+          "created_at",
+          "updated_at",
+          "name",
+          "generator_id"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp when the stack was created."
+          },
+          "deleted_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Timestamp for soft deletion, if applicable."
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional description of the stack."
+          },
+          "generator_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Generator that created this stack."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique identifier for the stack."
+          },
+          "name": {
+            "type": "string",
+            "description": "Name of the stack."
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp when the stack was last updated."
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "admin_pak": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "Authorization"
+      },
+      "agent_pak": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "Authorization"
+      },
+      "generator_pak": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "Authorization"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "agent-events",
+      "description": "Agent Events management API"
+    },
+    {
+      "name": "generators",
+      "description": "Generator management API"
+    },
+    {
+      "name": "agent-labels",
+      "description": "Agent Labels management API"
+    },
+    {
+      "name": "agent-annotations",
+      "description": "Agent Annotations management API"
+    },
+    {
+      "name": "agent-targets",
+      "description": "Agent Targets management API"
+    },
+    {
+      "name": "agents",
+      "description": "Core Agent management API"
+    },
+    {
+      "name": "deployment-objects",
+      "description": "Deployment Objects management API"
+    },
+    {
+      "name": "stacks",
+      "description": "Stack management API"
+    },
+    {
+      "name": "auth",
+      "description": "Authentication API"
+    }
+  ]
+}

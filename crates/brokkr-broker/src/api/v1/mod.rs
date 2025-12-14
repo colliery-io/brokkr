@@ -18,6 +18,8 @@ pub mod generators;
 pub mod middleware;
 pub mod openapi;
 pub mod stacks;
+pub mod templates;
+pub mod work_orders;
 
 use crate::dal::DAL;
 use axum::middleware::from_fn_with_state;
@@ -42,6 +44,9 @@ pub fn routes(dal: DAL) -> Router<DAL> {
         .merge(deployment_objects::routes())
         .merge(generators::routes())
         .merge(stacks::routes())
+        .merge(templates::routes())
+        .merge(work_orders::routes())
+        .merge(work_orders::agent_routes())
         .layer(from_fn_with_state(
             dal.clone(),
             middleware::auth_middleware::<axum::body::Body>,

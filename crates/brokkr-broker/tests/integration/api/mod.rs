@@ -9,4 +9,7 @@ mod agents;
 mod auth;
 mod deployment_objects;
 mod generators;
+mod health;
 mod stacks;
+mod templates;
+mod work_orders;

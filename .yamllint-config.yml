@@ -6,3 +6,15 @@ rules:
     max: 500
   truthy:
     check-keys: false
+  document-start: disable
+  comments-indentation: disable
+  braces:
+    min-spaces-inside: 0
+    max-spaces-inside: 1
+  brackets:
+    min-spaces-inside: 0
+    max-spaces-inside: 1
+
+ignore: |
+  charts/brokkr-broker/templates/
+  charts/brokkr-agent/templates/

@@ -30,8 +30,7 @@
 //! let agents = dal.agents().list().expect("Failed to list agents");
 //! ```
 
-use diesel::r2d2::{ConnectionManager, Pool};
-use diesel::PgConnection;
+use crate::db::ConnectionPool;
 
 pub mod agents;
 use agents::AgentsDAL;
@@ -63,6 +62,24 @@ use deployment_objects::DeploymentObjectsDAL;
 pub mod generators;
 use generators::GeneratorsDAL;
 
+pub mod templates;
+use templates::TemplatesDAL;
+
+pub mod template_labels;
+use template_labels::TemplateLabelsDAL;
+
+pub mod template_annotations;
+use template_annotations::TemplateAnnotationsDAL;
+
+pub mod template_targets;
+use template_targets::TemplateTargetsDAL;
+
+pub mod rendered_deployment_objects;
+use rendered_deployment_objects::RenderedDeploymentObjectsDAL;
+
+pub mod work_orders;
+use work_orders::WorkOrdersDAL;
+
 /// The main Data Access Layer struct.
 ///
 /// This struct serves as the central point for database operations,
@@ -70,8 +87,8 @@ use generators::GeneratorsDAL;
 /// implementations for different entities.
 #[derive(Clone)]
 pub struct DAL {
-    /// A connection pool for PostgreSQL database connections.
-    pub pool: Pool<ConnectionManager<PgConnection>>,
+    /// A connection pool for PostgreSQL database connections with schema support.
+    pub pool: ConnectionPool,
 }
 
 impl DAL {
@@ -79,12 +96,12 @@ impl DAL {
     ///
     /// # Arguments
     ///
-    /// * `pool` - A connection pool for PostgreSQL database connections.
+    /// * `pool` - A connection pool for PostgreSQL database connections with schema support.
     ///
     /// # Returns
     ///
     /// A new DAL instance.
-    pub fn new(pool: Pool<ConnectionManager<PgConnection>>) -> Self {
+    pub fn new(pool: ConnectionPool) -> Self {
         DAL { pool }
     }
 
@@ -176,6 +193,60 @@ impl DAL {
     /// An instance of GeneratorsDal.
     pub fn generators(&self) -> GeneratorsDAL {
         GeneratorsDAL { dal: self }
+    }
+
+    /// Provides access to the Templates Data Access Layer.
+    ///
+    /// # Returns
+    ///
+    /// An instance of TemplatesDAL.
+    pub fn templates(&self) -> TemplatesDAL {
+        TemplatesDAL { dal: self }
+    }
+
+    /// Provides access to the Template Labels Data Access Layer.
+    ///
+    /// # Returns
+    ///
+    /// An instance of TemplateLabelsDAL.
+    pub fn template_labels(&self) -> TemplateLabelsDAL {
+        TemplateLabelsDAL { dal: self }
+    }
+
+    /// Provides access to the Template Annotations Data Access Layer.
+    ///
+    /// # Returns
+    ///
+    /// An instance of TemplateAnnotationsDAL.
+    pub fn template_annotations(&self) -> TemplateAnnotationsDAL {
+        TemplateAnnotationsDAL { dal: self }
+    }
+
+    /// Provides access to the Template Targets Data Access Layer.
+    ///
+    /// # Returns
+    ///
+    /// An instance of TemplateTargetsDAL.
+    pub fn template_targets(&self) -> TemplateTargetsDAL {
+        TemplateTargetsDAL { dal: self }
+    }
+
+    /// Provides access to the Rendered Deployment Objects Data Access Layer.
+    ///
+    /// # Returns
+    ///
+    /// An instance of RenderedDeploymentObjectsDAL.
+    pub fn rendered_deployment_objects(&self) -> RenderedDeploymentObjectsDAL {
+        RenderedDeploymentObjectsDAL { dal: self }
+    }
+
+    /// Provides access to the Work Orders Data Access Layer.
+    ///
+    /// # Returns
+    ///
+    /// An instance of WorkOrdersDAL.
+    pub fn work_orders(&self) -> WorkOrdersDAL {
+        WorkOrdersDAL { dal: self }
     }
 }
 

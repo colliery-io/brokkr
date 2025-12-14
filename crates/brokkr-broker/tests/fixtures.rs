@@ -25,7 +25,13 @@ use brokkr_models::models::{
     generator::{Generator, NewGenerator},
     stack_annotations::{NewStackAnnotation, StackAnnotation},
     stack_labels::{NewStackLabel, StackLabel},
+    stack_templates::StackTemplate,
     stacks::{NewStack, Stack},
+    template_annotations::{NewTemplateAnnotation, TemplateAnnotation},
+    template_labels::{NewTemplateLabel, TemplateLabel},
+    work_order_annotations::{NewWorkOrderAnnotation, WorkOrderAnnotation},
+    work_order_labels::{NewWorkOrderLabel, WorkOrderLabel},
+    work_orders::{NewWorkOrder, NewWorkOrderTarget, WorkOrder, WorkOrderTarget, WORK_TYPE_BUILD},
 };
 use brokkr_utils::Settings;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
@@ -82,7 +88,8 @@ impl TestFixture {
     pub fn new() -> Self {
         dotenv().ok();
         let settings = Settings::new(None).expect("Failed to load settings");
-        let connection_pool = create_shared_connection_pool(&settings.database.url, "brokkr", 5);
+        let connection_pool =
+            create_shared_connection_pool(&settings.database.url, "brokkr", 5, None);
         // Run migrations
         let mut conn = connection_pool
             .pool
@@ -101,7 +108,7 @@ impl TestFixture {
         // Read the admin PAK from the temporary file
         let admin_pak = "brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8".to_string();
 
-        let dal = DAL::new(connection_pool.pool.clone());
+        let dal = DAL::new(connection_pool.clone());
 
         // Fetch the admin generator
         let admin_generator = dal
@@ -400,6 +407,173 @@ impl TestFixture {
             .update_pak_hash(agent.id, hash)
             .expect("Failed to update PAK hash");
         (agent, pak)
+    }
+
+    /// Creates a new stack template for testing purposes.
+    ///
+    /// # Arguments
+    ///
+    /// * `generator_id` - Optional generator ID. NULL means system template.
+    /// * `name` - The name of the template.
+    /// * `description` - An optional description for the template.
+    /// * `template_content` - The Tera template content.
+    /// * `parameters_schema` - The JSON Schema for parameters.
+    ///
+    /// # Returns
+    ///
+    /// Returns the created StackTemplate on success, or panics on failure.
+    pub fn create_test_template(
+        &self,
+        generator_id: Option<Uuid>,
+        name: String,
+        description: Option<String>,
+        template_content: String,
+        parameters_schema: String,
+    ) -> StackTemplate {
+        self.dal
+            .templates()
+            .create_new_version(generator_id, name, description, template_content, parameters_schema)
+            .expect("Failed to create template")
+    }
+
+    /// Creates a new template label for testing purposes.
+    ///
+    /// # Arguments
+    ///
+    /// * `template_id` - The UUID of the template to associate the label with.
+    /// * `label` - The label text.
+    ///
+    /// # Returns
+    ///
+    /// Returns the created TemplateLabel on success, or panics on failure.
+    pub fn create_test_template_label(&self, template_id: Uuid, label: String) -> TemplateLabel {
+        let new_label =
+            NewTemplateLabel::new(template_id, label).expect("Failed to create NewTemplateLabel");
+        self.dal
+            .template_labels()
+            .create(&new_label)
+            .expect("Failed to create template label")
+    }
+
+    /// Creates a new template annotation for testing purposes.
+    ///
+    /// # Arguments
+    ///
+    /// * `template_id` - The UUID of the template to associate the annotation with.
+    /// * `key` - The key for the annotation.
+    /// * `value` - The value for the annotation.
+    ///
+    /// # Returns
+    ///
+    /// Returns the created TemplateAnnotation on success, or panics on failure.
+    pub fn create_test_template_annotation(
+        &self,
+        template_id: Uuid,
+        key: &str,
+        value: &str,
+    ) -> TemplateAnnotation {
+        let new_annotation = NewTemplateAnnotation::new(template_id, key.to_string(), value.to_string())
+            .expect("Failed to create NewTemplateAnnotation");
+        self.dal
+            .template_annotations()
+            .create(&new_annotation)
+            .expect("Failed to create template annotation")
+    }
+
+    /// Creates a new work order for testing purposes.
+    ///
+    /// # Arguments
+    ///
+    /// * `work_type` - The type of work (e.g., "build").
+    /// * `yaml_content` - The YAML content for the work order.
+    ///
+    /// # Returns
+    ///
+    /// Returns the created WorkOrder on success, or panics on failure.
+    pub fn create_test_work_order(&self, work_type: &str, yaml_content: &str) -> WorkOrder {
+        let new_work_order = NewWorkOrder::new(
+            work_type.to_string(),
+            yaml_content.to_string(),
+            None,
+            None,
+            None,
+        )
+        .expect("Failed to create NewWorkOrder");
+        self.dal
+            .work_orders()
+            .create(&new_work_order)
+            .expect("Failed to create work order")
+    }
+
+    /// Creates a new work order target for testing purposes.
+    ///
+    /// # Arguments
+    ///
+    /// * `work_order_id` - The UUID of the work order.
+    /// * `agent_id` - The UUID of the agent.
+    ///
+    /// # Returns
+    ///
+    /// Returns the created WorkOrderTarget on success, or panics on failure.
+    pub fn create_test_work_order_target(
+        &self,
+        work_order_id: Uuid,
+        agent_id: Uuid,
+    ) -> WorkOrderTarget {
+        let new_target = NewWorkOrderTarget::new(work_order_id, agent_id)
+            .expect("Failed to create NewWorkOrderTarget");
+        self.dal
+            .work_orders()
+            .add_target(&new_target)
+            .expect("Failed to create work order target")
+    }
+
+    /// Creates a new work order label for testing purposes.
+    ///
+    /// # Arguments
+    ///
+    /// * `work_order_id` - The UUID of the work order.
+    /// * `label` - The label string.
+    ///
+    /// # Returns
+    ///
+    /// Returns the created WorkOrderLabel on success, or panics on failure.
+    pub fn create_test_work_order_label(
+        &self,
+        work_order_id: Uuid,
+        label: &str,
+    ) -> WorkOrderLabel {
+        let new_label = NewWorkOrderLabel::new(work_order_id, label.to_string())
+            .expect("Failed to create NewWorkOrderLabel");
+        self.dal
+            .work_orders()
+            .add_label(&new_label)
+            .expect("Failed to create work order label")
+    }
+
+    /// Creates a new work order annotation for testing purposes.
+    ///
+    /// # Arguments
+    ///
+    /// * `work_order_id` - The UUID of the work order.
+    /// * `key` - The annotation key.
+    /// * `value` - The annotation value.
+    ///
+    /// # Returns
+    ///
+    /// Returns the created WorkOrderAnnotation on success, or panics on failure.
+    pub fn create_test_work_order_annotation(
+        &self,
+        work_order_id: Uuid,
+        key: &str,
+        value: &str,
+    ) -> WorkOrderAnnotation {
+        let new_annotation = NewWorkOrderAnnotation::new(work_order_id, key.to_string(), value.to_string())
+            .expect("Failed to create NewWorkOrderAnnotation");
+        self.dal
+            .work_orders()
+            .add_annotation(&new_annotation)
+            .expect("Failed to create work order annotation")
     }
 
     fn reset_database(&self) {

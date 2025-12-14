@@ -49,6 +49,7 @@ services:
       - BROKKR__DATABASE__URL=postgres://brokkr:brokkr@postgres:5432/brokkr
     volumes:
       - brokkr-keys:/tmp/brokkr-keys
+    user: "0:0"  # Run as root for init tasks that need to write to shared volumes
     entrypoint: []
     command: >
       sh -c "
@@ -70,8 +71,14 @@ services:
       - BROKKR__AGENT__AGENT_NAME=brokkr-integration-test-agent
       - BROKKR__AGENT__CLUSTER_NAME=brokkr-dev-integration-cluster
       - BROKKR__AGENT__KUBECONFIG_PATH=/tmp/brokkr-keys/kubeconfig.docker.yaml
+      - BROKKR__AGENT__HEALTH_PORT=8080
     volumes:
       - brokkr-keys:/tmp/brokkr-keys
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
     entrypoint: []
     command: >
       sh -c "
@@ -111,12 +118,13 @@ services:
 
 
   k3s:
-    image: rancher/k3s:v1.27.3-k3s1
+    image: rancher/k3s:v1.30.10-k3s1
     command:
       - server
       - --cluster-init
       - --write-kubeconfig=/output/kubeconfig.yaml
       - --write-kubeconfig-mode=666
+      - --tls-san=brokkr-dev-k3s-1
     privileged: true
     environment:
       - K3S_TOKEN=brokkr-secret
@@ -185,6 +193,23 @@ services:
     depends_on:
       init-agent:
         condition: service_completed_successfully
+      init-kubeconfig:
+        condition: service_completed_successfully
+
+  copy-kubeconfig:
+    image: alpine
+    volumes:
+      - brokkr-keys:/source:ro
+      - /tmp/brokkr-keys:/destination
+    command: >
+      sh -c "
+        mkdir -p /destination &&
+        cp /source/kubeconfig.yaml /destination/ &&
+        cp /source/kubeconfig.local.yaml /destination/ &&
+        cp /source/kubeconfig.docker.yaml /destination/ &&
+        chmod -R 777 /destination/
+      "
+    depends_on:
       init-kubeconfig:
         condition: service_completed_successfully
 

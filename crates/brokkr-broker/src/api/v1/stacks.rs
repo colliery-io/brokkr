@@ -5,19 +5,24 @@
  */
 
 use crate::dal::DAL;
+use crate::utils::matching::template_matches_stack;
+use crate::utils::templating;
 
 use crate::api::v1::middleware::AuthPayload;
 use axum::{
     extract::{Extension, Path, State},
     http::StatusCode,
-    routing::{delete, get},
+    routing::{delete, get, post},
     Json, Router,
 };
 use brokkr_models::models::deployment_objects::{DeploymentObject, NewDeploymentObject};
+use brokkr_models::models::rendered_deployment_objects::NewRenderedDeploymentObject;
 use brokkr_models::models::stack_annotations::{NewStackAnnotation, StackAnnotation};
 use brokkr_models::models::stack_labels::{NewStackLabel, StackLabel};
 use brokkr_models::models::stacks::{NewStack, Stack};
 use brokkr_utils::logging::prelude::*;
+use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 pub fn routes() -> Router<DAL> {
@@ -31,6 +36,10 @@ pub fn routes() -> Router<DAL> {
         .route(
             "/stacks/:id/deployment-objects",
             get(list_deployment_objects).post(create_deployment_object),
+        )
+        .route(
+            "/stacks/:id/deployment-objects/from-template",
+            post(instantiate_template),
         )
         .route("/stacks/:id/labels", get(list_labels).post(add_label))
         .route("/stacks/:id/labels/:label", delete(remove_label))
@@ -750,4 +759,267 @@ async fn remove_annotation(
             Json(serde_json::json!({"error": "Failed to fetch stack annotations"})),
         )),
     }
+}
+
+/// Request body for template instantiation.
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
+pub struct TemplateInstantiationRequest {
+    /// ID of the template to instantiate.
+    pub template_id: Uuid,
+    /// Parameters to render the template with.
+    pub parameters: serde_json::Value,
+}
+
+/// Instantiates a template into a deployment object.
+///
+/// This endpoint renders a template with the provided parameters and creates
+/// a deployment object in the specified stack.
+///
+/// # Authorization
+/// Admin or generator with stack access.
+#[utoipa::path(
+    post,
+    path = "/api/v1/stacks/{stack_id}/deployment-objects/from-template",
+    tag = "stacks",
+    params(
+        ("stack_id" = Uuid, Path, description = "Stack ID")
+    ),
+    request_body = TemplateInstantiationRequest,
+    responses(
+        (status = 201, description = "Deployment object created", body = DeploymentObject),
+        (status = 400, description = "Invalid parameters or template rendering failed"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Template or stack not found"),
+        (status = 422, description = "Template labels don't match stack"),
+    ),
+    security(
+        ("pak" = [])
+    )
+)]
+async fn instantiate_template(
+    State(dal): State<DAL>,
+    Extension(auth_payload): Extension<AuthPayload>,
+    Path(stack_id): Path<Uuid>,
+    Json(request): Json<TemplateInstantiationRequest>,
+) -> Result<(StatusCode, Json<DeploymentObject>), (StatusCode, Json<serde_json::Value>)> {
+    info!(
+        "Handling template instantiation: template={}, stack={}",
+        request.template_id, stack_id
+    );
+
+    // 1. Get stack (404 if not found)
+    let stack = dal.stacks().get(vec![stack_id]).map_err(|e| {
+        error!("Failed to fetch stack {}: {:?}", stack_id, e);
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "Failed to fetch stack"})),
+        )
+    })?;
+
+    if stack.is_empty() {
+        warn!("Stack not found: {}", stack_id);
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "Stack not found"})),
+        ));
+    }
+    let stack = &stack[0];
+
+    // 2. Verify authorization (admin or generator with stack access)
+    if !auth_payload.admin && auth_payload.generator != Some(stack.generator_id) {
+        warn!(
+            "Unauthorized template instantiation attempt for stack {}",
+            stack_id
+        );
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({"error": "Access denied"})),
+        ));
+    }
+
+    // 3. Get template (404 if not found/deleted)
+    let template = dal.templates().get(request.template_id).map_err(|e| {
+        error!("Failed to fetch template {}: {:?}", request.template_id, e);
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "Failed to fetch template"})),
+        )
+    })?;
+
+    let template = match template {
+        Some(t) => t,
+        None => {
+            warn!("Template not found: {}", request.template_id);
+            return Err((
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({"error": "Template not found"})),
+            ));
+        }
+    };
+
+    // 4. Get template labels/annotations
+    let template_labels: Vec<String> = dal
+        .template_labels()
+        .list_for_template(template.id)
+        .map_err(|e| {
+            error!("Failed to fetch template labels: {:?}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Failed to fetch template labels"})),
+            )
+        })?
+        .into_iter()
+        .map(|l| l.label)
+        .collect();
+
+    let template_annotations: Vec<(String, String)> = dal
+        .template_annotations()
+        .list_for_template(template.id)
+        .map_err(|e| {
+            error!("Failed to fetch template annotations: {:?}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Failed to fetch template annotations"})),
+            )
+        })?
+        .into_iter()
+        .map(|a| (a.key, a.value))
+        .collect();
+
+    // 5. Get stack labels/annotations
+    let stack_labels: Vec<String> = dal
+        .stack_labels()
+        .list_for_stack(stack_id)
+        .map_err(|e| {
+            error!("Failed to fetch stack labels: {:?}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Failed to fetch stack labels"})),
+            )
+        })?
+        .into_iter()
+        .map(|l| l.label)
+        .collect();
+
+    let stack_annotations: Vec<(String, String)> = dal
+        .stack_annotations()
+        .list_for_stack(stack_id)
+        .map_err(|e| {
+            error!("Failed to fetch stack annotations: {:?}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Failed to fetch stack annotations"})),
+            )
+        })?
+        .into_iter()
+        .map(|a| (a.key, a.value))
+        .collect();
+
+    // 6. Validate label matching (422 with details on mismatch)
+    let match_result = template_matches_stack(
+        &template_labels,
+        &template_annotations,
+        &stack_labels,
+        &stack_annotations,
+    );
+
+    if !match_result.matches {
+        warn!(
+            "Template {} labels don't match stack {}: missing_labels={:?}, missing_annotations={:?}",
+            template.id, stack_id, match_result.missing_labels, match_result.missing_annotations
+        );
+        return Err((
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(serde_json::json!({
+                "error": "Template labels do not match stack",
+                "missing_labels": match_result.missing_labels,
+                "missing_annotations": match_result.missing_annotations,
+            })),
+        ));
+    }
+
+    // 7. Validate parameters against JSON Schema (400 on invalid)
+    if let Err(errors) = templating::validate_parameters(&template.parameters_schema, &request.parameters) {
+        let error_messages: Vec<String> = errors.iter().map(|e| e.to_string()).collect();
+        warn!("Parameter validation failed: {:?}", error_messages);
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "Invalid parameters",
+                "validation_errors": error_messages,
+            })),
+        ));
+    }
+
+    // 8. Render template with Tera (400 on render error)
+    let rendered_yaml = templating::render_template(&template.template_content, &request.parameters)
+        .map_err(|e| {
+            error!("Failed to render template: {:?}", e);
+            (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": e.to_string()})),
+            )
+        })?;
+
+    // 9. Create DeploymentObject
+    let new_deployment_object =
+        NewDeploymentObject::new(stack_id, rendered_yaml.clone(), false).map_err(|e| {
+            error!("Failed to create deployment object: {:?}", e);
+            (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": e})),
+            )
+        })?;
+
+    let deployment_object = dal
+        .deployment_objects()
+        .create(&new_deployment_object)
+        .map_err(|e| {
+            error!("Failed to insert deployment object: {:?}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Failed to create deployment object"})),
+            )
+        })?;
+
+    // 10. Create RenderedDeploymentObject provenance record
+    let parameters_json = serde_json::to_string(&request.parameters).map_err(|e| {
+        error!("Failed to serialize parameters: {:?}", e);
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "Failed to serialize parameters"})),
+        )
+    })?;
+
+    let provenance = NewRenderedDeploymentObject::new(
+        deployment_object.id,
+        template.id,
+        template.version,
+        parameters_json,
+    )
+    .map_err(|e| {
+        error!("Failed to create provenance record: {:?}", e);
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": e})),
+        )
+    })?;
+
+    dal.rendered_deployment_objects()
+        .create(&provenance)
+        .map_err(|e| {
+            error!("Failed to insert provenance record: {:?}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Failed to create provenance record"})),
+            )
+        })?;
+
+    info!(
+        "Successfully instantiated template {} into deployment object {} for stack {}",
+        template.id, deployment_object.id, stack_id
+    );
+
+    Ok((StatusCode::CREATED, Json(deployment_object)))
 }

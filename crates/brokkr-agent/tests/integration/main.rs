@@ -7,4 +7,5 @@
 mod broker;
 #[path = "../fixtures.rs"]
 mod fixtures;
+mod health;
 mod k8s;

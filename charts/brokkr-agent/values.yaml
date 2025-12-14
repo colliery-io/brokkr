@@ -1,0 +1,108 @@
+image:
+  repository: ghcr.io/colliery-io/brokkr-agent
+  tag: latest
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+
+# Shipwright Build integration for container image builds
+# When enabled, installs Shipwright Build and Tekton Pipelines as dependencies
+shipwright:
+  # Enable Shipwright Build integration (includes Tekton Pipelines)
+  # Set to false if Shipwright/Tekton are already installed or not needed
+  enabled: true
+
+  # Install sample ClusterBuildStrategies (buildah, kaniko, etc.)
+  # Recommended for most deployments
+  installSampleStrategies: true
+
+broker:
+  url: http://brokkr-broker:3000
+  agentName: ""
+  clusterName: ""
+  pak: ""
+
+agent:
+  pollingInterval: 30
+
+rbac:
+  create: true
+  clusterWide: true
+  # Additional custom RBAC rules to append to the agent role
+  # Example:
+  # additionalRules:
+  #   - apiGroups: ["custom.io"]
+  #     resources: ["customresources"]
+  #     verbs: ["get", "list", "watch"]
+  additionalRules: []
+
+serviceAccount:
+  create: true
+  name: ""
+
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "50m"
+  limits:
+    memory: "256Mi"
+    cpu: "200m"
+
+# AppArmor configuration
+# AppArmor provides additional security but requires AppArmor-enabled host
+apparmor:
+  # Enable AppArmor annotations (requires AppArmor support on cluster nodes)
+  enabled: false
+  # AppArmor profile to use (runtime/default is most common)
+  profile: runtime/default
+
+# Pod-level security context for agent
+# Controls security settings that apply to all containers in the pod
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  # Seccomp profile for syscall filtering (Kubernetes 1.19+)
+  # Uncomment for production security hardening
+  # seccompProfile:
+  #   type: RuntimeDefault
+
+# Container-level security context for agent
+# Controls security settings specific to the agent container
+containerSecurityContext:
+  # Prevent privilege escalation
+  allowPrivilegeEscalation: false
+  # Enable read-only root filesystem for maximum security
+  # Note: Requires emptyDir volumes for /tmp and other writable paths
+  readOnlyRootFilesystem: false
+  runAsNonRoot: true
+  runAsUser: 10001
+  # Drop all Linux capabilities and add back only required ones
+  capabilities:
+    drop:
+      - ALL
+    # Uncomment if specific capabilities are needed
+    # add:
+    #   - NET_BIND_SERVICE
+
+# Metrics and monitoring configuration
+metrics:
+  # Enable Prometheus metrics endpoint at /metrics
+  enabled: true
+
+  # ServiceMonitor configuration for Prometheus Operator
+  serviceMonitor:
+    # Enable ServiceMonitor CRD creation
+    # Requires Prometheus Operator to be installed in the cluster
+    enabled: false
+
+    # Scrape interval for Prometheus
+    interval: 30s
+
+    # Scrape timeout (must be shorter than interval)
+    # scrapeTimeout: 10s
+
+    # Additional labels for ServiceMonitor (for Prometheus selector matching)
+    # additionalLabels:
+    #   prometheus: kube-prometheus

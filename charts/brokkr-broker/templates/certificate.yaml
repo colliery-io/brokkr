@@ -1,0 +1,21 @@
+{{- if and .Values.tls.enabled .Values.tls.certManager.enabled }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "brokkr-broker.fullname" . }}-tls
+  labels:
+    {{- include "brokkr-broker.labels" . | nindent 4 }}
+spec:
+  secretName: {{ include "brokkr-broker.fullname" . }}-tls
+  issuerRef:
+    name: {{ .Values.tls.certManager.issuer }}
+    kind: {{ .Values.tls.certManager.issuerKind }}
+  dnsNames:
+    {{- if .Values.ingress.enabled }}
+    {{- range .Values.ingress.hosts }}
+    - {{ .host }}
+    {{- end }}
+    {{- else }}
+    - {{ include "brokkr-broker.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local
+    {{- end }}
+{{- end }}
