@@ -75,7 +75,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=build-${{ matrix.component }}-${{ steps.platform.outputs.arch }}
           cache-to: type=gha,mode=max,scope=build-${{ matrix.component }}-${{ steps.platform.outputs.arch }}
-          outputs: type=image,name=${{ env.REGISTRY }}/${{ github.repository_owner }}/brokkr-${{ matrix.component }},push-by-digest=true,name-canonical=true,push=false
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ github.repository_owner }}/brokkr-${{ matrix.component }},push-by-digest=true,name-canonical=true,push=true
           build-args: |
             VERSION=${{ github.ref_name }}
 
