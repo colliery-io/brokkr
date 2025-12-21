@@ -7,7 +7,7 @@ created_at: 2025-12-07T17:57:55.348032+00:00
 updated_at: 2025-12-07T21:32:51.144406+00:00
 parent: BROKKR-I-0002
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -28,6 +28,8 @@ initiative_id: BROKKR-I-0002
 ## Objective
 
 Implement Diesel ORM models for all template-related tables, including read models, write models, and validation logic following existing patterns.
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

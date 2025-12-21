@@ -7,7 +7,7 @@ created_at: 2025-12-07T17:57:55.945441+00:00
 updated_at: 2025-12-13T03:24:45.057922+00:00
 parent: BROKKR-I-0002
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -28,6 +28,8 @@ initiative_id: BROKKR-I-0002
 ## Objective
 
 Create utility modules for Tera template rendering and JSON Schema parameter validation, used by both template creation (syntax validation) and instantiation (rendering).
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

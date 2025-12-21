@@ -1,13 +1,13 @@
 ---
-id: create-builder-sa-serviceaccount
+id: create-example-build-and-workorder
 level: task
-title: "Create builder-sa ServiceAccount and RBAC manifests"
-short_code: "BROKKR-T-0040"
-created_at: 2025-12-12T21:17:37.505733+00:00
-updated_at: 2025-12-13T03:02:10.580647+00:00
+title: "Create example Build and WorkOrder YAML specifications"
+short_code: "BROKKR-T-0041"
+created_at: 2025-12-12T21:17:37.638992+00:00
+updated_at: 2025-12-13T04:11:56.711892+00:00
 parent: BROKKR-I-0001
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -19,7 +19,7 @@ strategy_id: NULL
 initiative_id: BROKKR-I-0001
 ---
 
-# Create builder-sa ServiceAccount and RBAC manifests
+# Create example Build and WorkOrder YAML specifications
 
 *This template includes sections for various types of tasks. Delete sections that don't apply to your specific use case.*
 
@@ -64,6 +64,8 @@ initiative_id: BROKKR-I-0001
 - **Current Problems**: {What's difficult/slow/buggy now}
 - **Benefits of Fixing**: {What improves after refactoring}
 - **Risk Assessment**: {Risks of not addressing this}
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

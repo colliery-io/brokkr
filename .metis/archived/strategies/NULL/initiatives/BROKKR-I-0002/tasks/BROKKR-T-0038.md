@@ -7,7 +7,7 @@ created_at: 2025-12-07T17:58:03.819158+00:00
 updated_at: 2025-12-13T03:24:45.167615+00:00
 parent: BROKKR-I-0002
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -28,6 +28,8 @@ initiative_id: BROKKR-I-0002
 ## Objective
 
 Add comprehensive OpenAPI documentation for all template-related endpoints using utoipa annotations, ensuring they appear correctly in the Swagger UI.
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

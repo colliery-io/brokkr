@@ -7,7 +7,7 @@ created_at: 2025-12-07T17:57:55.448971+00:00
 updated_at: 2025-12-07T21:42:53.881530+00:00
 parent: BROKKR-I-0002
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -28,6 +28,8 @@ initiative_id: BROKKR-I-0002
 ## Objective
 
 Implement Data Access Layer (DAL) modules for all template-related entities, providing database operations following existing patterns.
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

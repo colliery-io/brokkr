@@ -7,7 +7,7 @@ created_at: 2025-12-07T17:57:55.242902+00:00
 updated_at: 2025-12-07T20:42:30.143406+00:00
 parent: BROKKR-I-0002
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -28,6 +28,8 @@ initiative_id: BROKKR-I-0002
 ## Objective
 
 Create the database migration for the stack templating system, including all 5 required tables and associated triggers/indexes.
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

@@ -7,7 +7,7 @@ created_at: 2025-12-07T17:57:55.576586+00:00
 updated_at: 2025-12-07T23:08:21.251159+00:00
 parent: BROKKR-I-0002
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -28,6 +28,8 @@ initiative_id: BROKKR-I-0002
 ## Objective
 
 Implement REST API endpoints for template management including create, read, update, delete, and label/annotation management.
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

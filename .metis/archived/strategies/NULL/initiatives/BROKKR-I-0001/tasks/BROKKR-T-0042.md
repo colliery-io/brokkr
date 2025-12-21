@@ -1,13 +1,13 @@
 ---
-id: document-shipwright-and-tekton
+id: write-integration-tests-for-work
 level: task
-title: "Document Shipwright and Tekton installation prerequisites"
-short_code: "BROKKR-T-0039"
-created_at: 2025-12-12T21:17:37.429500+00:00
-updated_at: 2025-12-13T04:11:56.644956+00:00
+title: "Write integration tests for work order system"
+short_code: "BROKKR-T-0042"
+created_at: 2025-12-12T21:17:37.785334+00:00
+updated_at: 2025-12-12T23:58:31.284815+00:00
 parent: BROKKR-I-0001
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -19,7 +19,7 @@ strategy_id: NULL
 initiative_id: BROKKR-I-0001
 ---
 
-# Document Shipwright and Tekton installation prerequisites
+# Write integration tests for work order system
 
 *This template includes sections for various types of tasks. Delete sections that don't apply to your specific use case.*
 
@@ -29,7 +29,7 @@ initiative_id: BROKKR-I-0001
 
 ## Objective **[REQUIRED]**
 
-{Clear statement of what this task accomplishes}
+Write comprehensive integration tests for the work order system, covering both DAL operations and API endpoints.
 
 ## Backlog Item Details **[CONDITIONAL: Backlog Item]**
 
@@ -69,11 +69,19 @@ initiative_id: BROKKR-I-0001
 
 ## Acceptance Criteria
 
+## Acceptance Criteria
+
 ## Acceptance Criteria **[REQUIRED]**
 
-- [ ] {Specific, testable requirement 1}
-- [ ] {Specific, testable requirement 2}
-- [ ] {Specific, testable requirement 3}
+- [x] DAL tests for work order CRUD operations
+- [x] DAL tests for claim/release operations
+- [x] DAL tests for completion operations (success/failure/retry)
+- [x] DAL tests for target management
+- [x] DAL tests for work order log
+- [x] API tests for work order management endpoints
+- [x] API tests for agent operations (list_pending, claim, complete)
+- [x] API tests for authorization checks
+- [x] All 48 tests pass via `angreal tests integration brokkr-broker work_orders`
 
 ## Test Cases **[CONDITIONAL: Testing Task]**
 
@@ -138,4 +146,10 @@ initiative_id: BROKKR-I-0001
 
 ## Status Updates **[REQUIRED]**
 
-*To be added during implementation*
+**2025-12-12**: Implementation complete
+- Created `crates/brokkr-broker/tests/integration/dal/work_orders.rs` (35 DAL tests)
+- Created `crates/brokkr-broker/tests/integration/api/work_orders.rs` (13 API tests)
+- Updated test fixtures with work order helper methods
+- Fixed migration to use VARCHAR instead of ENUM for Diesel compatibility
+- All 48 tests pass
+- Commit: 29835df

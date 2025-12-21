@@ -7,7 +7,7 @@ created_at: 2025-12-07T17:57:55.167455+00:00
 updated_at: 2025-12-07T20:37:04.560233+00:00
 parent: BROKKR-I-0002
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -28,6 +28,8 @@ initiative_id: BROKKR-I-0002
 ## Objective
 
 Add the `tera` and `jsonschema` crates to the workspace dependencies to enable template rendering and parameter validation for the stack templating system.
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

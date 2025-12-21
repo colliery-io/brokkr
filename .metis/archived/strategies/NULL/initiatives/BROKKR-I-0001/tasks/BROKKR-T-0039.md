@@ -1,13 +1,13 @@
 ---
-id: add-openapi-documentation-for-work
+id: document-shipwright-and-tekton
 level: task
-title: "Add OpenAPI documentation for work order endpoints"
-short_code: "BROKKR-T-0043"
-created_at: 2025-12-12T21:17:37.926349+00:00
-updated_at: 2025-12-13T04:11:56.766732+00:00
+title: "Document Shipwright and Tekton installation prerequisites"
+short_code: "BROKKR-T-0039"
+created_at: 2025-12-12T21:17:37.429500+00:00
+updated_at: 2025-12-13T04:11:56.644956+00:00
 parent: BROKKR-I-0001
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -19,7 +19,7 @@ strategy_id: NULL
 initiative_id: BROKKR-I-0001
 ---
 
-# Add OpenAPI documentation for work order endpoints
+# Document Shipwright and Tekton installation prerequisites
 
 *This template includes sections for various types of tasks. Delete sections that don't apply to your specific use case.*
 
@@ -64,6 +64,8 @@ initiative_id: BROKKR-I-0001
 - **Current Problems**: {What's difficult/slow/buggy now}
 - **Benefits of Fixing**: {What improves after refactoring}
 - **Risk Assessment**: {Risks of not addressing this}
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

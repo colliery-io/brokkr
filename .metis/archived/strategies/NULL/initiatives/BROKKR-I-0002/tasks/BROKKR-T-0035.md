@@ -7,7 +7,7 @@ created_at: 2025-12-07T17:57:55.807216+00:00
 updated_at: 2025-12-13T03:24:45.012314+00:00
 parent: BROKKR-I-0002
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -28,6 +28,8 @@ initiative_id: BROKKR-I-0002
 ## Objective
 
 Implement the core template instantiation endpoint that renders a template with parameters and creates a deployment object in a stack.
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

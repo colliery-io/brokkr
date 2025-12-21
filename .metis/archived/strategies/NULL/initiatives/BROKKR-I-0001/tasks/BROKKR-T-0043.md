@@ -1,13 +1,13 @@
 ---
-id: write-integration-tests-for-work
+id: add-openapi-documentation-for-work
 level: task
-title: "Write integration tests for work order system"
-short_code: "BROKKR-T-0042"
-created_at: 2025-12-12T21:17:37.785334+00:00
-updated_at: 2025-12-12T23:58:31.284815+00:00
+title: "Add OpenAPI documentation for work order endpoints"
+short_code: "BROKKR-T-0043"
+created_at: 2025-12-12T21:17:37.926349+00:00
+updated_at: 2025-12-13T04:11:56.766732+00:00
 parent: BROKKR-I-0001
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -19,7 +19,7 @@ strategy_id: NULL
 initiative_id: BROKKR-I-0001
 ---
 
-# Write integration tests for work order system
+# Add OpenAPI documentation for work order endpoints
 
 *This template includes sections for various types of tasks. Delete sections that don't apply to your specific use case.*
 
@@ -29,7 +29,7 @@ initiative_id: BROKKR-I-0001
 
 ## Objective **[REQUIRED]**
 
-Write comprehensive integration tests for the work order system, covering both DAL operations and API endpoints.
+{Clear statement of what this task accomplishes}
 
 ## Backlog Item Details **[CONDITIONAL: Backlog Item]**
 
@@ -69,17 +69,13 @@ Write comprehensive integration tests for the work order system, covering both D
 
 ## Acceptance Criteria
 
+## Acceptance Criteria
+
 ## Acceptance Criteria **[REQUIRED]**
 
-- [x] DAL tests for work order CRUD operations
-- [x] DAL tests for claim/release operations
-- [x] DAL tests for completion operations (success/failure/retry)
-- [x] DAL tests for target management
-- [x] DAL tests for work order log
-- [x] API tests for work order management endpoints
-- [x] API tests for agent operations (list_pending, claim, complete)
-- [x] API tests for authorization checks
-- [x] All 48 tests pass via `angreal tests integration brokkr-broker work_orders`
+- [ ] {Specific, testable requirement 1}
+- [ ] {Specific, testable requirement 2}
+- [ ] {Specific, testable requirement 3}
 
 ## Test Cases **[CONDITIONAL: Testing Task]**
 
@@ -144,10 +140,4 @@ Write comprehensive integration tests for the work order system, covering both D
 
 ## Status Updates **[REQUIRED]**
 
-**2025-12-12**: Implementation complete
-- Created `crates/brokkr-broker/tests/integration/dal/work_orders.rs` (35 DAL tests)
-- Created `crates/brokkr-broker/tests/integration/api/work_orders.rs` (13 API tests)
-- Updated test fixtures with work order helper methods
-- Fixed migration to use VARCHAR instead of ENUM for Diesel compatibility
-- All 48 tests pass
-- Commit: 29835df
+*To be added during implementation*

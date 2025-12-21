@@ -7,7 +7,7 @@ created_at: 2025-12-12T21:17:38.085624+00:00
 updated_at: 2025-12-12T21:33:11.815837+00:00
 parent: BROKKR-I-0001
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -64,6 +64,8 @@ Add comprehensive end-to-end test for Shipwright build integration that validate
 - **Current Problems**: {What's difficult/slow/buggy now}
 - **Benefits of Fixing**: {What improves after refactoring}
 - **Risk Assessment**: {Risks of not addressing this}
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 
