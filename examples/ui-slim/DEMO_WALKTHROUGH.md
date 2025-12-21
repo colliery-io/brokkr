@@ -34,25 +34,32 @@ New agents start as `INACTIVE` for safety - they won't process deployments until
 
 ### 1.3 Add Labels to an Agent
 
-Labels enable targeting deployments to specific agents.
+Labels are simple tags that enable **automatic stack matching** - agents receive deployments from stacks with matching labels.
 
 1. In the agent modal, find the **Labels** section
-2. Type `environment` in the input and press Enter or click +
-3. Add more labels: `production`, `us-west-2`
+2. Type `development` and press Enter or click +
+3. Add more labels: `us-west-2`, `frontend`
 
-**Common label patterns:**
-- Environment: `dev`, `staging`, `production`
-- Region: `us-west-2`, `eu-central-1`
-- Tier: `frontend`, `backend`, `database`
-- Team: `platform`, `payments`, `search`
+**How matching works:**
+- Agent has label `production`
+- Stack has label `production`
+- → Agent automatically receives that stack's deployments
+
+**Common labels:**
+- `dev`, `staging`, `production`
+- `us-west-2`, `eu-central-1`, `ap-southeast-1`
+- `frontend`, `backend`, `database`
+- `team-platform`, `team-payments`
 
 ### 1.4 Add Annotations
 
-Annotations store metadata that doesn't affect targeting.
+Annotations are key-value pairs for richer metadata. They also enable stack matching.
 
 1. In the **Annotations** section
 2. Add key: `owner`, value: `platform-team`
-3. Add key: `cost-center`, value: `engineering`
+3. Add key: `cost-center`, value: `eng-123`
+
+**Note:** Both key and value must have no whitespace (use hyphens).
 
 ---
 
@@ -81,9 +88,9 @@ Stacks are logical groupings of Kubernetes resources.
    - Generator: Select your generator
 4. Click **Create**
 
-### 2.3 Deploy a Namespace
+### 2.3 Deploy the Application Stack (Happy Path)
 
-Click on your new stack, then click **+ Deploy** and paste:
+Click on your new stack, then click **+ Deploy** and paste this complete multi-document YAML:
 
 ```yaml
 apiVersion: v1
@@ -93,13 +100,7 @@ metadata:
   labels:
     app: demo
     managed-by: brokkr
-```
-
-### 2.4 Deploy a ConfigMap
-
-Click **+ Deploy** again:
-
-```yaml
+---
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -115,11 +116,7 @@ data:
       "dark_mode": true,
       "beta_features": false
     }
-```
-
-### 2.5 Deploy an Application (Happy Path)
-
-```yaml
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -182,14 +179,34 @@ spec:
   type: ClusterIP
 ```
 
-### 2.6 Target the Stack to an Agent
+This single deployment object contains all resources for the application: namespace, config, deployment, and service. The agent applies them in order.
 
-For deployments to be applied, agents must be targeted to stacks.
+### 2.4 Connect Agents to Stacks
+
+There are **two ways** for agents to receive deployment objects from a stack:
+
+#### Option A: Label Matching (Recommended for Fleet Deployments)
+
+Agents automatically receive deployments from stacks with matching labels. No explicit targeting needed.
+
+1. Go to **Stacks** tab, click on `demo-application`
+2. Add a label: `development`
+3. Go to **Agents** tab, click on your agent
+4. Add the same label: `development`
+5. The agent now automatically receives deployments from any stack with label `development`
+
+**Why this matters:** Deploy to 100 agents by labeling one stack, not by creating 100 explicit targets.
+
+#### Option B: Explicit Targeting (For Specific One-Off Bindings)
+
+Directly bind an agent to a stack:
 
 1. Go to **Agents** tab
 2. Click on your active agent
 3. In **Stack Targets** section, select `demo-application` from dropdown
-4. The stack is now targeted - agent will apply the deployment objects
+4. This agent now explicitly receives deployments from this stack
+
+**When to use explicit targets:** Testing a deployment on one agent before rolling out via labels.
 
 ---
 

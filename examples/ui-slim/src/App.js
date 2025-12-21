@@ -1001,7 +1001,7 @@ const JobsPanel = ({ agents }) => {
 };
 
 // ==================== ADMIN PANEL ====================
-const AdminPanel = () => {
+const AdminPanel = ({ onGeneratorsChange, onAgentsChange }) => {
   const [agents, setAgents] = useState([]);
   const [generators, setGenerators] = useState([]);
   const [showCreate, setShowCreate] = useState(null);
@@ -1016,9 +1016,11 @@ const AdminPanel = () => {
       const [a, g] = await Promise.all([api.getAgents(), api.getGenerators()]);
       setAgents(a);
       setGenerators(g);
+      onAgentsChange?.(a);
+      onGeneratorsChange?.(g);
     } catch (e) { console.error(e); }
     setLoading(false);
-  }, []);
+  }, [onAgentsChange, onGeneratorsChange]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -1177,7 +1179,7 @@ export default function App() {
         {activePanel === 'stacks' && <StacksPanel generators={generators} agents={agents} onRefresh={setStacks} />}
         {activePanel === 'templates' && <TemplatesPanel stacks={stacks} />}
         {activePanel === 'jobs' && <JobsPanel agents={agents} />}
-        {activePanel === 'admin' && <AdminPanel />}
+        {activePanel === 'admin' && <AdminPanel onGeneratorsChange={setGenerators} onAgentsChange={setAgents} />}
       </main>
 
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
