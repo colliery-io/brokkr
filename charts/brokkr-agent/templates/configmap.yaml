@@ -10,3 +10,5 @@ data:
   BROKKR__AGENT__CLUSTER_NAME: {{ .Values.broker.clusterName | quote }}
   BROKKR__AGENT__POLLING_INTERVAL: {{ .Values.agent.pollingInterval | quote }}
   BROKKR__AGENT__PAK: {{ .Values.broker.pak | quote }}
+  BROKKR__AGENT__DEPLOYMENT_HEALTH_ENABLED: {{ .Values.agent.deploymentHealth.enabled | quote }}
+  BROKKR__AGENT__DEPLOYMENT_HEALTH_INTERVAL: {{ .Values.agent.deploymentHealth.intervalSeconds | quote }}

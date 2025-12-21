@@ -166,7 +166,7 @@ services:
   brokkr-ui:
     build:
       context: ../..
-      dockerfile: docker/Dockerfile.ui
+      dockerfile: docker/Dockerfile.ui-slim
     ports:
       - "3001:3001"
     depends_on:

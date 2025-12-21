@@ -89,6 +89,10 @@ pub struct Settings {
 pub struct Broker {
     /// PAK Hash
     pub pak_hash: Option<String>,
+    /// Interval for diagnostic cleanup task in seconds (default: 900 = 15 minutes)
+    pub diagnostic_cleanup_interval_seconds: Option<u64>,
+    /// Maximum age for completed/expired diagnostics before deletion in hours (default: 1)
+    pub diagnostic_max_age_hours: Option<i64>,
 }
 
 /// Represents the agent configuration
@@ -115,6 +119,10 @@ pub struct Agent {
     pub event_message_retry_delay: u64,
     /// Health check HTTP server port
     pub health_port: Option<u16>,
+    /// Whether deployment health checking is enabled
+    pub deployment_health_enabled: Option<bool>,
+    /// Interval for deployment health checks in seconds
+    pub deployment_health_interval: Option<u64>,
 }
 
 /// Represents the database configuration

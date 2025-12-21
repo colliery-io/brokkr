@@ -84,6 +84,20 @@ diesel::table! {
 }
 
 diesel::table! {
+    deployment_health (id) {
+        id -> Uuid,
+        agent_id -> Uuid,
+        deployment_object_id -> Uuid,
+        #[max_length = 20]
+        status -> Varchar,
+        summary -> Nullable<Text>,
+        checked_at -> Timestamptz,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
     deployment_objects (id) {
         id -> Uuid,
         created_at -> Timestamptz,
@@ -273,9 +287,39 @@ diesel::table! {
     }
 }
 
+diesel::table! {
+    diagnostic_requests (id) {
+        id -> Uuid,
+        agent_id -> Uuid,
+        deployment_object_id -> Uuid,
+        #[max_length = 20]
+        status -> Varchar,
+        #[max_length = 255]
+        requested_by -> Nullable<Varchar>,
+        created_at -> Timestamptz,
+        claimed_at -> Nullable<Timestamptz>,
+        completed_at -> Nullable<Timestamptz>,
+        expires_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    diagnostic_results (id) {
+        id -> Uuid,
+        request_id -> Uuid,
+        pod_statuses -> Text,
+        events -> Text,
+        log_tails -> Nullable<Text>,
+        collected_at -> Timestamptz,
+        created_at -> Timestamptz,
+    }
+}
+
 diesel::joinable!(agent_annotations -> agents (agent_id));
 diesel::joinable!(agent_events -> agents (agent_id));
 diesel::joinable!(agent_events -> deployment_objects (deployment_object_id));
+diesel::joinable!(deployment_health -> agents (agent_id));
+diesel::joinable!(deployment_health -> deployment_objects (deployment_object_id));
 diesel::joinable!(agent_labels -> agents (agent_id));
 diesel::joinable!(agent_targets -> agents (agent_id));
 diesel::joinable!(agent_targets -> stacks (stack_id));
@@ -296,6 +340,9 @@ diesel::joinable!(work_order_targets -> work_orders (work_order_id));
 diesel::joinable!(work_order_targets -> agents (agent_id));
 diesel::joinable!(work_order_labels -> work_orders (work_order_id));
 diesel::joinable!(work_order_annotations -> work_orders (work_order_id));
+diesel::joinable!(diagnostic_requests -> agents (agent_id));
+diesel::joinable!(diagnostic_requests -> deployment_objects (deployment_object_id));
+diesel::joinable!(diagnostic_results -> diagnostic_requests (request_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
     admin_role,
@@ -305,7 +352,10 @@ diesel::allow_tables_to_appear_in_same_query!(
     agent_targets,
     agents,
     app_initialization,
+    deployment_health,
     deployment_objects,
+    diagnostic_requests,
+    diagnostic_results,
     generators,
     rendered_deployment_objects,
     stack_annotations,

@@ -8,6 +8,7 @@ mod agent_events;
 mod agents;
 mod auth;
 mod deployment_objects;
+mod diagnostics;
 mod generators;
 mod health;
 mod stacks;
