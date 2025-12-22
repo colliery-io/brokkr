@@ -277,11 +277,13 @@ spec:
         image: {{ image }}
         ports:
         - containerPort: {{ port | default(value=8080) }}
+{%- if env | length > 0 %}
         env:
-        {% for key, value in env %}
+{%- for key, value in env %}
         - name: {{ key }}
           value: "{{ value }}"
-        {% endfor %}
+{%- endfor %}
+{%- endif %}
         resources:
           requests:
             memory: {{ memory_request | default(value="128Mi") }}
