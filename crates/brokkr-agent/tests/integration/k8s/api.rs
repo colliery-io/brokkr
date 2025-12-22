@@ -1113,3 +1113,153 @@ async fn test_delete_k8s_object_not_found() {
     // Cleanup
     cleanup(&client, test_namespace).await;
 }
+
+#[tokio::test]
+async fn test_reconcile_namespace_in_same_deployment() {
+    // This test verifies that a deployment containing both a Namespace and
+    // resources that use that namespace works correctly. This was a bug where
+    // validation ran before applying namespaces, causing "namespace not found" errors.
+    let test_namespace = format!("test-ns-same-deploy-{}", Uuid::new_v4());
+    let stack_id = format!("test-stack-{}", Uuid::new_v4());
+    let checksum = format!("test-checksum-{}", Uuid::new_v4());
+
+    let (client, _discovery) = setup().await;
+
+    // Create objects including the namespace itself
+    let objects = vec![
+        // Namespace object
+        serde_json::json!({
+            "apiVersion": "v1",
+            "kind": "Namespace",
+            "metadata": {
+                "name": test_namespace,
+                "annotations": {
+                    STACK_LABEL: stack_id,
+                    CHECKSUM_ANNOTATION: checksum
+                }
+            }
+        }),
+        // ConfigMap in that namespace
+        serde_json::json!({
+            "apiVersion": "v1",
+            "kind": "ConfigMap",
+            "metadata": {
+                "name": "test-config",
+                "namespace": test_namespace,
+                "annotations": {
+                    STACK_LABEL: stack_id,
+                    CHECKSUM_ANNOTATION: checksum
+                }
+            },
+            "data": {
+                "key1": "value1"
+            }
+        }),
+    ];
+
+    let objects: Vec<DynamicObject> = objects
+        .into_iter()
+        .map(|obj| serde_json::from_value(obj).unwrap())
+        .collect();
+
+    // This should succeed - namespace is applied first, then ConfigMap is validated and applied
+    let result = reconcile_target_state(&objects, client.clone(), &stack_id, &checksum).await;
+    assert!(
+        result.is_ok(),
+        "Reconciliation with namespace in same deployment should succeed: {:?}",
+        result.err()
+    );
+
+    // Verify namespace was created
+    let ns_api = Api::<Namespace>::all(client.clone());
+    let ns = ns_api.get(&test_namespace).await;
+    assert!(ns.is_ok(), "Namespace should exist");
+
+    // Verify ConfigMap was created
+    let cm_api = Api::<ConfigMap>::namespaced(client.clone(), &test_namespace);
+    let cm = cm_api.get("test-config").await;
+    assert!(cm.is_ok(), "ConfigMap should exist");
+    assert_eq!(
+        cm.unwrap().data.unwrap().get("key1").unwrap(),
+        "value1",
+        "ConfigMap should have correct value"
+    );
+
+    // Cleanup
+    cleanup(&client, &test_namespace).await;
+}
+
+#[tokio::test]
+async fn test_reconcile_namespace_rollback_on_failure() {
+    // This test verifies that if validation fails for objects in a newly created
+    // namespace, the namespace is rolled back (deleted).
+    let test_namespace = format!("test-ns-rollback-{}", Uuid::new_v4());
+    let stack_id = format!("test-stack-{}", Uuid::new_v4());
+    let checksum = format!("test-checksum-{}", Uuid::new_v4());
+
+    let (client, _discovery) = setup().await;
+
+    // Create objects including the namespace and an invalid object
+    let objects = vec![
+        // Namespace object
+        serde_json::json!({
+            "apiVersion": "v1",
+            "kind": "Namespace",
+            "metadata": {
+                "name": test_namespace,
+                "annotations": {
+                    STACK_LABEL: stack_id,
+                    CHECKSUM_ANNOTATION: checksum
+                }
+            }
+        }),
+        // Invalid Pod (missing required spec)
+        serde_json::json!({
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+                "name": "invalid-pod",
+                "namespace": test_namespace,
+                "annotations": {
+                    STACK_LABEL: stack_id,
+                    CHECKSUM_ANNOTATION: checksum
+                }
+            }
+            // Missing required 'spec' field - should fail validation
+        }),
+    ];
+
+    let objects: Vec<DynamicObject> = objects
+        .into_iter()
+        .map(|obj| serde_json::from_value(obj).unwrap())
+        .collect();
+
+    // This should fail because Pod is invalid
+    let result = reconcile_target_state(&objects, client.clone(), &stack_id, &checksum).await;
+    assert!(
+        result.is_err(),
+        "Reconciliation should fail due to invalid Pod"
+    );
+
+    // Give k8s a moment to process the namespace deletion
+    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+
+    // Verify namespace was rolled back (deleted or terminating)
+    let ns_api = Api::<Namespace>::all(client.clone());
+    match ns_api.get(&test_namespace).await {
+        Ok(ns) => {
+            // If namespace exists, it should be in Terminating state
+            assert_eq!(
+                ns.status.as_ref().and_then(|s| s.phase.as_deref()),
+                Some("Terminating"),
+                "Namespace should be terminating after rollback"
+            );
+        }
+        Err(kube::Error::Api(err)) if err.code == 404 => {
+            // Namespace doesn't exist - this is the expected outcome
+        }
+        Err(e) => {
+            panic!("Unexpected error checking namespace: {:?}", e);
+        }
+    }
+}
