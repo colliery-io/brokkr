@@ -38,7 +38,7 @@ export const getStacks = () => request('/api/v1/stacks');
 export const getStackLabels = (id) => request(`/api/v1/stacks/${id}/labels`);
 export const getStackAnnotations = (id) => request(`/api/v1/stacks/${id}/annotations`);
 export const getStackDeployments = (id) => request(`/api/v1/stacks/${id}/deployment-objects`);
-export const createStack = (name, description, generatorId) => request('/api/v1/stacks', { method: 'POST', body: JSON.stringify({ name, description, generator_id: generatorId }) });
+export const createStack = (name, description, generatorId) => request('/api/v1/stacks', { method: 'POST', body: JSON.stringify({ name, description: description || null, generator_id: generatorId }) });
 export const addStackLabel = (id, label) => request(`/api/v1/stacks/${id}/labels`, { method: 'POST', body: JSON.stringify(label) });
 export const removeStackLabel = (id, label) => request(`/api/v1/stacks/${id}/labels/${label}`, { method: 'DELETE' });
 export const addStackAnnotation = (id, key, value) => request(`/api/v1/stacks/${id}/annotations`, { method: 'POST', body: JSON.stringify({ stack_id: id, key, value }) });
@@ -53,8 +53,8 @@ export const getDeployment = (id) => request(`/api/v1/deployment-objects/${id}`)
 export const getTemplates = () => request('/api/v1/templates');
 export const getTemplateLabels = (id) => request(`/api/v1/templates/${id}/labels`);
 export const getTemplateAnnotations = (id) => request(`/api/v1/templates/${id}/annotations`);
-export const createTemplate = (name, description, content, schema) => request('/api/v1/templates', { method: 'POST', body: JSON.stringify({ name, description, template_content: content, parameters_schema: schema }) });
-export const updateTemplate = (id, description, content, schema) => request(`/api/v1/templates/${id}`, { method: 'PUT', body: JSON.stringify({ description, template_content: content, parameters_schema: schema }) });
+export const createTemplate = (name, description, content, schema) => request('/api/v1/templates', { method: 'POST', body: JSON.stringify({ name, description: description || null, template_content: content, parameters_schema: schema }) });
+export const updateTemplate = (id, description, content, schema) => request(`/api/v1/templates/${id}`, { method: 'PUT', body: JSON.stringify({ description: description || null, template_content: content, parameters_schema: schema }) });
 export const deleteTemplate = (id) => request(`/api/v1/templates/${id}`, { method: 'DELETE' });
 export const addTemplateLabel = (id, label) => request(`/api/v1/templates/${id}/labels`, { method: 'POST', body: JSON.stringify(label) });
 export const removeTemplateLabel = (id, label) => request(`/api/v1/templates/${id}/labels/${label}`, { method: 'DELETE' });
@@ -62,7 +62,7 @@ export const instantiateTemplate = (stackId, templateId, params) => request(`/ap
 
 // Generators
 export const getGenerators = () => request('/api/v1/generators');
-export const createGenerator = (name, description) => request('/api/v1/generators', { method: 'POST', body: JSON.stringify({ name, description }) });
+export const createGenerator = (name, description) => request('/api/v1/generators', { method: 'POST', body: JSON.stringify({ name, description: description || null }) });
 export const rotateGeneratorPak = (id) => request(`/api/v1/generators/${id}/rotate-pak`, { method: 'POST' });
 
 // Work Orders (Jobs)
@@ -89,7 +89,7 @@ export const deleteWorkOrder = (id) => request(`/api/v1/work-orders/${id}`, { me
 export const getWorkOrderLog = (workType, success, agentId, limit) => {
   const params = new URLSearchParams();
   if (workType) params.append('work_type', workType);
-  if (success !== undefined) params.append('success', success);
+  if (success !== undefined && success !== null) params.append('success', success);
   if (agentId) params.append('agent_id', agentId);
   if (limit) params.append('limit', limit);
   const query = params.toString();
