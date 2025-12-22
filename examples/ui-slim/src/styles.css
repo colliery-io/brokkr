@@ -785,6 +785,11 @@ button {
   color: var(--text-secondary);
 }
 
+.error-text {
+  color: var(--accent-danger);
+  word-break: break-word;
+}
+
 .empty {
   padding: 40px;
   text-align: center;

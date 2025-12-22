@@ -871,6 +871,7 @@ const JobsPanel = ({ agents }) => {
                   <th>Type</th>
                   <th>Status</th>
                   <th>Retries</th>
+                  <th>Last Error</th>
                   <th>Created</th>
                   <th>Actions</th>
                 </tr>
@@ -882,6 +883,9 @@ const JobsPanel = ({ agents }) => {
                     <td><Tag variant="info">{wo.work_type}</Tag></td>
                     <td><Status status={wo.status} /></td>
                     <td>{wo.retry_count}/{wo.max_retries}</td>
+                    <td className="dim" title={wo.last_error || ''}>
+                      {wo.last_error ? (wo.last_error.slice(0, 40) + (wo.last_error.length > 40 ? '...' : '')) : '—'}
+                    </td>
                     <td className="dim">{new Date(wo.created_at).toLocaleString()}</td>
                     <td>
                       <button onClick={(e) => { e.stopPropagation(); cancel(wo.id); }} className="btn-icon" title="Cancel">✕</button>
@@ -987,6 +991,18 @@ const JobsPanel = ({ agents }) => {
               <div className="detail-row">
                 <span className="detail-label">Claimed By</span>
                 <span className="mono">{selected.claimed_by}</span>
+              </div>
+            )}
+            {selected.last_error && (
+              <div className="detail-row">
+                <span className="detail-label">Last Error</span>
+                <span className="error-text">{selected.last_error}</span>
+              </div>
+            )}
+            {selected.last_error_at && (
+              <div className="detail-row">
+                <span className="detail-label">Error Time</span>
+                <span className="dim">{new Date(selected.last_error_at).toLocaleString()}</span>
               </div>
             )}
           </div>

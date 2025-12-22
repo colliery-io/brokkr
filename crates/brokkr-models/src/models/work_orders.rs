@@ -69,7 +69,9 @@ pub const WORK_TYPE_BUILD: &str = "build";
     "max_retries": 3,
     "retry_count": 0,
     "backoff_seconds": 60,
-    "next_retry_after": null
+    "next_retry_after": null,
+    "last_error": null,
+    "last_error_at": null
 }))]
 pub struct WorkOrder {
     /// Unique identifier for the work order.
@@ -111,6 +113,12 @@ pub struct WorkOrder {
     /// Timestamp when RETRY_PENDING work order becomes PENDING again.
     #[schema(example = "null")]
     pub next_retry_after: Option<DateTime<Utc>>,
+    /// Most recent error message from failed execution attempt.
+    #[schema(example = "null")]
+    pub last_error: Option<String>,
+    /// Timestamp of the most recent failure.
+    #[schema(example = "null")]
+    pub last_error_at: Option<DateTime<Utc>>,
 }
 
 /// Represents a new work order to be inserted into the database.

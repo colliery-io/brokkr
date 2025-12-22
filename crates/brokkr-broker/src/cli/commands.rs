@@ -103,6 +103,10 @@ pub async fn serve(config: &Settings) -> Result<(), Box<dyn std::error::Error>> 
     };
     utils::background_tasks::start_diagnostic_cleanup_task(dal.clone(), cleanup_config);
 
+    // Start work order maintenance task (retry processing and stale claim detection)
+    let work_order_config = utils::background_tasks::WorkOrderMaintenanceConfig::default();
+    utils::background_tasks::start_work_order_maintenance_task(dal.clone(), work_order_config);
+
     // Configure API routes
     info!("Configuring API routes");
     let app = api::configure_api_routes(dal.clone()).with_state(dal);

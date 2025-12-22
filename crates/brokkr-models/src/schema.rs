@@ -237,6 +237,8 @@ diesel::table! {
         retry_count -> Int4,
         backoff_seconds -> Int4,
         next_retry_after -> Nullable<Timestamptz>,
+        last_error -> Nullable<Text>,
+        last_error_at -> Nullable<Timestamptz>,
     }
 }
 
