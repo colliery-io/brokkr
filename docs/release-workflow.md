@@ -24,21 +24,16 @@ Version tags must follow semantic versioning and start with `v`:
 - `v1.0.0-beta1` - Beta release (marked as pre-release)
 - `v1.0.0-alpha1` - Alpha release (marked as pre-release)
 
-### 2. Automated Testing Phase
+### 2. Automated Build Phase
 
 When a version tag is pushed, the release workflow automatically:
 
-1. **Helm Chart Tests** - Full k3s deployment tests via `angreal helm test`
-   - Deploys broker and agent charts to k3s cluster
-   - Tests all RBAC configurations and values files
-   - Validates health endpoints and connectivity
-   - Same comprehensive tests as local `angreal helm test all`
-   - **Note**: This phase takes 10-15 minutes for full validation
-
-2. **Container Image Builds** - Builds multi-arch images for AMD64 and ARM64
+1. **Container Image Builds** - Builds multi-arch images for AMD64 and ARM64
    - Builds broker and agent images for both platforms
    - Creates manifests but does NOT push them yet
    - Stores image digests as artifacts
+
+**Note**: Helm chart tests run on the main branch via the `build-and-test.yml` workflow before tagging. By the time a release is tagged, helm tests have already passed.
 
 ### 3. Manual Approval Gate
 
@@ -107,11 +102,6 @@ Recommended: Add at least 2 reviewers for redundancy.
          │
          ▼
 ┌─────────────────┐
-│  Helm Tests     │  ← Validates all charts and values
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
 │  Build Images   │  ← Multi-arch builds (amd64 + arm64)
 └────────┬────────┘
          │
@@ -131,6 +121,8 @@ Recommended: Add at least 2 reviewers for redundancy.
 │ Publish Charts  │  ← Create GitHub Release
 └─────────────────┘
 ```
+
+**Note**: Helm tests run on main branch before tagging (via `build-and-test.yml`).
 
 ## Rollback Procedure
 
@@ -216,10 +208,11 @@ Runs when code/Dockerfiles change (~15-20 minutes):
 ### release.yml
 
 Triggered by version tags:
-- Runs full Helm test suite
-- Builds release images with version tags
+- Builds release images with version tags (multi-arch)
 - Requires manual approval before publishing
 - Publishes to ghcr.io and GitHub Releases
+
+**Note**: Helm tests are NOT run in the release workflow. They run on main via `build-and-test.yml` before tagging.
 
 ## Local Testing Before Release
 

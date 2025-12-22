@@ -92,6 +92,21 @@ pub async fn serve(config: &Settings) -> Result<(), Box<dyn std::error::Error>> 
     info!("Initializing Data Access Layer");
     let dal = DAL::new(connection_pool.clone());
 
+    // Start background tasks
+    info!("Starting background tasks");
+    let cleanup_config = utils::background_tasks::DiagnosticCleanupConfig {
+        interval_seconds: config
+            .broker
+            .diagnostic_cleanup_interval_seconds
+            .unwrap_or(900),
+        max_age_hours: config.broker.diagnostic_max_age_hours.unwrap_or(1),
+    };
+    utils::background_tasks::start_diagnostic_cleanup_task(dal.clone(), cleanup_config);
+
+    // Start work order maintenance task (retry processing and stale claim detection)
+    let work_order_config = utils::background_tasks::WorkOrderMaintenanceConfig::default();
+    utils::background_tasks::start_work_order_maintenance_task(dal.clone(), work_order_config);
+
     // Configure API routes
     info!("Configuring API routes");
     let app = api::configure_api_routes(dal.clone()).with_state(dal);

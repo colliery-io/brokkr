@@ -24,6 +24,12 @@ broker:
 
 agent:
   pollingInterval: 30
+  # Deployment health checking configuration
+  deploymentHealth:
+    # Enable deployment health checking
+    enabled: true
+    # Interval in seconds for health checks (minimum 30 recommended)
+    intervalSeconds: 60
 
 rbac:
   create: true

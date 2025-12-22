@@ -1,0 +1,21 @@
+[package]
+name = "brokkr-e2e"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+# Keep this crate independent from the main workspace
+[workspace]
+
+[[bin]]
+name = "brokkr-e2e"
+path = "src/main.rs"
+
+[dependencies]
+reqwest = { version = "0.11", features = ["json"] }
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }

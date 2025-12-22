@@ -431,24 +431,26 @@ impl WorkOrdersDAL<'_> {
 
     /// Completes a work order with failure.
     ///
-    /// If retries remain, the work order is marked as RETRY_PENDING with exponential backoff.
-    /// If max retries exceeded, the work order is moved to the log.
+    /// If `retryable` is true and retries remain, the work order is marked as RETRY_PENDING.
+    /// If `retryable` is false or max retries exceeded, the work order is moved to the log.
     ///
     /// # Arguments
     ///
     /// * `work_order_id` - The UUID of the work order that failed.
     /// * `error_message` - The error message describing the failure.
+    /// * `retryable` - Whether this failure type can be retried.
     ///
     /// # Returns
     ///
     /// Returns either:
     /// - `Ok(None)` if the work order was scheduled for retry
-    /// - `Ok(Some(WorkOrderLog))` if max retries exceeded and moved to log
+    /// - `Ok(Some(WorkOrderLog))` if not retryable or max retries exceeded
     /// - `Err` on database error
     pub fn complete_failure(
         &self,
         work_order_id: Uuid,
         error_message: String,
+        retryable: bool,
     ) -> Result<Option<WorkOrderLog>, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
 
@@ -460,8 +462,9 @@ impl WorkOrdersDAL<'_> {
 
             let new_retry_count = work_order.retry_count + 1;
 
-            if new_retry_count > work_order.max_retries {
-                // Max retries exceeded - move to log
+            // Move to log immediately if not retryable, or if max retries exceeded
+            if !retryable || new_retry_count > work_order.max_retries {
+                // Move to log
                 let log_entry =
                     NewWorkOrderLog::from_work_order(&work_order, false, Some(error_message));
                 let log_result: WorkOrderLog = diesel::insert_into(work_order_log::table)
@@ -478,7 +481,8 @@ impl WorkOrdersDAL<'_> {
                 let backoff_multiplier = 2_i64.pow(new_retry_count as u32);
                 let backoff_duration =
                     Duration::seconds(work_order.backoff_seconds as i64 * backoff_multiplier);
-                let next_retry = Utc::now() + backoff_duration;
+                let now = Utc::now();
+                let next_retry = now + backoff_duration;
 
                 diesel::update(work_orders::table.filter(work_orders::id.eq(work_order_id)))
                     .set((
@@ -487,6 +491,8 @@ impl WorkOrdersDAL<'_> {
                         work_orders::next_retry_after.eq(next_retry),
                         work_orders::claimed_by.eq(None::<Uuid>),
                         work_orders::claimed_at.eq(None::<chrono::DateTime<Utc>>),
+                        work_orders::last_error.eq(&error_message),
+                        work_orders::last_error_at.eq(now),
                     ))
                     .execute(conn)?;
 

@@ -129,6 +129,14 @@ pub struct CompleteWorkOrderRequest {
     pub success: bool,
     /// Result message (image digest on success, error details on failure).
     pub message: Option<String>,
+    /// Whether the failure is retryable. Defaults to true if not specified.
+    /// Set to false for permanent failures (e.g., invalid YAML, missing namespace).
+    #[serde(default = "default_retryable")]
+    pub retryable: bool,
+}
+
+fn default_retryable() -> bool {
+    true
 }
 
 /// Query parameters for listing work orders.
@@ -666,12 +674,22 @@ async fn complete_work_order(
         }
     } else {
         let error_message = request.message.unwrap_or_else(|| "Unknown error".to_string());
-        match dal.work_orders().complete_failure(id, error_message) {
+        match dal
+            .work_orders()
+            .complete_failure(id, error_message, request.retryable)
+        {
             Ok(Some(log_entry)) => {
-                info!(
-                    "Work order {} failed and exceeded max retries, moved to log",
-                    id
-                );
+                if request.retryable {
+                    info!(
+                        "Work order {} failed and exceeded max retries, moved to log",
+                        id
+                    );
+                } else {
+                    info!(
+                        "Work order {} failed with non-retryable error, moved to log",
+                        id
+                    );
+                }
                 Ok((StatusCode::OK, Json(serde_json::json!(log_entry))))
             }
             Ok(None) => {

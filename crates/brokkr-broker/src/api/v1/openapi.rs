@@ -4,15 +4,23 @@
  * See LICENSE file in the project root for full license text.
  */
 
+use crate::api::v1::diagnostics::{
+    CreateDiagnosticRequest, DiagnosticResponse, SubmitDiagnosticResult,
+};
 use crate::api::v1::generators::CreateGeneratorResponse;
 use crate::api::v1::middleware::AuthResponse;
 use crate::api::v1::stacks::TemplateInstantiationRequest;
 use crate::api::v1::templates::{AddAnnotationRequest, CreateTemplateRequest, UpdateTemplateRequest};
+use crate::api::v1::health::{
+    DeploymentHealthResponse, DeploymentObjectHealthSummary, DeploymentObjectHealthUpdate,
+    HealthStatusUpdate, StackHealthResponse,
+};
 use crate::api::v1::work_orders::{
     ClaimWorkOrderRequest, CompleteWorkOrderRequest, CreateWorkOrderRequest, WorkOrderTargeting,
 };
 use crate::api::v1::{
-    agent_events, agents, auth, deployment_objects, generators, stacks, templates, work_orders,
+    agent_events, agents, auth, deployment_objects, diagnostics, generators, health, stacks,
+    templates, work_orders,
 };
 use crate::dal::DAL;
 use axum::{response::Json, routing::get, Router};
@@ -22,7 +30,10 @@ use brokkr_models::models::{
     agent_labels::{AgentLabel, NewAgentLabel},
     agent_targets::{AgentTarget, NewAgentTarget},
     agents::{Agent, NewAgent},
+    deployment_health::{DeploymentHealth, HealthSummary, ResourceHealth},
     deployment_objects::{DeploymentObject, NewDeploymentObject},
+    diagnostic_requests::DiagnosticRequest,
+    diagnostic_results::DiagnosticResult,
     generator::{Generator, NewGenerator},
     stack_templates::{NewStackTemplate, StackTemplate},
     stacks::{NewStack, Stack},
@@ -90,6 +101,14 @@ use utoipa_swagger_ui::SwaggerUi;
         work_orders::list_work_order_log,
         work_orders::get_work_order_log,
         auth::verify_pak,
+        health::update_health_status,
+        health::get_deployment_health,
+        health::get_stack_health,
+        diagnostics::create_diagnostic_request,
+        diagnostics::get_diagnostic,
+        diagnostics::get_pending_diagnostics,
+        diagnostics::claim_diagnostic,
+        diagnostics::submit_diagnostic_result,
     ),
     components(
         schemas(
@@ -126,6 +145,19 @@ use utoipa_swagger_ui::SwaggerUi;
             WorkOrderTargeting,
             ClaimWorkOrderRequest,
             CompleteWorkOrderRequest,
+            DeploymentHealth,
+            HealthSummary,
+            ResourceHealth,
+            HealthStatusUpdate,
+            DeploymentObjectHealthUpdate,
+            DeploymentHealthResponse,
+            StackHealthResponse,
+            DeploymentObjectHealthSummary,
+            DiagnosticRequest,
+            DiagnosticResult,
+            CreateDiagnosticRequest,
+            DiagnosticResponse,
+            SubmitDiagnosticResult,
         )
     ),
     tags(
@@ -140,7 +172,9 @@ use utoipa_swagger_ui::SwaggerUi;
         (name = "templates", description = "Stack Templates management API"),
         (name = "work-orders", description = "Work Orders management API"),
         (name = "work-order-log", description = "Work Order Log API"),
-        (name = "auth", description = "Authentication API")
+        (name = "auth", description = "Authentication API"),
+        (name = "health", description = "Deployment Health monitoring API"),
+        (name = "diagnostics", description = "On-demand diagnostics API")
     ),
     modifiers(&SecurityAddon)
 )]

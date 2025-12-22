@@ -7,6 +7,9 @@ level = "debug"
 [broker]
 pak_hash = "4c697273df3d764cba950bb5c04368097685f09259f5bd880d892cf1ff9f4cdd"
 # brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8
+# Diagnostic cleanup configuration
+diagnostic_cleanup_interval_seconds = 900  # 15 minutes
+diagnostic_max_age_hours = 1               # 1 hour
 
 [pak]
 prefix = "brokkr"
@@ -27,3 +30,6 @@ cluster_name='DEFAULT'
 max_event_message_retries = 2
 event_message_retry_delay = 5
 health_port = 8080
+# Deployment health checking configuration
+deployment_health_enabled = true
+deployment_health_interval = 60

@@ -56,8 +56,17 @@ use stack_annotations::StackAnnotationsDAL;
 pub mod stack_labels;
 use stack_labels::StackLabelsDAL;
 
+pub mod deployment_health;
+use deployment_health::DeploymentHealthDAL;
+
 pub mod deployment_objects;
 use deployment_objects::DeploymentObjectsDAL;
+
+pub mod diagnostic_requests;
+use diagnostic_requests::DiagnosticRequestsDAL;
+
+pub mod diagnostic_results;
+use diagnostic_results::DiagnosticResultsDAL;
 
 pub mod generators;
 use generators::GeneratorsDAL;
@@ -177,6 +186,15 @@ impl DAL {
         StacksDAL { dal: self }
     }
 
+    /// Provides access to the Deployment Health Data Access Layer.
+    ///
+    /// # Returns
+    ///
+    /// An instance of DeploymentHealthDAL.
+    pub fn deployment_health(&self) -> DeploymentHealthDAL {
+        DeploymentHealthDAL { dal: self }
+    }
+
     /// Provides access to the Deployment Objects Data Access Layer.
     ///
     /// # Returns
@@ -247,6 +265,24 @@ impl DAL {
     /// An instance of WorkOrdersDAL.
     pub fn work_orders(&self) -> WorkOrdersDAL {
         WorkOrdersDAL { dal: self }
+    }
+
+    /// Provides access to the Diagnostic Requests Data Access Layer.
+    ///
+    /// # Returns
+    ///
+    /// An instance of DiagnosticRequestsDAL.
+    pub fn diagnostic_requests(&self) -> DiagnosticRequestsDAL {
+        DiagnosticRequestsDAL { dal: self }
+    }
+
+    /// Provides access to the Diagnostic Results Data Access Layer.
+    ///
+    /// # Returns
+    ///
+    /// An instance of DiagnosticResultsDAL.
+    pub fn diagnostic_results(&self) -> DiagnosticResultsDAL {
+        DiagnosticResultsDAL { dal: self }
     }
 }
 

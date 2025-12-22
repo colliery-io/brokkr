@@ -14,7 +14,9 @@ pub mod agent_events;
 pub mod agents;
 pub mod auth;
 pub mod deployment_objects;
+pub mod diagnostics;
 pub mod generators;
+pub mod health;
 pub mod middleware;
 pub mod openapi;
 pub mod stacks;
@@ -42,7 +44,9 @@ pub fn routes(dal: DAL) -> Router<DAL> {
         .merge(agents::routes())
         .merge(auth::routes())
         .merge(deployment_objects::routes())
+        .merge(diagnostics::routes())
         .merge(generators::routes())
+        .merge(health::routes())
         .merge(stacks::routes())
         .merge(templates::routes())
         .merge(work_orders::routes())

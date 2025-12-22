@@ -1,0 +1,12 @@
+FROM node:18-alpine
+WORKDIR /app
+# Copy package files
+COPY examples/ui-slim/package.json ./
+# Install dependencies
+RUN npm install
+# Copy source code
+COPY examples/ui-slim/ .
+# Expose port for development server
+EXPOSE 3001
+# Start development server
+CMD ["npm", "start"]
