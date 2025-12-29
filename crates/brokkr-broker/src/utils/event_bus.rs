@@ -13,7 +13,6 @@
 use crate::dal::DAL;
 use brokkr_models::models::webhooks::{BrokkrEvent, NewWebhookDelivery};
 use brokkr_utils::logging::prelude::*;
-use std::sync::Arc;
 use tokio::sync::mpsc;
 
 /// Default channel buffer size for events.

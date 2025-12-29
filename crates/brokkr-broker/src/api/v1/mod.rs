@@ -21,6 +21,7 @@ pub mod middleware;
 pub mod openapi;
 pub mod stacks;
 pub mod templates;
+pub mod webhooks;
 pub mod work_orders;
 
 use crate::dal::DAL;
@@ -49,6 +50,7 @@ pub fn routes(dal: DAL) -> Router<DAL> {
         .merge(health::routes())
         .merge(stacks::routes())
         .merge(templates::routes())
+        .merge(webhooks::routes())
         .merge(work_orders::routes())
         .merge(work_orders::agent_routes())
         .layer(from_fn_with_state(

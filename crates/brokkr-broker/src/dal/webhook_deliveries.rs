@@ -12,9 +12,8 @@
 
 use crate::dal::DAL;
 use brokkr_models::models::webhooks::{
-    NewWebhookDelivery, UpdateWebhookDelivery, WebhookDelivery,
-    DELIVERY_STATUS_DEAD, DELIVERY_STATUS_FAILED, DELIVERY_STATUS_PENDING,
-    DELIVERY_STATUS_SUCCESS,
+    NewWebhookDelivery, WebhookDelivery, DELIVERY_STATUS_DEAD, DELIVERY_STATUS_FAILED,
+    DELIVERY_STATUS_PENDING, DELIVERY_STATUS_SUCCESS,
 };
 use brokkr_models::schema::webhook_deliveries;
 use chrono::{DateTime, Duration, Utc};
@@ -86,12 +85,14 @@ impl WebhookDeliveriesDAL<'_> {
             .load(conn)
     }
 
-    /// Lists deliveries for a subscription.
+    /// Lists deliveries for a subscription with optional filtering.
     ///
     /// # Arguments
     ///
     /// * `subscription_id` - The subscription UUID.
+    /// * `status_filter` - Optional status to filter by.
     /// * `limit` - Maximum number of deliveries to return.
+    /// * `offset` - Number of deliveries to skip for pagination.
     ///
     /// # Returns
     ///
@@ -99,14 +100,24 @@ impl WebhookDeliveriesDAL<'_> {
     pub fn list_for_subscription(
         &self,
         subscription_id: Uuid,
+        status_filter: Option<&str>,
         limit: i64,
+        offset: i64,
     ) -> Result<Vec<WebhookDelivery>, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
 
-        webhook_deliveries::table
+        let mut query = webhook_deliveries::table
             .filter(webhook_deliveries::subscription_id.eq(subscription_id))
+            .into_boxed();
+
+        if let Some(status) = status_filter {
+            query = query.filter(webhook_deliveries::status.eq(status));
+        }
+
+        query
             .order(webhook_deliveries::created_at.desc())
             .limit(limit)
+            .offset(offset)
             .load(conn)
     }
 
