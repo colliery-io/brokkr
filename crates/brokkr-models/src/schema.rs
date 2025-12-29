@@ -317,6 +317,44 @@ diesel::table! {
     }
 }
 
+diesel::table! {
+    webhook_subscriptions (id) {
+        id -> Uuid,
+        #[max_length = 255]
+        name -> Varchar,
+        url_encrypted -> Bytea,
+        auth_header_encrypted -> Nullable<Bytea>,
+        event_types -> Array<Nullable<Text>>,
+        filters -> Nullable<Text>,
+        enabled -> Bool,
+        max_retries -> Int4,
+        timeout_seconds -> Int4,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
+        #[max_length = 255]
+        created_by -> Nullable<Varchar>,
+    }
+}
+
+diesel::table! {
+    webhook_deliveries (id) {
+        id -> Uuid,
+        subscription_id -> Uuid,
+        #[max_length = 100]
+        event_type -> Varchar,
+        event_id -> Uuid,
+        payload -> Text,
+        #[max_length = 20]
+        status -> Varchar,
+        attempts -> Int4,
+        last_attempt_at -> Nullable<Timestamptz>,
+        next_attempt_at -> Nullable<Timestamptz>,
+        last_error -> Nullable<Text>,
+        created_at -> Timestamptz,
+        completed_at -> Nullable<Timestamptz>,
+    }
+}
+
 diesel::joinable!(agent_annotations -> agents (agent_id));
 diesel::joinable!(agent_events -> agents (agent_id));
 diesel::joinable!(agent_events -> deployment_objects (deployment_object_id));
@@ -345,6 +383,7 @@ diesel::joinable!(work_order_annotations -> work_orders (work_order_id));
 diesel::joinable!(diagnostic_requests -> agents (agent_id));
 diesel::joinable!(diagnostic_requests -> deployment_objects (deployment_object_id));
 diesel::joinable!(diagnostic_results -> diagnostic_requests (request_id));
+diesel::joinable!(webhook_deliveries -> webhook_subscriptions (subscription_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
     admin_role,
@@ -372,4 +411,6 @@ diesel::allow_tables_to_appear_in_same_query!(
     work_order_labels,
     work_order_log,
     work_order_targets,
+    webhook_subscriptions,
+    webhook_deliveries,
 );

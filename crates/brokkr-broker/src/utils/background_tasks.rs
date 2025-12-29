@@ -147,6 +147,277 @@ pub fn start_work_order_maintenance_task(dal: DAL, config: WorkOrderMaintenanceC
     });
 }
 
+/// Configuration for webhook delivery worker.
+pub struct WebhookDeliveryConfig {
+    /// How often to poll for pending deliveries (in seconds).
+    pub interval_seconds: u64,
+    /// Maximum number of deliveries to process per interval.
+    pub batch_size: i64,
+    /// Encryption key for decrypting URLs and auth headers.
+    pub encryption_key: Vec<u8>,
+}
+
+impl Default for WebhookDeliveryConfig {
+    fn default() -> Self {
+        Self {
+            interval_seconds: 5,  // Poll every 5 seconds
+            batch_size: 50,       // Process up to 50 deliveries per batch
+            encryption_key: vec![], // Must be set by caller
+        }
+    }
+}
+
+/// Configuration for webhook cleanup task.
+pub struct WebhookCleanupConfig {
+    /// How often to run the cleanup (in seconds).
+    pub interval_seconds: u64,
+    /// Number of days to retain completed/dead deliveries.
+    pub retention_days: i64,
+}
+
+impl Default for WebhookCleanupConfig {
+    fn default() -> Self {
+        Self {
+            interval_seconds: 3600, // Every hour
+            retention_days: 7,      // Keep for 7 days
+        }
+    }
+}
+
+/// Starts the webhook delivery worker background task.
+///
+/// This task periodically:
+/// 1. Fetches pending deliveries that are ready to be sent
+/// 2. Attempts to deliver each via HTTP POST
+/// 3. Marks deliveries as success or failure (with retry scheduling)
+///
+/// # Arguments
+/// * `dal` - The Data Access Layer instance
+/// * `config` - Configuration for the delivery worker
+pub fn start_webhook_delivery_task(dal: DAL, config: WebhookDeliveryConfig) {
+    info!(
+        "Starting webhook delivery worker (interval: {}s, batch_size: {})",
+        config.interval_seconds, config.batch_size
+    );
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .expect("Failed to create HTTP client");
+
+    tokio::spawn(async move {
+        let mut ticker = interval(Duration::from_secs(config.interval_seconds));
+
+        loop {
+            ticker.tick().await;
+
+            // Fetch pending deliveries
+            let deliveries = match dal.webhook_deliveries().get_pending(config.batch_size) {
+                Ok(d) => d,
+                Err(e) => {
+                    error!("Failed to fetch pending webhook deliveries: {:?}", e);
+                    continue;
+                }
+            };
+
+            if deliveries.is_empty() {
+                continue;
+            }
+
+            debug!("Processing {} pending webhook deliveries", deliveries.len());
+
+            for delivery in deliveries {
+                // Get the subscription to retrieve URL and auth header
+                let subscription = match dal.webhook_subscriptions().get(delivery.subscription_id) {
+                    Ok(Some(sub)) => sub,
+                    Ok(None) => {
+                        warn!(
+                            "Subscription {} not found for delivery {}, marking as dead",
+                            delivery.subscription_id, delivery.id
+                        );
+                        let _ = dal.webhook_deliveries().mark_failed(
+                            delivery.id,
+                            "Subscription not found",
+                            0, // Force dead
+                        );
+                        continue;
+                    }
+                    Err(e) => {
+                        error!(
+                            "Failed to get subscription {} for delivery {}: {:?}",
+                            delivery.subscription_id, delivery.id, e
+                        );
+                        continue;
+                    }
+                };
+
+                // Decrypt URL and auth header
+                let url = match decrypt_value(&subscription.url_encrypted, &config.encryption_key) {
+                    Ok(u) => u,
+                    Err(e) => {
+                        error!(
+                            "Failed to decrypt URL for subscription {}: {}",
+                            subscription.id, e
+                        );
+                        let _ = dal.webhook_deliveries().mark_failed(
+                            delivery.id,
+                            &format!("Failed to decrypt URL: {}", e),
+                            0,
+                        );
+                        continue;
+                    }
+                };
+
+                let auth_header = subscription
+                    .auth_header_encrypted
+                    .as_ref()
+                    .map(|encrypted| decrypt_value(encrypted, &config.encryption_key))
+                    .transpose();
+
+                let auth_header = match auth_header {
+                    Ok(h) => h,
+                    Err(e) => {
+                        error!(
+                            "Failed to decrypt auth header for subscription {}: {}",
+                            subscription.id, e
+                        );
+                        let _ = dal.webhook_deliveries().mark_failed(
+                            delivery.id,
+                            &format!("Failed to decrypt auth header: {}", e),
+                            0,
+                        );
+                        continue;
+                    }
+                };
+
+                // Attempt delivery
+                let result = attempt_delivery(&client, &url, auth_header.as_deref(), &delivery.payload).await;
+
+                match result {
+                    Ok(_) => {
+                        match dal.webhook_deliveries().mark_success(delivery.id) {
+                            Ok(_) => {
+                                debug!(
+                                    "Webhook delivery {} succeeded for subscription {}",
+                                    delivery.id, subscription.id
+                                );
+                            }
+                            Err(e) => {
+                                error!(
+                                    "Failed to mark delivery {} as success: {:?}",
+                                    delivery.id, e
+                                );
+                            }
+                        }
+                    }
+                    Err(error) => {
+                        match dal.webhook_deliveries().mark_failed(
+                            delivery.id,
+                            &error,
+                            subscription.max_retries,
+                        ) {
+                            Ok(updated) => {
+                                if updated.status == "dead" {
+                                    warn!(
+                                        "Webhook delivery {} dead after {} attempts: {}",
+                                        delivery.id, updated.attempts, error
+                                    );
+                                } else {
+                                    debug!(
+                                        "Webhook delivery {} failed (attempt {}), will retry: {}",
+                                        delivery.id, updated.attempts, error
+                                    );
+                                }
+                            }
+                            Err(e) => {
+                                error!(
+                                    "Failed to mark delivery {} as failed: {:?}",
+                                    delivery.id, e
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+/// Attempts to deliver a webhook payload via HTTP POST.
+async fn attempt_delivery(
+    client: &reqwest::Client,
+    url: &str,
+    auth_header: Option<&str>,
+    payload: &str,
+) -> Result<(), String> {
+    let mut request = client
+        .post(url)
+        .header("Content-Type", "application/json")
+        .body(payload.to_string());
+
+    if let Some(auth) = auth_header {
+        request = request.header("Authorization", auth);
+    }
+
+    let response = request.send().await.map_err(|e| format!("Request failed: {}", e))?;
+
+    let status = response.status();
+    if status.is_success() {
+        Ok(())
+    } else {
+        let body = response.text().await.unwrap_or_default();
+        Err(format!("HTTP {}: {}", status, body.chars().take(200).collect::<String>()))
+    }
+}
+
+/// Decrypts an encrypted value using the provided key.
+///
+/// For now, this is a placeholder that treats the encrypted value as plaintext.
+/// TODO: Implement actual encryption/decryption.
+fn decrypt_value(encrypted: &[u8], _key: &[u8]) -> Result<String, String> {
+    // Placeholder: treat as plaintext UTF-8
+    // In production, implement proper AES-GCM or similar encryption
+    String::from_utf8(encrypted.to_vec())
+        .map_err(|e| format!("Invalid UTF-8: {}", e))
+}
+
+/// Starts the webhook cleanup background task.
+///
+/// This task periodically deletes old completed/dead deliveries
+/// based on the retention policy.
+///
+/// # Arguments
+/// * `dal` - The Data Access Layer instance
+/// * `config` - Configuration for the cleanup task
+pub fn start_webhook_cleanup_task(dal: DAL, config: WebhookCleanupConfig) {
+    info!(
+        "Starting webhook cleanup task (interval: {}s, retention: {}d)",
+        config.interval_seconds, config.retention_days
+    );
+
+    tokio::spawn(async move {
+        let mut ticker = interval(Duration::from_secs(config.interval_seconds));
+
+        loop {
+            ticker.tick().await;
+
+            match dal.webhook_deliveries().cleanup_old(config.retention_days) {
+                Ok(deleted) => {
+                    if deleted > 0 {
+                        info!(
+                            "Cleaned up {} old webhook deliveries (age > {}d)",
+                            deleted, config.retention_days
+                        );
+                    }
+                }
+                Err(e) => {
+                    error!("Failed to cleanup old webhook deliveries: {:?}", e);
+                }
+            }
+        }
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -162,5 +433,27 @@ mod tests {
     fn test_default_work_order_config() {
         let config = WorkOrderMaintenanceConfig::default();
         assert_eq!(config.interval_seconds, 10);
+    }
+
+    #[test]
+    fn test_default_webhook_delivery_config() {
+        let config = WebhookDeliveryConfig::default();
+        assert_eq!(config.interval_seconds, 5);
+        assert_eq!(config.batch_size, 50);
+    }
+
+    #[test]
+    fn test_default_webhook_cleanup_config() {
+        let config = WebhookCleanupConfig::default();
+        assert_eq!(config.interval_seconds, 3600);
+        assert_eq!(config.retention_days, 7);
+    }
+
+    #[test]
+    fn test_decrypt_value_plaintext() {
+        let encrypted = b"https://example.com/webhook".to_vec();
+        let result = decrypt_value(&encrypted, &[]);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "https://example.com/webhook");
     }
 }

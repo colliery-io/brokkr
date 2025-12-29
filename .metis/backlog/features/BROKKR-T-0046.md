@@ -44,9 +44,10 @@ Implement a flexible webhook delivery system that allows operators to subscribe 
 ## Acceptance Criteria
 
 ### Webhook Registration
-- [ ] API to register webhook subscriptions (URL, secret, event types)
+- [ ] API to register webhook subscriptions (URL, auth_header, event types)
 - [ ] Support filtering by event type, agent, stack, or label selectors
-- [ ] Webhook secrets stored securely (encrypted at rest)
+- [ ] URL and auth_header encrypted at rest
+- [ ] Optional `validate` flag to test endpoint on create
 - [ ] CRUD operations for webhook subscriptions
 
 ### Event Types
@@ -66,9 +67,9 @@ Implement a flexible webhook delivery system that allows operators to subscribe 
 - [ ] Delivery status tracking per webhook
 
 ### Security
-- [ ] HMAC signature on payloads (X-Brokkr-Signature header)
-- [ ] Timestamp in payload to prevent replay attacks
-- [ ] TLS required for webhook URLs (configurable for dev)
+- [ ] Optional auth header per subscription (for endpoints that require it)
+- [ ] URLs may contain embedded tokens (e.g., Slack incoming webhooks)
+- [ ] TLS recommended for webhook URLs (warning on HTTP, configurable)
 
 ### Observability
 - [ ] Delivery success/failure metrics
@@ -134,8 +135,8 @@ CREATE TABLE webhook_subscriptions (
     
     -- Subscription details
     name VARCHAR(255) NOT NULL,
-    url TEXT NOT NULL,
-    secret_encrypted BYTEA NOT NULL,        -- Encrypted webhook secret for HMAC
+    url_encrypted BYTEA NOT NULL,           -- Encrypted; may contain embedded tokens (e.g., Slack URLs)
+    auth_header_encrypted BYTEA,            -- Encrypted; optional: "Bearer xyz" or "Token abc"
     
     -- Event filtering
     event_types TEXT[] NOT NULL,            -- Array of event type patterns (e.g., 'health.*')
@@ -193,11 +194,21 @@ Create a webhook subscription.
 {
   "name": "PagerDuty Alerts",
   "url": "https://events.pagerduty.com/v2/enqueue",
-  "secret": "whsec_...",
+  "auth_header": "Bearer pd-routing-key-here",
   "event_types": ["health.degraded", "health.failing", "agent.offline"],
   "filters": {
     "labels": { "env": "production" }
-  }
+  },
+  "validate": true
+}
+```
+
+For Slack (token embedded in URL, no auth header needed):
+```json
+{
+  "name": "Slack Alerts",
+  "url": "https://hooks.slack.com/services/T00/B00/xxxxx",
+  "event_types": ["health.*", "agent.offline"]
 }
 ```
 
@@ -254,10 +265,9 @@ Manually retry a failed delivery.
 **Headers**:
 ```
 Content-Type: application/json
-X-Brokkr-Signature: sha256=abc123...
+Authorization: <auth_header if configured>
 X-Brokkr-Event: health.degraded
 X-Brokkr-Delivery-Id: dlv_xyz789
-X-Brokkr-Timestamp: 1705315800
 ```
 
 ---
@@ -281,7 +291,7 @@ X-Brokkr-Timestamp: 1705315800
 
 - **Slow webhooks blocking**: Use connection timeouts and async workers
 - **Webhook endpoint down**: Retry with backoff, eventually dead-letter
-- **Secret management**: Encrypt secrets at rest, never log
+- **Secret management**: Encrypt URL and auth_header at rest, never log decrypted values
 
 ---
 
@@ -295,14 +305,14 @@ X-Brokkr-Timestamp: 1705315800
 
 ### Phase 2: Subscription API
 - [ ] Implement CRUD endpoints for webhook subscriptions
-- [ ] Secret encryption/decryption utilities
+- [ ] URL/auth_header encryption/decryption utilities
 - [ ] Event type pattern matching (wildcards)
 - [ ] Filter matching logic (agent, stack, labels)
 
 ### Phase 3: Delivery System
 - [ ] Implement delivery worker background task
-- [ ] HMAC signature generation
 - [ ] HTTP client with timeout and retries
+- [ ] Include auth_header in Authorization header if configured
 - [ ] Exponential backoff logic
 - [ ] Dead letter handling
 
@@ -315,18 +325,22 @@ X-Brokkr-Timestamp: 1705315800
 ### Phase 5: Observability & Polish
 - [ ] Delivery status API endpoints
 - [ ] Manual retry endpoint
+- [ ] Delivery cleanup background task (configurable retention)
 - [ ] Prometheus metrics (deliveries, latency, failures)
 - [ ] Integration tests
 - [ ] Documentation
 
 ---
 
-## Open Questions
+## Design Decisions
 
-1. **Event persistence**: Should events be persisted independently of deliveries for replay/audit?
-2. **Rate limiting**: Should we rate-limit deliveries per subscription to protect endpoints?
-3. **Batching**: Should we support batching multiple events into single webhook call?
-4. **Subscription validation**: Should we verify webhook URL is reachable on create?
+1. **Encryption key management**: Use existing broker secret if available, otherwise config file + env var override (standard Brokkr pattern).
+
+2. **Event persistence**: No separate event storage. Events only exist as deliveries. Rationale: Can't guarantee downstream idempotence, so replay capability would be misleading.
+
+3. **Delivery cleanup**: Single configurable retention period via config + env var (e.g., `webhook.delivery_retention_days`, default 7 days).
+
+4. **Subscription validation**: Optional. Support `validate: true` flag on create that sends a test event and requires successful delivery.
 
 ---
 

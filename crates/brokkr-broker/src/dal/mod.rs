@@ -86,6 +86,12 @@ use template_targets::TemplateTargetsDAL;
 pub mod rendered_deployment_objects;
 use rendered_deployment_objects::RenderedDeploymentObjectsDAL;
 
+pub mod webhook_deliveries;
+use webhook_deliveries::WebhookDeliveriesDAL;
+
+pub mod webhook_subscriptions;
+use webhook_subscriptions::WebhookSubscriptionsDAL;
+
 pub mod work_orders;
 use work_orders::WorkOrdersDAL;
 
@@ -283,6 +289,24 @@ impl DAL {
     /// An instance of DiagnosticResultsDAL.
     pub fn diagnostic_results(&self) -> DiagnosticResultsDAL {
         DiagnosticResultsDAL { dal: self }
+    }
+
+    /// Provides access to the Webhook Subscriptions Data Access Layer.
+    ///
+    /// # Returns
+    ///
+    /// An instance of WebhookSubscriptionsDAL.
+    pub fn webhook_subscriptions(&self) -> WebhookSubscriptionsDAL {
+        WebhookSubscriptionsDAL { dal: self }
+    }
+
+    /// Provides access to the Webhook Deliveries Data Access Layer.
+    ///
+    /// # Returns
+    ///
+    /// An instance of WebhookDeliveriesDAL.
+    pub fn webhook_deliveries(&self) -> WebhookDeliveriesDAL {
+        WebhookDeliveriesDAL { dal: self }
     }
 }
 
