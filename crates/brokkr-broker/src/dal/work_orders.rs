@@ -24,6 +24,8 @@
 //! are considered stale and can be reclaimed by other agents.
 
 use crate::dal::DAL;
+use crate::utils::event_bus;
+use brokkr_models::models::webhooks::{BrokkrEvent, EVENT_WORKORDER_COMPLETED};
 use brokkr_models::models::work_order_annotations::{NewWorkOrderAnnotation, WorkOrderAnnotation};
 use brokkr_models::models::work_order_labels::{NewWorkOrderLabel, WorkOrderLabel};
 use brokkr_models::models::work_orders::{
@@ -409,7 +411,7 @@ impl WorkOrdersDAL<'_> {
     ) -> Result<WorkOrderLog, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
 
-        conn.transaction(|conn| {
+        let log_result: WorkOrderLog = conn.transaction(|conn| {
             // Get the work order
             let work_order: WorkOrder = work_orders::table
                 .filter(work_orders::id.eq(work_order_id))
@@ -425,8 +427,27 @@ impl WorkOrdersDAL<'_> {
             diesel::delete(work_orders::table.filter(work_orders::id.eq(work_order_id)))
                 .execute(conn)?;
 
-            Ok(log_result)
-        })
+            Ok::<WorkOrderLog, diesel::result::Error>(log_result)
+        })?;
+
+        // Emit completion event
+        self.emit_completion_event(&log_result);
+
+        Ok(log_result)
+    }
+
+    /// Emits a work order completion event.
+    fn emit_completion_event(&self, log: &WorkOrderLog) {
+        let event_data = serde_json::json!({
+            "work_order_log_id": log.id,
+            "work_type": log.work_type,
+            "success": log.success,
+            "result_message": log.result_message,
+            "agent_id": log.claimed_by,
+            "completed_at": log.created_at,
+        });
+
+        event_bus::emit(BrokkrEvent::new(EVENT_WORKORDER_COMPLETED, event_data));
     }
 
     /// Completes a work order with failure.
@@ -454,7 +475,7 @@ impl WorkOrdersDAL<'_> {
     ) -> Result<Option<WorkOrderLog>, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
 
-        conn.transaction(|conn| {
+        let result: Option<WorkOrderLog> = conn.transaction(|conn| {
             // Get the work order
             let work_order: WorkOrder = work_orders::table
                 .filter(work_orders::id.eq(work_order_id))
@@ -475,7 +496,7 @@ impl WorkOrdersDAL<'_> {
                 diesel::delete(work_orders::table.filter(work_orders::id.eq(work_order_id)))
                     .execute(conn)?;
 
-                Ok(Some(log_result))
+                Ok::<Option<WorkOrderLog>, diesel::result::Error>(Some(log_result))
             } else {
                 // Schedule retry with exponential backoff
                 let backoff_multiplier = 2_i64.pow(new_retry_count as u32);
@@ -498,7 +519,14 @@ impl WorkOrdersDAL<'_> {
 
                 Ok(None)
             }
-        })
+        })?;
+
+        // Emit completion event if work order was moved to log
+        if let Some(ref log) = result {
+            self.emit_completion_event(log);
+        }
+
+        Ok(result)
     }
 
     // =========================================================================

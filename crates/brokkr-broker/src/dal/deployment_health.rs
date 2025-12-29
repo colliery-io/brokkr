@@ -11,7 +11,11 @@
 //! and aggregating health across deployments.
 
 use crate::dal::DAL;
+use crate::utils::event_bus;
 use brokkr_models::models::deployment_health::{DeploymentHealth, NewDeploymentHealth};
+use brokkr_models::models::webhooks::{
+    BrokkrEvent, EVENT_HEALTH_DEGRADED, EVENT_HEALTH_FAILING, EVENT_HEALTH_RECOVERED,
+};
 use brokkr_models::schema::deployment_health;
 use brokkr_models::schema::deployment_objects;
 use diesel::prelude::*;
@@ -30,6 +34,11 @@ impl DeploymentHealthDAL<'_> {
     /// If a record already exists for the agent+deployment_object combination,
     /// it will be updated. Otherwise, a new record will be created.
     ///
+    /// Emits webhook events when health status changes:
+    /// - `health.degraded` when status changes to "degraded"
+    /// - `health.failing` when status changes to "failing" or "error"
+    /// - `health.recovered` when status changes from degraded/failing to "healthy"
+    ///
     /// # Arguments
     ///
     /// * `new_health` - The health record to upsert.
@@ -43,7 +52,17 @@ impl DeploymentHealthDAL<'_> {
     ) -> Result<DeploymentHealth, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
 
-        diesel::insert_into(deployment_health::table)
+        // Get the existing record to detect status changes
+        let existing: Option<DeploymentHealth> = deployment_health::table
+            .filter(deployment_health::agent_id.eq(new_health.agent_id))
+            .filter(deployment_health::deployment_object_id.eq(new_health.deployment_object_id))
+            .first(conn)
+            .optional()?;
+
+        let old_status = existing.as_ref().map(|h| h.status.as_str());
+
+        // Perform the upsert
+        let result: DeploymentHealth = diesel::insert_into(deployment_health::table)
             .values(new_health)
             .on_conflict((
                 deployment_health::agent_id,
@@ -55,7 +74,39 @@ impl DeploymentHealthDAL<'_> {
                 deployment_health::summary.eq(excluded(deployment_health::summary)),
                 deployment_health::checked_at.eq(excluded(deployment_health::checked_at)),
             ))
-            .get_result(conn)
+            .get_result(conn)?;
+
+        // Emit event if status changed
+        let new_status = result.status.as_str();
+        if old_status != Some(new_status) {
+            self.emit_health_event(&result, old_status);
+        }
+
+        Ok(result)
+    }
+
+    /// Emits a health event based on status transition.
+    fn emit_health_event(&self, health: &DeploymentHealth, old_status: Option<&str>) {
+        let event_type = match health.status.as_str() {
+            "degraded" => EVENT_HEALTH_DEGRADED,
+            "failing" | "error" => EVENT_HEALTH_FAILING,
+            "healthy" if old_status == Some("degraded") || old_status == Some("failing") || old_status == Some("error") => {
+                EVENT_HEALTH_RECOVERED
+            }
+            _ => return, // No event for other transitions
+        };
+
+        let event_data = serde_json::json!({
+            "deployment_health_id": health.id,
+            "agent_id": health.agent_id,
+            "deployment_object_id": health.deployment_object_id,
+            "status": health.status,
+            "previous_status": old_status,
+            "summary": health.summary,
+            "checked_at": health.checked_at,
+        });
+
+        event_bus::emit(BrokkrEvent::new(event_type, event_data));
     }
 
     /// Upserts multiple deployment health records in a batch.

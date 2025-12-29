@@ -13,10 +13,15 @@
 use crate::dal::DAL;
 use brokkr_models::models::webhooks::{BrokkrEvent, NewWebhookDelivery};
 use brokkr_utils::logging::prelude::*;
+use once_cell::sync::OnceCell;
+use std::sync::Arc;
 use tokio::sync::mpsc;
 
 /// Default channel buffer size for events.
 const DEFAULT_CHANNEL_SIZE: usize = 1000;
+
+/// Global event bus storage.
+static EVENT_BUS: OnceCell<Arc<EventBus>> = OnceCell::new();
 
 /// The event bus for distributing events to webhook subscribers.
 #[derive(Clone)]
@@ -104,6 +109,45 @@ impl EventBus {
 
         debug!("Event emitted (async): {} (id: {})", event_type, event_id);
         Ok(())
+    }
+}
+
+/// Initializes the global event bus.
+///
+/// This should be called once during broker startup.
+///
+/// # Arguments
+/// * `dal` - The Data Access Layer for database operations.
+///
+/// # Returns
+/// Ok(()) if initialization succeeded, Err if already initialized.
+pub fn init_event_bus(dal: DAL) -> Result<(), String> {
+    let bus = EventBus::new(dal);
+    EVENT_BUS
+        .set(Arc::new(bus))
+        .map_err(|_| "Event bus already initialized".to_string())
+}
+
+/// Gets the global event bus.
+///
+/// # Returns
+/// The event bus, or None if not initialized.
+pub fn get_event_bus() -> Option<Arc<EventBus>> {
+    EVENT_BUS.get().cloned()
+}
+
+/// Emits an event to the global event bus.
+///
+/// This is a convenience function for emitting events without
+/// needing to get the bus directly.
+///
+/// # Arguments
+/// * `event` - The event to emit.
+pub fn emit(event: BrokkrEvent) {
+    if let Some(bus) = get_event_bus() {
+        bus.emit(event);
+    } else {
+        warn!("Event bus not initialized, event dropped: {}", event.event_type);
     }
 }
 

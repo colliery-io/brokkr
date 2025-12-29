@@ -92,6 +92,16 @@ pub async fn serve(config: &Settings) -> Result<(), Box<dyn std::error::Error>> 
     info!("Initializing Data Access Layer");
     let dal = DAL::new(connection_pool.clone());
 
+    // Initialize encryption key for webhooks
+    info!("Initializing encryption key");
+    utils::encryption::init_encryption_key(config.broker.webhook_encryption_key.as_deref())
+        .expect("Failed to initialize encryption key");
+
+    // Initialize event bus for webhook notifications
+    info!("Initializing event bus");
+    utils::event_bus::init_event_bus(dal.clone())
+        .expect("Failed to initialize event bus");
+
     // Start background tasks
     info!("Starting background tasks");
     let cleanup_config = utils::background_tasks::DiagnosticCleanupConfig {
@@ -106,6 +116,23 @@ pub async fn serve(config: &Settings) -> Result<(), Box<dyn std::error::Error>> 
     // Start work order maintenance task (retry processing and stale claim detection)
     let work_order_config = utils::background_tasks::WorkOrderMaintenanceConfig::default();
     utils::background_tasks::start_work_order_maintenance_task(dal.clone(), work_order_config);
+
+    // Start webhook delivery worker
+    let webhook_delivery_config = utils::background_tasks::WebhookDeliveryConfig {
+        interval_seconds: config
+            .broker
+            .webhook_delivery_interval_seconds
+            .unwrap_or(5),
+        batch_size: config.broker.webhook_delivery_batch_size.unwrap_or(50),
+    };
+    utils::background_tasks::start_webhook_delivery_task(dal.clone(), webhook_delivery_config);
+
+    // Start webhook cleanup task
+    let webhook_cleanup_config = utils::background_tasks::WebhookCleanupConfig {
+        interval_seconds: 3600, // Every hour
+        retention_days: config.broker.webhook_cleanup_retention_days.unwrap_or(7),
+    };
+    utils::background_tasks::start_webhook_cleanup_task(dal.clone(), webhook_cleanup_config);
 
     // Configure API routes
     info!("Configuring API routes");
