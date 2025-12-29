@@ -468,4 +468,26 @@ impl AgentsDAL<'_> {
 
         query.first(conn).optional()
     }
+
+    /// Retrieves an agent by its PAK hash.
+    ///
+    /// This method uses the indexed pak_hash column for O(1) lookups
+    /// instead of scanning the entire table.
+    ///
+    /// # Arguments
+    ///
+    /// * `pak_hash` - The hashed PAK to search for.
+    ///
+    /// # Returns
+    ///
+    /// Returns a `Result` containing an `Option<Agent>` if found,
+    /// or a `diesel::result::Error` on failure.
+    pub fn get_by_pak_hash(&self, pak_hash: &str) -> Result<Option<Agent>, diesel::result::Error> {
+        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        agents::table
+            .filter(agents::pak_hash.eq(pak_hash))
+            .filter(agents::deleted_at.is_null())
+            .first(conn)
+            .optional()
+    }
 }

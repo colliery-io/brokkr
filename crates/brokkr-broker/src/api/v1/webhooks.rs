@@ -159,8 +159,14 @@ pub struct ListDeliveriesQuery {
 use crate::utils::encryption;
 
 /// Encrypts a value for storage.
-fn encrypt_value(value: &str) -> Vec<u8> {
-    encryption::encrypt_string(value)
+fn encrypt_value(value: &str) -> Result<Vec<u8>, (StatusCode, Json<serde_json::Value>)> {
+    encryption::encrypt_string(value).map_err(|e| {
+        error!("Encryption failed: {}", e);
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "Failed to encrypt data"})),
+        )
+    })
 }
 
 /// Decrypts a stored value back to a string.
@@ -308,8 +314,11 @@ async fn create_webhook(
     }
 
     // Encrypt URL and auth header
-    let url_encrypted = encrypt_value(&request.url);
-    let auth_header_encrypted = request.auth_header.as_ref().map(|h| encrypt_value(h));
+    let url_encrypted = encrypt_value(&request.url)?;
+    let auth_header_encrypted = match &request.auth_header {
+        Some(h) => Some(encrypt_value(h)?),
+        None => None,
+    };
 
     // Determine who created this
     let created_by = if auth_payload.admin {
@@ -470,11 +479,21 @@ async fn update_webhook(
         Ok(Some(_)) => {}
     }
 
-    // Build changeset
+    // Build changeset - handle encryption with proper error handling
+    let url_encrypted = match request.url {
+        Some(u) => Some(encrypt_value(&u)?),
+        None => None,
+    };
+    let auth_header_encrypted = match request.auth_header {
+        Some(Some(h)) => Some(Some(encrypt_value(&h)?)),
+        Some(None) => Some(None), // Explicitly clear the auth header
+        None => None,             // No change to auth header
+    };
+
     let changeset = UpdateWebhookSubscription {
         name: request.name,
-        url_encrypted: request.url.map(|u| encrypt_value(&u)),
-        auth_header_encrypted: request.auth_header.map(|opt| opt.map(|h| encrypt_value(&h))),
+        url_encrypted,
+        auth_header_encrypted,
         event_types: request.event_types.map(|types| types.into_iter().map(Some).collect()),
         filters: request.filters.map(|opt| {
             opt.map(|f| serde_json::to_string(&f).unwrap_or_default())

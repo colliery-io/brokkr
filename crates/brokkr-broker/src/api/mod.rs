@@ -158,6 +158,7 @@ pub mod v1;
 use crate::dal::DAL;
 use crate::metrics;
 use axum::{response::IntoResponse, routing::get, Router};
+use brokkr_utils::config::Cors;
 use hyper::StatusCode;
 
 /// Configures and returns the main application router with all API routes
@@ -168,13 +169,14 @@ use hyper::StatusCode;
 /// # Arguments
 ///
 /// * `dal` - An instance of the Data Access Layer
+/// * `cors_config` - CORS configuration settings
 ///
 /// # Returns
 ///
 /// Returns a configured `Router` instance that includes all API routes and middleware.
-pub fn configure_api_routes(dal: DAL) -> Router<DAL> {
+pub fn configure_api_routes(dal: DAL, cors_config: &Cors) -> Router<DAL> {
     Router::new()
-        .merge(v1::routes(dal.clone()))
+        .merge(v1::routes(dal.clone(), cors_config))
         .route("/healthz", get(healthz))
         .route("/readyz", get(readyz))
         .route("/metrics", get(metrics))

@@ -50,3 +50,6 @@ uuid = { workspace = true }
 # Templating dependencies
 tera = { workspace = true }
 jsonschema = { workspace = true }
+
+# Encryption dependencies
+aes-gcm = "0.10"

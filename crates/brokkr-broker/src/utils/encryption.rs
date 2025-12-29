@@ -6,44 +6,96 @@
 
 //! Encryption utilities for protecting sensitive data at rest.
 //!
-//! This module provides encryption and decryption functionality for webhook URLs
+//! This module provides AES-256-GCM encryption and decryption functionality for webhook URLs
 //! and authentication headers stored in the database.
 //!
-//! # Security Note
+//! # Format
 //!
-//! The current implementation uses XOR-based obfuscation with a key-derived mask.
-//! This is NOT cryptographically secure and should be replaced with proper
-//! AES-256-GCM encryption before production use.
+//! Encrypted data format: `version (1 byte) || nonce (12 bytes) || ciphertext || tag (16 bytes)`
 //!
-//! TODO: Replace with proper AES-256-GCM using the `aes-gcm` crate.
+//! Version bytes:
+//! - 0x00: Legacy XOR encryption (read-only, for migration)
+//! - 0x01: AES-256-GCM encryption
 
+use aes_gcm::{
+    aead::{Aead, KeyInit},
+    Aes256Gcm, Nonce,
+};
 use brokkr_utils::logging::prelude::*;
 use once_cell::sync::OnceCell;
 use rand::RngCore;
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
 
+/// Version byte for AES-256-GCM encrypted data
+const VERSION_AES_GCM: u8 = 0x01;
+
+/// Version byte for legacy XOR encrypted data (read-only)
+const VERSION_LEGACY_XOR: u8 = 0x00;
+
+/// Nonce size for AES-256-GCM (96 bits)
+const AES_GCM_NONCE_SIZE: usize = 12;
+
+/// Legacy XOR nonce size (128 bits)
+const LEGACY_XOR_NONCE_SIZE: usize = 16;
+
 /// Global encryption key storage.
 static ENCRYPTION_KEY: OnceCell<Arc<EncryptionKey>> = OnceCell::new();
 
-/// Encryption key wrapper with derived material.
+/// Encryption error types
 #[derive(Debug)]
+pub enum EncryptionError {
+    /// Encryption operation failed
+    EncryptionFailed,
+    /// Decryption operation failed (wrong key or corrupted data)
+    DecryptionFailed,
+    /// Invalid data format
+    InvalidData(String),
+    /// Unsupported encryption version
+    UnsupportedVersion(u8),
+}
+
+impl std::fmt::Display for EncryptionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            EncryptionError::EncryptionFailed => write!(f, "Encryption failed"),
+            EncryptionError::DecryptionFailed => write!(f, "Decryption failed"),
+            EncryptionError::InvalidData(msg) => write!(f, "Invalid data: {}", msg),
+            EncryptionError::UnsupportedVersion(v) => write!(f, "Unsupported encryption version: {}", v),
+        }
+    }
+}
+
+impl std::error::Error for EncryptionError {}
+
+/// Encryption key wrapper with AES-256-GCM cipher.
 pub struct EncryptionKey {
     /// The raw 32-byte key.
     key: [u8; 32],
+    /// Pre-initialized AES-256-GCM cipher
+    cipher: Aes256Gcm,
+}
+
+impl std::fmt::Debug for EncryptionKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("EncryptionKey")
+            .field("fingerprint", &self.fingerprint())
+            .finish()
+    }
 }
 
 impl EncryptionKey {
     /// Creates a new encryption key from raw bytes.
     pub fn new(key: [u8; 32]) -> Self {
-        Self { key }
+        let cipher = Aes256Gcm::new_from_slice(&key).expect("valid key size");
+        Self { key, cipher }
     }
 
     /// Creates a new random encryption key.
     pub fn generate() -> Self {
         let mut key = [0u8; 32];
         rand::thread_rng().fill_bytes(&mut key);
-        Self { key }
+        Self::new(key)
     }
 
     /// Creates a key from a hex-encoded string.
@@ -56,7 +108,7 @@ impl EncryptionKey {
 
         let mut key = [0u8; 32];
         key.copy_from_slice(&bytes);
-        Ok(Self { key })
+        Ok(Self::new(key))
     }
 
     /// Returns the key as a hex string (for logging key fingerprint only).
@@ -65,62 +117,95 @@ impl EncryptionKey {
         hex::encode(&hash[..8])
     }
 
-    /// Derives a mask for a given nonce using the key.
-    fn derive_mask(&self, nonce: &[u8]) -> Vec<u8> {
-        let mut hasher = Sha256::new();
-        hasher.update(&self.key);
-        hasher.update(nonce);
-        hasher.finalize().to_vec()
-    }
-
-    /// Encrypts data using XOR with a derived mask.
+    /// Encrypts data using AES-256-GCM.
     ///
     /// # Format
-    /// The output format is: `nonce (16 bytes) || ciphertext`
-    ///
-    /// # Security Warning
-    /// This is NOT cryptographically secure. It's XOR-based obfuscation
-    /// that should be replaced with AES-GCM before production use.
-    pub fn encrypt(&self, plaintext: &[u8]) -> Vec<u8> {
+    /// The output format is: `version (1 byte) || nonce (12 bytes) || ciphertext || tag (16 bytes)`
+    pub fn encrypt(&self, plaintext: &[u8]) -> Result<Vec<u8>, EncryptionError> {
         // Generate random nonce
-        let mut nonce = [0u8; 16];
-        rand::thread_rng().fill_bytes(&mut nonce);
+        let mut nonce_bytes = [0u8; AES_GCM_NONCE_SIZE];
+        rand::thread_rng().fill_bytes(&mut nonce_bytes);
+        let nonce = Nonce::from_slice(&nonce_bytes);
 
-        // Derive mask from key and nonce
-        let mask = self.derive_mask(&nonce);
+        // Encrypt with AES-256-GCM
+        let ciphertext = self
+            .cipher
+            .encrypt(nonce, plaintext)
+            .map_err(|_| EncryptionError::EncryptionFailed)?;
 
-        // XOR plaintext with repeated mask
-        let ciphertext: Vec<u8> = plaintext
-            .iter()
-            .enumerate()
-            .map(|(i, &b)| b ^ mask[i % mask.len()])
-            .collect();
-
-        // Prepend nonce to ciphertext
-        let mut output = Vec::with_capacity(16 + ciphertext.len());
-        output.extend_from_slice(&nonce);
+        // Build output: version || nonce || ciphertext (includes auth tag)
+        let mut output = Vec::with_capacity(1 + AES_GCM_NONCE_SIZE + ciphertext.len());
+        output.push(VERSION_AES_GCM);
+        output.extend_from_slice(&nonce_bytes);
         output.extend(ciphertext);
-        output
+        Ok(output)
     }
 
-    /// Decrypts data encrypted with encrypt().
+    /// Decrypts data, automatically detecting the encryption version.
     ///
-    /// # Arguments
-    /// * `ciphertext` - The encrypted data (nonce || ciphertext).
+    /// Supports:
+    /// - Version 0x01: AES-256-GCM
+    /// - Version 0x00 or no version byte: Legacy XOR (for migration)
+    pub fn decrypt(&self, data: &[u8]) -> Result<Vec<u8>, EncryptionError> {
+        if data.is_empty() {
+            return Err(EncryptionError::InvalidData("Empty data".to_string()));
+        }
+
+        // Check version byte
+        let version = data[0];
+
+        match version {
+            VERSION_AES_GCM => self.decrypt_aes_gcm(&data[1..]),
+            VERSION_LEGACY_XOR => self.decrypt_legacy_xor(&data[1..]),
+            _ => {
+                // No version byte - assume legacy XOR format
+                // Legacy format: nonce (16 bytes) || ciphertext
+                if data.len() >= LEGACY_XOR_NONCE_SIZE {
+                    self.decrypt_legacy_xor(data)
+                } else {
+                    Err(EncryptionError::InvalidData("Data too short".to_string()))
+                }
+            }
+        }
+    }
+
+    /// Decrypts AES-256-GCM encrypted data.
+    fn decrypt_aes_gcm(&self, data: &[u8]) -> Result<Vec<u8>, EncryptionError> {
+        if data.len() < AES_GCM_NONCE_SIZE {
+            return Err(EncryptionError::InvalidData(
+                "Ciphertext too short (missing nonce)".to_string(),
+            ));
+        }
+
+        let (nonce_bytes, ciphertext) = data.split_at(AES_GCM_NONCE_SIZE);
+        let nonce = Nonce::from_slice(nonce_bytes);
+
+        self.cipher
+            .decrypt(nonce, ciphertext)
+            .map_err(|_| EncryptionError::DecryptionFailed)
+    }
+
+    /// Decrypts legacy XOR-encrypted data (for migration support).
     ///
-    /// # Returns
-    /// The decrypted plaintext, or an error if decryption fails.
-    pub fn decrypt(&self, ciphertext: &[u8]) -> Result<Vec<u8>, String> {
-        if ciphertext.len() < 16 {
-            return Err("Ciphertext too short (missing nonce)".to_string());
+    /// # Security Warning
+    /// This method exists only for backward compatibility during migration.
+    /// XOR encryption is NOT cryptographically secure.
+    fn decrypt_legacy_xor(&self, data: &[u8]) -> Result<Vec<u8>, EncryptionError> {
+        if data.len() < LEGACY_XOR_NONCE_SIZE {
+            return Err(EncryptionError::InvalidData(
+                "Legacy ciphertext too short (missing nonce)".to_string(),
+            ));
         }
 
         // Extract nonce and actual ciphertext
-        let nonce = &ciphertext[..16];
-        let encrypted = &ciphertext[16..];
+        let nonce = &data[..LEGACY_XOR_NONCE_SIZE];
+        let encrypted = &data[LEGACY_XOR_NONCE_SIZE..];
 
-        // Derive same mask
-        let mask = self.derive_mask(nonce);
+        // Derive same mask using SHA-256
+        let mut hasher = Sha256::new();
+        hasher.update(&self.key);
+        hasher.update(nonce);
+        let mask = hasher.finalize();
 
         // XOR to decrypt
         let plaintext: Vec<u8> = encrypted
@@ -181,8 +266,8 @@ pub fn get_encryption_key() -> Arc<EncryptionKey> {
 /// * `value` - The plaintext string to encrypt.
 ///
 /// # Returns
-/// The encrypted bytes.
-pub fn encrypt_string(value: &str) -> Vec<u8> {
+/// The encrypted bytes, or an error if encryption fails.
+pub fn encrypt_string(value: &str) -> Result<Vec<u8>, EncryptionError> {
     get_encryption_key().encrypt(value.as_bytes())
 }
 
@@ -194,7 +279,9 @@ pub fn encrypt_string(value: &str) -> Vec<u8> {
 /// # Returns
 /// The decrypted string, or an error if decryption fails.
 pub fn decrypt_string(encrypted: &[u8]) -> Result<String, String> {
-    let bytes = get_encryption_key().decrypt(encrypted)?;
+    let bytes = get_encryption_key()
+        .decrypt(encrypted)
+        .map_err(|e| e.to_string())?;
     String::from_utf8(bytes).map_err(|e| format!("Decrypted value is not valid UTF-8: {}", e))
 }
 
@@ -224,7 +311,7 @@ mod tests {
         let key = EncryptionKey::generate();
         let plaintext = b"https://example.com/webhook?token=secret123";
 
-        let encrypted = key.encrypt(plaintext);
+        let encrypted = key.encrypt(plaintext).unwrap();
         let decrypted = key.decrypt(&encrypted).unwrap();
 
         assert_eq!(decrypted, plaintext);
@@ -235,7 +322,7 @@ mod tests {
         let key = EncryptionKey::generate();
         let plaintext = b"";
 
-        let encrypted = key.encrypt(plaintext);
+        let encrypted = key.encrypt(plaintext).unwrap();
         let decrypted = key.decrypt(&encrypted).unwrap();
 
         assert_eq!(decrypted, plaintext);
@@ -247,8 +334,8 @@ mod tests {
         let plaintext = b"test data";
 
         // Same plaintext should produce different ciphertext due to random nonce
-        let encrypted1 = key.encrypt(plaintext);
-        let encrypted2 = key.encrypt(plaintext);
+        let encrypted1 = key.encrypt(plaintext).unwrap();
+        let encrypted2 = key.encrypt(plaintext).unwrap();
 
         assert_ne!(encrypted1, encrypted2);
 
@@ -263,17 +350,32 @@ mod tests {
         let key2 = EncryptionKey::generate();
         let plaintext = b"secret message";
 
-        let encrypted = key1.encrypt(plaintext);
-        let decrypted = key2.decrypt(&encrypted).unwrap();
+        let encrypted = key1.encrypt(plaintext).unwrap();
 
-        // Wrong key produces garbage, not the original
-        assert_ne!(decrypted, plaintext);
+        // Wrong key should fail decryption (AES-GCM has authentication)
+        assert!(key2.decrypt(&encrypted).is_err());
+    }
+
+    #[test]
+    fn test_decrypt_tampered_data() {
+        let key = EncryptionKey::generate();
+        let plaintext = b"secret message";
+
+        let mut encrypted = key.encrypt(plaintext).unwrap();
+
+        // Tamper with the ciphertext
+        if let Some(byte) = encrypted.last_mut() {
+            *byte ^= 0xFF;
+        }
+
+        // Tampered data should fail authentication
+        assert!(key.decrypt(&encrypted).is_err());
     }
 
     #[test]
     fn test_decrypt_too_short() {
         let key = EncryptionKey::generate();
-        let short = vec![0u8; 10]; // Less than 16 bytes
+        let short = vec![VERSION_AES_GCM, 0u8, 1, 2]; // Too short
 
         assert!(key.decrypt(&short).is_err());
     }
@@ -286,5 +388,46 @@ mod tests {
         // Fingerprint should be 16 hex chars (8 bytes)
         assert_eq!(fingerprint.len(), 16);
         assert!(fingerprint.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn test_version_byte_present() {
+        let key = EncryptionKey::generate();
+        let plaintext = b"test";
+
+        let encrypted = key.encrypt(plaintext).unwrap();
+
+        // First byte should be version
+        assert_eq!(encrypted[0], VERSION_AES_GCM);
+    }
+
+    #[test]
+    fn test_legacy_xor_decryption() {
+        // Test that we can decrypt legacy XOR format
+        let key = EncryptionKey::generate();
+        let plaintext = b"legacy data";
+
+        // Manually create legacy XOR encrypted data
+        let mut nonce = [0u8; LEGACY_XOR_NONCE_SIZE];
+        rand::thread_rng().fill_bytes(&mut nonce);
+
+        let mut hasher = Sha256::new();
+        hasher.update(&key.key);
+        hasher.update(&nonce);
+        let mask = hasher.finalize();
+
+        let ciphertext: Vec<u8> = plaintext
+            .iter()
+            .enumerate()
+            .map(|(i, &b)| b ^ mask[i % mask.len()])
+            .collect();
+
+        // Legacy format without version byte
+        let mut legacy_encrypted = nonce.to_vec();
+        legacy_encrypted.extend(ciphertext);
+
+        // Should be able to decrypt
+        let decrypted = key.decrypt(&legacy_encrypted).unwrap();
+        assert_eq!(decrypted, plaintext);
     }
 }

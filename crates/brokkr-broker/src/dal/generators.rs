@@ -232,4 +232,29 @@ impl GeneratorsDAL<'_> {
             .filter(generators::deleted_at.is_null())
             .load::<Generator>(conn)
     }
+
+    /// Retrieves a generator by its PAK hash.
+    ///
+    /// This method uses the indexed pak_hash column for O(1) lookups
+    /// instead of scanning the entire table.
+    ///
+    /// # Arguments
+    ///
+    /// * `pak_hash` - The hashed PAK to search for.
+    ///
+    /// # Returns
+    ///
+    /// Returns a `Result` containing an `Option<Generator>` if found,
+    /// or a `diesel::result::Error` on failure.
+    pub fn get_by_pak_hash(
+        &self,
+        pak_hash: &str,
+    ) -> Result<Option<Generator>, diesel::result::Error> {
+        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        generators::table
+            .filter(generators::pak_hash.eq(pak_hash))
+            .filter(generators::deleted_at.is_null())
+            .first(conn)
+            .optional()
+    }
 }

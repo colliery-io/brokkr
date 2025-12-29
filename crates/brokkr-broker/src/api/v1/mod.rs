@@ -27,18 +27,19 @@ pub mod work_orders;
 use crate::dal::DAL;
 use axum::middleware::from_fn_with_state;
 use axum::Router;
-use tower_http::cors::{Any, CorsLayer};
+use brokkr_utils::config::Cors;
+use brokkr_utils::logging::prelude::*;
+use hyper::{header::HeaderName, Method};
+use std::time::Duration;
+use tower_http::cors::CorsLayer;
 
 /// Constructs and returns the main router for API v1.
 ///
 /// This function combines all the route handlers from different modules
 /// and applies the authentication middleware.
-pub fn routes(dal: DAL) -> Router<DAL> {
-    // Configure CORS
-    let cors = CorsLayer::new()
-        .allow_methods(Any)
-        .allow_headers(Any)
-        .allow_origin(Any);
+pub fn routes(dal: DAL, cors_config: &Cors) -> Router<DAL> {
+    // Configure CORS from settings
+    let cors = build_cors_layer(cors_config);
 
     let api_routes = Router::new()
         .merge(agent_events::routes())
@@ -62,4 +63,47 @@ pub fn routes(dal: DAL) -> Router<DAL> {
     Router::new()
         .nest("/api/v1", api_routes)
         .merge(openapi::configure_openapi())
+}
+
+/// Builds a CORS layer from configuration.
+///
+/// If "*" is in the allowed_origins list, allows all origins.
+/// Otherwise, restricts to the configured origins.
+fn build_cors_layer(config: &Cors) -> CorsLayer {
+    let mut cors = CorsLayer::new();
+
+    // Handle allowed origins
+    if config.allowed_origins.iter().any(|o| o == "*") {
+        info!("CORS: Allowing all origins (not recommended for production)");
+        cors = cors.allow_origin(tower_http::cors::Any);
+    } else {
+        let origins: Vec<_> = config
+            .allowed_origins
+            .iter()
+            .filter_map(|o| o.parse().ok())
+            .collect();
+        info!("CORS: Allowing origins: {:?}", config.allowed_origins);
+        cors = cors.allow_origin(origins);
+    }
+
+    // Handle allowed methods
+    let methods: Vec<Method> = config
+        .allowed_methods
+        .iter()
+        .filter_map(|m| m.parse().ok())
+        .collect();
+    cors = cors.allow_methods(methods);
+
+    // Handle allowed headers
+    let headers: Vec<HeaderName> = config
+        .allowed_headers
+        .iter()
+        .filter_map(|h| h.parse().ok())
+        .collect();
+    cors = cors.allow_headers(headers);
+
+    // Set max age
+    cors = cors.max_age(Duration::from_secs(config.max_age_seconds));
+
+    cors
 }

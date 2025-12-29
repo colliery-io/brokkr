@@ -24,6 +24,13 @@ short_token_length = 8
 long_token_length = 24
 short_token_prefix = "BR"
 
+[cors]
+# Allowed origins for CORS requests (use "*" in array to allow all, not recommended for production)
+allowed_origins = ["http://localhost:3001"]
+allowed_methods = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+allowed_headers = ["Authorization", "Content-Type"]
+max_age_seconds = 3600
+
 [agent]
 broker_url = "http://localhost:3000"
 polling_interval = 10

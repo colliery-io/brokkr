@@ -12,6 +12,7 @@
 use axum::Router;
 use brokkr_broker::api;
 use brokkr_broker::dal::DAL;
+use brokkr_utils::config::Cors;
 use brokkr_broker::db::create_shared_connection_pool;
 use brokkr_broker::utils;
 use brokkr_broker::utils::pak;
@@ -67,7 +68,13 @@ impl TestFixture {
     /// Returns a configured Axum Router.
     #[allow(dead_code)]
     pub fn create_test_router(&self) -> Router<DAL> {
-        api::configure_api_routes(self.dal.clone())
+        let test_cors = Cors {
+            allowed_origins: vec!["*".to_string()],
+            allowed_methods: vec!["GET".to_string(), "POST".to_string(), "PUT".to_string(), "DELETE".to_string()],
+            allowed_headers: vec!["Authorization".to_string(), "Content-Type".to_string()],
+            max_age_seconds: 3600,
+        };
+        api::configure_api_routes(self.dal.clone(), &test_cors)
     }
 
     /// Creates a new TestFixture instance.

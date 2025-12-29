@@ -83,6 +83,22 @@ pub struct Settings {
     pub agent: Agent,
     /// Broker configuration
     pub broker: Broker,
+    /// CORS configuration
+    pub cors: Cors,
+}
+
+/// Represents the CORS configuration
+#[derive(Debug, Deserialize, Clone)]
+pub struct Cors {
+    /// Allowed origins for CORS requests
+    /// Use "*" to allow all origins (not recommended for production)
+    pub allowed_origins: Vec<String>,
+    /// Allowed HTTP methods
+    pub allowed_methods: Vec<String>,
+    /// Allowed HTTP headers
+    pub allowed_headers: Vec<String>,
+    /// Max age for preflight cache in seconds
+    pub max_age_seconds: u64,
 }
 
 #[derive(Debug, Deserialize, Clone)]

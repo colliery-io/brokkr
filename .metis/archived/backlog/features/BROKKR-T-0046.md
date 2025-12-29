@@ -4,15 +4,15 @@ level: task
 title: "Event Webhook System"
 short_code: "BROKKR-T-0046"
 created_at: 2025-12-20T02:19:55.756396+00:00
-updated_at: 2025-12-20T02:19:55.756396+00:00
+updated_at: 2025-12-29T14:12:51.967030+00:00
 parent: 
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
-  - "#phase/backlog"
   - "#feature"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -40,6 +40,14 @@ Implement a flexible webhook delivery system that allows operators to subscribe 
 - **User Value**: Operators can integrate Brokkr with their existing alerting and automation tooling without polling
 - **Business Value**: Enables enterprise adoption by supporting standard webhook integrations; reduces operational burden
 - **Effort Estimate**: M (Medium) - straightforward patterns, but needs reliable delivery
+
+## Acceptance Criteria
+
+## Acceptance Criteria
+
+## Acceptance Criteria
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 
