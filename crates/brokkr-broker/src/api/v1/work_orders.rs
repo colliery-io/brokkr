@@ -38,7 +38,7 @@ use axum::{
     Json, Router,
 };
 use brokkr_models::models::work_orders::{NewWorkOrder, WorkOrder, WorkOrderLog};
-use brokkr_utils::logging::prelude::*;
+use tracing::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;

@@ -9,7 +9,7 @@
 //! This module provides functionality for creating, verifying, and managing
 //! Prefixed API Keys using a singleton controller pattern.
 
-use brokkr_utils::logging::prelude::*;
+use tracing::{debug, error, info, warn};
 use brokkr_utils::Settings;
 use once_cell::sync::OnceCell;
 use prefixed_api_key::PrefixedApiKey;

@@ -3,6 +3,8 @@ url = "postgres://brokkr:brokkr@localhost:5432/brokkr"
 
 [log]
 level = "debug"
+# Log format: "text" for human-readable or "json" for structured JSON logs
+format = "text"
 
 [broker]
 pak_hash = "4c697273df3d764cba950bb5c04368097685f09259f5bd880d892cf1ff9f4cdd"
@@ -45,3 +47,23 @@ health_port = 8080
 # Deployment health checking configuration
 deployment_health_enabled = true
 deployment_health_interval = 60
+
+[telemetry]
+# Enable OpenTelemetry tracing (base setting, can be overridden per component)
+enabled = false
+# OTLP endpoint for trace export (gRPC) - shared default
+otlp_endpoint = "http://localhost:4317"
+# Service name for traces - base default
+service_name = "brokkr"
+# Sampling rate (0.0 to 1.0, where 1.0 = 100% of traces)
+sampling_rate = 0.1
+
+# Broker-specific telemetry overrides (inherits from [telemetry] if not set)
+[telemetry.broker]
+service_name = "brokkr-broker"
+# otlp_endpoint = "http://broker-collector:4317"  # uncomment to override
+
+# Agent-specific telemetry overrides (inherits from [telemetry] if not set)
+[telemetry.agent]
+service_name = "brokkr-agent"
+# otlp_endpoint = "http://agent-collector:4317"  # uncomment to override

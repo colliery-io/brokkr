@@ -21,7 +21,7 @@ use brokkr_models::models::webhooks::{
     NewWebhookSubscription, UpdateWebhookSubscription, WebhookDelivery, WebhookFilters,
     WebhookSubscription, VALID_EVENT_TYPES,
 };
-use brokkr_utils::logging::prelude::*;
+use tracing::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;

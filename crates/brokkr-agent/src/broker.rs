@@ -13,12 +13,12 @@ use crate::diagnostics::{DiagnosticRequest, SubmitDiagnosticResult};
 use brokkr_models::models::agent_events::NewAgentEvent;
 use brokkr_models::models::agents::Agent;
 use brokkr_models::models::deployment_objects::DeploymentObject;
-use brokkr_utils::logging::prelude::*;
 use brokkr_utils::Settings;
 use reqwest::Client;
 use reqwest::StatusCode;
 use std::time::Duration;
 use tokio::time::sleep;
+use tracing::{debug, error, info, instrument, trace, warn};
 use uuid::Uuid;
 
 /// Waits for the broker service to become ready.
@@ -71,6 +71,7 @@ pub async fn wait_for_broker_ready(config: &Settings) {
 ///
 /// # Returns
 /// * `Result<(), Box<dyn std::error::Error>>` - Success or error with message
+#[instrument(skip(config), fields(broker_url = %config.agent.broker_url))]
 pub async fn verify_agent_pak(config: &Settings) -> Result<(), Box<dyn std::error::Error>> {
     let url = format!("{}/api/v1/auth/pak", config.agent.broker_url);
     debug!("Verifying agent PAK at {}", url);

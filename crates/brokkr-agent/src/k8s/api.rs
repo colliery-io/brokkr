@@ -40,7 +40,7 @@
 use crate::k8s::objects::verify_object_ownership;
 use crate::k8s::objects::{CHECKSUM_ANNOTATION, STACK_LABEL};
 use backoff::ExponentialBackoffBuilder;
-use brokkr_utils::logging::prelude::*;
+use tracing::{debug, error, info, trace, warn};
 use k8s_openapi::api::core::v1::Namespace;
 use kube::api::DeleteParams;
 use kube::api::DynamicObject;

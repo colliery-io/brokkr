@@ -1,100 +1,20 @@
-import React, { useState, useEffect, useCallback, createContext, useContext } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import * as api from './api';
 import './styles.css';
 
-// Toast context for app-wide notifications
-const ToastContext = createContext(null);
-const useToast = () => useContext(ToastContext);
-
-// Helper to extract user-friendly error message
-const getErrorMessage = (error) => {
-  if (error?.response?.data?.message) return error.response.data.message;
-  if (error?.response?.data?.error) return error.response.data.error;
-  if (error?.message) return error.message;
-  return 'An unexpected error occurred';
-};
-
-// Reusable tag/chip component
-const Tag = ({ children, onRemove, variant = 'default' }) => (
-  <span className={`tag tag-${variant}`}>
-    {children}
-    {onRemove && <button onClick={onRemove} className="tag-remove">×</button>}
-  </span>
-);
-
-// Collapsible section
-const Section = ({ title, icon, children, defaultOpen = false, count }) => {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <div className={`section ${open ? 'open' : ''}`}>
-      <button className="section-header" onClick={() => setOpen(!open)}>
-        <span className="section-icon">{icon}</span>
-        <span className="section-title">{title}</span>
-        {count !== undefined && <span className="section-count">{count}</span>}
-        <span className="section-arrow">{open ? '▼' : '▶'}</span>
-      </button>
-      {open && <div className="section-content">{children}</div>}
-    </div>
-  );
-};
-
-// Inline form for adding items
-const InlineAdd = ({ placeholder, onAdd, fields = 1 }) => {
-  const [values, setValues] = useState(fields === 1 ? '' : { key: '', value: '' });
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (fields === 1 && values.trim()) {
-      onAdd(values.trim());
-      setValues('');
-    } else if (fields === 2 && values.key.trim() && values.value.trim()) {
-      onAdd(values.key.trim(), values.value.trim());
-      setValues({ key: '', value: '' });
-    }
-  };
-  return (
-    <form onSubmit={handleSubmit} className="inline-add">
-      {fields === 1 ? (
-        <input value={values} onChange={(e) => setValues(e.target.value)} placeholder={placeholder} />
-      ) : (
-        <>
-          <input value={values.key} onChange={(e) => setValues({ ...values, key: e.target.value })} placeholder="key" />
-          <input value={values.value} onChange={(e) => setValues({ ...values, value: e.target.value })} placeholder="value" />
-        </>
-      )}
-      <button type="submit">+</button>
-    </form>
-  );
-};
-
-// Status indicator
-const Status = ({ status }) => {
-  const s = (status || '').toLowerCase();
-  const color = s === 'active' || s === 'success' || s === 'healthy' ? 'green' :
-                s === 'inactive' || s === 'failure' || s === 'failed' ? 'red' :
-                s === 'pending' || s === 'in_progress' ? 'yellow' : 'gray';
-  return <span className={`status status-${color}`}>{status}</span>;
-};
-
-// Modal component
-const Modal = ({ title, onClose, children }) => (
-  <div className="modal-overlay" onClick={onClose}>
-    <div className="modal" onClick={(e) => e.stopPropagation()}>
-      <div className="modal-header">
-        <h3>{title}</h3>
-        <button onClick={onClose} className="modal-close">×</button>
-      </div>
-      <div className="modal-body">{children}</div>
-    </div>
-  </div>
-);
-
-// Toast notification
-const Toast = ({ message, type = 'info', onClose }) => (
-  <div className={`toast toast-${type}`}>
-    {message}
-    <button onClick={onClose}>×</button>
-  </div>
-);
+// Import shared components from modular components file
+import {
+  Tag,
+  Section,
+  InlineAdd,
+  Status,
+  Pagination,
+  usePagination,
+  Modal,
+  ToastProvider,
+  useToast,
+  getErrorMessage
+} from './components';
 
 // ==================== AGENTS PANEL ====================
 const AgentsPanel = ({ stacks, onRefresh }) => {
@@ -104,6 +24,7 @@ const AgentsPanel = ({ stacks, onRefresh }) => {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const toast = useToast();
+  const pagination = usePagination(agents);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -226,36 +147,48 @@ const AgentsPanel = ({ stacks, onRefresh }) => {
       {agents.length === 0 ? (
         <div className="empty">No agents registered</div>
       ) : (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Cluster</th>
-                <th>Status</th>
-                <th>Labels</th>
-                <th>Targets</th>
-                <th>Last Seen</th>
-              </tr>
-            </thead>
-            <tbody>
-              {agents.map((a) => (
-                <tr key={a.id} onClick={() => selectAgent(a)} className="clickable">
-                  <td className="mono">{a.name}</td>
-                  <td className="mono dim">{a.cluster_name}</td>
-                  <td><Status status={a.status} /></td>
-                  <td>
-                    {details[a.id]?.labels?.map((l) => (
-                      <Tag key={l.id} variant="label">{l.label}</Tag>
-                    ))}
-                  </td>
-                  <td>{details[a.id]?.targets?.length || 0}</td>
-                  <td className="dim">{a.last_heartbeat ? new Date(a.last_heartbeat).toLocaleString() : 'Never'}</td>
+        <>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Cluster</th>
+                  <th>Status</th>
+                  <th>Labels</th>
+                  <th>Targets</th>
+                  <th>Last Seen</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {pagination.paginatedItems.map((a) => (
+                  <tr key={a.id} onClick={() => selectAgent(a)} className="clickable">
+                    <td className="mono">{a.name}</td>
+                    <td className="mono dim">{a.cluster_name}</td>
+                    <td><Status status={a.status} /></td>
+                    <td>
+                      {details[a.id]?.labels?.map((l) => (
+                        <Tag key={l.id} variant="label">{l.label}</Tag>
+                      ))}
+                    </td>
+                    <td>{details[a.id]?.targets?.length || 0}</td>
+                    <td className="dim">{a.last_heartbeat ? new Date(a.last_heartbeat).toLocaleString() : 'Never'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {agents.length > 10 && (
+            <Pagination
+              page={pagination.page}
+              totalPages={pagination.totalPages}
+              onPageChange={pagination.setPage}
+              pageSize={pagination.pageSize}
+              onPageSizeChange={pagination.setPageSize}
+              total={pagination.total}
+            />
+          )}
+        </>
       )}
 
       {selected && (
@@ -352,6 +285,7 @@ const StacksPanel = ({ generators, agents, onRefresh }) => {
   const [isDeletion, setIsDeletion] = useState(false);
   const [loading, setLoading] = useState(true);
   const toast = useToast();
+  const pagination = usePagination(stacks);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -511,32 +445,44 @@ const StacksPanel = ({ generators, agents, onRefresh }) => {
       {stacks.length === 0 ? (
         <div className="empty">No stacks found</div>
       ) : (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Description</th>
-                <th>Labels</th>
-                <th>Deployments</th>
-              </tr>
-            </thead>
-            <tbody>
-              {stacks.map((s) => (
-                <tr key={s.id} onClick={() => selectStack(s)} className="clickable">
-                  <td className="mono">{s.name}</td>
-                  <td className="dim">{s.description || '—'}</td>
-                  <td>
-                    {details[s.id]?.labels?.map((l) => (
-                      <Tag key={l.id} variant="label">{l.label}</Tag>
-                    ))}
-                  </td>
-                  <td>—</td>
+        <>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Description</th>
+                  <th>Labels</th>
+                  <th>Deployments</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {pagination.paginatedItems.map((s) => (
+                  <tr key={s.id} onClick={() => selectStack(s)} className="clickable">
+                    <td className="mono">{s.name}</td>
+                    <td className="dim">{s.description || '—'}</td>
+                    <td>
+                      {details[s.id]?.labels?.map((l) => (
+                        <Tag key={l.id} variant="label">{l.label}</Tag>
+                      ))}
+                    </td>
+                    <td>—</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {stacks.length > 10 && (
+            <Pagination
+              page={pagination.page}
+              totalPages={pagination.totalPages}
+              onPageChange={pagination.setPage}
+              pageSize={pagination.pageSize}
+              onPageSizeChange={pagination.setPageSize}
+              total={pagination.total}
+            />
+          )}
+        </>
       )}
 
       {showCreate && (
@@ -699,6 +645,7 @@ const TemplatesPanel = ({ stacks }) => {
   const [instantiateForm, setInstantiateForm] = useState({ stackId: '', params: '{}' });
   const [loading, setLoading] = useState(true);
   const toast = useToast();
+  const pagination = usePagination(templates);
 
   const defaultContent = `apiVersion: v1
 kind: ConfigMap
@@ -802,36 +749,48 @@ data:
       {templates.length === 0 ? (
         <div className="empty">No templates found</div>
       ) : (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Version</th>
-                <th>Description</th>
-                <th>Labels</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {templates.map((t) => (
-                <tr key={t.id} onClick={() => setSelected(t)} className="clickable">
-                  <td className="mono">{t.name}</td>
-                  <td><Tag variant="version">v{t.version}</Tag></td>
-                  <td className="dim">{t.description || '—'}</td>
-                  <td>
-                    {details[t.id]?.labels?.map((l) => (
-                      <Tag key={l.id} variant="label">{l.label}</Tag>
-                    ))}
-                  </td>
-                  <td>
-                    <button onClick={(e) => { e.stopPropagation(); setSelected(t); setShowInstantiate(true); }} className="btn-small">▶ Use</button>
-                  </td>
+        <>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Version</th>
+                  <th>Description</th>
+                  <th>Labels</th>
+                  <th>Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {pagination.paginatedItems.map((t) => (
+                  <tr key={t.id} onClick={() => setSelected(t)} className="clickable">
+                    <td className="mono">{t.name}</td>
+                    <td><Tag variant="version">v{t.version}</Tag></td>
+                    <td className="dim">{t.description || '—'}</td>
+                    <td>
+                      {details[t.id]?.labels?.map((l) => (
+                        <Tag key={l.id} variant="label">{l.label}</Tag>
+                      ))}
+                    </td>
+                    <td>
+                      <button onClick={(e) => { e.stopPropagation(); setSelected(t); setShowInstantiate(true); }} className="btn-small">▶ Use</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {templates.length > 10 && (
+            <Pagination
+              page={pagination.page}
+              totalPages={pagination.totalPages}
+              onPageChange={pagination.setPage}
+              pageSize={pagination.pageSize}
+              onPageSizeChange={pagination.setPageSize}
+              total={pagination.total}
+            />
+          )}
+        </>
       )}
 
       {showCreate && (
@@ -1319,6 +1278,7 @@ const WebhooksPanel = () => {
   });
   const [loading, setLoading] = useState(true);
   const toast = useToast();
+  const pagination = usePagination(webhooks);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1413,54 +1373,66 @@ const WebhooksPanel = () => {
       {webhooks.length === 0 ? (
         <div className="empty">No webhooks configured</div>
       ) : (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Status</th>
-                <th>Events</th>
-                <th>URL</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {webhooks.map((w) => (
-                <tr key={w.id} onClick={() => selectWebhook(w)} className="clickable">
-                  <td className="mono">{w.name}</td>
-                  <td>
-                    <span className={`status status-${w.enabled ? 'green' : 'gray'}`}>
-                      {w.enabled ? 'enabled' : 'disabled'}
-                    </span>
-                  </td>
-                  <td>
-                    {w.event_types?.slice(0, 3).map((e, i) => (
-                      <Tag key={i} variant="info">{e}</Tag>
-                    ))}
-                    {w.event_types?.length > 3 && <span className="dim">+{w.event_types.length - 3}</span>}
-                  </td>
-                  <td className="dim">{w.has_url ? '••••••••' : '—'}</td>
-                  <td>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); toggleEnabled(w); }}
-                      className="btn-icon"
-                      title={w.enabled ? 'Disable' : 'Enable'}
-                    >
-                      {w.enabled ? '⏸' : '▶'}
-                    </button>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); remove(w.id); }}
-                      className="btn-icon"
-                      title="Delete"
-                    >
-                      ✕
-                    </button>
-                  </td>
+        <>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Status</th>
+                  <th>Events</th>
+                  <th>URL</th>
+                  <th>Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {pagination.paginatedItems.map((w) => (
+                  <tr key={w.id} onClick={() => selectWebhook(w)} className="clickable">
+                    <td className="mono">{w.name}</td>
+                    <td>
+                      <span className={`status status-${w.enabled ? 'green' : 'gray'}`}>
+                        {w.enabled ? 'enabled' : 'disabled'}
+                      </span>
+                    </td>
+                    <td>
+                      {w.event_types?.slice(0, 3).map((e, i) => (
+                        <Tag key={i} variant="info">{e}</Tag>
+                      ))}
+                      {w.event_types?.length > 3 && <span className="dim">+{w.event_types.length - 3}</span>}
+                    </td>
+                    <td className="dim">{w.has_url ? '••••••••' : '—'}</td>
+                    <td>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); toggleEnabled(w); }}
+                        className="btn-icon"
+                        title={w.enabled ? 'Disable' : 'Enable'}
+                      >
+                        {w.enabled ? '⏸' : '▶'}
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); remove(w.id); }}
+                        className="btn-icon"
+                        title="Delete"
+                      >
+                        ✕
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {webhooks.length > 10 && (
+            <Pagination
+              page={pagination.page}
+              totalPages={pagination.totalPages}
+              onPageChange={pagination.setPage}
+              pageSize={pagination.pageSize}
+              onPageSizeChange={pagination.setPageSize}
+              total={pagination.total}
+            />
+          )}
+        </>
       )}
 
       {showCreate && (
@@ -1622,17 +1594,13 @@ const WebhooksPanel = () => {
 };
 
 // ==================== MAIN APP ====================
-export default function App() {
+// Inner app component that uses toast context
+const AppContent = () => {
   const [activePanel, setActivePanel] = useState('agents');
   const [stacks, setStacks] = useState([]);
   const [agents, setAgents] = useState([]);
   const [generators, setGenerators] = useState([]);
-  const [toast, setToast] = useState(null);
-
-  const showToast = useCallback((message, type = 'info') => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 4000);
-  }, []);
+  const showToast = useToast();
 
   useEffect(() => {
     api.getGenerators().then(setGenerators).catch((e) => {
@@ -1644,33 +1612,38 @@ export default function App() {
   }, [showToast]);
 
   return (
-    <ToastContext.Provider value={showToast}>
-      <div className="app">
-        <header className="header">
-          <div className="logo">
-            <span className="logo-icon">◆</span>
-            <span className="logo-text">BROKKR</span>
-          </div>
-          <nav className="nav">
-            {['agents', 'stacks', 'templates', 'jobs', 'webhooks', 'admin'].map((p) => (
-              <button key={p} className={`nav-item ${activePanel === p ? 'active' : ''}`} onClick={() => setActivePanel(p)}>
-                {p}
-              </button>
-            ))}
-          </nav>
-        </header>
+    <div className="app">
+      <header className="header">
+        <div className="logo">
+          <span className="logo-icon">◆</span>
+          <span className="logo-text">BROKKR</span>
+        </div>
+        <nav className="nav">
+          {['agents', 'stacks', 'templates', 'jobs', 'webhooks', 'admin'].map((p) => (
+            <button key={p} className={`nav-item ${activePanel === p ? 'active' : ''}`} onClick={() => setActivePanel(p)}>
+              {p}
+            </button>
+          ))}
+        </nav>
+      </header>
 
-        <main className="main">
-          {activePanel === 'agents' && <AgentsPanel stacks={stacks} onRefresh={setAgents} />}
-          {activePanel === 'stacks' && <StacksPanel generators={generators} agents={agents} onRefresh={setStacks} />}
-          {activePanel === 'templates' && <TemplatesPanel stacks={stacks} />}
-          {activePanel === 'jobs' && <JobsPanel agents={agents} />}
-          {activePanel === 'webhooks' && <WebhooksPanel />}
-          {activePanel === 'admin' && <AdminPanel onGeneratorsChange={setGenerators} onAgentsChange={setAgents} />}
-        </main>
+      <main className="main">
+        {activePanel === 'agents' && <AgentsPanel stacks={stacks} onRefresh={setAgents} />}
+        {activePanel === 'stacks' && <StacksPanel generators={generators} agents={agents} onRefresh={setStacks} />}
+        {activePanel === 'templates' && <TemplatesPanel stacks={stacks} />}
+        {activePanel === 'jobs' && <JobsPanel agents={agents} />}
+        {activePanel === 'webhooks' && <WebhooksPanel />}
+        {activePanel === 'admin' && <AdminPanel onGeneratorsChange={setGenerators} onAgentsChange={setAgents} />}
+      </main>
+    </div>
+  );
+};
 
-        {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-      </div>
-    </ToastContext.Provider>
+// Main App with ToastProvider wrapper
+export default function App() {
+  return (
+    <ToastProvider>
+      <AppContent />
+    </ToastProvider>
   );
 }

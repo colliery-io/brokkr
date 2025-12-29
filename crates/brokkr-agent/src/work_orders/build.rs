@@ -20,7 +20,7 @@
 //! - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
 
 use crate::k8s;
-use brokkr_utils::logging::prelude::*;
+use tracing::{debug, error, info, trace, warn};
 use kube::{
     api::{Api, DynamicObject, PatchParams, PostParams},
     Client as K8sClient, Discovery,

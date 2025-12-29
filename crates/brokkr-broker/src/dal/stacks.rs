@@ -239,37 +239,23 @@ impl StacksDAL<'_> {
                     return Ok(Vec::new());
                 }
 
-                let mut all_matching_stacks: Option<HashSet<Stack>> = None;
+                // Use SQL EXISTS subqueries for efficient AND filtering (single query)
+                let mut query = stacks::table
+                    .filter(stacks::deleted_at.is_null())
+                    .into_boxed();
 
-                for (key, value) in annotations {
-                    let matching_stacks: HashSet<Stack> = stacks::table
-                        .inner_join(stack_annotations::table)
-                        .filter(stacks::deleted_at.is_null())
+                for (key, value) in &annotations {
+                    let subquery = stack_annotations::table
+                        .filter(stack_annotations::stack_id.eq(stacks::id))
                         .filter(stack_annotations::key.eq(key))
-                        .filter(stack_annotations::value.eq(value))
-                        .select(stacks::all_columns)
-                        .load(conn)?
-                        .into_iter()
-                        .collect();
-
-                    all_matching_stacks = match all_matching_stacks {
-                        Some(stacks) => {
-                            Some(stacks.intersection(&matching_stacks).cloned().collect())
-                        }
-                        None => Some(matching_stacks),
-                    };
-
-                    if let Some(ref stacks) = all_matching_stacks {
-                        if stacks.is_empty() {
-                            break;
-                        }
-                    }
+                        .filter(stack_annotations::value.eq(value));
+                    query = query.filter(diesel::dsl::exists(subquery));
                 }
 
-                Ok(
-                    all_matching_stacks
-                        .map_or_else(Vec::new, |stacks| stacks.into_iter().collect()),
-                )
+                query
+                    .select(stacks::all_columns)
+                    .distinct()
+                    .load::<Stack>(conn)
             }
         }
     }

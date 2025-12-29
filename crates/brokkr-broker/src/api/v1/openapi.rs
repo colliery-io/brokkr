@@ -18,8 +18,9 @@ use crate::api::v1::health::{
 use crate::api::v1::work_orders::{
     ClaimWorkOrderRequest, CompleteWorkOrderRequest, CreateWorkOrderRequest, WorkOrderTargeting,
 };
+use crate::api::v1::admin::{ConfigChangeInfo, ConfigReloadResponse};
 use crate::api::v1::{
-    agent_events, agents, auth, deployment_objects, diagnostics, generators, health, stacks,
+    admin, agent_events, agents, auth, deployment_objects, diagnostics, generators, health, stacks,
     templates, work_orders,
 };
 use crate::dal::DAL;
@@ -109,6 +110,7 @@ use utoipa_swagger_ui::SwaggerUi;
         diagnostics::get_pending_diagnostics,
         diagnostics::claim_diagnostic,
         diagnostics::submit_diagnostic_result,
+        admin::reload_config,
     ),
     components(
         schemas(
@@ -158,6 +160,8 @@ use utoipa_swagger_ui::SwaggerUi;
             CreateDiagnosticRequest,
             DiagnosticResponse,
             SubmitDiagnosticResult,
+            ConfigReloadResponse,
+            ConfigChangeInfo,
         )
     ),
     tags(
@@ -174,7 +178,8 @@ use utoipa_swagger_ui::SwaggerUi;
         (name = "work-order-log", description = "Work Order Log API"),
         (name = "auth", description = "Authentication API"),
         (name = "health", description = "Deployment Health monitoring API"),
-        (name = "diagnostics", description = "On-demand diagnostics API")
+        (name = "diagnostics", description = "On-demand diagnostics API"),
+        (name = "Admin", description = "Administrative operations API")
     ),
     modifiers(&SecurityAddon)
 )]

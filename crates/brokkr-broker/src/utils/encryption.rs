@@ -21,7 +21,7 @@ use aes_gcm::{
     aead::{Aead, KeyInit},
     Aes256Gcm, Nonce,
 };
-use brokkr_utils::logging::prelude::*;
+use tracing::{debug, error, info, warn};
 use once_cell::sync::OnceCell;
 use rand::RngCore;
 use sha2::{Digest, Sha256};

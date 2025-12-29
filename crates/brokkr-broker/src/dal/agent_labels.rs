@@ -121,4 +121,31 @@ impl AgentLabelsDAL<'_> {
             .get_result::<i64>(conn)
             .map(|count| count > 0)
     }
+
+    /// Deletes a specific label for an agent using a single indexed query.
+    ///
+    /// This is more efficient than fetching all labels and filtering client-side.
+    ///
+    /// # Arguments
+    ///
+    /// * `agent_id` - The UUID of the agent.
+    /// * `label` - The label string to delete.
+    ///
+    /// # Returns
+    ///
+    /// Returns a Result containing the number of affected rows (0 or 1) on success,
+    /// or a diesel::result::Error on failure.
+    pub fn delete_by_agent_and_label(
+        &self,
+        agent_id: Uuid,
+        label: &str,
+    ) -> Result<usize, diesel::result::Error> {
+        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        diesel::delete(
+            agent_labels::table
+                .filter(agent_labels::agent_id.eq(agent_id))
+                .filter(agent_labels::label.eq(label)),
+        )
+        .execute(conn)
+    }
 }

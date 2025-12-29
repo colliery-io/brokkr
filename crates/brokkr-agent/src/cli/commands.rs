@@ -60,7 +60,7 @@
 
 use crate::{broker, deployment_health, diagnostics, health, k8s, work_orders};
 use brokkr_utils::config::Settings;
-use brokkr_utils::logging::prelude::*;
+use brokkr_utils::telemetry::prelude::*;
 use reqwest::Client;
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -74,7 +74,12 @@ use uuid::Uuid;
 
 pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
     let config = Settings::new(None).expect("Failed to load configuration");
-    brokkr_utils::logging::init(&config.log.level).expect("Failed to initialize logger");
+
+    // Initialize telemetry (includes tracing/logging setup)
+    let telemetry_config = config.telemetry.for_agent();
+    brokkr_utils::telemetry::init(&telemetry_config, &config.log.level, &config.log.format)
+        .expect("Failed to initialize telemetry");
+
     info!("Starting Brokkr Agent");
 
     info!("Waiting for broker to be ready");
@@ -404,6 +409,9 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
         "Shutdown complete for agent '{}' (id: {})",
         agent.name, agent.id
     );
+
+    // Shutdown telemetry, flushing any pending traces
+    brokkr_utils::telemetry::shutdown();
 
     Ok(())
 }

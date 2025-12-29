@@ -10,6 +10,7 @@
 //! It includes submodules for various API functionalities and sets up the main router
 //! with authentication middleware.
 
+pub mod admin;
 pub mod agent_events;
 pub mod agents;
 pub mod auth;
@@ -27,8 +28,8 @@ pub mod work_orders;
 use crate::dal::DAL;
 use axum::middleware::from_fn_with_state;
 use axum::Router;
-use brokkr_utils::config::Cors;
-use brokkr_utils::logging::prelude::*;
+use brokkr_utils::config::{Cors, ReloadableConfig};
+use tracing::{debug, error, info, warn};
 use hyper::{header::HeaderName, Method};
 use std::time::Duration;
 use tower_http::cors::CorsLayer;
@@ -37,11 +38,11 @@ use tower_http::cors::CorsLayer;
 ///
 /// This function combines all the route handlers from different modules
 /// and applies the authentication middleware.
-pub fn routes(dal: DAL, cors_config: &Cors) -> Router<DAL> {
+pub fn routes(dal: DAL, cors_config: &Cors, reloadable_config: Option<ReloadableConfig>) -> Router<DAL> {
     // Configure CORS from settings
     let cors = build_cors_layer(cors_config);
 
-    let api_routes = Router::new()
+    let mut api_routes = Router::new()
         .merge(agent_events::routes())
         .merge(agents::routes())
         .merge(auth::routes())
@@ -54,11 +55,17 @@ pub fn routes(dal: DAL, cors_config: &Cors) -> Router<DAL> {
         .merge(webhooks::routes())
         .merge(work_orders::routes())
         .merge(work_orders::agent_routes())
+        .merge(admin::routes())
         .layer(from_fn_with_state(
             dal.clone(),
             middleware::auth_middleware::<axum::body::Body>,
         ))
         .layer(cors);
+
+    // Add ReloadableConfig as an extension if available
+    if let Some(config) = reloadable_config {
+        api_routes = api_routes.layer(axum::Extension(config));
+    }
 
     Router::new()
         .nest("/api/v1", api_routes)

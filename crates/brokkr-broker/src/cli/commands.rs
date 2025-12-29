@@ -11,8 +11,8 @@ use crate::utils;
 use crate::utils::pak;
 use brokkr_models::models::agents::NewAgent;
 use brokkr_models::models::generator::NewGenerator;
-use brokkr_utils::config::Settings;
-use brokkr_utils::logging::prelude::*;
+use brokkr_utils::config::{ReloadableConfig, Settings};
+use tracing::{debug, error, info, warn};
 use diesel::prelude::*;
 use diesel::result::Error as DieselError;
 use diesel::sql_query;
@@ -134,9 +134,19 @@ pub async fn serve(config: &Settings) -> Result<(), Box<dyn std::error::Error>> 
     };
     utils::background_tasks::start_webhook_cleanup_task(dal.clone(), webhook_cleanup_config);
 
+    // Create reloadable configuration for hot-reload support
+    info!("Initializing reloadable configuration");
+    let reloadable_config = ReloadableConfig::from_settings(config.clone(), None);
+
+    // Start ConfigMap watcher for Kubernetes hot-reload (if running in K8s)
+    if let Some(watcher_config) = utils::config_watcher::ConfigWatcherConfig::from_environment() {
+        utils::config_watcher::start_config_watcher(reloadable_config.clone(), watcher_config);
+    }
+
     // Configure API routes
     info!("Configuring API routes");
-    let app = api::configure_api_routes(dal.clone(), &config.cors).with_state(dal);
+    let app = api::configure_api_routes(dal.clone(), &config.cors, Some(reloadable_config))
+        .with_state(dal);
 
     // Set up the server address
     let addr = "0.0.0.0:3000";

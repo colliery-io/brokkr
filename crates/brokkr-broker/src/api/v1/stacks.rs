@@ -20,8 +20,8 @@ use brokkr_models::models::rendered_deployment_objects::NewRenderedDeploymentObj
 use brokkr_models::models::stack_annotations::{NewStackAnnotation, StackAnnotation};
 use brokkr_models::models::stack_labels::{NewStackLabel, StackLabel};
 use brokkr_models::models::stacks::{NewStack, Stack};
-use brokkr_utils::logging::prelude::*;
 use serde::{Deserialize, Serialize};
+use tracing::{error, info, instrument, warn};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
@@ -67,6 +67,7 @@ pub fn routes() -> Router<DAL> {
         ("pak" = [])
     )
 )]
+#[instrument(skip(dal, auth_payload), fields(admin = auth_payload.admin))]
 async fn list_stacks(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -561,17 +562,11 @@ async fn remove_label(
         }
     }
 
-    // Find the label to delete
-    match dal.stack_labels().list_for_stack(stack_id) {
-        Ok(labels) => {
-            if let Some(stack_label) = labels.into_iter().find(|l| l.label == label) {
-                match dal.stack_labels().delete(stack_label.id) {
-                    Ok(_) => Ok(StatusCode::NO_CONTENT),
-                    Err(_) => Err((
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(serde_json::json!({"error": "Failed to remove stack label"})),
-                    )),
-                }
+    // Delete the label directly using indexed query
+    match dal.stack_labels().delete_by_stack_and_label(stack_id, &label) {
+        Ok(deleted_count) => {
+            if deleted_count > 0 {
+                Ok(StatusCode::NO_CONTENT)
             } else {
                 Err((
                     StatusCode::NOT_FOUND,
@@ -581,7 +576,7 @@ async fn remove_label(
         }
         Err(_) => Err((
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({"error": "Failed to fetch stack labels"})),
+            Json(serde_json::json!({"error": "Failed to remove stack label"})),
         )),
     }
 }
@@ -736,17 +731,11 @@ async fn remove_annotation(
         }
     }
 
-    // Find the annotation to delete
-    match dal.stack_annotations().list_for_stack(stack_id) {
-        Ok(annotations) => {
-            if let Some(stack_annotation) = annotations.into_iter().find(|a| a.key == key) {
-                match dal.stack_annotations().delete(stack_annotation.id) {
-                    Ok(_) => Ok(StatusCode::NO_CONTENT),
-                    Err(_) => Err((
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(serde_json::json!({"error": "Failed to remove stack annotation"})),
-                    )),
-                }
+    // Delete the annotation directly using indexed query
+    match dal.stack_annotations().delete_by_stack_and_key(stack_id, &key) {
+        Ok(deleted_count) => {
+            if deleted_count > 0 {
+                Ok(StatusCode::NO_CONTENT)
             } else {
                 Err((
                     StatusCode::NOT_FOUND,
@@ -756,7 +745,7 @@ async fn remove_annotation(
         }
         Err(_) => Err((
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({"error": "Failed to fetch stack annotations"})),
+            Json(serde_json::json!({"error": "Failed to remove stack annotation"})),
         )),
     }
 }

@@ -33,6 +33,10 @@ serde_yaml = { workspace = true }
 tokio = { workspace = true }
 uuid = { workspace = true }
 
+# OpenTelemetry dependencies
+opentelemetry = { workspace = true }
+tracing = { workspace = true }
+
 [dev-dependencies]
 once_cell = { workspace = true }
 serial_test = "3.2.0"

@@ -20,7 +20,7 @@ use axum::{
 use brokkr_models::models::deployment_health::{
     DeploymentHealth, HealthSummary, NewDeploymentHealth,
 };
-use brokkr_utils::logging::prelude::*;
+use tracing::{debug, error, info, warn};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;

@@ -159,3 +159,49 @@ networkPolicy:
   #       - protocol: TCP
   #         port: 443
   additionalEgressRules: []
+
+# OpenTelemetry telemetry configuration for distributed tracing
+telemetry:
+  # Enable OpenTelemetry tracing
+  enabled: false
+
+  # OTLP endpoint for trace export (gRPC)
+  # This can be different from the broker's collector if agents are in separate clusters
+  # Examples:
+  #   - Local collector: http://otel-collector:4317
+  #   - Cluster-local collector: http://otel-collector.monitoring:4317
+  #   - External collector: https://otel.example.com:4317
+  otlpEndpoint: "http://otel-collector:4317"
+
+  # Sampling rate (0.0 to 1.0)
+  # 0.1 = 10% of traces sampled (recommended for production)
+  # 1.0 = 100% of traces sampled (development/debugging)
+  samplingRate: 0.1
+
+  # Optional: Deploy OpenTelemetry Collector as a sidecar
+  # Useful for agents in air-gapped or restricted network environments
+  collector:
+    # Enable OTel collector sidecar
+    enabled: false
+
+    # Collector image
+    image:
+      repository: otel/opentelemetry-collector-contrib
+      tag: "0.96.0"
+      pullPolicy: IfNotPresent
+
+    # Resource limits for collector sidecar
+    resources:
+      requests:
+        memory: 64Mi
+        cpu: 50m
+      limits:
+        memory: 128Mi
+        cpu: 100m
+
+    # OTLP exporters configuration
+    exporters:
+      # OTLP exporter endpoint
+      otlpEndpoint: ""
+      # Enable debug exporter
+      debug: false

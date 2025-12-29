@@ -158,8 +158,10 @@ pub mod v1;
 use crate::dal::DAL;
 use crate::metrics;
 use axum::{response::IntoResponse, routing::get, Router};
-use brokkr_utils::config::Cors;
+use brokkr_utils::config::{Cors, ReloadableConfig};
 use hyper::StatusCode;
+use tower_http::trace::TraceLayer;
+use tracing::Level;
 
 /// Configures and returns the main application router with all API routes
 ///
@@ -170,16 +172,42 @@ use hyper::StatusCode;
 ///
 /// * `dal` - An instance of the Data Access Layer
 /// * `cors_config` - CORS configuration settings
+/// * `reloadable_config` - Optional reloadable configuration for hot-reload support
 ///
 /// # Returns
 ///
 /// Returns a configured `Router` instance that includes all API routes and middleware.
-pub fn configure_api_routes(dal: DAL, cors_config: &Cors) -> Router<DAL> {
+pub fn configure_api_routes(
+    dal: DAL,
+    cors_config: &Cors,
+    reloadable_config: Option<ReloadableConfig>,
+) -> Router<DAL> {
     Router::new()
-        .merge(v1::routes(dal.clone(), cors_config))
+        .merge(v1::routes(dal.clone(), cors_config, reloadable_config))
         .route("/healthz", get(healthz))
         .route("/readyz", get(readyz))
         .route("/metrics", get(metrics))
+        .layer(
+            TraceLayer::new_for_http()
+                .make_span_with(|request: &hyper::Request<_>| {
+                    tracing::span!(
+                        Level::INFO,
+                        "http_request",
+                        method = %request.method(),
+                        uri = %request.uri(),
+                        version = ?request.version(),
+                    )
+                })
+                .on_response(
+                    |response: &hyper::Response<_>, latency: std::time::Duration, _span: &tracing::Span| {
+                        tracing::info!(
+                            status = %response.status(),
+                            latency_ms = latency.as_millis(),
+                            "response"
+                        );
+                    },
+                ),
+        )
 }
 
 /// Health check endpoint handler

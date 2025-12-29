@@ -149,4 +149,30 @@ impl AgentTargetsDAL<'_> {
         diesel::delete(agent_targets::table.filter(agent_targets::stack_id.eq(stack_id)))
             .execute(conn)
     }
+
+    /// Deletes a specific target for an agent using a single indexed query.
+    ///
+    /// This is more efficient than fetching all targets and filtering client-side.
+    ///
+    /// # Arguments
+    ///
+    /// * `agent_id` - The UUID of the agent.
+    /// * `stack_id` - The UUID of the stack to remove from targets.
+    ///
+    /// # Returns
+    ///
+    /// The number of affected rows (0 or 1) on success, or a `diesel::result::Error` on failure.
+    pub fn delete_by_agent_and_stack(
+        &self,
+        agent_id: Uuid,
+        stack_id: Uuid,
+    ) -> Result<usize, diesel::result::Error> {
+        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        diesel::delete(
+            agent_targets::table
+                .filter(agent_targets::agent_id.eq(agent_id))
+                .filter(agent_targets::stack_id.eq(stack_id)),
+        )
+        .execute(conn)
+    }
 }

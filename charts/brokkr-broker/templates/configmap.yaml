@@ -4,7 +4,15 @@ metadata:
   name: {{ include "brokkr-broker.fullname" . }}
   labels:
     {{- include "brokkr-broker.labels" . | nindent 4 }}
+  annotations:
+    # Annotation for tools like Stakater Reloader to trigger pod restarts on ConfigMap changes
+    # Only needed if using external reload controllers - broker has built-in ConfigMap watching
+    # Hash of values that affect this ConfigMap - changes trigger annotation update
+    checksum/config: {{ toJson .Values | sha256sum | trunc 63 }}
 data:
+  # =============================================================================
+  # Static settings (require pod restart to apply changes)
+  # =============================================================================
   {{- if not .Values.postgresql.existingSecret }}
   BROKKR__DATABASE__URL: {{ printf "postgres://%s:%s@%s:%s/%s" (include "brokkr-broker.databaseUsername" .) (include "brokkr-broker.databasePassword" .) (include "brokkr-broker.databaseHost" .) (include "brokkr-broker.databasePort" .) (include "brokkr-broker.databaseName" .) | quote }}
   {{- end }}
@@ -17,4 +25,56 @@ data:
   BROKKR__TLS__KEY_PATH: "/etc/tls/tls.key"
   {{- else }}
   BROKKR__TLS__ENABLED: "false"
+  {{- end }}
+  # Telemetry configuration (static - requires restart)
+  {{- if .Values.telemetry.enabled }}
+  BROKKR__TELEMETRY__ENABLED: "true"
+  {{- if .Values.telemetry.collector.enabled }}
+  # When using sidecar collector, point to localhost
+  BROKKR__TELEMETRY__OTLP_ENDPOINT: "http://localhost:4317"
+  {{- else }}
+  BROKKR__TELEMETRY__OTLP_ENDPOINT: {{ .Values.telemetry.otlpEndpoint | quote }}
+  {{- end }}
+  BROKKR__TELEMETRY__BROKER__SERVICE_NAME: "brokkr-broker"
+  BROKKR__TELEMETRY__SAMPLING_RATE: {{ .Values.telemetry.samplingRate | quote }}
+  {{- else }}
+  BROKKR__TELEMETRY__ENABLED: "false"
+  {{- end }}
+  # =============================================================================
+  # Hot-reloadable settings (changes apply without pod restart)
+  # The broker watches this ConfigMap and automatically reloads these settings
+  # =============================================================================
+  # Log level (@hot-reload: true)
+  {{- if .Values.broker }}
+  BROKKR__LOG__LEVEL: {{ .Values.broker.logLevel | default "info" | quote }}
+  # Diagnostic cleanup settings (@hot-reload: true)
+  BROKKR__BROKER__DIAGNOSTIC_CLEANUP_INTERVAL_SECONDS: {{ .Values.broker.diagnosticCleanupIntervalSeconds | default 900 | quote }}
+  BROKKR__BROKER__DIAGNOSTIC_MAX_AGE_HOURS: {{ .Values.broker.diagnosticMaxAgeHours | default 1 | quote }}
+  # Webhook delivery settings (@hot-reload: true)
+  BROKKR__BROKER__WEBHOOK_DELIVERY_INTERVAL_SECONDS: {{ .Values.broker.webhookDeliveryIntervalSeconds | default 5 | quote }}
+  BROKKR__BROKER__WEBHOOK_DELIVERY_BATCH_SIZE: {{ .Values.broker.webhookDeliveryBatchSize | default 50 | quote }}
+  BROKKR__BROKER__WEBHOOK_CLEANUP_RETENTION_DAYS: {{ .Values.broker.webhookCleanupRetentionDays | default 7 | quote }}
+  {{- if .Values.broker.webhookEncryptionKey }}
+  # Webhook encryption key (static - requires restart)
+  BROKKR__BROKER__WEBHOOK_ENCRYPTION_KEY: {{ .Values.broker.webhookEncryptionKey | quote }}
+  {{- end }}
+  {{- end }}
+  # CORS configuration (@hot-reload: true)
+  {{- if .Values.cors }}
+  BROKKR__CORS__ALLOWED_ORIGINS: {{ .Values.cors.allowedOrigins | join "," | quote }}
+  BROKKR__CORS__ALLOWED_METHODS: {{ .Values.cors.allowedMethods | join "," | quote }}
+  BROKKR__CORS__ALLOWED_HEADERS: {{ .Values.cors.allowedHeaders | join "," | quote }}
+  BROKKR__CORS__MAX_AGE_SECONDS: {{ .Values.cors.maxAgeSeconds | default 3600 | quote }}
+  {{- end }}
+  # =============================================================================
+  # ConfigMap watcher settings (for automatic hot-reload in Kubernetes)
+  # =============================================================================
+  {{- if .Values.configReload }}
+  {{- if .Values.configReload.enabled }}
+  BROKKR_CONFIG_WATCHER_ENABLED: "true"
+  BROKKR_CONFIG_WATCHER_DEBOUNCE_SECONDS: {{ .Values.configReload.debounceSeconds | default 5 | quote }}
+  BROKKR_CONFIGMAP_NAME: {{ include "brokkr-broker.fullname" . | quote }}
+  {{- else }}
+  BROKKR_CONFIG_WATCHER_ENABLED: "false"
+  {{- end }}
   {{- end }}

@@ -4,6 +4,7 @@
  * See LICENSE file in the project root for full license text.
  */
 
+mod admin;
 mod agent_events;
 mod agents;
 mod auth;

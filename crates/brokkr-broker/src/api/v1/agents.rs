@@ -25,7 +25,7 @@ use brokkr_models::models::agent_targets::{AgentTarget, NewAgentTarget};
 use brokkr_models::models::agents::{Agent, NewAgent};
 use brokkr_models::models::deployment_objects::DeploymentObject;
 use brokkr_models::models::stacks::Stack;
-use brokkr_utils::logging::prelude::*;
+use tracing::{debug, error, info, warn};
 use serde::Deserialize;
 use serde_json::Value;
 use uuid::Uuid;
@@ -711,28 +711,14 @@ async fn remove_label(
         ));
     }
 
-    match dal.agent_labels().list_for_agent(id) {
-        Ok(labels) => {
-            if let Some(agent_label) = labels.into_iter().find(|l| l.label == label) {
-                match dal.agent_labels().delete(agent_label.id) {
-                    Ok(_) => {
-                        info!(
-                            "Successfully removed label '{}' from agent with ID: {}",
-                            label, id
-                        );
-                        Ok(StatusCode::NO_CONTENT)
-                    }
-                    Err(e) => {
-                        error!(
-                            "Failed to remove label '{}' from agent with ID {}: {:?}",
-                            label, id, e
-                        );
-                        Err((
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            Json(serde_json::json!({"error": "Failed to remove agent label"})),
-                        ))
-                    }
-                }
+    match dal.agent_labels().delete_by_agent_and_label(id, &label) {
+        Ok(deleted_count) => {
+            if deleted_count > 0 {
+                info!(
+                    "Successfully removed label '{}' from agent with ID: {}",
+                    label, id
+                );
+                Ok(StatusCode::NO_CONTENT)
             } else {
                 warn!("Label '{}' not found for agent with ID: {}", label, id);
                 Err((
@@ -742,10 +728,13 @@ async fn remove_label(
             }
         }
         Err(e) => {
-            error!("Failed to fetch labels for agent with ID {}: {:?}", id, e);
+            error!(
+                "Failed to remove label '{}' from agent with ID {}: {:?}",
+                label, id, e
+            );
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": "Failed to fetch agent labels"})),
+                Json(serde_json::json!({"error": "Failed to remove agent label"})),
             ))
         }
     }
@@ -913,28 +902,14 @@ async fn remove_annotation(
         ));
     }
 
-    match dal.agent_annotations().list_for_agent(id) {
-        Ok(annotations) => {
-            if let Some(agent_annotation) = annotations.into_iter().find(|a| a.key == key) {
-                match dal.agent_annotations().delete(agent_annotation.id) {
-                    Ok(_) => {
-                        info!(
-                            "Successfully removed annotation '{}' from agent with ID: {}",
-                            key, id
-                        );
-                        Ok(StatusCode::NO_CONTENT)
-                    }
-                    Err(e) => {
-                        error!(
-                            "Failed to remove annotation '{}' from agent with ID {}: {:?}",
-                            key, id, e
-                        );
-                        Err((
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            Json(serde_json::json!({"error": "Failed to remove agent annotation"})),
-                        ))
-                    }
-                }
+    match dal.agent_annotations().delete_by_agent_and_key(id, &key) {
+        Ok(deleted_count) => {
+            if deleted_count > 0 {
+                info!(
+                    "Successfully removed annotation '{}' from agent with ID: {}",
+                    key, id
+                );
+                Ok(StatusCode::NO_CONTENT)
             } else {
                 warn!("Annotation '{}' not found for agent with ID: {}", key, id);
                 Err((
@@ -945,12 +920,12 @@ async fn remove_annotation(
         }
         Err(e) => {
             error!(
-                "Failed to fetch annotations for agent with ID {}: {:?}",
-                id, e
+                "Failed to remove annotation '{}' from agent with ID {}: {:?}",
+                key, id, e
             );
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": "Failed to fetch agent annotations"})),
+                Json(serde_json::json!({"error": "Failed to remove agent annotation"})),
             ))
         }
     }
@@ -1111,28 +1086,14 @@ async fn remove_target(
         ));
     }
 
-    match dal.agent_targets().list_for_agent(id) {
-        Ok(targets) => {
-            if let Some(target) = targets.into_iter().find(|t| t.stack_id == stack_id) {
-                match dal.agent_targets().delete(target.id) {
-                    Ok(_) => {
-                        info!(
-                            "Successfully removed target for stack {} from agent with ID: {}",
-                            stack_id, id
-                        );
-                        Ok(StatusCode::NO_CONTENT)
-                    }
-                    Err(e) => {
-                        error!(
-                            "Failed to remove target for stack {} from agent with ID {}: {:?}",
-                            stack_id, id, e
-                        );
-                        Err((
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            Json(serde_json::json!({"error": "Failed to remove agent target"})),
-                        ))
-                    }
-                }
+    match dal.agent_targets().delete_by_agent_and_stack(id, stack_id) {
+        Ok(deleted_count) => {
+            if deleted_count > 0 {
+                info!(
+                    "Successfully removed target for stack {} from agent with ID: {}",
+                    stack_id, id
+                );
+                Ok(StatusCode::NO_CONTENT)
             } else {
                 warn!(
                     "Target for stack {} not found for agent with ID: {}",
@@ -1145,10 +1106,13 @@ async fn remove_target(
             }
         }
         Err(e) => {
-            error!("Failed to fetch targets for agent with ID {}: {:?}", id, e);
+            error!(
+                "Failed to remove target for stack {} from agent with ID {}: {:?}",
+                stack_id, id, e
+            );
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": "Failed to fetch agent targets"})),
+                Json(serde_json::json!({"error": "Failed to remove agent target"})),
             ))
         }
     }

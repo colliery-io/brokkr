@@ -12,7 +12,7 @@
 
 use crate::dal::DAL;
 use brokkr_models::models::webhooks::{BrokkrEvent, NewWebhookDelivery};
-use brokkr_utils::logging::prelude::*;
+use tracing::{debug, error, info, warn};
 use once_cell::sync::OnceCell;
 use std::sync::Arc;
 use tokio::sync::mpsc;

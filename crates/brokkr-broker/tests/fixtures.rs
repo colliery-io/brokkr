@@ -12,7 +12,7 @@
 use axum::Router;
 use brokkr_broker::api;
 use brokkr_broker::dal::DAL;
-use brokkr_utils::config::Cors;
+use brokkr_utils::config::{Cors, ReloadableConfig};
 use brokkr_broker::db::create_shared_connection_pool;
 use brokkr_broker::utils;
 use brokkr_broker::utils::pak;
@@ -63,6 +63,8 @@ impl Default for TestFixture {
 impl TestFixture {
     /// Creates and returns an Axum Router with configured API routes.
     ///
+    /// This matches the production code path by always including ReloadableConfig.
+    ///
     /// # Returns
     ///
     /// Returns a configured Axum Router.
@@ -74,7 +76,8 @@ impl TestFixture {
             allowed_headers: vec!["Authorization".to_string(), "Content-Type".to_string()],
             max_age_seconds: 3600,
         };
-        api::configure_api_routes(self.dal.clone(), &test_cors)
+        let reloadable_config = ReloadableConfig::from_settings(self.settings.clone(), None);
+        api::configure_api_routes(self.dal.clone(), &test_cors, Some(reloadable_config))
     }
 
     /// Creates a new TestFixture instance.

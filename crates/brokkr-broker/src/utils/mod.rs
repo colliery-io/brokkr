@@ -10,7 +10,7 @@
 //! the broker, including admin key management and shutdown procedures.
 
 use brokkr_models::schema::admin_role;
-use brokkr_utils::logging::prelude::*;
+use tracing::{debug, error, info, warn};
 use chrono::Utc;
 use diesel::prelude::*;
 use std::fs;
@@ -18,6 +18,7 @@ use std::path::Path;
 use tokio::sync::oneshot;
 use uuid::Uuid;
 pub mod background_tasks;
+pub mod config_watcher;
 pub mod encryption;
 pub mod event_bus;
 pub mod matching;
