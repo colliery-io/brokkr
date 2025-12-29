@@ -417,9 +417,27 @@ mod tests {
     }
 
     #[test]
+    fn test_custom_diagnostic_config() {
+        let config = DiagnosticCleanupConfig {
+            interval_seconds: 60,
+            max_age_hours: 24,
+        };
+        assert_eq!(config.interval_seconds, 60);
+        assert_eq!(config.max_age_hours, 24);
+    }
+
+    #[test]
     fn test_default_work_order_config() {
         let config = WorkOrderMaintenanceConfig::default();
         assert_eq!(config.interval_seconds, 10);
+    }
+
+    #[test]
+    fn test_custom_work_order_config() {
+        let config = WorkOrderMaintenanceConfig {
+            interval_seconds: 30,
+        };
+        assert_eq!(config.interval_seconds, 30);
     }
 
     #[test]
@@ -430,9 +448,60 @@ mod tests {
     }
 
     #[test]
+    fn test_custom_webhook_delivery_config() {
+        let config = WebhookDeliveryConfig {
+            interval_seconds: 10,
+            batch_size: 100,
+        };
+        assert_eq!(config.interval_seconds, 10);
+        assert_eq!(config.batch_size, 100);
+    }
+
+    #[test]
     fn test_default_webhook_cleanup_config() {
         let config = WebhookCleanupConfig::default();
         assert_eq!(config.interval_seconds, 3600);
         assert_eq!(config.retention_days, 7);
+    }
+
+    #[test]
+    fn test_custom_webhook_cleanup_config() {
+        let config = WebhookCleanupConfig {
+            interval_seconds: 7200,
+            retention_days: 30,
+        };
+        assert_eq!(config.interval_seconds, 7200);
+        assert_eq!(config.retention_days, 30);
+    }
+
+    #[tokio::test]
+    async fn test_attempt_delivery_invalid_url() {
+        let client = reqwest::Client::new();
+        let result = attempt_delivery(
+            &client,
+            "http://invalid.invalid.invalid:12345/webhook",
+            None,
+            r#"{"test": "data"}"#,
+        )
+        .await;
+
+        // Should fail with a connection error
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Request failed"));
+    }
+
+    #[tokio::test]
+    async fn test_attempt_delivery_with_auth_header_invalid_url() {
+        let client = reqwest::Client::new();
+        let result = attempt_delivery(
+            &client,
+            "http://invalid.invalid.invalid:12345/webhook",
+            Some("Bearer test-token"),
+            r#"{"event": "test"}"#,
+        )
+        .await;
+
+        // Should fail, but auth header should be accepted without panic
+        assert!(result.is_err());
     }
 }

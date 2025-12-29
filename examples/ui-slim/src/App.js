@@ -1,6 +1,18 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, createContext, useContext } from 'react';
 import * as api from './api';
 import './styles.css';
+
+// Toast context for app-wide notifications
+const ToastContext = createContext(null);
+const useToast = () => useContext(ToastContext);
+
+// Helper to extract user-friendly error message
+const getErrorMessage = (error) => {
+  if (error?.response?.data?.message) return error.response.data.message;
+  if (error?.response?.data?.error) return error.response.data.error;
+  if (error?.message) return error.message;
+  return 'An unexpected error occurred';
+};
 
 // Reusable tag/chip component
 const Tag = ({ children, onRemove, variant = 'default' }) => (
@@ -91,6 +103,7 @@ const AgentsPanel = ({ stacks, onRefresh }) => {
   const [selected, setSelected] = useState(null);
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
+  const toast = useToast();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -106,60 +119,99 @@ const AgentsPanel = ({ stacks, onRefresh }) => {
         d[a.id] = { labels, annotations, targets };
       }));
       setDetails(d);
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      toast?.('Failed to load agents: ' + getErrorMessage(e), 'error');
+    }
     setLoading(false);
-  }, [onRefresh]);
+  }, [onRefresh, toast]);
 
   useEffect(() => { load(); }, [load]);
 
   const selectAgent = async (agent) => {
     setSelected(agent);
-    const evts = await api.getAgentEvents(agent.id);
-    setEvents(evts);
+    try {
+      const evts = await api.getAgentEvents(agent.id);
+      setEvents(evts);
+    } catch (e) {
+      toast?.('Failed to load agent events: ' + getErrorMessage(e), 'error');
+      setEvents([]);
+    }
   };
 
   const addLabel = async (label) => {
-    await api.addAgentLabel(selected.id, label);
-    const labels = await api.getAgentLabels(selected.id);
-    setDetails({ ...details, [selected.id]: { ...details[selected.id], labels } });
+    try {
+      await api.addAgentLabel(selected.id, label);
+      const labels = await api.getAgentLabels(selected.id);
+      setDetails({ ...details, [selected.id]: { ...details[selected.id], labels } });
+      toast?.('Label added', 'success');
+    } catch (e) {
+      toast?.('Failed to add label: ' + getErrorMessage(e), 'error');
+    }
   };
 
   const removeLabel = async (label) => {
-    await api.removeAgentLabel(selected.id, label);
-    const labels = await api.getAgentLabels(selected.id);
-    setDetails({ ...details, [selected.id]: { ...details[selected.id], labels } });
+    try {
+      await api.removeAgentLabel(selected.id, label);
+      const labels = await api.getAgentLabels(selected.id);
+      setDetails({ ...details, [selected.id]: { ...details[selected.id], labels } });
+    } catch (e) {
+      toast?.('Failed to remove label: ' + getErrorMessage(e), 'error');
+    }
   };
 
   const addAnnotation = async (key, value) => {
-    await api.addAgentAnnotation(selected.id, key, value);
-    const annotations = await api.getAgentAnnotations(selected.id);
-    setDetails({ ...details, [selected.id]: { ...details[selected.id], annotations } });
+    try {
+      await api.addAgentAnnotation(selected.id, key, value);
+      const annotations = await api.getAgentAnnotations(selected.id);
+      setDetails({ ...details, [selected.id]: { ...details[selected.id], annotations } });
+      toast?.('Annotation added', 'success');
+    } catch (e) {
+      toast?.('Failed to add annotation: ' + getErrorMessage(e), 'error');
+    }
   };
 
   const removeAnnotation = async (key) => {
-    await api.removeAgentAnnotation(selected.id, key);
-    const annotations = await api.getAgentAnnotations(selected.id);
-    setDetails({ ...details, [selected.id]: { ...details[selected.id], annotations } });
+    try {
+      await api.removeAgentAnnotation(selected.id, key);
+      const annotations = await api.getAgentAnnotations(selected.id);
+      setDetails({ ...details, [selected.id]: { ...details[selected.id], annotations } });
+    } catch (e) {
+      toast?.('Failed to remove annotation: ' + getErrorMessage(e), 'error');
+    }
   };
 
   const addTarget = async (stackId) => {
-    await api.addAgentTarget(selected.id, stackId);
-    const targets = await api.getAgentTargets(selected.id);
-    setDetails({ ...details, [selected.id]: { ...details[selected.id], targets } });
+    try {
+      await api.addAgentTarget(selected.id, stackId);
+      const targets = await api.getAgentTargets(selected.id);
+      setDetails({ ...details, [selected.id]: { ...details[selected.id], targets } });
+      toast?.('Target added', 'success');
+    } catch (e) {
+      toast?.('Failed to add target: ' + getErrorMessage(e), 'error');
+    }
   };
 
   const removeTarget = async (stackId) => {
-    await api.removeAgentTarget(selected.id, stackId);
-    const targets = await api.getAgentTargets(selected.id);
-    setDetails({ ...details, [selected.id]: { ...details[selected.id], targets } });
+    try {
+      await api.removeAgentTarget(selected.id, stackId);
+      const targets = await api.getAgentTargets(selected.id);
+      setDetails({ ...details, [selected.id]: { ...details[selected.id], targets } });
+    } catch (e) {
+      toast?.('Failed to remove target: ' + getErrorMessage(e), 'error');
+    }
   };
 
   const toggleStatus = async () => {
-    const newStatus = selected.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
-    const updated = await api.updateAgent(selected.id, { status: newStatus });
-    setSelected(updated);
-    setAgents(agents.map(a => a.id === updated.id ? updated : a));
-    onRefresh?.(agents.map(a => a.id === updated.id ? updated : a));
+    try {
+      const newStatus = selected.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+      const updated = await api.updateAgent(selected.id, { status: newStatus });
+      setSelected(updated);
+      setAgents(agents.map(a => a.id === updated.id ? updated : a));
+      onRefresh?.(agents.map(a => a.id === updated.id ? updated : a));
+      toast?.(`Agent ${newStatus.toLowerCase()}`, 'success');
+    } catch (e) {
+      toast?.('Failed to update agent status: ' + getErrorMessage(e), 'error');
+    }
   };
 
   if (loading) return <div className="loading">Loading agents...</div>;
@@ -299,6 +351,7 @@ const StacksPanel = ({ generators, agents, onRefresh }) => {
   const [yaml, setYaml] = useState('');
   const [isDeletion, setIsDeletion] = useState(false);
   const [loading, setLoading] = useState(true);
+  const toast = useToast();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -312,76 +365,115 @@ const StacksPanel = ({ generators, agents, onRefresh }) => {
       }));
       setDetails(d);
       onRefresh?.(data);
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      toast?.('Failed to load stacks: ' + getErrorMessage(e), 'error');
+    }
     setLoading(false);
-  }, [onRefresh]);
+  }, [onRefresh, toast]);
 
   useEffect(() => { load(); }, [load]);
 
   const selectStack = async (stack) => {
     setSelected(stack);
     setStackHealth(null);
-    const [deps, health] = await Promise.all([
-      api.getStackDeployments(stack.id),
-      api.getStackHealth(stack.id).catch(() => null)
-    ]);
-    setDeployments(deps);
-    setStackHealth(health);
+    try {
+      const [deps, health] = await Promise.all([
+        api.getStackDeployments(stack.id),
+        api.getStackHealth(stack.id).catch(() => null)
+      ]);
+      setDeployments(deps);
+      setStackHealth(health);
+    } catch (e) {
+      toast?.('Failed to load stack details: ' + getErrorMessage(e), 'error');
+    }
   };
 
   const create = async (e) => {
     e.preventDefault();
-    await api.createStack(newStack.name, newStack.description, newStack.generatorId);
-    setShowCreate(false);
-    setNewStack({ name: '', description: '', generatorId: '' });
-    load();
+    try {
+      await api.createStack(newStack.name, newStack.description, newStack.generatorId);
+      setShowCreate(false);
+      setNewStack({ name: '', description: '', generatorId: '' });
+      toast?.('Stack created', 'success');
+      load();
+    } catch (e) {
+      toast?.('Failed to create stack: ' + getErrorMessage(e), 'error');
+    }
   };
 
   const deploy = async (e) => {
     e.preventDefault();
-    await api.createDeployment(selected.id, yaml, isDeletion);
-    setShowDeploy(false);
-    setYaml('');
-    setIsDeletion(false);
-    const deps = await api.getStackDeployments(selected.id);
-    setDeployments(deps);
+    try {
+      await api.createDeployment(selected.id, yaml, isDeletion);
+      setShowDeploy(false);
+      setYaml('');
+      setIsDeletion(false);
+      const deps = await api.getStackDeployments(selected.id);
+      setDeployments(deps);
+      toast?.('Deployment created', 'success');
+    } catch (e) {
+      toast?.('Failed to create deployment: ' + getErrorMessage(e), 'error');
+    }
   };
 
   const addLabel = async (label) => {
-    await api.addStackLabel(selected.id, label);
-    const labels = await api.getStackLabels(selected.id);
-    setDetails({ ...details, [selected.id]: { ...details[selected.id], labels } });
+    try {
+      await api.addStackLabel(selected.id, label);
+      const labels = await api.getStackLabels(selected.id);
+      setDetails({ ...details, [selected.id]: { ...details[selected.id], labels } });
+      toast?.('Label added', 'success');
+    } catch (e) {
+      toast?.('Failed to add label: ' + getErrorMessage(e), 'error');
+    }
   };
 
   const removeLabel = async (label) => {
-    await api.removeStackLabel(selected.id, label);
-    const labels = await api.getStackLabels(selected.id);
-    setDetails({ ...details, [selected.id]: { ...details[selected.id], labels } });
+    try {
+      await api.removeStackLabel(selected.id, label);
+      const labels = await api.getStackLabels(selected.id);
+      setDetails({ ...details, [selected.id]: { ...details[selected.id], labels } });
+    } catch (e) {
+      toast?.('Failed to remove label: ' + getErrorMessage(e), 'error');
+    }
   };
 
   const addAnnotation = async (key, value) => {
-    await api.addStackAnnotation(selected.id, key, value);
-    const annotations = await api.getStackAnnotations(selected.id);
-    setDetails({ ...details, [selected.id]: { ...details[selected.id], annotations } });
+    try {
+      await api.addStackAnnotation(selected.id, key, value);
+      const annotations = await api.getStackAnnotations(selected.id);
+      setDetails({ ...details, [selected.id]: { ...details[selected.id], annotations } });
+      toast?.('Annotation added', 'success');
+    } catch (e) {
+      toast?.('Failed to add annotation: ' + getErrorMessage(e), 'error');
+    }
   };
 
   const removeAnnotation = async (key) => {
-    await api.removeStackAnnotation(selected.id, key);
-    const annotations = await api.getStackAnnotations(selected.id);
-    setDetails({ ...details, [selected.id]: { ...details[selected.id], annotations } });
+    try {
+      await api.removeStackAnnotation(selected.id, key);
+      const annotations = await api.getStackAnnotations(selected.id);
+      setDetails({ ...details, [selected.id]: { ...details[selected.id], annotations } });
+    } catch (e) {
+      toast?.('Failed to remove annotation: ' + getErrorMessage(e), 'error');
+    }
   };
 
   const copyDeployment = async (depId) => {
-    const dep = await api.getDeployment(depId);
-    setYaml(dep.yaml_content);
-    setIsDeletion(dep.is_deletion_marker);
-    setShowDeploy(true);
+    try {
+      const dep = await api.getDeployment(depId);
+      setYaml(dep.yaml_content);
+      setIsDeletion(dep.is_deletion_marker);
+      setShowDeploy(true);
+    } catch (e) {
+      toast?.('Failed to load deployment: ' + getErrorMessage(e), 'error');
+    }
   };
 
   const requestDiagnostic = async (depId, agentId) => {
     try {
       const req = await api.createDiagnostic(depId, agentId, 'ui-slim', 60);
       setDiagnosticResult({ status: 'pending', request: req, id: req.id });
+      toast?.('Diagnostic requested', 'success');
       // Poll for result
       const pollResult = async () => {
         try {
@@ -394,10 +486,14 @@ const StacksPanel = ({ generators, agents, onRefresh }) => {
           } else if (res.request.status === 'pending') {
             setTimeout(pollResult, 2000);
           }
-        } catch (e) { console.error(e); }
+        } catch (e) {
+          toast?.('Failed to poll diagnostic: ' + getErrorMessage(e), 'error');
+        }
       };
       setTimeout(pollResult, 2000);
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      toast?.('Failed to request diagnostic: ' + getErrorMessage(e), 'error');
+    }
   };
 
   if (loading) return <div className="loading">Loading stacks...</div>;
@@ -602,6 +698,7 @@ const TemplatesPanel = ({ stacks }) => {
   const [newTemplate, setNewTemplate] = useState({ name: '', description: '', content: '', schema: '{}' });
   const [instantiateForm, setInstantiateForm] = useState({ stackId: '', params: '{}' });
   const [loading, setLoading] = useState(true);
+  const toast = useToast();
 
   const defaultContent = `apiVersion: v1
 kind: ConfigMap
@@ -622,46 +719,72 @@ data:
         d[t.id] = { labels, annotations };
       }));
       setDetails(d);
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      toast?.('Failed to load templates: ' + getErrorMessage(e), 'error');
+    }
     setLoading(false);
-  }, []);
+  }, [toast]);
 
   useEffect(() => { load(); }, [load]);
 
   const create = async (e) => {
     e.preventDefault();
-    await api.createTemplate(newTemplate.name, newTemplate.description, newTemplate.content, newTemplate.schema);
-    setShowCreate(false);
-    setNewTemplate({ name: '', description: '', content: '', schema: '{}' });
-    load();
+    try {
+      await api.createTemplate(newTemplate.name, newTemplate.description, newTemplate.content, newTemplate.schema);
+      setShowCreate(false);
+      setNewTemplate({ name: '', description: '', content: '', schema: '{}' });
+      toast?.('Template created', 'success');
+      load();
+    } catch (e) {
+      toast?.('Failed to create template: ' + getErrorMessage(e), 'error');
+    }
   };
 
   const instantiate = async (e) => {
     e.preventDefault();
-    const params = JSON.parse(instantiateForm.params);
-    await api.instantiateTemplate(instantiateForm.stackId, selected.id, params);
-    setShowInstantiate(false);
-    setInstantiateForm({ stackId: '', params: '{}' });
+    try {
+      const params = JSON.parse(instantiateForm.params);
+      await api.instantiateTemplate(instantiateForm.stackId, selected.id, params);
+      setShowInstantiate(false);
+      setInstantiateForm({ stackId: '', params: '{}' });
+      toast?.('Template instantiated', 'success');
+    } catch (e) {
+      toast?.('Failed to instantiate template: ' + getErrorMessage(e), 'error');
+    }
   };
 
   const remove = async (id) => {
     if (window.confirm('Delete this template?')) {
-      await api.deleteTemplate(id);
-      setSelected(null);
-      load();
+      try {
+        await api.deleteTemplate(id);
+        setSelected(null);
+        toast?.('Template deleted', 'success');
+        load();
+      } catch (e) {
+        toast?.('Failed to delete template: ' + getErrorMessage(e), 'error');
+      }
     }
   };
 
   const addLabel = async (label) => {
-    await api.addTemplateLabel(selected.id, label);
-    const labels = await api.getTemplateLabels(selected.id);
-    setDetails({ ...details, [selected.id]: { ...details[selected.id], labels } });
+    try {
+      await api.addTemplateLabel(selected.id, label);
+      const labels = await api.getTemplateLabels(selected.id);
+      setDetails({ ...details, [selected.id]: { ...details[selected.id], labels } });
+      toast?.('Label added', 'success');
+    } catch (e) {
+      toast?.('Failed to add label: ' + getErrorMessage(e), 'error');
+    }
   };
 
   const removeLabel = async (label) => {
-    await api.removeTemplateLabel(selected.id, label);
-    const labels = await api.getTemplateLabels(selected.id);
-    setDetails({ ...details, [selected.id]: { ...details[selected.id], labels } });
+    try {
+      await api.removeTemplateLabel(selected.id, label);
+      const labels = await api.getTemplateLabels(selected.id);
+      setDetails({ ...details, [selected.id]: { ...details[selected.id], labels } });
+    } catch (e) {
+      toast?.('Failed to remove label: ' + getErrorMessage(e), 'error');
+    }
   };
 
   if (loading) return <div className="loading">Loading templates...</div>;
@@ -809,6 +932,7 @@ const JobsPanel = ({ agents }) => {
     backoffSeconds: 60
   });
   const [loading, setLoading] = useState(true);
+  const toast = useToast();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -819,31 +943,43 @@ const JobsPanel = ({ agents }) => {
       ]);
       setWorkOrders(orders);
       setWorkOrderLog(log);
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      toast?.('Failed to load jobs: ' + getErrorMessage(e), 'error');
+    }
     setLoading(false);
-  }, []);
+  }, [toast]);
 
   useEffect(() => { load(); }, [load]);
 
   const create = async (e) => {
     e.preventDefault();
-    const targeting = {};
-    if (form.targetAgentIds.length > 0) targeting.agent_ids = form.targetAgentIds;
-    if (form.targetLabels.trim()) targeting.labels = form.targetLabels.split(',').map(l => l.trim()).filter(Boolean);
+    try {
+      const targeting = {};
+      if (form.targetAgentIds.length > 0) targeting.agent_ids = form.targetAgentIds;
+      if (form.targetLabels.trim()) targeting.labels = form.targetLabels.split(',').map(l => l.trim()).filter(Boolean);
 
-    await api.createWorkOrder(form.workType, form.yamlContent, targeting, {
-      maxRetries: form.maxRetries,
-      backoffSeconds: form.backoffSeconds
-    });
-    setShowCreate(false);
-    setForm({ workType: 'build', yamlContent: '', targetAgentIds: [], targetLabels: '', maxRetries: 3, backoffSeconds: 60 });
-    load();
+      await api.createWorkOrder(form.workType, form.yamlContent, targeting, {
+        maxRetries: form.maxRetries,
+        backoffSeconds: form.backoffSeconds
+      });
+      setShowCreate(false);
+      setForm({ workType: 'build', yamlContent: '', targetAgentIds: [], targetLabels: '', maxRetries: 3, backoffSeconds: 60 });
+      toast?.('Work order created', 'success');
+      load();
+    } catch (e) {
+      toast?.('Failed to create work order: ' + getErrorMessage(e), 'error');
+    }
   };
 
   const cancel = async (id) => {
     if (window.confirm('Cancel this work order?')) {
-      await api.deleteWorkOrder(id);
-      load();
+      try {
+        await api.deleteWorkOrder(id);
+        toast?.('Work order cancelled', 'success');
+        load();
+      } catch (e) {
+        toast?.('Failed to cancel work order: ' + getErrorMessage(e), 'error');
+      }
     }
   };
 
@@ -1025,6 +1161,7 @@ const AdminPanel = ({ onGeneratorsChange, onAgentsChange }) => {
   const [newPak, setNewPak] = useState(null);
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(true);
+  const toast = useToast();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1034,9 +1171,11 @@ const AdminPanel = ({ onGeneratorsChange, onAgentsChange }) => {
       setGenerators(g);
       onAgentsChange?.(a);
       onGeneratorsChange?.(g);
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      toast?.('Failed to load admin data: ' + getErrorMessage(e), 'error');
+    }
     setLoading(false);
-  }, [onAgentsChange, onGeneratorsChange]);
+  }, [onAgentsChange, onGeneratorsChange, toast]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -1046,13 +1185,17 @@ const AdminPanel = ({ onGeneratorsChange, onAgentsChange }) => {
       if (showCreate === 'agent') {
         const res = await api.createAgent(form.name, form.cluster);
         setNewPak(res.initial_pak);
+        toast?.('Agent created', 'success');
       } else {
         const res = await api.createGenerator(form.name, form.description);
         setNewPak(res.pak);
+        toast?.('Generator created', 'success');
       }
       setCopied(false);
       load();
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      toast?.('Failed to create: ' + getErrorMessage(e), 'error');
+    }
   };
 
   const rotate = async (type, id) => {
@@ -1061,7 +1204,10 @@ const AdminPanel = ({ onGeneratorsChange, onAgentsChange }) => {
       setNewPak(res.pak);
       setCopied(false);
       setShowCreate(type);
-    } catch (e) { console.error(e); }
+      toast?.('PAK rotated', 'success');
+    } catch (e) {
+      toast?.('Failed to rotate PAK: ' + getErrorMessage(e), 'error');
+    }
   };
 
   const copy = () => {
@@ -1172,6 +1318,7 @@ const WebhooksPanel = () => {
     timeoutSeconds: 30
   });
   const [loading, setLoading] = useState(true);
+  const toast = useToast();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1179,9 +1326,11 @@ const WebhooksPanel = () => {
       const [wh, types] = await Promise.all([api.getWebhooks(), api.getWebhookEventTypes()]);
       setWebhooks(wh);
       setEventTypes(types);
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      toast?.('Failed to load webhooks: ' + getErrorMessage(e), 'error');
+    }
     setLoading(false);
-  }, []);
+  }, [toast]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -1191,7 +1340,7 @@ const WebhooksPanel = () => {
       const dels = await api.getWebhookDeliveries(webhook.id, null, 50);
       setDeliveries(dels);
     } catch (e) {
-      console.error(e);
+      toast?.('Failed to load deliveries: ' + getErrorMessage(e), 'error');
       setDeliveries([]);
     }
   };
@@ -1208,8 +1357,11 @@ const WebhooksPanel = () => {
       );
       setShowCreate(false);
       setForm({ name: '', url: '', eventTypes: [], authHeader: '', maxRetries: 5, timeoutSeconds: 30 });
+      toast?.('Webhook created', 'success');
       load();
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      toast?.('Failed to create webhook: ' + getErrorMessage(e), 'error');
+    }
   };
 
   const toggleEnabled = async (webhook) => {
@@ -1219,7 +1371,10 @@ const WebhooksPanel = () => {
       if (selected?.id === webhook.id) {
         setSelected({ ...selected, enabled: !webhook.enabled });
       }
-    } catch (e) { console.error(e); }
+      toast?.(webhook.enabled ? 'Webhook disabled' : 'Webhook enabled', 'success');
+    } catch (e) {
+      toast?.('Failed to update webhook: ' + getErrorMessage(e), 'error');
+    }
   };
 
   const remove = async (id) => {
@@ -1227,8 +1382,11 @@ const WebhooksPanel = () => {
       try {
         await api.deleteWebhook(id);
         setSelected(null);
+        toast?.('Webhook deleted', 'success');
         load();
-      } catch (e) { console.error(e); }
+      } catch (e) {
+        toast?.('Failed to delete webhook: ' + getErrorMessage(e), 'error');
+      }
     }
   };
 
@@ -1471,42 +1629,48 @@ export default function App() {
   const [generators, setGenerators] = useState([]);
   const [toast, setToast] = useState(null);
 
-  useEffect(() => {
-    api.getGenerators().then(setGenerators).catch(console.error);
-    api.getAgents().then(setAgents).catch(console.error);
+  const showToast = useCallback((message, type = 'info') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000);
   }, []);
 
-  const showToast = (message, type = 'info') => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
-  };
+  useEffect(() => {
+    api.getGenerators().then(setGenerators).catch((e) => {
+      showToast('Failed to load generators: ' + getErrorMessage(e), 'error');
+    });
+    api.getAgents().then(setAgents).catch((e) => {
+      showToast('Failed to load agents: ' + getErrorMessage(e), 'error');
+    });
+  }, [showToast]);
 
   return (
-    <div className="app">
-      <header className="header">
-        <div className="logo">
-          <span className="logo-icon">◆</span>
-          <span className="logo-text">BROKKR</span>
-        </div>
-        <nav className="nav">
-          {['agents', 'stacks', 'templates', 'jobs', 'webhooks', 'admin'].map((p) => (
-            <button key={p} className={`nav-item ${activePanel === p ? 'active' : ''}`} onClick={() => setActivePanel(p)}>
-              {p}
-            </button>
-          ))}
-        </nav>
-      </header>
+    <ToastContext.Provider value={showToast}>
+      <div className="app">
+        <header className="header">
+          <div className="logo">
+            <span className="logo-icon">◆</span>
+            <span className="logo-text">BROKKR</span>
+          </div>
+          <nav className="nav">
+            {['agents', 'stacks', 'templates', 'jobs', 'webhooks', 'admin'].map((p) => (
+              <button key={p} className={`nav-item ${activePanel === p ? 'active' : ''}`} onClick={() => setActivePanel(p)}>
+                {p}
+              </button>
+            ))}
+          </nav>
+        </header>
 
-      <main className="main">
-        {activePanel === 'agents' && <AgentsPanel stacks={stacks} onRefresh={setAgents} />}
-        {activePanel === 'stacks' && <StacksPanel generators={generators} agents={agents} onRefresh={setStacks} />}
-        {activePanel === 'templates' && <TemplatesPanel stacks={stacks} />}
-        {activePanel === 'jobs' && <JobsPanel agents={agents} />}
-        {activePanel === 'webhooks' && <WebhooksPanel />}
-        {activePanel === 'admin' && <AdminPanel onGeneratorsChange={setGenerators} onAgentsChange={setAgents} />}
-      </main>
+        <main className="main">
+          {activePanel === 'agents' && <AgentsPanel stacks={stacks} onRefresh={setAgents} />}
+          {activePanel === 'stacks' && <StacksPanel generators={generators} agents={agents} onRefresh={setStacks} />}
+          {activePanel === 'templates' && <TemplatesPanel stacks={stacks} />}
+          {activePanel === 'jobs' && <JobsPanel agents={agents} />}
+          {activePanel === 'webhooks' && <WebhooksPanel />}
+          {activePanel === 'admin' && <AdminPanel onGeneratorsChange={setGenerators} onAgentsChange={setAgents} />}
+        </main>
 
-      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-    </div>
+        {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      </div>
+    </ToastContext.Provider>
   );
 }

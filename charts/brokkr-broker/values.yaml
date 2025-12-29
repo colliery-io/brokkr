@@ -230,3 +230,54 @@ metrics:
     # Additional labels for ServiceMonitor (for Prometheus selector matching)
     # additionalLabels:
     #   prometheus: kube-prometheus
+
+# NetworkPolicy configuration for restricting pod network access
+networkPolicy:
+  # Enable NetworkPolicy creation
+  enabled: false
+
+  # Allow ingress from specific sources (list of podSelector/namespaceSelector)
+  # If empty, allows from any pod in the same namespace
+  # Example:
+  #   allowIngressFrom:
+  #     - namespaceSelector:
+  #         matchLabels:
+  #           kubernetes.io/metadata.name: ingress-nginx
+  #       podSelector:
+  #         matchLabels:
+  #           app.kubernetes.io/name: ingress-nginx
+  allowIngressFrom: []
+
+  # Allow metrics scraping from Prometheus namespace
+  # Example:
+  #   allowMetricsFrom:
+  #     - namespaceSelector:
+  #         matchLabels:
+  #           kubernetes.io/metadata.name: monitoring
+  allowMetricsFrom: []
+
+  # Allow egress for webhook deliveries to external HTTPS endpoints
+  allowWebhookEgress: true
+
+  # Additional custom egress rules
+  # additionalEgressRules:
+  #   - to:
+  #       - ipBlock:
+  #           cidr: 10.0.0.0/8
+  #     ports:
+  #       - protocol: TCP
+  #         port: 443
+  additionalEgressRules: []
+
+# PodDisruptionBudget configuration for high availability during updates
+podDisruptionBudget:
+  # Enable PodDisruptionBudget creation
+  enabled: false
+
+  # Minimum number of pods that must be available during voluntary disruptions
+  # Can be an integer or a percentage (e.g., "50%")
+  minAvailable: 1
+
+  # Maximum number of pods that can be unavailable during voluntary disruptions
+  # Alternative to minAvailable - only set one
+  # maxUnavailable: 1

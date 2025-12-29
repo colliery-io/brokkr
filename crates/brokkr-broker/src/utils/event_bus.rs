@@ -234,9 +234,92 @@ async fn dispatch_event(dal: &DAL, event: &BrokkrEvent) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use brokkr_models::models::webhooks::BrokkrEvent;
+    use serde_json::json;
+    use uuid::Uuid;
 
     #[test]
     fn test_default_channel_size() {
         assert_eq!(DEFAULT_CHANNEL_SIZE, 1000);
+    }
+
+    #[test]
+    fn test_get_event_bus_uninitialized() {
+        // When event bus is not initialized, get_event_bus returns None
+        // Note: We can't easily reset the global state, but we can verify the API
+        let bus = get_event_bus();
+        // In test context without init, this may or may not be None depending on test order
+        // The important thing is it doesn't panic
+        let _ = bus;
+    }
+
+    #[test]
+    fn test_emit_without_bus_does_not_panic() {
+        // Create a test event
+        let event = BrokkrEvent::new("test.event", json!({"test": "data"}));
+
+        // Calling emit when bus is not initialized should not panic
+        // It should just log a warning and drop the event
+        emit(event);
+    }
+
+    #[test]
+    fn test_brokkr_event_creation() {
+        let event = BrokkrEvent::new("stack.created", json!({"stack_id": "test-123"}));
+
+        assert_eq!(event.event_type, "stack.created");
+        assert!(event.id != Uuid::nil());
+        assert!(event.timestamp.timestamp() > 0);
+    }
+
+    #[test]
+    fn test_brokkr_event_with_minimal_data() {
+        let event = BrokkrEvent::new("test.minimal", json!(null));
+
+        assert_eq!(event.event_type, "test.minimal");
+        assert_eq!(event.data, json!(null));
+    }
+
+    #[test]
+    fn test_brokkr_event_data_serialization() {
+        let data = json!({
+            "agent_id": "agent-1",
+            "cluster": "production",
+            "metadata": {
+                "nested": "value"
+            }
+        });
+
+        let event = BrokkrEvent::new("agent.heartbeat", data.clone());
+
+        // Verify data is preserved
+        assert_eq!(event.data, data);
+    }
+
+    #[test]
+    fn test_brokkr_event_unique_ids() {
+        let event1 = BrokkrEvent::new("test.event", json!({}));
+        let event2 = BrokkrEvent::new("test.event", json!({}));
+
+        // Each event should have a unique ID
+        assert_ne!(event1.id, event2.id);
+    }
+
+    #[test]
+    fn test_event_type_patterns() {
+        // Test various event type patterns
+        let patterns = vec![
+            "agent.created",
+            "agent.updated",
+            "agent.deleted",
+            "stack.created",
+            "deployment.created",
+            "work_order.completed",
+        ];
+
+        for pattern in patterns {
+            let event = BrokkrEvent::new(pattern, json!({}));
+            assert_eq!(event.event_type, pattern);
+        }
     }
 }

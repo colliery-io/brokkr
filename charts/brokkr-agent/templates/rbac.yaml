@@ -26,7 +26,6 @@ rules:
   - services
   - endpoints
   - configmaps
-  - secrets
   {{- if .Values.rbac.clusterWide }}
   - persistentvolumes
   {{- end }}
@@ -35,6 +34,19 @@ rules:
   - get
   - list
   - watch
+{{- if .Values.rbac.secretAccess.enabled }}
+# Secrets - restricted access based on configuration
+# WARNING: Secret access should be limited to specific namespaces in production
+- apiGroups: [""]
+  resources:
+  - secrets
+  verbs:
+  {{- if .Values.rbac.secretAccess.readContents }}
+  - get
+  {{- end }}
+  - list
+  - watch
+{{- end }}
 
 # Apps API - workload inventory
 - apiGroups: ["apps"]

@@ -34,6 +34,16 @@ agent:
 rbac:
   create: true
   clusterWide: true
+  # Secret access configuration
+  # By default, the agent does NOT have access to secrets for security reasons
+  secretAccess:
+    # Enable secret access (list/watch only by default)
+    # WARNING: Enabling this grants access to potentially sensitive data
+    enabled: false
+    # Allow reading secret contents (get verb)
+    # Only enable if the agent needs to read actual secret data
+    # When false, agent can only see secret metadata (names, namespaces, labels)
+    readContents: false
   # Additional custom RBAC rules to append to the agent role
   # Example:
   # additionalRules:
@@ -112,3 +122,40 @@ metrics:
     # Additional labels for ServiceMonitor (for Prometheus selector matching)
     # additionalLabels:
     #   prometheus: kube-prometheus
+
+# NetworkPolicy configuration for restricting agent network access
+networkPolicy:
+  # Enable NetworkPolicy creation
+  enabled: false
+
+  # CIDR for Kubernetes API server (default allows any)
+  # Set to your cluster's API server CIDR for stricter security
+  # Example: "10.0.0.1/32" for a specific API server IP
+  kubernetesApiCidr: "0.0.0.0/0"
+
+  # Broker endpoint configuration for egress rules
+  # brokerEndpoint:
+  #   podSelector:
+  #     matchLabels:
+  #       app.kubernetes.io/name: brokkr-broker
+  #   namespaceSelector:
+  #     matchLabels:
+  #       kubernetes.io/metadata.name: brokkr
+
+  # Allow metrics scraping from Prometheus namespace
+  # Example:
+  #   allowMetricsFrom:
+  #     - namespaceSelector:
+  #         matchLabels:
+  #           kubernetes.io/metadata.name: monitoring
+  allowMetricsFrom: []
+
+  # Additional custom egress rules
+  # additionalEgressRules:
+  #   - to:
+  #       - ipBlock:
+  #           cidr: 10.0.0.0/8
+  #     ports:
+  #       - protocol: TCP
+  #         port: 443
+  additionalEgressRules: []
