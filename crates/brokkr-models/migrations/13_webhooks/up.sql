@@ -59,4 +59,4 @@ CREATE INDEX idx_webhook_deliveries_cleanup ON webhook_deliveries(created_at) WH
 CREATE TRIGGER update_webhook_subscriptions_updated_at
     BEFORE UPDATE ON webhook_subscriptions
     FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_column();
+    EXECUTE FUNCTION update_timestamp();

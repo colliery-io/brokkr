@@ -13,4 +13,5 @@ mod generators;
 mod health;
 mod stacks;
 mod templates;
+mod webhooks;
 mod work_orders;

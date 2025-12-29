@@ -1156,6 +1156,313 @@ const AdminPanel = ({ onGeneratorsChange, onAgentsChange }) => {
   );
 };
 
+// ==================== WEBHOOKS PANEL ====================
+const WebhooksPanel = () => {
+  const [webhooks, setWebhooks] = useState([]);
+  const [eventTypes, setEventTypes] = useState([]);
+  const [selected, setSelected] = useState(null);
+  const [deliveries, setDeliveries] = useState([]);
+  const [showCreate, setShowCreate] = useState(false);
+  const [form, setForm] = useState({
+    name: '',
+    url: '',
+    eventTypes: [],
+    authHeader: '',
+    maxRetries: 5,
+    timeoutSeconds: 30
+  });
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [wh, types] = await Promise.all([api.getWebhooks(), api.getWebhookEventTypes()]);
+      setWebhooks(wh);
+      setEventTypes(types);
+    } catch (e) { console.error(e); }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const selectWebhook = async (webhook) => {
+    setSelected(webhook);
+    try {
+      const dels = await api.getWebhookDeliveries(webhook.id, null, 50);
+      setDeliveries(dels);
+    } catch (e) {
+      console.error(e);
+      setDeliveries([]);
+    }
+  };
+
+  const create = async (e) => {
+    e.preventDefault();
+    try {
+      await api.createWebhook(
+        form.name,
+        form.url,
+        form.eventTypes,
+        form.authHeader || null,
+        { maxRetries: form.maxRetries, timeoutSeconds: form.timeoutSeconds }
+      );
+      setShowCreate(false);
+      setForm({ name: '', url: '', eventTypes: [], authHeader: '', maxRetries: 5, timeoutSeconds: 30 });
+      load();
+    } catch (e) { console.error(e); }
+  };
+
+  const toggleEnabled = async (webhook) => {
+    try {
+      await api.updateWebhook(webhook.id, { enabled: !webhook.enabled });
+      load();
+      if (selected?.id === webhook.id) {
+        setSelected({ ...selected, enabled: !webhook.enabled });
+      }
+    } catch (e) { console.error(e); }
+  };
+
+  const remove = async (id) => {
+    if (window.confirm('Delete this webhook?')) {
+      try {
+        await api.deleteWebhook(id);
+        setSelected(null);
+        load();
+      } catch (e) { console.error(e); }
+    }
+  };
+
+  const toggleEventType = (type) => {
+    if (form.eventTypes.includes(type)) {
+      setForm({ ...form, eventTypes: form.eventTypes.filter(t => t !== type) });
+    } else {
+      setForm({ ...form, eventTypes: [...form.eventTypes, type] });
+    }
+  };
+
+  if (loading) return <div className="loading">Loading webhooks...</div>;
+
+  return (
+    <div className="panel">
+      <div className="panel-header">
+        <h2>🔔 Webhooks</h2>
+        <div className="panel-actions">
+          <button onClick={() => setShowCreate(true)} className="btn-primary">+ New Webhook</button>
+          <button onClick={load} className="btn-icon">↻</button>
+        </div>
+      </div>
+
+      {webhooks.length === 0 ? (
+        <div className="empty">No webhooks configured</div>
+      ) : (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Status</th>
+                <th>Events</th>
+                <th>URL</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {webhooks.map((w) => (
+                <tr key={w.id} onClick={() => selectWebhook(w)} className="clickable">
+                  <td className="mono">{w.name}</td>
+                  <td>
+                    <span className={`status status-${w.enabled ? 'green' : 'gray'}`}>
+                      {w.enabled ? 'enabled' : 'disabled'}
+                    </span>
+                  </td>
+                  <td>
+                    {w.event_types?.slice(0, 3).map((e, i) => (
+                      <Tag key={i} variant="info">{e}</Tag>
+                    ))}
+                    {w.event_types?.length > 3 && <span className="dim">+{w.event_types.length - 3}</span>}
+                  </td>
+                  <td className="dim">{w.has_url ? '••••••••' : '—'}</td>
+                  <td>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); toggleEnabled(w); }}
+                      className="btn-icon"
+                      title={w.enabled ? 'Disable' : 'Enable'}
+                    >
+                      {w.enabled ? '⏸' : '▶'}
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); remove(w.id); }}
+                      className="btn-icon"
+                      title="Delete"
+                    >
+                      ✕
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {showCreate && (
+        <Modal title="Create Webhook" onClose={() => setShowCreate(false)}>
+          <form onSubmit={create} className="form">
+            <label>Name
+              <input
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                placeholder="My Webhook"
+                required
+              />
+            </label>
+            <label>URL
+              <input
+                value={form.url}
+                onChange={(e) => setForm({ ...form, url: e.target.value })}
+                placeholder="https://example.com/webhook"
+                type="url"
+                required
+              />
+            </label>
+            <label>Authorization Header (optional)
+              <input
+                value={form.authHeader}
+                onChange={(e) => setForm({ ...form, authHeader: e.target.value })}
+                placeholder="Bearer your-token"
+              />
+            </label>
+            <label>Event Types
+              <div className="event-type-grid">
+                {eventTypes.map((type) => (
+                  <label key={type} className="checkbox-inline">
+                    <input
+                      type="checkbox"
+                      checked={form.eventTypes.includes(type)}
+                      onChange={() => toggleEventType(type)}
+                    />
+                    <span>{type}</span>
+                  </label>
+                ))}
+              </div>
+            </label>
+            <div className="form-row">
+              <label>Max Retries
+                <input
+                  type="number"
+                  value={form.maxRetries}
+                  onChange={(e) => setForm({ ...form, maxRetries: parseInt(e.target.value) })}
+                  min="0"
+                  max="10"
+                />
+              </label>
+              <label>Timeout (seconds)
+                <input
+                  type="number"
+                  value={form.timeoutSeconds}
+                  onChange={(e) => setForm({ ...form, timeoutSeconds: parseInt(e.target.value) })}
+                  min="1"
+                  max="300"
+                />
+              </label>
+            </div>
+            <div className="form-actions">
+              <button type="button" onClick={() => setShowCreate(false)}>Cancel</button>
+              <button type="submit" className="btn-primary" disabled={form.eventTypes.length === 0}>Create</button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {selected && (
+        <Modal title={`Webhook: ${selected.name}`} onClose={() => setSelected(null)}>
+          <div className="detail-grid">
+            <div className="detail-row">
+              <span className="detail-label">ID</span>
+              <span className="mono">{selected.id}</span>
+            </div>
+            <div className="detail-row">
+              <span className="detail-label">Status</span>
+              <span className={`status status-${selected.enabled ? 'green' : 'gray'}`}>
+                {selected.enabled ? 'enabled' : 'disabled'}
+              </span>
+              <button
+                onClick={() => toggleEnabled(selected)}
+                className={`btn-toggle ${selected.enabled ? 'active' : ''}`}
+              >
+                {selected.enabled ? 'Disable' : 'Enable'}
+              </button>
+            </div>
+            <div className="detail-row">
+              <span className="detail-label">URL</span>
+              <span className="dim">{selected.has_url ? '(encrypted)' : '—'}</span>
+            </div>
+            <div className="detail-row">
+              <span className="detail-label">Auth Header</span>
+              <span className="dim">{selected.has_auth_header ? '(configured)' : 'none'}</span>
+            </div>
+            <div className="detail-row">
+              <span className="detail-label">Max Retries</span>
+              <span>{selected.max_retries}</span>
+            </div>
+            <div className="detail-row">
+              <span className="detail-label">Timeout</span>
+              <span>{selected.timeout_seconds}s</span>
+            </div>
+          </div>
+
+          <div className="detail-section">
+            <h4>Event Types</h4>
+            <div className="tags">
+              {selected.event_types?.map((e, i) => (
+                <Tag key={i} variant="info">{e}</Tag>
+              ))}
+            </div>
+          </div>
+
+          <div className="detail-section">
+            <h4>Recent Deliveries</h4>
+            {deliveries.length === 0 ? (
+              <div className="empty-small">No deliveries yet</div>
+            ) : (
+              <div className="table-wrap">
+                <table className="table-compact">
+                  <thead>
+                    <tr>
+                      <th>Event</th>
+                      <th>Status</th>
+                      <th>Attempts</th>
+                      <th>Created</th>
+                      <th>Error</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {deliveries.map((d) => (
+                      <tr key={d.id}>
+                        <td><Tag variant="info">{d.event_type}</Tag></td>
+                        <td><Status status={d.status} /></td>
+                        <td>{d.attempts}</td>
+                        <td className="dim">{new Date(d.created_at).toLocaleString()}</td>
+                        <td className="dim" title={d.last_error || ''}>
+                          {d.last_error ? (d.last_error.slice(0, 30) + (d.last_error.length > 30 ? '...' : '')) : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          <div className="form-actions">
+            <button onClick={() => remove(selected.id)} className="btn-danger">Delete</button>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+};
+
 // ==================== MAIN APP ====================
 export default function App() {
   const [activePanel, setActivePanel] = useState('agents');
@@ -1182,7 +1489,7 @@ export default function App() {
           <span className="logo-text">BROKKR</span>
         </div>
         <nav className="nav">
-          {['agents', 'stacks', 'templates', 'jobs', 'admin'].map((p) => (
+          {['agents', 'stacks', 'templates', 'jobs', 'webhooks', 'admin'].map((p) => (
             <button key={p} className={`nav-item ${activePanel === p ? 'active' : ''}`} onClick={() => setActivePanel(p)}>
               {p}
             </button>
@@ -1195,6 +1502,7 @@ export default function App() {
         {activePanel === 'stacks' && <StacksPanel generators={generators} agents={agents} onRefresh={setStacks} />}
         {activePanel === 'templates' && <TemplatesPanel stacks={stacks} />}
         {activePanel === 'jobs' && <JobsPanel agents={agents} />}
+        {activePanel === 'webhooks' && <WebhooksPanel />}
         {activePanel === 'admin' && <AdminPanel onGeneratorsChange={setGenerators} onAgentsChange={setAgents} />}
       </main>
 

@@ -18,4 +18,6 @@ mod stack_annotations;
 mod stack_labels;
 mod stacks;
 mod templates;
+mod webhook_deliveries;
+mod webhook_subscriptions;
 mod work_orders;

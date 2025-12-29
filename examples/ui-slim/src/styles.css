@@ -1010,3 +1010,63 @@ button {
   background: var(--accent-danger);
   color: white;
 }
+
+/* Event type grid for webhooks */
+.event-type-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+  padding: 12px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.checkbox-inline {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  gap: 8px !important;
+  padding: 6px 8px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+
+.checkbox-inline:hover {
+  background: var(--bg-hover);
+}
+
+.checkbox-inline input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  cursor: pointer;
+}
+
+.checkbox-inline span {
+  font-size: 11px;
+  color: var(--text-primary);
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+/* Compact table for deliveries */
+.table-compact th,
+.table-compact td {
+  padding: 8px 12px;
+  font-size: 11px;
+}
+
+.table-compact {
+  font-size: 11px;
+}
+
+/* Disabled button state */
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

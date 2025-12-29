@@ -105,6 +105,9 @@ impl TestFixture {
             .expect("Failed to create PAK controller");
         utils::first_startup(&mut conn, &settings).expect("Failed to run first startup");
 
+        // Initialize encryption key for webhook tests (ignore if already initialized)
+        let _ = utils::encryption::init_encryption_key(None);
+
         // Read the admin PAK from the temporary file
         let admin_pak = "brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8".to_string();
 

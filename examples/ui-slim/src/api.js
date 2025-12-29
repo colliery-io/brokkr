@@ -107,3 +107,32 @@ export const getDiagnostic = (id) => request(`/api/v1/diagnostics/${id}`);
 // Deployment Health
 export const getDeploymentHealth = (id) => request(`/api/v1/deployment-objects/${id}/health`);
 export const getStackHealth = (id) => request(`/api/v1/stacks/${id}/health`);
+
+// Webhooks
+export const getWebhooks = () => request('/api/v1/webhooks');
+export const getWebhook = (id) => request(`/api/v1/webhooks/${id}`);
+export const createWebhook = (name, url, eventTypes, authHeader, options = {}) => request('/api/v1/webhooks', {
+  method: 'POST',
+  body: JSON.stringify({
+    name,
+    url,
+    event_types: eventTypes,
+    auth_header: authHeader || null,
+    enabled: options.enabled !== false,
+    max_retries: options.maxRetries || 5,
+    timeout_seconds: options.timeoutSeconds || 30
+  })
+});
+export const updateWebhook = (id, updates) => request(`/api/v1/webhooks/${id}`, {
+  method: 'PUT',
+  body: JSON.stringify(updates)
+});
+export const deleteWebhook = (id) => request(`/api/v1/webhooks/${id}`, { method: 'DELETE' });
+export const getWebhookEventTypes = () => request('/api/v1/webhooks/event-types');
+export const getWebhookDeliveries = (id, status, limit) => {
+  const params = new URLSearchParams();
+  if (status) params.append('status', status);
+  if (limit) params.append('limit', limit);
+  const query = params.toString();
+  return request(`/api/v1/webhooks/${id}/deliveries${query ? '?' + query : ''}`);
+};
