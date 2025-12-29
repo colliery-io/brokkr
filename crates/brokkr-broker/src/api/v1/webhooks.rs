@@ -156,20 +156,16 @@ pub struct ListDeliveriesQuery {
 // Encryption Helpers
 // =============================================================================
 
+use crate::utils::encryption;
+
 /// Encrypts a value for storage.
-///
-/// TODO: Implement actual encryption using AES-GCM or similar.
-/// For now, this is a placeholder that stores as plaintext bytes.
-fn encrypt_value(value: &str, _key: &[u8]) -> Vec<u8> {
-    value.as_bytes().to_vec()
+fn encrypt_value(value: &str) -> Vec<u8> {
+    encryption::encrypt_string(value)
 }
 
-/// Returns the encryption key from config or generates a new one.
-///
-/// TODO: Implement proper key management from config/env.
-fn get_encryption_key() -> Vec<u8> {
-    // Placeholder: return empty key until proper encryption is implemented
-    vec![]
+/// Decrypts a stored value back to a string.
+fn decrypt_value(encrypted: &[u8]) -> Result<String, String> {
+    encryption::decrypt_string(encrypted)
 }
 
 // =============================================================================
@@ -312,9 +308,8 @@ async fn create_webhook(
     }
 
     // Encrypt URL and auth header
-    let key = get_encryption_key();
-    let url_encrypted = encrypt_value(&request.url, &key);
-    let auth_header_encrypted = request.auth_header.as_ref().map(|h| encrypt_value(h, &key));
+    let url_encrypted = encrypt_value(&request.url);
+    let auth_header_encrypted = request.auth_header.as_ref().map(|h| encrypt_value(h));
 
     // Determine who created this
     let created_by = if auth_payload.admin {
@@ -475,13 +470,11 @@ async fn update_webhook(
         Ok(Some(_)) => {}
     }
 
-    let key = get_encryption_key();
-
     // Build changeset
     let changeset = UpdateWebhookSubscription {
         name: request.name,
-        url_encrypted: request.url.map(|u| encrypt_value(&u, &key)),
-        auth_header_encrypted: request.auth_header.map(|opt| opt.map(|h| encrypt_value(&h, &key))),
+        url_encrypted: request.url.map(|u| encrypt_value(&u)),
+        auth_header_encrypted: request.auth_header.map(|opt| opt.map(|h| encrypt_value(&h))),
         event_types: request.event_types.map(|types| types.into_iter().map(Some).collect()),
         filters: request.filters.map(|opt| {
             opt.map(|f| serde_json::to_string(&f).unwrap_or_default())
@@ -687,12 +680,10 @@ async fn test_webhook(
     };
 
     // Decrypt URL and auth header
-    // Note: Using placeholder decryption until proper encryption is implemented
-    let _key = get_encryption_key();
-    let url = match String::from_utf8(subscription.url_encrypted.clone()) {
+    let url = match decrypt_value(&subscription.url_encrypted) {
         Ok(u) => u,
         Err(e) => {
-            error!("Failed to decrypt URL: {:?}", e);
+            error!("Failed to decrypt URL: {}", e);
             return Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to decrypt webhook URL"})),
@@ -703,7 +694,15 @@ async fn test_webhook(
     let auth_header = subscription
         .auth_header_encrypted
         .as_ref()
-        .and_then(|h| String::from_utf8(h.clone()).ok());
+        .map(|h| decrypt_value(h))
+        .transpose()
+        .map_err(|e| {
+            error!("Failed to decrypt auth header: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Failed to decrypt auth header"})),
+            )
+        })?;
 
     // Create test payload
     let test_event = serde_json::json!({

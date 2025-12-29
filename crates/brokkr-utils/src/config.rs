@@ -93,6 +93,15 @@ pub struct Broker {
     pub diagnostic_cleanup_interval_seconds: Option<u64>,
     /// Maximum age for completed/expired diagnostics before deletion in hours (default: 1)
     pub diagnostic_max_age_hours: Option<i64>,
+    /// Webhook encryption key (hex-encoded, 32 bytes for AES-256)
+    /// If not provided, a random key will be generated on startup (not recommended for production)
+    pub webhook_encryption_key: Option<String>,
+    /// Webhook delivery worker interval in seconds (default: 5)
+    pub webhook_delivery_interval_seconds: Option<u64>,
+    /// Webhook delivery batch size (default: 50)
+    pub webhook_delivery_batch_size: Option<i64>,
+    /// Webhook delivery cleanup retention in days (default: 7)
+    pub webhook_cleanup_retention_days: Option<i64>,
 }
 
 /// Represents the agent configuration

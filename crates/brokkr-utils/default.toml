@@ -10,6 +10,11 @@ pak_hash = "4c697273df3d764cba950bb5c04368097685f09259f5bd880d892cf1ff9f4cdd"
 # Diagnostic cleanup configuration
 diagnostic_cleanup_interval_seconds = 900  # 15 minutes
 diagnostic_max_age_hours = 1               # 1 hour
+# Webhook configuration
+# webhook_encryption_key = ""              # Hex-encoded 32-byte key (if empty, random key generated)
+webhook_delivery_interval_seconds = 5      # Poll for pending deliveries every 5 seconds
+webhook_delivery_batch_size = 50           # Process up to 50 deliveries per batch
+webhook_cleanup_retention_days = 7         # Keep completed/dead deliveries for 7 days
 
 [pak]
 prefix = "brokkr"

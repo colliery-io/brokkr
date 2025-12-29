@@ -18,6 +18,7 @@ use std::path::Path;
 use tokio::sync::oneshot;
 use uuid::Uuid;
 pub mod background_tasks;
+pub mod encryption;
 pub mod event_bus;
 pub mod matching;
 pub mod pak;

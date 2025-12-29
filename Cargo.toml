@@ -23,6 +23,7 @@ diesel_logger = { version = "0.3", features = [] }
 diesel_migrations = { version = "2.0", features = ["postgres"] }
 dotenv = { version = "0.15.0", features = [] }
 env_logger = { version = "0.9.0", features = [] }
+hex = { version = "0.4", features = [] }
 hyper = { version = "1.4.1", features = ["full"] }
 k8s-openapi = { version = "0.23.0", features = ["latest"] }
 kube = { version = "0.95.0", features = ["client"] }

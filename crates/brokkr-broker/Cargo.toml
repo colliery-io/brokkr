@@ -22,6 +22,7 @@ utoipa-swagger-ui = { workspace = true, features = ["axum"] }
 
 # External dependencies
 axum = { workspace = true }
+hex = { workspace = true }
 reqwest = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true, features = ["derive", "env"] }

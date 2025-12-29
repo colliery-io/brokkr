@@ -153,8 +153,6 @@ pub struct WebhookDeliveryConfig {
     pub interval_seconds: u64,
     /// Maximum number of deliveries to process per interval.
     pub batch_size: i64,
-    /// Encryption key for decrypting URLs and auth headers.
-    pub encryption_key: Vec<u8>,
 }
 
 impl Default for WebhookDeliveryConfig {
@@ -162,7 +160,6 @@ impl Default for WebhookDeliveryConfig {
         Self {
             interval_seconds: 5,  // Poll every 5 seconds
             batch_size: 50,       // Process up to 50 deliveries per batch
-            encryption_key: vec![], // Must be set by caller
         }
     }
 }
@@ -252,7 +249,7 @@ pub fn start_webhook_delivery_task(dal: DAL, config: WebhookDeliveryConfig) {
                 };
 
                 // Decrypt URL and auth header
-                let url = match decrypt_value(&subscription.url_encrypted, &config.encryption_key) {
+                let url = match super::encryption::decrypt_string(&subscription.url_encrypted) {
                     Ok(u) => u,
                     Err(e) => {
                         error!(
@@ -271,7 +268,7 @@ pub fn start_webhook_delivery_task(dal: DAL, config: WebhookDeliveryConfig) {
                 let auth_header = subscription
                     .auth_header_encrypted
                     .as_ref()
-                    .map(|encrypted| decrypt_value(encrypted, &config.encryption_key))
+                    .map(|encrypted| super::encryption::decrypt_string(encrypted))
                     .transpose();
 
                 let auth_header = match auth_header {
@@ -370,16 +367,6 @@ async fn attempt_delivery(
     }
 }
 
-/// Decrypts an encrypted value using the provided key.
-///
-/// For now, this is a placeholder that treats the encrypted value as plaintext.
-/// TODO: Implement actual encryption/decryption.
-fn decrypt_value(encrypted: &[u8], _key: &[u8]) -> Result<String, String> {
-    // Placeholder: treat as plaintext UTF-8
-    // In production, implement proper AES-GCM or similar encryption
-    String::from_utf8(encrypted.to_vec())
-        .map_err(|e| format!("Invalid UTF-8: {}", e))
-}
 
 /// Starts the webhook cleanup background task.
 ///
@@ -447,13 +434,5 @@ mod tests {
         let config = WebhookCleanupConfig::default();
         assert_eq!(config.interval_seconds, 3600);
         assert_eq!(config.retention_days, 7);
-    }
-
-    #[test]
-    fn test_decrypt_value_plaintext() {
-        let encrypted = b"https://example.com/webhook".to_vec();
-        let result = decrypt_value(&encrypted, &[]);
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), "https://example.com/webhook");
     }
 }
