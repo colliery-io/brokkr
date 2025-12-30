@@ -17,6 +17,7 @@ use std::fs;
 use std::path::Path;
 use tokio::sync::oneshot;
 use uuid::Uuid;
+pub mod audit;
 pub mod background_tasks;
 pub mod config_watcher;
 pub mod encryption;

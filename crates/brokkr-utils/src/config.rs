@@ -121,6 +121,8 @@ pub struct Broker {
     pub webhook_delivery_batch_size: Option<i64>,
     /// Webhook delivery cleanup retention in days (default: 7)
     pub webhook_cleanup_retention_days: Option<i64>,
+    /// Audit log retention in days (default: 90)
+    pub audit_log_retention_days: Option<i64>,
 }
 
 /// Represents the agent configuration

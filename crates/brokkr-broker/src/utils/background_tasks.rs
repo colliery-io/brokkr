@@ -405,6 +405,60 @@ pub fn start_webhook_cleanup_task(dal: DAL, config: WebhookCleanupConfig) {
     });
 }
 
+/// Configuration for audit log cleanup task.
+pub struct AuditLogCleanupConfig {
+    /// How often to run the cleanup (in seconds).
+    pub interval_seconds: u64,
+    /// Number of days to retain audit logs.
+    pub retention_days: i64,
+}
+
+impl Default for AuditLogCleanupConfig {
+    fn default() -> Self {
+        Self {
+            interval_seconds: 86400, // Daily
+            retention_days: 90,      // 90 days default
+        }
+    }
+}
+
+/// Starts the audit log cleanup background task.
+///
+/// This task periodically deletes old audit log entries based on
+/// the configured retention policy.
+///
+/// # Arguments
+/// * `dal` - The Data Access Layer instance
+/// * `config` - Configuration for the cleanup task
+pub fn start_audit_log_cleanup_task(dal: DAL, config: AuditLogCleanupConfig) {
+    info!(
+        "Starting audit log cleanup task (interval: {}s, retention: {}d)",
+        config.interval_seconds, config.retention_days
+    );
+
+    tokio::spawn(async move {
+        let mut ticker = interval(Duration::from_secs(config.interval_seconds));
+
+        loop {
+            ticker.tick().await;
+
+            match dal.audit_logs().cleanup_old_logs(config.retention_days) {
+                Ok(deleted) => {
+                    if deleted > 0 {
+                        info!(
+                            "Cleaned up {} old audit logs (age > {}d)",
+                            deleted, config.retention_days
+                        );
+                    }
+                }
+                Err(e) => {
+                    error!("Failed to cleanup old audit logs: {:?}", e);
+                }
+            }
+        }
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

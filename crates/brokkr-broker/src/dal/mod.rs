@@ -96,6 +96,9 @@ use agents::AgentsDAL;
 pub mod agent_annotations;
 use agent_annotations::AgentAnnotationsDAL;
 
+pub mod audit_logs;
+use audit_logs::AuditLogsDAL;
+
 pub mod agent_events;
 use agent_events::AgentEventsDAL;
 
@@ -365,6 +368,15 @@ impl DAL {
     /// An instance of WebhookDeliveriesDAL.
     pub fn webhook_deliveries(&self) -> WebhookDeliveriesDAL {
         WebhookDeliveriesDAL { dal: self }
+    }
+
+    /// Provides access to the Audit Logs Data Access Layer.
+    ///
+    /// # Returns
+    ///
+    /// An instance of AuditLogsDAL.
+    pub fn audit_logs(&self) -> AuditLogsDAL {
+        AuditLogsDAL { dal: self }
     }
 }
 

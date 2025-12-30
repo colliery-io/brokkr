@@ -9,6 +9,7 @@ pub mod agent_events;
 pub mod agent_labels;
 pub mod agent_targets;
 pub mod agents;
+pub mod audit_logs;
 pub mod deployment_health;
 pub mod deployment_objects;
 pub mod diagnostic_requests;

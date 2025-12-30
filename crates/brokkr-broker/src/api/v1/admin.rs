@@ -12,17 +12,19 @@
 use super::middleware::AuthPayload;
 use crate::dal::DAL;
 use axum::{
-    extract::Extension,
+    extract::{Extension, Query, State},
     http::StatusCode,
     response::IntoResponse,
-    routing::post,
+    routing::{get, post},
     Json, Router,
 };
+use brokkr_models::models::audit_logs::{AuditLog, AuditLogFilter};
 use brokkr_utils::config::ReloadableConfig;
 use chrono::{DateTime, Utc};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tracing::{error, info, warn};
-use utoipa::ToSchema;
+use utoipa::{IntoParams, ToSchema};
+use uuid::Uuid;
 
 /// Response structure for configuration reload operations.
 #[derive(Debug, Serialize, ToSchema)]
@@ -49,12 +51,71 @@ pub struct ConfigChangeInfo {
     pub new_value: String,
 }
 
+/// Query parameters for listing audit logs.
+#[derive(Debug, Deserialize, IntoParams)]
+pub struct AuditLogQueryParams {
+    /// Filter by actor type (admin, agent, generator, system).
+    #[param(example = "admin")]
+    pub actor_type: Option<String>,
+    /// Filter by actor ID.
+    pub actor_id: Option<Uuid>,
+    /// Filter by action (exact match or prefix with *).
+    #[param(example = "agent.*")]
+    pub action: Option<String>,
+    /// Filter by resource type.
+    #[param(example = "agent")]
+    pub resource_type: Option<String>,
+    /// Filter by resource ID.
+    pub resource_id: Option<Uuid>,
+    /// Filter by start time (inclusive, ISO 8601).
+    pub from: Option<DateTime<Utc>>,
+    /// Filter by end time (exclusive, ISO 8601).
+    pub to: Option<DateTime<Utc>>,
+    /// Maximum number of results (default 100, max 1000).
+    #[param(example = 100)]
+    pub limit: Option<i64>,
+    /// Number of results to skip.
+    #[param(example = 0)]
+    pub offset: Option<i64>,
+}
+
+impl From<AuditLogQueryParams> for AuditLogFilter {
+    fn from(params: AuditLogQueryParams) -> Self {
+        Self {
+            actor_type: params.actor_type,
+            actor_id: params.actor_id,
+            action: params.action,
+            resource_type: params.resource_type,
+            resource_id: params.resource_id,
+            from: params.from,
+            to: params.to,
+        }
+    }
+}
+
+/// Response structure for audit log list operations.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct AuditLogListResponse {
+    /// The audit log entries.
+    pub logs: Vec<AuditLog>,
+    /// Total count of matching entries (for pagination).
+    pub total: i64,
+    /// Number of entries returned.
+    pub count: usize,
+    /// Limit used for this query.
+    pub limit: i64,
+    /// Offset used for this query.
+    pub offset: i64,
+}
+
 /// Constructs and returns the admin routes.
 ///
 /// These routes require admin PAK authentication.
 pub fn routes() -> Router<DAL> {
     info!("Setting up admin routes");
-    Router::new().route("/admin/config/reload", post(reload_config))
+    Router::new()
+        .route("/admin/config/reload", post(reload_config))
+        .route("/admin/audit-logs", get(list_audit_logs))
 }
 
 /// Reloads the broker configuration from disk.
@@ -138,6 +199,101 @@ async fn reload_config(
             Err(StatusCode::INTERNAL_SERVER_ERROR)
         }
     }
+}
+
+/// Lists audit logs with optional filtering and pagination.
+///
+/// Returns audit log entries matching the specified filters, ordered by
+/// timestamp descending (most recent first).
+///
+/// # Authentication
+///
+/// Requires admin PAK authentication.
+///
+/// # Query Parameters
+///
+/// - `actor_type`: Filter by actor type (admin, agent, generator, system).
+/// - `actor_id`: Filter by actor UUID.
+/// - `action`: Filter by action (exact match or prefix with *).
+/// - `resource_type`: Filter by resource type.
+/// - `resource_id`: Filter by resource UUID.
+/// - `from`: Filter by start time (inclusive).
+/// - `to`: Filter by end time (exclusive).
+/// - `limit`: Maximum results (default 100, max 1000).
+/// - `offset`: Number of results to skip.
+///
+/// # Returns
+///
+/// - `200 OK`: List of audit logs with pagination info.
+/// - `401 UNAUTHORIZED`: Missing or invalid authentication.
+/// - `403 FORBIDDEN`: Authenticated but not an admin.
+/// - `500 INTERNAL_SERVER_ERROR`: Database error.
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/audit-logs",
+    tag = "Admin",
+    params(AuditLogQueryParams),
+    responses(
+        (status = 200, description = "Audit logs retrieved successfully", body = AuditLogListResponse),
+        (status = 401, description = "Missing or invalid authentication"),
+        (status = 403, description = "Not authorized (admin only)"),
+        (status = 500, description = "Database error")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+async fn list_audit_logs(
+    State(dal): State<DAL>,
+    Extension(auth): Extension<AuthPayload>,
+    Query(params): Query<AuditLogQueryParams>,
+) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+    // Verify admin authorization
+    if !auth.admin {
+        warn!("Non-admin attempted to access audit logs");
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({"error": "Admin access required"})),
+        ));
+    }
+
+    let limit = params.limit.unwrap_or(100).min(1000);
+    let offset = params.offset.unwrap_or(0);
+    let filter: AuditLogFilter = params.into();
+
+    // Get total count for pagination
+    let total = match dal.audit_logs().count(Some(&filter)) {
+        Ok(count) => count,
+        Err(e) => {
+            error!("Failed to count audit logs: {:?}", e);
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Failed to query audit logs"})),
+            ));
+        }
+    };
+
+    // Get the logs
+    let logs = match dal.audit_logs().list(Some(&filter), Some(limit), Some(offset)) {
+        Ok(logs) => logs,
+        Err(e) => {
+            error!("Failed to list audit logs: {:?}", e);
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Failed to query audit logs"})),
+            ));
+        }
+    };
+
+    let count = logs.len();
+
+    Ok(Json(AuditLogListResponse {
+        logs,
+        total,
+        count,
+        limit,
+        offset,
+    }))
 }
 
 #[cfg(test)]

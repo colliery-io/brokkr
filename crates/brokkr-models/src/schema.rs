@@ -355,6 +355,25 @@ diesel::table! {
     }
 }
 
+diesel::table! {
+    audit_logs (id) {
+        id -> Uuid,
+        timestamp -> Timestamptz,
+        #[max_length = 20]
+        actor_type -> Varchar,
+        actor_id -> Nullable<Uuid>,
+        #[max_length = 100]
+        action -> Varchar,
+        #[max_length = 50]
+        resource_type -> Varchar,
+        resource_id -> Nullable<Uuid>,
+        details -> Nullable<Jsonb>,
+        ip_address -> Nullable<Text>,
+        user_agent -> Nullable<Text>,
+        created_at -> Timestamptz,
+    }
+}
+
 diesel::joinable!(agent_annotations -> agents (agent_id));
 diesel::joinable!(agent_events -> agents (agent_id));
 diesel::joinable!(agent_events -> deployment_objects (deployment_object_id));
@@ -393,6 +412,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     agent_targets,
     agents,
     app_initialization,
+    audit_logs,
     deployment_health,
     deployment_objects,
     diagnostic_requests,

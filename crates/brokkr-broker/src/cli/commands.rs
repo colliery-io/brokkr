@@ -102,6 +102,11 @@ pub async fn serve(config: &Settings) -> Result<(), Box<dyn std::error::Error>> 
     utils::event_bus::init_event_bus(dal.clone())
         .expect("Failed to initialize event bus");
 
+    // Initialize audit logger for compliance tracking
+    info!("Initializing audit logger");
+    utils::audit::init_audit_logger(dal.clone())
+        .expect("Failed to initialize audit logger");
+
     // Start background tasks
     info!("Starting background tasks");
     let cleanup_config = utils::background_tasks::DiagnosticCleanupConfig {
@@ -133,6 +138,13 @@ pub async fn serve(config: &Settings) -> Result<(), Box<dyn std::error::Error>> 
         retention_days: config.broker.webhook_cleanup_retention_days.unwrap_or(7),
     };
     utils::background_tasks::start_webhook_cleanup_task(dal.clone(), webhook_cleanup_config);
+
+    // Start audit log cleanup task
+    let audit_cleanup_config = utils::background_tasks::AuditLogCleanupConfig {
+        interval_seconds: 86400, // Daily
+        retention_days: config.broker.audit_log_retention_days.unwrap_or(90),
+    };
+    utils::background_tasks::start_audit_log_cleanup_task(dal.clone(), audit_cleanup_config);
 
     // Create reloadable configuration for hot-reload support
     info!("Initializing reloadable configuration");
