@@ -30,6 +30,12 @@ const AgentsPanel = ({ stacks, onRefresh }) => {
     setLoading(true);
     try {
       const data = await api.getAgents();
+      // Sort agents: ACTIVE first, then by name
+      data.sort((a, b) => {
+        if (a.status === 'ACTIVE' && b.status !== 'ACTIVE') return -1;
+        if (a.status !== 'ACTIVE' && b.status === 'ACTIVE') return 1;
+        return a.name.localeCompare(b.name);
+      });
       setAgents(data);
       onRefresh?.(data);
       const d = {};
@@ -891,6 +897,8 @@ const JobsPanel = ({ agents }) => {
     backoffSeconds: 60
   });
   const [loading, setLoading] = useState(true);
+  const [buildDemoRunning, setBuildDemoRunning] = useState(false);
+  const [buildDemoStatus, setBuildDemoStatus] = useState(null);
   const toast = useToast();
 
   const load = useCallback(async () => {
@@ -942,6 +950,92 @@ const JobsPanel = ({ agents }) => {
     }
   };
 
+  // Build Demo - creates a build work order for the webhook-catcher
+  const runBuildDemo = async () => {
+    if (buildDemoRunning) return;
+    setBuildDemoRunning(true);
+    setBuildDemoStatus({ step: 'creating', message: 'Creating build work order...' });
+
+    try {
+      // Create the build work order
+      const workOrder = await api.createBuildWorkOrder();
+      setBuildDemoStatus({ step: 'pending', message: 'Build work order created, waiting for agent to claim...', workOrderId: workOrder.id });
+      toast?.('Build work order created', 'success');
+
+      // Poll for completion
+      const pollInterval = setInterval(async () => {
+        try {
+          // Check if still in active work orders
+          const orders = await api.getWorkOrders();
+          const current = orders.find(o => o.id === workOrder.id);
+
+          if (current) {
+            if (current.status === 'CLAIMED') {
+              setBuildDemoStatus({ step: 'building', message: 'Agent claimed work order, building...', workOrderId: workOrder.id });
+            } else if (current.status === 'RETRY_PENDING') {
+              setBuildDemoStatus({ step: 'retrying', message: `Build failed, retrying (${current.retry_count}/${current.max_retries})...`, workOrderId: workOrder.id, error: current.last_error });
+            }
+          } else {
+            // Check work order log for completion
+            const log = await api.getWorkOrderLog('build', null, null, 10);
+            const completed = log.find(l => l.original_work_order_id === workOrder.id);
+
+            if (completed) {
+              clearInterval(pollInterval);
+              if (completed.success) {
+                setBuildDemoStatus({
+                  step: 'completed',
+                  message: 'Build completed successfully!',
+                  workOrderId: workOrder.id,
+                  result: completed.result_message
+                });
+                toast?.('Build completed successfully!', 'success');
+              } else {
+                setBuildDemoStatus({
+                  step: 'failed',
+                  message: 'Build failed',
+                  workOrderId: workOrder.id,
+                  error: completed.result_message
+                });
+                toast?.('Build failed: ' + completed.result_message, 'error');
+              }
+              setBuildDemoRunning(false);
+              load();
+            }
+          }
+        } catch (e) {
+          console.error('Error polling build status:', e);
+        }
+      }, 3000);
+
+      // Timeout after 15 minutes
+      setTimeout(() => {
+        clearInterval(pollInterval);
+        if (buildDemoRunning) {
+          setBuildDemoRunning(false);
+          setBuildDemoStatus({ step: 'timeout', message: 'Build timed out after 15 minutes' });
+          toast?.('Build timed out', 'error');
+        }
+      }, 15 * 60 * 1000);
+
+      load();
+    } catch (e) {
+      setBuildDemoRunning(false);
+      setBuildDemoStatus({ step: 'error', message: 'Failed to create build work order: ' + getErrorMessage(e) });
+      toast?.('Failed to create build work order: ' + getErrorMessage(e), 'error');
+    }
+  };
+
+  // Pre-fill the create form with the webhook-catcher build YAML
+  const prefillBuildDemo = () => {
+    setForm({
+      ...form,
+      workType: 'build',
+      yamlContent: api.getWebhookCatcherBuildYaml()
+    });
+    setShowCreate(true);
+  };
+
   if (loading) return <div className="loading">Loading jobs...</div>;
 
   return (
@@ -953,6 +1047,55 @@ const JobsPanel = ({ agents }) => {
           <button onClick={load} className="btn-icon">↻</button>
         </div>
       </div>
+
+      <Section title="Build Demo" icon="🔨" defaultOpen>
+        <p className="dim" style={{ marginBottom: '12px' }}>
+          Build the webhook-catcher service from source using Shipwright. This demonstrates the complete build pipeline: Git clone → Container build → Push to registry.
+        </p>
+        <div className="build-demo-actions">
+          <button
+            onClick={runBuildDemo}
+            className={`btn-primary ${buildDemoRunning ? 'disabled' : ''}`}
+            disabled={buildDemoRunning}
+          >
+            {buildDemoRunning ? '⏳ Building...' : '▶ Run Build'}
+          </button>
+          <button onClick={prefillBuildDemo} className="btn-secondary">
+            📝 View Build YAML
+          </button>
+        </div>
+
+        {buildDemoStatus && (
+          <div className={`build-demo-status build-demo-${buildDemoStatus.step}`}>
+            <div className="build-demo-step">
+              {buildDemoStatus.step === 'creating' && '⏳'}
+              {buildDemoStatus.step === 'pending' && '⏳'}
+              {buildDemoStatus.step === 'building' && '🔨'}
+              {buildDemoStatus.step === 'retrying' && '🔄'}
+              {buildDemoStatus.step === 'completed' && '✅'}
+              {buildDemoStatus.step === 'failed' && '❌'}
+              {buildDemoStatus.step === 'error' && '❌'}
+              {buildDemoStatus.step === 'timeout' && '⏰'}
+              <span>{buildDemoStatus.message}</span>
+            </div>
+            {buildDemoStatus.workOrderId && (
+              <div className="build-demo-id dim">
+                Work Order: {buildDemoStatus.workOrderId.slice(0, 8)}...
+              </div>
+            )}
+            {buildDemoStatus.result && (
+              <div className="build-demo-result">
+                <strong>Image Digest:</strong> <code>{buildDemoStatus.result}</code>
+              </div>
+            )}
+            {buildDemoStatus.error && (
+              <div className="build-demo-error error-text">
+                {buildDemoStatus.error}
+              </div>
+            )}
+          </div>
+        )}
+      </Section>
 
       <Section title="Active Work Orders" icon="▶" count={workOrders.length} defaultOpen>
         {workOrders.length === 0 ? (
@@ -1120,6 +1263,9 @@ const AdminPanel = ({ onGeneratorsChange, onAgentsChange }) => {
   const [newPak, setNewPak] = useState(null);
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [demoRunning, setDemoRunning] = useState(false);
+  const [demoLogs, setDemoLogs] = useState([]);
+  const [demoResults, setDemoResults] = useState(null);
   const toast = useToast();
 
   const load = useCallback(async () => {
@@ -1182,6 +1328,32 @@ const AdminPanel = ({ onGeneratorsChange, onAgentsChange }) => {
     setForm({ name: '', cluster: '', description: '' });
   };
 
+  const runDemo = async () => {
+    if (demoRunning) return;
+    setDemoRunning(true);
+    setDemoLogs([]);
+    setDemoResults(null);
+
+    try {
+      await api.runDemoSetup((progress) => {
+        setDemoLogs(logs => [...logs, { time: new Date().toLocaleTimeString(), message: progress.message }]);
+        if (progress.done) {
+          setDemoRunning(false);
+          if (progress.results) {
+            setDemoResults(progress.results);
+            toast?.('Demo setup complete!', 'success');
+            load(); // Refresh data
+          } else if (progress.error) {
+            toast?.('Demo setup failed: ' + progress.error.message, 'error');
+          }
+        }
+      });
+    } catch (e) {
+      setDemoRunning(false);
+      toast?.('Demo setup failed: ' + getErrorMessage(e), 'error');
+    }
+  };
+
   if (loading) return <div className="loading">Loading...</div>;
 
   return (
@@ -1189,6 +1361,96 @@ const AdminPanel = ({ onGeneratorsChange, onAgentsChange }) => {
       <div className="panel-header">
         <h2>⚙ Admin</h2>
       </div>
+
+      <Section title="Demo Setup" icon="🚀" defaultOpen>
+        <p className="dim" style={{ marginBottom: '12px' }}>
+          Demonstrates real functionality: activates the deployed agent, deploys a second agent via K8s, creates stacks with deployments, and captures webhook events.
+        </p>
+        <button
+          onClick={runDemo}
+          className={`btn-primary btn-block ${demoRunning ? 'disabled' : ''}`}
+          disabled={demoRunning}
+        >
+          {demoRunning ? '⏳ Running Demo Setup...' : '▶ Run Demo Setup'}
+        </button>
+
+        {demoLogs.length > 0 && (
+          <div className="demo-log">
+            {demoLogs.map((log, i) => (
+              <div key={i} className="demo-log-entry">
+                <span className="dim">{log.time}</span>
+                <span>{log.message}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {demoResults && (
+          <div className="demo-results">
+            {demoResults.realAgent && (
+              <div className="demo-agent-info">
+                <h4>Real Agent Activated:</h4>
+                <div className="demo-agent-detail">
+                  <span className="mono">{demoResults.realAgent.name}</span>
+                  <Status status="ACTIVE" />
+                </div>
+              </div>
+            )}
+
+            {demoResults.stagingAgent && (
+              <div className="demo-agent-info">
+                <h4>Staging Agent Deployed:</h4>
+                <div className="demo-agent-detail">
+                  <span className="mono">{demoResults.stagingAgent.agent?.name || 'demo-staging-agent'}</span>
+                  <Tag variant="info">deploying via K8s</Tag>
+                </div>
+              </div>
+            )}
+
+            <h4>Created Resources:</h4>
+            <div className="demo-results-grid">
+              <div className="demo-result-item">
+                <span className="demo-result-count">{demoResults.generators.length}</span>
+                <span className="demo-result-label">Generators</span>
+              </div>
+              <div className="demo-result-item">
+                <span className="demo-result-count">{demoResults.agents.length}</span>
+                <span className="demo-result-label">New Agents</span>
+              </div>
+              <div className="demo-result-item">
+                <span className="demo-result-count">{demoResults.stacks.length}</span>
+                <span className="demo-result-label">Stacks</span>
+              </div>
+              <div className="demo-result-item">
+                <span className="demo-result-count">{demoResults.deployments.length}</span>
+                <span className="demo-result-label">Deployments</span>
+              </div>
+              <div className="demo-result-item">
+                <span className="demo-result-count">{demoResults.templates.length}</span>
+                <span className="demo-result-label">Templates</span>
+              </div>
+              <div className="demo-result-item">
+                <span className="demo-result-count">{demoResults.webhooks.length}</span>
+                <span className="demo-result-label">Webhooks</span>
+              </div>
+            </div>
+
+            {demoResults.receivedWebhooks && demoResults.receivedWebhooks.length > 0 && (
+              <div className="webhook-events">
+                <h4>Received Webhook Events ({demoResults.receivedWebhooks.length}):</h4>
+                <div className="webhook-events-list">
+                  {demoResults.receivedWebhooks.slice(0, 10).map((event, i) => (
+                    <div key={i} className="webhook-event">
+                      <span className="webhook-event-type">{event.event_type}</span>
+                      <span className="webhook-event-time">{new Date(event.received_at).toLocaleTimeString()}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </Section>
 
       <Section title="Agent PAKs" icon="⬡" count={agents.length} defaultOpen>
         <button onClick={() => setShowCreate('agent')} className="btn-primary btn-block">+ Create Agent PAK</button>
@@ -1268,6 +1530,7 @@ const WebhooksPanel = () => {
   const [selected, setSelected] = useState(null);
   const [deliveries, setDeliveries] = useState([]);
   const [showCreate, setShowCreate] = useState(false);
+  const [autoRefresh, setAutoRefresh] = useState(false);
   const [form, setForm] = useState({
     name: '',
     url: '',
@@ -1593,6 +1856,173 @@ const WebhooksPanel = () => {
   );
 };
 
+// ==================== METRICS PANEL ====================
+const MetricsPanel = () => {
+  const [metrics, setMetrics] = useState(null);
+  const [parsedMetrics, setParsedMetrics] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [autoRefresh, setAutoRefresh] = useState(false);
+  const toast = useToast();
+
+  const load = useCallback(async () => {
+    try {
+      const raw = await api.getMetrics();
+      setMetrics(raw);
+      setParsedMetrics(api.parseMetrics(raw));
+    } catch (e) {
+      toast?.('Failed to load metrics: ' + getErrorMessage(e), 'error');
+    }
+    setLoading(false);
+  }, [toast]);
+
+  useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    if (!autoRefresh) return;
+    const interval = setInterval(load, 5000);
+    return () => clearInterval(interval);
+  }, [autoRefresh, load]);
+
+  // Helper to get metric value
+  const getMetricValue = (name, labels = {}) => {
+    if (!parsedMetrics || !parsedMetrics[name]) return null;
+    const match = parsedMetrics[name].find(m =>
+      Object.entries(labels).every(([k, v]) => m.labels[k] === v)
+    );
+    return match ? match.value : null;
+  };
+
+  // Get all values for a metric
+  const getMetricValues = (name) => parsedMetrics?.[name] || [];
+
+  // Sum all values for a counter/gauge
+  const sumMetric = (name) => {
+    const values = getMetricValues(name);
+    return values.reduce((sum, m) => sum + m.value, 0);
+  };
+
+  if (loading) return <div className="loading">Loading metrics...</div>;
+
+  // Calculate summary stats
+  const totalRequests = sumMetric('brokkr_http_requests_total');
+  const activeAgents = getMetricValue('brokkr_active_agents') || 0;
+  const totalStacks = getMetricValue('brokkr_stacks_total') || 0;
+  const totalDeployments = getMetricValue('brokkr_deployment_objects_total') || 0;
+
+  // Get request breakdown by endpoint
+  const requestsByEndpoint = {};
+  getMetricValues('brokkr_http_requests_total').forEach(m => {
+    const endpoint = m.labels.endpoint || 'unknown';
+    requestsByEndpoint[endpoint] = (requestsByEndpoint[endpoint] || 0) + m.value;
+  });
+
+  // Get agent heartbeat ages
+  const heartbeatAges = getMetricValues('brokkr_agent_heartbeat_age_seconds');
+
+  return (
+    <div className="panel">
+      <div className="panel-header">
+        <h2>📊 Metrics</h2>
+        <div className="panel-actions">
+          <label className="checkbox-inline">
+            <input
+              type="checkbox"
+              checked={autoRefresh}
+              onChange={(e) => setAutoRefresh(e.target.checked)}
+            />
+            <span>Auto-refresh</span>
+          </label>
+          <button onClick={load} className="btn-icon">↻</button>
+        </div>
+      </div>
+
+      <Section title="System Overview" icon="◈" defaultOpen>
+        <div className="metrics-grid">
+          <div className="metric-card">
+            <div className="metric-value">{totalRequests.toLocaleString()}</div>
+            <div className="metric-label">Total HTTP Requests</div>
+          </div>
+          <div className="metric-card">
+            <div className="metric-value">{activeAgents}</div>
+            <div className="metric-label">Active Agents</div>
+          </div>
+          <div className="metric-card">
+            <div className="metric-value">{totalStacks}</div>
+            <div className="metric-label">Total Stacks</div>
+          </div>
+          <div className="metric-card">
+            <div className="metric-value">{totalDeployments}</div>
+            <div className="metric-label">Deployment Objects</div>
+          </div>
+        </div>
+      </Section>
+
+      <Section title="HTTP Request Breakdown" icon="▶" defaultOpen>
+        {Object.keys(requestsByEndpoint).length === 0 ? (
+          <div className="empty-small">No HTTP requests recorded yet</div>
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Endpoint</th>
+                  <th>Requests</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(requestsByEndpoint)
+                  .sort((a, b) => b[1] - a[1])
+                  .slice(0, 15)
+                  .map(([endpoint, count]) => (
+                    <tr key={endpoint}>
+                      <td className="mono">{endpoint}</td>
+                      <td>{count.toLocaleString()}</td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Section>
+
+      <Section title="Agent Heartbeats" icon="♥">
+        {heartbeatAges.length === 0 ? (
+          <div className="empty-small">No agent heartbeat data</div>
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Agent</th>
+                  <th>Last Heartbeat Age</th>
+                </tr>
+              </thead>
+              <tbody>
+                {heartbeatAges.map((m, i) => (
+                  <tr key={i}>
+                    <td className="mono">{m.labels.agent_name || m.labels.agent_id}</td>
+                    <td>
+                      <span className={m.value > 300 ? 'error-text' : m.value > 60 ? 'warning-text' : ''}>
+                        {m.value.toFixed(1)}s
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Section>
+
+      <Section title="Raw Metrics" icon="📄">
+        <div className="metrics-raw">
+          <pre className="code-block">{metrics?.slice(0, 5000)}{metrics?.length > 5000 && '\n... (truncated)'}</pre>
+        </div>
+      </Section>
+    </div>
+  );
+};
+
 // ==================== MAIN APP ====================
 // Inner app component that uses toast context
 const AppContent = () => {
@@ -1619,7 +2049,7 @@ const AppContent = () => {
           <span className="logo-text">BROKKR</span>
         </div>
         <nav className="nav">
-          {['agents', 'stacks', 'templates', 'jobs', 'webhooks', 'admin'].map((p) => (
+          {['agents', 'stacks', 'templates', 'jobs', 'webhooks', 'metrics', 'admin'].map((p) => (
             <button key={p} className={`nav-item ${activePanel === p ? 'active' : ''}`} onClick={() => setActivePanel(p)}>
               {p}
             </button>
@@ -1633,6 +2063,7 @@ const AppContent = () => {
         {activePanel === 'templates' && <TemplatesPanel stacks={stacks} />}
         {activePanel === 'jobs' && <JobsPanel agents={agents} />}
         {activePanel === 'webhooks' && <WebhooksPanel />}
+        {activePanel === 'metrics' && <MetricsPanel />}
         {activePanel === 'admin' && <AdminPanel onGeneratorsChange={setGenerators} onAgentsChange={setAgents} />}
       </main>
     </div>

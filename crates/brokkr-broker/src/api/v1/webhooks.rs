@@ -11,7 +11,12 @@
 
 use crate::api::v1::middleware::AuthPayload;
 use crate::dal::DAL;
+use crate::utils::audit;
 use axum::http::StatusCode;
+use brokkr_models::models::audit_logs::{
+    ACTION_WEBHOOK_CREATED, ACTION_WEBHOOK_DELETED, ACTION_WEBHOOK_UPDATED,
+    ACTOR_TYPE_ADMIN, RESOURCE_TYPE_WEBHOOK,
+};
 use axum::{
     extract::{Extension, Path, Query, State},
     routing::{delete, get, post, put},
@@ -358,6 +363,22 @@ async fn create_webhook(
     match dal.webhook_subscriptions().create(&new_sub) {
         Ok(subscription) => {
             info!("Successfully created webhook subscription with ID: {}", subscription.id);
+
+            // Log audit entry for webhook creation
+            audit::log_action(
+                ACTOR_TYPE_ADMIN,
+                None,
+                ACTION_WEBHOOK_CREATED,
+                RESOURCE_TYPE_WEBHOOK,
+                Some(subscription.id),
+                Some(serde_json::json!({
+                    "name": subscription.name,
+                    "event_types": subscription.event_types,
+                })),
+                None,
+                None,
+            );
+
             Ok((StatusCode::CREATED, Json(subscription.into())))
         }
         Err(e) => {
@@ -506,6 +527,22 @@ async fn update_webhook(
     match dal.webhook_subscriptions().update(id, &changeset) {
         Ok(subscription) => {
             info!("Successfully updated webhook subscription with ID: {}", id);
+
+            // Log audit entry for webhook update
+            audit::log_action(
+                ACTOR_TYPE_ADMIN,
+                None,
+                ACTION_WEBHOOK_UPDATED,
+                RESOURCE_TYPE_WEBHOOK,
+                Some(id),
+                Some(serde_json::json!({
+                    "name": subscription.name,
+                    "enabled": subscription.enabled,
+                })),
+                None,
+                None,
+            );
+
             Ok(Json(subscription.into()))
         }
         Err(e) => {
@@ -554,6 +591,19 @@ async fn delete_webhook(
     match dal.webhook_subscriptions().delete(id) {
         Ok(count) if count > 0 => {
             info!("Successfully deleted webhook subscription with ID: {}", id);
+
+            // Log audit entry for webhook deletion
+            audit::log_action(
+                ACTOR_TYPE_ADMIN,
+                None,
+                ACTION_WEBHOOK_DELETED,
+                RESOURCE_TYPE_WEBHOOK,
+                Some(id),
+                None,
+                None,
+                None,
+            );
+
             Ok(StatusCode::NO_CONTENT)
         }
         Ok(_) => {

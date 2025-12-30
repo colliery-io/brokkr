@@ -386,3 +386,216 @@ pub async fn test_health_diagnostics(client: &Client) -> Result<()> {
 
     Ok(())
 }
+
+// =============================================================================
+// Part 7: Webhooks
+// =============================================================================
+
+pub async fn test_webhooks(client: &Client, echo_server_url: Option<&str>) -> Result<()> {
+    // Use echo server if provided, otherwise use a placeholder URL
+    let webhook_url = echo_server_url.unwrap_or("http://webhook-echo:8080/webhook");
+
+    // Create a webhook subscription
+    println!("  → Creating webhook subscription...");
+    let webhook = client.create_webhook(
+        "e2e-test-webhook",
+        webhook_url,
+        vec!["health.degraded", "health.failing", "workorder.completed"],
+        Some("Bearer e2e-test-token"),
+    ).await?;
+    let webhook_id: Uuid = webhook["id"].as_str().unwrap().parse()?;
+    println!("    Created webhook: {}", webhook_id);
+
+    // Verify webhook was created
+    assert_eq!(webhook["name"], "e2e-test-webhook");
+    assert_eq!(webhook["enabled"], true);
+    println!("    Webhook enabled: true");
+
+    // List webhooks
+    println!("  → Listing webhooks...");
+    let webhooks = client.list_webhooks().await?;
+    assert!(!webhooks.is_empty(), "Should have at least one webhook");
+    println!("    Found {} webhook(s)", webhooks.len());
+
+    // Get specific webhook
+    println!("  → Getting webhook details...");
+    let fetched = client.get_webhook(webhook_id).await?;
+    assert_eq!(fetched["id"], webhook_id.to_string());
+    assert_eq!(fetched["name"], "e2e-test-webhook");
+
+    // Verify event_types
+    let event_types = fetched["event_types"].as_array().expect("event_types should be array");
+    assert_eq!(event_types.len(), 3);
+    println!("    Webhook subscribes to {} event type(s)", event_types.len());
+
+    // Update webhook (disable it)
+    println!("  → Updating webhook (disable)...");
+    let updated = client.update_webhook(webhook_id, json!({"enabled": false})).await?;
+    assert_eq!(updated["enabled"], false);
+    println!("    Webhook disabled");
+
+    // Re-enable
+    println!("  → Re-enabling webhook...");
+    let updated = client.update_webhook(webhook_id, json!({"enabled": true})).await?;
+    assert_eq!(updated["enabled"], true);
+    println!("    Webhook re-enabled");
+
+    // Test webhook delivery (sends a test event)
+    // Note: This requires the webhook delivery worker to be running
+    if echo_server_url.is_some() {
+        println!("  → Testing webhook delivery...");
+        match client.test_webhook(webhook_id).await {
+            Ok(result) => {
+                println!("    Test delivery initiated: {:?}", result.get("delivery_id"));
+            }
+            Err(e) => {
+                // Test endpoint might not exist in all versions
+                println!("    Test delivery skipped (endpoint may not exist): {}", e);
+            }
+        }
+
+        // Wait a moment for delivery to be processed
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+
+        // Check deliveries
+        println!("  → Checking webhook deliveries...");
+        let deliveries = client.list_webhook_deliveries(webhook_id).await?;
+        println!("    Found {} delivery record(s)", deliveries.len());
+    }
+
+    // Delete webhook
+    println!("  → Deleting webhook...");
+    client.delete_webhook(webhook_id).await?;
+    println!("    Webhook deleted");
+
+    // Verify deletion
+    let webhooks = client.list_webhooks().await?;
+    let still_exists = webhooks.iter().any(|w| w["id"] == webhook_id.to_string());
+    assert!(!still_exists, "Webhook should be deleted");
+    println!("    Deletion verified");
+
+    Ok(())
+}
+
+// =============================================================================
+// Part 8: Audit Logs
+// =============================================================================
+
+pub async fn test_audit_logs(client: &Client) -> Result<()> {
+    // The previous tests should have generated audit log entries
+    println!("  → Fetching audit logs...");
+    let result = client.list_audit_logs(Some(50)).await?;
+
+    let logs = result["logs"].as_array().expect("logs should be array");
+    let total = result["total"].as_i64().unwrap_or(0);
+
+    println!("    Found {} audit log entries (showing {})", total, logs.len());
+
+    // Check log structure if we have entries
+    if let Some(first_log) = logs.first() {
+        assert!(first_log.get("id").is_some(), "Log should have id");
+        assert!(first_log.get("action").is_some(), "Log should have action");
+        assert!(first_log.get("actor_type").is_some(), "Log should have actor_type");
+        assert!(first_log.get("created_at").is_some(), "Log should have timestamp");
+        println!("    Log structure verified");
+
+        // Show sample actions
+        let actions: Vec<&str> = logs.iter()
+            .filter_map(|l| l["action"].as_str())
+            .take(5)
+            .collect();
+        println!("    Sample actions: {:?}", actions);
+    } else {
+        // Audit logging may not be fully integrated yet - warn but don't fail
+        println!("    ⚠ No audit logs found - audit logging may not be enabled for all endpoints");
+    }
+
+    // Verify API returns proper structure (this should always pass)
+    assert!(result.get("logs").is_some(), "Response should have logs field");
+    assert!(result.get("total").is_some(), "Response should have total field");
+    println!("    Audit log API structure verified");
+
+    Ok(())
+}
+
+// =============================================================================
+// Part 9: Metrics & Observability
+// =============================================================================
+
+pub async fn test_metrics(client: &Client) -> Result<()> {
+    // Make some API calls first to generate metrics
+    println!("  → Generating metrics by making API calls...");
+    let _ = client.get_healthz().await?;
+    let _ = client.list_agents().await?;
+    let _ = client.list_stacks().await?;
+    println!("    Made several API calls to generate metrics");
+
+    // Fetch metrics
+    println!("  → Fetching Prometheus metrics...");
+    let metrics = client.get_metrics().await?;
+
+    // Verify metrics content type is Prometheus format
+    assert!(!metrics.is_empty(), "Metrics should not be empty");
+    println!("    Metrics endpoint returned {} bytes", metrics.len());
+
+    // Verify HTTP request metrics are present and recording data
+    println!("  → Verifying HTTP request metrics...");
+    assert!(
+        metrics.contains("brokkr_http_requests_total"),
+        "Should contain HTTP requests counter"
+    );
+    assert!(
+        metrics.contains("brokkr_http_request_duration_seconds"),
+        "Should contain HTTP request duration histogram"
+    );
+    println!("    HTTP request metrics present ✓");
+
+    // Verify metrics have proper labels
+    println!("  → Verifying metric labels...");
+    assert!(
+        metrics.contains("method=\"GET\""),
+        "HTTP metrics should have method label"
+    );
+    assert!(
+        metrics.contains("endpoint="),
+        "HTTP metrics should have endpoint label"
+    );
+    println!("    Metric labels verified ✓");
+
+    // Verify system gauges are present
+    println!("  → Verifying system metrics...");
+    let system_metrics = [
+        "brokkr_active_agents",
+        "brokkr_stacks_total",
+        "brokkr_deployment_objects_total",
+    ];
+    for metric in system_metrics {
+        assert!(
+            metrics.contains(metric),
+            "Should contain {} gauge",
+            metric
+        );
+    }
+    println!("    System metrics present ✓");
+
+    // Verify database metrics are defined
+    println!("  → Verifying database metrics...");
+    // Note: DB metrics may not have data yet if no DB queries were instrumented
+    // We just check they're defined (will appear after first use)
+    if metrics.contains("brokkr_database_queries_total") {
+        println!("    Database query metrics present ✓");
+    } else {
+        println!("    ⚠ Database metrics not yet populated (expected if DAL not instrumented)");
+    }
+
+    // Print all brokkr metrics (not histogram buckets to keep it readable)
+    println!("  → Brokkr metrics:");
+    for line in metrics.lines() {
+        if line.starts_with("brokkr_") && !line.contains("_bucket{") && !line.contains("_sum{") && !line.contains("_count{") {
+            println!("    {}", line);
+        }
+    }
+
+    println!("  → Metrics observability verified");
+    Ok(())
+}

@@ -5,9 +5,11 @@ weight: 5
 
 # Network Flows
 
-This document describes the network traffic flows between Brokkr components, useful for operators configuring firewalls, network policies, and understanding system connectivity requirements.
+Understanding the network architecture of a distributed system is essential for proper deployment, security hardening, and troubleshooting. This document provides a comprehensive analysis of the network traffic patterns between Brokkr components, including detailed port and protocol specifications, firewall requirements, and Kubernetes NetworkPolicy configurations.
 
-## Network Topology Overview
+## Network Topology
+
+Brokkr implements a hub-and-spoke network topology where the broker acts as the central coordination point. All agents initiate outbound connections to the broker—there are no inbound connections required to agents. This pull-based model simplifies firewall configuration and enables agents to operate behind NAT without special accommodations.
 
 {{< mermaid >}}
 flowchart TB
@@ -40,72 +42,74 @@ flowchart TB
     Agent -.->|Manages| Workloads
 {{< /mermaid >}}
 
-**Key Points:**
-- Agents initiate all connections to the broker (pull model)
-- No inbound connections required to agents
-- Webhook delivery is outbound from broker to external endpoints
+The diagram above illustrates the three primary network zones in a typical Brokkr deployment. External traffic from administrators and generators enters through an ingress controller, which terminates TLS and forwards requests to the broker service. The broker maintains persistent connectivity to its PostgreSQL database and sends outbound webhook deliveries to configured external endpoints. Meanwhile, agents in target clusters poll the broker for deployment instructions and interact with their local Kubernetes API servers to apply resources.
 
-## Connection Details
+## Connection Specifications
 
 ### Complete Connection Matrix
 
+The following table enumerates every network connection in the Brokkr system, including the source and destination components, ports, protocols, and whether each connection is required for basic operation.
+
 | Source | Destination | Port | Protocol | Direction | Required | Purpose |
 |--------|-------------|------|----------|-----------|----------|---------|
-| Admin/UI | Broker | 3000 | HTTPS | Inbound | Yes | API access, management UI |
-| Generator | Broker | 3000 | HTTPS | Inbound | Yes | Stack/deployment creation |
+| Admin/UI | Broker | 3000 | HTTPS | Inbound | Yes | API access, management operations |
+| Generator | Broker | 3000 | HTTPS | Inbound | Yes | Stack and deployment object creation |
 | Agent | Broker | 3000 | HTTPS | Outbound | Yes | Fetch deployments, report events |
 | Broker | PostgreSQL | 5432 | TCP | Internal | Yes | Database operations |
 | Agent | K8s API | 6443 | HTTPS | Local | Yes | Resource management |
 | Broker | Webhook endpoints | 443 | HTTPS | Outbound | Optional | Event notifications |
-| Prometheus | Broker | 3000 | HTTP | Inbound | Optional | Metrics scraping (/metrics) |
-| Prometheus | Agent | 8080 | HTTP | Inbound | Optional | Metrics scraping (/metrics) |
+| Prometheus | Broker | 3000 | HTTP | Inbound | Optional | Metrics scraping at /metrics |
+| Prometheus | Agent | 8080 | HTTP | Inbound | Optional | Metrics scraping at /metrics |
 | Broker | OTLP Collector | 4317 | gRPC | Outbound | Optional | Distributed tracing |
 | Agent | OTLP Collector | 4317 | gRPC | Outbound | Optional | Distributed tracing |
 
+### Port Assignments
+
+Brokkr uses a small number of well-defined ports. The broker service listens on port 3000 for all API traffic, including agent communication, administrator operations, and generator requests. This single-port design simplifies ingress configuration and firewall rules. Agents expose a health and metrics server on port 8080, which serves the `/healthz`, `/ready`, `/health`, and `/metrics` endpoints used by Kubernetes liveness probes and Prometheus scraping.
+
+The PostgreSQL database uses the standard port 5432. When deploying the bundled PostgreSQL instance via the Helm chart, this connection remains internal to the broker cluster. External PostgreSQL deployments may use different ports, which can be configured via the `postgresql.external.port` value.
+
+OpenTelemetry tracing, when enabled, uses gRPC on port 4317 to communicate with OTLP collectors. This optional integration provides distributed tracing capabilities for debugging and performance analysis.
+
 ## Broker Network Requirements
 
-### Inbound Connections
+### Inbound Traffic
 
-The broker accepts inbound connections on a single port:
+The broker service accepts all inbound traffic on a single port, simplifying both service exposure and network policy configuration. The default configuration exposes port 3000, though this is rarely accessed directly in production. Instead, an ingress controller typically terminates TLS and forwards traffic to the broker.
 
-| Port | Protocol | Source | Purpose |
-|------|----------|--------|---------|
-| 3000 | HTTP/HTTPS | Agents, Admins, Generators | All API traffic |
+The broker service supports three exposure methods through its Helm chart:
 
-The broker service can be exposed via:
-- **ClusterIP** (default): Internal cluster access only
-- **LoadBalancer**: Direct external access
-- **Ingress**: Recommended for production with TLS termination
+**ClusterIP** is the default service type, restricting access to within the Kubernetes cluster. This configuration is appropriate when agents run in the same cluster as the broker or when an ingress controller handles external access.
 
-### Outbound Connections
+**LoadBalancer** creates a cloud provider load balancer that exposes the service directly to external traffic. While simpler to configure than ingress, this approach requires managing TLS termination separately and may incur additional cloud provider costs.
 
-| Destination | Port | Protocol | Purpose | Required |
-|-------------|------|----------|---------|----------|
-| PostgreSQL | 5432 | TCP/TLS | Database | Yes |
-| Webhook URLs | 443 | HTTPS | Event delivery | If webhooks configured |
-| OTLP Collector | 4317 | gRPC | Telemetry | If tracing enabled |
+**Ingress** (recommended for production) delegates external access and TLS termination to a Kubernetes ingress controller. This approach integrates with cert-manager for automatic certificate management and provides flexible routing options.
+
+### Outbound Traffic
+
+The broker initiates three types of outbound connections. Database connectivity to PostgreSQL is essential—the broker cannot operate without it. The Helm chart supports both bundled PostgreSQL (deployed as a subchart) and external PostgreSQL instances. For bundled deployments, the connection uses internal cluster DNS (`brokkr-broker-postgresql:5432`). External databases are configured via the `postgresql.external` values or by providing a complete connection URL through `postgresql.existingSecret`.
+
+Webhook delivery represents the second outbound connection type. When webhooks are configured, the broker dispatches event notifications to external HTTP/HTTPS endpoints. The webhook delivery worker processes deliveries in batches, with the batch size and interval configurable via `broker.webhookDeliveryBatchSize` (default: 50) and `broker.webhookDeliveryIntervalSeconds` (default: 5). Failed deliveries are retried with exponential backoff.
+
+OpenTelemetry tracing, when enabled, establishes gRPC connections to an OTLP collector. The collector endpoint is configured via `telemetry.otlpEndpoint`, and the sampling rate via `telemetry.samplingRate`. The Helm chart optionally deploys an OTel collector sidecar for environments where the main collector is not directly accessible.
 
 ### Database Connectivity
 
-The broker requires persistent connectivity to PostgreSQL:
+The broker uses Diesel ORM with an r2d2 connection pool for PostgreSQL connectivity. Connection strings follow the standard PostgreSQL URI format:
 
 ```
-# Connection string format
 postgres://user:password@host:5432/database
-
-# With SSL
-postgres://user:password@host:5432/database?sslmode=require
 ```
 
-**Bundled PostgreSQL**: When `postgresql.enabled=true`, the database runs as a sidecar and uses cluster-internal DNS (`brokkr-broker-postgresql:5432`).
-
-**External PostgreSQL**: Configure via `postgresql.external.*` values or provide connection string via `postgresql.existingSecret`.
+For production deployments, TLS should be enabled by appending `?sslmode=require` or stronger modes to the connection string. The broker supports multi-tenant deployments through PostgreSQL schema isolation—the `postgresql.external.schema` value specifies which schema to use for data storage.
 
 ## Agent Network Requirements
 
-### Outbound Connections Only
+### Outbound-Only Architecture
 
-Agents only make outbound connections - no inbound ports are required:
+Agents operate with an outbound-only network model. They initiate all connections and require no inbound ports for their primary function. This design enables agents to operate behind restrictive firewalls and NAT gateways without special configuration—a critical feature for edge deployments and air-gapped environments.
+
+The agent's network requirements are minimal: connectivity to the broker API and the local Kubernetes API server. When metrics scraping is enabled, the agent also accepts inbound connections from Prometheus on port 8080.
 
 | Destination | Port | Protocol | Purpose |
 |-------------|------|----------|---------|
@@ -115,203 +119,65 @@ Agents only make outbound connections - no inbound ports are required:
 
 ### Kubernetes API Access
 
-The agent communicates with the local Kubernetes API server:
-- Uses in-cluster configuration automatically
-- Requires appropriate RBAC permissions (created by Helm chart)
-- Connection is always local to the cluster
+Agents communicate with their local Kubernetes API server to apply and manage resources. When deployed via the Helm chart, agents use in-cluster configuration automatically—the Kubernetes client discovers the API server address from the cluster's DNS and service account credentials.
+
+The Helm chart creates RBAC resources that grant agents permission to manage resources across the cluster (when `rbac.clusterWide: true`) or within specific namespaces. The agent requires broad resource access for deployment management but can be restricted from sensitive resources like Secrets through the `rbac.secretAccess` configuration.
 
 ### Broker Connectivity
 
-Agents poll the broker at configurable intervals (default: 30 seconds):
+Agents poll the broker at a configurable interval (default: 30 seconds, set via `agent.pollingInterval`). Each polling cycle fetches pending deployment objects and reports events for completed operations. The agent also sends deployment health status updates at a separate interval (default: 60 seconds, set via `agent.deploymentHealth.intervalSeconds`).
 
-```yaml
-broker:
-  url: https://broker.example.com:3000  # Or internal: http://brokkr-broker:3000
-  pak: "brokkr_BR..."                    # Pre-Authentication Key
-```
+The broker URL is configured via the `broker.url` value in the agent's Helm chart. For deployments where the agent and broker share a cluster, an internal URL like `http://brokkr-broker:3000` provides optimal performance. For multi-cluster deployments, agents use the broker's external URL with TLS: `https://broker.example.com`.
+
+Authentication uses Prefixed API Keys (PAKs), which agents include in the `Authorization` header of every request. The PAK is generated when an agent is registered and should be provided via `broker.pak` in the Helm values or through a Kubernetes Secret.
 
 ## TLS Configuration
 
 ### Broker TLS Options
 
-1. **Ingress TLS Termination** (Recommended)
-   - TLS terminates at ingress controller
-   - Internal traffic uses HTTP
-   - Simplest certificate management
+The broker supports three TLS configuration approaches, each suited to different deployment scenarios.
 
-2. **Direct TLS on Broker**
-   - Enable via `tls.enabled=true`
-   - Provide certificates via secret or cert-manager
-   - Use for non-ingress deployments
+**Ingress TLS Termination** is the recommended approach for most production deployments. TLS terminates at the ingress controller, and internal traffic between the ingress and broker uses plain HTTP. This approach centralizes certificate management and integrates smoothly with cert-manager:
 
-3. **Cert-Manager Integration**
-   ```yaml
-   tls:
-     enabled: true
-     certManager:
-       enabled: true
-       issuer: letsencrypt-prod
-       issuerKind: ClusterIssuer
-   ```
+```yaml
+ingress:
+  enabled: true
+  className: 'nginx'
+  tls:
+    - secretName: brokkr-tls
+      hosts:
+        - broker.example.com
+```
+
+**Direct TLS on Broker** enables TLS termination at the broker itself, useful for deployments without an ingress controller or when end-to-end encryption is required. Enable via `tls.enabled: true` and provide certificates either through `tls.existingSecret` or inline via `tls.cert` and `tls.key`.
+
+**Cert-Manager Integration** automates certificate provisioning when combined with ingress TLS. The Helm chart can configure cert-manager annotations to automatically request and renew certificates:
+
+```yaml
+tls:
+  enabled: true
+  certManager:
+    enabled: true
+    issuer: 'letsencrypt-prod'
+    issuerKind: 'ClusterIssuer'
+```
 
 ### Agent-to-Broker TLS
 
-Agents should always use HTTPS when communicating with the broker:
+Agents should always communicate with the broker over HTTPS in production. The agent validates the broker's TLS certificate using the system's trusted certificate authorities. For deployments with self-signed or private CA certificates, the CA must be added to the agent's trust store or mounted as a volume.
 
-```yaml
-broker:
-  url: https://broker.example.com:3000
-```
+## Kubernetes NetworkPolicy Configuration
 
-The agent validates the broker's TLS certificate. For self-signed certificates, you may need to:
-- Add the CA to the agent's trust store
-- Or use `--insecure` flag (not recommended for production)
-
-## Kubernetes NetworkPolicy Examples
+NetworkPolicies provide defense-in-depth by restricting pod-to-pod and pod-to-external communication at the network layer. Both the broker and agent Helm charts include optional NetworkPolicy resources that implement least-privilege network access.
 
 ### Broker NetworkPolicy
 
-Allow inbound from agents and ingress, outbound to PostgreSQL and webhooks:
+The broker's NetworkPolicy allows inbound connections from configured sources and outbound connections to the database and webhook destinations. When `networkPolicy.enabled: true`, the generated policy includes:
 
-```yaml
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: brokkr-broker
-  namespace: brokkr
-spec:
-  podSelector:
-    matchLabels:
-      app.kubernetes.io/name: brokkr-broker
-  policyTypes:
-    - Ingress
-    - Egress
+**Ingress rules** permit connections on port 3000 from pods matching the selectors specified in `networkPolicy.allowIngressFrom`. If no selectors are specified, the policy allows connections from any pod in the same namespace. Metrics scraping can be separately controlled via `networkPolicy.allowMetricsFrom`.
 
-  ingress:
-    # Allow from ingress controller
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: ingress-nginx
-          podSelector:
-            matchLabels:
-              app.kubernetes.io/name: ingress-nginx
-      ports:
-        - protocol: TCP
-          port: 3000
+**Egress rules** permit DNS resolution (UDP/TCP port 53), database connectivity (port 5432 to PostgreSQL pods or external IPs), and optionally webhook delivery (HTTPS port 443 to external IPs, excluding private ranges). The `networkPolicy.allowWebhookEgress` value controls whether webhook egress is permitted.
 
-    # Allow from agents (if in same cluster)
-    - from:
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/name: brokkr-agent
-      ports:
-        - protocol: TCP
-          port: 3000
-
-    # Allow Prometheus scraping
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: monitoring
-      ports:
-        - protocol: TCP
-          port: 3000
-
-  egress:
-    # Allow to PostgreSQL
-    - to:
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/name: postgresql
-      ports:
-        - protocol: TCP
-          port: 5432
-
-    # Allow DNS
-    - to:
-        - namespaceSelector: {}
-          podSelector:
-            matchLabels:
-              k8s-app: kube-dns
-      ports:
-        - protocol: UDP
-          port: 53
-
-    # Allow webhook delivery to external HTTPS
-    - to:
-        - ipBlock:
-            cidr: 0.0.0.0/0
-            except:
-              - 10.0.0.0/8
-              - 172.16.0.0/12
-              - 192.168.0.0/16
-      ports:
-        - protocol: TCP
-          port: 443
-```
-
-### Agent NetworkPolicy
-
-Allow outbound to broker and Kubernetes API:
-
-```yaml
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: brokkr-agent
-  namespace: brokkr
-spec:
-  podSelector:
-    matchLabels:
-      app.kubernetes.io/name: brokkr-agent
-  policyTypes:
-    - Egress
-
-  egress:
-    # Allow to Kubernetes API server
-    - to:
-        - ipBlock:
-            cidr: 0.0.0.0/0  # Restrict to API server IP in production
-      ports:
-        - protocol: TCP
-          port: 6443
-
-    # Allow to broker (if in same cluster)
-    - to:
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/name: brokkr-broker
-      ports:
-        - protocol: TCP
-          port: 3000
-
-    # Allow to external broker (if in different cluster)
-    - to:
-        - ipBlock:
-            cidr: 0.0.0.0/0
-      ports:
-        - protocol: TCP
-          port: 443
-        - protocol: TCP
-          port: 3000
-
-    # Allow DNS
-    - to:
-        - namespaceSelector: {}
-          podSelector:
-            matchLabels:
-              k8s-app: kube-dns
-      ports:
-        - protocol: UDP
-          port: 53
-```
-
-## Helm Chart NetworkPolicy
-
-Both Helm charts include optional NetworkPolicy resources:
-
-### Broker Chart
 ```yaml
 networkPolicy:
   enabled: true
@@ -319,6 +185,9 @@ networkPolicy:
     - namespaceSelector:
         matchLabels:
           kubernetes.io/metadata.name: ingress-nginx
+      podSelector:
+        matchLabels:
+          app.kubernetes.io/name: ingress-nginx
   allowMetricsFrom:
     - namespaceSelector:
         matchLabels:
@@ -326,11 +195,29 @@ networkPolicy:
   allowWebhookEgress: true
 ```
 
-### Agent Chart
+### Agent NetworkPolicy
+
+The agent's NetworkPolicy restricts traffic to essential destinations only. When enabled, the policy permits:
+
+**Egress to DNS** (UDP/TCP port 53) for name resolution.
+
+**Egress to the Kubernetes API server** (ports 443 and 6443). The `networkPolicy.kubernetesApiCidr` value controls which IP ranges can receive this traffic—in production, restrict this to the actual API server IP for maximum security.
+
+**Egress to the broker** on the configured port (default 3000). The destination can be specified as a pod selector for same-cluster deployments or as an IP block for external brokers.
+
+**Ingress for metrics** (port 8080) when `metrics.enabled: true` and `networkPolicy.allowMetricsFrom` specifies allowed scrapers.
+
 ```yaml
 networkPolicy:
   enabled: true
-  kubernetesApiCidr: "10.0.0.1/32"  # Restrict to API server IP
+  kubernetesApiCidr: "10.0.0.1/32"  # API server IP
+  brokerEndpoint:
+    podSelector:
+      matchLabels:
+        app.kubernetes.io/name: brokkr-broker
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: brokkr
   allowMetricsFrom:
     - namespaceSelector:
         matchLabels:
@@ -341,71 +228,54 @@ networkPolicy:
 
 ### Minimum Required Ports
 
-**For Broker Host:**
-| Direction | Port | Protocol | Source/Dest | Purpose |
-|-----------|------|----------|-------------|---------|
-| Inbound | 3000 | TCP | Agents, Admins | API access |
-| Outbound | 5432 | TCP | PostgreSQL | Database |
+Organizations deploying Brokkr must configure firewalls to permit the following traffic:
+
+**For the broker host:**
+
+| Direction | Port | Protocol | Source/Destination | Purpose |
+|-----------|------|----------|---------------------|---------|
+| Inbound | 3000 (or 443 via ingress) | TCP | Agents, Admins, Generators | API access |
+| Outbound | 5432 | TCP | PostgreSQL database | Database connectivity |
 | Outbound | 443 | TCP | Webhook endpoints | Event delivery |
 
-**For Agent Host:**
-| Direction | Port | Protocol | Source/Dest | Purpose |
-|-----------|------|----------|-------------|---------|
-| Outbound | 3000/443 | TCP | Broker | API communication |
-| Outbound | 6443 | TCP | K8s API | Cluster management |
+**For the agent host:**
+
+| Direction | Port | Protocol | Source/Destination | Purpose |
+|-----------|------|----------|---------------------|---------|
+| Outbound | 3000 or 443 | TCP | Broker | API communication |
+| Outbound | 6443 | TCP | Kubernetes API server | Cluster management |
 
 ### Cloud Provider Security Groups
 
-#### AWS Security Groups
+Cloud deployments require security group configuration that permits the traffic flows described above. The following examples demonstrate typical configurations for major cloud providers.
 
-**Broker Security Group:**
-```hcl
-# Inbound
-ingress {
-  from_port   = 3000
-  to_port     = 3000
-  protocol    = "tcp"
-  cidr_blocks = ["10.0.0.0/8"]  # VPC CIDR
-}
+**AWS Security Groups:**
 
-# Outbound to RDS
-egress {
-  from_port   = 5432
-  to_port     = 5432
-  protocol    = "tcp"
-  cidr_blocks = ["10.0.0.0/8"]
-}
+For the broker, create an inbound rule permitting TCP port 3000 from the VPC CIDR (or specific agent security groups). Create outbound rules for PostgreSQL (port 5432 to the database security group) and webhook delivery (port 443 to 0.0.0.0/0 or specific webhook destinations).
 
-# Outbound for webhooks
-egress {
-  from_port   = 443
-  to_port     = 443
-  protocol    = "tcp"
-  cidr_blocks = ["0.0.0.0/0"]
-}
-```
+**GCP Firewall Rules:**
+
+Create an ingress rule with a target tag for broker instances, permitting TCP port 3000 from authorized sources. Create egress rules permitting port 5432 to the Cloud SQL instance and port 443 for webhooks.
+
+**Azure Network Security Groups:**
+
+Configure inbound rules for port 3000 from the virtual network address space. Configure outbound rules for database connectivity and webhook delivery similar to the AWS and GCP examples.
 
 ## Troubleshooting Network Issues
 
 ### Common Problems
 
-1. **Agent can't reach broker**
-   - Verify broker URL is correct
-   - Check DNS resolution
-   - Verify no firewall blocking port 3000/443
-   - Check NetworkPolicy if enabled
+**Agent cannot reach broker:** This typically manifests as repeated connection timeouts or DNS resolution failures in agent logs. Begin by verifying the broker URL is correct and resolvable from the agent pod. Use `nslookup` or `dig` to test DNS resolution. Check that no NetworkPolicy or firewall rule blocks egress on the broker port. For TLS connections, verify the agent trusts the broker's certificate.
 
-2. **Broker can't reach database**
-   - Verify database host is resolvable
-   - Check security group/firewall rules for port 5432
-   - Verify database credentials
+**Broker cannot reach database:** Database connectivity failures prevent the broker from starting. Verify the database host is resolvable and the credentials are correct. Check security group rules permit traffic on port 5432. For TLS-enabled database connections, verify the `sslmode` parameter is correctly configured.
 
-3. **Webhooks not being delivered**
-   - Check egress rules allow HTTPS to external IPs
-   - Verify webhook URL is accessible
-   - Check broker logs for delivery errors
+**Webhooks not being delivered:** Check the broker logs for delivery errors, which indicate whether the issue is connection-related or response-related. Verify egress rules permit HTTPS traffic to external IPs. If NetworkPolicy is enabled, confirm `allowWebhookEgress: true` is set. Test webhook endpoint accessibility using `curl` from a pod in the broker namespace.
+
+**Metrics not being scraped:** If Prometheus cannot reach the metrics endpoints, verify the ServiceMonitor is correctly configured and the Prometheus operator's selector matches. Check that NetworkPolicy allows ingress from the monitoring namespace on the metrics port (3000 for broker, 8080 for agent).
 
 ### Diagnostic Commands
+
+The following commands help diagnose network connectivity issues:
 
 ```bash
 # Test broker connectivity from agent pod
@@ -414,9 +284,15 @@ kubectl exec -it deploy/brokkr-agent -- wget -qO- http://brokkr-broker:3000/heal
 # Test database connectivity from broker pod
 kubectl exec -it deploy/brokkr-broker -- nc -zv postgresql 5432
 
-# Check NetworkPolicy is applied
+# List NetworkPolicies in the namespace
 kubectl get networkpolicy -n brokkr
 
-# View network policy details
+# Examine NetworkPolicy details
 kubectl describe networkpolicy brokkr-broker -n brokkr
+
+# Check agent logs for connection errors
+kubectl logs deploy/brokkr-agent | grep -i "connection\|error\|timeout"
+
+# Verify DNS resolution from within a pod
+kubectl exec -it deploy/brokkr-agent -- nslookup brokkr-broker
 ```

@@ -241,6 +241,6 @@ sequenceDiagram
 
 Now that you understand the core concepts of Brokkr, you can:
 - Follow our [Quick Start Guide](../../getting-started/quick-start) to try it out
-- Learn about [Architecture Decisions](../architecture-decisions) to understand why we made these choices
-- Explore [Best Practices](../best-practices) to get the most out of Brokkr
-- Read about [Advanced Topics](../advanced-topics) to dive deeper
+- Learn about the [Technical Architecture](architecture) for a deeper understanding of the implementation
+- Explore the [Data Model](data-model) to understand how entities relate
+- Read the [Security Model](security-model) for details on authentication and authorization

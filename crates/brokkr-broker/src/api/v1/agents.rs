@@ -11,8 +11,13 @@
 
 use crate::api::v1::middleware::AuthPayload;
 use crate::dal::DAL;
-use crate::utils::pak;
+use crate::metrics;
+use crate::utils::{audit, pak};
 use axum::http::StatusCode;
+use brokkr_models::models::audit_logs::{
+    ACTION_AGENT_CREATED, ACTION_AGENT_DELETED, ACTION_AGENT_UPDATED, ACTION_PAK_ROTATED,
+    ACTOR_TYPE_ADMIN, RESOURCE_TYPE_AGENT,
+};
 use axum::{
     extract::{Extension, Path, Query, State},
     routing::{delete, get, post},
@@ -89,6 +94,19 @@ async fn list_agents(
     match dal.agents().list() {
         Ok(agents) => {
             info!("Successfully retrieved {} agents", agents.len());
+            // Update active agents metric
+            let active_count = agents.iter().filter(|a| a.status == "ACTIVE").count();
+            metrics::set_active_agents(active_count as i64);
+
+            // Update heartbeat age metrics for all agents
+            let now = chrono::Utc::now();
+            for agent in &agents {
+                if let Some(last_hb) = agent.last_heartbeat {
+                    let age_seconds = (now - last_hb).num_seconds().max(0) as f64;
+                    metrics::set_agent_heartbeat_age(&agent.id.to_string(), &agent.name, age_seconds);
+                }
+            }
+
             Ok(Json(agents))
         }
         Err(e) => {
@@ -148,6 +166,22 @@ async fn create_agent(
             match dal.agents().update_pak_hash(agent.id, pak_hash) {
                 Ok(updated_agent) => {
                     info!("Successfully updated PAK hash for agent ID: {}", agent.id);
+
+                    // Log audit entry for agent creation
+                    audit::log_action(
+                        ACTOR_TYPE_ADMIN,
+                        None,
+                        ACTION_AGENT_CREATED,
+                        RESOURCE_TYPE_AGENT,
+                        Some(agent.id),
+                        Some(serde_json::json!({
+                            "name": updated_agent.name,
+                            "cluster_name": updated_agent.cluster_name,
+                        })),
+                        None,
+                        None,
+                    );
+
                     let response = serde_json::json!({
                         "agent": updated_agent,
                         "initial_pak": pak
@@ -380,6 +414,23 @@ async fn update_agent(
     match dal.agents().update(id, &agent) {
         Ok(updated_agent) => {
             info!("Successfully updated agent with ID: {}", id);
+
+            // Log audit entry for agent update
+            audit::log_action(
+                ACTOR_TYPE_ADMIN,
+                None,
+                ACTION_AGENT_UPDATED,
+                RESOURCE_TYPE_AGENT,
+                Some(id),
+                Some(serde_json::json!({
+                    "name": updated_agent.name,
+                    "cluster_name": updated_agent.cluster_name,
+                    "status": updated_agent.status,
+                })),
+                None,
+                None,
+            );
+
             Ok(Json(updated_agent))
         }
         Err(e) => {
@@ -429,6 +480,19 @@ async fn delete_agent(
     match dal.agents().soft_delete(id) {
         Ok(_) => {
             info!("Successfully deleted agent with ID: {}", id);
+
+            // Log audit entry for agent deletion
+            audit::log_action(
+                ACTOR_TYPE_ADMIN,
+                None,
+                ACTION_AGENT_DELETED,
+                RESOURCE_TYPE_AGENT,
+                Some(id),
+                None,
+                None,
+                None,
+            );
+
             Ok(StatusCode::NO_CONTENT)
         }
         Err(e) => {
@@ -1161,6 +1225,13 @@ async fn record_heartbeat(
     match dal.agents().record_heartbeat(id) {
         Ok(_) => {
             info!("Successfully recorded heartbeat for agent with ID: {}", id);
+
+            // Update heartbeat age metric (age is now 0 since we just recorded it)
+            // Also get agent name for the metric label
+            if let Ok(Some(agent)) = dal.agents().get(id) {
+                metrics::set_agent_heartbeat_age(&id.to_string(), &agent.name, 0.0);
+            }
+
             Ok(StatusCode::NO_CONTENT)
         }
         Err(e) => {
@@ -1393,6 +1464,21 @@ async fn rotate_agent_pak(
     match dal.agents().update_pak_hash(id, pak_hash) {
         Ok(updated_agent) => {
             info!("Successfully rotated PAK for agent with ID: {}", id);
+
+            // Log audit entry for PAK rotation
+            audit::log_action(
+                ACTOR_TYPE_ADMIN,
+                None,
+                ACTION_PAK_ROTATED,
+                RESOURCE_TYPE_AGENT,
+                Some(id),
+                Some(serde_json::json!({
+                    "agent_name": updated_agent.name,
+                })),
+                None,
+                None,
+            );
+
             Ok(Json(serde_json::json!({
                 "agent": updated_agent,
                 "pak": pak

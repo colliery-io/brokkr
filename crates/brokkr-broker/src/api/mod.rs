@@ -157,9 +157,18 @@
 pub mod v1;
 use crate::dal::DAL;
 use crate::metrics;
-use axum::{response::IntoResponse, routing::get, Router};
+use axum::{
+    body::Body,
+    extract::Request,
+    middleware::{self, Next},
+    response::{IntoResponse, Response},
+    routing::get,
+    Router,
+};
 use brokkr_utils::config::{Cors, ReloadableConfig};
 use hyper::StatusCode;
+use std::time::Instant;
+use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 use tracing::Level;
 
@@ -182,11 +191,19 @@ pub fn configure_api_routes(
     cors_config: &Cors,
     reloadable_config: Option<ReloadableConfig>,
 ) -> Router<DAL> {
+    // Build a permissive CORS layer for health/metrics endpoints
+    let root_cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods(Any)
+        .allow_headers(Any);
+
     Router::new()
         .merge(v1::routes(dal.clone(), cors_config, reloadable_config))
         .route("/healthz", get(healthz))
         .route("/readyz", get(readyz))
-        .route("/metrics", get(metrics))
+        .route("/metrics", get(metrics_handler))
+        .layer(root_cors)
+        .layer(middleware::from_fn(metrics_middleware))
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(|request: &hyper::Request<_>| {
@@ -242,11 +259,32 @@ async fn readyz() -> impl IntoResponse {
 /// # Returns
 ///
 /// Returns a 200 OK status code with Prometheus metrics in text format.
-async fn metrics() -> impl IntoResponse {
+async fn metrics_handler() -> impl IntoResponse {
     let metrics_data = metrics::encode_metrics();
     (
         StatusCode::OK,
         [("Content-Type", "text/plain; version=0.0.4")],
         metrics_data,
     )
+}
+
+/// Middleware to record HTTP request metrics
+///
+/// Records request count and duration for each HTTP request.
+async fn metrics_middleware(request: Request<Body>, next: Next) -> Response {
+    let start = Instant::now();
+    let method = request.method().to_string();
+    let path = request.uri().path().to_string();
+
+    // Process the request
+    let response = next.run(request).await;
+
+    // Record metrics (skip the /metrics endpoint itself to avoid recursion)
+    if path != "/metrics" {
+        let duration = start.elapsed().as_secs_f64();
+        let status = response.status().as_u16();
+        metrics::record_http_request(&path, &method, status, duration);
+    }
+
+    response
 }

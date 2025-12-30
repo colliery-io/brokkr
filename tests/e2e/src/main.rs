@@ -27,6 +27,8 @@ async fn main() -> ExitCode {
     let admin_pak = env::var("ADMIN_PAK").unwrap_or_else(|_| {
         "brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8".to_string()
     });
+    // Echo server URL for webhook delivery testing (in docker-compose: webhook-echo:8080)
+    let echo_server_url = env::var("WEBHOOK_ECHO_URL").ok();
 
     println!("╔══════════════════════════════════════════════════════════════╗");
     println!("║           Brokkr End-to-End Test Suite                       ║");
@@ -74,6 +76,9 @@ async fn main() -> ExitCode {
     run_scenario!("Part 4: Templates", scenarios::test_templates(&client));
     run_scenario!("Part 5: Work Orders", scenarios::test_work_orders(&client));
     run_scenario!("Part 6: Health & Diagnostics", scenarios::test_health_diagnostics(&client));
+    run_scenario!("Part 7: Webhooks", scenarios::test_webhooks(&client, echo_server_url.as_deref()));
+    run_scenario!("Part 8: Audit Logs", scenarios::test_audit_logs(&client));
+    run_scenario!("Part 9: Metrics & Observability", scenarios::test_metrics(&client));
 
     // Summary
     println!("══════════════════════════════════════════════════════════════════");

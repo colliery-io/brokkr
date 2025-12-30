@@ -63,7 +63,7 @@ kubectl port-forward svc/brokkr-broker 3000:3000 &
 
 ### 3. Create an Agent and Get PAK
 
-Create an agent registration and retrieve its Pre-Authentication Key (PAK):
+Create an agent registration and retrieve its Prefixed API Key (PAK):
 
 ```bash
 # Create a new agent
@@ -362,17 +362,19 @@ Key configuration options for the broker chart:
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `postgresql.enabled` | Enable bundled PostgreSQL | `false` |
-| `postgresql.auth.password` | PostgreSQL password | `brokkr` |
-| `database.host` | External database host | `""` |
-| `database.port` | External database port | `5432` |
-| `database.name` | Database name | `brokkr` |
-| `database.user` | Database username | `brokkr` |
-| `database.password` | Database password | `""` |
+| `postgresql.enabled` | Enable bundled PostgreSQL | `true` |
+| `postgresql.auth.password` | PostgreSQL password (bundled) | `brokkr` |
+| `postgresql.external.host` | External database host | `""` |
+| `postgresql.external.port` | External database port | `5432` |
+| `postgresql.external.database` | Database name | `brokkr` |
+| `postgresql.external.username` | Database username | `brokkr` |
+| `postgresql.external.password` | Database password | `brokkr` |
+| `postgresql.external.schema` | PostgreSQL schema (multi-tenant) | `""` |
 | `replicaCount` | Number of broker replicas | `1` |
-| `image.tag` | Image tag to use | Chart appVersion |
-| `resources.limits.cpu` | CPU limit | `1000m` |
-| `resources.limits.memory` | Memory limit | `1Gi` |
+| `image.tag` | Image tag to use | `latest` |
+| `broker.logLevel` | Log level | `info` |
+| `resources.limits.cpu` | CPU limit | `500m` |
+| `resources.limits.memory` | Memory limit | `512Mi` |
 | `tls.enabled` | Enable TLS | `false` |
 
 ### Agent Values
@@ -382,13 +384,18 @@ Key configuration options for the agent chart:
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `broker.url` | Broker URL | **Required** |
-| `broker.pak` | Agent PAK | **Required** |
-| `agent.pollingInterval` | Polling interval | `30s` |
-| `rbac.mode` | RBAC mode (cluster/namespace) | `cluster` |
+| `broker.pak` | Agent PAK (Prefixed API Key) | **Required** |
+| `broker.agentName` | Human-readable agent name | `""` |
+| `broker.clusterName` | Name of the managed cluster | `""` |
+| `agent.pollingInterval` | Seconds between broker polls | `30` |
+| `agent.deploymentHealth.enabled` | Enable deployment health checks | `true` |
+| `agent.deploymentHealth.intervalSeconds` | Health check interval | `60` |
 | `rbac.create` | Create RBAC resources | `true` |
-| `resources.limits.cpu` | CPU limit | `500m` |
-| `resources.limits.memory` | Memory limit | `512Mi` |
-| `image.tag` | Image tag to use | Chart appVersion |
+| `rbac.clusterWide` | Cluster-wide RBAC (vs namespaced) | `true` |
+| `rbac.secretAccess.enabled` | Enable secret access | `false` |
+| `resources.limits.cpu` | CPU limit | `200m` |
+| `resources.limits.memory` | Memory limit | `256Mi` |
+| `image.tag` | Image tag to use | `latest` |
 
 For complete configuration options, see the chart values files:
 - [Broker Chart Values](https://github.com/colliery-io/brokkr/blob/main/charts/brokkr-broker/values.yaml)

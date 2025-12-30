@@ -353,6 +353,96 @@ impl Client {
     pub async fn get_diagnostic(&self, id: Uuid) -> Result<Value> {
         self.get(&format!("/api/v1/diagnostics/{}", id)).await
     }
+
+    // =========================================================================
+    // Webhooks
+    // =========================================================================
+
+    pub async fn create_webhook(
+        &self,
+        name: &str,
+        url: &str,
+        event_types: Vec<&str>,
+        auth_header: Option<&str>,
+    ) -> Result<Value> {
+        let mut body = json!({
+            "name": name,
+            "url": url,
+            "event_types": event_types
+        });
+        if let Some(auth) = auth_header {
+            body["auth_header"] = json!(auth);
+        }
+        self.post("/api/v1/webhooks", body).await
+    }
+
+    pub async fn list_webhooks(&self) -> Result<Vec<Value>> {
+        self.get("/api/v1/webhooks").await
+    }
+
+    pub async fn get_webhook(&self, id: Uuid) -> Result<Value> {
+        self.get(&format!("/api/v1/webhooks/{}", id)).await
+    }
+
+    pub async fn update_webhook(&self, id: Uuid, updates: Value) -> Result<Value> {
+        self.put(&format!("/api/v1/webhooks/{}", id), updates).await
+    }
+
+    pub async fn delete_webhook(&self, id: Uuid) -> Result<()> {
+        self.delete(&format!("/api/v1/webhooks/{}", id)).await
+    }
+
+    pub async fn list_webhook_deliveries(&self, webhook_id: Uuid) -> Result<Vec<Value>> {
+        self.get(&format!("/api/v1/webhooks/{}/deliveries", webhook_id)).await
+    }
+
+    pub async fn test_webhook(&self, id: Uuid) -> Result<Value> {
+        self.post(&format!("/api/v1/webhooks/{}/test", id), json!({})).await
+    }
+
+    // =========================================================================
+    // Audit Logs
+    // =========================================================================
+
+    pub async fn list_audit_logs(&self, limit: Option<i32>) -> Result<Value> {
+        let path = match limit {
+            Some(l) => format!("/api/v1/admin/audit-logs?limit={}", l),
+            None => "/api/v1/admin/audit-logs".to_string(),
+        };
+        self.get(&path).await
+    }
+
+    // =========================================================================
+    // Metrics
+    // =========================================================================
+
+    /// Fetch Prometheus metrics from the broker
+    pub async fn get_metrics(&self) -> Result<String> {
+        let url = format!("{}/metrics", self.base_url);
+        let resp = self.http.get(&url).send().await?;
+        let status = resp.status();
+        let text = resp.text().await?;
+
+        if !status.is_success() {
+            return Err(format!("HTTP {}: {}", status, text).into());
+        }
+
+        Ok(text)
+    }
+
+    /// Fetch health check endpoint
+    pub async fn get_healthz(&self) -> Result<String> {
+        let url = format!("{}/healthz", self.base_url);
+        let resp = self.http.get(&url).send().await?;
+        let status = resp.status();
+        let text = resp.text().await?;
+
+        if !status.is_success() {
+            return Err(format!("HTTP {}: {}", status, text).into());
+        }
+
+        Ok(text)
+    }
 }
 
 fn sha256_hex(data: &str) -> String {

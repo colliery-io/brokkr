@@ -39,7 +39,9 @@
 
 use crate::k8s::objects::verify_object_ownership;
 use crate::k8s::objects::{CHECKSUM_ANNOTATION, STACK_LABEL};
+use crate::metrics;
 use backoff::ExponentialBackoffBuilder;
+use std::time::Instant;
 use tracing::{debug, error, info, trace, warn};
 use k8s_openapi::api::core::v1::Namespace;
 use kube::api::DeleteParams;
@@ -149,12 +151,15 @@ pub async fn apply_k8s_objects(
     patch_params: PatchParams,
 ) -> Result<(), Box<dyn std::error::Error>> {
     info!("Applying {} Kubernetes objects", k8s_objects.len());
+    let start = Instant::now();
 
     let discovery = Discovery::new(k8s_client.clone())
         .run()
         .await
         .map_err(|e| {
             error!("Failed to create Kubernetes discovery client: {}", e);
+            metrics::kubernetes_operations_total().with_label_values(&["apply"]).inc();
+            metrics::kubernetes_operation_duration_seconds().with_label_values(&["apply"]).observe(start.elapsed().as_secs_f64());
             e
         })?;
 
@@ -239,6 +244,11 @@ pub async fn apply_k8s_objects(
         "Successfully applied all {} Kubernetes objects",
         k8s_objects.len()
     );
+
+    // Record metrics for successful apply
+    metrics::kubernetes_operations_total().with_label_values(&["apply"]).inc();
+    metrics::kubernetes_operation_duration_seconds().with_label_values(&["apply"]).observe(start.elapsed().as_secs_f64());
+
     Ok(())
 }
 

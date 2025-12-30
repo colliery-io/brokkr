@@ -66,6 +66,8 @@ services:
         condition: service_completed_successfully
       init-kubeconfig:
         condition: service_completed_successfully
+      init-shipwright:
+        condition: service_completed_successfully
     environment:
       - BROKKR__AGENT__BROKER_URL=http://brokkr-broker:3000
       - BROKKR__AGENT__AGENT_NAME=brokkr-integration-test-agent
@@ -132,7 +134,10 @@ services:
     volumes:
       - k3s-data:/var/lib/rancher/k3s
       - brokkr-keys:/output
-
+      - ./k3s-registries.yaml:/etc/rancher/k3s/registries.yaml:ro
+    depends_on:
+      registry:
+        condition: service_healthy
     ports:
       - "6443:6443"
     healthcheck:
@@ -213,7 +218,59 @@ services:
       init-kubeconfig:
         condition: service_completed_successfully
 
+  # Local container registry for Shipwright builds
+  registry:
+    image: registry:2
+    ports:
+      - "5050:5000"
+    volumes:
+      - registry-data:/var/lib/registry
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5000/v2/"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Install Shipwright and Tekton for build work orders
+  init-shipwright:
+    image: bitnami/kubectl:latest
+    depends_on:
+      k3s:
+        condition: service_healthy
+      init-kubeconfig:
+        condition: service_completed_successfully
+    volumes:
+      - brokkr-keys:/tmp/brokkr-keys
+    entrypoint: []
+    command: >
+      sh -c '
+        export KUBECONFIG=/tmp/brokkr-keys/kubeconfig.docker.yaml
+
+        echo "Installing Tekton Pipelines..."
+        kubectl apply -f https://storage.googleapis.com/tekton-releases/pipeline/previous/v0.59.0/release.yaml
+
+        echo "Waiting for Tekton to be ready..."
+        kubectl wait --for=condition=Ready pods -l app=tekton-pipelines-controller -n tekton-pipelines --timeout=300s || true
+        sleep 10
+
+        echo "Installing Shipwright Build..."
+        kubectl apply -f https://github.com/shipwright-io/build/releases/download/v0.13.0/release.yaml
+
+        echo "Waiting for Shipwright to be ready..."
+        kubectl wait --for=condition=Ready pods -l app=shipwright-build-controller -n shipwright-build --timeout=300s || true
+        sleep 10
+
+        echo "Installing sample build strategies..."
+        kubectl apply -f https://github.com/shipwright-io/build/releases/download/v0.13.0/sample-strategies.yaml
+
+        echo "Verifying installation..."
+        kubectl get clusterbuildstrategies
+
+        echo "Shipwright installation complete!"
+      '
+
 volumes:
   brokkr-postgres-data:
   k3s-data:
   brokkr-keys:
+  registry-data:

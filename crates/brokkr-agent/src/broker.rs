@@ -10,13 +10,14 @@
 
 use crate::deployment_health::{DeploymentObjectHealthUpdate, HealthStatusUpdate};
 use crate::diagnostics::{DiagnosticRequest, SubmitDiagnosticResult};
+use crate::metrics;
 use brokkr_models::models::agent_events::NewAgentEvent;
 use brokkr_models::models::agents::Agent;
 use brokkr_models::models::deployment_objects::DeploymentObject;
 use brokkr_utils::Settings;
 use reqwest::Client;
 use reqwest::StatusCode;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::time::sleep;
 use tracing::{debug, error, info, instrument, trace, warn};
 use uuid::Uuid;
@@ -202,6 +203,7 @@ pub async fn fetch_and_process_deployment_objects(
 
     debug!("Fetching deployment objects from {}", url);
 
+    let start = Instant::now();
     let response = client
         .get(&url)
         .header("Authorization", format!("Bearer {}", config.agent.pak))
@@ -209,9 +211,12 @@ pub async fn fetch_and_process_deployment_objects(
         .await
         .map_err(|e| {
             error!("Failed to send request to broker: {}", e);
+            metrics::poll_requests_total().with_label_values(&["error"]).inc();
+            metrics::poll_duration_seconds().with_label_values(&[]).observe(start.elapsed().as_secs_f64());
             Box::new(e) as Box<dyn std::error::Error>
         })?;
 
+    let duration = start.elapsed().as_secs_f64();
     match response.status() {
         StatusCode::OK => {
             let deployment_objects: Vec<DeploymentObject> = response.json().await.map_err(|e| {
@@ -225,6 +230,15 @@ pub async fn fetch_and_process_deployment_objects(
                 agent.name
             );
 
+            metrics::poll_requests_total().with_label_values(&["success"]).inc();
+            metrics::poll_duration_seconds().with_label_values(&[]).observe(duration);
+            metrics::last_successful_poll_timestamp().set(
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs_f64()
+            );
+
             Ok(deployment_objects)
         }
         status => {
@@ -233,6 +247,8 @@ pub async fn fetch_and_process_deployment_objects(
                 "Broker request failed with status {}: {}",
                 status, error_body
             );
+            metrics::poll_requests_total().with_label_values(&["error"]).inc();
+            metrics::poll_duration_seconds().with_label_values(&[]).observe(duration);
             Err(format!(
                 "Broker request failed. Status: {}, Body: {}",
                 status, error_body
@@ -402,6 +418,7 @@ pub async fn send_heartbeat(
         config.agent.broker_url, agent.id
     );
 
+    let start = Instant::now();
     let response = client
         .post(&url)
         .header("Authorization", format!("Bearer {}", config.agent.pak))
@@ -409,12 +426,20 @@ pub async fn send_heartbeat(
         .await
         .map_err(|e| {
             error!("Failed to send heartbeat for agent {}: {}", agent.name, e);
+            metrics::heartbeat_sent_total().inc();
             Box::new(e) as Box<dyn std::error::Error>
         })?;
 
     match response.status() {
         StatusCode::OK | StatusCode::NO_CONTENT => {
             trace!("Heartbeat sent successfully for agent {}", agent.name);
+            metrics::heartbeat_sent_total().inc();
+            metrics::last_successful_poll_timestamp().set(
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs_f64()
+            );
             Ok(())
         }
         StatusCode::UNAUTHORIZED => {
