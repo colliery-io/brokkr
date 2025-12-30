@@ -48,6 +48,173 @@ This document provides detailed technical implementation information about Brokk
 - State persistence for recovery
 - State diff calculation
 
+## Component Architecture
+
+This section provides visual diagrams showing how components interact within each service and across the system.
+
+### Broker Internal Architecture
+
+The broker service consists of several interconnected components:
+
+{{< mermaid >}}
+flowchart TB
+    subgraph API["API Layer (Axum)"]
+        Routes[Routes & Handlers]
+        Middleware[Auth Middleware]
+        OpenAPI[OpenAPI Docs]
+    end
+
+    subgraph Core["Core Services"]
+        DAL[Data Access Layer]
+        EventBus[Event Bus]
+        AuditLog[Audit Logger]
+    end
+
+    subgraph Background["Background Services"]
+        ConfigWatch[Config Watcher]
+        Cleanup[Cleanup Tasks]
+        WebhookDispatch[Webhook Dispatcher]
+    end
+
+    subgraph Utils["Utilities"]
+        PAK[PAK Validator]
+        Encryption[Encryption]
+        Matching[Agent Matching]
+        Templating[Template Engine]
+    end
+
+    DB[(PostgreSQL)]
+
+    Routes --> Middleware
+    Middleware --> PAK
+    Routes --> DAL
+    Routes --> EventBus
+    DAL --> DB
+    EventBus --> WebhookDispatch
+    EventBus --> AuditLog
+    AuditLog --> DAL
+    ConfigWatch --> DAL
+    Cleanup --> DAL
+    Templating --> DAL
+{{< /mermaid >}}
+
+**Component Responsibilities:**
+
+| Component | Purpose |
+|-----------|---------|
+| **API Layer** | HTTP request handling, authentication, OpenAPI documentation |
+| **DAL** | Database operations for all entities (agents, stacks, deployments, etc.) |
+| **Event Bus** | Internal pub/sub for decoupled event handling |
+| **Audit Logger** | Async audit trail with batched writes |
+| **Background Services** | Config reload, cleanup tasks, webhook delivery |
+| **Utilities** | PAK validation, encryption, agent matching, templating |
+
+### Agent Internal Architecture
+
+The agent service manages Kubernetes resources based on broker instructions:
+
+{{< mermaid >}}
+flowchart TB
+    subgraph BrokerComm["Broker Communication"]
+        Client[Broker Client]
+        Poller[Polling Loop]
+        EventReporter[Event Reporter]
+    end
+
+    subgraph K8s["Kubernetes Operations"]
+        K8sAPI[K8s API Client]
+        Objects[Object Manager]
+        Reconciler[Reconciler]
+    end
+
+    subgraph Health["Health & Diagnostics"]
+        HealthCheck[Health Endpoints]
+        DeployHealth[Deployment Health]
+        Diagnostics[Diagnostics Runner]
+    end
+
+    subgraph WorkOrders["Work Orders"]
+        WOExecutor[Work Order Executor]
+        WOReporter[Result Reporter]
+    end
+
+    Broker[Broker API]
+    Cluster[Kubernetes Cluster]
+
+    Poller --> Client
+    Client --> Broker
+    Client --> Reconciler
+    Reconciler --> Objects
+    Objects --> K8sAPI
+    K8sAPI --> Cluster
+    Reconciler --> EventReporter
+    EventReporter --> Client
+    DeployHealth --> K8sAPI
+    DeployHealth --> EventReporter
+    Diagnostics --> K8sAPI
+    WOExecutor --> K8sAPI
+    WOExecutor --> WOReporter
+    WOReporter --> Client
+{{< /mermaid >}}
+
+**Component Responsibilities:**
+
+| Component | Purpose |
+|-----------|---------|
+| **Broker Client** | REST API communication with broker, PAK authentication |
+| **Polling Loop** | Periodic fetch of deployment objects and work orders |
+| **Reconciler** | Compares desired vs actual state, applies changes |
+| **K8s API Client** | Dynamic Kubernetes client for resource operations |
+| **Event Reporter** | Reports deployment events back to broker |
+| **Work Order Executor** | Executes transient operations (builds, commands) |
+| **Deployment Health** | Monitors health of deployed resources |
+
+### Cross-Service Interactions
+
+This diagram shows how the broker and agents communicate:
+
+{{< mermaid >}}
+sequenceDiagram
+    participant Admin as Admin/Generator
+    participant Broker as Broker
+    participant DB as PostgreSQL
+    participant Agent as Agent
+    participant K8s as Kubernetes
+
+    Note over Admin,K8s: Deployment Creation Flow
+    Admin->>Broker: Create Stack & Deployment Object
+    Broker->>DB: Store deployment object
+    Broker->>Broker: Match agents via labels
+    Broker->>DB: Create agent targets
+
+    Note over Admin,K8s: Agent Reconciliation Loop
+    loop Every polling interval
+        Agent->>Broker: GET /api/v1/agent/deployment-objects
+        Broker->>DB: Query targeted objects
+        Broker-->>Agent: Return deployment objects
+        Agent->>Agent: Calculate diff (desired vs actual)
+        Agent->>K8s: Apply/Update/Delete resources
+        K8s-->>Agent: Operation result
+        Agent->>Broker: POST /api/v1/agent/events
+        Broker->>DB: Store events
+        Broker->>Broker: Trigger webhooks
+    end
+
+    Note over Admin,K8s: Status Reporting
+    Agent->>K8s: Watch resource status
+    K8s-->>Agent: Status updates
+    Agent->>Broker: Report deployment health
+    Broker->>DB: Update health status
+{{< /mermaid >}}
+
+**Key Interaction Patterns:**
+
+1. **Push Configuration**: Admins/generators push deployment configurations to the broker
+2. **Pull Deployment**: Agents poll the broker for their targeted deployment objects
+3. **Apply Resources**: Agents apply resources to their Kubernetes cluster
+4. **Report Events**: Agents report success/failure events back to the broker
+5. **Webhook Dispatch**: Broker dispatches events to configured webhook endpoints
+
 ## Performance Characteristics
 
 ### Broker Performance
