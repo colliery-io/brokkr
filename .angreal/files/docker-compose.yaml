@@ -231,9 +231,9 @@ services:
       timeout: 3s
       retries: 5
 
-  # Install Shipwright and Tekton for build work orders
+  # Install Shipwright and Tekton for build work orders via Helm
   init-shipwright:
-    image: bitnami/kubectl:latest
+    image: alpine/helm:3.14
     depends_on:
       k3s:
         condition: service_healthy
@@ -241,30 +241,37 @@ services:
         condition: service_completed_successfully
     volumes:
       - brokkr-keys:/tmp/brokkr-keys
+      - ../../charts/brokkr-agent:/charts/brokkr-agent:ro
     entrypoint: []
     command: >
       sh -c '
         export KUBECONFIG=/tmp/brokkr-keys/kubeconfig.docker.yaml
 
-        echo "Installing Tekton Pipelines..."
-        kubectl apply -f https://storage.googleapis.com/tekton-releases/pipeline/previous/v0.59.0/release.yaml
+        echo "Installing Tekton and Shipwright via Helm..."
 
-        echo "Waiting for Tekton to be ready..."
-        kubectl wait --for=condition=Ready pods -l app=tekton-pipelines-controller -n tekton-pipelines --timeout=300s || true
-        sleep 10
+        # Install just the dependencies (tekton + shipwright) without the agent
+        helm dependency update /charts/brokkr-agent
 
-        echo "Installing Shipwright Build..."
-        kubectl apply -f https://github.com/shipwright-io/build/releases/download/v0.13.0/release.yaml
+        # Install tekton-pipelines subchart
+        helm install tekton-pipelines /charts/brokkr-agent/charts/tekton-pipelines-0.37.2.tgz \
+          --namespace tekton-pipelines \
+          --create-namespace \
+          --wait \
+          --timeout 10m
 
-        echo "Waiting for Shipwright to be ready..."
-        kubectl wait --for=condition=Ready pods -l app=shipwright-build-controller -n shipwright-build --timeout=300s || true
-        sleep 10
+        echo "Tekton installed, installing Shipwright..."
 
-        echo "Installing sample build strategies..."
-        kubectl apply -f https://github.com/shipwright-io/build/releases/download/v0.13.0/sample-strategies.yaml
+        # Install shipwright-build subchart
+        helm install shipwright-build /charts/brokkr-agent/charts/shipwright-build-0.10.0.tgz \
+          --namespace shipwright-build \
+          --create-namespace \
+          --set shipwrightBuild.clusterBuildStrategies.enabled=true \
+          --wait \
+          --timeout 10m
 
         echo "Verifying installation..."
-        kubectl get clusterbuildstrategies
+        helm list -A
+        kubectl get clusterbuildstrategies 2>/dev/null || echo "ClusterBuildStrategies not yet available"
 
         echo "Shipwright installation complete!"
       '
