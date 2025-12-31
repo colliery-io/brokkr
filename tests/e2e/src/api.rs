@@ -327,6 +327,10 @@ impl Client {
         self.get(&format!("/api/v1/work-orders/{}", id)).await
     }
 
+    pub async fn get_work_order_log(&self, id: Uuid) -> Result<Value> {
+        self.get(&format!("/api/v1/work-order-log/{}", id)).await
+    }
+
     pub async fn delete_work_order(&self, id: Uuid) -> Result<()> {
         self.delete(&format!("/api/v1/work-orders/{}", id)).await
     }

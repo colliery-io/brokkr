@@ -1,0 +1,64 @@
+# Development/testing values for brokkr-agent
+# Used by docker-compose for local development environment
+#
+# Usage:
+#   helm upgrade --install brokkr-agent ./charts/brokkr-agent \
+#     -f ./charts/brokkr-agent/values-dev.yaml \
+#     --set broker.pak="$PAK" \
+#     --set "hostAliases[0].ip=$BROKER_IP"
+
+image:
+  # Local registry in docker-compose environment
+  # Uses localhost:5050 which k3s-registries.yaml mirrors to http://registry:5000
+  repository: localhost:5050/brokkr-agent
+  tag: dev
+  pullPolicy: Always
+
+broker:
+  # Broker URL - hostname resolved via hostAliases
+  url: http://brokkr-broker:3000
+  agentName: brokkr-integration-test-agent
+  clusterName: brokkr-dev-integration-cluster
+  # pak: set via --set flag at install time
+
+# hostAliases: set via --set flag at install time (broker IP is dynamic)
+
+# Shipwright/Tekton installation for build work orders
+shipwright:
+  enabled: true
+  install:
+    tekton: true
+    tektonVersion: "v0.68.1"
+    shipwright: true
+    shipwrightVersion: "v0.18.1"
+    sampleStrategies: true
+  certManagement: "self-signed"
+
+# Relaxed security for dev environment
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  runAsNonRoot: true
+  runAsUser: 10001
+  capabilities:
+    drop:
+      - ALL
+
+# Enable metrics for debugging
+metrics:
+  enabled: true
+
+# Lower resource requests for dev
+resources:
+  requests:
+    memory: "64Mi"
+    cpu: "25m"
+  limits:
+    memory: "256Mi"
+    cpu: "200m"

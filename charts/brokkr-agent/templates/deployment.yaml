@@ -26,6 +26,10 @@ spec:
       serviceAccountName: {{ include "brokkr-agent.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- with .Values.hostAliases }}
+      hostAliases:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
       - name: agent
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"

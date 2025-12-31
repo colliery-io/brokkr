@@ -49,75 +49,13 @@ services:
       - BROKKR__DATABASE__URL=postgres://brokkr:brokkr@postgres:5432/brokkr
     volumes:
       - brokkr-keys:/tmp/brokkr-keys
-    user: "0:0"  # Run as root for init tasks that need to write to shared volumes
+    user: "0:0"
     entrypoint: []
     command: >
       sh -c "
         ./brokkr-broker create agent --name brokkr-integration-test-agent --cluster-name brokkr-dev-integration-cluster | tee /tmp/brokkr-keys/agent.out &&
         grep 'Initial PAK:' /tmp/brokkr-keys/agent.out | cut -d' ' -f3 > /tmp/brokkr-keys/agent.pak
       "
-
-  brokkr-agent:
-    build:
-      context: ../..
-      dockerfile: docker/Dockerfile.agent
-    depends_on:
-      init-agent:
-        condition: service_completed_successfully
-      init-kubeconfig:
-        condition: service_completed_successfully
-      init-shipwright:
-        condition: service_completed_successfully
-    environment:
-      - BROKKR__AGENT__BROKER_URL=http://brokkr-broker:3000
-      - BROKKR__AGENT__AGENT_NAME=brokkr-integration-test-agent
-      - BROKKR__AGENT__CLUSTER_NAME=brokkr-dev-integration-cluster
-      - BROKKR__AGENT__KUBECONFIG_PATH=/tmp/brokkr-keys/kubeconfig.docker.yaml
-      - BROKKR__AGENT__HEALTH_PORT=8080
-    volumes:
-      - brokkr-keys:/tmp/brokkr-keys
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/readyz"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-    entrypoint: []
-    command: >
-      sh -c "
-        echo 'Container Starting.'
-
-        # Wait for kubeconfig to be ready and accessible
-        while [ ! -f /tmp/brokkr-keys/kubeconfig.yaml ] ; do
-          echo 'Waiting for kubeconfig to be ready...'
-          sleep 10
-        done
-
-        # Wait for agent PAK to be ready
-        while [ ! -f /tmp/brokkr-keys/agent.pak ] ; do
-          echo 'Waiting for agent PAK to be ready...'
-          sleep 10
-        done
-
-        # Export PAK and start agent
-        export BROKKR__AGENT__PAK=$$(cat /tmp/brokkr-keys/agent.pak)
-
-        # Wait for Kubernetes API to be fully accessible with retries
-        max_retries=30
-        retry_count=0
-        while ! KUBECONFIG=/tmp/brokkr-keys/kubeconfig.docker.yaml kubectl get nodes > /dev/null 2>&1; do
-          retry_count=$$((retry_count + 1))
-          if [ $$retry_count -eq $$max_retries ]; then
-            echo 'Timed out waiting for Kubernetes API to become accessible'
-            exit 1
-          fi
-          echo 'Waiting for Kubernetes API to be accessible... (attempt '$$retry_count' of '$$max_retries')'
-          sleep 5
-        done
-
-        echo 'Kubernetes API is accessible, starting agent...'
-        env && cat /tmp/brokkr-keys/agent.pak && ./brokkr-agent start
-      "
-
 
   k3s:
     image: rancher/k3s:v1.30.10-k3s1
@@ -165,7 +103,111 @@ services:
         sed -i "s|server: https://127.0.0.1:6443|server: https://brokkr-dev-k3s-1:6443|g" /tmp/brokkr-keys/kubeconfig.docker.yaml
 
         # Sleep to ensure files written
-        sleep 60
+        sleep 10
+      '
+
+  # Local container registry for agent images and Shipwright builds
+  registry:
+    image: registry:2
+    ports:
+      - "5050:5000"
+    volumes:
+      - registry-data:/var/lib/registry
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5000/v2/"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Build and push agent image to local registry
+  build-agent-image:
+    build:
+      context: ../..
+      dockerfile: docker/Dockerfile.agent
+    image: localhost:5050/brokkr-agent:dev
+    depends_on:
+      registry:
+        condition: service_healthy
+    entrypoint: ["echo", "Image built"]
+
+  push-agent-image:
+    image: docker:27-cli
+    depends_on:
+      build-agent-image:
+        condition: service_completed_successfully
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: >
+      sh -c '
+        docker push localhost:5050/brokkr-agent:dev
+      '
+
+  # Deploy brokkr-agent via Helm chart into K3s
+  # This triggers pre-install hooks for Tekton/Shipwright installation
+  helm-install:
+    image: alpine/k8s:1.30.2
+    depends_on:
+      init-kubeconfig:
+        condition: service_completed_successfully
+      init-agent:
+        condition: service_completed_successfully
+      push-agent-image:
+        condition: service_completed_successfully
+      brokkr-broker:
+        condition: service_healthy
+    volumes:
+      - brokkr-keys:/tmp/brokkr-keys
+      - ../../charts/brokkr-agent:/charts/brokkr-agent:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    entrypoint: []
+    command: >
+      sh -c '
+        export KUBECONFIG=/tmp/brokkr-keys/kubeconfig.docker.yaml
+
+        # Install docker CLI for inspecting broker IP
+        apk add --no-cache docker-cli >/dev/null 2>&1
+
+        # Wait for PAK file
+        while [ ! -f /tmp/brokkr-keys/agent.pak ]; do
+          echo "Waiting for agent PAK..."
+          sleep 2
+        done
+        PAK=$$(cat /tmp/brokkr-keys/agent.pak)
+
+        # Get the broker container IP address
+        BROKER_IP=$$(docker inspect -f "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}" brokkr-dev-brokkr-broker-1 2>/dev/null || echo "")
+        if [ -z "$$BROKER_IP" ]; then
+          echo "Warning: Could not get broker IP, trying alternate container name..."
+          BROKER_IP=$$(docker inspect -f "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}" brokkr-dev_brokkr-broker_1 2>/dev/null || echo "brokkr-broker")
+        fi
+        echo "Broker IP: $$BROKER_IP"
+
+        # Get the registry container IP address
+        REGISTRY_IP=$$(docker inspect -f "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}" brokkr-dev-registry-1 2>/dev/null || echo "")
+        if [ -z "$$REGISTRY_IP" ]; then
+          REGISTRY_IP=$$(docker inspect -f "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}" brokkr-dev_registry_1 2>/dev/null || echo "registry")
+        fi
+        echo "Registry IP: $$REGISTRY_IP"
+
+        echo "Installing brokkr-agent via Helm..."
+        helm upgrade --install brokkr-agent /charts/brokkr-agent \
+          --namespace brokkr-system \
+          --create-namespace \
+          -f /charts/brokkr-agent/values-dev.yaml \
+          --set broker.pak="$$PAK" \
+          --set "hostAliases[0].ip=$$BROKER_IP" \
+          --set "hostAliases[0].hostnames[0]=brokkr-broker" \
+          --set "hostAliases[1].ip=$$REGISTRY_IP" \
+          --set "hostAliases[1].hostnames[0]=registry" \
+          --wait \
+          --timeout 10m
+
+        echo "Helm installation complete!"
+        helm list -n brokkr-system
+        kubectl get pods -n brokkr-system
+        kubectl get pods -n tekton-pipelines
+        kubectl get pods -n shipwright-build
+        kubectl get clusterbuildstrategies
       '
 
   brokkr-ui:
@@ -218,62 +260,73 @@ services:
       init-kubeconfig:
         condition: service_completed_successfully
 
-  # Local container registry for Shipwright builds
-  registry:
-    image: registry:2
-    ports:
-      - "5050:5000"
-    volumes:
-      - registry-data:/var/lib/registry
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5000/v2/"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-
-  # Install Shipwright and Tekton for build work orders via Helm
-  init-shipwright:
-    image: alpine/helm:3.14
+  # Readiness check - verifies entire stack is operational
+  # Wait for this service to complete before running tests
+  ready:
+    image: alpine/k8s:1.30.2
     depends_on:
-      k3s:
-        condition: service_healthy
-      init-kubeconfig:
+      helm-install:
         condition: service_completed_successfully
     volumes:
       - brokkr-keys:/tmp/brokkr-keys
-      - ../../charts/brokkr-agent:/charts/brokkr-agent:ro
     entrypoint: []
     command: >
       sh -c '
         export KUBECONFIG=/tmp/brokkr-keys/kubeconfig.docker.yaml
 
-        echo "Installing Tekton and Shipwright via Helm..."
+        echo "=== Checking infrastructure readiness ==="
 
-        # Install just the dependencies (tekton + shipwright) without the agent
-        helm dependency update /charts/brokkr-agent
+        # Check Tekton
+        echo "Checking Tekton..."
+        kubectl wait --for=condition=available --timeout=120s deployment/tekton-pipelines-controller -n tekton-pipelines || exit 1
+        kubectl wait --for=condition=available --timeout=120s deployment/tekton-pipelines-webhook -n tekton-pipelines || exit 1
+        echo "✓ Tekton ready"
 
-        # Install tekton-pipelines subchart
-        helm install tekton-pipelines /charts/brokkr-agent/charts/tekton-pipelines-0.37.2.tgz \
-          --namespace tekton-pipelines \
-          --create-namespace \
-          --wait \
-          --timeout 10m
+        # Check Shipwright
+        echo "Checking Shipwright..."
+        kubectl wait --for=condition=available --timeout=120s deployment/shipwright-build-controller -n shipwright-build || exit 1
+        kubectl wait --for=condition=available --timeout=120s deployment/shipwright-build-webhook -n shipwright-build || exit 1
+        echo "✓ Shipwright ready"
 
-        echo "Tekton installed, installing Shipwright..."
+        # Check ClusterBuildStrategies exist
+        echo "Checking ClusterBuildStrategies..."
+        CBS_COUNT=$$(kubectl get clusterbuildstrategies --no-headers 2>/dev/null | wc -l)
+        if [ "$$CBS_COUNT" -lt 1 ]; then
+          echo "✗ No ClusterBuildStrategies found"
+          exit 1
+        fi
+        echo "✓ ClusterBuildStrategies ready ($$CBS_COUNT strategies)"
 
-        # Install shipwright-build subchart
-        helm install shipwright-build /charts/brokkr-agent/charts/shipwright-build-0.10.0.tgz \
-          --namespace shipwright-build \
-          --create-namespace \
-          --set shipwrightBuild.clusterBuildStrategies.enabled=true \
-          --wait \
-          --timeout 10m
+        # Check Agent
+        echo "Checking Agent..."
+        kubectl wait --for=condition=available --timeout=120s deployment/brokkr-agent -n brokkr-system || exit 1
+        echo "✓ Agent deployment ready"
 
-        echo "Verifying installation..."
-        helm list -A
-        kubectl get clusterbuildstrategies 2>/dev/null || echo "ClusterBuildStrategies not yet available"
+        # Check agent can reach broker (look for successful heartbeat in logs)
+        echo "Checking Agent-Broker connectivity..."
+        for i in $$(seq 1 30); do
+          if kubectl logs -n brokkr-system -l app.kubernetes.io/name=brokkr-agent --tail=50 2>/dev/null | grep -q "Successfully sent heartbeat"; then
+            echo "✓ Agent connected to broker"
+            break
+          fi
+          if [ $$i -eq 30 ]; then
+            echo "✗ Agent not connected to broker after 30 attempts"
+            kubectl logs -n brokkr-system -l app.kubernetes.io/name=brokkr-agent --tail=20
+            exit 1
+          fi
+          sleep 2
+        done
 
-        echo "Shipwright installation complete!"
+        echo ""
+        echo "=========================================="
+        echo "✓ Infrastructure ready!"
+        echo "=========================================="
+        echo ""
+        echo "Tekton:      $$(kubectl get pods -n tekton-pipelines --no-headers | wc -l) pods"
+        echo "Shipwright:  $$(kubectl get pods -n shipwright-build --no-headers | wc -l) pods"
+        echo "Agent:       $$(kubectl get pods -n brokkr-system --no-headers | wc -l) pods"
+        echo "Strategies:  $$CBS_COUNT ClusterBuildStrategies"
+        echo ""
       '
 
 volumes:

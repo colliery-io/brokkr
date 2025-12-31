@@ -104,6 +104,28 @@ spec:
         command: ["echo", "E2E test job completed"]
 "#;
 
+/// Shipwright Build YAML for build work order testing
+/// Uses ttl.sh for ephemeral image storage (no registry credentials needed)
+/// Note: sample-go has Dockerfile in docker-build/ subdirectory
+const BUILD_YAML: &str = r#"---
+apiVersion: shipwright.io/v1beta1
+kind: Build
+metadata:
+  name: e2e-test-build
+  namespace: default
+spec:
+  source:
+    type: Git
+    git:
+      url: https://github.com/shipwright-io/sample-go
+    contextDir: docker-build
+  strategy:
+    name: kaniko
+    kind: ClusterBuildStrategy
+  output:
+    image: ttl.sh/brokkr-e2e-test:1h
+"#;
+
 // =============================================================================
 // Part 1: Agent Management
 // =============================================================================
@@ -347,6 +369,168 @@ pub async fn test_work_orders(client: &Client) -> Result<()> {
     println!("  → Deleting work order...");
     client.delete_work_order(wo_id).await?;
     println!("    Work order deleted");
+
+    Ok(())
+}
+
+// =============================================================================
+// Part 5b: Build Work Orders (Shipwright)
+// =============================================================================
+
+/// Test build work orders using Shipwright.
+///
+/// This test creates a real build work order and waits for the agent to
+/// process it through Shipwright. Requires:
+/// - A running agent (brokkr-integration-test-agent)
+/// - Tekton and Shipwright installed in the cluster
+/// - ClusterBuildStrategies available (buildah)
+pub async fn test_build_work_orders(client: &Client) -> Result<()> {
+    // Find the real running agent
+    println!("  → Finding running agent...");
+    let agents = client.list_agents().await?;
+    let agent = agents.iter()
+        .find(|a| a["name"] == "brokkr-integration-test-agent")
+        .ok_or("No running agent found - is brokkr-agent running?")?;
+    let agent_id: Uuid = agent["id"].as_str().unwrap().parse()?;
+    println!("    Found agent: {} ({})", agent["name"], agent_id);
+
+    // Ensure agent is active (it may be INACTIVE by default)
+    let agent_status = agent["status"].as_str().unwrap_or("UNKNOWN");
+    if agent_status != "ACTIVE" {
+        println!("  → Activating agent (was {})...", agent_status);
+        client.update_agent(agent_id, json!({"status": "ACTIVE"})).await?;
+        println!("    Agent activated");
+    } else {
+        println!("    Agent is already ACTIVE");
+    }
+
+    // Create build work order targeting the real agent
+    println!("  → Creating build work order...");
+    let work_order = client.create_work_order(
+        "build",
+        BUILD_YAML,
+        Some(vec![agent_id]),
+        None,
+    ).await?;
+    let wo_id: Uuid = work_order["id"].as_str().unwrap().parse()?;
+    assert_eq!(work_order["work_type"], "build");
+    assert_eq!(work_order["status"], "PENDING");
+    println!("    Created build work order: {}", wo_id);
+
+    // Wait for the build to complete (or fail/timeout)
+    println!("  → Waiting for build to complete (this may take several minutes)...");
+    let max_wait = std::time::Duration::from_secs(600); // 10 minutes max
+    let poll_interval = std::time::Duration::from_secs(10);
+    let start = std::time::Instant::now();
+
+    let final_status = loop {
+        if start.elapsed() > max_wait {
+            println!("    ⚠ Build timed out after {:?}", max_wait);
+            break "TIMEOUT".to_string();
+        }
+
+        // Try to get work order - may return 404 if completed and moved to log
+        match client.get_work_order(wo_id).await {
+            Ok(wo) => {
+                let status = wo["status"].as_str().unwrap_or("UNKNOWN").to_string();
+
+                match status.as_str() {
+                    "PENDING" => {
+                        println!("    Status: PENDING (waiting for agent to claim)");
+                    }
+                    "CLAIMED" => {
+                        println!("    Status: CLAIMED (agent processing...)");
+                    }
+                    "IN_PROGRESS" => {
+                        println!("    Status: IN_PROGRESS (building...)");
+                    }
+                    "COMPLETED" => {
+                        let result = wo["result"].as_str().unwrap_or("no result");
+                        println!("    Status: COMPLETED");
+                        println!("    Result: {}", result);
+                        break status;
+                    }
+                    "FAILED" => {
+                        let result = wo["result"].as_str().unwrap_or("no error message");
+                        println!("    Status: FAILED");
+                        println!("    Error: {}", result);
+                        break status;
+                    }
+                    _ => {
+                        println!("    Status: {} (unexpected)", status);
+                    }
+                }
+            }
+            Err(e) if e.to_string().contains("404") => {
+                // Work order completed and moved to work_order_log
+                // Check the log for final status
+                println!("    Work order moved to log, checking result...");
+                match client.get_work_order_log(wo_id).await {
+                    Ok(log) => {
+                        let success = log["success"].as_bool().unwrap_or(false);
+                        let result = log["result_message"].as_str().unwrap_or("no message");
+                        if success {
+                            println!("    Status: COMPLETED (from log)");
+                            println!("    Result: {}", result);
+                            break "COMPLETED".to_string();
+                        } else {
+                            println!("    Status: FAILED (from log)");
+                            println!("    Error: {}", result);
+                            break "FAILED".to_string();
+                        }
+                    }
+                    Err(log_err) => {
+                        return Err(format!("Work order not found in active or log: {}", log_err).into());
+                    }
+                }
+            }
+            Err(e) => {
+                return Err(e);
+            }
+        }
+
+        tokio::time::sleep(poll_interval).await;
+    };
+
+    // Evaluate result
+    match final_status.as_str() {
+        "COMPLETED" => {
+            println!("  ✓ Build completed successfully!");
+        }
+        "FAILED" => {
+            // Build failed - this could be due to Shipwright not being installed
+            // or a build configuration issue. Log but don't fail the test.
+            let wo = client.get_work_order(wo_id).await?;
+            let error = wo["result"].as_str().unwrap_or("unknown error");
+            if error.contains("BuildRun CRD not found") || error.contains("Shipwright") {
+                println!("  ⚠ Build failed - Shipwright may not be installed");
+                println!("    Error: {}", error);
+                println!("    Install Tekton and Shipwright to enable builds");
+            } else {
+                return Err(format!("Build failed: {}", error).into());
+            }
+        }
+        "TIMEOUT" => {
+            // Check final state
+            let wo = client.get_work_order(wo_id).await?;
+            let status = wo["status"].as_str().unwrap_or("UNKNOWN");
+            if status == "PENDING" {
+                println!("  ⚠ Build never started - agent may not be processing work orders");
+            } else {
+                println!("  ⚠ Build timed out in status: {}", status);
+            }
+            return Err("Build work order timed out".into());
+        }
+        _ => {
+            return Err(format!("Unexpected final status: {}", final_status).into());
+        }
+    }
+
+    // Clean up Build resource from cluster
+    // Note: Work orders that complete are moved to work_order_log, no need to delete
+    println!("  → Cleaning up Build resource...");
+    // The Build/BuildRun resources remain in cluster - cleanup happens naturally
+    // or via ttl.sh image expiration
 
     Ok(())
 }

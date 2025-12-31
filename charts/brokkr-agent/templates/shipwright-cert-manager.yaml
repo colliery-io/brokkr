@@ -1,0 +1,52 @@
+{{- if and .Values.shipwright.enabled .Values.shipwright.install.shipwright (eq .Values.shipwright.certManagement "cert-manager") }}
+# cert-manager resources for Shipwright webhook TLS
+# Requires cert-manager to be installed in the cluster
+
+{{- if eq .Values.shipwright.certManager.issuerKind "Issuer" }}
+# Create a self-signed issuer in the shipwright-build namespace
+# For production, replace with a proper CA issuer
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ .Values.shipwright.certManager.issuerName }}
+  namespace: shipwright-build
+  labels:
+    {{- include "brokkr-agent.labels" . | nindent 4 }}
+spec:
+  selfSigned: {}
+{{- end }}
+
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: shipwright-build-webhook-cert
+  namespace: shipwright-build
+  labels:
+    {{- include "brokkr-agent.labels" . | nindent 4 }}
+spec:
+  secretName: shipwright-build-webhook-cert
+  duration: {{ .Values.shipwright.certManager.duration }}
+  renewBefore: {{ .Values.shipwright.certManager.renewBefore }}
+  subject:
+    organizations:
+      - shipwright
+  commonName: shp-build-webhook.shipwright-build.svc
+  isCA: false
+  privateKey:
+    algorithm: RSA
+    size: 4096
+  usages:
+    - server auth
+    - digital signature
+    - key encipherment
+  dnsNames:
+    - shp-build-webhook
+    - shp-build-webhook.shipwright-build
+    - shp-build-webhook.shipwright-build.svc
+    - shp-build-webhook.shipwright-build.svc.cluster.local
+  issuerRef:
+    name: {{ .Values.shipwright.certManager.issuerName }}
+    kind: {{ .Values.shipwright.certManager.issuerKind }}
+{{- end }}
