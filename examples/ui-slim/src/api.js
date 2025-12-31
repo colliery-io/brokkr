@@ -161,8 +161,19 @@ export const clearWebhookCatcher = async () => {
 
 // Generate K8s manifests for deploying a Brokkr agent
 export const getAgentDeploymentYaml = (agentName, clusterName, pak, labels = {}, annotations = {}) => {
-  const labelStr = Object.entries(labels).map(([k, v]) => `${k}: "${v}"`).join('\n        ');
-  const annotationStr = Object.entries(annotations).map(([k, v]) => `${k}: "${v}"`).join('\n        ');
+  // Build extra labels with proper indentation (4 spaces for metadata.labels)
+  const extraLabels = Object.entries(labels)
+    .map(([k, v]) => `    ${k}: "${v}"`)
+    .join('\n');
+
+  // Build extra annotations with proper indentation
+  const extraAnnotations = Object.entries(annotations)
+    .map(([k, v]) => `    ${k}: "${v}"`)
+    .join('\n');
+
+  // Only add labels/annotations sections if we have entries
+  const labelsSection = extraLabels ? `\n${extraLabels}` : '';
+  const annotationsSection = extraAnnotations ? `  annotations:\n${extraAnnotations}\n` : '';
 
   return `---
 apiVersion: v1
@@ -226,11 +237,8 @@ metadata:
   namespace: default
   labels:
     app: brokkr-agent
-    agent: ${agentName}
-    ${labelStr}
-  annotations:
-    ${annotationStr}
-spec:
+    agent: ${agentName}${labelsSection}
+${annotationsSection}spec:
   replicas: 1
   selector:
     matchLabels:

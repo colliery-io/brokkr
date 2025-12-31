@@ -1406,3 +1406,24 @@ button:disabled {
   align-items: center;
   gap: 12px;
 }
+
+/* Heartbeat Indicator */
+.heartbeat {
+  font-size: 10px;
+  margin-right: 6px;
+  cursor: help;
+}
+
+.heartbeat-green {
+  color: var(--accent-success);
+  text-shadow: 0 0 4px var(--accent-success);
+}
+
+.heartbeat-yellow {
+  color: var(--accent-warning);
+  text-shadow: 0 0 4px var(--accent-warning);
+}
+
+.heartbeat-red {
+  color: var(--accent-danger);
+}

@@ -8,6 +8,7 @@ import {
   Section,
   InlineAdd,
   Status,
+  HeartbeatIndicator,
   Pagination,
   usePagination,
   Modal,
@@ -171,7 +172,7 @@ const AgentsPanel = ({ stacks, onRefresh }) => {
                   <tr key={a.id} onClick={() => selectAgent(a)} className="clickable">
                     <td className="mono">{a.name}</td>
                     <td className="mono dim">{a.cluster_name}</td>
-                    <td><Status status={a.status} /></td>
+                    <td><HeartbeatIndicator lastHeartbeat={a.last_heartbeat} /><Status status={a.status} /></td>
                     <td>
                       {details[a.id]?.labels?.map((l) => (
                         <Tag key={l.id} variant="label">{l.label}</Tag>
@@ -210,10 +211,15 @@ const AgentsPanel = ({ stacks, onRefresh }) => {
             </div>
             <div className="detail-row">
               <span className="detail-label">Status</span>
+              <HeartbeatIndicator lastHeartbeat={selected.last_heartbeat} />
               <Status status={selected.status} />
               <button onClick={toggleStatus} className={`btn-toggle ${selected.status === 'ACTIVE' ? 'active' : ''}`}>
                 {selected.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
               </button>
+            </div>
+            <div className="detail-row">
+              <span className="detail-label">Last Heartbeat</span>
+              <span className="dim">{selected.last_heartbeat ? new Date(selected.last_heartbeat).toLocaleString() : 'Never'}</span>
             </div>
           </div>
 

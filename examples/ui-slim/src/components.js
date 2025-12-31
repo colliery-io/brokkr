@@ -112,6 +112,28 @@ export const Status = ({ status }) => {
   return <span className={`status status-${color}`}>{status}</span>;
 };
 
+// ==================== HEARTBEAT INDICATOR ====================
+
+// Shows connection state based on last heartbeat timestamp
+// Green: < 5s, Yellow: < 30s, Red: > 45s or never
+export const HeartbeatIndicator = ({ lastHeartbeat }) => {
+  if (!lastHeartbeat) {
+    return <span className="heartbeat heartbeat-red" title="Never connected">●</span>;
+  }
+
+  const now = new Date();
+  const last = new Date(lastHeartbeat);
+  const ageSeconds = (now - last) / 1000;
+
+  if (ageSeconds < 5) {
+    return <span className="heartbeat heartbeat-green" title={`Last seen ${Math.round(ageSeconds)}s ago`}>●</span>;
+  } else if (ageSeconds < 30) {
+    return <span className="heartbeat heartbeat-yellow" title={`Last seen ${Math.round(ageSeconds)}s ago`}>●</span>;
+  } else {
+    return <span className="heartbeat heartbeat-red" title={`Last seen ${Math.round(ageSeconds)}s ago`}>●</span>;
+  }
+};
+
 // ==================== PAGINATION ====================
 
 export const Pagination = ({ page, totalPages, onPageChange, pageSize, onPageSizeChange, total }) => (
