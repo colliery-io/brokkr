@@ -4,7 +4,7 @@ level: task
 title: "UAT Demo: End-to-end workflow demonstrating complete Brokkr feature set"
 short_code: "BROKKR-T-0090"
 created_at: 2025-12-31T02:37:15.926480+00:00
-updated_at: 2025-12-31T21:00:42.025063+00:00
+updated_at: 2026-01-02T20:06:06.305841+00:00
 parent: 
 blocked_by: []
 archived: false
@@ -12,7 +12,7 @@ archived: false
 tags:
   - "#task"
   - "#feature"
-  - "#phase/active"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -115,6 +115,8 @@ Dedicated cleanup button that removes in dependency order:
 4. Delete stacks
 5. Delete templates
 6. Deactivate demo agents (keep for audit)
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

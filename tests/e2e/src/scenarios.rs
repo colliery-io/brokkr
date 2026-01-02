@@ -739,6 +739,117 @@ pub async fn test_webhooks(client: &Client, webhook_catcher_url: Option<&str>) -
 }
 
 // =============================================================================
+// Part 7b: Agent Reconciliation of Existing Deployments (BROKKR-T-0094)
+// =============================================================================
+
+/// Test that agents can reconcile pre-existing deployments when targeted to a stack.
+/// This tests the scenario where:
+/// 1. Stack exists with deployment object
+/// 2. Agent is created and targeted to the stack AFTER deployment exists
+/// 3. Agent should see the deployment via target-state API
+pub async fn test_agent_reconciliation_existing_deployments(client: &Client) -> Result<()> {
+    // Create generator for all stacks
+    println!("  → Setting up reconciliation test resources...");
+    let gen_result = client.create_generator("e2e-reconcile-gen", None).await?;
+    let generator_id: Uuid = gen_result["generator"]["id"].as_str().unwrap().parse()?;
+
+    // ==========================================================================
+    // Test 1: Direct Targeting - Deployment exists before agent targeting
+    // ==========================================================================
+    println!("  → Test 1: Direct targeting with pre-existing deployment...");
+
+    // 1a. Create stack with deployment FIRST
+    let stack1 = client.create_stack("e2e-reconcile-direct", None, generator_id).await?;
+    let stack1_id: Uuid = stack1["id"].as_str().unwrap().parse()?;
+    let deployment1 = client.create_deployment(stack1_id, "# Direct targeting test", false).await?;
+    let deployment1_id: Uuid = deployment1["id"].as_str().unwrap().parse()?;
+    println!("    Created stack and deployment: {}", deployment1_id);
+
+    // 1b. Create agent (no targets yet)
+    let agent1_result = client.create_agent("e2e-reconcile-direct-agent", "reconcile-cluster-1").await?;
+    let agent1_id: Uuid = agent1_result["agent"]["id"].as_str().unwrap().parse()?;
+    client.update_agent(agent1_id, json!({"status": "ACTIVE"})).await?;
+    println!("    Created agent: {}", agent1_id);
+
+    // 1c. NOW target agent to stack (after deployment exists)
+    client.add_agent_target(agent1_id, stack1_id).await?;
+    println!("    Targeted agent to stack");
+
+    // 1d. Verify agent sees the pre-existing deployment
+    let target_state1 = client.get_agent_target_state(agent1_id, None).await?;
+    assert!(
+        target_state1.iter().any(|d| d["id"] == deployment1_id.to_string()),
+        "Agent should see pre-existing deployment via direct targeting"
+    );
+    println!("    ✓ Agent sees pre-existing deployment via direct targeting");
+
+    // ==========================================================================
+    // Test 2: Label Targeting - Deployment exists before agent gets matching label
+    // ==========================================================================
+    println!("  → Test 2: Label targeting with pre-existing deployment...");
+
+    // 2a. Create stack with label and deployment FIRST
+    let stack2 = client.create_stack("e2e-reconcile-label", None, generator_id).await?;
+    let stack2_id: Uuid = stack2["id"].as_str().unwrap().parse()?;
+    client.add_stack_label(stack2_id, "reconcile-test-label").await?;
+    let deployment2 = client.create_deployment(stack2_id, "# Label targeting test", false).await?;
+    let deployment2_id: Uuid = deployment2["id"].as_str().unwrap().parse()?;
+    println!("    Created labeled stack and deployment: {}", deployment2_id);
+
+    // 2b. Create agent (no labels yet)
+    let agent2_result = client.create_agent("e2e-reconcile-label-agent", "reconcile-cluster-2").await?;
+    let agent2_id: Uuid = agent2_result["agent"]["id"].as_str().unwrap().parse()?;
+    client.update_agent(agent2_id, json!({"status": "ACTIVE"})).await?;
+    println!("    Created agent: {}", agent2_id);
+
+    // 2c. NOW add matching label to agent (after deployment exists)
+    client.add_agent_label(agent2_id, "reconcile-test-label").await?;
+    println!("    Added matching label to agent");
+
+    // 2d. Verify agent sees the pre-existing deployment
+    let target_state2 = client.get_agent_target_state(agent2_id, None).await?;
+    assert!(
+        target_state2.iter().any(|d| d["id"] == deployment2_id.to_string()),
+        "Agent should see pre-existing deployment via label targeting"
+    );
+    println!("    ✓ Agent sees pre-existing deployment via label targeting");
+
+    // ==========================================================================
+    // Test 3: Annotation Targeting - Deployment exists before agent gets matching annotation
+    // ==========================================================================
+    println!("  → Test 3: Annotation targeting with pre-existing deployment...");
+
+    // 3a. Create stack with annotation and deployment FIRST
+    let stack3 = client.create_stack("e2e-reconcile-annotation", None, generator_id).await?;
+    let stack3_id: Uuid = stack3["id"].as_str().unwrap().parse()?;
+    client.add_stack_annotation(stack3_id, "reconcile-key", "reconcile-value").await?;
+    let deployment3 = client.create_deployment(stack3_id, "# Annotation targeting test", false).await?;
+    let deployment3_id: Uuid = deployment3["id"].as_str().unwrap().parse()?;
+    println!("    Created annotated stack and deployment: {}", deployment3_id);
+
+    // 3b. Create agent (no annotations yet)
+    let agent3_result = client.create_agent("e2e-reconcile-annotation-agent", "reconcile-cluster-3").await?;
+    let agent3_id: Uuid = agent3_result["agent"]["id"].as_str().unwrap().parse()?;
+    client.update_agent(agent3_id, json!({"status": "ACTIVE"})).await?;
+    println!("    Created agent: {}", agent3_id);
+
+    // 3c. NOW add matching annotation to agent (after deployment exists)
+    client.add_agent_annotation(agent3_id, "reconcile-key", "reconcile-value").await?;
+    println!("    Added matching annotation to agent");
+
+    // 3d. Verify agent sees the pre-existing deployment
+    let target_state3 = client.get_agent_target_state(agent3_id, None).await?;
+    assert!(
+        target_state3.iter().any(|d| d["id"] == deployment3_id.to_string()),
+        "Agent should see pre-existing deployment via annotation targeting"
+    );
+    println!("    ✓ Agent sees pre-existing deployment via annotation targeting");
+
+    println!("  ✓ All reconciliation tests passed!");
+    Ok(())
+}
+
+// =============================================================================
 // Part 8: Audit Logs
 // =============================================================================
 

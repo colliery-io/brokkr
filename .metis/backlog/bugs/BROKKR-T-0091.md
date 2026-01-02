@@ -4,7 +4,7 @@ level: task
 title: "Webhook delivery should occur from agent (data plane) not broker (control plane)"
 short_code: "BROKKR-T-0091"
 created_at: 2025-12-31T16:29:40.111362+00:00
-updated_at: 2025-12-31T16:32:09.924441+00:00
+updated_at: 2026-01-02T12:47:19.450382+00:00
 parent: 
 blocked_by: []
 archived: false
@@ -12,7 +12,7 @@ archived: false
 tags:
   - "#task"
   - "#bug"
-  - "#phase/todo"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -147,6 +147,10 @@ Plus an optional `delivery_target_labels` array for label-based agent targeting.
 6. **Delivery Status Tracking**:
    - `webhook_deliveries` table gains `target_agent_id` and `delivered_by_agent_id` columns
    - Status reflects agent delivery attempts
+
+## Acceptance Criteria
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

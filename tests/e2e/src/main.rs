@@ -78,6 +78,7 @@ async fn main() -> ExitCode {
     run_scenario!("Part 5b: Build Work Orders (Shipwright)", scenarios::test_build_work_orders(&client));
     run_scenario!("Part 6: Health & Diagnostics", scenarios::test_health_diagnostics(&client));
     run_scenario!("Part 7: Webhooks", scenarios::test_webhooks(&client, webhook_catcher_url.as_deref()));
+    run_scenario!("Part 7b: Agent Reconciliation (BROKKR-T-0094)", scenarios::test_agent_reconciliation_existing_deployments(&client));
     run_scenario!("Part 8: Audit Logs", scenarios::test_audit_logs(&client));
     run_scenario!("Part 9: Metrics & Observability", scenarios::test_metrics(&client));
 

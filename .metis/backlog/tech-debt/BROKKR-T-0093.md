@@ -4,15 +4,15 @@ level: task
 title: "Review soft delete implementation and unique constraints"
 short_code: "BROKKR-T-0093"
 created_at: 2026-01-01T00:18:27.775499+00:00
-updated_at: 2026-01-01T00:18:27.775499+00:00
+updated_at: 2026-01-02T20:06:05.362582+00:00
 parent: 
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/backlog"
   - "#tech-debt"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -81,6 +81,12 @@ Convert constraints to partial unique indexes:
 ```sql
 CREATE UNIQUE INDEX unique_agent_cluster ON agents (name, cluster_name) WHERE deleted_at IS NULL;
 ```
+
+## Acceptance Criteria
+
+## Acceptance Criteria
+
+## Acceptance Criteria
 
 ## Acceptance Criteria **[REQUIRED]**
 

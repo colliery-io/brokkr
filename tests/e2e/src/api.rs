@@ -166,6 +166,14 @@ impl Client {
         self.get(&format!("/api/v1/agents/{}/stacks", id)).await
     }
 
+    pub async fn get_agent_target_state(&self, id: Uuid, mode: Option<&str>) -> Result<Vec<Value>> {
+        let path = match mode {
+            Some(m) => format!("/api/v1/agents/{}/target-state?mode={}", id, m),
+            None => format!("/api/v1/agents/{}/target-state", id),
+        };
+        self.get(&path).await
+    }
+
     // =========================================================================
     // Generators
     // =========================================================================
