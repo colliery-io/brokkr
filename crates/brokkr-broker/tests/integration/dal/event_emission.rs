@@ -28,21 +28,6 @@ fn create_subscription_for_event(name: &str, event_type: &str) -> NewWebhookSubs
     }
 }
 
-fn create_subscription_with_wildcard(name: &str, pattern: &str) -> NewWebhookSubscription {
-    NewWebhookSubscription {
-        name: name.to_string(),
-        url_encrypted: b"https://example.com/webhook".to_vec(),
-        auth_header_encrypted: None,
-        event_types: vec![Some(pattern.to_string())],
-        filters: None,
-        target_labels: None,
-        enabled: true,
-        max_retries: 5,
-        timeout_seconds: 30,
-        created_by: Some("test".to_string()),
-    }
-}
-
 fn create_disabled_subscription(name: &str, event_type: &str) -> NewWebhookSubscription {
     NewWebhookSubscription {
         name: name.to_string(),
@@ -70,6 +55,26 @@ fn create_subscription_with_target_labels(
         event_types: vec![Some(event_type.to_string())],
         filters: None,
         target_labels: Some(labels.into_iter().map(Some).collect()),
+        enabled: true,
+        max_retries: 5,
+        timeout_seconds: 30,
+        created_by: Some("test".to_string()),
+    }
+}
+
+fn create_subscription_with_agent_filter(
+    name: &str,
+    event_type: &str,
+    agent_id: uuid::Uuid,
+) -> NewWebhookSubscription {
+    let filters = serde_json::json!({ "agent_id": agent_id.to_string() });
+    NewWebhookSubscription {
+        name: name.to_string(),
+        url_encrypted: b"https://example.com/webhook".to_vec(),
+        auth_header_encrypted: None,
+        event_types: vec![Some(event_type.to_string())],
+        filters: Some(filters.to_string()),
+        target_labels: None,
         enabled: true,
         max_retries: 5,
         timeout_seconds: 30,
@@ -138,14 +143,10 @@ fn test_work_order_completion_emits_event() {
 fn test_wildcard_subscription_matches_events() {
     let fixture = TestFixture::new();
 
-    // Create subscription with wildcard pattern
-    let sub = create_subscription_with_wildcard("WO Wildcard Sub", "workorder.*");
-    let subscription = fixture.dal.webhook_subscriptions().create(&sub).unwrap();
-
-    // Create and complete a work order
+    // Create agent and work order first (these emit workorder.created and workorder.claimed)
     let (agent, _) = fixture.create_test_agent_with_pak(
-        format!("Agent-wildcard-{}", uuid::Uuid::new_v4()),
-        format!("cluster-wildcard-{}", uuid::Uuid::new_v4()),
+        "Agent-wildcard".to_string(),
+        "cluster-wildcard".to_string(),
     );
 
     let wo = NewWorkOrder::new(
@@ -165,11 +166,16 @@ fn test_wildcard_subscription_matches_events() {
         .claim(work_order.id, agent.id)
         .unwrap();
 
+    // NOW create subscription with wildcard pattern - after create/claim events
+    let sub = create_subscription_for_event("WO Wildcard Sub", "workorder.*");
+    let subscription = fixture.dal.webhook_subscriptions().create(&sub).unwrap();
+
+    // Complete the work order - this emits workorder.completed which matches workorder.*
     fixture.dal.work_orders()
         .complete_success(work_order.id, Some("Done".to_string()))
         .unwrap();
 
-    // Verify wildcard matched the event
+    // Verify wildcard matched the completion event
     let deliveries = fixture.dal.webhook_deliveries()
         .list_for_subscription(subscription.id, None, 100, 0)
         .unwrap();
@@ -279,16 +285,18 @@ fn test_delivery_inherits_target_labels_from_subscription() {
 fn test_no_delivery_when_no_matching_subscription() {
     let fixture = TestFixture::new();
 
-    // Create subscription for a DIFFERENT event type
-    let sub = create_subscription_for_event("Agent Events Sub", "agent.registered");
-    let subscription = fixture.dal.webhook_subscriptions().create(&sub).unwrap();
-
-    // Complete a work order (emits workorder.completed, not agent.registered)
+    // Create agent FIRST so we can filter by it
     let (agent, _) = fixture.create_test_agent_with_pak(
         format!("Agent-{}", uuid::Uuid::new_v4()),
         format!("cluster-{}", uuid::Uuid::new_v4()),
     );
 
+    // Create subscription for a DIFFERENT event type (agent.registered, not workorder.completed)
+    // Also add agent filter for test isolation
+    let sub = create_subscription_with_agent_filter("Agent Events Sub", "agent.registered", agent.id);
+    let subscription = fixture.dal.webhook_subscriptions().create(&sub).unwrap();
+
+    // Complete a work order (emits workorder.completed, not agent.registered)
     let wo = NewWorkOrder::new(
         "custom".to_string(),
         "test: yaml".to_string(),

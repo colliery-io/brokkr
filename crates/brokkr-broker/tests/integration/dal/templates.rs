@@ -413,3 +413,61 @@ fn test_same_content_same_checksum() {
 
     assert_eq!(t1.checksum, t2.checksum);
 }
+
+#[test]
+fn test_recreate_template_after_soft_delete() {
+    let fixture = TestFixture::new();
+
+    // Create a template with a specific name
+    let original_template = fixture.create_test_template(
+        None,
+        "recreatable-template".to_string(),
+        Some("Original version".to_string()),
+        TEST_TEMPLATE_CONTENT.to_string(),
+        "{}".to_string(),
+    );
+
+    // Soft delete the template
+    fixture
+        .dal
+        .templates()
+        .soft_delete(original_template.id)
+        .expect("Failed to soft delete template");
+
+    // Verify the template is soft-deleted
+    let deleted = fixture
+        .dal
+        .templates()
+        .get(original_template.id)
+        .expect("Failed to check deleted template");
+    assert!(deleted.is_none(), "Template should not be visible after soft delete");
+
+    // Create a new template with the SAME name (and same generator_id + version combo)
+    // This should succeed because the partial unique index excludes soft-deleted records
+    let recreated_template = fixture
+        .dal
+        .templates()
+        .create_new_version(
+            None,
+            "recreatable-template".to_string(),
+            Some("Recreated version".to_string()),
+            TEST_TEMPLATE_CONTENT.to_string(),
+            "{}".to_string(),
+        )
+        .expect("Should be able to recreate template with same name after soft delete");
+
+    // Verify the new template was created
+    // Note: The version will be 1 because it's treated as a new template series
+    assert_ne!(recreated_template.id, original_template.id);
+    assert_eq!(recreated_template.name, "recreatable-template");
+    assert_eq!(recreated_template.version, 1);
+
+    // Verify the old template still exists in the database (soft-deleted)
+    let deleted_template = fixture
+        .dal
+        .templates()
+        .get_including_deleted(original_template.id)
+        .expect("Failed to get deleted template")
+        .expect("Deleted template should exist");
+    assert!(deleted_template.deleted_at.is_some());
+}

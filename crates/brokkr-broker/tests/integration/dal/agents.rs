@@ -678,3 +678,51 @@ fn test_get_agent_by_name_and_cluster_name() {
         .expect("Failed to get non-existent agent by name and cluster name");
     assert!(non_existent_agent.is_none());
 }
+
+#[test]
+fn test_recreate_agent_after_soft_delete() {
+    let fixture = TestFixture::new();
+
+    // Create an agent with a specific name
+    let original_agent =
+        fixture.create_test_agent("Recreatable Agent".to_string(), "Test Cluster".to_string());
+
+    // Soft delete the agent
+    fixture
+        .dal
+        .agents()
+        .soft_delete(original_agent.id)
+        .expect("Failed to soft delete agent");
+
+    // Verify the agent is soft-deleted
+    let deleted = fixture
+        .dal
+        .agents()
+        .get(original_agent.id)
+        .expect("Failed to check deleted agent");
+    assert!(deleted.is_none(), "Agent should not be visible after soft delete");
+
+    // Create a new agent with the SAME name and cluster
+    // This should succeed because the partial unique index excludes soft-deleted records
+    let new_agent = NewAgent::new("Recreatable Agent".to_string(), "Test Cluster".to_string())
+        .expect("Failed to create NewAgent");
+
+    let recreated_agent = fixture
+        .dal
+        .agents()
+        .create(&new_agent)
+        .expect("Should be able to recreate agent with same name after soft delete");
+
+    // Verify the new agent was created with a different ID
+    assert_ne!(recreated_agent.id, original_agent.id);
+    assert_eq!(recreated_agent.name, "Recreatable Agent");
+    assert_eq!(recreated_agent.cluster_name, "Test Cluster");
+
+    // Both agents should exist in the database (one active, one soft-deleted)
+    let all_agents = fixture
+        .dal
+        .agents()
+        .list_all()
+        .expect("Failed to list all agents");
+    assert_eq!(all_agents.len(), 2);
+}

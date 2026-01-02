@@ -217,22 +217,26 @@ fn test_claim_for_agent_without_matching_labels() {
 fn test_release_expired() {
     let fixture = TestFixture::new();
 
-    let sub = create_test_subscription("Test Sub");
+    // Use unique subscription name to help with test isolation
+    let sub = create_test_subscription(&format!("Release Expired Sub {}", uuid::Uuid::new_v4()));
     let subscription = fixture.dal.webhook_subscriptions().create(&sub).unwrap();
 
     let event = create_test_event();
     let new_delivery = NewWebhookDelivery::new(subscription.id, &event, None).unwrap();
-    fixture.dal.webhook_deliveries().create(&new_delivery).unwrap();
+    let created_delivery = fixture.dal.webhook_deliveries().create(&new_delivery).unwrap();
+    let created_id = created_delivery.id;
 
     // Claim with 0 TTL (immediately expired)
     let claimed = fixture
         .dal
         .webhook_deliveries()
-        .claim_for_broker(1, Some(0))
+        .claim_for_broker(100, Some(0)) // Claim more to ensure we get our delivery
         .unwrap();
 
-    assert_eq!(claimed.len(), 1);
-    assert_eq!(claimed[0].status, "acquired");
+    // Find our specific delivery among the claimed ones
+    let our_delivery = claimed.iter().find(|d| d.id == created_id);
+    assert!(our_delivery.is_some(), "Our delivery should have been claimed");
+    assert_eq!(our_delivery.unwrap().status, "acquired");
 
     // Sleep briefly to ensure TTL expires
     std::thread::sleep(std::time::Duration::from_millis(100));
@@ -244,10 +248,11 @@ fn test_release_expired() {
         .release_expired()
         .expect("Failed to release expired");
 
-    assert_eq!(released, 1);
+    // At least our delivery should be released (may be more from other tests)
+    assert!(released >= 1, "At least 1 expired delivery should be released");
 
-    // Verify status is back to pending
-    let delivery = fixture.dal.webhook_deliveries().get(claimed[0].id).unwrap().unwrap();
+    // Verify OUR delivery's status is back to pending
+    let delivery = fixture.dal.webhook_deliveries().get(created_id).unwrap().unwrap();
     assert_eq!(delivery.status, "pending");
     assert!(delivery.acquired_by.is_none());
     assert!(delivery.acquired_until.is_none());
@@ -304,31 +309,33 @@ fn test_mark_failed_with_retry() {
 fn test_process_retries() {
     let fixture = TestFixture::new();
 
-    let sub = create_test_subscription("Test Sub");
+    // Use agent-targeted delivery to avoid broker background task claiming it
+    let unique_label = format!("test-retry-{}", uuid::Uuid::new_v4());
+    let sub = create_test_subscription_with_labels("Process Retries Sub", vec![unique_label.clone()]);
     let subscription = fixture.dal.webhook_subscriptions().create(&sub).unwrap();
 
     let event = create_test_event();
-    let new_delivery = NewWebhookDelivery::new(subscription.id, &event, None).unwrap();
+    let target_labels = Some(vec![Some(unique_label.clone())]);
+    let new_delivery = NewWebhookDelivery::new(subscription.id, &event, target_labels).unwrap();
     let delivery = fixture.dal.webhook_deliveries().create(&new_delivery).unwrap();
+    let delivery_id = delivery.id;
 
-    // Mark as failed (sets next_retry_at in the past due to low backoff)
-    fixture.dal.webhook_deliveries().mark_failed(delivery.id, "Error", 5).unwrap();
+    // Mark as failed (sets next_retry_at with exponential backoff: 2^1 = 2 seconds)
+    let failed = fixture.dal.webhook_deliveries().mark_failed(delivery_id, "Error", 5).unwrap();
+    assert_eq!(failed.status, "failed", "Delivery should be in failed status");
+    assert_eq!(failed.attempts, 1, "Should have 1 attempt");
+    assert!(failed.next_retry_at.is_some(), "next_retry_at should be set");
 
-    // Wait for retry time
+    // Wait for retry time (backoff is 2 seconds, wait 3 to be safe)
     std::thread::sleep(std::time::Duration::from_secs(3));
 
-    // Process retries should move it back to pending
-    let moved = fixture
-        .dal
-        .webhook_deliveries()
-        .process_retries()
-        .expect("Failed to process retries");
+    // Process retries should move the delivery to pending
+    let moved = fixture.dal.webhook_deliveries().process_retries().expect("Failed to process retries");
+    assert!(moved >= 1, "Should process at least 1 retry");
 
-    assert_eq!(moved, 1);
-
-    // Verify status is back to pending
-    let updated = fixture.dal.webhook_deliveries().get(delivery.id).unwrap().unwrap();
-    assert_eq!(updated.status, "pending");
+    // Verify delivery's status is back to pending
+    let updated = fixture.dal.webhook_deliveries().get(delivery_id).unwrap().unwrap();
+    assert_eq!(updated.status, "pending", "Delivery should be pending after retry processing");
 }
 
 #[test]
@@ -403,27 +410,41 @@ fn test_list_for_subscription() {
 fn test_cleanup_old_deliveries() {
     let fixture = TestFixture::new();
 
-    let sub = create_test_subscription("Test Sub");
+    let sub = create_test_subscription(&format!("Cleanup Test Sub {}", uuid::Uuid::new_v4()));
     let subscription = fixture.dal.webhook_subscriptions().create(&sub).unwrap();
 
     // Create and complete a delivery
     let event = create_test_event();
     let new_delivery = NewWebhookDelivery::new(subscription.id, &event, None).unwrap();
     let delivery = fixture.dal.webhook_deliveries().create(&new_delivery).unwrap();
-    fixture.dal.webhook_deliveries().mark_success(delivery.id).unwrap();
+    let delivery_id = delivery.id;
+    let completed = fixture.dal.webhook_deliveries().mark_success(delivery_id).unwrap();
 
-    // Cleanup with 0 days retention (should delete everything)
+    // Verify mark_success actually completed the delivery
+    assert_eq!(completed.status, "success");
+    assert!(completed.completed_at.is_some(), "completed_at should be set");
+
+    // Verify it exists before cleanup
+    let before = fixture.dal.webhook_deliveries().get(delivery_id).unwrap();
+    assert!(before.is_some(), "Delivery should exist before cleanup");
+
+    // Small delay to ensure created_at is before the cleanup cutoff time
+    // (cleanup_old uses created_at < cutoff, so we need created_at to be in the past)
+    std::thread::sleep(std::time::Duration::from_millis(100));
+
+    // Cleanup with 0 days retention (should delete completed deliveries)
     let deleted = fixture
         .dal
         .webhook_deliveries()
         .cleanup_old(0)
         .expect("Failed to cleanup");
 
-    assert_eq!(deleted, 1);
+    // Verify our delivery was deleted
+    let retrieved = fixture.dal.webhook_deliveries().get(delivery_id).unwrap();
+    assert!(retrieved.is_none(), "Delivery should be deleted after cleanup");
 
-    // Verify deleted
-    let retrieved = fixture.dal.webhook_deliveries().get(delivery.id).unwrap();
-    assert!(retrieved.is_none());
+    // With serial execution, we should have deleted at least our delivery
+    assert!(deleted >= 1, "Should delete at least 1 completed delivery (deleted: {})", deleted);
 }
 
 #[test]
@@ -530,17 +551,28 @@ fn test_exponential_backoff_timing() {
 
     let fixture = TestFixture::new();
 
-    let sub = create_test_subscription("Test Sub");
+    // Use agent-targeted delivery to avoid broker background task claiming it
+    let unique_label = format!("test-backoff-{}", uuid::Uuid::new_v4());
+    let sub = create_test_subscription_with_labels("Backoff Test Sub", vec![unique_label.clone()]);
     let subscription = fixture.dal.webhook_subscriptions().create(&sub).unwrap();
 
+    // Create agent with matching labels
+    let (agent, _) = fixture.create_test_agent_with_pak(
+        format!("Backoff Agent {}", uuid::Uuid::new_v4()),
+        format!("cluster-{}", uuid::Uuid::new_v4()),
+    );
+    let agent_labels = vec![unique_label.clone()];
+
     let event = create_test_event();
-    let new_delivery = NewWebhookDelivery::new(subscription.id, &event, None).unwrap();
+    let target_labels = Some(vec![Some(unique_label.clone())]);
+    let new_delivery = NewWebhookDelivery::new(subscription.id, &event, target_labels).unwrap();
     let delivery = fixture.dal.webhook_deliveries().create(&new_delivery).unwrap();
+    let delivery_id = delivery.id;
 
     // First failure: next_retry_at should be now + 2^1 = 2 seconds
     let before = Utc::now();
     let after_fail1 = fixture.dal.webhook_deliveries()
-        .mark_failed(delivery.id, "Error 1", 10)
+        .mark_failed(delivery_id, "Error 1", 10)
         .unwrap();
 
     assert_eq!(after_fail1.attempts, 1);
@@ -553,14 +585,21 @@ fn test_exponential_backoff_timing() {
     std::thread::sleep(std::time::Duration::from_secs(3));
     fixture.dal.webhook_deliveries().process_retries().unwrap();
 
-    // Claim it again for second attempt
-    let claimed = fixture.dal.webhook_deliveries().claim_for_broker(1, None).unwrap();
-    assert_eq!(claimed.len(), 1);
+    // Verify our delivery is now pending
+    let after_retry = fixture.dal.webhook_deliveries().get(delivery_id).unwrap().unwrap();
+    assert_eq!(after_retry.status, "pending", "Delivery should be pending after retry processing");
+
+    // Claim for second attempt using our agent
+    let claimed = fixture.dal.webhook_deliveries()
+        .claim_for_agent(agent.id, &agent_labels, 1, None)
+        .unwrap();
+    assert_eq!(claimed.len(), 1, "Should claim our delivery");
+    assert_eq!(claimed[0].id, delivery_id);
 
     // Second failure: next_retry_at should be now + 2^2 = 4 seconds
     let before2 = Utc::now();
     let after_fail2 = fixture.dal.webhook_deliveries()
-        .mark_failed(delivery.id, "Error 2", 10)
+        .mark_failed(delivery_id, "Error 2", 10)
         .unwrap();
 
     assert_eq!(after_fail2.attempts, 2);
