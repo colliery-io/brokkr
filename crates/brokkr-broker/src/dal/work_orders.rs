@@ -25,7 +25,10 @@
 
 use crate::dal::DAL;
 use crate::utils::event_bus;
-use brokkr_models::models::webhooks::{BrokkrEvent, EVENT_WORKORDER_COMPLETED};
+use brokkr_models::models::webhooks::{
+    BrokkrEvent, EVENT_WORKORDER_CLAIMED, EVENT_WORKORDER_COMPLETED, EVENT_WORKORDER_CREATED,
+    EVENT_WORKORDER_FAILED,
+};
 use brokkr_models::models::work_order_annotations::{NewWorkOrderAnnotation, WorkOrderAnnotation};
 use brokkr_models::models::work_order_labels::{NewWorkOrderLabel, WorkOrderLabel};
 use brokkr_models::models::work_orders::{
@@ -63,9 +66,20 @@ impl WorkOrdersDAL<'_> {
     /// Returns the created WorkOrder on success, or a diesel::result::Error on failure.
     pub fn create(&self, new_work_order: &NewWorkOrder) -> Result<WorkOrder, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
-        diesel::insert_into(work_orders::table)
+        let work_order: WorkOrder = diesel::insert_into(work_orders::table)
             .values(new_work_order)
-            .get_result(conn)
+            .get_result(conn)?;
+
+        // Emit workorder.created event
+        let event_data = serde_json::json!({
+            "work_order_id": work_order.id,
+            "work_type": work_order.work_type,
+            "status": work_order.status,
+            "created_at": work_order.created_at,
+        });
+        event_bus::emit_event(self.dal, &BrokkrEvent::new(EVENT_WORKORDER_CREATED, event_data));
+
+        Ok(work_order)
     }
 
     /// Retrieves a work order by its UUID.
@@ -280,7 +294,7 @@ impl WorkOrdersDAL<'_> {
 
         // Atomically update the work order status to CLAIMED
         let now = Utc::now();
-        diesel::update(
+        let work_order: WorkOrder = diesel::update(
             work_orders::table
                 .filter(work_orders::id.eq(work_order_id))
                 .filter(work_orders::status.eq(WORK_ORDER_STATUS_PENDING)),
@@ -290,7 +304,18 @@ impl WorkOrdersDAL<'_> {
             work_orders::claimed_by.eq(agent_id),
             work_orders::claimed_at.eq(now),
         ))
-        .get_result(conn)
+        .get_result(conn)?;
+
+        // Emit workorder.claimed event
+        let event_data = serde_json::json!({
+            "work_order_id": work_order.id,
+            "work_type": work_order.work_type,
+            "agent_id": agent_id,
+            "claimed_at": now,
+        });
+        event_bus::emit_event(self.dal, &BrokkrEvent::new(EVENT_WORKORDER_CLAIMED, event_data));
+
+        Ok(work_order)
     }
 
     /// Checks if an agent is authorized to claim a work order using any targeting mechanism.
@@ -437,6 +462,7 @@ impl WorkOrdersDAL<'_> {
     }
 
     /// Emits a work order completion event.
+    /// Emits `workorder.completed` on success, `workorder.failed` on failure.
     fn emit_completion_event(&self, log: &WorkOrderLog) {
         let event_data = serde_json::json!({
             "work_order_log_id": log.id,
@@ -447,7 +473,13 @@ impl WorkOrdersDAL<'_> {
             "completed_at": log.created_at,
         });
 
-        event_bus::emit_event(self.dal, &BrokkrEvent::new(EVENT_WORKORDER_COMPLETED, event_data));
+        let event_type = if log.success {
+            EVENT_WORKORDER_COMPLETED
+        } else {
+            EVENT_WORKORDER_FAILED
+        };
+
+        event_bus::emit_event(self.dal, &BrokkrEvent::new(event_type, event_data));
     }
 
     /// Completes a work order with failure.

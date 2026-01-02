@@ -6,10 +6,12 @@
 
 use crate::dal::FilterType;
 use crate::dal::DAL;
+use crate::utils::event_bus;
 use brokkr_models::models::agent_annotations::AgentAnnotation;
 use brokkr_models::models::agent_labels::AgentLabel;
 use brokkr_models::models::agent_targets::AgentTarget;
 use brokkr_models::models::agents::{Agent, NewAgent};
+use brokkr_models::models::webhooks::{BrokkrEvent, EVENT_AGENT_DEREGISTERED, EVENT_AGENT_REGISTERED};
 use brokkr_models::schema::{agent_annotations, agent_labels, agent_targets, agents};
 use chrono::Utc;
 use diesel::prelude::*;
@@ -54,9 +56,21 @@ impl AgentsDAL<'_> {
     /// ```
     pub fn create(&self, new_agent: &NewAgent) -> Result<Agent, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
-        diesel::insert_into(agents::table)
+        let agent: Agent = diesel::insert_into(agents::table)
             .values(new_agent)
-            .get_result(conn)
+            .get_result(conn)?;
+
+        // Emit agent.registered event
+        let event_data = serde_json::json!({
+            "agent_id": agent.id,
+            "name": agent.name,
+            "cluster_name": agent.cluster_name,
+            "status": agent.status,
+            "created_at": agent.created_at,
+        });
+        event_bus::emit_event(self.dal, &BrokkrEvent::new(EVENT_AGENT_REGISTERED, event_data));
+
+        Ok(agent)
     }
 
     /// Retrieves a non-deleted agent by its UUID.
@@ -157,9 +171,20 @@ impl AgentsDAL<'_> {
     /// or a `diesel::result::Error` on failure.
     pub fn soft_delete(&self, agent_uuid: Uuid) -> Result<usize, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
-        diesel::update(agents::table.filter(agents::id.eq(agent_uuid)))
+        let rows = diesel::update(agents::table.filter(agents::id.eq(agent_uuid)))
             .set(agents::deleted_at.eq(Utc::now()))
-            .execute(conn)
+            .execute(conn)?;
+
+        if rows > 0 {
+            // Emit agent.deregistered event
+            let event_data = serde_json::json!({
+                "agent_id": agent_uuid,
+                "deleted_at": Utc::now(),
+            });
+            event_bus::emit_event(self.dal, &BrokkrEvent::new(EVENT_AGENT_DEREGISTERED, event_data));
+        }
+
+        Ok(rows)
     }
 
     /// Hard deletes an agent from the database.

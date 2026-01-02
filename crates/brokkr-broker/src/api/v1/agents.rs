@@ -12,7 +12,10 @@
 use crate::api::v1::middleware::AuthPayload;
 use crate::dal::DAL;
 use crate::metrics;
-use crate::utils::{audit, pak};
+use crate::utils::{audit, event_bus, pak};
+use brokkr_models::models::webhooks::{
+    BrokkrEvent, EVENT_DEPLOYMENT_APPLIED, EVENT_DEPLOYMENT_FAILED,
+};
 use axum::http::StatusCode;
 use brokkr_models::models::audit_logs::{
     ACTION_AGENT_CREATED, ACTION_AGENT_DELETED, ACTION_AGENT_UPDATED, ACTION_PAK_ROTATED,
@@ -610,6 +613,25 @@ async fn create_event(
     match dal.agent_events().create(&new_event) {
         Ok(event) => {
             info!("Successfully created event for agent with ID: {}", id);
+
+            // Emit deployment webhook event based on status
+            let webhook_event_type = if new_event.status.to_uppercase() == "SUCCESS" {
+                EVENT_DEPLOYMENT_APPLIED
+            } else {
+                EVENT_DEPLOYMENT_FAILED
+            };
+
+            let event_data = serde_json::json!({
+                "agent_event_id": event.id,
+                "agent_id": event.agent_id,
+                "deployment_object_id": event.deployment_object_id,
+                "event_type": event.event_type,
+                "status": event.status,
+                "message": event.message,
+                "created_at": event.created_at,
+            });
+            event_bus::emit_event(&dal, &BrokkrEvent::new(webhook_event_type, event_data));
+
             Ok(Json(event))
         }
         Err(e) => {

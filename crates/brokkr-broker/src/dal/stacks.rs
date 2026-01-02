@@ -12,7 +12,9 @@
 
 use crate::dal::FilterType;
 use crate::dal::DAL;
+use crate::utils::event_bus;
 use brokkr_models::models::stacks::{NewStack, Stack};
+use brokkr_models::models::webhooks::{BrokkrEvent, EVENT_STACK_CREATED, EVENT_STACK_DELETED};
 use brokkr_models::schema::{
     agent_annotations, agent_labels, agent_targets, stack_annotations, stack_labels, stacks,
 };
@@ -39,9 +41,20 @@ impl StacksDAL<'_> {
     /// Returns a Result containing the created Stack on success, or a diesel::result::Error on failure.
     pub fn create(&self, new_stack: &NewStack) -> Result<Stack, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
-        diesel::insert_into(stacks::table)
+        let stack: Stack = diesel::insert_into(stacks::table)
             .values(new_stack)
-            .get_result(conn)
+            .get_result(conn)?;
+
+        // Emit stack.created event
+        let event_data = serde_json::json!({
+            "stack_id": stack.id,
+            "name": stack.name,
+            "description": stack.description,
+            "created_at": stack.created_at,
+        });
+        event_bus::emit_event(self.dal, &BrokkrEvent::new(EVENT_STACK_CREATED, event_data));
+
+        Ok(stack)
     }
 
     /// Retrieves non-deleted stacks by their UUIDs.
@@ -135,9 +148,20 @@ impl StacksDAL<'_> {
     /// Returns a Result containing the number of affected rows (0 or 1) on success, or a diesel::result::Error on failure.
     pub fn soft_delete(&self, stack_uuid: Uuid) -> Result<usize, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
-        diesel::update(stacks::table.filter(stacks::id.eq(stack_uuid)))
+        let rows = diesel::update(stacks::table.filter(stacks::id.eq(stack_uuid)))
             .set(stacks::deleted_at.eq(Utc::now()))
-            .execute(conn)
+            .execute(conn)?;
+
+        if rows > 0 {
+            // Emit stack.deleted event
+            let event_data = serde_json::json!({
+                "stack_id": stack_uuid,
+                "deleted_at": Utc::now(),
+            });
+            event_bus::emit_event(self.dal, &BrokkrEvent::new(EVENT_STACK_DELETED, event_data));
+        }
+
+        Ok(rows)
     }
 
     /// Hard deletes a stack from the database.
