@@ -214,7 +214,11 @@ Events are processed synchronously in the API handler—the database insert must
 
 ### Webhook Delivery
 
-Webhook subscriptions enable external systems to receive notifications when events occur in Brokkr. The delivery system prioritizes reliability through persistent queuing and automatic retries.
+Webhook subscriptions enable external systems to receive notifications when events occur in Brokkr. The delivery system prioritizes reliability through persistent queuing and automatic retries, with two delivery modes for different network topologies.
+
+#### Broker Delivery (Default)
+
+When no `target_labels` are specified on a subscription, the broker delivers webhooks directly. This is suitable for external endpoints accessible from the broker's network.
 
 {{< mermaid >}}
 sequenceDiagram
@@ -248,7 +252,46 @@ sequenceDiagram
 
 The webhook worker runs as a background task, polling for pending deliveries every 5 seconds (configurable via `broker.webhookDeliveryIntervalSeconds`). Each polling cycle processes up to 50 deliveries (configurable via `broker.webhookDeliveryBatchSize`), enabling high throughput while controlling resource usage.
 
+#### Agent Delivery
+
+When `target_labels` are specified on a subscription, agents matching those labels deliver the webhooks. This enables webhooks to reach in-cluster endpoints (e.g., `http://service.namespace.svc.cluster.local`) that the broker cannot access due to network separation.
+
+{{< mermaid >}}
+sequenceDiagram
+    participant EventBus as Event Bus
+    participant DB as PostgreSQL
+    participant Agent as Agent (matching labels)
+    participant Endpoint as In-Cluster Endpoint
+
+    EventBus->>DB: Find matching subscriptions
+    DB-->>EventBus: Subscription list
+    EventBus->>DB: INSERT webhook_delivery with target_labels
+
+    loop Every 10 seconds (agent heartbeat)
+        Agent->>DB: Fetch pending deliveries matching my labels
+        DB-->>Agent: Delivery batch
+
+        par For each delivery
+            Agent->>Agent: Decrypt URL and auth header
+            Agent->>Endpoint: POST event payload
+            alt Success (2xx)
+                Endpoint-->>Agent: 200 OK
+                Agent->>DB: Report success
+            else Failure
+                Endpoint-->>Agent: Error
+                Agent->>DB: Report failure (schedules retry)
+            end
+        end
+    end
+{{< /mermaid >}}
+
+Agent delivery requires the agent to have ALL labels specified in `target_labels`. For example, a subscription with `target_labels: ["env:prod", "region:us"]` will only be delivered by agents with both labels. This allows precise control over which agents handle which webhooks.
+
+#### Encryption and Security
+
 Delivery URLs and authentication headers are stored encrypted in the database using AES-256-GCM. The worker decrypts these values just before making the HTTP request, minimizing the time sensitive data exists in memory.
+
+#### Retry Behavior
 
 Failed deliveries are retried with exponential backoff. The first retry occurs after 2 seconds, the second after 4 seconds, then 8, 16, and so on. After exhausting the maximum retry count (configurable), deliveries are marked as "dead" and no longer retried. A cleanup task removes old delivery records after 7 days (configurable via `broker.webhookCleanupRetentionDays`).
 
@@ -258,12 +301,12 @@ Brokkr emits events for various system activities, enabling external systems to 
 
 | Category | Event Types | Description |
 |----------|-------------|-------------|
-| **Deployment** | `deployment.applied`, `deployment.updated`, `deployment.deleted`, `deployment.failed` | Resource operations on clusters |
-| **Work Order** | `workorder.completed`, `workorder.failed` | Work order lifecycle events |
-| **Health** | `deployment.health.changed` | Health state transitions |
-| **Agent** | `agent.connected`, `agent.disconnected` | Agent connectivity changes |
+| **Agent** | `agent.registered`, `agent.deregistered` | Agent lifecycle events |
+| **Stack** | `stack.created`, `stack.deleted` | Stack lifecycle events |
+| **Deployment** | `deployment.created`, `deployment.applied`, `deployment.failed`, `deployment.deleted` | Deployment object lifecycle and application results |
+| **Work Order** | `workorder.created`, `workorder.claimed`, `workorder.completed`, `workorder.failed` | Work order lifecycle from creation to completion |
 
-Webhook subscriptions can filter by event type, receiving only the events relevant to their use case. This filtering reduces unnecessary network traffic and processing on the receiving end.
+Webhook subscriptions can filter by event type using exact matches or wildcards (e.g., `deployment.*` matches all deployment events). This filtering reduces unnecessary network traffic and processing on the receiving end. See the [Webhooks Reference](/reference/webhooks) for complete details on event payloads and subscription configuration.
 
 ## Authentication Flows
 
