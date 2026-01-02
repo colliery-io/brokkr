@@ -614,6 +614,9 @@ def create_agent_in_broker(broker_release_name, agent_name, cluster_name, namesp
 
     if result.returncode != 0 or not result.stdout.strip():
         print("Failed to get broker pod name")
+        print(f"  Return code: {result.returncode}")
+        print(f"  Stdout: {result.stdout}")
+        print(f"  Stderr: {result.stderr}")
         return None
 
     broker_pod = result.stdout.strip()
@@ -624,6 +627,7 @@ def create_agent_in_broker(broker_release_name, agent_name, cluster_name, namesp
         kubectl exec {broker_pod} -n {namespace} -- \
             brokkr-broker create agent --name {agent_name} --cluster-name {cluster_name}
     """
+    print(f"Running: kubectl exec {broker_pod} -- brokkr-broker create agent --name {agent_name} --cluster-name {cluster_name}")
 
     result = subprocess.run([
         "docker", "run", "--rm",
@@ -634,15 +638,22 @@ def create_agent_in_broker(broker_release_name, agent_name, cluster_name, namesp
         "sh", "-c", create_agent_cmd
     ], capture_output=True, text=True, cwd=cwd)
 
+    # Always show output for debugging
+    print(f"  Return code: {result.returncode}")
+    if result.stdout.strip():
+        print(f"  Stdout: {result.stdout.strip()}")
+    if result.stderr.strip():
+        print(f"  Stderr: {result.stderr.strip()}")
+
     if result.returncode != 0:
-        print("Failed to create agent")
-        print(f"Error: {result.stderr}")
+        print("ERROR: Failed to create agent via broker CLI")
         return None
 
     # Parse the PAK from the output
-    # The output should contain the PAK
     output = result.stdout.strip()
-    print(f"Agent creation output:\n{output}")
+    if not output:
+        print("ERROR: No output from broker CLI command")
+        return None
 
     # Look for PAK in the output (assuming it's printed)
     # We'll need to parse this based on the actual output format

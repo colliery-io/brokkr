@@ -246,10 +246,12 @@ pub fn create_agent(
 ) -> Result<(), Box<dyn std::error::Error>> {
     info!("Creating new agent: {}", name);
 
+    // Use pool size 2 because agent creation emits webhook events
+    // which require a second connection while the first is still held
     let pool = create_shared_connection_pool(
         &config.database.url,
         "brokkr",
-        1,
+        2,
         config.database.schema.as_deref(),
     );
     let dal = DAL::new(pool.clone());
