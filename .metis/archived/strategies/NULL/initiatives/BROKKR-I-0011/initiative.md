@@ -4,14 +4,14 @@ level: initiative
 title: "Comprehensive Deployment Documentation"
 short_code: "BROKKR-I-0011"
 created_at: 2025-12-29T14:23:21.828284+00:00
-updated_at: 2025-12-29T14:23:21.828284+00:00
+updated_at: 2025-12-30T02:24:17.301973+00:00
 parent: BROKKR-V-0001
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#initiative"
-  - "#phase/discovery"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -28,71 +28,48 @@ Create comprehensive deployment documentation covering all major cloud providers
 
 ## Scope
 
-### 1. Cloud Provider Guides
-Create step-by-step guides for:
-- **AWS EKS:** VPC setup, EKS cluster, RDS PostgreSQL, ALB Ingress
-- **GCP GKE:** VPC setup, GKE cluster, Cloud SQL, GCE Ingress
-- **Azure AKS:** VNet setup, AKS cluster, Azure Database for PostgreSQL
-- **DigitalOcean:** DOKS cluster, managed PostgreSQL
+### Architecture Reference Documentation
 
-Each guide includes:
-- Prerequisites and IAM/RBAC requirements
-- Infrastructure provisioning (Terraform examples)
-- Helm installation with cloud-specific values
-- TLS configuration with cloud-native solutions
-- Monitoring integration
+Enhance existing architecture documentation with comprehensive diagrams and explanations:
 
-### 2. On-Premises Guide
-- Bare metal Kubernetes (kubeadm, k3s)
-- Self-hosted PostgreSQL with HA
-- Cert-manager with internal CA
-- Load balancer options (MetalLB, etc.)
+1. **Component Interaction Diagrams**
+   - Broker internal component interactions (API, DAL, Event Bus, Background Tasks)
+   - Agent internal component interactions (Broker Client, K8s Client, Reconciler)
+   - Cross-component communication patterns
 
-### 3. Operational Runbooks
-- **Upgrade Procedures:** Version migration steps, rollback
-- **Backup/Restore:** Database backup, disaster recovery
-- **Scaling:** Manual and automatic scaling guides
-- **Troubleshooting:** Common issues, debug procedures
-- **Security:** Key rotation, incident response
+2. **Network Flow Diagrams**
+   - Traffic flows between broker, agents, and external systems
+   - Ports, protocols, and connection types
+   - TLS and authentication handshakes
 
-### 4. Architecture Reference
-- Component interaction diagrams
-- Network flow diagrams
-- Data flow diagrams
-- Security boundary documentation
+3. **Data Flow Diagrams**
+   - Deployment lifecycle: creation → targeting → application → status reporting
+   - Event flow: agent events, webhooks, audit logs
+   - Authentication flows: PAK verification, admin tokens, generators
 
-### 5. API Reference Enhancement
-- Add more request/response examples
-- Document error codes comprehensively
-- Add SDK usage examples (curl, Python, Go)
+4. **Security Boundary Documentation**
+   - Trust boundaries and zones
+   - Authentication and authorization flows
+   - RBAC model for agents and admins
+   - Network security considerations
 
 ## Deliverables
 
+Update existing documentation:
 ```
-docs/content/
-├── deployment/
-│   ├── aws-eks.md
-│   ├── gcp-gke.md
-│   ├── azure-aks.md
-│   ├── digitalocean.md
-│   └── on-premises.md
-├── operations/
-│   ├── upgrades.md
-│   ├── backup-restore.md
-│   ├── scaling.md
-│   ├── troubleshooting.md
-│   └── security.md
-└── reference/
-    └── api/
-        └── examples/
+docs/content/explanation/
+├── architecture.md (enhanced with interaction diagrams)
+├── network-flows.md (new)
+├── data-flows.md (new)
+└── security-model.md (new)
 ```
 
 ## Success Criteria
 
-- New users can deploy to any major cloud in < 1 hour
-- Operational procedures documented for all common tasks
-- Architecture diagrams explain system behavior
-- API documentation includes working examples Initiative
+- Clear diagrams showing how components interact
+- Network flows documented for operators configuring firewalls
+- Data flows explain the deployment lifecycle
+- Security boundaries clearly defined for compliance Initiative
 
 *This template includes sections for various types of initiatives. Delete sections that don't apply to your specific use case.*
 
