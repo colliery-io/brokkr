@@ -447,7 +447,7 @@ impl WorkOrdersDAL<'_> {
             "completed_at": log.created_at,
         });
 
-        event_bus::emit(BrokkrEvent::new(EVENT_WORKORDER_COMPLETED, event_data));
+        event_bus::emit_event(self.dal, &BrokkrEvent::new(EVENT_WORKORDER_COMPLETED, event_data));
     }
 
     /// Completes a work order with failure.

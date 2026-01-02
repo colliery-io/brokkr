@@ -64,8 +64,50 @@
 //!   Default: "BR"
 
 use config::{Config, ConfigError, Environment, File};
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 use std::sync::{Arc, RwLock};
+
+/// Deserializes a comma-separated string or array into Vec<String>
+/// This allows environment variables to be set as "value1,value2,value3"
+/// while also supporting proper arrays in config files
+fn deserialize_string_or_vec<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    use serde::de::{self, SeqAccess, Visitor};
+    use std::fmt;
+
+    struct StringOrVec;
+
+    impl<'de> Visitor<'de> for StringOrVec {
+        type Value = Vec<String>;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str("a string or sequence of strings")
+        }
+
+        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            // Split by comma and trim whitespace
+            Ok(value.split(',').map(|s| s.trim().to_string()).collect())
+        }
+
+        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+        where
+            A: SeqAccess<'de>,
+        {
+            let mut vec = Vec::new();
+            while let Some(item) = seq.next_element::<String>()? {
+                vec.push(item);
+            }
+            Ok(vec)
+        }
+    }
+
+    deserializer.deserialize_any(StringOrVec)
+}
 
 // Include the default settings file as a string constant
 const DEFAULT_SETTINGS: &str = include_str!("../default.toml");
@@ -95,10 +137,16 @@ pub struct Settings {
 pub struct Cors {
     /// Allowed origins for CORS requests
     /// Use "*" to allow all origins (not recommended for production)
+    /// Can be set as comma-separated string via env var: "origin1,origin2"
+    #[serde(deserialize_with = "deserialize_string_or_vec")]
     pub allowed_origins: Vec<String>,
     /// Allowed HTTP methods
+    /// Can be set as comma-separated string via env var: "GET,POST,PUT"
+    #[serde(deserialize_with = "deserialize_string_or_vec")]
     pub allowed_methods: Vec<String>,
     /// Allowed HTTP headers
+    /// Can be set as comma-separated string via env var: "Authorization,Content-Type"
+    #[serde(deserialize_with = "deserialize_string_or_vec")]
     pub allowed_headers: Vec<String>,
     /// Max age for preflight cache in seconds
     pub max_age_seconds: u64,

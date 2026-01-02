@@ -4,7 +4,7 @@ level: task
 title: "UAT Demo: End-to-end workflow demonstrating complete Brokkr feature set"
 short_code: "BROKKR-T-0090"
 created_at: 2025-12-31T02:37:15.926480+00:00
-updated_at: 2025-12-31T16:16:31.784598+00:00
+updated_at: 2025-12-31T21:00:42.025063+00:00
 parent: 
 blocked_by: []
 archived: false
@@ -12,7 +12,7 @@ archived: false
 tags:
   - "#task"
   - "#feature"
-  - "#phase/todo"
+  - "#phase/active"
 
 
 exit_criteria_met: false
@@ -41,81 +41,82 @@ Create a comprehensive UAT (User Acceptance Testing) demo workflow in the UI tha
 
 ## Demo Workflow Overview
 
-**Entry Point:** `angreal local up` → Navigate to Admin Panel → Click "Demo"
+**Entry Point:** `angreal local up` → Navigate to **Demo tab** (dedicated first-class tab)
 
-### Phase 1: Environment Validation
-- Verify docker-compose stack is healthy
-- Verify K3s cluster is accessible
-- Verify Tekton Pipelines are installed and running
-- Verify Shipwright Build is installed with ClusterBuildStrategies available
-- Verify initial agent (from docker-compose) is ACTIVE and heartbeating
+## Updated Implementation Plan (2025-12-31)
 
-### Phase 2: Build Work Order - Webhook Server
-**Goal:** Use Shipwright to build our webhook-catcher container image
+### UI Design: Dedicated Demo Tab
 
-1. Create a `build` type work order with:
-   - Git source: `examples/webhook-catcher/` (or similar simple Go/Node app)
-   - Strategy: `buildah` or `kaniko` ClusterBuildStrategy
-   - Output: Push to local registry (`localhost:5050/webhook-catcher:demo`)
-2. Submit work order to the initial agent
-3. Poll work order status until COMPLETED
-4. Display: BuildRun name, duration, image digest
+The demo is now a **self-contained tab** (not buried in Admin) with:
+- Visual phase cards showing real-time progress
+- Status indicators (pending → running → complete)
+- Live webhook event stream
+- Cleanup button to remove demo resources
 
-### Phase 3: Deploy Secondary Agent via Brokkr
-**Goal:** Demonstrate Brokkr deploying Brokkr (agent self-deployment)
+### Phase 1: Environment Check
+**Purpose:** Validate prerequisites before demo starts
+- Check broker API health (`/healthz`)
+- Find and verify integration agent is ACTIVE with recent heartbeat
+- Verify Shipwright/Tekton are installed (ClusterBuildStrategies exist)
 
-1. Create a generator + stack for "demo-agents"
-2. Create deployment object containing:
-   - ServiceAccount with RBAC permissions
-   - ConfigMap with agent configuration
-   - Deployment for brokkr-agent pointing to broker
-3. Target the stack to the initial agent (by label or explicit target)
-4. Wait for initial agent to apply the deployment
-5. Wait for secondary agent to register with broker and become ACTIVE
-6. Display: New agent name, cluster, heartbeat status
+**Visual:** Green checkmarks with live status indicators
 
-### Phase 4: Deploy Webhook Server via Secondary Agent
-**Goal:** Deploy the built webhook-catcher image using the NEW agent
+### Phase 2: Container Build
+**Purpose:** Demonstrate Shipwright container builds via Brokkr
+- Create `build` type work order for webhook-catcher image
+- Target to integration agent
+- Poll work order status: PENDING → CLAIMED → BUILDING → COMPLETED
+- Show BuildRun progress with duration timer
+- Result: `registry:5000/webhook-catcher:demo` image ready
 
-1. Create a generator + stack for "webhook-apps"
-2. Create deployment object containing:
-   - Namespace: `demo-webhooks`
-   - Deployment: webhook-catcher using built image
-   - Service: ClusterIP exposing the webhook endpoint
-3. Add label to target the SECONDARY agent specifically
-4. Wait for deployment to be applied
-5. Poll deployment health until pods are Ready
-6. Display: Pod status, service endpoint
+**Visual:** Progress bar with status transitions
 
-### Phase 5: Configure Webhook Subscription
-**Goal:** Set up Brokkr to send events to our webhook server
+### Phase 3: Agent Deployment
+**Purpose:** Demonstrate Brokkr deploying another Brokkr agent
+- Register new agent (`demo-staging-agent`) → get PAK
+- Create stack with agent deployment YAML (ServiceAccount, RBAC, Deployment)
+- Target stack to integration agent
+- Poll for new agent to become ACTIVE with heartbeat
 
-1. Create webhook subscription:
-   - Name: `demo-webhook-receiver`
-   - URL: `http://webhook-catcher.demo-webhooks.svc.cluster.local:8080/webhook`
-   - Events: `deployment.created`, `deployment.updated`, `health.changed`
-   - Enabled: true
-2. Display: Webhook ID, subscribed events
+**Visual:** Step-by-step progress with heartbeat indicator
 
-### Phase 6: Trigger Webhook Events
-**Goal:** Create activity that fires webhooks and verify receipt
+### Phase 4: Stack & Deployments
+**Purpose:** Show core deployment workflow
+- Create generator
+- Create stack with labels
+- Deploy multi-document YAML (nginx + http-echo services)
+- Target to integration agent
+- Show deployment status transitions
 
-1. Create a simple deployment (just a Namespace or ConfigMap)
-2. Target it to any agent
-3. Wait for deployment to be processed
-4. Query webhook-catcher's `/messages` endpoint (via port-forward or ingress)
-5. Display: Received webhook payloads with timestamps
+**Visual:** Deployment status indicators (Pending → Applied → Healthy)
 
-### Phase 7: Verification & Cleanup Summary
-**Goal:** Show what was demonstrated and current state
+### Phase 5: Webhooks
+**Purpose:** Demonstrate event-driven notifications
+- Create webhook subscription for multiple event types
+- Show real-time webhook events as they're received
+- Poll webhook-catcher `/messages` endpoint
+- Display auto-scrolling event stream with timestamps
 
-Display summary:
-- ✅ Build work order: Built `webhook-catcher:demo` image
-- ✅ Agent deployment: Secondary agent running in K3s
-- ✅ Application deployment: Webhook server running via secondary agent
-- ✅ Webhook delivery: N messages received by webhook server
+**Visual:** Live-updating event log
 
-Optional: Offer cleanup button to remove demo resources
+### Phase 6: Templates
+**Purpose:** Show reusable configuration patterns
+- Create parameterized template (ConfigMap with variables)
+- Instantiate with sample parameters
+- Show resulting deployment
+
+**Visual:** Template → Parameters → Result flow
+
+### Cleanup Function
+Dedicated cleanup button that removes in dependency order:
+1. Remove agent targets
+2. Delete webhook subscriptions
+3. Create deletion markers for deployments
+4. Delete stacks
+5. Delete templates
+6. Deactivate demo agents (keep for audit)
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 
@@ -208,8 +209,21 @@ angreal local up
 
 ## Blocked By
 
-- [[BROKKR-T-0091]] - Webhook delivery should occur from agent (data plane) not broker (control plane)
+- ~~[[BROKKR-T-0091]] - Webhook delivery should occur from agent (data plane) not broker (control plane)~~ ✅ COMPLETED
+
+## Files to Modify
+
+| File | Changes |
+|------|---------|
+| `examples/ui-slim/src/App.js` | Add DemoPanel component (~300 lines), add 'demo' to nav |
+| `examples/ui-slim/src/api.js` | Add phased demo functions, cleanup function |
+| `examples/ui-slim/src/styles.css` | Add `.demo-phase`, `.demo-step`, `.event-stream` styles |
+| `examples/webhook-catcher/` | ✅ Already created (Python app) |
+| `.angreal/files/docker-compose.yaml` | ✅ Already updated (webhook-catcher service) |
 
 ## Status Updates
 
 - 2025-12-31: Ticket created. Demo currently uses fake database records instead of real functionality.
+- 2025-12-31: BROKKR-T-0091 completed - webhook agent-side delivery now implemented. Blocker removed.
+- 2025-12-31: Plan updated to 6-phase dedicated Demo tab. webhook-catcher app created. Implementation starting.
+- 2025-12-31: **Implementation complete.** DemoPanel component added to App.js (~600 lines), CSS styles added, API functions added. Demo tab now available in UI navigation. Ready for testing.

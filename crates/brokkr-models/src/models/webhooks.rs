@@ -22,36 +22,60 @@ use uuid::Uuid;
 
 /// Valid delivery statuses
 pub const DELIVERY_STATUS_PENDING: &str = "pending";
+pub const DELIVERY_STATUS_ACQUIRED: &str = "acquired";
 pub const DELIVERY_STATUS_SUCCESS: &str = "success";
 pub const DELIVERY_STATUS_FAILED: &str = "failed";
 pub const DELIVERY_STATUS_DEAD: &str = "dead";
 
 pub const VALID_DELIVERY_STATUSES: &[&str] = &[
     DELIVERY_STATUS_PENDING,
+    DELIVERY_STATUS_ACQUIRED,
     DELIVERY_STATUS_SUCCESS,
     DELIVERY_STATUS_FAILED,
     DELIVERY_STATUS_DEAD,
 ];
 
-/// Event type constants
-pub const EVENT_HEALTH_DEGRADED: &str = "health.degraded";
-pub const EVENT_HEALTH_FAILING: &str = "health.failing";
-pub const EVENT_HEALTH_RECOVERED: &str = "health.recovered";
+// =============================================================================
+// Event Type Constants
+// =============================================================================
+
+// Agent events
+pub const EVENT_AGENT_REGISTERED: &str = "agent.registered";
+pub const EVENT_AGENT_DEREGISTERED: &str = "agent.deregistered";
+
+// Stack events
+pub const EVENT_STACK_CREATED: &str = "stack.created";
+pub const EVENT_STACK_DELETED: &str = "stack.deleted";
+
+// Deployment object events
+pub const EVENT_DEPLOYMENT_CREATED: &str = "deployment.created";
 pub const EVENT_DEPLOYMENT_APPLIED: &str = "deployment.applied";
 pub const EVENT_DEPLOYMENT_FAILED: &str = "deployment.failed";
-pub const EVENT_AGENT_OFFLINE: &str = "agent.offline";
-pub const EVENT_AGENT_ONLINE: &str = "agent.online";
+pub const EVENT_DEPLOYMENT_DELETED: &str = "deployment.deleted";
+
+// Work order events
+pub const EVENT_WORKORDER_CREATED: &str = "workorder.created";
+pub const EVENT_WORKORDER_CLAIMED: &str = "workorder.claimed";
 pub const EVENT_WORKORDER_COMPLETED: &str = "workorder.completed";
+pub const EVENT_WORKORDER_FAILED: &str = "workorder.failed";
 
 pub const VALID_EVENT_TYPES: &[&str] = &[
-    EVENT_HEALTH_DEGRADED,
-    EVENT_HEALTH_FAILING,
-    EVENT_HEALTH_RECOVERED,
+    // Agent
+    EVENT_AGENT_REGISTERED,
+    EVENT_AGENT_DEREGISTERED,
+    // Stack
+    EVENT_STACK_CREATED,
+    EVENT_STACK_DELETED,
+    // Deployment
+    EVENT_DEPLOYMENT_CREATED,
     EVENT_DEPLOYMENT_APPLIED,
     EVENT_DEPLOYMENT_FAILED,
-    EVENT_AGENT_OFFLINE,
-    EVENT_AGENT_ONLINE,
+    EVENT_DEPLOYMENT_DELETED,
+    // Work order
+    EVENT_WORKORDER_CREATED,
+    EVENT_WORKORDER_CLAIMED,
     EVENT_WORKORDER_COMPLETED,
+    EVENT_WORKORDER_FAILED,
 ];
 
 // =============================================================================
@@ -63,7 +87,7 @@ pub const VALID_EVENT_TYPES: &[&str] = &[
 pub struct BrokkrEvent {
     /// Unique identifier for this event (idempotency key).
     pub id: Uuid,
-    /// Event type (e.g., "health.degraded").
+    /// Event type (e.g., "deployment.applied").
     pub event_type: String,
     /// When the event occurred.
     pub timestamp: DateTime<Utc>,
@@ -115,10 +139,12 @@ pub struct WebhookSubscription {
     /// Encrypted Authorization header value.
     #[serde(skip_serializing)]
     pub auth_header_encrypted: Option<Vec<u8>>,
-    /// Event types to subscribe to (supports wildcards like "health.*").
+    /// Event types to subscribe to (supports wildcards like "deployment.*").
     pub event_types: Vec<Option<String>>,
     /// JSON-encoded filters.
     pub filters: Option<String>,
+    /// Labels for delivery targeting (NULL = broker delivers).
+    pub target_labels: Option<Vec<Option<String>>>,
     /// Whether the subscription is active.
     pub enabled: bool,
     /// Maximum delivery retry attempts.
@@ -147,6 +173,8 @@ pub struct NewWebhookSubscription {
     pub event_types: Vec<Option<String>>,
     /// JSON-encoded filters.
     pub filters: Option<String>,
+    /// Labels for delivery targeting (NULL = broker delivers).
+    pub target_labels: Option<Vec<Option<String>>>,
     /// Whether the subscription is active (defaults to true).
     pub enabled: bool,
     /// Maximum retry attempts (defaults to 5).
@@ -166,6 +194,7 @@ impl NewWebhookSubscription {
     /// * `auth_header_encrypted` - Pre-encrypted Authorization header (optional).
     /// * `event_types` - List of event types to subscribe to.
     /// * `filters` - Optional filters as WebhookFilters struct.
+    /// * `target_labels` - Optional labels for delivery targeting.
     /// * `created_by` - Who is creating the subscription.
     ///
     /// # Returns
@@ -176,6 +205,7 @@ impl NewWebhookSubscription {
         auth_header_encrypted: Option<Vec<u8>>,
         event_types: Vec<String>,
         filters: Option<WebhookFilters>,
+        target_labels: Option<Vec<String>>,
         created_by: Option<String>,
     ) -> Result<Self, String> {
         // Validate name
@@ -203,6 +233,7 @@ impl NewWebhookSubscription {
             auth_header_encrypted,
             event_types: event_types.into_iter().map(Some).collect(),
             filters: filters_json,
+            target_labels: target_labels.map(|labels| labels.into_iter().map(Some).collect()),
             enabled: true,
             max_retries: 5,
             timeout_seconds: 30,
@@ -225,6 +256,8 @@ pub struct UpdateWebhookSubscription {
     pub event_types: Option<Vec<Option<String>>>,
     /// New filters.
     pub filters: Option<Option<String>>,
+    /// New target labels for delivery.
+    pub target_labels: Option<Option<Vec<Option<String>>>>,
     /// Enable/disable.
     pub enabled: Option<bool>,
     /// New max retries.
@@ -251,14 +284,20 @@ pub struct WebhookDelivery {
     pub event_id: Uuid,
     /// JSON-encoded event payload.
     pub payload: String,
-    /// Delivery status: pending, success, failed, dead.
+    /// Labels for delivery targeting (copied from subscription).
+    pub target_labels: Option<Vec<Option<String>>>,
+    /// Delivery status: pending, acquired, success, failed, dead.
     pub status: String,
+    /// Agent ID that acquired this delivery (NULL = broker).
+    pub acquired_by: Option<Uuid>,
+    /// TTL for the acquisition - release if exceeded.
+    pub acquired_until: Option<DateTime<Utc>>,
     /// Number of delivery attempts.
     pub attempts: i32,
     /// When the last delivery attempt was made.
     pub last_attempt_at: Option<DateTime<Utc>>,
-    /// When to attempt delivery next (for retries).
-    pub next_attempt_at: Option<DateTime<Utc>>,
+    /// When to retry after failure.
+    pub next_retry_at: Option<DateTime<Utc>>,
     /// Error message from last failed attempt.
     pub last_error: Option<String>,
     /// When the delivery was created.
@@ -279,10 +318,10 @@ pub struct NewWebhookDelivery {
     pub event_id: Uuid,
     /// JSON-encoded payload.
     pub payload: String,
+    /// Labels for delivery targeting (copied from subscription).
+    pub target_labels: Option<Vec<Option<String>>>,
     /// Initial status (pending).
     pub status: String,
-    /// When to first attempt delivery.
-    pub next_attempt_at: DateTime<Utc>,
 }
 
 impl NewWebhookDelivery {
@@ -291,10 +330,15 @@ impl NewWebhookDelivery {
     /// # Arguments
     /// * `subscription_id` - The subscription to deliver to.
     /// * `event` - The event to deliver.
+    /// * `target_labels` - Labels for delivery targeting (from subscription).
     ///
     /// # Returns
     /// A Result containing the new delivery or an error.
-    pub fn new(subscription_id: Uuid, event: &BrokkrEvent) -> Result<Self, String> {
+    pub fn new(
+        subscription_id: Uuid,
+        event: &BrokkrEvent,
+        target_labels: Option<Vec<Option<String>>>,
+    ) -> Result<Self, String> {
         if subscription_id.is_nil() {
             return Err("Subscription ID cannot be nil".to_string());
         }
@@ -307,8 +351,8 @@ impl NewWebhookDelivery {
             event_type: event.event_type.clone(),
             event_id: event.id,
             payload,
+            target_labels,
             status: DELIVERY_STATUS_PENDING.to_string(),
-            next_attempt_at: Utc::now(),
         })
     }
 }
@@ -319,12 +363,16 @@ impl NewWebhookDelivery {
 pub struct UpdateWebhookDelivery {
     /// New status.
     pub status: Option<String>,
+    /// Agent that acquired this delivery.
+    pub acquired_by: Option<Option<Uuid>>,
+    /// TTL for the acquisition.
+    pub acquired_until: Option<Option<DateTime<Utc>>>,
     /// Increment attempts.
     pub attempts: Option<i32>,
     /// When last attempted.
     pub last_attempt_at: Option<DateTime<Utc>>,
     /// When to retry.
-    pub next_attempt_at: Option<Option<DateTime<Utc>>>,
+    pub next_retry_at: Option<Option<DateTime<Utc>>>,
     /// Error message.
     pub last_error: Option<Option<String>>,
     /// When completed.
@@ -342,10 +390,10 @@ mod tests {
     #[test]
     fn test_brokkr_event_new() {
         let data = serde_json::json!({"agent_id": "123"});
-        let event = BrokkrEvent::new(EVENT_AGENT_OFFLINE, data.clone());
+        let event = BrokkrEvent::new(EVENT_AGENT_REGISTERED, data.clone());
 
         assert!(!event.id.is_nil());
-        assert_eq!(event.event_type, EVENT_AGENT_OFFLINE);
+        assert_eq!(event.event_type, EVENT_AGENT_REGISTERED);
         assert_eq!(event.data, data);
     }
 
@@ -355,7 +403,8 @@ mod tests {
             "Test Webhook".to_string(),
             vec![1, 2, 3], // Mock encrypted URL
             None,
-            vec!["health.*".to_string()],
+            vec!["deployment.*".to_string()],
+            None,
             None,
             Some("admin".to_string()),
         );
@@ -365,6 +414,25 @@ mod tests {
         assert_eq!(sub.name, "Test Webhook");
         assert!(sub.enabled);
         assert_eq!(sub.max_retries, 5);
+        assert!(sub.target_labels.is_none());
+    }
+
+    #[test]
+    fn test_new_webhook_subscription_with_target_labels() {
+        let result = NewWebhookSubscription::new(
+            "Test Webhook".to_string(),
+            vec![1, 2, 3],
+            None,
+            vec!["deployment.*".to_string()],
+            None,
+            Some(vec!["env:prod".to_string(), "region:us-east".to_string()]),
+            Some("admin".to_string()),
+        );
+
+        assert!(result.is_ok());
+        let sub = result.unwrap();
+        let labels = sub.target_labels.unwrap();
+        assert_eq!(labels.len(), 2);
     }
 
     #[test]
@@ -373,7 +441,8 @@ mod tests {
             "".to_string(),
             vec![1, 2, 3],
             None,
-            vec!["health.*".to_string()],
+            vec!["deployment.*".to_string()],
+            None,
             None,
             None,
         );
@@ -391,6 +460,7 @@ mod tests {
             vec![],
             None,
             None,
+            None,
         );
 
         assert!(result.is_err());
@@ -400,22 +470,37 @@ mod tests {
     #[test]
     fn test_new_webhook_delivery_success() {
         let event = BrokkrEvent::new(
-            EVENT_HEALTH_DEGRADED,
-            serde_json::json!({"status": "degraded"}),
+            EVENT_DEPLOYMENT_APPLIED,
+            serde_json::json!({"deployment_object_id": "123"}),
         );
-        let result = NewWebhookDelivery::new(Uuid::new_v4(), &event);
+        let result = NewWebhookDelivery::new(Uuid::new_v4(), &event, None);
 
         assert!(result.is_ok());
         let delivery = result.unwrap();
-        assert_eq!(delivery.event_type, EVENT_HEALTH_DEGRADED);
+        assert_eq!(delivery.event_type, EVENT_DEPLOYMENT_APPLIED);
         assert_eq!(delivery.event_id, event.id);
         assert_eq!(delivery.status, DELIVERY_STATUS_PENDING);
+        assert!(delivery.target_labels.is_none());
+    }
+
+    #[test]
+    fn test_new_webhook_delivery_with_target_labels() {
+        let event = BrokkrEvent::new(
+            EVENT_DEPLOYMENT_APPLIED,
+            serde_json::json!({"deployment_object_id": "123"}),
+        );
+        let labels = Some(vec![Some("env:prod".to_string())]);
+        let result = NewWebhookDelivery::new(Uuid::new_v4(), &event, labels);
+
+        assert!(result.is_ok());
+        let delivery = result.unwrap();
+        assert!(delivery.target_labels.is_some());
     }
 
     #[test]
     fn test_new_webhook_delivery_nil_subscription() {
-        let event = BrokkrEvent::new(EVENT_AGENT_ONLINE, serde_json::json!({}));
-        let result = NewWebhookDelivery::new(Uuid::nil(), &event);
+        let event = BrokkrEvent::new(EVENT_AGENT_REGISTERED, serde_json::json!({}));
+        let result = NewWebhookDelivery::new(Uuid::nil(), &event, None);
 
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Subscription ID cannot be nil"));
@@ -436,5 +521,31 @@ mod tests {
 
         assert_eq!(filters.agent_id, parsed.agent_id);
         assert_eq!(filters.labels, parsed.labels);
+    }
+
+    #[test]
+    fn test_valid_event_types() {
+        // Ensure all event types are present
+        assert!(VALID_EVENT_TYPES.contains(&EVENT_AGENT_REGISTERED));
+        assert!(VALID_EVENT_TYPES.contains(&EVENT_AGENT_DEREGISTERED));
+        assert!(VALID_EVENT_TYPES.contains(&EVENT_STACK_CREATED));
+        assert!(VALID_EVENT_TYPES.contains(&EVENT_STACK_DELETED));
+        assert!(VALID_EVENT_TYPES.contains(&EVENT_DEPLOYMENT_CREATED));
+        assert!(VALID_EVENT_TYPES.contains(&EVENT_DEPLOYMENT_APPLIED));
+        assert!(VALID_EVENT_TYPES.contains(&EVENT_DEPLOYMENT_FAILED));
+        assert!(VALID_EVENT_TYPES.contains(&EVENT_DEPLOYMENT_DELETED));
+        assert!(VALID_EVENT_TYPES.contains(&EVENT_WORKORDER_CREATED));
+        assert!(VALID_EVENT_TYPES.contains(&EVENT_WORKORDER_CLAIMED));
+        assert!(VALID_EVENT_TYPES.contains(&EVENT_WORKORDER_COMPLETED));
+        assert!(VALID_EVENT_TYPES.contains(&EVENT_WORKORDER_FAILED));
+    }
+
+    #[test]
+    fn test_valid_delivery_statuses() {
+        assert!(VALID_DELIVERY_STATUSES.contains(&DELIVERY_STATUS_PENDING));
+        assert!(VALID_DELIVERY_STATUSES.contains(&DELIVERY_STATUS_ACQUIRED));
+        assert!(VALID_DELIVERY_STATUSES.contains(&DELIVERY_STATUS_SUCCESS));
+        assert!(VALID_DELIVERY_STATUSES.contains(&DELIVERY_STATUS_FAILED));
+        assert!(VALID_DELIVERY_STATUSES.contains(&DELIVERY_STATUS_DEAD));
     }
 }

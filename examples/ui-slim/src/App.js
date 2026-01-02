@@ -1037,7 +1037,7 @@ const JobsPanel = ({ agents }) => {
     setForm({
       ...form,
       workType: 'build',
-      yamlContent: api.getWebhookCatcherBuildYaml()
+      yamlContent: api.getDemoBuildYaml()
     });
     setShowCreate(true);
   };
@@ -1269,9 +1269,6 @@ const AdminPanel = ({ onGeneratorsChange, onAgentsChange }) => {
   const [newPak, setNewPak] = useState(null);
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [demoRunning, setDemoRunning] = useState(false);
-  const [demoLogs, setDemoLogs] = useState([]);
-  const [demoResults, setDemoResults] = useState(null);
   const toast = useToast();
 
   const load = useCallback(async () => {
@@ -1334,32 +1331,6 @@ const AdminPanel = ({ onGeneratorsChange, onAgentsChange }) => {
     setForm({ name: '', cluster: '', description: '' });
   };
 
-  const runDemo = async () => {
-    if (demoRunning) return;
-    setDemoRunning(true);
-    setDemoLogs([]);
-    setDemoResults(null);
-
-    try {
-      await api.runDemoSetup((progress) => {
-        setDemoLogs(logs => [...logs, { time: new Date().toLocaleTimeString(), message: progress.message }]);
-        if (progress.done) {
-          setDemoRunning(false);
-          if (progress.results) {
-            setDemoResults(progress.results);
-            toast?.('Demo setup complete!', 'success');
-            load(); // Refresh data
-          } else if (progress.error) {
-            toast?.('Demo setup failed: ' + progress.error.message, 'error');
-          }
-        }
-      });
-    } catch (e) {
-      setDemoRunning(false);
-      toast?.('Demo setup failed: ' + getErrorMessage(e), 'error');
-    }
-  };
-
   if (loading) return <div className="loading">Loading...</div>;
 
   return (
@@ -1367,96 +1338,6 @@ const AdminPanel = ({ onGeneratorsChange, onAgentsChange }) => {
       <div className="panel-header">
         <h2>⚙ Admin</h2>
       </div>
-
-      <Section title="Demo Setup" icon="🚀" defaultOpen>
-        <p className="dim" style={{ marginBottom: '12px' }}>
-          Demonstrates real functionality: activates the deployed agent, deploys a second agent via K8s, creates stacks with deployments, and captures webhook events.
-        </p>
-        <button
-          onClick={runDemo}
-          className={`btn-primary btn-block ${demoRunning ? 'disabled' : ''}`}
-          disabled={demoRunning}
-        >
-          {demoRunning ? '⏳ Running Demo Setup...' : '▶ Run Demo Setup'}
-        </button>
-
-        {demoLogs.length > 0 && (
-          <div className="demo-log">
-            {demoLogs.map((log, i) => (
-              <div key={i} className="demo-log-entry">
-                <span className="dim">{log.time}</span>
-                <span>{log.message}</span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {demoResults && (
-          <div className="demo-results">
-            {demoResults.realAgent && (
-              <div className="demo-agent-info">
-                <h4>Real Agent Activated:</h4>
-                <div className="demo-agent-detail">
-                  <span className="mono">{demoResults.realAgent.name}</span>
-                  <Status status="ACTIVE" />
-                </div>
-              </div>
-            )}
-
-            {demoResults.stagingAgent && (
-              <div className="demo-agent-info">
-                <h4>Staging Agent Deployed:</h4>
-                <div className="demo-agent-detail">
-                  <span className="mono">{demoResults.stagingAgent.agent?.name || 'demo-staging-agent'}</span>
-                  <Tag variant="info">deploying via K8s</Tag>
-                </div>
-              </div>
-            )}
-
-            <h4>Created Resources:</h4>
-            <div className="demo-results-grid">
-              <div className="demo-result-item">
-                <span className="demo-result-count">{demoResults.generators.length}</span>
-                <span className="demo-result-label">Generators</span>
-              </div>
-              <div className="demo-result-item">
-                <span className="demo-result-count">{demoResults.agents.length}</span>
-                <span className="demo-result-label">New Agents</span>
-              </div>
-              <div className="demo-result-item">
-                <span className="demo-result-count">{demoResults.stacks.length}</span>
-                <span className="demo-result-label">Stacks</span>
-              </div>
-              <div className="demo-result-item">
-                <span className="demo-result-count">{demoResults.deployments.length}</span>
-                <span className="demo-result-label">Deployments</span>
-              </div>
-              <div className="demo-result-item">
-                <span className="demo-result-count">{demoResults.templates.length}</span>
-                <span className="demo-result-label">Templates</span>
-              </div>
-              <div className="demo-result-item">
-                <span className="demo-result-count">{demoResults.webhooks.length}</span>
-                <span className="demo-result-label">Webhooks</span>
-              </div>
-            </div>
-
-            {demoResults.receivedWebhooks && demoResults.receivedWebhooks.length > 0 && (
-              <div className="webhook-events">
-                <h4>Received Webhook Events ({demoResults.receivedWebhooks.length}):</h4>
-                <div className="webhook-events-list">
-                  {demoResults.receivedWebhooks.slice(0, 10).map((event, i) => (
-                    <div key={i} className="webhook-event">
-                      <span className="webhook-event-type">{event.event_type}</span>
-                      <span className="webhook-event-time">{new Date(event.received_at).toLocaleTimeString()}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </Section>
 
       <Section title="Agent PAKs" icon="⬡" count={agents.length} defaultOpen>
         <button onClick={() => setShowCreate('agent')} className="btn-primary btn-block">+ Create Agent PAK</button>
@@ -2029,6 +1910,940 @@ const MetricsPanel = () => {
   );
 };
 
+// ==================== DEMO PANEL ====================
+const DemoPanel = () => {
+  const toast = useToast();
+  const [demoState, setDemoState] = useState({
+    status: 'idle', // idle, running, completed, error
+    currentPhase: 0,
+    startTime: null,
+    integrationAgent: null, // Stored from Phase 1 for use in other phases
+    phases: {
+      1: { name: 'Environment Check', status: 'pending', steps: [], duration: null },
+      2: { name: 'Container Build', status: 'pending', steps: [], workOrder: null, duration: null },
+      3: { name: 'Agent Status', status: 'pending', steps: [], agent: null, duration: null },
+      4: { name: 'Stack & Deployments', status: 'pending', steps: [], deployments: [], duration: null },
+      5: { name: 'Webhooks', status: 'pending', steps: [], webhookEvents: [], duration: null },
+      6: { name: 'Templates', status: 'pending', steps: [], template: null, duration: null }
+    },
+    summary: { builds: 0, generators: 0, agents: 0, stacks: 0, deployments: 0, webhooks: 0, templates: 0 },
+    createdResources: { workOrderIds: [], agentIds: [], stackIds: [], webhookIds: [], templateIds: [], deploymentIds: [] }
+  });
+  const [cleanupRunning, setCleanupRunning] = useState(false);
+
+  // Helper to update a specific phase
+  const updatePhase = (phaseNum, updates) => {
+    setDemoState(prev => ({
+      ...prev,
+      phases: {
+        ...prev.phases,
+        [phaseNum]: { ...prev.phases[phaseNum], ...updates }
+      }
+    }));
+  };
+
+  // Helper to add a step to a phase
+  const addStep = (phaseNum, step) => {
+    setDemoState(prev => ({
+      ...prev,
+      phases: {
+        ...prev.phases,
+        [phaseNum]: {
+          ...prev.phases[phaseNum],
+          steps: [...prev.phases[phaseNum].steps, { time: new Date(), ...step }]
+        }
+      }
+    }));
+  };
+
+  // Format duration
+  const formatDuration = (ms) => {
+    if (!ms) return '';
+    const seconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(seconds / 60);
+    if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
+    return `${seconds}s`;
+  };
+
+  // Initialize/reset the demo
+  const resetDemo = () => {
+    setDemoState(prev => ({
+      ...prev,
+      status: 'ready',
+      startTime: Date.now(),
+      currentPhase: 0,
+      phases: Object.fromEntries(
+        Object.entries(prev.phases).map(([k, v]) => [k, { ...v, status: 'pending', steps: [], duration: null }])
+      ),
+      summary: { builds: 0, generators: 0, agents: 0, stacks: 0, deployments: 0, webhooks: 0, templates: 0 },
+      createdResources: { workOrderIds: [], agentIds: [], stackIds: [], webhookIds: [], templateIds: [], deploymentIds: [] }
+    }));
+  };
+
+  // Check if a phase can be started (Phase 1 must complete first, then 2-6 can run in any order)
+  const canStartPhase = (phaseNum) => {
+    if (demoState.status === 'idle') return false;
+    if (demoState.phases[phaseNum]?.status === 'running') return false;
+    if (phaseNum === 1) return demoState.phases[1]?.status === 'pending';
+    // After Phase 1 (health check) completes, any other phase can run independently
+    return demoState.phases[1]?.status === 'success' &&
+           demoState.phases[phaseNum]?.status === 'pending';
+  };
+
+  // Run a specific phase
+  const runPhase = async (phaseNum) => {
+    if (!canStartPhase(phaseNum)) return;
+
+    setDemoState(prev => ({ ...prev, currentPhase: phaseNum }));
+
+    try {
+      switch (phaseNum) {
+        case 1: await runPhase1(); break;
+        case 2: await runPhase2(); break;
+        case 3: await runPhase3(); break;
+        case 4: await runPhase4(); break;
+        case 5: await runPhase5(); break;
+        case 6: await runPhase6(); break;
+        default: break;
+      }
+
+      // Check if all phases are complete
+      if (phaseNum === 6 && demoState.phases[6]?.status !== 'error') {
+        setDemoState(prev => ({ ...prev, status: 'completed', currentPhase: 0 }));
+        toast?.('Demo completed successfully!', 'success');
+      }
+    } catch (error) {
+      updatePhase(phaseNum, { status: 'error' });
+      toast?.(`Phase ${phaseNum} failed: ${error.message}`, 'error');
+    }
+  };
+
+  // Phase 1: Environment Check
+  const runPhase1 = async () => {
+    const phaseStart = Date.now();
+    updatePhase(1, { status: 'running' });
+    setDemoState(prev => ({ ...prev, currentPhase: 1 }));
+
+    // Check broker health
+    addStep(1, { text: 'Checking broker API...', status: 'running' });
+    try {
+      await fetch('/healthz');
+      addStep(1, { text: 'Broker API healthy', status: 'success', icon: '✓' });
+    } catch (e) {
+      addStep(1, { text: 'Broker API unreachable', status: 'error' });
+      throw new Error('Broker API not available');
+    }
+
+    // Find integration agent
+    addStep(1, { text: 'Finding integration agent...', status: 'running' });
+    const agents = await api.getAgents();
+    let integrationAgent = agents.find(a => a.name === 'brokkr-integration-test-agent');
+    if (!integrationAgent) {
+      addStep(1, { text: 'Integration agent not found', status: 'error' });
+      throw new Error('Integration agent not found. Run `angreal local up` first.');
+    }
+
+    // Activate agent if not ACTIVE
+    if (integrationAgent.status !== 'ACTIVE') {
+      addStep(1, { text: `Agent is ${integrationAgent.status}, activating...`, status: 'running' });
+      try {
+        await api.updateAgent(integrationAgent.id, { status: 'ACTIVE' });
+        const refreshedAgents = await api.getAgents();
+        integrationAgent = refreshedAgents.find(a => a.id === integrationAgent.id) || integrationAgent;
+        addStep(1, { text: 'Agent activated', status: 'success', icon: '✓' });
+      } catch (e) {
+        addStep(1, { text: `Failed to activate agent: ${e.message}`, status: 'warning', icon: '⚠' });
+      }
+    }
+
+    const heartbeatAge = integrationAgent.last_heartbeat
+      ? Math.floor((Date.now() - new Date(integrationAgent.last_heartbeat).getTime()) / 1000)
+      : null;
+    addStep(1, {
+      text: `Agent ready: ${integrationAgent.name} (${integrationAgent.status})`,
+      status: integrationAgent.status === 'ACTIVE' ? 'success' : 'warning',
+      icon: integrationAgent.status === 'ACTIVE' ? '✓' : '⚠',
+      detail: heartbeatAge !== null ? `Last heartbeat: ${heartbeatAge}s ago` : 'No heartbeat yet'
+    });
+
+    // Store the integration agent for use in other phases
+    setDemoState(prev => ({ ...prev, integrationAgent }));
+
+    // Check webhook catcher
+    addStep(1, { text: 'Checking webhook catcher...', status: 'running' });
+    try {
+      const res = await fetch('http://localhost:8090/healthz');
+      if (res.ok) {
+        addStep(1, { text: 'Webhook catcher ready', status: 'success', icon: '✓' });
+      } else {
+        addStep(1, { text: 'Webhook catcher not healthy', status: 'warning', icon: '⚠' });
+      }
+    } catch (e) {
+      addStep(1, { text: 'Webhook catcher not reachable (optional)', status: 'warning', icon: '⚠' });
+    }
+
+    updatePhase(1, { status: 'success', duration: Date.now() - phaseStart });
+  };
+
+  // Phase 2: Container Build
+  const runPhase2 = async () => {
+    const phaseStart = Date.now();
+    updatePhase(2, { status: 'running' });
+    setDemoState(prev => ({ ...prev, currentPhase: 2 }));
+
+    const agentId = demoState.integrationAgent?.id;
+    if (!agentId) {
+      addStep(2, { text: 'No integration agent found - run Phase 1 first', status: 'error', icon: '✗' });
+      throw new Error('Integration agent not found');
+    }
+
+    const imageTag = `demo-${Date.now()}`;
+
+    addStep(2, { text: 'Creating build work order...', status: 'running', detail: `Target: ${demoState.integrationAgent.name}` });
+    let workOrder;
+    try {
+      workOrder = await api.createBuildWorkOrder(imageTag, agentId);
+      addStep(2, { text: `Work order created: ${workOrder.id.slice(0, 8)}...`, status: 'success', icon: '✓' });
+      setDemoState(prev => ({
+        ...prev,
+        createdResources: { ...prev.createdResources, workOrderIds: [...prev.createdResources.workOrderIds, workOrder.id] },
+        phases: { ...prev.phases, 2: { ...prev.phases[2], workOrder } }
+      }));
+    } catch (e) {
+      addStep(2, { text: `Failed to create work order: ${e.message}`, status: 'error', icon: '✗' });
+      throw e;
+    }
+
+    addStep(2, { text: 'Waiting for agent to claim work order...', status: 'running', detail: 'Status: PENDING' });
+
+    const pollStartTime = Date.now();
+    const maxPollTime = 300000;
+    let lastStatus = 'PENDING';
+
+    while (Date.now() - pollStartTime < maxPollTime) {
+      try {
+        const wo = await api.getWorkOrder(workOrder.id);
+        if (wo.status !== lastStatus) {
+          lastStatus = wo.status;
+          const statusMessages = {
+            'PENDING': { text: 'Waiting for agent to claim...', icon: '○', detail: 'Status: PENDING' },
+            'CLAIMED': { text: 'Agent claimed work order', icon: '◐', detail: 'Status: CLAIMED - preparing build' },
+            'IN_PROGRESS': { text: 'Build in progress...', icon: '◐', detail: 'Status: IN_PROGRESS - building image' },
+            'COMPLETED': { text: 'Build completed successfully!', icon: '✓', detail: `Image: registry:5000/webhook-catcher:${imageTag}` },
+            'FAILED': { text: 'Build failed', icon: '✗', detail: wo.result_message || 'Unknown error' },
+            'CANCELLED': { text: 'Build cancelled', icon: '✗', detail: 'Work order was cancelled' }
+          };
+          const msg = statusMessages[wo.status] || { text: `Status: ${wo.status}`, icon: '○' };
+          addStep(2, { text: msg.text, status: wo.status === 'COMPLETED' ? 'success' : (wo.status === 'FAILED' || wo.status === 'CANCELLED') ? 'error' : 'running', icon: msg.icon, detail: msg.detail });
+        }
+
+        if (wo.status === 'COMPLETED') {
+          updatePhase(2, { status: 'success', duration: Date.now() - phaseStart, workOrder: wo });
+          setDemoState(prev => ({ ...prev, summary: { ...prev.summary, builds: 1 } }));
+          return;
+        }
+        if (wo.status === 'FAILED' || wo.status === 'CANCELLED') {
+          throw new Error(`Build ${wo.status.toLowerCase()}: ${wo.result_message || 'Unknown error'}`);
+        }
+        setDemoState(prev => ({
+          ...prev,
+          phases: { ...prev.phases, 2: { ...prev.phases[2], workOrder: wo } }
+        }));
+      } catch (e) {
+        if (e.message.includes('Build failed') || e.message.includes('Build cancelled')) throw e;
+      }
+      await new Promise(resolve => setTimeout(resolve, 3000));
+    }
+
+    addStep(2, { text: 'Build timed out after 5 minutes', status: 'error', icon: '✗' });
+    throw new Error('Build timed out - check agent logs');
+  };
+
+  // Phase 3: Agent Status - verify agent is healthy and add demo labels
+  const runPhase3 = async () => {
+    const phaseStart = Date.now();
+    updatePhase(3, { status: 'running' });
+    setDemoState(prev => ({ ...prev, currentPhase: 3 }));
+
+    const agent = demoState.integrationAgent;
+    if (!agent) {
+      addStep(3, { text: 'Integration agent not found - run Phase 1 first', status: 'error', icon: '✗' });
+      throw new Error('Integration agent not found');
+    }
+
+    // Check agent status
+    addStep(3, { text: `Checking agent: ${agent.name}...`, status: 'running' });
+    const agents = await api.getAgents();
+    const currentAgent = agents.find(a => a.id === agent.id);
+
+    if (!currentAgent) {
+      addStep(3, { text: 'Agent not found in database', status: 'error', icon: '✗' });
+      throw new Error('Agent not found');
+    }
+
+    const heartbeatAge = currentAgent.last_heartbeat
+      ? Math.floor((Date.now() - new Date(currentAgent.last_heartbeat).getTime()) / 1000)
+      : null;
+
+    addStep(3, {
+      text: `Agent status: ${currentAgent.status}`,
+      status: currentAgent.status === 'ACTIVE' ? 'success' : 'warning',
+      icon: currentAgent.status === 'ACTIVE' ? '✓' : '⚠',
+      detail: heartbeatAge !== null ? `Last heartbeat: ${heartbeatAge}s ago` : 'No heartbeat yet'
+    });
+
+    // Add demo labels to agent
+    addStep(3, { text: 'Adding demo labels to agent...', status: 'running' });
+    try {
+      await api.addAgentLabel(currentAgent.id, 'env:demo').catch(() => {});
+      await api.addAgentLabel(currentAgent.id, 'tier:primary').catch(() => {});
+      await api.addAgentAnnotation(currentAgent.id, 'demo-phase', 'labeled').catch(() => {});
+      addStep(3, { text: 'Labels added: env:demo, tier:primary', status: 'success', icon: '✓' });
+    } catch (e) {
+      addStep(3, { text: 'Labels already exist (continuing)', status: 'info', icon: '○' });
+    }
+
+    // Get or create generator for subsequent phases
+    addStep(3, { text: 'Creating demo-generator...', status: 'running' });
+    try {
+      const gen = await api.createGenerator('demo-generator', 'Demo generator for UAT');
+      addStep(3, { text: 'Generator created', status: 'success', icon: '✓' });
+      setDemoState(prev => ({ ...prev, summary: { ...prev.summary, generators: prev.summary.generators + 1 } }));
+    } catch (e) {
+      if (e.message.includes('already exists') || e.message.includes('duplicate')) {
+        addStep(3, { text: 'Generator exists (reusing)', status: 'info', icon: '○' });
+      } else throw e;
+    }
+
+    updatePhase(3, { status: 'success', duration: Date.now() - phaseStart });
+  };
+
+  // Phase 4: Stack & Deployments
+  const runPhase4 = async () => {
+    const phaseStart = Date.now();
+    updatePhase(4, { status: 'running' });
+    setDemoState(prev => ({ ...prev, currentPhase: 4 }));
+
+    // First, label the integration agent to demonstrate label-based targeting
+    addStep(4, { text: 'Labeling integration agent...', status: 'running' });
+    try {
+      const agents = await api.getAgents();
+      const integrationAgent = agents.find(a => a.name === 'brokkr-integration-test-agent');
+      if (integrationAgent) {
+        await api.addAgentLabel(integrationAgent.id, 'env:demo').catch(() => {});
+        await api.addAgentLabel(integrationAgent.id, 'tier:primary').catch(() => {});
+        await api.addAgentAnnotation(integrationAgent.id, 'purpose', 'demo-deployment').catch(() => {});
+        addStep(4, { text: 'Agent labeled: env:demo, tier:primary', status: 'success', icon: '✓' });
+      }
+    } catch (e) {
+      addStep(4, { text: 'Agent labeling skipped', status: 'info', icon: '○' });
+    }
+
+    addStep(4, { text: 'Creating demo-services stack...', status: 'running' });
+    try {
+      // Get or create generator
+      const generators = await api.getGenerators();
+      let generator = generators.find(g => g.name === 'demo-generator');
+      if (!generator) {
+        const genResult = await api.createGenerator('demo-generator', 'Demo generator');
+        generator = genResult.generator;
+      }
+
+      const stack = await api.createStack('demo-services', 'Demo application services', generator.id);
+      // Label stack to match agent labels (demonstrates label-based targeting concept)
+      await api.addStackLabel(stack.id, 'env:demo');
+      await api.addStackLabel(stack.id, 'tier:primary');
+      await api.addStackAnnotation(stack.id, 'deployed-by', 'demo-phase-4');
+      addStep(4, { text: 'Stack created with matching labels: env:demo, tier:primary', status: 'success', icon: '✓' });
+      setDemoState(prev => ({
+        ...prev,
+        createdResources: { ...prev.createdResources, stackIds: [...prev.createdResources.stackIds, stack.id] },
+        summary: { ...prev.summary, stacks: prev.summary.stacks + 1 }
+      }));
+
+      // Create deployment
+      addStep(4, { text: 'Creating deployments (nginx + http-echo)...', status: 'running' });
+      const deploymentYaml = `---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-web
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: demo-web
+  template:
+    metadata:
+      labels:
+        app: demo-web
+    spec:
+      containers:
+      - name: web
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-api
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: demo-api
+  template:
+    metadata:
+      labels:
+        app: demo-api
+    spec:
+      containers:
+      - name: api
+        image: hashicorp/http-echo
+        args: ["-text=Hello from Brokkr Demo"]
+        ports:
+        - containerPort: 5678`;
+
+      const deployment = await api.createDeployment(stack.id, deploymentYaml);
+      addStep(4, { text: 'Deployments created', status: 'success', icon: '✓', detail: 'demo-web, demo-api' });
+      setDemoState(prev => ({
+        ...prev,
+        createdResources: { ...prev.createdResources, deploymentIds: [...prev.createdResources.deploymentIds, deployment.id] },
+        summary: { ...prev.summary, deployments: prev.summary.deployments + 2 }
+      }));
+
+      // Target stack to agent with matching labels
+      addStep(4, { text: 'Targeting stack to agent with matching labels...', status: 'running' });
+      const agents = await api.getAgents();
+      const agent = agents.find(a => a.name === 'brokkr-integration-test-agent' && a.status === 'ACTIVE');
+      if (agent) {
+        await api.addAgentTarget(agent.id, stack.id);
+        addStep(4, { text: `Targeted to ${agent.name} (labels: env:demo, tier:primary)`, status: 'success', icon: '✓' });
+      }
+    } catch (e) {
+      if (e.message.includes('already exists')) {
+        addStep(4, { text: 'Resources already exist (reusing)', status: 'info', icon: '○' });
+      } else {
+        throw e;
+      }
+    }
+
+    updatePhase(4, { status: 'success', duration: Date.now() - phaseStart });
+  };
+
+  // Phase 5: Webhooks
+  const runPhase5 = async () => {
+    const phaseStart = Date.now();
+    updatePhase(5, { status: 'running' });
+    setDemoState(prev => ({ ...prev, currentPhase: 5 }));
+
+    let webhookId = null;
+
+    addStep(5, { text: 'Creating webhook subscription...', status: 'running' });
+    try {
+      // Valid event types: health.degraded, health.failing, health.recovered,
+      // deployment.applied, deployment.failed, agent.offline, agent.online, workorder.completed
+      const webhook = await api.createWebhook(
+        'demo-event-notifier',
+        'http://host.docker.internal:8090/receive',
+        ['health.recovered', 'health.degraded', 'health.failing', 'deployment.applied', 'deployment.failed', 'workorder.completed'],
+        null
+      );
+      webhookId = webhook.id;
+      addStep(5, { text: 'Webhook subscription created (health + deployment events)', status: 'success', icon: '✓' });
+      setDemoState(prev => ({
+        ...prev,
+        createdResources: { ...prev.createdResources, webhookIds: [...prev.createdResources.webhookIds, webhook.id] },
+        summary: { ...prev.summary, webhooks: prev.summary.webhooks + 1 }
+      }));
+    } catch (e) {
+      if (e.message.includes('already exists')) {
+        addStep(5, { text: 'Webhook already exists (reusing)', status: 'info', icon: '○' });
+        // Get existing webhook
+        const webhooks = await api.getWebhooks();
+        const existing = webhooks.find(w => w.name === 'demo-event-notifier');
+        if (existing) webhookId = existing.id;
+      } else {
+        throw e;
+      }
+    }
+
+    // Trigger deployment events by deploying something that will cause health status changes
+    addStep(5, { text: 'Triggering deployment events...', status: 'running' });
+    try {
+      // Create a small test stack to trigger webhook events
+      const generators = await api.getGenerators();
+      let generator = generators.find(g => g.name === 'demo-generator');
+      if (!generator) {
+        const genResult = await api.createGenerator('demo-generator', 'Demo generator');
+        generator = genResult.generator;
+      }
+
+      const testStack = await api.createStack('webhook-test-stack', 'Stack to trigger webhook events', generator.id);
+      await api.addStackLabel(testStack.id, 'purpose:webhook-test');
+
+      // Create a deployment that will trigger health status changes when applied
+      const testYaml = `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: webhook-test-config
+  namespace: default
+data:
+  test: "webhook-demo"`;
+      await api.createDeployment(testStack.id, testYaml);
+
+      // Target to an agent - when agent applies this, health status changes trigger webhook events
+      const agents = await api.getAgents();
+      const agent = agents.find(a => a.status === 'ACTIVE');
+      if (agent) {
+        await api.addAgentTarget(agent.id, testStack.id);
+        addStep(5, { text: 'Deployment targeted to agent (health events will fire when applied)', status: 'success', icon: '✓' });
+      } else {
+        addStep(5, { text: 'No active agent - deployment created but no health events', status: 'warning', icon: '⚠' });
+      }
+
+      setDemoState(prev => ({
+        ...prev,
+        createdResources: { ...prev.createdResources, stackIds: [...prev.createdResources.stackIds, testStack.id] }
+      }));
+    } catch (e) {
+      addStep(5, { text: `Event triggering: ${e.message}`, status: 'warning', icon: '⚠' });
+    }
+
+    // Poll for webhook events (agent needs time to apply deployment and report health)
+    addStep(5, { text: 'Waiting for agent to apply deployment and trigger events...', status: 'running' });
+    let eventCount = 0;
+    for (let attempt = 0; attempt < 6; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      try {
+        const stats = await api.getWebhookCatcherStats();
+        eventCount = stats.count || 0;
+        if (eventCount > 0) break;
+      } catch (e) {
+        // webhook-catcher might not be running
+      }
+    }
+
+    try {
+      const stats = await api.getWebhookCatcherStats();
+      eventCount = stats.count || 0;
+      addStep(5, { text: `Received ${eventCount} webhook events`, status: eventCount > 0 ? 'success' : 'info', icon: eventCount > 0 ? '✓' : '○' });
+      if (stats.messages && stats.messages.length > 0) {
+        setDemoState(prev => ({
+          ...prev,
+          phases: {
+            ...prev.phases,
+            5: { ...prev.phases[5], webhookEvents: stats.messages.slice(0, 10) }
+          }
+        }));
+      }
+    } catch (e) {
+      addStep(5, { text: `Received ${eventCount} webhook events (webhook-catcher not running)`, status: eventCount > 0 ? 'success' : 'info', icon: eventCount > 0 ? '✓' : '○' });
+    }
+
+    updatePhase(5, { status: 'success', duration: Date.now() - phaseStart });
+  };
+
+  // Phase 6: Templates
+  const runPhase6 = async () => {
+    const phaseStart = Date.now();
+    updatePhase(6, { status: 'running' });
+    setDemoState(prev => ({ ...prev, currentPhase: 6 }));
+
+    let templateId = null;
+
+    // Create template
+    addStep(6, { text: 'Creating template...', status: 'running' });
+    try {
+      const templateContent = `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ name }}
+  namespace: {{ namespace | default(value="default") }}
+data:
+  config.json: |
+    {
+      "app": "{{ app_name }}",
+      "environment": "{{ environment }}",
+      "version": "{{ version | default(value="1.0.0") }}",
+      "deployed_by": "brokkr-demo"
+    }`;
+      const templateSchema = JSON.stringify({
+        type: 'object',
+        required: ['name', 'app_name', 'environment'],
+        properties: {
+          name: { type: 'string', description: 'ConfigMap name' },
+          namespace: { type: 'string', default: 'default' },
+          app_name: { type: 'string', description: 'Application name' },
+          environment: { type: 'string', enum: ['dev', 'staging', 'prod'] },
+          version: { type: 'string', default: '1.0.0' }
+        }
+      });
+      const template = await api.createTemplate('app-config-template', 'Reusable application config template', templateContent, templateSchema);
+      templateId = template.id;
+      addStep(6, { text: 'Template created: app-config-template', status: 'success', icon: '✓' });
+      setDemoState(prev => ({
+        ...prev,
+        createdResources: { ...prev.createdResources, templateIds: [...prev.createdResources.templateIds, template.id] },
+        summary: { ...prev.summary, templates: prev.summary.templates + 1 }
+      }));
+    } catch (e) {
+      if (e.message.includes('already exists')) {
+        addStep(6, { text: 'Template already exists, fetching...', status: 'info', icon: '○' });
+        // Get existing template
+        const templates = await api.getTemplates();
+        const existing = templates.find(t => t.name === 'app-config-template');
+        if (existing) templateId = existing.id;
+      } else {
+        throw e;
+      }
+    }
+
+    // Create stack for template instantiation
+    addStep(6, { text: 'Creating stack for template deployment...', status: 'running' });
+    try {
+      const generators = await api.getGenerators();
+      let generator = generators.find(g => g.name === 'demo-generator');
+      if (!generator) {
+        const genResult = await api.createGenerator('demo-generator', 'Demo generator');
+        generator = genResult.generator;
+      }
+
+      const stack = await api.createStack('demo-config-stack', 'Stack for template-based configs', generator.id);
+      await api.addStackLabel(stack.id, 'type:config');
+      await api.addStackLabel(stack.id, 'source:template');
+      addStep(6, { text: 'Stack created: demo-config-stack', status: 'success', icon: '✓' });
+
+      // Instantiate template with parameters
+      addStep(6, { text: 'Instantiating template with parameters...', status: 'running' });
+      if (templateId) {
+        const params = {
+          name: 'demo-app-config',
+          app_name: 'demo-application',
+          environment: 'staging',
+          version: '2.0.0'
+        };
+        const deployment = await api.instantiateTemplate(stack.id, templateId, params);
+        addStep(6, { text: `Template instantiated: ${JSON.stringify(params)}`, status: 'success', icon: '✓' });
+        setDemoState(prev => ({
+          ...prev,
+          createdResources: { ...prev.createdResources, stackIds: [...prev.createdResources.stackIds, stack.id], deploymentIds: [...prev.createdResources.deploymentIds, deployment.id] },
+          summary: { ...prev.summary, stacks: prev.summary.stacks + 1, deployments: prev.summary.deployments + 1 }
+        }));
+
+        // Target to integration agent
+        addStep(6, { text: 'Targeting to integration agent...', status: 'running' });
+        const agents = await api.getAgents();
+        const agent = agents.find(a => a.name === 'brokkr-integration-test-agent' && a.status === 'ACTIVE');
+        if (agent) {
+          await api.addAgentTarget(agent.id, stack.id);
+          addStep(6, { text: `ConfigMap will be deployed by ${agent.name}`, status: 'success', icon: '✓' });
+        }
+      } else {
+        addStep(6, { text: 'No template available to instantiate', status: 'warning', icon: '⚠' });
+      }
+    } catch (e) {
+      if (e.message.includes('already exists')) {
+        addStep(6, { text: 'Stack already exists (reusing)', status: 'info', icon: '○' });
+      } else {
+        throw e;
+      }
+    }
+
+    updatePhase(6, { status: 'success', duration: Date.now() - phaseStart });
+  };
+
+  // Cleanup demo resources
+  const runCleanup = async () => {
+    setCleanupRunning(true);
+    try {
+      toast?.('Cleanup started...', 'info');
+
+      // Thorough cleanup - find and delete ALL demo resources, not just tracked ones
+
+      // 1. Delete all webhooks with 'demo' in name
+      try {
+        const webhooks = await api.getWebhooks();
+        for (const wh of webhooks.filter(w => w.name.includes('demo'))) {
+          try { await api.deleteWebhook(wh.id); } catch (e) { /* ignore */ }
+        }
+      } catch (e) { /* ignore */ }
+
+      // 2. Delete all stacks with 'demo' or 'staging' or 'webhook-test' in name
+      try {
+        const stacks = await api.getStacks();
+        for (const stack of stacks.filter(s =>
+          s.name.includes('demo') || s.name.includes('staging') || s.name.includes('webhook-test')
+        )) {
+          // First remove agent targets
+          try {
+            const agents = await api.getAgents();
+            for (const agent of agents) {
+              try { await api.removeAgentTarget(agent.id, stack.id); } catch (e) { /* ignore */ }
+            }
+          } catch (e) { /* ignore */ }
+          // Then delete the stack
+          try { await api.deleteStack(stack.id); } catch (e) { /* ignore */ }
+        }
+      } catch (e) { /* ignore */ }
+
+      // 3. Delete all templates with 'demo' or 'app-config' in name
+      try {
+        const templates = await api.getTemplates();
+        for (const tpl of templates.filter(t => t.name.includes('demo') || t.name.includes('app-config'))) {
+          try { await api.deleteTemplate(tpl.id); } catch (e) { /* ignore */ }
+        }
+      } catch (e) { /* ignore */ }
+
+      // 4. Deactivate demo agents (don't delete - keep for audit)
+      try {
+        const agents = await api.getAgents();
+        for (const agent of agents.filter(a => a.name.includes('demo') || a.name.includes('staging'))) {
+          try {
+            await api.updateAgent(agent.id, { status: 'DEACTIVATED' });
+            // Actually delete demo agents for clean slate
+            await api.deleteAgent(agent.id);
+          } catch (e) { /* ignore */ }
+        }
+      } catch (e) { /* ignore */ }
+
+      // 5. Delete generators with 'demo' in name
+      try {
+        const generators = await api.getGenerators();
+        for (const gen of generators.filter(g => g.name.includes('demo'))) {
+          try { await api.deleteGenerator(gen.id); } catch (e) { /* ignore */ }
+        }
+      } catch (e) { /* ignore */ }
+
+      // 6. Remove labels from integration agent
+      try {
+        const agents = await api.getAgents();
+        const integrationAgent = agents.find(a => a.name === 'brokkr-integration-test-agent');
+        if (integrationAgent) {
+          try { await api.removeAgentLabel(integrationAgent.id, 'env:demo'); } catch (e) { /* ignore */ }
+          try { await api.removeAgentLabel(integrationAgent.id, 'tier:primary'); } catch (e) { /* ignore */ }
+          try { await api.removeAgentAnnotation(integrationAgent.id, 'purpose'); } catch (e) { /* ignore */ }
+        }
+      } catch (e) { /* ignore */ }
+
+      toast?.('Cleanup completed - ready for fresh demo', 'success');
+
+      // Reset state completely
+      setDemoState({
+        status: 'idle',
+        currentPhase: 0,
+        startTime: null,
+        integrationAgent: null,
+        phases: {
+          1: { name: 'Environment Check', status: 'pending', steps: [], duration: null },
+          2: { name: 'Container Build', status: 'pending', steps: [], workOrder: null, duration: null },
+          3: { name: 'Agent Status', status: 'pending', steps: [], agent: null, duration: null },
+          4: { name: 'Stack & Deployments', status: 'pending', steps: [], deployments: [], duration: null },
+          5: { name: 'Webhooks', status: 'pending', steps: [], webhookEvents: [], duration: null },
+          6: { name: 'Templates', status: 'pending', steps: [], template: null, duration: null }
+        },
+        summary: { builds: 0, generators: 0, agents: 0, stacks: 0, deployments: 0, webhooks: 0, templates: 0 },
+        createdResources: { workOrderIds: [], agentIds: [], stackIds: [], webhookIds: [], templateIds: [], deploymentIds: [] }
+      });
+    } catch (e) {
+      toast?.('Cleanup failed: ' + e.message, 'error');
+    }
+    setCleanupRunning(false);
+  };
+
+  // Get total duration
+  const totalDuration = demoState.startTime ? Date.now() - demoState.startTime : 0;
+
+  // Render phase card
+  const PhaseCard = ({ num, phase }) => {
+    const phaseNum = parseInt(num, 10);
+    const canStart = canStartPhase(phaseNum);
+
+    const statusIcon = {
+      pending: '○',
+      running: '◐',
+      success: '✓',
+      error: '✗',
+      info: '○'
+    }[phase.status] || '○';
+
+    const statusClass = {
+      pending: 'phase-pending',
+      running: 'phase-running',
+      success: 'phase-success',
+      error: 'phase-error'
+    }[phase.status] || '';
+
+    return (
+      <div className={`demo-phase ${statusClass}`}>
+        <div className="demo-phase-header">
+          {/* Play button - only clickable when phase can start */}
+          <button
+            className={`demo-phase-play ${canStart ? 'active' : ''}`}
+            onClick={() => canStart && runPhase(phaseNum)}
+            disabled={!canStart}
+            title={canStart ? `Start Phase ${num}` : phase.status === 'success' ? 'Completed' : phase.status === 'running' ? 'Running...' : 'Complete previous phase first'}
+          >
+            {phase.status === 'running' ? '◐' : phase.status === 'success' ? '✓' : '▶'}
+          </button>
+          <span className="demo-phase-title">Phase {num}: {phase.name}</span>
+          <span className="demo-phase-status">
+            {phase.status === 'running' && '⏳ Running'}
+            {phase.status === 'success' && `✅ ${formatDuration(phase.duration)}`}
+            {phase.status === 'error' && '❌ Failed'}
+            {phase.status === 'pending' && '○ Pending'}
+          </span>
+        </div>
+        {phase.steps.length > 0 && (
+          <div className="demo-phase-steps">
+            {phase.steps.map((step, i) => (
+              <div key={i} className={`demo-step demo-step-${step.status}`}>
+                <span className="demo-step-icon">{step.icon || (step.status === 'running' ? '...' : '•')}</span>
+                <span className="demo-step-text">{step.text}</span>
+                {step.detail && <span className="demo-step-detail">{step.detail}</span>}
+              </div>
+            ))}
+          </div>
+        )}
+        {/* Show build progress stages in phase 2 */}
+        {num === '2' && phase.workOrder && phase.status === 'running' && (
+          <div className="demo-build-progress">
+            <h4>Build Progress</h4>
+            <div className="demo-build-stages">
+              <span className={`demo-build-stage ${phase.workOrder.status === 'PENDING' ? 'active' : ['CLAIMED', 'IN_PROGRESS', 'COMPLETED'].includes(phase.workOrder.status) ? 'complete' : ''}`}>
+                ● PENDING
+              </span>
+              <span className="demo-build-stage-arrow">→</span>
+              <span className={`demo-build-stage ${phase.workOrder.status === 'CLAIMED' ? 'active' : ['IN_PROGRESS', 'COMPLETED'].includes(phase.workOrder.status) ? 'complete' : ''}`}>
+                ● CLAIMED
+              </span>
+              <span className="demo-build-stage-arrow">→</span>
+              <span className={`demo-build-stage ${phase.workOrder.status === 'IN_PROGRESS' ? 'active' : phase.workOrder.status === 'COMPLETED' ? 'complete' : ''}`}>
+                ◐ BUILDING
+              </span>
+              <span className="demo-build-stage-arrow">→</span>
+              <span className={`demo-build-stage ${phase.workOrder.status === 'COMPLETED' ? 'complete' : ''}`}>
+                ○ COMPLETED
+              </span>
+            </div>
+            <div className="demo-build-meta">
+              <span>Strategy: kaniko (ClusterBuildStrategy)</span>
+              <span>Agent: {phase.workOrder.claimed_by_agent_name || 'waiting...'}</span>
+            </div>
+          </div>
+        )}
+        {/* Show webhook events in phase 5 */}
+        {num === '5' && phase.webhookEvents && phase.webhookEvents.length > 0 && (
+          <div className="demo-event-stream">
+            <div className="demo-event-stream-header">📨 Received Events</div>
+            {phase.webhookEvents.map((evt, i) => (
+              <div key={i} className="demo-event">
+                <span className="demo-event-time">{new Date(evt.received_at).toLocaleTimeString()}</span>
+                <span className="demo-event-type">{evt.body?.event_type || 'unknown'}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="panel demo-panel">
+      <div className="panel-header">
+        <h2>🎯 Platform Demo</h2>
+        <div className="panel-actions">
+          {demoState.status === 'idle' && (
+            <button onClick={resetDemo} className="btn-primary">▶ Initialize Demo</button>
+          )}
+          {(demoState.status === 'ready' || demoState.currentPhase > 0) && demoState.status !== 'completed' && (
+            <button onClick={resetDemo} className="btn-secondary">↺ Reset</button>
+          )}
+          {demoState.status === 'completed' && (
+            <>
+              <button onClick={resetDemo} className="btn-primary">🔄 Run Again</button>
+              <button onClick={runCleanup} className="btn-danger" disabled={cleanupRunning}>
+                {cleanupRunning ? '🗑 Cleaning...' : '🗑 Cleanup'}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {demoState.status === 'idle' && (
+        <div className="demo-intro">
+          <p>This demo walks through all major Brokkr features. Click <strong>Initialize Demo</strong> to begin, then click the play button on each phase to progress.</p>
+          <ul className="demo-feature-list">
+            <li><strong>Phase 1: Environment Check</strong> — Verify broker, agent, and services</li>
+            <li><strong>Phase 2: Container Build</strong> — Build images using Shipwright + Tekton</li>
+            <li><strong>Phase 3: Agent Status</strong> — Verify agent health and add labels</li>
+            <li><strong>Phase 4: Stack Management</strong> — Create stacks and deploy workloads</li>
+            <li><strong>Phase 5: Webhooks</strong> — Real-time event notifications</li>
+            <li><strong>Phase 6: Templates</strong> — Reusable parameterized configurations</li>
+          </ul>
+          <p className="demo-prereq">⚠ Prerequisites: Run <code>angreal local up</code> first</p>
+        </div>
+      )}
+
+      {demoState.status !== 'idle' && (
+        <>
+          {demoState.status === 'ready' && demoState.phases[1]?.status === 'pending' && (
+            <div className="demo-ready-banner">
+              <span>👆 Click the play button on <strong>Phase 1</strong> to begin</span>
+            </div>
+          )}
+
+          {demoState.status === 'completed' && (
+            <div className="demo-complete-banner">
+              <div className="demo-complete-icon">✅</div>
+              <div className="demo-complete-text">
+                <strong>Demo Complete!</strong>
+                <span>All 6 phases completed in {formatDuration(totalDuration)}</span>
+              </div>
+            </div>
+          )}
+
+          {demoState.status === 'completed' && (
+            <div className="demo-summary-grid">
+              <div className="demo-summary-item">
+                <span className="demo-summary-count">{demoState.summary.generators}</span>
+                <span className="demo-summary-label">Generators</span>
+              </div>
+              <div className="demo-summary-item">
+                <span className="demo-summary-count">{demoState.summary.agents}</span>
+                <span className="demo-summary-label">Agents</span>
+              </div>
+              <div className="demo-summary-item">
+                <span className="demo-summary-count">{demoState.summary.stacks}</span>
+                <span className="demo-summary-label">Stacks</span>
+              </div>
+              <div className="demo-summary-item">
+                <span className="demo-summary-count">{demoState.summary.deployments}</span>
+                <span className="demo-summary-label">Deployments</span>
+              </div>
+              <div className="demo-summary-item">
+                <span className="demo-summary-count">{demoState.summary.webhooks}</span>
+                <span className="demo-summary-label">Webhooks</span>
+              </div>
+              <div className="demo-summary-item">
+                <span className="demo-summary-count">{demoState.summary.templates}</span>
+                <span className="demo-summary-label">Templates</span>
+              </div>
+            </div>
+          )}
+
+          {Object.entries(demoState.phases).map(([num, phase]) => (
+            <PhaseCard key={num} num={num} phase={phase} />
+          ))}
+        </>
+      )}
+    </div>
+  );
+};
+
 // ==================== MAIN APP ====================
 // Inner app component that uses toast context
 const AppContent = () => {
@@ -2055,7 +2870,7 @@ const AppContent = () => {
           <span className="logo-text">BROKKR</span>
         </div>
         <nav className="nav">
-          {['agents', 'stacks', 'templates', 'jobs', 'webhooks', 'metrics', 'admin'].map((p) => (
+          {['agents', 'stacks', 'templates', 'jobs', 'webhooks', 'metrics', 'demo', 'admin'].map((p) => (
             <button key={p} className={`nav-item ${activePanel === p ? 'active' : ''}`} onClick={() => setActivePanel(p)}>
               {p}
             </button>
@@ -2070,6 +2885,7 @@ const AppContent = () => {
         {activePanel === 'jobs' && <JobsPanel agents={agents} />}
         {activePanel === 'webhooks' && <WebhooksPanel />}
         {activePanel === 'metrics' && <MetricsPanel />}
+        {activePanel === 'demo' && <DemoPanel />}
         {activePanel === 'admin' && <AdminPanel onGeneratorsChange={setGenerators} onAgentsChange={setAgents} />}
       </main>
     </div>

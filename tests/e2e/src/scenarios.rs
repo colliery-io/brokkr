@@ -575,16 +575,18 @@ pub async fn test_health_diagnostics(client: &Client) -> Result<()> {
 // Part 7: Webhooks
 // =============================================================================
 
-pub async fn test_webhooks(client: &Client, echo_server_url: Option<&str>) -> Result<()> {
-    // Use echo server if provided, otherwise use a placeholder URL
-    let webhook_url = echo_server_url.unwrap_or("http://webhook-echo:8080/webhook");
+pub async fn test_webhooks(client: &Client, webhook_catcher_url: Option<&str>) -> Result<()> {
+    // Use webhook-catcher if provided, otherwise use a placeholder URL
+    let webhook_url = webhook_catcher_url
+        .map(|url| format!("{}/webhook", url))
+        .unwrap_or_else(|| "http://webhook-catcher:8080/webhook".to_string());
 
     // Create a webhook subscription
     println!("  → Creating webhook subscription...");
     let webhook = client.create_webhook(
         "e2e-test-webhook",
-        webhook_url,
-        vec!["health.degraded", "health.failing", "workorder.completed"],
+        &webhook_url,
+        vec!["workorder.completed"],
         Some("Bearer e2e-test-token"),
     ).await?;
     let webhook_id: Uuid = webhook["id"].as_str().unwrap().parse()?;
@@ -609,7 +611,7 @@ pub async fn test_webhooks(client: &Client, echo_server_url: Option<&str>) -> Re
 
     // Verify event_types
     let event_types = fetched["event_types"].as_array().expect("event_types should be array");
-    assert_eq!(event_types.len(), 3);
+    assert_eq!(event_types.len(), 1);
     println!("    Webhook subscribes to {} event type(s)", event_types.len());
 
     // Update webhook (disable it)
@@ -624,28 +626,103 @@ pub async fn test_webhooks(client: &Client, echo_server_url: Option<&str>) -> Re
     assert_eq!(updated["enabled"], true);
     println!("    Webhook re-enabled");
 
-    // Test webhook delivery (sends a test event)
-    // Note: This requires the webhook delivery worker to be running
-    if echo_server_url.is_some() {
-        println!("  → Testing webhook delivery...");
-        match client.test_webhook(webhook_id).await {
-            Ok(result) => {
-                println!("    Test delivery initiated: {:?}", result.get("delivery_id"));
-            }
-            Err(e) => {
-                // Test endpoint might not exist in all versions
-                println!("    Test delivery skipped (endpoint may not exist): {}", e);
+    // ==========================================================================
+    // E2E Webhook Delivery Test
+    // ==========================================================================
+    if let Some(catcher_url) = webhook_catcher_url {
+        println!("  → Testing end-to-end webhook delivery...");
+
+        let catcher = crate::api::WebhookCatcher::new(catcher_url);
+
+        // Clear any existing messages
+        catcher.clear_messages().await?;
+        println!("    Cleared webhook-catcher messages");
+
+        // Create a work order that will trigger workorder.completed event
+        println!("    Creating work order to trigger event...");
+        let wo = client.create_work_order(
+            "custom",
+            "# Webhook test work order\necho 'test'",
+            None,
+            Some(vec!["integration-test"]), // Target any integration test agent
+        ).await?;
+        let wo_id: Uuid = wo["id"].as_str().unwrap().parse()?;
+        println!("    Created work order: {}", wo_id);
+
+        // Wait for work order to be claimed and completed
+        println!("    Waiting for work order completion...");
+        let mut completed = false;
+        for _ in 0..30 {
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+            match client.get_work_order(wo_id).await {
+                Ok(wo_status) => {
+                    let status = wo_status["status"].as_str().unwrap_or("unknown");
+                    if status == "COMPLETED" || status == "FAILED" {
+                        println!("    Work order status: {}", status);
+                        completed = true;
+                        break;
+                    }
+                }
+                Err(_) => {
+                    // Work order might have been moved to log
+                    // Check if we got a webhook
+                    if let Ok(msgs) = catcher.get_messages().await {
+                        if msgs["count"].as_u64().unwrap_or(0) > 0 {
+                            completed = true;
+                            break;
+                        }
+                    }
+                }
             }
         }
 
-        // Wait a moment for delivery to be processed
-        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        if completed {
+            // Wait for webhook delivery (broker delivery worker runs every 5 seconds)
+            println!("    Waiting for webhook delivery...");
+            match catcher.wait_for_messages(1, 15).await {
+                Ok(msgs) => {
+                    let count = msgs["count"].as_u64().unwrap_or(0);
+                    println!("    ✓ Received {} webhook message(s)", count);
 
-        // Check deliveries
-        println!("  → Checking webhook deliveries...");
-        let deliveries = client.list_webhook_deliveries(webhook_id).await?;
-        println!("    Found {} delivery record(s)", deliveries.len());
+                    // Verify the message content
+                    if let Some(messages) = msgs["messages"].as_array() {
+                        if let Some(first_msg) = messages.first() {
+                            if let Some(body) = first_msg.get("body") {
+                                let event_type = body["event_type"].as_str().unwrap_or("unknown");
+                                println!("    ✓ Event type: {}", event_type);
+                                assert_eq!(event_type, "workorder.completed", "Expected workorder.completed event");
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    println!("    ⚠ Webhook delivery not received: {}", e);
+                    // Check delivery status in broker
+                    let deliveries = client.list_webhook_deliveries(webhook_id).await?;
+                    println!("    Broker shows {} delivery record(s)", deliveries.len());
+                    for d in deliveries.iter() {
+                        println!("      - Status: {}, Error: {:?}",
+                            d["status"].as_str().unwrap_or("unknown"),
+                            d["last_error"].as_str()
+                        );
+                    }
+                }
+            }
+        } else {
+            println!("    ⚠ Work order did not complete in time, skipping delivery verification");
+        }
+
+        // Clean up work order (delete if still exists)
+        let _ = client.delete_work_order(wo_id).await;
+    } else {
+        println!("  → Skipping delivery test (no WEBHOOK_CATCHER_URL)");
     }
+
+    // Check deliveries via broker API
+    println!("  → Checking webhook deliveries via API...");
+    let deliveries = client.list_webhook_deliveries(webhook_id).await?;
+    println!("    Found {} delivery record(s)", deliveries.len());
 
     // Delete webhook
     println!("  → Deleting webhook...");

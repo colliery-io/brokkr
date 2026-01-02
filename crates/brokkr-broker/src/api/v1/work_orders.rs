@@ -384,9 +384,61 @@ async fn get_work_order(
         ));
     }
 
+    // First check the active work_orders table
     match dal.work_orders().get(id) {
         Ok(Some(work_order)) => {
             info!("Successfully retrieved work order with ID: {}", id);
+            return Ok(Json(work_order));
+        }
+        Ok(None) => {
+            // Not in active table, check the log for completed work orders
+            debug!("Work order {} not in active table, checking log", id);
+        }
+        Err(e) => {
+            error!("Failed to fetch work order with ID {}: {:?}", id, e);
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Failed to fetch work order"})),
+            ));
+        }
+    }
+
+    // Check the work order log for completed work orders
+    match dal.work_orders().get_log(id) {
+        Ok(Some(log_entry)) => {
+            info!(
+                "Successfully retrieved completed work order with ID: {} from log",
+                id
+            );
+            // Synthesize a WorkOrder from the log entry
+            let status = if log_entry.success {
+                "COMPLETED".to_string()
+            } else {
+                "FAILED".to_string()
+            };
+            // For failed work orders, populate last_error from result_message
+            let (last_error, last_error_at) = if !log_entry.success {
+                (log_entry.result_message.clone(), Some(log_entry.completed_at))
+            } else {
+                (None, None)
+            };
+            let work_order = WorkOrder {
+                id: log_entry.id,
+                created_at: log_entry.created_at,
+                updated_at: log_entry.completed_at, // Use completed_at as updated_at
+                work_type: log_entry.work_type,
+                yaml_content: log_entry.yaml_content,
+                status,
+                claimed_by: log_entry.claimed_by,
+                claimed_at: log_entry.claimed_at,
+                retry_count: log_entry.retries_attempted,
+                max_retries: 0, // Not available in log
+                next_retry_after: None,
+                backoff_seconds: 0,  // Not available in log
+                claim_timeout_seconds: 0, // Not available in log
+                last_error,
+                last_error_at,
+            };
             Ok(Json(work_order))
         }
         Ok(None) => {
@@ -397,7 +449,7 @@ async fn get_work_order(
             ))
         }
         Err(e) => {
-            error!("Failed to fetch work order with ID {}: {:?}", id, e);
+            error!("Failed to fetch work order log with ID {}: {:?}", id, e);
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to fetch work order"})),

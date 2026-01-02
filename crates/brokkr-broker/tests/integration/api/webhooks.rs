@@ -94,7 +94,7 @@ async fn test_create_webhook_admin_success() {
     let new_webhook = json!({
         "name": "Test Webhook",
         "url": "https://example.com/webhook",
-        "event_types": ["health.degraded", "health.failing"],
+        "event_types": ["deployment.applied", "deployment.failed"],
         "auth_header": "Bearer secret-token"
     });
 
@@ -129,9 +129,9 @@ async fn test_create_webhook_with_wildcard_events() {
     let admin_pak = fixture.admin_pak.clone();
 
     let new_webhook = json!({
-        "name": "All Health Events",
+        "name": "All Deployment Events",
         "url": "https://example.com/webhook",
-        "event_types": ["health.*"]
+        "event_types": ["deployment.*"]
     });
 
     let response = app
@@ -159,7 +159,7 @@ async fn test_create_webhook_invalid_url() {
     let new_webhook = json!({
         "name": "Invalid URL Webhook",
         "url": "not-a-valid-url",
-        "event_types": ["health.degraded"]
+        "event_types": ["deployment.applied"]
     });
 
     let response = app
@@ -188,7 +188,7 @@ async fn test_create_webhook_non_admin_forbidden() {
     let new_webhook = json!({
         "name": "Test Webhook",
         "url": "https://example.com/webhook",
-        "event_types": ["health.degraded"]
+        "event_types": ["deployment.applied"]
     });
 
     let response = app
@@ -222,8 +222,9 @@ async fn test_get_webhook_admin_success() {
         name: "Test Webhook".to_string(),
         url_encrypted: b"https://example.com/webhook".to_vec(),
         auth_header_encrypted: None,
-        event_types: vec![Some("health.degraded".to_string())],
+        event_types: vec![Some("deployment.applied".to_string())],
         filters: None,
+        target_labels: None,
         enabled: true,
         max_retries: 5,
         timeout_seconds: 30,
@@ -288,8 +289,9 @@ async fn test_update_webhook_admin_success() {
         name: "Original Name".to_string(),
         url_encrypted: b"https://example.com/webhook".to_vec(),
         auth_header_encrypted: None,
-        event_types: vec![Some("health.degraded".to_string())],
+        event_types: vec![Some("deployment.applied".to_string())],
         filters: None,
+        target_labels: None,
         enabled: true,
         max_retries: 5,
         timeout_seconds: 30,
@@ -339,8 +341,9 @@ async fn test_delete_webhook_admin_success() {
         name: "To Delete".to_string(),
         url_encrypted: b"https://example.com/webhook".to_vec(),
         auth_header_encrypted: None,
-        event_types: vec![Some("health.degraded".to_string())],
+        event_types: vec![Some("deployment.applied".to_string())],
         filters: None,
+        target_labels: None,
         enabled: true,
         max_retries: 5,
         timeout_seconds: 30,
@@ -418,10 +421,10 @@ async fn test_list_event_types_admin_success() {
     let event_types: Vec<String> = serde_json::from_slice(&body).unwrap();
 
     // Should contain known event types
-    assert!(event_types.contains(&"health.degraded".to_string()));
-    assert!(event_types.contains(&"health.failing".to_string()));
-    assert!(event_types.contains(&"health.recovered".to_string()));
+    assert!(event_types.contains(&"deployment.applied".to_string()));
+    assert!(event_types.contains(&"deployment.failed".to_string()));
     assert!(event_types.contains(&"workorder.completed".to_string()));
+    assert!(event_types.contains(&"agent.registered".to_string()));
 }
 
 // =============================================================================
@@ -439,8 +442,9 @@ async fn test_list_deliveries_admin_success() {
         name: "Test Webhook".to_string(),
         url_encrypted: b"https://example.com/webhook".to_vec(),
         auth_header_encrypted: None,
-        event_types: vec![Some("health.degraded".to_string())],
+        event_types: vec![Some("deployment.applied".to_string())],
         filters: None,
+        target_labels: None,
         enabled: true,
         max_retries: 5,
         timeout_seconds: 30,
@@ -480,8 +484,9 @@ async fn test_list_deliveries_with_status_filter() {
         name: "Test Webhook".to_string(),
         url_encrypted: b"https://example.com/webhook".to_vec(),
         auth_header_encrypted: None,
-        event_types: vec![Some("health.degraded".to_string())],
+        event_types: vec![Some("deployment.applied".to_string())],
         filters: None,
+        target_labels: None,
         enabled: true,
         max_retries: 5,
         timeout_seconds: 30,
@@ -490,8 +495,8 @@ async fn test_list_deliveries_with_status_filter() {
     let subscription = fixture.dal.webhook_subscriptions().create(&new_sub).unwrap();
 
     // Create a delivery
-    let event = BrokkrEvent::new("health.degraded", json!({"test": true}));
-    let new_delivery = NewWebhookDelivery::new(subscription.id, &event).unwrap();
+    let event = BrokkrEvent::new("deployment.applied", json!({"test": true}));
+    let new_delivery = NewWebhookDelivery::new(subscription.id, &event, None).unwrap();
     fixture.dal.webhook_deliveries().create(&new_delivery).unwrap();
 
     let app = fixture.create_test_router().with_state(fixture.dal.clone());

@@ -58,6 +58,10 @@ data:
   # Webhook encryption key (static - requires restart)
   BROKKR__BROKER__WEBHOOK_ENCRYPTION_KEY: {{ .Values.broker.webhookEncryptionKey | quote }}
   {{- end }}
+  {{- if .Values.broker.pakHash }}
+  # Admin PAK hash (static - requires restart)
+  BROKKR__BROKER__PAK_HASH: {{ .Values.broker.pakHash | quote }}
+  {{- end }}
   {{- end }}
   # CORS configuration (@hot-reload: true)
   {{- if .Values.cors }}

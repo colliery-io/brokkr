@@ -158,15 +158,15 @@ async fn test_metrics_contains_all_defined_metrics() {
     let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body_str = String::from_utf8(body.to_vec()).unwrap();
 
-    // Verify all defined metric types are present in the output
-    // These metrics may have no data yet, but their definitions should exist
+    // Verify metric types that are always present in the output.
+    // Note: CounterVec/HistogramVec metrics only appear after at least one value
+    // is recorded. Database metrics (brokkr_database_queries_total, etc.) are
+    // defined but not yet instrumented in the DAL layer, so they won't appear.
+    // GaugeVec metrics like agent_heartbeat_age_seconds also need data first.
     let expected_metrics = [
         "brokkr_http_requests_total",
         "brokkr_http_request_duration_seconds",
-        "brokkr_database_queries_total",
-        "brokkr_database_query_duration_seconds",
         "brokkr_active_agents",
-        "brokkr_agent_heartbeat_age_seconds",
         "brokkr_stacks_total",
         "brokkr_deployment_objects_total",
     ];

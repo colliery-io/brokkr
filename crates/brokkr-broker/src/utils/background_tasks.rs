@@ -184,9 +184,11 @@ impl Default for WebhookCleanupConfig {
 /// Starts the webhook delivery worker background task.
 ///
 /// This task periodically:
-/// 1. Fetches pending deliveries that are ready to be sent
-/// 2. Attempts to deliver each via HTTP POST
-/// 3. Marks deliveries as success or failure (with retry scheduling)
+/// 1. Releases expired acquired deliveries back to pending
+/// 2. Moves failed deliveries with elapsed backoff back to pending
+/// 3. Claims pending deliveries for broker (target_labels is NULL)
+/// 4. Attempts to deliver each via HTTP POST
+/// 5. Marks deliveries as success or failure (with retry scheduling)
 ///
 /// # Arguments
 /// * `dal` - The Data Access Layer instance
@@ -208,11 +210,35 @@ pub fn start_webhook_delivery_task(dal: DAL, config: WebhookDeliveryConfig) {
         loop {
             ticker.tick().await;
 
-            // Fetch pending deliveries
-            let deliveries = match dal.webhook_deliveries().get_pending(config.batch_size) {
+            // First, release any expired acquired deliveries
+            match dal.webhook_deliveries().release_expired() {
+                Ok(count) => {
+                    if count > 0 {
+                        debug!("Released {} expired webhook delivery claims", count);
+                    }
+                }
+                Err(e) => {
+                    error!("Failed to release expired webhook deliveries: {:?}", e);
+                }
+            }
+
+            // Move failed deliveries back to pending if retry time has elapsed
+            match dal.webhook_deliveries().process_retries() {
+                Ok(count) => {
+                    if count > 0 {
+                        debug!("Moved {} webhook deliveries from failed to pending for retry", count);
+                    }
+                }
+                Err(e) => {
+                    error!("Failed to process webhook retries: {:?}", e);
+                }
+            }
+
+            // Claim pending broker deliveries (target_labels is NULL)
+            let deliveries = match dal.webhook_deliveries().claim_for_broker(config.batch_size, None) {
                 Ok(d) => d,
                 Err(e) => {
-                    error!("Failed to fetch pending webhook deliveries: {:?}", e);
+                    error!("Failed to claim pending webhook deliveries: {:?}", e);
                     continue;
                 }
             };
@@ -221,7 +247,7 @@ pub fn start_webhook_delivery_task(dal: DAL, config: WebhookDeliveryConfig) {
                 continue;
             }
 
-            debug!("Processing {} pending webhook deliveries", deliveries.len());
+            debug!("Processing {} claimed webhook deliveries", deliveries.len());
 
             for delivery in deliveries {
                 // Get the subscription to retrieve URL and auth header

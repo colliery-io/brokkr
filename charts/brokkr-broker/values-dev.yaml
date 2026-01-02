@@ -1,0 +1,94 @@
+# Development/testing values for brokkr-broker
+# Used by docker-compose for local development environment
+#
+# Usage:
+#   helm upgrade --install brokkr-broker ./charts/brokkr-broker \
+#     -f ./charts/brokkr-broker/values-dev.yaml \
+#     -n brokkr-system --create-namespace
+
+image:
+  # Local registry in docker-compose environment
+  # Uses localhost:5050 which k3s-registries.yaml mirrors to http://registry:5000
+  repository: localhost:5050/brokkr-broker
+  tag: dev
+  pullPolicy: Always
+
+# Single replica for dev
+replicaCount: 1
+
+# Expose broker via NodePort for UI access from outside k3s
+service:
+  type: NodePort
+  port: 3000
+  nodePort: 30300
+
+# Bundled PostgreSQL for self-contained dev environment
+postgresql:
+  enabled: true
+  auth:
+    username: brokkr
+    password: brokkr
+    database: brokkr
+  primary:
+    persistence:
+      enabled: true
+      size: 1Gi
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "250m"
+
+# Broker settings for dev
+broker:
+  logLevel: debug
+  # Admin PAK hash - matches the default PAK: brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8
+  pakHash: "4c697273df3d764cba950bb5c04368097685f09259f5bd880d892cf1ff9f4cdd"
+
+# CORS - allow all for dev (UI runs on different origin)
+cors:
+  allowedOrigins:
+    - "*"
+  allowedMethods:
+    - GET
+    - POST
+    - PUT
+    - PATCH
+    - DELETE
+    - OPTIONS
+  allowedHeaders:
+    - Authorization
+    - Content-Type
+    - Accept
+  maxAgeSeconds: 3600
+
+# Lower resource requests for dev
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "50m"
+  limits:
+    memory: "256Mi"
+    cpu: "200m"
+
+# Relaxed security for dev environment
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  runAsNonRoot: true
+  runAsUser: 10001
+  capabilities:
+    drop:
+      - ALL
+
+# Enable metrics for debugging
+metrics:
+  enabled: true

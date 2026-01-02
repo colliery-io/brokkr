@@ -361,3 +361,9 @@ async fn deliver_webhook(url, auth_header, payload, timeout_secs) -> DeliveryRes
 
 - 2025-12-31: Bug identified during UAT demo planning. Webhooks cannot reach in-cluster services because broker makes HTTP calls directly.
 - 2025-12-31: Design discussion - refined to use `delivery_mode` (broker/agent/auto) with label-based targeting instead of explicit agent IDs. Consistent with Brokkr's existing targeting model.
+- 2025-12-31: Implementation complete. All changes implemented and unit tests passing:
+  - Database schema updated with `delivery_mode`, `delivery_target_labels`, `target_agent_id`, `delivered_by_agent_id`
+  - Broker API extended with agent webhook endpoints (`GET /agents/:id/webhooks/pending`, `POST /webhook-deliveries/:id/result`)
+  - Event dispatch logic updated to route webhooks based on delivery mode
+  - Agent webhooks module created with polling loop and HTTP delivery logic
+  - All unit tests passing (models: 7/7, event_bus: 8/8, agent webhooks: 4/4)

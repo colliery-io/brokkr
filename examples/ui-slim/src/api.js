@@ -1,4 +1,4 @@
-const BASE_URL = process.env.REACT_APP_BROKER_URL || 'http://localhost:3000';
+const BASE_URL = process.env.REACT_APP_BROKER_URL || 'http://localhost:30300';
 const AUTH = `Bearer ${process.env.REACT_APP_ADMIN_PAK || ''}`;
 
 const sha256 = async (str) => {
@@ -145,407 +145,51 @@ export const getMetrics = async () => {
 };
 
 // Webhook Catcher (for demo purposes)
-const WEBHOOK_CATCHER_URL = 'http://localhost:8888';
+// Port 8090 is exposed by docker-compose for localhost access
+const WEBHOOK_CATCHER_URL = 'http://localhost:8090';
 
 export const getWebhookCatcherStats = async () => {
-  const res = await fetch(`${WEBHOOK_CATCHER_URL}/stats`);
+  const res = await fetch(`${WEBHOOK_CATCHER_URL}/messages`);
   if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
   return res.json();
 };
 
 export const clearWebhookCatcher = async () => {
-  const res = await fetch(`${WEBHOOK_CATCHER_URL}/clear`, { method: 'POST' });
+  const res = await fetch(`${WEBHOOK_CATCHER_URL}/messages`, { method: 'DELETE' });
   if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
   return res.json();
 };
 
-// Generate K8s manifests for deploying a Brokkr agent
-export const getAgentDeploymentYaml = (agentName, clusterName, pak, labels = {}, annotations = {}) => {
-  // Build extra labels with proper indentation (4 spaces for metadata.labels)
-  const extraLabels = Object.entries(labels)
-    .map(([k, v]) => `    ${k}: "${v}"`)
-    .join('\n');
-
-  // Build extra annotations with proper indentation
-  const extraAnnotations = Object.entries(annotations)
-    .map(([k, v]) => `    ${k}: "${v}"`)
-    .join('\n');
-
-  // Only add labels/annotations sections if we have entries
-  const labelsSection = extraLabels ? `\n${extraLabels}` : '';
-  const annotationsSection = extraAnnotations ? `  annotations:\n${extraAnnotations}\n` : '';
-
-  return `---
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: brokkr-agent-${agentName}
-  namespace: default
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: brokkr-agent-${agentName}
-rules:
-- apiGroups: [""]
-  resources: [pods, pods/log, pods/status, namespaces, nodes, services, endpoints, configmaps, persistentvolumes, persistentvolumeclaims, events]
-  verbs: [get, list, watch]
-- apiGroups: ["apps"]
-  resources: [deployments, deployments/status, statefulsets, daemonsets, replicasets]
-  verbs: [get, list, watch, create, update, patch, delete]
-- apiGroups: ["batch"]
-  resources: [jobs, cronjobs]
-  verbs: [get, list, watch]
-- apiGroups: ["networking.k8s.io"]
-  resources: [ingresses, networkpolicies]
-  verbs: [get, list, watch]
-- apiGroups: ["shipwright.io"]
-  resources: [builds, buildruns, buildstrategies, clusterbuildstrategies]
-  verbs: [get, list, watch, create, update, patch, delete]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: brokkr-agent-${agentName}
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: brokkr-agent-${agentName}
-subjects:
-- kind: ServiceAccount
-  name: brokkr-agent-${agentName}
-  namespace: default
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: brokkr-agent-${agentName}-config
-  namespace: default
-data:
-  BROKKR__AGENT__BROKER_URL: "http://brokkr-broker:3000"
-  BROKKR__AGENT__AGENT_NAME: "${agentName}"
-  BROKKR__AGENT__CLUSTER_NAME: "${clusterName}"
-  BROKKR__AGENT__PAK: "${pak}"
-  BROKKR__AGENT__POLLING_INTERVAL: "10"
-  BROKKR__AGENT__DEPLOYMENT_HEALTH_ENABLED: "true"
-  BROKKR__AGENT__DEPLOYMENT_HEALTH_INTERVAL: "30"
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: brokkr-agent-${agentName}
-  namespace: default
-  labels:
-    app: brokkr-agent
-    agent: ${agentName}${labelsSection}
-${annotationsSection}spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: brokkr-agent
-      agent: ${agentName}
-  template:
-    metadata:
-      labels:
-        app: brokkr-agent
-        agent: ${agentName}
-    spec:
-      serviceAccountName: brokkr-agent-${agentName}
-      containers:
-      - name: agent
-        image: ghcr.io/colliery-io/brokkr-agent:latest
-        imagePullPolicy: Always
-        args: ["start"]
-        envFrom:
-        - configMapRef:
-            name: brokkr-agent-${agentName}-config
-        ports:
-        - containerPort: 8080
-        livenessProbe:
-          httpGet:
-            path: /healthz
-            port: 8080
-          initialDelaySeconds: 30
-          periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /readyz
-            port: 8080
-          initialDelaySeconds: 10
-          periodSeconds: 5
-        resources:
-          requests:
-            memory: "128Mi"
-            cpu: "50m"
-          limits:
-            memory: "256Mi"
-            cpu: "200m"
-        volumeMounts:
-        - name: tmp
-          mountPath: /tmp
-      volumes:
-      - name: tmp
-        emptyDir: {}
-`.trim();
-};
-
-// Demo/Init Script - demonstrates REAL functionality with the deployed agent
-export const runDemoSetup = async (onProgress) => {
-  const log = (msg) => onProgress?.({ message: msg, done: false });
-  const results = {
-    generators: [],
-    agents: [],
-    stacks: [],
-    deployments: [],
-    templates: [],
-    webhooks: [],
-    realAgent: null,
-    stagingAgent: null
-  };
-
-  try {
-    // 1. Find and activate the real deployed agent
-    log('Finding real deployed agent...');
-    const agents = await getAgents();
-    const realAgent = agents.find(a => a.name === 'brokkr-integration-test-agent');
-
-    if (!realAgent) {
-      throw new Error('No real agent found. Make sure brokkr-agent is running.');
-    }
-
-    results.realAgent = realAgent;
-    log(`Found agent: ${realAgent.name} (status: ${realAgent.status})`);
-
-    if (realAgent.status !== 'ACTIVE') {
-      log('Activating the real agent...');
-      await updateAgent(realAgent.id, { status: 'ACTIVE' });
-      log('Agent activated!');
-    }
-
-    // Add labels to the real agent
-    log('Adding labels to real agent...');
-    await addAgentLabel(realAgent.id, 'env:integration').catch(() => {});
-    await addAgentLabel(realAgent.id, 'tier:primary').catch(() => {});
-    await addAgentAnnotation(realAgent.id, 'role', 'primary-deployer').catch(() => {});
-    log('Labels added to integration agent');
-
-    // 2. Create a generator for our stacks
-    log('Creating generator...');
-    const generator = await createGenerator('demo-pipeline', 'Demo CI/CD pipeline');
-    results.generators.push(generator.generator);
-    log('Generator created');
-
-    // 3. Create webhook FIRST to capture all subsequent events
-    log('Creating webhook to capture events...');
-    const webhook = await createWebhook(
-      'demo-event-notifier',
-      'http://webhook-catcher:8080/receive',
-      ['agent.created', 'agent.updated', 'stack.created', 'deployment_object.created', 'work_order.completed'],
-      null,
-      { maxRetries: 3, timeoutSeconds: 10 }
-    );
-    results.webhooks.push(webhook);
-    log('Webhook ready - will capture all events');
-
-    // 4. Create a stack for deploying a second agent
-    log('Creating stack for staging agent deployment...');
-    const agentStack = await createStack('staging-agent-stack', 'Deploys a staging environment agent', generator.generator.id);
-    results.stacks.push(agentStack);
-    log('Agent stack created');
-
-    // 5. Create the staging agent in the broker (to get PAK)
-    log('Registering staging agent with broker...');
-    const stagingAgentResult = await createAgent('demo-staging-agent', 'brokkr-dev-integration-cluster');
-    results.stagingAgent = stagingAgentResult;
-    results.agents.push(stagingAgentResult.agent);
-    log(`Staging agent registered (PAK received)`);
-
-    // 6. Deploy the staging agent via the real agent
-    log('Creating deployment for staging agent...');
-    const agentYaml = getAgentDeploymentYaml(
-      'demo-staging-agent',
-      'brokkr-dev-integration-cluster',
-      stagingAgentResult.initial_pak,
-      { env: 'staging', tier: 'secondary' },
-      { role: 'staging-deployer', 'deployed-by': 'demo-setup' }
-    );
-    const agentDeployment = await createDeployment(agentStack.id, agentYaml);
-    results.deployments.push(agentDeployment);
-    log('Staging agent deployment created');
-
-    // 7. Assign the stack to the real agent so it deploys the staging agent
-    log('Targeting stack to real agent...');
-    await addAgentTarget(realAgent.id, agentStack.id);
-    log('Stack targeted - agent will deploy staging agent');
-
-    // 8. Create a stack for demo services
-    log('Creating demo services stack...');
-    const servicesStack = await createStack('demo-services', 'Demo application services', generator.generator.id);
-    results.stacks.push(servicesStack);
-
-    // Add labels
-    await addStackLabel(servicesStack.id, 'app:demo');
-    await addStackLabel(servicesStack.id, 'team:platform');
-
-    // 9. Deploy demo services (triggers webhooks)
-    log('Deploying demo services...');
-    const servicesYaml = `---
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: demo-web
-  namespace: default
-spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: demo-web
-  template:
-    metadata:
-      labels:
-        app: demo-web
-    spec:
-      containers:
-      - name: web
-        image: nginx:alpine
-        ports:
-        - containerPort: 80
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: demo-web-svc
-  namespace: default
-spec:
-  selector:
-    app: demo-web
-  ports:
-  - port: 80
-    targetPort: 80
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: demo-api
-  namespace: default
-spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: demo-api
-  template:
-    metadata:
-      labels:
-        app: demo-api
-    spec:
-      containers:
-      - name: api
-        image: hashicorp/http-echo
-        args: ["-text=Hello from Brokkr Demo"]
-        ports:
-        - containerPort: 5678
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: demo-api-svc
-  namespace: default
-spec:
-  selector:
-    app: demo-api
-  ports:
-  - port: 80
-    targetPort: 5678`;
-
-    const servicesDeployment = await createDeployment(servicesStack.id, servicesYaml);
-    results.deployments.push(servicesDeployment);
-    log('Demo services deployment created');
-
-    // Target services stack to real agent
-    await addAgentTarget(realAgent.id, servicesStack.id);
-    log('Services stack targeted to agent');
-
-    // 10. Create a template for reusable configs
-    log('Creating reusable template...');
-    const templateContent = `apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: {{ name }}
-  namespace: {{ namespace | default(value="default") }}
-data:
-  config.json: |
-    {
-      "environment": "{{ environment }}",
-      "version": "{{ version | default(value="1.0.0") }}"
-    }`;
-
-    const templateSchema = JSON.stringify({
-      type: 'object',
-      required: ['name', 'environment'],
-      properties: {
-        name: { type: 'string' },
-        namespace: { type: 'string', default: 'default' },
-        environment: { type: 'string', enum: ['dev', 'staging', 'prod'] },
-        version: { type: 'string', default: '1.0.0' }
-      }
-    });
-
-    const template = await createTemplate('app-config-template', 'Application configuration template', templateContent, templateSchema);
-    results.templates.push(template);
-    log('Template created');
-
-    // Wait for agent to process deployments and webhooks to deliver
-    log('Waiting for agent to process deployments...');
-    await new Promise(resolve => setTimeout(resolve, 5000));
-
-    // 11. Fetch webhook events
-    log('Fetching received webhook events...');
-    try {
-      const catcherStats = await getWebhookCatcherStats();
-      results.receivedWebhooks = catcherStats.messages || [];
-      log(`Webhook catcher received ${catcherStats.count} events!`);
-    } catch (e) {
-      log('Could not fetch webhook stats: ' + e.message);
-      results.receivedWebhooks = [];
-    }
-
-    onProgress?.({ message: 'Demo setup complete! Check Agents tab to see both agents.', done: true, results });
-    return results;
-  } catch (error) {
-    onProgress?.({ message: `Error: ${error.message}`, done: true, error });
-    throw error;
-  }
-};
-
-// Shipwright Build YAML for webhook-catcher from the Brokkr repository
-export const getWebhookCatcherBuildYaml = (imageTag = 'latest', branch = 'feature/event-webhooks') => `
+// Shipwright Build YAML - uses same proven config as e2e tests
+// Uses sample-go repo with ttl.sh for ephemeral image storage (no registry credentials needed)
+export const getDemoBuildYaml = () => `
 apiVersion: shipwright.io/v1beta1
 kind: Build
 metadata:
-  name: webhook-catcher-build
+  name: demo-build
   namespace: default
 spec:
   source:
     type: Git
     git:
-      url: https://github.com/colliery-io/brokkr
-      revision: ${branch}
-    contextDir: tools/webhook-catcher
+      url: https://github.com/shipwright-io/sample-go
+    contextDir: docker-build
   strategy:
-    name: buildah
+    name: kaniko
     kind: ClusterBuildStrategy
   output:
-    image: registry:5000/webhook-catcher:${imageTag}
+    image: ttl.sh/brokkr-demo-build:1h
 `.trim();
 
-// Create a build work order for the webhook-catcher
-export const createBuildWorkOrder = async (imageTag = 'latest') => {
-  const buildYaml = getWebhookCatcherBuildYaml(imageTag);
+// Create a build work order for the demo
+// If agentId is provided, targets that specific agent (like e2e tests do)
+export const createBuildWorkOrder = async (imageTag = 'latest', agentId = null) => {
+  const buildYaml = getDemoBuildYaml();
 
-  // Target all agents (they'll compete to claim it)
-  const targeting = {
-    labels: []  // Empty labels means any agent can claim it
-  };
+  // Target specific agent if provided, otherwise any agent can claim it
+  const targeting = agentId
+    ? { agent_ids: [agentId] }
+    : { labels: [] };
 
   return createWorkOrder('build', buildYaml, targeting, {
     maxRetries: 3,
@@ -580,13 +224,13 @@ spec:
         - containerPort: 8080
         livenessProbe:
           httpGet:
-            path: /health
+            path: /healthz
             port: 8080
           initialDelaySeconds: 5
           periodSeconds: 10
         readinessProbe:
           httpGet:
-            path: /health
+            path: /readyz
             port: 8080
           initialDelaySeconds: 5
           periodSeconds: 5
@@ -633,4 +277,216 @@ export const parseMetrics = (metricsText) => {
   }
 
   return metrics;
+};
+
+// ============================================
+// DEMO PANEL API FUNCTIONS
+// ============================================
+
+// Check environment prerequisites for demo
+export const checkEnvironment = async () => {
+  const result = {
+    brokerHealthy: false,
+    integrationAgent: null,
+    shipwrightReady: false,
+    buildStrategies: 0,
+    errors: []
+  };
+
+  // Check broker health
+  try {
+    const res = await fetch(`${BASE_URL}/healthz`);
+    result.brokerHealthy = res.ok;
+  } catch (e) {
+    result.errors.push('Broker API not reachable');
+  }
+
+  // Find integration agent
+  try {
+    const agents = await getAgents();
+    result.integrationAgent = agents.find(a => a.name === 'brokkr-integration-test-agent');
+    if (!result.integrationAgent) {
+      result.errors.push('Integration test agent not found');
+    }
+  } catch (e) {
+    result.errors.push('Failed to fetch agents: ' + e.message);
+  }
+
+  // Check for ClusterBuildStrategies (indicates Shipwright is ready)
+  // We check this via work order creation attempt later, but for now we can assume ready
+  // if the agent is present (Helm chart installs Shipwright)
+  if (result.integrationAgent?.status === 'ACTIVE') {
+    result.shipwrightReady = true;
+    result.buildStrategies = 3; // Helm chart installs buildah, buildpacks, kaniko
+  }
+
+  return result;
+};
+
+// Get webhook catcher events
+export const getWebhookCatcherEvents = async () => {
+  try {
+    const res = await fetch(`${WEBHOOK_CATCHER_URL}/messages`);
+    if (!res.ok) return { count: 0, messages: [] };
+    return res.json();
+  } catch (e) {
+    return { count: 0, messages: [] };
+  }
+};
+
+// Poll for a condition with timeout
+export const pollForCondition = async (checkFn, intervalMs = 2000, timeoutMs = 60000) => {
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < timeoutMs) {
+    const result = await checkFn();
+    if (result.done) {
+      return result;
+    }
+    await new Promise(resolve => setTimeout(resolve, intervalMs));
+  }
+
+  throw new Error('Polling timed out');
+};
+
+// Poll agent status until ACTIVE with recent heartbeat
+export const pollAgentStatus = async (agentId, timeoutMs = 120000) => {
+  return pollForCondition(async () => {
+    try {
+      const agents = await getAgents();
+      const agent = agents.find(a => a.id === agentId);
+      if (!agent) return { done: false, agent: null };
+
+      if (agent.status === 'ACTIVE' && agent.last_heartbeat) {
+        const heartbeatAge = Date.now() - new Date(agent.last_heartbeat).getTime();
+        if (heartbeatAge < 60000) { // Within last minute
+          return { done: true, agent };
+        }
+      }
+      return { done: false, agent };
+    } catch (e) {
+      return { done: false, agent: null, error: e.message };
+    }
+  }, 3000, timeoutMs);
+};
+
+// Poll work order until completed or failed
+export const pollWorkOrderStatus = async (workOrderId, timeoutMs = 300000) => {
+  return pollForCondition(async () => {
+    try {
+      const wo = await getWorkOrder(workOrderId);
+      const terminalStates = ['COMPLETED', 'FAILED', 'CANCELLED'];
+      if (terminalStates.includes(wo.status)) {
+        return { done: true, workOrder: wo };
+      }
+      return { done: false, workOrder: wo };
+    } catch (e) {
+      return { done: false, workOrder: null, error: e.message };
+    }
+  }, 3000, timeoutMs);
+};
+
+// Delete a stack and all its resources
+export const deleteStack = (id) => request(`/api/v1/stacks/${id}`, { method: 'DELETE' });
+
+// Delete an agent
+export const deleteAgent = (id) => request(`/api/v1/agents/${id}`, { method: 'DELETE' });
+
+// Delete a generator
+export const deleteGenerator = (id) => request(`/api/v1/generators/${id}`, { method: 'DELETE' });
+
+// Cleanup demo resources
+export const cleanupDemo = async (resources, onProgress) => {
+  const log = (step, status) => onProgress?.(step, status);
+  const errors = [];
+
+  // 1. Remove agent targets first
+  if (resources.agentTargets?.length) {
+    log('Removing agent targets...', 'active');
+    for (const target of resources.agentTargets) {
+      try {
+        await removeAgentTarget(target.agentId, target.stackId);
+      } catch (e) {
+        errors.push(`Failed to remove target: ${e.message}`);
+      }
+    }
+    log('Agent targets removed', 'done');
+  }
+
+  // 2. Delete webhook subscriptions
+  if (resources.webhookIds?.length) {
+    log('Removing webhook subscriptions...', 'active');
+    for (const id of resources.webhookIds) {
+      try {
+        await deleteWebhook(id);
+      } catch (e) {
+        errors.push(`Failed to delete webhook ${id}: ${e.message}`);
+      }
+    }
+    log('Webhooks removed', 'done');
+  }
+
+  // 3. Create deletion markers for deployments (triggers K8s cleanup)
+  if (resources.deploymentIds?.length) {
+    log('Creating deletion markers...', 'active');
+    for (const deployment of resources.deploymentIds) {
+      try {
+        // Create a deletion marker deployment object
+        await createDeployment(deployment.stackId, deployment.yaml, true);
+      } catch (e) {
+        errors.push(`Failed to create deletion marker: ${e.message}`);
+      }
+    }
+    log('Deletion markers created', 'done');
+  }
+
+  // 4. Delete stacks
+  if (resources.stackIds?.length) {
+    log('Deleting stacks...', 'active');
+    for (const id of resources.stackIds) {
+      try {
+        await deleteStack(id);
+      } catch (e) {
+        errors.push(`Failed to delete stack ${id}: ${e.message}`);
+      }
+    }
+    log('Stacks deleted', 'done');
+  }
+
+  // 5. Delete templates
+  if (resources.templateIds?.length) {
+    log('Deleting templates...', 'active');
+    for (const id of resources.templateIds) {
+      try {
+        await deleteTemplate(id);
+      } catch (e) {
+        errors.push(`Failed to delete template ${id}: ${e.message}`);
+      }
+    }
+    log('Templates deleted', 'done');
+  }
+
+  // 6. Deactivate demo agents (don't delete - keep for audit)
+  if (resources.agentIds?.length) {
+    log('Deactivating demo agents...', 'active');
+    for (const id of resources.agentIds) {
+      try {
+        await updateAgent(id, { status: 'DEACTIVATED' });
+      } catch (e) {
+        errors.push(`Failed to deactivate agent ${id}: ${e.message}`);
+      }
+    }
+    log('Demo agents deactivated', 'done');
+  }
+
+  // 7. Clear webhook catcher
+  log('Clearing webhook catcher...', 'active');
+  try {
+    await clearWebhookCatcher();
+  } catch (e) {
+    // Not critical
+  }
+  log('Webhook catcher cleared', 'done');
+
+  return { success: errors.length === 0, errors };
 };

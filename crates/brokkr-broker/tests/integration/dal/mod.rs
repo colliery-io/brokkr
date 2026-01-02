@@ -13,6 +13,7 @@ mod deployment_health;
 mod deployment_objects;
 mod diagnostic_requests;
 mod diagnostic_results;
+mod event_emission;
 mod generators;
 mod stack_annotations;
 mod stack_labels;

@@ -97,11 +97,6 @@ pub async fn serve(config: &Settings) -> Result<(), Box<dyn std::error::Error>> 
     utils::encryption::init_encryption_key(config.broker.webhook_encryption_key.as_deref())
         .expect("Failed to initialize encryption key");
 
-    // Initialize event bus for webhook notifications
-    info!("Initializing event bus");
-    utils::event_bus::init_event_bus(dal.clone())
-        .expect("Failed to initialize event bus");
-
     // Initialize audit logger for compliance tracking
     info!("Initializing audit logger");
     utils::audit::init_audit_logger(dal.clone())

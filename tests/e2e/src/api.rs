@@ -369,6 +369,18 @@ impl Client {
         event_types: Vec<&str>,
         auth_header: Option<&str>,
     ) -> Result<Value> {
+        self.create_webhook_with_options(name, url, event_types, auth_header, None, None).await
+    }
+
+    pub async fn create_webhook_with_options(
+        &self,
+        name: &str,
+        url: &str,
+        event_types: Vec<&str>,
+        auth_header: Option<&str>,
+        delivery_mode: Option<&str>,
+        delivery_target_labels: Option<Vec<&str>>,
+    ) -> Result<Value> {
         let mut body = json!({
             "name": name,
             "url": url,
@@ -376,6 +388,12 @@ impl Client {
         });
         if let Some(auth) = auth_header {
             body["auth_header"] = json!(auth);
+        }
+        if let Some(mode) = delivery_mode {
+            body["delivery_mode"] = json!(mode);
+        }
+        if let Some(labels) = delivery_target_labels {
+            body["delivery_target_labels"] = json!(labels);
         }
         self.post("/api/v1/webhooks", body).await
     }
@@ -446,6 +464,70 @@ impl Client {
         }
 
         Ok(text)
+    }
+}
+
+/// Client for webhook-catcher test service
+pub struct WebhookCatcher {
+    http: reqwest::Client,
+    base_url: String,
+}
+
+impl WebhookCatcher {
+    pub fn new(base_url: &str) -> Self {
+        Self {
+            http: reqwest::Client::new(),
+            base_url: base_url.to_string(),
+        }
+    }
+
+    /// Get all messages received by webhook-catcher
+    pub async fn get_messages(&self) -> Result<Value> {
+        let url = format!("{}/messages", self.base_url);
+        let resp = self.http.get(&url).send().await?;
+        let status = resp.status();
+        let text = resp.text().await?;
+
+        if !status.is_success() {
+            return Err(format!("HTTP {}: {}", status, text).into());
+        }
+
+        Ok(serde_json::from_str(&text)?)
+    }
+
+    /// Clear all messages from webhook-catcher
+    pub async fn clear_messages(&self) -> Result<()> {
+        let url = format!("{}/messages", self.base_url);
+        let resp = self.http.delete(&url).send().await?;
+
+        if !resp.status().is_success() {
+            let text = resp.text().await?;
+            return Err(format!("Failed to clear: {}", text).into());
+        }
+
+        Ok(())
+    }
+
+    /// Wait for at least N messages to arrive, with timeout
+    pub async fn wait_for_messages(&self, count: usize, timeout_secs: u64) -> Result<Value> {
+        let start = std::time::Instant::now();
+        loop {
+            let result = self.get_messages().await?;
+            let msg_count = result["count"].as_u64().unwrap_or(0) as usize;
+
+            if msg_count >= count {
+                return Ok(result);
+            }
+
+            if start.elapsed() > std::time::Duration::from_secs(timeout_secs) {
+                return Err(format!(
+                    "Timeout waiting for {} messages, only got {}",
+                    count, msg_count
+                ).into());
+            }
+
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        }
     }
 }
 
