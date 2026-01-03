@@ -29,9 +29,16 @@ def ensure_k3s_running(skip_docker=False):
     print("k3s cluster is ready (docker-compose healthcheck passed)")
 
 
-def run_in_k8s_container(cmd, description="Running command in k8s container"):
-    """Run a command inside a kubernetes tools container on the docker network."""
-    print(f"{description}...")
+def run_in_k8s_container(cmd, description="Running command in k8s container", quiet=False):
+    """Run a command inside a kubernetes tools container on the docker network.
+
+    Args:
+        cmd: Command to run inside the container
+        description: Description for logging (default: "Running command in k8s container")
+        quiet: If True, suppress output (useful for cleanup operations)
+    """
+    if not quiet:
+        print(f"{description}...")
 
     # Use alpine/k8s which has kubectl, helm, and other k8s tools
     # Mount the charts directory and brokkr-keys volume
@@ -44,7 +51,7 @@ def run_in_k8s_container(cmd, description="Running command in k8s container"):
         "-e", "KUBECONFIG=/keys/kubeconfig.docker.yaml",
         "alpine/k8s:1.30.10",
         "sh", "-c", cmd
-    ], cwd=cwd, capture_output=False)
+    ], cwd=cwd, capture_output=quiet, text=quiet)
 
     return result.returncode == 0
 
@@ -302,12 +309,19 @@ def helm_install(chart_name, release_name, values, namespace="default", values_f
     return success
 
 
-def helm_uninstall(release_name, namespace="default"):
-    """Uninstall a Helm release."""
-    print(f"\nUninstalling Helm release: {release_name}")
+def helm_uninstall(release_name, namespace="default", quiet=False):
+    """Uninstall a Helm release.
 
-    cmd = f"helm uninstall {release_name} --namespace {namespace} --wait"
-    return run_in_k8s_container(cmd, f"Uninstalling {release_name}")
+    Args:
+        release_name: Name of the Helm release to uninstall
+        namespace: Kubernetes namespace (default: "default")
+        quiet: If True, suppress output (useful for cleanup operations)
+    """
+    if not quiet:
+        print(f"\nUninstalling Helm release: {release_name}")
+
+    cmd = f"helm uninstall {release_name} --namespace {namespace} --wait --ignore-not-found"
+    return run_in_k8s_container(cmd, f"Uninstalling {release_name}", quiet=quiet)
 
 
 def wait_for_pods(release_name, namespace="default", timeout=180):
@@ -943,8 +957,14 @@ def test_agent_with_values_file(tag, registry, no_cleanup, values_file_name, bro
             helm_uninstall(release_name)
 
 
-def deploy_test_broker(tag, registry):
-    """Deploy a broker instance for agent testing and return the release name."""
+def deploy_test_broker(tag, registry, with_admin_pak=False):
+    """Deploy a broker instance for agent testing and return the release name.
+
+    Args:
+        tag: Image tag to deploy
+        registry: Container registry URL
+        with_admin_pak: If True, configure broker with well-known admin PAK for API access
+    """
     broker_release_name = "brokkr-broker-for-agent-test"
     broker_chart_name = "brokkr-broker"
 
@@ -957,15 +977,17 @@ def deploy_test_broker(tag, registry):
     print("Deploying broker for agent testing")
     print("=" * 60)
 
-    # Include admin PAK hash for API access (matches well-known dev PAK)
-    # PAK: brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8
     broker_values = {
         "image.tag": tag,
         "image.repository": f"{registry}/brokkr-broker",
         "image.pullSecrets[0].name": "ghcr-secret",
         "postgresql.enabled": "true",
-        "broker.pakHash": "4c697273df3d764cba950bb5c04368097685f09259f5bd880d892cf1ff9f4cdd",
     }
+
+    # Only include admin PAK hash when needed (for Shipwright tests that use admin API)
+    # PAK: brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8
+    if with_admin_pak:
+        broker_values["broker.pakHash"] = "4c697273df3d764cba950bb5c04368097685f09259f5bd880d892cf1ff9f4cdd"
 
     if not helm_install(broker_chart_name, broker_release_name, broker_values):
         print("Failed to deploy broker for agent testing")
@@ -1665,6 +1687,19 @@ def run_smoke_tests(tag, registry, no_cleanup):
     """
     results = []
 
+    # Pre-cleanup: Remove any stale releases from previous runs
+    # This prevents conflicts when reusing a k3s cluster (e.g., with --skip-docker)
+    print("Cleaning up any stale releases from previous runs...")
+    stale_releases = [
+        "brokkr-broker-test",
+        "brokkr-broker-for-agent-test",
+        "brokkr-agent-test-cluster-wide",
+        "brokkr-agent-test-namespace-scoped",
+        "brokkr-agent-test-no-rbac",
+    ]
+    for release in stale_releases:
+        helm_uninstall(release, quiet=True)
+
     # Phase 1: Template validation (fast, no deployment)
     template_results = run_parallel_template_tests(tag, registry)
     results.extend(template_results)
@@ -1770,7 +1805,24 @@ def run_shipwright_tests(tag, registry, no_cleanup):
     """
     results = []
 
-    broker_release_name = deploy_test_broker(tag, registry)
+    # Pre-cleanup: Remove stale releases and Shipwright resources
+    print("Cleaning up any stale releases and Shipwright resources...")
+    stale_releases = [
+        "brokkr-broker-for-agent-test",
+        "brokkr-agent-test-shipwright",
+    ]
+    for release in stale_releases:
+        helm_uninstall(release, quiet=True)
+
+    # Clean up stale Shipwright builds
+    run_in_k8s_container(
+        "kubectl delete build,buildrun --all -n default --ignore-not-found 2>/dev/null || true",
+        "Cleaning up stale builds",
+        quiet=True
+    )
+
+    # Shipwright tests need admin PAK for API access (work order creation)
+    broker_release_name = deploy_test_broker(tag, registry, with_admin_pak=True)
     if not broker_release_name:
         results.append(("shipwright-broker-setup", False))
         return results

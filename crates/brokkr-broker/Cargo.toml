@@ -58,7 +58,10 @@ aes-gcm = "0.10"
 opentelemetry = { workspace = true }
 tracing = { workspace = true }
 
-# Kubernetes dependencies (for ConfigMap watching)
+# Kubernetes dependencies (for agent/resource operations, not config watching)
 kube = { workspace = true, features = ["client", "runtime", "derive"] }
 k8s-openapi = { workspace = true }
 futures = "0.3"
+
+# File watching for config hot-reload
+notify = "7"
