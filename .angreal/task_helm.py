@@ -2,31 +2,104 @@ import angreal
 import subprocess
 import sys
 import time
+import uuid
 from utils import docker_up, docker_down, docker_clean, cwd
 import os
 
 helm = angreal.command_group(name="helm", about="commands for Helm chart testing")
 
+# Local registry configuration
+LOCAL_REGISTRY = "localhost:5050"
+LOCAL_REGISTRY_K8S = "registry:5000"  # How k3s sees the registry (via docker network)
 
-def ensure_k3s_running(skip_docker=False):
-    """Ensure k3s cluster is running via docker-compose."""
-    if skip_docker:
-        print("Skipping docker setup (--skip-docker flag set)")
-        return
+# Global project name - set at test start for isolation
+_PROJECT_NAME = None
 
-    print("Starting k3s cluster via docker-compose (k3s only, not full stack)...")
-    docker_clean()
 
-    # Also remove the host directory to clear old kubeconfig files
-    # (docker_clean removes volumes, but /tmp/brokkr-keys persists on host)
-    print("Cleaning up stale kubeconfig files from /tmp/brokkr-keys...")
-    subprocess.run(["rm", "-rf", "/tmp/brokkr-keys"], check=False)
+def generate_project_name():
+    """Generate a unique project name for isolated test runs."""
+    short_id = uuid.uuid4().hex[:8]
+    return f"helm-test-{short_id}"
 
-    # Only start k3s and init-kubeconfig (init-kubeconfig depends on k3s)
-    # The --wait flag ensures init-kubeconfig completes (including its 60s sleep)
-    docker_up(services=["k3s", "init-kubeconfig"])
 
-    print("k3s cluster is ready (docker-compose healthcheck passed)")
+def get_project_name():
+    """Get the current project name."""
+    global _PROJECT_NAME
+    if _PROJECT_NAME is None:
+        _PROJECT_NAME = generate_project_name()
+    return _PROJECT_NAME
+
+
+def get_network_name():
+    """Get the docker network name for the current project."""
+    return f"{get_project_name()}_default"
+
+
+def get_volume_name(volume):
+    """Get the full volume name for the current project."""
+    return f"{get_project_name()}_{volume}"
+
+
+def build_and_push_local_images(tag="local"):
+    """Build broker and agent images and push to local registry.
+
+    Returns:
+        tuple: (success, registry_url) - registry_url is for k8s to pull from
+    """
+    print("\n" + "=" * 60)
+    print("Building and pushing images to local registry")
+    print("=" * 60)
+
+    images = [
+        ("broker", "docker/Dockerfile.broker"),
+        ("agent", "docker/Dockerfile.agent"),
+    ]
+
+    for component, dockerfile in images:
+        image_name = f"{LOCAL_REGISTRY}/brokkr-{component}:{tag}"
+        print(f"\nBuilding {component}...")
+
+        result = subprocess.run([
+            "docker", "build",
+            "-t", image_name,
+            "-f", dockerfile,
+            "."
+        ], cwd=cwd, capture_output=False)
+
+        if result.returncode != 0:
+            print(f"Failed to build {component}")
+            return False, None
+
+        print(f"Pushing {component} to local registry...")
+        result = subprocess.run([
+            "docker", "push", image_name
+        ], cwd=cwd, capture_output=False)
+
+        if result.returncode != 0:
+            print(f"Failed to push {component}")
+            return False, None
+
+        print(f"  ✓ {component} pushed to {image_name}")
+
+    print("\n✓ All images built and pushed to local registry")
+    # Return the registry URL that k8s will use (via docker network)
+    return True, LOCAL_REGISTRY_K8S
+
+
+
+def ensure_k3s_running():
+    """Start an isolated k3s cluster via docker-compose with unique project name."""
+    project = get_project_name()
+    print(f"\nStarting isolated k3s cluster (project: {project})...")
+
+    # Clean any leftover volumes from crashed previous runs with same name (unlikely but safe)
+    docker_clean(project=project)
+
+    # Start registry + k3s + init-kubeconfig
+    services = ["registry", "k3s", "init-kubeconfig", "copy-kubeconfig"]
+    docker_up(services=services, project=project)
+
+    print(f"k3s cluster is ready (project: {project})")
 
 
 def run_in_k8s_container(cmd, description="Running command in k8s container", quiet=False):
@@ -45,9 +118,9 @@ def run_in_k8s_container(cmd, description="Running command in k8s container", qu
     # Connect to the same docker network as k3s
     result = subprocess.run([
         "docker", "run", "--rm",
-        "--network", "brokkr-dev_default",
+        "--network", get_network_name(),
         "-v", f"{os.path.join(cwd, 'charts')}:/charts:ro",
-        "-v", "brokkr-dev_brokkr-keys:/keys:ro",
+        "-v", f"{get_volume_name('brokkr-keys')}:/keys:ro",
         "-e", "KUBECONFIG=/keys/kubeconfig.docker.yaml",
         "alpine/k8s:1.30.10",
         "sh", "-c", cmd
@@ -62,7 +135,7 @@ def verify_kubectl_connectivity():
 
     # Wait for kubeconfig.docker.yaml to exist with faster polling
     print("Waiting for kubeconfig.docker.yaml to be created...")
-    max_wait = 30  # Reduced from 70 seconds
+    max_wait = 30
     start_time = time.time()
     poll_intervals = [1, 1, 2, 2, 3, 3, 5, 5, 5, 5]  # Fast initial checks, then slower
 
@@ -70,8 +143,8 @@ def verify_kubectl_connectivity():
     while time.time() - start_time < max_wait:
         result = subprocess.run([
             "docker", "run", "--rm",
-            "--network", "brokkr-dev_default",
-            "-v", "brokkr-dev_brokkr-keys:/keys:ro",
+            "--network", get_network_name(),
+            "-v", f"{get_volume_name('brokkr-keys')}:/keys:ro",
             "alpine/k8s:1.30.10",
             "sh", "-c", "test -f /keys/kubeconfig.docker.yaml"
         ], cwd=cwd, capture_output=True)
@@ -101,53 +174,7 @@ def verify_kubectl_connectivity():
     print("kubectl connectivity verified")
 
 
-def setup_image_pull_secret(registry, namespace="default"):
-    """Create image pull secret for private registry access."""
-    import os
-
-    # Check if GITHUB_TOKEN is available
-    github_token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
-
-    if not github_token:
-        print("\nWarning: No GITHUB_TOKEN or GH_TOKEN environment variable found.", flush=True)
-        print("Image pulls from private GHCR repositories will fail.", flush=True)
-        print("Set GITHUB_TOKEN with a PAT that has read:packages scope.", flush=True)
-        return False
-
-    print(f"\nCreating image pull secret for {registry}...", flush=True)
-
-    # Create docker config for GHCR
-    # The username doesn't matter for GHCR, the token is what's important
-    cmd = f"""
-        kubectl create secret docker-registry ghcr-secret \
-            --docker-server={registry} \
-            --docker-username=token \
-            --docker-password={github_token} \
-            --namespace {namespace} \
-            --dry-run=client -o yaml | kubectl apply -f -
-    """
-
-    # Pass the token via environment variable to the container
-    result = subprocess.run([
-        "docker", "run", "--rm",
-        "--network", "brokkr-dev_default",
-        "-v", f"{os.path.join(cwd, 'charts')}:/charts:ro",
-        "-v", "brokkr-dev_brokkr-keys:/keys:ro",
-        "-e", "KUBECONFIG=/keys/kubeconfig.docker.yaml",
-        "-e", f"GITHUB_TOKEN={github_token}",
-        "alpine/k8s:1.30.10",
-        "sh", "-c", cmd
-    ], cwd=cwd)
-
-    if result.returncode == 0:
-        print("Image pull secret created successfully", flush=True)
-        return True
-    else:
-        print("Failed to create image pull secret", flush=True)
-        return False
-
-
-def helm_template_test(chart_name, values_file=None, extra_values=None, tag="test", registry="ghcr.io/colliery-io"):
+def helm_template_test(chart_name, values_file=None, extra_values=None, tag="local", registry="registry:5000"):
     """Validate chart renders correctly without deploying.
 
     Args:
@@ -339,8 +366,8 @@ def wait_for_pods(release_name, namespace="default", timeout=180):
 
         result = subprocess.run([
             "docker", "run", "--rm",
-            "--network", "brokkr-dev_default",
-            "-v", "brokkr-dev_brokkr-keys:/keys:ro",
+            "--network", get_network_name(),
+            "-v", f"{get_volume_name('brokkr-keys')}:/keys:ro",
             "-e", "KUBECONFIG=/keys/kubeconfig.docker.yaml",
             "alpine/k8s:1.30.10",
             "sh", "-c", cmd
@@ -439,9 +466,6 @@ def test_broker_chart(tag, registry, no_cleanup, test_external_db=False):
     external_db_release = None
 
     try:
-        # Setup image pull secret
-        setup_image_pull_secret(registry.split('/')[0])  # Extract hostname (ghcr.io)
-
         if test_external_db:
             # Deploy a standalone PostgreSQL as "external" database
             print("\n" + "=" * 60)
@@ -497,8 +521,8 @@ spec:
             # Apply manifest
             result = subprocess.run([
                 "docker", "run", "--rm",
-                "--network", "brokkr-dev_default",
-                "-v", "brokkr-dev_brokkr-keys:/keys:ro",
+                "--network", get_network_name(),
+                "-v", f"{get_volume_name('brokkr-keys')}:/keys:ro",
                 "-e", "KUBECONFIG=/keys/kubeconfig.docker.yaml",
                 "alpine/k8s:1.30.10",
                 "sh", "-c", f"cat <<'EOF' | kubectl apply -f -\n{postgres_manifest}\nEOF"
@@ -516,8 +540,7 @@ spec:
             values = {
                 "image.tag": tag,
                 "image.repository": f"{registry}/brokkr-broker",
-                "image.pullSecrets[0].name": "ghcr-secret",
-                "postgresql.enabled": "false",
+                                "postgresql.enabled": "false",
                 "postgresql.external.host": external_db_release,
                 "postgresql.external.username": "brokkr",
                 "postgresql.external.password": "external-test-password",
@@ -527,8 +550,7 @@ spec:
             values = {
                 "image.tag": tag,
                 "image.repository": f"{registry}/brokkr-broker",
-                "image.pullSecrets[0].name": "ghcr-secret",
-                "postgresql.enabled": "true",
+                                "postgresql.enabled": "true",
             }
 
         # Install chart
@@ -578,9 +600,6 @@ def test_broker_multi_tenant_schema(tag, registry, no_cleanup):
     chart_name = "brokkr-broker"
 
     try:
-        # Setup image pull secret
-        setup_image_pull_secret(registry.split('/')[0])
-
         # Deploy a standalone PostgreSQL as shared database
         print("\n" + "=" * 60)
         print("Deploying shared PostgreSQL for multi-tenant testing")
@@ -627,8 +646,8 @@ spec:
 
         result = subprocess.run([
             "docker", "run", "--rm",
-            "--network", "brokkr-dev_default",
-            "-v", "brokkr-dev_brokkr-keys:/keys:ro",
+            "--network", get_network_name(),
+            "-v", f"{get_volume_name('brokkr-keys')}:/keys:ro",
             "-e", "KUBECONFIG=/keys/kubeconfig.docker.yaml",
             "alpine/k8s:1.30.10",
             "sh", "-c", f"cat <<'EOF' | kubectl apply -f -\n{postgres_manifest}\nEOF"
@@ -667,8 +686,7 @@ spec:
         values_a = {
             "image.tag": tag,
             "image.repository": f"{registry}/brokkr-broker",
-            "image.pullSecrets[0].name": "ghcr-secret",
-            "postgresql.enabled": "false",
+                        "postgresql.enabled": "false",
             "postgresql.external.host": external_db_release,
             "postgresql.external.username": "brokkr",
             "postgresql.external.password": "shared-test-password",
@@ -691,8 +709,7 @@ spec:
         values_b = {
             "image.tag": tag,
             "image.repository": f"{registry}/brokkr-broker",
-            "image.pullSecrets[0].name": "ghcr-secret",
-            "postgresql.enabled": "false",
+                        "postgresql.enabled": "false",
             "postgresql.external.host": external_db_release,
             "postgresql.external.username": "brokkr",
             "postgresql.external.password": "shared-test-password",
@@ -758,8 +775,8 @@ def create_agent_in_broker(broker_release_name, agent_name, cluster_name, namesp
 
     result = subprocess.run([
         "docker", "run", "--rm",
-        "--network", "brokkr-dev_default",
-        "-v", "brokkr-dev_brokkr-keys:/keys:ro",
+        "--network", get_network_name(),
+        "-v", f"{get_volume_name('brokkr-keys')}:/keys:ro",
         "-e", "KUBECONFIG=/keys/kubeconfig.docker.yaml",
         "alpine/k8s:1.30.10",
         "sh", "-c", get_pod_cmd
@@ -784,8 +801,8 @@ def create_agent_in_broker(broker_release_name, agent_name, cluster_name, namesp
 
     result = subprocess.run([
         "docker", "run", "--rm",
-        "--network", "brokkr-dev_default",
-        "-v", "brokkr-dev_brokkr-keys:/keys:ro",
+        "--network", get_network_name(),
+        "-v", f"{get_volume_name('brokkr-keys')}:/keys:ro",
         "-e", "KUBECONFIG=/keys/kubeconfig.docker.yaml",
         "alpine/k8s:1.30.10",
         "sh", "-c", create_agent_cmd
@@ -846,16 +863,13 @@ def test_broker_with_values_file(tag, registry, no_cleanup, values_file_name):
     values_file = f"charts/brokkr-broker/values/{values_file_name}.yaml"
 
     try:
-        setup_image_pull_secret(registry.split('/')[0])
-
         print(f"\nDeploying broker with {values_file_name}.yaml")
 
         # Base values that override values file for test environment
         broker_values = {
             "image.tag": tag,
             "image.repository": f"{registry}/brokkr-broker",
-            "image.pullSecrets[0].name": "ghcr-secret",
-        }
+                    }
 
         # For production/staging, override external DB to use bundled
         if values_file_name in ["production", "staging"]:
@@ -923,8 +937,7 @@ def test_agent_with_values_file(tag, registry, no_cleanup, values_file_name, bro
         agent_values = {
             "image.tag": tag,
             "image.repository": f"{registry}/brokkr-agent",
-            "image.pullSecrets[0].name": "ghcr-secret",
-            "broker.url": broker_url,
+                        "broker.url": broker_url,
             "broker.agentName": agent_name,
             "broker.clusterName": "test-cluster",
             "broker.pak": pak,
@@ -968,11 +981,6 @@ def deploy_test_broker(tag, registry, with_admin_pak=False):
     broker_release_name = "brokkr-broker-for-agent-test"
     broker_chart_name = "brokkr-broker"
 
-    # Setup image pull secret (required for pulling from GHCR)
-    if not setup_image_pull_secret(registry.split('/')[0]):  # Extract hostname (ghcr.io)
-        print("Failed to setup image pull secret, broker deployment will fail", flush=True)
-        return None
-
     print("\n" + "=" * 60)
     print("Deploying broker for agent testing")
     print("=" * 60)
@@ -980,8 +988,7 @@ def deploy_test_broker(tag, registry, with_admin_pak=False):
     broker_values = {
         "image.tag": tag,
         "image.repository": f"{registry}/brokkr-broker",
-        "image.pullSecrets[0].name": "ghcr-secret",
-        "postgresql.enabled": "true",
+                "postgresql.enabled": "true",
     }
 
     # Only include admin PAK hash when needed (for Shipwright tests that use admin API)
@@ -1047,8 +1054,7 @@ def test_agent_chart(tag, registry, no_cleanup, rbac_mode="cluster-wide", broker
         agent_values = {
             "image.tag": tag,
             "image.repository": f"{registry}/brokkr-agent",
-            "image.pullSecrets[0].name": "ghcr-secret",
-            "broker.url": broker_url,
+                        "broker.url": broker_url,
             "broker.agentName": agent_name,
             "broker.clusterName": "test-cluster",
             "broker.pak": pak,
@@ -1150,8 +1156,8 @@ def get_agent_id_from_broker(broker_release_name, agent_name, admin_pak, namespa
 
     result = subprocess.run([
         "docker", "run", "--rm",
-        "--network", "brokkr-dev_default",
-        "-v", "brokkr-dev_brokkr-keys:/keys:ro",
+        "--network", get_network_name(),
+        "-v", f"{get_volume_name('brokkr-keys')}:/keys:ro",
         "-e", "KUBECONFIG=/keys/kubeconfig.docker.yaml",
         "alpine/k8s:1.30.10",
         "sh", "-c", get_pod_cmd
@@ -1172,8 +1178,8 @@ def get_agent_id_from_broker(broker_release_name, agent_name, admin_pak, namespa
 
     result = subprocess.run([
         "docker", "run", "--rm",
-        "--network", "brokkr-dev_default",
-        "-v", "brokkr-dev_brokkr-keys:/keys:ro",
+        "--network", get_network_name(),
+        "-v", f"{get_volume_name('brokkr-keys')}:/keys:ro",
         "-e", "KUBECONFIG=/keys/kubeconfig.docker.yaml",
         "alpine/k8s:1.30.10",
         "sh", "-c", get_agents_cmd
@@ -1212,8 +1218,8 @@ def activate_agent(broker_release_name, admin_pak, agent_id, namespace="default"
 
     result = subprocess.run([
         "docker", "run", "--rm",
-        "--network", "brokkr-dev_default",
-        "-v", "brokkr-dev_brokkr-keys:/keys:ro",
+        "--network", get_network_name(),
+        "-v", f"{get_volume_name('brokkr-keys')}:/keys:ro",
         "-e", "KUBECONFIG=/keys/kubeconfig.docker.yaml",
         "alpine/k8s:1.30.10",
         "sh", "-c", get_pod_cmd
@@ -1237,8 +1243,8 @@ def activate_agent(broker_release_name, admin_pak, agent_id, namespace="default"
 
     result = subprocess.run([
         "docker", "run", "--rm",
-        "--network", "brokkr-dev_default",
-        "-v", "brokkr-dev_brokkr-keys:/keys:ro",
+        "--network", get_network_name(),
+        "-v", f"{get_volume_name('brokkr-keys')}:/keys:ro",
         "-e", "KUBECONFIG=/keys/kubeconfig.docker.yaml",
         "alpine/k8s:1.30.10",
         "sh", "-c", activate_cmd
@@ -1282,8 +1288,8 @@ def create_work_order(broker_release_name, admin_pak, agent_id, work_type, yaml_
 
     result = subprocess.run([
         "docker", "run", "--rm",
-        "--network", "brokkr-dev_default",
-        "-v", "brokkr-dev_brokkr-keys:/keys:ro",
+        "--network", get_network_name(),
+        "-v", f"{get_volume_name('brokkr-keys')}:/keys:ro",
         "-e", "KUBECONFIG=/keys/kubeconfig.docker.yaml",
         "alpine/k8s:1.30.10",
         "sh", "-c", get_pod_cmd
@@ -1312,8 +1318,8 @@ def create_work_order(broker_release_name, admin_pak, agent_id, work_type, yaml_
 
     result = subprocess.run([
         "docker", "run", "--rm",
-        "--network", "brokkr-dev_default",
-        "-v", "brokkr-dev_brokkr-keys:/keys:ro",
+        "--network", get_network_name(),
+        "-v", f"{get_volume_name('brokkr-keys')}:/keys:ro",
         "-e", "KUBECONFIG=/keys/kubeconfig.docker.yaml",
         "alpine/k8s:1.30.10",
         "sh", "-c", create_wo_cmd
@@ -1350,8 +1356,8 @@ def wait_for_work_order_completion(broker_release_name, admin_pak, work_order_id
 
     result = subprocess.run([
         "docker", "run", "--rm",
-        "--network", "brokkr-dev_default",
-        "-v", "brokkr-dev_brokkr-keys:/keys:ro",
+        "--network", get_network_name(),
+        "-v", f"{get_volume_name('brokkr-keys')}:/keys:ro",
         "-e", "KUBECONFIG=/keys/kubeconfig.docker.yaml",
         "alpine/k8s:1.30.10",
         "sh", "-c", get_pod_cmd
@@ -1373,8 +1379,8 @@ def wait_for_work_order_completion(broker_release_name, admin_pak, work_order_id
 
         result = subprocess.run([
             "docker", "run", "--rm",
-            "--network", "brokkr-dev_default",
-            "-v", "brokkr-dev_brokkr-keys:/keys:ro",
+            "--network", get_network_name(),
+            "-v", f"{get_volume_name('brokkr-keys')}:/keys:ro",
             "-e", "KUBECONFIG=/keys/kubeconfig.docker.yaml",
             "alpine/k8s:1.30.10",
             "sh", "-c", check_log_cmd
@@ -1403,8 +1409,8 @@ def wait_for_work_order_completion(broker_release_name, admin_pak, work_order_id
 
         result = subprocess.run([
             "docker", "run", "--rm",
-            "--network", "brokkr-dev_default",
-            "-v", "brokkr-dev_brokkr-keys:/keys:ro",
+            "--network", get_network_name(),
+            "-v", f"{get_volume_name('brokkr-keys')}:/keys:ro",
             "-e", "KUBECONFIG=/keys/kubeconfig.docker.yaml",
             "alpine/k8s:1.30.10",
             "sh", "-c", check_wo_cmd
@@ -1471,8 +1477,7 @@ def test_shipwright_e2e(tag, registry, no_cleanup, broker_release_name=None):
         agent_values = {
             "image.tag": tag,
             "image.repository": f"{registry}/brokkr-agent",
-            "image.pullSecrets[0].name": "ghcr-secret",
-            "broker.url": broker_url,
+                        "broker.url": broker_url,
             "broker.agentName": agent_name,
             "broker.clusterName": "shipwright-e2e-cluster",
             "broker.pak": pak,
@@ -1529,8 +1534,8 @@ def test_shipwright_e2e(tag, registry, no_cleanup, broker_release_name=None):
             strategy_check_cmd = f"kubectl get clusterbuildstrategy {strategy_name} -o name 2>/dev/null"
             result = subprocess.run([
                 "docker", "run", "--rm",
-                "--network", "brokkr-dev_default",
-                "-v", "brokkr-dev_brokkr-keys:/keys:ro",
+                "--network", get_network_name(),
+                "-v", f"{get_volume_name('brokkr-keys')}:/keys:ro",
                 "-e", "KUBECONFIG=/keys/kubeconfig.docker.yaml",
                 "alpine/k8s:1.30.10",
                 "sh", "-c", strategy_check_cmd
@@ -1971,13 +1976,15 @@ def print_test_results(results):
 @helm()
 @angreal.command(name="test", about="test Helm charts in k3s cluster")
 @angreal.argument(name="tier", required=True, help="Test tier: smoke, full, shipwright, or legacy component (broker, agent, all)")
-@angreal.argument(name="skip_docker", long="skip-docker", help="Skip docker compose setup", takes_value=False, is_flag=True)
 @angreal.argument(name="no_cleanup", long="no-cleanup", help="Skip cleanup after tests", takes_value=False, is_flag=True)
-@angreal.argument(name="tag", long="tag", help="Image tag to test (default: test)", default_value="test")
-@angreal.argument(name="registry", long="registry", help="Registry URL (default: ghcr.io/colliery-io)", default_value="ghcr.io/colliery-io")
-def test_helm_chart(tier, skip_docker=False, no_cleanup=False, tag="test", registry="ghcr.io/colliery-io"):
+@angreal.argument(name="tag", long="tag", help="Image tag to test (default: local)", default_value="local")
+def test_helm_chart(tier, no_cleanup=False, tag="local"):
     """
     Test Helm charts in a k3s cluster with tiered execution.
+
+    Each test run is fully isolated with its own k3s cluster and registry.
+    Images are built locally - no GITHUB_TOKEN needed.
+    Multiple tests can run in parallel (each gets unique project name).
 
     Test Tiers:
       smoke      - Fast validation (~3-5 min): template checks + basic deployment
@@ -1990,10 +1997,8 @@ def test_helm_chart(tier, skip_docker=False, no_cleanup=False, tag="test", regis
       all        - All tests including Shipwright E2E
 
     Examples:
-        angreal helm test smoke --tag test        # Quick PR validation
-        angreal helm test full --skip-docker      # Comprehensive release testing
-        angreal helm test broker --tag test       # Legacy: broker tests only
-        angreal helm test all --no-cleanup        # Legacy: all tests
+        angreal helm test smoke                   # Build images and run smoke tests
+        angreal helm test all --no-cleanup        # Keep resources for inspection
     """
     valid_tiers = ["smoke", "full", "shipwright"]
     legacy_components = ["broker", "agent", "all"]
@@ -2005,8 +2010,20 @@ def test_helm_chart(tier, skip_docker=False, no_cleanup=False, tag="test", regis
         sys.exit(1)
 
     try:
-        # Setup k3s
-        ensure_k3s_running(skip_docker)
+        # Setup k3s (includes local registry)
+        ensure_k3s_running()
+
+        # Build and push images to local registry
+        print("\n" + "=" * 60)
+        print("Building images and pushing to local registry...")
+        print("=" * 60)
+
+        success, registry = build_and_push_local_images(tag)
+        if not success:
+            print("Failed to build and push local images")
+            sys.exit(1)
+
+        print(f"\nUsing local registry: {registry}")
 
         # Verify kubectl connectivity
         verify_kubectl_connectivity()
@@ -2040,24 +2057,26 @@ def test_helm_chart(tier, skip_docker=False, no_cleanup=False, tag="test", regis
         # Print results summary
         all_passed = print_test_results(results)
 
+        project = get_project_name()
         if no_cleanup:
-            print("\nHelm releases left running (--no-cleanup)")
+            print(f"\nHelm releases left running (--no-cleanup)")
+            print(f"Project: {project}")
             print("To inspect, run commands in a k8s container:")
-            print("  docker run --rm -it --network brokkr-dev_default \\")
-            print("    -v brokkr-dev_brokkr-keys:/keys:ro \\")
+            print(f"  docker run --rm -it --network {get_network_name()} \\")
+            print(f"    -v {get_volume_name('brokkr-keys')}:/keys:ro \\")
             print("    -e KUBECONFIG=/keys/kubeconfig.docker.yaml \\")
             print("    alpine/k8s:1.30.10 sh")
             print("  # Then inside container:")
             print("  kubectl get pods")
             print("  helm list")
             print("\nTo clean up manually:")
-            print("  angreal local down --hard")
-
-        # Cleanup docker if needed
-        if not skip_docker and not no_cleanup:
+            print(f"  docker compose -f .angreal/files/docker-compose.yaml -p {project} down")
+            print(f"  docker volume rm {get_volume_name('brokkr-keys')} {get_volume_name('k3s-data')} {get_volume_name('registry-data')}")
+        else:
+            # Cleanup docker
             print("\nCleaning up docker environment...")
-            docker_down()
-            docker_clean()
+            docker_down(project=project)
+            docker_clean(project=project)
 
         # Exit with error if any tests failed
         if not all_passed:
@@ -2065,8 +2084,9 @@ def test_helm_chart(tier, skip_docker=False, no_cleanup=False, tag="test", regis
 
     except Exception as e:
         print(f"\nError during Helm testing: {e}")
-        if not skip_docker and not no_cleanup:
+        if not no_cleanup:
             print("Cleaning up docker environment...")
-            docker_down()
-            docker_clean()
+            project = get_project_name()
+            docker_down(project=project)
+            docker_clean(project=project)
         sys.exit(1)

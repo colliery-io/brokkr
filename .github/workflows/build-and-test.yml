@@ -200,21 +200,21 @@ jobs:
       - name: Validate broker chart templates
         run: |
           echo "Testing broker chart with default values..."
-          helm template test charts/brokkr-broker > /dev/null
+          helm template test charts/brokkr-broker --kube-version 1.30.0 > /dev/null
           echo "Testing broker chart with production values..."
-          helm template test charts/brokkr-broker -f charts/brokkr-broker/values/production.yaml > /dev/null
+          helm template test charts/brokkr-broker --kube-version 1.30.0 -f charts/brokkr-broker/values/production.yaml > /dev/null
           echo "Testing broker chart with development values..."
-          helm template test charts/brokkr-broker -f charts/brokkr-broker/values/development.yaml > /dev/null
+          helm template test charts/brokkr-broker --kube-version 1.30.0 -f charts/brokkr-broker/values/development.yaml > /dev/null
           echo "✓ All broker template tests passed"
 
       - name: Validate agent chart templates
         run: |
           echo "Testing agent chart with default values..."
-          helm template test charts/brokkr-agent > /dev/null
+          helm template test charts/brokkr-agent --kube-version 1.30.0 > /dev/null
           echo "Testing agent chart with production values..."
-          helm template test charts/brokkr-agent -f charts/brokkr-agent/values/production.yaml > /dev/null
+          helm template test charts/brokkr-agent --kube-version 1.30.0 -f charts/brokkr-agent/values/production.yaml > /dev/null
           echo "Testing agent chart with development values..."
-          helm template test charts/brokkr-agent -f charts/brokkr-agent/values/development.yaml > /dev/null
+          helm template test charts/brokkr-agent --kube-version 1.30.0 -f charts/brokkr-agent/values/development.yaml > /dev/null
           echo "✓ All agent template tests passed"
 
   publish-dev-charts:
