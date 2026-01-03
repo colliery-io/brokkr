@@ -5,29 +5,25 @@ on:
   push:
     branches: [main, develop]
     paths:
-      - 'broker/**'
-      - 'agent/**'
-      - 'models/**'
-      - 'utils/**'
+      - 'crates/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
       - 'docker/Dockerfile.broker'
       - 'docker/Dockerfile.agent'
       - 'charts/**'
       - '.github/workflows/build-and-test.yml'
+      - '.angreal/**'
   pull_request:
     branches: [main, develop]
     paths:
-      - 'broker/**'
-      - 'agent/**'
-      - 'models/**'
-      - 'utils/**'
+      - 'crates/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
       - 'docker/Dockerfile.broker'
       - 'docker/Dockerfile.agent'
       - 'charts/**'
       - '.github/workflows/build-and-test.yml'
+      - '.angreal/**'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
