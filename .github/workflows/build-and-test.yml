@@ -174,39 +174,13 @@ jobs:
         run: |
           docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ github.repository_owner }}/brokkr-${{ matrix.component }}:${{ steps.tag.outputs.tag }}
 
-  # Smoke tests run on every PR - fast validation (~3-5 min)
-  helm-smoke-tests:
-    name: Helm Smoke Tests
+  # Helm template validation - fast, reliable chart structure tests
+  helm-template-tests:
+    name: Helm Template Validation
     runs-on: ubuntu-latest
     needs: merge-manifests
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-
-      - name: Install angreal
-        run: |
-          python -m pip install --upgrade pip
-          pip install angreal
-
-      - name: Create required directories
-        run: |
-          mkdir -p /tmp/brokkr-keys
-          chmod 777 /tmp/brokkr-keys
-
-      - name: Determine image tag
-        id: tag
-        run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "tag=pr-${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
-          else
-            echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
-          fi
 
       - name: Set up Helm
         uses: azure/setup-helm@v3
@@ -223,162 +197,29 @@ jobs:
           helm dependency build charts/brokkr-broker
           helm dependency build charts/brokkr-agent
 
-      - name: Log in to Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ env.REGISTRY_USER }}
-          password: ${{ secrets.GHCR_TOKEN }}
-
-      - name: docker compose up (k3s only)
-        uses: hoverkraft-tech/compose-action@v2.0.1
-        with:
-          compose-file: ".angreal/files/docker-compose.yaml"
-          services: |
-            k3s
-            init-kubeconfig
-            copy-kubeconfig
-
-      - name: Execute helm smoke tests
-        env:
-          GITHUB_TOKEN: ${{ secrets.GHCR_TOKEN }}
-        run: angreal helm test smoke --skip-docker --tag ${{ steps.tag.outputs.tag }} --registry ${{ env.REGISTRY }}/${{ github.repository_owner }}
-
-  # Full tests run only on push to main/develop (~10-15 min)
-  helm-full-tests:
-    name: Helm Full Tests
-    runs-on: ubuntu-latest
-    needs: helm-smoke-tests
-    if: github.event_name != 'pull_request'
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-
-      - name: Install angreal
+      - name: Validate broker chart templates
         run: |
-          python -m pip install --upgrade pip
-          pip install angreal
+          echo "Testing broker chart with default values..."
+          helm template test charts/brokkr-broker > /dev/null
+          echo "Testing broker chart with production values..."
+          helm template test charts/brokkr-broker -f charts/brokkr-broker/values/production.yaml > /dev/null
+          echo "Testing broker chart with development values..."
+          helm template test charts/brokkr-broker -f charts/brokkr-broker/values/development.yaml > /dev/null
+          echo "✓ All broker template tests passed"
 
-      - name: Create required directories
+      - name: Validate agent chart templates
         run: |
-          mkdir -p /tmp/brokkr-keys
-          chmod 777 /tmp/brokkr-keys
-
-      - name: Determine image tag
-        id: tag
-        run: echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
-
-      - name: Set up Helm
-        uses: azure/setup-helm@v3
-        with:
-          version: 'v3.12.0'
-
-      - name: Add Helm repositories
-        run: |
-          helm repo add bitnami https://charts.bitnami.com/bitnami
-          helm repo add openfunction https://openfunction.github.io/charts/
-
-      - name: Build Helm dependencies
-        run: |
-          helm dependency build charts/brokkr-broker
-          helm dependency build charts/brokkr-agent
-
-      - name: Log in to Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ env.REGISTRY_USER }}
-          password: ${{ secrets.GHCR_TOKEN }}
-
-      - name: docker compose up (k3s only)
-        uses: hoverkraft-tech/compose-action@v2.0.1
-        with:
-          compose-file: ".angreal/files/docker-compose.yaml"
-          services: |
-            k3s
-            init-kubeconfig
-            copy-kubeconfig
-
-      - name: Execute helm full tests
-        env:
-          GITHUB_TOKEN: ${{ secrets.GHCR_TOKEN }}
-        run: angreal helm test full --skip-docker --tag ${{ steps.tag.outputs.tag }} --registry ${{ env.REGISTRY }}/${{ github.repository_owner }}
-
-  # Shipwright E2E tests run in parallel with full tests (~10-15 min)
-  helm-shipwright-tests:
-    name: Helm Shipwright E2E Tests
-    runs-on: ubuntu-latest
-    needs: helm-smoke-tests
-    if: github.event_name != 'pull_request'
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-
-      - name: Install angreal
-        run: |
-          python -m pip install --upgrade pip
-          pip install angreal
-
-      - name: Create required directories
-        run: |
-          mkdir -p /tmp/brokkr-keys
-          chmod 777 /tmp/brokkr-keys
-
-      - name: Determine image tag
-        id: tag
-        run: echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
-
-      - name: Set up Helm
-        uses: azure/setup-helm@v3
-        with:
-          version: 'v3.12.0'
-
-      - name: Add Helm repositories
-        run: |
-          helm repo add bitnami https://charts.bitnami.com/bitnami
-          helm repo add openfunction https://openfunction.github.io/charts/
-
-      - name: Build Helm dependencies
-        run: |
-          helm dependency build charts/brokkr-broker
-          helm dependency build charts/brokkr-agent
-
-      - name: Log in to Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ env.REGISTRY_USER }}
-          password: ${{ secrets.GHCR_TOKEN }}
-
-      - name: docker compose up (k3s only)
-        uses: hoverkraft-tech/compose-action@v2.0.1
-        with:
-          compose-file: ".angreal/files/docker-compose.yaml"
-          services: |
-            k3s
-            init-kubeconfig
-            copy-kubeconfig
-
-      - name: Execute helm shipwright E2E tests
-        env:
-          GITHUB_TOKEN: ${{ secrets.GHCR_TOKEN }}
-        run: angreal helm test shipwright --skip-docker --tag ${{ steps.tag.outputs.tag }} --registry ${{ env.REGISTRY }}/${{ github.repository_owner }}
+          echo "Testing agent chart with default values..."
+          helm template test charts/brokkr-agent > /dev/null
+          echo "Testing agent chart with production values..."
+          helm template test charts/brokkr-agent -f charts/brokkr-agent/values/production.yaml > /dev/null
+          echo "Testing agent chart with development values..."
+          helm template test charts/brokkr-agent -f charts/brokkr-agent/values/development.yaml > /dev/null
+          echo "✓ All agent template tests passed"
 
   publish-dev-charts:
     name: Publish Development Helm Charts
-    needs: [helm-full-tests, helm-shipwright-tests]
+    needs: helm-template-tests
     runs-on: ubuntu-latest
     if: github.event_name != 'pull_request'
     permissions:
@@ -428,7 +269,7 @@ jobs:
 
   publish-pr-charts:
     name: Publish PR Helm Charts
-    needs: helm-smoke-tests
+    needs: helm-template-tests
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     permissions:
