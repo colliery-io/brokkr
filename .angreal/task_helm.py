@@ -50,15 +50,16 @@ def run_in_k8s_container(cmd, description="Running command in k8s container"):
 
 
 def verify_kubectl_connectivity():
-    """Verify kubectl can connect to k3s cluster."""
+    """Verify kubectl can connect to k3s cluster with fast polling."""
     print("\nVerifying kubectl connectivity...")
 
-    # Wait for kubeconfig.docker.yaml to exist
-    # The init-kubeconfig service sleeps for 60s to ensure files are written
+    # Wait for kubeconfig.docker.yaml to exist with faster polling
     print("Waiting for kubeconfig.docker.yaml to be created...")
-    max_wait = 70  # Wait up to 70 seconds for init-kubeconfig to complete
+    max_wait = 30  # Reduced from 70 seconds
     start_time = time.time()
+    poll_intervals = [1, 1, 2, 2, 3, 3, 5, 5, 5, 5]  # Fast initial checks, then slower
 
+    poll_idx = 0
     while time.time() - start_time < max_wait:
         result = subprocess.run([
             "docker", "run", "--rm",
@@ -74,7 +75,9 @@ def verify_kubectl_connectivity():
 
         elapsed = int(time.time() - start_time)
         print(f"Waiting for kubeconfig.docker.yaml... ({elapsed}s)")
-        time.sleep(5)
+        sleep_time = poll_intervals[min(poll_idx, len(poll_intervals) - 1)]
+        time.sleep(sleep_time)
+        poll_idx += 1
     else:
         # List what files are available
         run_in_k8s_container("ls -la /keys/", "Available files in /keys")
@@ -99,12 +102,12 @@ def setup_image_pull_secret(registry, namespace="default"):
     github_token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
 
     if not github_token:
-        print("\nWarning: No GITHUB_TOKEN or GH_TOKEN environment variable found.")
-        print("Image pulls from private GHCR repositories will fail.")
-        print("Set GITHUB_TOKEN with a PAT that has read:packages scope.")
+        print("\nWarning: No GITHUB_TOKEN or GH_TOKEN environment variable found.", flush=True)
+        print("Image pulls from private GHCR repositories will fail.", flush=True)
+        print("Set GITHUB_TOKEN with a PAT that has read:packages scope.", flush=True)
         return False
 
-    print(f"\nCreating image pull secret for {registry}...")
+    print(f"\nCreating image pull secret for {registry}...", flush=True)
 
     # Create docker config for GHCR
     # The username doesn't matter for GHCR, the token is what's important
@@ -130,11 +133,100 @@ def setup_image_pull_secret(registry, namespace="default"):
     ], cwd=cwd)
 
     if result.returncode == 0:
-        print("Image pull secret created successfully")
+        print("Image pull secret created successfully", flush=True)
         return True
     else:
-        print("Failed to create image pull secret")
+        print("Failed to create image pull secret", flush=True)
         return False
+
+
+def helm_template_test(chart_name, values_file=None, extra_values=None, tag="test", registry="ghcr.io/colliery-io"):
+    """Validate chart renders correctly without deploying.
+
+    Args:
+        chart_name: Name of the chart (brokkr-broker, brokkr-agent)
+        values_file: Optional values file path (relative to charts dir)
+        extra_values: Optional dict of --set values
+        tag: Image tag for template rendering
+        registry: Registry URL for template rendering
+
+    Returns:
+        tuple: (test_name, success)
+    """
+    test_name = f"template-{chart_name}"
+    if values_file:
+        # Extract values file name for test naming
+        values_name = values_file.split('/')[-1].replace('.yaml', '')
+        test_name = f"template-{chart_name}-{values_name}"
+
+    # Build helm template command
+    cmd = f"helm template test-{chart_name} /charts/{chart_name}"
+
+    if values_file:
+        cmd += f" -f /{values_file}"
+
+    # Add common test values
+    values = extra_values or {}
+    values.update({
+        "image.tag": tag,
+        "image.repository": f"{registry}/{chart_name}",
+    })
+
+    for k, v in values.items():
+        cmd += f" --set {k}={v}"
+
+    # Redirect output to /dev/null, we only care about exit code
+    cmd += " > /dev/null 2>&1"
+
+    success = run_in_k8s_container(cmd, f"Template validation: {test_name}")
+
+    if success:
+        print(f"  ✓ {test_name}")
+    else:
+        print(f"  ✗ {test_name}")
+
+    return (test_name, success)
+
+
+def run_parallel_template_tests(tag, registry):
+    """Run all helm template validation tests.
+
+    Returns:
+        list: List of (test_name, success) tuples
+    """
+    import concurrent.futures
+
+    print("\n" + "=" * 60)
+    print("Phase 1: Helm Template Validation")
+    print("=" * 60)
+
+    # Define all template tests to run
+    template_tests = [
+        # Broker chart tests
+        ("brokkr-broker", None, None),
+        ("brokkr-broker", "charts/brokkr-broker/values/production.yaml", None),
+        ("brokkr-broker", "charts/brokkr-broker/values/development.yaml", None),
+        ("brokkr-broker", "charts/brokkr-broker/values/staging.yaml", None),
+        # Agent chart tests
+        ("brokkr-agent", None, {"broker.url": "http://test:3000", "broker.pak": "test-pak"}),
+        ("brokkr-agent", "charts/brokkr-agent/values/production.yaml", {"broker.url": "http://test:3000", "broker.pak": "test-pak"}),
+        ("brokkr-agent", "charts/brokkr-agent/values/development.yaml", {"broker.url": "http://test:3000", "broker.pak": "test-pak"}),
+        ("brokkr-agent", "charts/brokkr-agent/values/staging.yaml", {"broker.url": "http://test:3000", "broker.pak": "test-pak"}),
+    ]
+
+    results = []
+
+    # Run template tests (could be parallelized but docker containers have overhead)
+    # For now run sequentially which is still fast (~30s total)
+    for chart_name, values_file, extra_values in template_tests:
+        result = helm_template_test(chart_name, values_file, extra_values, tag, registry)
+        results.append(result)
+
+    passed = sum(1 for _, success in results if success)
+    total = len(results)
+    print(f"\nTemplate validation: {passed}/{total} passed")
+
+    return results
 
 
 def helm_install(chart_name, release_name, values, namespace="default", values_file=None):
@@ -218,16 +310,17 @@ def helm_uninstall(release_name, namespace="default"):
     return run_in_k8s_container(cmd, f"Uninstalling {release_name}")
 
 
-def wait_for_pods(release_name, namespace="default", timeout=300):
-    """Wait for all pods in a release to be ready."""
+def wait_for_pods(release_name, namespace="default", timeout=180):
+    """Wait for all pods in a release to be ready with fast failure detection."""
     print(f"\nWaiting for pods in release '{release_name}' to be ready...")
 
     start_time = time.time()
     while time.time() - start_time < timeout:
+        # Get pod status with container state info for CrashLoopBackOff detection
         cmd = f"""
             kubectl get pods -n {namespace} \
                 -l app.kubernetes.io/instance={release_name} \
-                -o jsonpath='{{range .items[*]}}{{.status.phase}}:{{range .status.conditions[?(@.type=="Ready")]}}{{.status}}{{end}} {{end}}'
+                -o jsonpath='{{range .items[*]}}{{.status.phase}}:{{range .status.conditions[?(@.type=="Ready")]}}{{.status}}{{end}}:{{range .status.containerStatuses[*]}}{{.state.waiting.reason}}{{end}} {{end}}'
         """
 
         result = subprocess.run([
@@ -240,13 +333,35 @@ def wait_for_pods(release_name, namespace="default", timeout=300):
         ], capture_output=True, text=True, cwd=cwd)
 
         if result.returncode == 0 and result.stdout.strip():
-            # Check if all pods are Running:True
             pod_statuses = result.stdout.strip().split()
+
+            # Check for terminal failure states (fail fast)
+            terminal_failures = ["CrashLoopBackOff", "ImagePullBackOff", "ErrImagePull", "InvalidImageName"]
+            for status in pod_statuses:
+                for failure in terminal_failures:
+                    if failure in status:
+                        elapsed = int(time.time() - start_time)
+                        print(f"Pod in terminal failure state: {failure} (detected in {elapsed}s)")
+                        # Show pod details for debugging
+                        run_in_k8s_container(
+                            f"kubectl get pods -n {namespace} -l app.kubernetes.io/instance={release_name}",
+                            "Pod status"
+                        )
+                        run_in_k8s_container(
+                            f"kubectl describe pods -n {namespace} -l app.kubernetes.io/instance={release_name} | tail -30",
+                            "Pod events"
+                        )
+                        return False
+
+            # Check if all pods are Running:True
             if pod_statuses and all("Running:True" in status for status in pod_statuses):
-                print(f"All pods in release '{release_name}' are ready!")
+                elapsed = int(time.time() - start_time)
+                print(f"All pods in release '{release_name}' are ready! ({elapsed}s)")
                 return True
 
-        time.sleep(5)
+        elapsed = int(time.time() - start_time)
+        print(f"  Waiting for pods... ({elapsed}s)")
+        time.sleep(3)  # Reduced from 5s
 
     print(f"Timeout waiting for pods in release '{release_name}' to be ready")
     return False
@@ -833,18 +948,23 @@ def deploy_test_broker(tag, registry):
     broker_release_name = "brokkr-broker-for-agent-test"
     broker_chart_name = "brokkr-broker"
 
-    # Setup image pull secret
-    setup_image_pull_secret(registry.split('/')[0])  # Extract hostname (ghcr.io)
+    # Setup image pull secret (required for pulling from GHCR)
+    if not setup_image_pull_secret(registry.split('/')[0]):  # Extract hostname (ghcr.io)
+        print("Failed to setup image pull secret, broker deployment will fail", flush=True)
+        return None
 
     print("\n" + "=" * 60)
     print("Deploying broker for agent testing")
     print("=" * 60)
 
+    # Include admin PAK hash for API access (matches well-known dev PAK)
+    # PAK: brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8
     broker_values = {
         "image.tag": tag,
         "image.repository": f"{registry}/brokkr-broker",
         "image.pullSecrets[0].name": "ghcr-secret",
         "postgresql.enabled": "true",
+        "broker.pakHash": "4c697273df3d764cba950bb5c04368097685f09259f5bd880d892cf1ff9f4cdd",
     }
 
     if not helm_install(broker_chart_name, broker_release_name, broker_values):
@@ -984,10 +1104,22 @@ def test_agent_chart(tag, registry, no_cleanup, rbac_mode="cluster-wide", broker
 
 
 def get_admin_pak_from_broker(broker_release_name, namespace="default"):
-    """Get the admin PAK from the broker pod's /tmp/brokkr-keys/key.txt."""
-    print(f"\nGetting admin PAK from broker...")
+    """Return the well-known admin PAK configured in test brokers.
 
-    # Get the broker pod name
+    The broker is deployed with a known pakHash that corresponds to this PAK.
+    This is the same PAK used by the E2E tests and demo UI.
+    """
+    # Well-known admin PAK matching the pakHash configured in deploy_test_broker
+    admin_pak = "brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8"
+    print(f"Using admin PAK: {admin_pak[:15]}...", flush=True)
+    return admin_pak
+
+
+def get_agent_id_from_broker(broker_release_name, agent_name, admin_pak, namespace="default"):
+    """Get the agent ID from the broker API using the admin PAK."""
+    print(f"\nGetting agent ID for '{agent_name}'...", flush=True)
+
+    # Get the broker pod name first
     get_pod_cmd = f"""
         kubectl get pods -n {namespace} \
             -l app.kubernetes.io/name=brokkr-broker,app.kubernetes.io/instance={broker_release_name} \
@@ -1004,42 +1136,16 @@ def get_admin_pak_from_broker(broker_release_name, namespace="default"):
     ], capture_output=True, text=True, cwd=cwd)
 
     if result.returncode != 0 or not result.stdout.strip():
-        print("Failed to get broker pod name")
+        print(f"Failed to get broker pod name", flush=True)
         return None
 
     broker_pod = result.stdout.strip()
 
-    # Read the admin PAK from the broker pod
-    read_pak_cmd = f"""
-        kubectl exec {broker_pod} -n {namespace} -- cat /tmp/brokkr-keys/key.txt
-    """
-
-    result = subprocess.run([
-        "docker", "run", "--rm",
-        "--network", "brokkr-dev_default",
-        "-v", "brokkr-dev_brokkr-keys:/keys:ro",
-        "-e", "KUBECONFIG=/keys/kubeconfig.docker.yaml",
-        "alpine/k8s:1.30.10",
-        "sh", "-c", read_pak_cmd
-    ], capture_output=True, text=True, cwd=cwd)
-
-    if result.returncode != 0:
-        print(f"Failed to read admin PAK: {result.stderr}")
-        return None
-
-    admin_pak = result.stdout.strip()
-    print(f"Got admin PAK: {admin_pak[:15]}...")
-    return admin_pak
-
-
-def get_agent_id_from_broker(broker_release_name, agent_name, admin_pak, namespace="default"):
-    """Get the agent ID from the broker API using the admin PAK."""
-    print(f"\nGetting agent ID for '{agent_name}'...")
-
-    # Query the broker API for agents
+    # Query the broker API via kubectl exec (localhost from within the pod)
     get_agents_cmd = f"""
-        curl -s -H "Authorization: Bearer {admin_pak}" \
-            http://{broker_release_name}:3000/api/v1/agents
+        kubectl exec {broker_pod} -n {namespace} -- \
+            curl -s -H "Authorization: Bearer {admin_pak}" \
+            http://localhost:3000/api/v1/agents
     """
 
     result = subprocess.run([
@@ -1052,7 +1158,7 @@ def get_agent_id_from_broker(broker_release_name, agent_name, admin_pak, namespa
     ], capture_output=True, text=True, cwd=cwd)
 
     if result.returncode != 0:
-        print(f"Failed to query agents API: {result.stderr}")
+        print(f"Failed to query agents API: {result.stderr}", flush=True)
         return None
 
     import json
@@ -1061,19 +1167,80 @@ def get_agent_id_from_broker(broker_release_name, agent_name, admin_pak, namespa
         for agent in agents:
             if agent.get("name") == agent_name:
                 agent_id = agent.get("id")
-                print(f"Found agent ID: {agent_id}")
+                print(f"Found agent ID: {agent_id}", flush=True)
                 return agent_id
-        print(f"Agent '{agent_name}' not found in {len(agents)} agents")
+        print(f"Agent '{agent_name}' not found in {len(agents)} agents", flush=True)
         return None
     except json.JSONDecodeError as e:
-        print(f"Failed to parse agents response: {e}")
-        print(f"Response: {result.stdout[:500]}")
+        print(f"Failed to parse agents response: {e}", flush=True)
+        print(f"Response: {result.stdout[:500]}", flush=True)
         return None
+
+
+def activate_agent(broker_release_name, admin_pak, agent_id, namespace="default"):
+    """Activate an agent so it can process work orders."""
+    print(f"\nActivating agent {agent_id}...", flush=True)
+
+    # Get broker pod name first
+    get_pod_cmd = f"""
+        kubectl get pods -n {namespace} \
+            -l app.kubernetes.io/name=brokkr-broker,app.kubernetes.io/instance={broker_release_name} \
+            -o jsonpath='{{.items[0].metadata.name}}'
+    """
+
+    result = subprocess.run([
+        "docker", "run", "--rm",
+        "--network", "brokkr-dev_default",
+        "-v", "brokkr-dev_brokkr-keys:/keys:ro",
+        "-e", "KUBECONFIG=/keys/kubeconfig.docker.yaml",
+        "alpine/k8s:1.30.10",
+        "sh", "-c", get_pod_cmd
+    ], capture_output=True, text=True, cwd=cwd)
+
+    if result.returncode != 0 or not result.stdout.strip():
+        print(f"Failed to get broker pod name", flush=True)
+        return False
+
+    broker_pod = result.stdout.strip()
+
+    # Activate agent via PUT request (matches E2E test API)
+    activate_cmd = f"""
+        kubectl exec {broker_pod} -n {namespace} -- \
+            curl -s -X PUT \
+                -H "Authorization: Bearer {admin_pak}" \
+                -H "Content-Type: application/json" \
+                -d '{{"status": "ACTIVE"}}' \
+                http://localhost:3000/api/v1/agents/{agent_id}
+    """
+
+    result = subprocess.run([
+        "docker", "run", "--rm",
+        "--network", "brokkr-dev_default",
+        "-v", "brokkr-dev_brokkr-keys:/keys:ro",
+        "-e", "KUBECONFIG=/keys/kubeconfig.docker.yaml",
+        "alpine/k8s:1.30.10",
+        "sh", "-c", activate_cmd
+    ], capture_output=True, text=True, cwd=cwd)
+
+    if result.returncode != 0:
+        print(f"Failed to activate agent: {result.stderr}", flush=True)
+        return False
+
+    import json
+    try:
+        agent = json.loads(result.stdout)
+        status = agent.get("status", "UNKNOWN")
+        print(f"Agent status: {status}", flush=True)
+        return status == "ACTIVE"
+    except json.JSONDecodeError as e:
+        print(f"Failed to parse response: {e}", flush=True)
+        print(f"Response: {result.stdout[:500]}", flush=True)
+        return False
 
 
 def create_work_order(broker_release_name, admin_pak, agent_id, work_type, yaml_content, namespace="default"):
     """Create a work order via the broker API."""
-    print(f"\nCreating work order of type '{work_type}'...")
+    print(f"\nCreating work order of type '{work_type}'...", flush=True)
 
     import json
     payload = json.dumps({
@@ -1084,13 +1251,41 @@ def create_work_order(broker_release_name, admin_pak, agent_id, work_type, yaml_
         "claim_timeout_seconds": 300,
     })
 
-    # Create work order via API
+    # Get broker pod name first
+    get_pod_cmd = f"""
+        kubectl get pods -n {namespace} \
+            -l app.kubernetes.io/name=brokkr-broker,app.kubernetes.io/instance={broker_release_name} \
+            -o jsonpath='{{.items[0].metadata.name}}'
+    """
+
+    result = subprocess.run([
+        "docker", "run", "--rm",
+        "--network", "brokkr-dev_default",
+        "-v", "brokkr-dev_brokkr-keys:/keys:ro",
+        "-e", "KUBECONFIG=/keys/kubeconfig.docker.yaml",
+        "alpine/k8s:1.30.10",
+        "sh", "-c", get_pod_cmd
+    ], capture_output=True, text=True, cwd=cwd)
+
+    if result.returncode != 0 or not result.stdout.strip():
+        print(f"Failed to get broker pod name", flush=True)
+        return None
+
+    broker_pod = result.stdout.strip()
+
+    # Escape the payload for shell - use base64 to avoid quoting issues
+    import base64
+    payload_b64 = base64.b64encode(payload.encode()).decode()
+
+    # Create work order via kubectl exec (localhost from within the pod)
     create_wo_cmd = f"""
-        curl -s -X POST \
-            -H "Authorization: Bearer {admin_pak}" \
-            -H "Content-Type: application/json" \
-            -d '{payload}' \
-            http://{broker_release_name}:3000/api/v1/work-orders
+        kubectl exec {broker_pod} -n {namespace} -- sh -c '
+            echo {payload_b64} | base64 -d | curl -s -X POST \
+                -H "Authorization: Bearer {admin_pak}" \
+                -H "Content-Type: application/json" \
+                -d @- \
+                http://localhost:3000/api/v1/work-orders
+        '
     """
 
     result = subprocess.run([
@@ -1103,32 +1298,55 @@ def create_work_order(broker_release_name, admin_pak, agent_id, work_type, yaml_
     ], capture_output=True, text=True, cwd=cwd)
 
     if result.returncode != 0:
-        print(f"Failed to create work order: {result.stderr}")
+        print(f"Failed to create work order: {result.stderr}", flush=True)
         return None
 
     try:
         work_order = json.loads(result.stdout)
         wo_id = work_order.get("id")
-        print(f"Created work order: {wo_id}")
+        print(f"Created work order: {wo_id}", flush=True)
         return wo_id
     except json.JSONDecodeError as e:
-        print(f"Failed to parse work order response: {e}")
-        print(f"Response: {result.stdout[:500]}")
+        print(f"Failed to parse work order response: {e}", flush=True)
+        print(f"Response: {result.stdout[:500]}", flush=True)
         return None
 
 
 def wait_for_work_order_completion(broker_release_name, admin_pak, work_order_id, timeout=300, namespace="default"):
     """Wait for a work order to complete (move to work_order_log)."""
-    print(f"\nWaiting for work order {work_order_id} to complete (timeout: {timeout}s)...")
+    print(f"\nWaiting for work order {work_order_id} to complete (timeout: {timeout}s)...", flush=True)
 
     import json
     start_time = time.time()
 
+    # Get broker pod name once
+    get_pod_cmd = f"""
+        kubectl get pods -n {namespace} \
+            -l app.kubernetes.io/name=brokkr-broker,app.kubernetes.io/instance={broker_release_name} \
+            -o jsonpath='{{.items[0].metadata.name}}'
+    """
+
+    result = subprocess.run([
+        "docker", "run", "--rm",
+        "--network", "brokkr-dev_default",
+        "-v", "brokkr-dev_brokkr-keys:/keys:ro",
+        "-e", "KUBECONFIG=/keys/kubeconfig.docker.yaml",
+        "alpine/k8s:1.30.10",
+        "sh", "-c", get_pod_cmd
+    ], capture_output=True, text=True, cwd=cwd)
+
+    if result.returncode != 0 or not result.stdout.strip():
+        print(f"Failed to get broker pod name", flush=True)
+        return False, "Failed to get broker pod"
+
+    broker_pod = result.stdout.strip()
+
     while time.time() - start_time < timeout:
         # Check if work order is in the log (completed)
         check_log_cmd = f"""
-            curl -s -H "Authorization: Bearer {admin_pak}" \
-                http://{broker_release_name}:3000/api/v1/work-order-log/{work_order_id}
+            kubectl exec {broker_pod} -n {namespace} -- \
+                curl -s -H "Authorization: Bearer {admin_pak}" \
+                http://localhost:3000/api/v1/work-order-log/{work_order_id}
         """
 
         result = subprocess.run([
@@ -1147,17 +1365,18 @@ def wait_for_work_order_completion(broker_release_name, admin_pak, work_order_id
                     success = log_entry.get("success", False)
                     message = log_entry.get("result_message", "")
                     elapsed = int(time.time() - start_time)
-                    print(f"Work order completed in {elapsed}s")
-                    print(f"  Success: {success}")
-                    print(f"  Message: {message[:100] if message else 'N/A'}")
+                    print(f"Work order completed in {elapsed}s", flush=True)
+                    print(f"  Success: {success}", flush=True)
+                    print(f"  Message: {message[:100] if message else 'N/A'}", flush=True)
                     return success, message
             except json.JSONDecodeError:
                 pass  # Not in log yet
 
         # Check current status
         check_wo_cmd = f"""
-            curl -s -H "Authorization: Bearer {admin_pak}" \
-                http://{broker_release_name}:3000/api/v1/work-orders/{work_order_id}
+            kubectl exec {broker_pod} -n {namespace} -- \
+                curl -s -H "Authorization: Bearer {admin_pak}" \
+                http://localhost:3000/api/v1/work-orders/{work_order_id}
         """
 
         result = subprocess.run([
@@ -1174,13 +1393,13 @@ def wait_for_work_order_completion(broker_release_name, admin_pak, work_order_id
                 wo = json.loads(result.stdout)
                 status = wo.get("status", "UNKNOWN")
                 elapsed = int(time.time() - start_time)
-                print(f"  Status: {status} ({elapsed}s elapsed)")
+                print(f"  Status: {status} ({elapsed}s elapsed)", flush=True)
             except json.JSONDecodeError:
                 pass
 
         time.sleep(10)
 
-    print(f"Timeout waiting for work order to complete")
+    print(f"Timeout waiting for work order to complete", flush=True)
     return False, "Timeout"
 
 
@@ -1237,9 +1456,11 @@ def test_shipwright_e2e(tag, registry, no_cleanup, broker_release_name=None):
             "broker.pak": pak,
             "rbac.create": "true",
             "rbac.clusterWide": "true",
-            # Enable Shipwright for this test
+            # Enable Shipwright for this test (matches values-dev.yaml)
             "shipwright.enabled": "true",
-            "shipwright.installSampleStrategies": "true",
+            "shipwright.install.tekton": "true",
+            "shipwright.install.shipwright": "true",
+            "shipwright.install.sampleStrategies": "true",
         }
 
         install_success = helm_install(agent_chart_name, agent_release_name, agent_values)
@@ -1277,15 +1498,39 @@ def test_shipwright_e2e(tag, registry, no_cleanup, broker_release_name=None):
         """
         shipwright_result = run_in_k8s_container(shipwright_ready_cmd, "Waiting for Shipwright controller")
 
-        # Check ClusterBuildStrategy exists
-        print("\nVerifying ClusterBuildStrategy 'buildah' exists...")
-        strategy_check_cmd = "kubectl get clusterbuildstrategy buildah -o name 2>/dev/null || echo 'not-found'"
-        run_in_k8s_container(strategy_check_cmd, "Checking buildah strategy")
+        # Wait for ClusterBuildStrategy to be created (install job might still be running)
+        # Use 'kaniko' strategy as it works without registry credentials (pushes to ttl.sh)
+        strategy_name = "kaniko"
+        print(f"\nWaiting for ClusterBuildStrategy '{strategy_name}' to be available...", flush=True)
+        strategy_ready = False
+        for attempt in range(30):  # Wait up to 60 seconds
+            strategy_check_cmd = f"kubectl get clusterbuildstrategy {strategy_name} -o name 2>/dev/null"
+            result = subprocess.run([
+                "docker", "run", "--rm",
+                "--network", "brokkr-dev_default",
+                "-v", "brokkr-dev_brokkr-keys:/keys:ro",
+                "-e", "KUBECONFIG=/keys/kubeconfig.docker.yaml",
+                "alpine/k8s:1.30.10",
+                "sh", "-c", strategy_check_cmd
+            ], capture_output=True, text=True, cwd=cwd)
+            if result.returncode == 0 and strategy_name in result.stdout:
+                print(f"✓ ClusterBuildStrategy '{strategy_name}' is available", flush=True)
+                strategy_ready = True
+                break
+            print(f"  Waiting for {strategy_name} strategy... ({attempt * 2}s)", flush=True)
+            time.sleep(2)
+
+        if not strategy_ready:
+            print(f"✗ ClusterBuildStrategy '{strategy_name}' not found after waiting", flush=True)
+            # List available strategies for debugging
+            list_cmd = "kubectl get clusterbuildstrategies 2>/dev/null || echo 'none found'"
+            run_in_k8s_container(list_cmd, "Listing available strategies")
+            return False
 
         # Step 4: Get admin PAK and agent ID for work order creation
-        print("\n" + "=" * 60)
-        print("Step 4: Getting admin credentials for work order creation")
-        print("=" * 60)
+        print("\n" + "=" * 60, flush=True)
+        print("Step 4: Getting admin credentials for work order creation", flush=True)
+        print("=" * 60, flush=True)
 
         admin_pak = get_admin_pak_from_broker(broker_release_name)
         if not admin_pak:
@@ -1297,13 +1542,18 @@ def test_shipwright_e2e(tag, registry, no_cleanup, broker_release_name=None):
             print("Failed to get agent ID")
             return False
 
+        # Activate the agent so it can process work orders
+        if not activate_agent(broker_release_name, admin_pak, agent_id):
+            print("Failed to activate agent")
+            return False
+
         # Step 5: Create a simple Build and WorkOrder
         print("\n" + "=" * 60)
         print("Step 5: Creating Shipwright Build via work order")
         print("=" * 60)
 
-        # Simple build that just tests the system without requiring a real registry
-        # This uses the buildah strategy with a minimal Dockerfile
+        # Simple build using ttl.sh (ephemeral registry, no credentials needed)
+        # Matches the E2E test pattern in tests/e2e/src/scenarios.rs
         build_yaml = '''---
 apiVersion: shipwright.io/v1beta1
 kind: Build
@@ -1315,15 +1565,12 @@ spec:
     type: Git
     git:
       url: https://github.com/shipwright-io/sample-go
-      revision: main
+    contextDir: docker-build
   strategy:
-    name: buildah
+    name: kaniko
     kind: ClusterBuildStrategy
   output:
-    # Use a local registry or skip push for testing
-    # For E2E test, we just want to verify the build runs
-    image: localhost:5000/e2e-test:latest
-    pushSecret: null
+    image: ttl.sh/brokkr-helm-e2e-test:1h
 '''
 
         work_order_id = create_work_order(
@@ -1401,37 +1648,308 @@ spec:
             )
 
 
+# =============================================================================
+# Tiered Test Runners
+# =============================================================================
+
+def run_smoke_tests(tag, registry, no_cleanup):
+    """Run fast smoke tests for PR validation (~3-5 min).
+
+    Smoke tests validate:
+    1. All chart templates render correctly (helm template)
+    2. Basic broker deployment works (bundled PostgreSQL)
+    3. Basic agent deployment works (cluster-wide RBAC)
+
+    Returns:
+        list: List of (test_name, success) tuples
+    """
+    results = []
+
+    # Phase 1: Template validation (fast, no deployment)
+    template_results = run_parallel_template_tests(tag, registry)
+    results.extend(template_results)
+
+    # Phase 2: Quick deployment tests
+    print("\n" + "=" * 60)
+    print("Phase 2: Quick Deployment Validation")
+    print("=" * 60)
+
+    # Single broker deployment (bundled PostgreSQL)
+    print("\nDeploying broker (bundled PostgreSQL)...")
+    result = test_broker_chart(tag, registry, no_cleanup=True, test_external_db=False)
+    results.append(("broker-deploy", result))
+
+    if not result:
+        print("Broker deployment failed, skipping agent test")
+        return results
+
+    # Deploy broker for agent test (reuse from above would be better but simpler to just deploy fresh)
+    broker_release_name = deploy_test_broker(tag, registry)
+    if broker_release_name:
+        # Single agent deployment (cluster-wide RBAC)
+        print("\nDeploying agent (cluster-wide RBAC)...")
+        result = test_agent_chart(tag, registry, no_cleanup=True,
+                                  rbac_mode="cluster-wide",
+                                  broker_release_name=broker_release_name)
+        results.append(("agent-deploy", result))
+
+        # Cleanup
+        if not no_cleanup:
+            helm_uninstall(broker_release_name)
+    else:
+        results.append(("agent-broker-setup", False))
+
+    return results
+
+
+def run_full_tests(tag, registry, no_cleanup):
+    """Run comprehensive tests for releases (~10-15 min).
+
+    Full tests include all smoke tests plus:
+    - External PostgreSQL configuration
+    - Multi-tenant schema isolation
+    - Additional RBAC modes (namespace-scoped, disabled)
+
+    Returns:
+        list: List of (test_name, success) tuples
+    """
+    results = []
+
+    # Run smoke tests first
+    smoke_results = run_smoke_tests(tag, registry, no_cleanup=True)
+    results.extend(smoke_results)
+
+    # Check if smoke tests passed
+    smoke_passed = all(success for _, success in smoke_results)
+    if not smoke_passed:
+        print("\nSmoke tests failed, skipping extended tests")
+        return results
+
+    # Clean up smoke test releases before extended tests (they use the same release names)
+    print("\nCleaning up smoke test releases before extended tests...")
+    helm_uninstall("brokkr-broker-test")
+    helm_uninstall("brokkr-broker-for-agent-test")
+    helm_uninstall("brokkr-agent-test-cluster-wide")
+
+    # Phase 3: Extended deployment tests
+    print("\n" + "=" * 60)
+    print("Phase 3: Extended Deployment Tests")
+    print("=" * 60)
+
+    # External PostgreSQL test
+    print("\nTesting broker with external PostgreSQL...")
+    result = test_broker_chart(tag, registry, no_cleanup, test_external_db=True)
+    results.append(("broker-external-db", result))
+
+    # Multi-tenant schema isolation test
+    print("\nTesting multi-tenant schema isolation...")
+    result = test_broker_multi_tenant_schema(tag, registry, no_cleanup)
+    results.append(("broker-multi-tenant-schema", result))
+
+    # Additional RBAC modes
+    broker_release_name = deploy_test_broker(tag, registry)
+    if broker_release_name:
+        for rbac_mode in ["namespace-scoped", "disabled"]:
+            print(f"\nTesting agent RBAC mode: {rbac_mode}...")
+            result = test_agent_chart(tag, registry, no_cleanup,
+                                      rbac_mode=rbac_mode,
+                                      broker_release_name=broker_release_name)
+            results.append((f"agent-rbac-{rbac_mode}", result))
+
+        if not no_cleanup:
+            helm_uninstall(broker_release_name)
+
+    return results
+
+
+def run_shipwright_tests(tag, registry, no_cleanup):
+    """Run Shipwright E2E tests only (~15 min).
+
+    Returns:
+        list: List of (test_name, success) tuples
+    """
+    results = []
+
+    broker_release_name = deploy_test_broker(tag, registry)
+    if not broker_release_name:
+        results.append(("shipwright-broker-setup", False))
+        return results
+
+    result = test_shipwright_e2e(tag, registry, no_cleanup, broker_release_name=broker_release_name)
+    results.append(("shipwright-e2e", result))
+
+    if not no_cleanup:
+        helm_uninstall(broker_release_name)
+
+    return results
+
+
+def run_legacy_tests(tag, registry, no_cleanup, component):
+    """Run legacy-style tests for backward compatibility.
+
+    Args:
+        component: One of broker, agent, shipwright, all
+    """
+    results = []
+
+    if component in ["broker", "all"]:
+        print("\n" + "=" * 60)
+        print("Testing broker chart (bundled PostgreSQL)")
+        print("=" * 60)
+        result = test_broker_chart(tag, registry, no_cleanup, test_external_db=False)
+        results.append(("broker-bundled-db", result))
+
+        print("\n" + "=" * 60)
+        print("Testing broker chart (external PostgreSQL)")
+        print("=" * 60)
+        result = test_broker_chart(tag, registry, no_cleanup, test_external_db=True)
+        results.append(("broker-external-db", result))
+
+        print("\n" + "=" * 60)
+        print("Testing broker chart (multi-tenant schema isolation)")
+        print("=" * 60)
+        result = test_broker_multi_tenant_schema(tag, registry, no_cleanup)
+        results.append(("broker-multi-tenant-schema", result))
+
+        # Test broker values files
+        values_files = ["production", "development", "staging"]
+        for values_file in values_files:
+            print("\n" + "=" * 60)
+            print(f"Testing broker chart with {values_file}.yaml")
+            print("=" * 60)
+            result = test_broker_with_values_file(tag, registry, no_cleanup, values_file)
+            results.append((f"broker-values-{values_file}", result))
+
+    broker_release_name = None
+    if component in ["agent", "all"]:
+        # Deploy broker once for all agent tests
+        print("\n" + "=" * 60)
+        print("Setting up broker for agent testing")
+        print("=" * 60)
+        broker_release_name = deploy_test_broker(tag, registry)
+
+        if not broker_release_name:
+            print("Failed to deploy broker for agent testing")
+            results.append(("agent-broker-setup", False))
+        else:
+            # Test agent with different RBAC modes
+            rbac_modes = ["cluster-wide", "namespace-scoped", "disabled"]
+            for rbac_mode in rbac_modes:
+                print("\n" + "=" * 60)
+                print(f"Testing agent chart (RBAC: {rbac_mode})")
+                print("=" * 60)
+                result = test_agent_chart(tag, registry, no_cleanup, rbac_mode=rbac_mode, broker_release_name=broker_release_name)
+                results.append((f"agent-rbac-{rbac_mode}", result))
+
+            # Test agent values files
+            values_files = ["production", "development", "staging"]
+            for values_file in values_files:
+                print("\n" + "=" * 60)
+                print(f"Testing agent chart with {values_file}.yaml")
+                print("=" * 60)
+                result = test_agent_with_values_file(tag, registry, no_cleanup, values_file, broker_release_name)
+                results.append((f"agent-values-{values_file}", result))
+
+            # Cleanup broker after all agent tests (unless shipwright test follows)
+            if not no_cleanup and component not in ["shipwright", "all"]:
+                print("\n" + "=" * 60)
+                print("Cleaning up broker")
+                print("=" * 60)
+                helm_uninstall(broker_release_name)
+
+    if component in ["shipwright", "all"]:
+        # For shipwright-only test, need to deploy broker first
+        if component == "shipwright":
+            print("\n" + "=" * 60)
+            print("Setting up broker for Shipwright E2E testing")
+            print("=" * 60)
+            broker_release_name = deploy_test_broker(tag, registry)
+
+            if not broker_release_name:
+                print("Failed to deploy broker for Shipwright E2E testing")
+                results.append(("shipwright-broker-setup", False))
+            else:
+                print("\n" + "=" * 60)
+                print("Testing Shipwright E2E (build work order)")
+                print("=" * 60)
+                result = test_shipwright_e2e(tag, registry, no_cleanup, broker_release_name=broker_release_name)
+                results.append(("shipwright-e2e", result))
+
+                # Cleanup broker
+                if not no_cleanup:
+                    print("\n" + "=" * 60)
+                    print("Cleaning up broker")
+                    print("=" * 60)
+                    helm_uninstall(broker_release_name)
+        else:
+            # For 'all', broker is already deployed from agent tests
+            print("\n" + "=" * 60)
+            print("Testing Shipwright E2E (build work order)")
+            print("=" * 60)
+            result = test_shipwright_e2e(tag, registry, no_cleanup, broker_release_name=broker_release_name)
+            results.append(("shipwright-e2e", result))
+
+            # Cleanup broker after shipwright test
+            if not no_cleanup:
+                print("\n" + "=" * 60)
+                print("Cleaning up broker")
+                print("=" * 60)
+                helm_uninstall(broker_release_name)
+
+    return results
+
+
+def print_test_results(results):
+    """Print test results summary."""
+    print("\n" + "=" * 60)
+    print("Test Results:")
+    print("=" * 60)
+    for test_name, success in results:
+        status = "PASSED" if success else "FAILED"
+        print(f"  {test_name}: {status}")
+    print("=" * 60)
+
+    passed = sum(1 for _, success in results if success)
+    total = len(results)
+    print(f"\nTotal: {passed}/{total} tests passed")
+
+    return all(success for _, success in results)
+
+
 @helm()
 @angreal.command(name="test", about="test Helm charts in k3s cluster")
-@angreal.argument(name="component", required=True, help="Component to test (broker, agent, shipwright, all)")
+@angreal.argument(name="tier", required=True, help="Test tier: smoke, full, shipwright, or legacy component (broker, agent, all)")
 @angreal.argument(name="skip_docker", long="skip-docker", help="Skip docker compose setup", takes_value=False, is_flag=True)
 @angreal.argument(name="no_cleanup", long="no-cleanup", help="Skip cleanup after tests", takes_value=False, is_flag=True)
 @angreal.argument(name="tag", long="tag", help="Image tag to test (default: test)", default_value="test")
 @angreal.argument(name="registry", long="registry", help="Registry URL (default: ghcr.io/colliery-io)", default_value="ghcr.io/colliery-io")
-def test_helm_chart(component, skip_docker=False, no_cleanup=False, tag="test", registry="ghcr.io/colliery-io"):
+def test_helm_chart(tier, skip_docker=False, no_cleanup=False, tag="test", registry="ghcr.io/colliery-io"):
     """
-    Test Helm charts in a k3s cluster.
+    Test Helm charts in a k3s cluster with tiered execution.
 
-    This command will:
-    1. Start k3s cluster (unless --skip-docker)
-    2. Install the specified Helm chart(s) from within a container
-    3. Validate pods are running
-    4. Test health check endpoints
-    5. Clean up (unless --no-cleanup)
+    Test Tiers:
+      smoke      - Fast validation (~3-5 min): template checks + basic deployment
+      full       - Comprehensive tests (~10-15 min): smoke + external DB, RBAC variants
+      shipwright - Shipwright E2E only (~15 min): build work order processing
 
-    All helm/kubectl commands run inside a container on the docker network,
-    avoiding host networking issues.
+    Legacy Components (backward compatibility):
+      broker     - All broker tests (bundled/external DB, multi-tenant, values files)
+      agent      - All agent tests (RBAC modes, values files)
+      all        - All tests including Shipwright E2E
 
     Examples:
-        angreal helm test broker --tag test
-        angreal helm test agent --skip-docker
-        angreal helm test all --no-cleanup
-        angreal helm test shipwright --tag test  # Shipwright E2E only
+        angreal helm test smoke --tag test        # Quick PR validation
+        angreal helm test full --skip-docker      # Comprehensive release testing
+        angreal helm test broker --tag test       # Legacy: broker tests only
+        angreal helm test all --no-cleanup        # Legacy: all tests
     """
-    valid_components = ["broker", "agent", "shipwright", "all"]
-    if component not in valid_components:
-        print(f"Error: Unknown component '{component}'")
-        print(f"Valid components: {', '.join(valid_components)}")
+    valid_tiers = ["smoke", "full", "shipwright"]
+    legacy_components = ["broker", "agent", "all"]
+
+    if tier not in valid_tiers + legacy_components:
+        print(f"Error: Unknown tier/component '{tier}'")
+        print(f"Valid tiers: {', '.join(valid_tiers)}")
+        print(f"Legacy components: {', '.join(legacy_components)}")
         sys.exit(1)
 
     try:
@@ -1441,120 +1959,34 @@ def test_helm_chart(component, skip_docker=False, no_cleanup=False, tag="test", 
         # Verify kubectl connectivity
         verify_kubectl_connectivity()
 
-        # Test components
-        results = []
-
-        if component in ["broker", "all"]:
+        # Run appropriate test tier
+        if tier == "smoke":
             print("\n" + "=" * 60)
-            print("Testing broker chart (bundled PostgreSQL)")
+            print("SMOKE TESTS (~3-5 min)")
             print("=" * 60)
-            result = test_broker_chart(tag, registry, no_cleanup, test_external_db=False)
-            results.append(("broker-bundled-db", result))
+            results = run_smoke_tests(tag, registry, no_cleanup)
 
+        elif tier == "full":
             print("\n" + "=" * 60)
-            print("Testing broker chart (external PostgreSQL)")
+            print("FULL TESTS (~10-15 min)")
             print("=" * 60)
-            result = test_broker_chart(tag, registry, no_cleanup, test_external_db=True)
-            results.append(("broker-external-db", result))
+            results = run_full_tests(tag, registry, no_cleanup)
 
+        elif tier == "shipwright":
             print("\n" + "=" * 60)
-            print("Testing broker chart (multi-tenant schema isolation)")
+            print("SHIPWRIGHT E2E TESTS (~15 min)")
             print("=" * 60)
-            result = test_broker_multi_tenant_schema(tag, registry, no_cleanup)
-            results.append(("broker-multi-tenant-schema", result))
+            results = run_shipwright_tests(tag, registry, no_cleanup)
 
-            # Test broker values files
-            values_files = ["production", "development", "staging"]
-            for values_file in values_files:
-                print("\n" + "=" * 60)
-                print(f"Testing broker chart with {values_file}.yaml")
-                print("=" * 60)
-                result = test_broker_with_values_file(tag, registry, no_cleanup, values_file)
-                results.append((f"broker-values-{values_file}", result))
-
-        if component in ["agent", "all"]:
-            # Deploy broker once for all agent tests
+        else:
+            # Legacy component-based testing
             print("\n" + "=" * 60)
-            print("Setting up broker for agent testing")
+            print(f"LEGACY TESTS: {tier.upper()}")
             print("=" * 60)
-            broker_release_name = deploy_test_broker(tag, registry)
+            results = run_legacy_tests(tag, registry, no_cleanup, tier)
 
-            if not broker_release_name:
-                print("Failed to deploy broker for agent testing")
-                results.append(("agent-broker-setup", False))
-            else:
-                # Test agent with different RBAC modes
-                rbac_modes = ["cluster-wide", "namespace-scoped", "disabled"]
-                for rbac_mode in rbac_modes:
-                    print("\n" + "=" * 60)
-                    print(f"Testing agent chart (RBAC: {rbac_mode})")
-                    print("=" * 60)
-                    result = test_agent_chart(tag, registry, no_cleanup, rbac_mode=rbac_mode, broker_release_name=broker_release_name)
-                    results.append((f"agent-rbac-{rbac_mode}", result))
-
-                # Test agent values files
-                values_files = ["production", "development", "staging"]
-                for values_file in values_files:
-                    print("\n" + "=" * 60)
-                    print(f"Testing agent chart with {values_file}.yaml")
-                    print("=" * 60)
-                    result = test_agent_with_values_file(tag, registry, no_cleanup, values_file, broker_release_name)
-                    results.append((f"agent-values-{values_file}", result))
-
-                # Cleanup broker after all agent tests (unless shipwright test follows)
-                if not no_cleanup and component not in ["shipwright", "all"]:
-                    print("\n" + "=" * 60)
-                    print("Cleaning up broker")
-                    print("=" * 60)
-                    helm_uninstall(broker_release_name)
-
-        if component in ["shipwright", "all"]:
-            # For shipwright-only test, need to deploy broker first
-            if component == "shipwright":
-                print("\n" + "=" * 60)
-                print("Setting up broker for Shipwright E2E testing")
-                print("=" * 60)
-                broker_release_name = deploy_test_broker(tag, registry)
-
-                if not broker_release_name:
-                    print("Failed to deploy broker for Shipwright E2E testing")
-                    results.append(("shipwright-broker-setup", False))
-                else:
-                    print("\n" + "=" * 60)
-                    print("Testing Shipwright E2E (build work order)")
-                    print("=" * 60)
-                    result = test_shipwright_e2e(tag, registry, no_cleanup, broker_release_name=broker_release_name)
-                    results.append(("shipwright-e2e", result))
-
-                    # Cleanup broker
-                    if not no_cleanup:
-                        print("\n" + "=" * 60)
-                        print("Cleaning up broker")
-                        print("=" * 60)
-                        helm_uninstall(broker_release_name)
-            else:
-                # For 'all', broker is already deployed from agent tests
-                print("\n" + "=" * 60)
-                print("Testing Shipwright E2E (build work order)")
-                print("=" * 60)
-                result = test_shipwright_e2e(tag, registry, no_cleanup, broker_release_name=broker_release_name)
-                results.append(("shipwright-e2e", result))
-
-                # Cleanup broker after shipwright test
-                if not no_cleanup:
-                    print("\n" + "=" * 60)
-                    print("Cleaning up broker")
-                    print("=" * 60)
-                    helm_uninstall(broker_release_name)
-
-        # Summary
-        print("\n" + "=" * 60)
-        print("Test Results:")
-        print("=" * 60)
-        for comp_name, result in results:
-            status = "✓ PASSED" if result else "✗ FAILED"
-            print(f"{comp_name}: {status}")
-        print("=" * 60)
+        # Print results summary
+        all_passed = print_test_results(results)
 
         if no_cleanup:
             print("\nHelm releases left running (--no-cleanup)")
@@ -1575,10 +2007,9 @@ def test_helm_chart(component, skip_docker=False, no_cleanup=False, tag="test", 
             docker_down()
             docker_clean()
 
-        # Exit with error if any tests failed, otherwise return normally
-        if not all(result for _, result in results):
+        # Exit with error if any tests failed
+        if not all_passed:
             sys.exit(1)
-        # Success - let angreal handle normal completion
 
     except Exception as e:
         print(f"\nError during Helm testing: {e}")
