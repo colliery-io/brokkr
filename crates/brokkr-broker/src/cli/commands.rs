@@ -39,11 +39,15 @@ pub async fn serve(config: &Settings) -> Result<(), Box<dyn std::error::Error>> 
     info!("Starting Brokkr Broker application");
 
     // Create database connection pool
+    // Pool size needs to accommodate:
+    // - 5 background tasks (diagnostic cleanup, work order maintenance, webhook delivery/cleanup, audit cleanup)
+    // - HTTP requests (middleware holds 1 connection while DAL methods need another)
+    // - Concurrent request handling and webhook event emission
     info!("Creating database connection pool");
     let connection_pool = create_shared_connection_pool(
         &config.database.url,
         "brokkr",
-        5,
+        50,
         config.database.schema.as_deref(),
     );
     info!("Database connection pool created successfully");

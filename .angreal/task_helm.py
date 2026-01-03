@@ -252,6 +252,30 @@ def wait_for_pods(release_name, namespace="default", timeout=300):
     return False
 
 
+def log_broker_diagnostics(broker_release_name, namespace="default"):
+    """Log broker pod diagnostics for debugging failures."""
+    print("\n" + "=" * 60)
+    print("BROKER DIAGNOSTICS")
+    print("=" * 60)
+
+    run_in_k8s_container(
+        f"kubectl get pods -n {namespace} -l app.kubernetes.io/instance={broker_release_name}",
+        "Broker pod status"
+    )
+
+    run_in_k8s_container(
+        f"kubectl logs -n {namespace} -l app.kubernetes.io/instance={broker_release_name} -c broker --tail=100",
+        "Broker container logs (last 100 lines)"
+    )
+
+    run_in_k8s_container(
+        f"kubectl describe pod -n {namespace} -l app.kubernetes.io/instance={broker_release_name}",
+        "Broker pod description"
+    )
+
+    print("=" * 60)
+
+
 def validate_health_endpoint(service_name, port, path, namespace="default"):
     """Validate a health check endpoint via the service."""
     print(f"\nValidating health endpoint: {service_name}:{port}{path}")
@@ -790,6 +814,8 @@ def test_agent_with_values_file(tag, registry, no_cleanup, values_file_name, bro
             return False
 
         if not wait_for_pods(release_name):
+            # Log broker diagnostics to understand why agent failed
+            log_broker_diagnostics(broker_release_name)
             if not no_cleanup:
                 helm_uninstall(release_name)
             return False
@@ -919,6 +945,8 @@ def test_agent_chart(tag, registry, no_cleanup, rbac_mode="cluster-wide", broker
         if rbac_mode == "cluster-wide":
             # Wait for agent pods to be ready
             if not wait_for_pods(agent_release_name):
+                # Log broker diagnostics to understand why agent failed
+                log_broker_diagnostics(broker_release_name)
                 if not no_cleanup:
                     helm_uninstall(agent_release_name)
                 return False
@@ -1223,6 +1251,9 @@ def test_shipwright_e2e(tag, registry, no_cleanup, broker_release_name=None):
         # Wait for agent pods to be ready
         if not wait_for_pods(agent_release_name):
             print("Agent pods failed to become ready")
+            # Log broker diagnostics to understand why agent failed
+            if broker_release_name:
+                log_broker_diagnostics(broker_release_name)
             return False
 
         print("Agent deployed successfully with Shipwright enabled")
