@@ -97,8 +97,7 @@ jobs:
           file: ./docker/Dockerfile.${{ matrix.component }}
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=build-${{ matrix.component }}-${{ steps.platform.outputs.arch }}
-          cache-to: type=gha,mode=max,scope=build-${{ matrix.component }}-${{ steps.platform.outputs.arch }}
+          no-cache: true
           outputs: type=image,name=${{ env.REGISTRY }}/${{ github.repository_owner }}/brokkr-${{ matrix.component }},push-by-digest=true,name-canonical=true,push=true
 
       - name: Export digest
@@ -195,12 +194,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install angreal
 
-      - name: Docker Compose Cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.docker
-          key: ${{ runner.os }}-docker-${{ hashFiles('.angreal/files/docker-compose.yaml') }}
-
       - name: Create required directories
         run: |
           mkdir -p /tmp/brokkr-keys
@@ -272,12 +265,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install angreal
 
-      - name: Docker Compose Cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.docker
-          key: ${{ runner.os }}-docker-${{ hashFiles('.angreal/files/docker-compose.yaml') }}
-
       - name: Create required directories
         run: |
           mkdir -p /tmp/brokkr-keys
@@ -343,12 +330,6 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install angreal
-
-      - name: Docker Compose Cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.docker
-          key: ${{ runner.os }}-docker-${{ hashFiles('.angreal/files/docker-compose.yaml') }}
 
       - name: Create required directories
         run: |
