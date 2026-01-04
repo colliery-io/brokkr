@@ -706,3 +706,160 @@ fn test_get_desired_state_for_agent() {
         "Objects should be sorted by sequence_id in descending order"
     );
 }
+
+// =============================================================================
+// Tests for BROKKR-T-0094: Agent reconciles existing deployments when targeted
+// These tests verify that deployments created BEFORE agent targeting are visible
+// =============================================================================
+
+/// Test that direct targeting (agent_targets table) works when deployment exists first.
+/// Scenario: Stack has deployment object → Agent is created → Agent is targeted to stack
+/// Expected: Agent should see the existing deployment object
+#[test]
+fn test_target_state_direct_targeting_after_deployment_exists() {
+    let fixture = TestFixture::new();
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
+
+    // 1. Create stack FIRST
+    let stack = fixture.create_test_stack("Stack Direct Target".to_string(), None, generator.id);
+
+    // 2. Create deployment object BEFORE agent exists
+    let deployment = fixture.create_test_deployment_object(
+        stack.id,
+        "yaml_content: pre-existing deployment".to_string(),
+        false,
+    );
+
+    // 3. Create agent (no targets yet)
+    let agent = fixture.create_test_agent(
+        "Agent Direct Target".to_string(),
+        "Test Cluster Direct".to_string(),
+    );
+
+    // 4. NOW target agent to stack (after deployment exists)
+    fixture.create_test_agent_target(agent.id, stack.id);
+
+    // 5. Query target state
+    let target_state = fixture
+        .dal
+        .deployment_objects()
+        .get_target_state_for_agent(agent.id, false)
+        .expect("Failed to get target state for agent");
+
+    // 6. Assert deployment IS returned
+    assert_eq!(
+        target_state.len(),
+        1,
+        "Agent should see pre-existing deployment via direct targeting"
+    );
+    assert_eq!(
+        target_state[0].id, deployment.id,
+        "Returned deployment should be the pre-existing one"
+    );
+}
+
+/// Test that label targeting works when deployment exists first.
+/// Scenario: Stack with label has deployment → Agent is created → Agent gets matching label
+/// Expected: Agent should see the existing deployment object
+#[test]
+fn test_target_state_label_targeting_after_deployment_exists() {
+    let fixture = TestFixture::new();
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
+
+    // 1. Create stack with label FIRST
+    let stack = fixture.create_test_stack("Stack Label Target".to_string(), None, generator.id);
+    fixture.create_test_stack_label(stack.id, "env:prod".to_string());
+
+    // 2. Create deployment object BEFORE agent targeting
+    let deployment = fixture.create_test_deployment_object(
+        stack.id,
+        "yaml_content: label-targeted deployment".to_string(),
+        false,
+    );
+
+    // 3. Create agent (no labels yet)
+    let agent = fixture.create_test_agent(
+        "Agent Label Target".to_string(),
+        "Test Cluster Label".to_string(),
+    );
+
+    // 4. NOW add matching label to agent (after deployment exists)
+    fixture.create_test_agent_label(agent.id, "env:prod".to_string());
+
+    // 5. Query target state
+    let target_state = fixture
+        .dal
+        .deployment_objects()
+        .get_target_state_for_agent(agent.id, false)
+        .expect("Failed to get target state for agent");
+
+    // 6. Assert deployment IS returned
+    assert_eq!(
+        target_state.len(),
+        1,
+        "Agent should see pre-existing deployment via label targeting"
+    );
+    assert_eq!(
+        target_state[0].id, deployment.id,
+        "Returned deployment should be the pre-existing one"
+    );
+}
+
+/// Test that annotation targeting works when deployment exists first.
+/// Scenario: Stack with annotation has deployment → Agent is created → Agent gets matching annotation
+/// Expected: Agent should see the existing deployment object
+#[test]
+fn test_target_state_annotation_targeting_after_deployment_exists() {
+    let fixture = TestFixture::new();
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
+
+    // 1. Create stack with annotation FIRST
+    let stack = fixture.create_test_stack("Stack Annotation Target".to_string(), None, generator.id);
+    fixture.create_test_stack_annotation(stack.id, "region", "us-west");
+
+    // 2. Create deployment object BEFORE agent targeting
+    let deployment = fixture.create_test_deployment_object(
+        stack.id,
+        "yaml_content: annotation-targeted deployment".to_string(),
+        false,
+    );
+
+    // 3. Create agent (no annotations yet)
+    let agent = fixture.create_test_agent(
+        "Agent Annotation Target".to_string(),
+        "Test Cluster Annotation".to_string(),
+    );
+
+    // 4. NOW add matching annotation to agent (after deployment exists)
+    fixture.create_test_agent_annotation(agent.id, "region".to_string(), "us-west".to_string());
+
+    // 5. Query target state
+    let target_state = fixture
+        .dal
+        .deployment_objects()
+        .get_target_state_for_agent(agent.id, false)
+        .expect("Failed to get target state for agent");
+
+    // 6. Assert deployment IS returned
+    assert_eq!(
+        target_state.len(),
+        1,
+        "Agent should see pre-existing deployment via annotation targeting"
+    );
+    assert_eq!(
+        target_state[0].id, deployment.id,
+        "Returned deployment should be the pre-existing one"
+    );
+}

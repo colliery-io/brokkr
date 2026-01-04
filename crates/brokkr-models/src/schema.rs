@@ -84,6 +84,20 @@ diesel::table! {
 }
 
 diesel::table! {
+    deployment_health (id) {
+        id -> Uuid,
+        agent_id -> Uuid,
+        deployment_object_id -> Uuid,
+        #[max_length = 20]
+        status -> Varchar,
+        summary -> Nullable<Text>,
+        checked_at -> Timestamptz,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
     deployment_objects (id) {
         id -> Uuid,
         created_at -> Timestamptz,
@@ -223,6 +237,8 @@ diesel::table! {
         retry_count -> Int4,
         backoff_seconds -> Int4,
         next_retry_after -> Nullable<Timestamptz>,
+        last_error -> Nullable<Text>,
+        last_error_at -> Nullable<Timestamptz>,
     }
 }
 
@@ -273,9 +289,100 @@ diesel::table! {
     }
 }
 
+diesel::table! {
+    diagnostic_requests (id) {
+        id -> Uuid,
+        agent_id -> Uuid,
+        deployment_object_id -> Uuid,
+        #[max_length = 20]
+        status -> Varchar,
+        #[max_length = 255]
+        requested_by -> Nullable<Varchar>,
+        created_at -> Timestamptz,
+        claimed_at -> Nullable<Timestamptz>,
+        completed_at -> Nullable<Timestamptz>,
+        expires_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    diagnostic_results (id) {
+        id -> Uuid,
+        request_id -> Uuid,
+        pod_statuses -> Text,
+        events -> Text,
+        log_tails -> Nullable<Text>,
+        collected_at -> Timestamptz,
+        created_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    webhook_subscriptions (id) {
+        id -> Uuid,
+        #[max_length = 255]
+        name -> Varchar,
+        url_encrypted -> Bytea,
+        auth_header_encrypted -> Nullable<Bytea>,
+        event_types -> Array<Nullable<Text>>,
+        filters -> Nullable<Text>,
+        target_labels -> Nullable<Array<Nullable<Text>>>,
+        enabled -> Bool,
+        max_retries -> Int4,
+        timeout_seconds -> Int4,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
+        #[max_length = 255]
+        created_by -> Nullable<Varchar>,
+    }
+}
+
+diesel::table! {
+    webhook_deliveries (id) {
+        id -> Uuid,
+        subscription_id -> Uuid,
+        #[max_length = 100]
+        event_type -> Varchar,
+        event_id -> Uuid,
+        payload -> Text,
+        target_labels -> Nullable<Array<Nullable<Text>>>,
+        #[max_length = 20]
+        status -> Varchar,
+        acquired_by -> Nullable<Uuid>,
+        acquired_until -> Nullable<Timestamptz>,
+        attempts -> Int4,
+        last_attempt_at -> Nullable<Timestamptz>,
+        next_retry_at -> Nullable<Timestamptz>,
+        last_error -> Nullable<Text>,
+        created_at -> Timestamptz,
+        completed_at -> Nullable<Timestamptz>,
+    }
+}
+
+diesel::table! {
+    audit_logs (id) {
+        id -> Uuid,
+        timestamp -> Timestamptz,
+        #[max_length = 20]
+        actor_type -> Varchar,
+        actor_id -> Nullable<Uuid>,
+        #[max_length = 100]
+        action -> Varchar,
+        #[max_length = 50]
+        resource_type -> Varchar,
+        resource_id -> Nullable<Uuid>,
+        details -> Nullable<Jsonb>,
+        ip_address -> Nullable<Text>,
+        user_agent -> Nullable<Text>,
+        created_at -> Timestamptz,
+    }
+}
+
 diesel::joinable!(agent_annotations -> agents (agent_id));
 diesel::joinable!(agent_events -> agents (agent_id));
 diesel::joinable!(agent_events -> deployment_objects (deployment_object_id));
+diesel::joinable!(deployment_health -> agents (agent_id));
+diesel::joinable!(deployment_health -> deployment_objects (deployment_object_id));
 diesel::joinable!(agent_labels -> agents (agent_id));
 diesel::joinable!(agent_targets -> agents (agent_id));
 diesel::joinable!(agent_targets -> stacks (stack_id));
@@ -296,6 +403,10 @@ diesel::joinable!(work_order_targets -> work_orders (work_order_id));
 diesel::joinable!(work_order_targets -> agents (agent_id));
 diesel::joinable!(work_order_labels -> work_orders (work_order_id));
 diesel::joinable!(work_order_annotations -> work_orders (work_order_id));
+diesel::joinable!(diagnostic_requests -> agents (agent_id));
+diesel::joinable!(diagnostic_requests -> deployment_objects (deployment_object_id));
+diesel::joinable!(diagnostic_results -> diagnostic_requests (request_id));
+diesel::joinable!(webhook_deliveries -> webhook_subscriptions (subscription_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
     admin_role,
@@ -305,7 +416,11 @@ diesel::allow_tables_to_appear_in_same_query!(
     agent_targets,
     agents,
     app_initialization,
+    audit_logs,
+    deployment_health,
     deployment_objects,
+    diagnostic_requests,
+    diagnostic_results,
     generators,
     rendered_deployment_objects,
     stack_annotations,
@@ -320,4 +435,6 @@ diesel::allow_tables_to_appear_in_same_query!(
     work_order_labels,
     work_order_log,
     work_order_targets,
+    webhook_subscriptions,
+    webhook_deliveries,
 );

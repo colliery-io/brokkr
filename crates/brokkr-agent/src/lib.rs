@@ -14,8 +14,11 @@
 
 pub mod broker;
 pub mod cli;
+pub mod deployment_health;
+pub mod diagnostics;
 pub mod health;
 pub mod k8s;
 pub mod metrics;
 pub mod utils;
+pub mod webhooks;
 pub mod work_orders;

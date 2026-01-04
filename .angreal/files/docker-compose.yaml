@@ -2,121 +2,105 @@
 name: brokkr-dev
 
 services:
+  # PostgreSQL database for broker
   postgres:
-    image: postgres:15-alpine
+    image: postgres:16-alpine
     environment:
-      - POSTGRES_USER=brokkr
-      - POSTGRES_PASSWORD=brokkr
-      - POSTGRES_DB=brokkr
+      POSTGRES_USER: brokkr
+      POSTGRES_PASSWORD: brokkr
+      POSTGRES_DB: brokkr
     ports:
-      - 5432:5432
+      - "5432:5432"
     volumes:
       - brokkr-postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "brokkr"]
-      interval: 1s
-      retries: 60
-    restart: always
+      test: ["CMD-SHELL", "pg_isready -U brokkr -d brokkr"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
-  brokkr-broker:
-    command: serve
+  # Local container registry for Shipwright builds
+  registry:
+    image: registry:2
+    ports:
+      - "5050:5000"
+    volumes:
+      - registry-data:/var/lib/registry
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5000/v2/"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Broker - runs as regular container
+  broker:
     build:
       context: ../..
       dockerfile: docker/Dockerfile.broker
+    command: serve
     ports:
-      - 3000:3000
+      - "3000:3000"
     depends_on:
       postgres:
         condition: service_healthy
     environment:
       - BROKKR__DATABASE__URL=postgres://brokkr:brokkr@postgres:5432/brokkr
-    volumes:
-      - brokkr-keys:/tmp/brokkr-keys
+      - BROKKR__LOG__LEVEL=debug
+      - BROKKR__CORS__ALLOWED_ORIGINS=*
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/readyz"]
+      test: ["CMD", "curl", "-f", "http://localhost:3000/healthz"]
       interval: 5s
       timeout: 3s
       retries: 10
 
+  # Initialize: create agent via broker CLI and extract PAK
   init-agent:
-    build:
-      context: ../..
-      dockerfile: docker/Dockerfile.broker
+    image: curlimages/curl:latest
+    user: root
     depends_on:
-      brokkr-broker:
+      broker:
         condition: service_healthy
-    environment:
-      - BROKKR__DATABASE__URL=postgres://brokkr:brokkr@postgres:5432/brokkr
     volumes:
       - brokkr-keys:/tmp/brokkr-keys
-    user: "0:0"  # Run as root for init tasks that need to write to shared volumes
     entrypoint: []
     command: >
-      sh -c "
-        ./brokkr-broker create agent --name brokkr-integration-test-agent --cluster-name brokkr-dev-integration-cluster | tee /tmp/brokkr-keys/agent.out &&
-        grep 'Initial PAK:' /tmp/brokkr-keys/agent.out | cut -d' ' -f3 > /tmp/brokkr-keys/agent.pak
-      "
+      sh -c '
+        echo "Checking for existing agent..."
 
-  brokkr-agent:
-    build:
-      context: ../..
-      dockerfile: docker/Dockerfile.agent
-    depends_on:
-      init-agent:
-        condition: service_completed_successfully
-      init-kubeconfig:
-        condition: service_completed_successfully
-    environment:
-      - BROKKR__AGENT__BROKER_URL=http://brokkr-broker:3000
-      - BROKKR__AGENT__AGENT_NAME=brokkr-integration-test-agent
-      - BROKKR__AGENT__CLUSTER_NAME=brokkr-dev-integration-cluster
-      - BROKKR__AGENT__KUBECONFIG_PATH=/tmp/brokkr-keys/kubeconfig.docker.yaml
-      - BROKKR__AGENT__HEALTH_PORT=8080
-    volumes:
-      - brokkr-keys:/tmp/brokkr-keys
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/readyz"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-    entrypoint: []
-    command: >
-      sh -c "
-        echo 'Container Starting.'
+        # Get existing agents and find our agent ID
+        EXISTING=$$(curl -s http://broker:3000/api/v1/agents \
+          -H "Authorization: Bearer brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8")
 
-        # Wait for kubeconfig to be ready and accessible
-        while [ ! -f /tmp/brokkr-keys/kubeconfig.yaml ] ; do
-          echo 'Waiting for kubeconfig to be ready...'
-          sleep 10
-        done
+        AGENT_ID=$$(echo "$$EXISTING" | sed -n "s/.*\"id\":\"\([^\"]*\)\".*\"name\":\"brokkr-integration-test-agent\".*/\1/p")
 
-        # Wait for agent PAK to be ready
-        while [ ! -f /tmp/brokkr-keys/agent.pak ] ; do
-          echo 'Waiting for agent PAK to be ready...'
-          sleep 10
-        done
+        if [ -n "$$AGENT_ID" ]; then
+          echo "Deleting existing agent: $$AGENT_ID"
+          curl -s -X DELETE "http://broker:3000/api/v1/agents/$$AGENT_ID" \
+            -H "Authorization: Bearer brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8"
+        fi
 
-        # Export PAK and start agent
-        export BROKKR__AGENT__PAK=$$(cat /tmp/brokkr-keys/agent.pak)
+        echo "Creating agent via broker API..."
 
-        # Wait for Kubernetes API to be fully accessible with retries
-        max_retries=30
-        retry_count=0
-        while ! KUBECONFIG=/tmp/brokkr-keys/kubeconfig.docker.yaml kubectl get nodes > /dev/null 2>&1; do
-          retry_count=$$((retry_count + 1))
-          if [ $$retry_count -eq $$max_retries ]; then
-            echo 'Timed out waiting for Kubernetes API to become accessible'
-            exit 1
-          fi
-          echo 'Waiting for Kubernetes API to be accessible... (attempt '$$retry_count' of '$$max_retries')'
-          sleep 5
-        done
+        RESPONSE=$$(curl -s -X POST http://broker:3000/api/v1/agents \
+          -H "Content-Type: application/json" \
+          -H "Authorization: Bearer brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8" \
+          -d "{\"name\": \"brokkr-integration-test-agent\", \"cluster_name\": \"brokkr-dev-integration-cluster\"}")
 
-        echo 'Kubernetes API is accessible, starting agent...'
-        env && cat /tmp/brokkr-keys/agent.pak && ./brokkr-agent start
-      "
+        echo "Response: $$RESPONSE"
 
+        # Extract PAK from JSON response
+        PAK=$$(echo "$$RESPONSE" | sed -n "s/.*\"initial_pak\":\"\([^\"]*\)\".*/\1/p")
 
+        if [ -z "$$PAK" ]; then
+          echo "ERROR: Failed to extract agent PAK from response"
+          exit 1
+        fi
+
+        echo "$$PAK" > /tmp/brokkr-keys/agent.pak
+        echo "Agent PAK: $$PAK"
+      '
+
+  # K3s cluster - only for Shipwright/Tekton build infrastructure
   k3s:
     image: rancher/k3s:v1.30.10-k3s1
     command:
@@ -124,7 +108,7 @@ services:
       - --cluster-init
       - --write-kubeconfig=/output/kubeconfig.yaml
       - --write-kubeconfig-mode=666
-      - --tls-san=brokkr-dev-k3s-1
+      - --tls-san=k3s
     privileged: true
     environment:
       - K3S_TOKEN=brokkr-secret
@@ -132,7 +116,10 @@ services:
     volumes:
       - k3s-data:/var/lib/rancher/k3s
       - brokkr-keys:/output
-
+      - ./k3s-registries.yaml:/etc/rancher/k3s/registries.yaml:ro
+    depends_on:
+      registry:
+        condition: service_healthy
     ports:
       - "6443:6443"
     healthcheck:
@@ -141,6 +128,7 @@ services:
       timeout: 5s
       retries: 5
 
+  # Initialize kubeconfig files for different contexts
   init-kubeconfig:
     image: alpine
     depends_on:
@@ -151,34 +139,138 @@ services:
     command: >
       sh -c '
         apk add --no-cache sed &&
-        # Create local kubeconfig
+
+        # Create local kubeconfig (for host machine)
         cp /tmp/brokkr-keys/kubeconfig.yaml /tmp/brokkr-keys/kubeconfig.local.yaml &&
         sed -i "s|server: https://127.0.0.1:6443|server: https://localhost:6443|g" /tmp/brokkr-keys/kubeconfig.local.yaml &&
 
-        # Create docker kubeconfig
+        # Create docker kubeconfig (for containers in docker network)
+        # Use service name "k3s" which works regardless of project name
         cp /tmp/brokkr-keys/kubeconfig.yaml /tmp/brokkr-keys/kubeconfig.docker.yaml &&
-        sed -i "s|server: https://127.0.0.1:6443|server: https://brokkr-dev-k3s-1:6443|g" /tmp/brokkr-keys/kubeconfig.docker.yaml
+        sed -i "s|server: https://127.0.0.1:6443|server: https://k3s:6443|g" /tmp/brokkr-keys/kubeconfig.docker.yaml &&
 
-        # Sleep to ensure files written
-        sleep 60
+        sleep 2
       '
 
-  brokkr-ui:
-    build:
-      context: ../..
-      dockerfile: docker/Dockerfile.ui
-    ports:
-      - "3001:3001"
+  # Install Shipwright/Tekton into k3s (no broker/agent helm charts)
+  install-shipwright:
+    image: alpine/k8s:1.30.2
     depends_on:
-      brokkr-broker:
-        condition: service_healthy
-    environment:
-      - REACT_APP_BROKER_URL=http://localhost:3000
-      - PORT=3001
-      - REACT_APP_ADMIN_PAK=brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8
+      init-kubeconfig:
+        condition: service_completed_successfully
     volumes:
       - brokkr-keys:/tmp/brokkr-keys
+      - ../../charts/brokkr-agent:/charts/brokkr-agent:ro
+    entrypoint: []
+    command: >
+      sh -c '
+        export KUBECONFIG=/tmp/brokkr-keys/kubeconfig.docker.yaml
 
+        echo "=== Installing Tekton Pipelines ==="
+        kubectl apply -f https://storage.googleapis.com/tekton-releases/pipeline/previous/v0.68.1/release.yaml
+
+        echo "Waiting for Tekton..."
+        kubectl wait --for=condition=available --timeout=120s deployment/tekton-pipelines-controller -n tekton-pipelines || true
+        kubectl wait --for=condition=available --timeout=120s deployment/tekton-pipelines-webhook -n tekton-pipelines || true
+
+        echo "=== Installing Shipwright Build ==="
+        # Use server-side apply to handle large CRDs (buildruns.shipwright.io exceeds 256KB annotation limit)
+        kubectl apply --server-side -f https://github.com/shipwright-io/build/releases/download/v0.18.1/release.yaml
+
+        echo "=== Creating self-signed webhook certificate ==="
+        # Install openssl
+        apk add --no-cache openssl >/dev/null 2>&1 || true
+
+        # Create temp dir for cert generation
+        CERT_DIR=$$(mktemp -d)
+        cd $$CERT_DIR
+
+        # Generate self-signed CA
+        openssl genrsa -out ca.key 4096 2>/dev/null
+        openssl req -new -x509 -days 365 -key ca.key -out ca.crt -subj "/CN=shipwright-webhook-ca" 2>/dev/null
+
+        # Generate server key and CSR with SANs
+        openssl genrsa -out tls.key 4096 2>/dev/null
+        printf "[req]\ndistinguished_name = req_distinguished_name\nreq_extensions = v3_req\n[req_distinguished_name]\n[v3_req]\nbasicConstraints = CA:FALSE\nkeyUsage = nonRepudiation, digitalSignature, keyEncipherment\nsubjectAltName = @alt_names\n[alt_names]\nDNS.1 = shp-build-webhook\nDNS.2 = shp-build-webhook.shipwright-build\nDNS.3 = shp-build-webhook.shipwright-build.svc\nDNS.4 = shp-build-webhook.shipwright-build.svc.cluster.local\n" > san.cnf
+        openssl req -new -key tls.key -out tls.csr -subj "/CN=shp-build-webhook.shipwright-build.svc" -config san.cnf 2>/dev/null
+        openssl x509 -req -in tls.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out tls.crt -days 365 -extensions v3_req -extfile san.cnf 2>/dev/null
+
+        # Create/update the secret
+        kubectl delete secret shipwright-build-webhook-cert -n shipwright-build 2>/dev/null || true
+        kubectl create secret tls shipwright-build-webhook-cert -n shipwright-build --cert=tls.crt --key=tls.key
+
+        # Patch the webhook with CA bundle
+        CA_BUNDLE=$$(cat ca.crt | base64 | tr -d '\\n')
+        kubectl patch validatingwebhookconfiguration shipwright-build-webhook --type=json -p="[{\"op\": \"replace\", \"path\": \"/webhooks/0/clientConfig/caBundle\", \"value\": \"$$CA_BUNDLE\"}]" || true
+        kubectl patch mutatingwebhookconfiguration shipwright-build-webhook --type=json -p="[{\"op\": \"replace\", \"path\": \"/webhooks/0/clientConfig/caBundle\", \"value\": \"$$CA_BUNDLE\"}]" || true
+
+        # Restart webhook to pick up cert
+        kubectl rollout restart deployment/shipwright-build-webhook -n shipwright-build || true
+
+        echo "Waiting for Shipwright..."
+        kubectl wait --for=condition=available --timeout=120s deployment/shipwright-build-controller -n shipwright-build || true
+        kubectl wait --for=condition=available --timeout=120s deployment/shipwright-build-webhook -n shipwright-build || true
+
+        echo "=== Installing Sample ClusterBuildStrategies ==="
+        kubectl apply -f https://github.com/shipwright-io/build/releases/download/v0.18.1/sample-strategies.yaml || true
+
+        echo "=== Shipwright/Tekton installation complete ==="
+        kubectl get pods -n tekton-pipelines
+        kubectl get pods -n shipwright-build
+        kubectl get clusterbuildstrategies
+      '
+
+  # Agent - runs as regular container, connects to broker and k3s
+  agent:
+    build:
+      context: ../..
+      dockerfile: docker/Dockerfile.agent
+    depends_on:
+      broker:
+        condition: service_healthy
+      init-agent:
+        condition: service_completed_successfully
+      install-shipwright:
+        condition: service_completed_successfully
+    volumes:
+      - brokkr-keys:/tmp/brokkr-keys:ro
+    environment:
+      - BROKKR__AGENT__BROKER_URL=http://broker:3000
+      - BROKKR__AGENT__AGENT_NAME=brokkr-integration-test-agent
+      - BROKKR__AGENT__CLUSTER_NAME=brokkr-dev-integration-cluster
+      - BROKKR__AGENT__KUBECONFIG_PATH=/tmp/brokkr-keys/kubeconfig.docker.yaml
+      - BROKKR__LOG__LEVEL=debug
+    entrypoint: []
+    command: >
+      sh -c '
+        # Read PAK from file
+        export BROKKR__AGENT__PAK=$$(cat /tmp/brokkr-keys/agent.pak)
+        echo "Starting agent with PAK: $$BROKKR__AGENT__PAK"
+        exec ./brokkr-agent start
+      '
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Copy kubeconfig to host for CI helm tests (no init-agent dependency)
+  copy-kubeconfig:
+    image: alpine
+    volumes:
+      - brokkr-keys:/source:ro
+      - /tmp/brokkr-keys:/destination
+    command: >
+      sh -c "
+        mkdir -p /destination &&
+        cp -r /source/* /destination/ &&
+        chmod -R 777 /destination/
+      "
+    depends_on:
+      init-kubeconfig:
+        condition: service_completed_successfully
+
+  # Copy keys to host for full dev environment
   copy-keys:
     image: alpine
     volumes:
@@ -196,24 +288,95 @@ services:
       init-kubeconfig:
         condition: service_completed_successfully
 
-  copy-kubeconfig:
-    image: alpine
-    volumes:
-      - brokkr-keys:/source:ro
-      - /tmp/brokkr-keys:/destination
-    command: >
-      sh -c "
-        mkdir -p /destination &&
-        cp /source/kubeconfig.yaml /destination/ &&
-        cp /source/kubeconfig.local.yaml /destination/ &&
-        cp /source/kubeconfig.docker.yaml /destination/ &&
-        chmod -R 777 /destination/
-      "
+  # UI for demo
+  brokkr-ui:
+    build:
+      context: ../..
+      dockerfile: docker/Dockerfile.ui-slim
+    ports:
+      - "3001:3001"
     depends_on:
-      init-kubeconfig:
+      broker:
+        condition: service_healthy
+    environment:
+      - REACT_APP_BROKER_URL=http://localhost:3000
+      - PORT=3001
+      - REACT_APP_ADMIN_PAK=brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8
+
+  # Webhook receiver for demo/testing
+  webhook-catcher:
+    build:
+      context: ../../examples/webhook-catcher
+      dockerfile: Dockerfile
+    ports:
+      - "8090:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Readiness check
+  ready:
+    image: alpine/k8s:1.30.2
+    depends_on:
+      agent:
+        condition: service_healthy
+      install-shipwright:
         condition: service_completed_successfully
+    volumes:
+      - brokkr-keys:/tmp/brokkr-keys
+    entrypoint: []
+    command: >
+      sh -c '
+        export KUBECONFIG=/tmp/brokkr-keys/kubeconfig.docker.yaml
+
+        echo "=== Checking infrastructure readiness ==="
+
+        # Broker and Agent checked via depends_on healthchecks
+        echo "Checking Broker..."
+        echo "✓ Broker ready"
+
+        echo "Checking Agent..."
+        echo "✓ Agent ready"
+
+        # Check Tekton
+        echo "Checking Tekton..."
+        kubectl wait --for=condition=available --timeout=60s deployment/tekton-pipelines-controller -n tekton-pipelines || exit 1
+        kubectl wait --for=condition=available --timeout=60s deployment/tekton-pipelines-webhook -n tekton-pipelines || exit 1
+        echo "✓ Tekton ready"
+
+        # Check Shipwright
+        echo "Checking Shipwright..."
+        kubectl wait --for=condition=available --timeout=60s deployment/shipwright-build-controller -n shipwright-build || exit 1
+        kubectl wait --for=condition=available --timeout=60s deployment/shipwright-build-webhook -n shipwright-build || exit 1
+        echo "✓ Shipwright ready"
+
+        # Check ClusterBuildStrategies exist
+        echo "Checking ClusterBuildStrategies..."
+        CBS_COUNT=$$(kubectl get clusterbuildstrategies --no-headers 2>/dev/null | wc -l)
+        if [ "$$CBS_COUNT" -lt 1 ]; then
+          echo "✗ No ClusterBuildStrategies found"
+          exit 1
+        fi
+        echo "✓ ClusterBuildStrategies ready ($$CBS_COUNT strategies)"
+
+        echo ""
+        echo "=========================================="
+        echo "✓ Infrastructure ready!"
+        echo "=========================================="
+        echo ""
+        echo "Broker:      http://localhost:3000"
+        echo "UI:          http://localhost:3001"
+        echo "Webhook:     http://localhost:8090"
+        echo "Tekton:      $$(kubectl get pods -n tekton-pipelines --no-headers | wc -l) pods"
+        echo "Shipwright:  $$(kubectl get pods -n shipwright-build --no-headers | wc -l) pods"
+        echo "Strategies:  $$CBS_COUNT ClusterBuildStrategies"
+        echo ""
+      '
 
 volumes:
-  brokkr-postgres-data:
   k3s-data:
   brokkr-keys:
+  registry-data:
+  brokkr-postgres-data:

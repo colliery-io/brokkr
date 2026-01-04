@@ -14,7 +14,7 @@
 use brokkr_models::models::agents::Agent;
 use brokkr_models::models::work_orders::WorkOrder;
 use brokkr_utils::config::Settings;
-use brokkr_utils::logging::prelude::*;
+use tracing::{debug, error, info, trace, warn};
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -30,6 +30,9 @@ struct ClaimRequest {
 struct CompleteRequest {
     success: bool,
     message: Option<String>,
+    /// Whether the error is retryable. Only meaningful when success=false.
+    /// If false, the broker will immediately fail the work order without retry.
+    retryable: bool,
 }
 
 /// Response for retry scheduling.
@@ -200,6 +203,7 @@ pub async fn claim_work_order(
 /// * `work_order_id` - ID of the work order
 /// * `success` - Whether the work completed successfully
 /// * `message` - Optional result message (image digest on success, error on failure)
+/// * `retryable` - Whether a failure is retryable (ignored on success)
 ///
 /// # Returns
 /// Ok(()) on success, Err on failure
@@ -209,6 +213,7 @@ pub async fn complete_work_order(
     work_order_id: Uuid,
     success: bool,
     message: Option<String>,
+    retryable: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let url = format!(
         "{}/api/v1/work-orders/{}/complete",
@@ -216,11 +221,15 @@ pub async fn complete_work_order(
     );
 
     debug!(
-        "Completing work order {} (success: {}) at {}",
-        work_order_id, success, url
+        "Completing work order {} (success: {}, retryable: {}) at {}",
+        work_order_id, success, retryable, url
     );
 
-    let request = CompleteRequest { success, message };
+    let request = CompleteRequest {
+        success,
+        message,
+        retryable,
+    };
 
     let response = client
         .post(&url)

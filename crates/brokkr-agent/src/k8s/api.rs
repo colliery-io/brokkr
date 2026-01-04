@@ -39,8 +39,11 @@
 
 use crate::k8s::objects::verify_object_ownership;
 use crate::k8s::objects::{CHECKSUM_ANNOTATION, STACK_LABEL};
+use crate::metrics;
 use backoff::ExponentialBackoffBuilder;
-use brokkr_utils::logging::prelude::*;
+use std::time::Instant;
+use tracing::{debug, error, info, trace, warn};
+use k8s_openapi::api::core::v1::Namespace;
 use kube::api::DeleteParams;
 use kube::api::DynamicObject;
 use kube::api::GroupVersionKind;
@@ -148,12 +151,15 @@ pub async fn apply_k8s_objects(
     patch_params: PatchParams,
 ) -> Result<(), Box<dyn std::error::Error>> {
     info!("Applying {} Kubernetes objects", k8s_objects.len());
+    let start = Instant::now();
 
     let discovery = Discovery::new(k8s_client.clone())
         .run()
         .await
         .map_err(|e| {
             error!("Failed to create Kubernetes discovery client: {}", e);
+            metrics::kubernetes_operations_total().with_label_values(&["apply"]).inc();
+            metrics::kubernetes_operation_duration_seconds().with_label_values(&["apply"]).observe(start.elapsed().as_secs_f64());
             e
         })?;
 
@@ -238,6 +244,11 @@ pub async fn apply_k8s_objects(
         "Successfully applied all {} Kubernetes objects",
         k8s_objects.len()
     );
+
+    // Record metrics for successful apply
+    metrics::kubernetes_operations_total().with_label_values(&["apply"]).inc();
+    metrics::kubernetes_operation_duration_seconds().with_label_values(&["apply"]).observe(start.elapsed().as_secs_f64());
+
     Ok(())
 }
 
@@ -538,13 +549,122 @@ pub async fn validate_k8s_objects(
     }
 }
 
+/// Applies a single Kubernetes object with proper annotations.
+///
+/// # Arguments
+/// * `object` - The DynamicObject to apply
+/// * `client` - Kubernetes client
+/// * `stack_id` - Stack ID for annotation
+/// * `checksum` - Checksum for annotation
+async fn apply_single_object(
+    object: &DynamicObject,
+    client: &Client,
+    stack_id: &str,
+    checksum: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let kind = object
+        .types
+        .as_ref()
+        .map(|t| t.kind.clone())
+        .unwrap_or_default();
+    let namespace = object
+        .metadata
+        .namespace
+        .as_deref()
+        .unwrap_or("default")
+        .to_string();
+    let name = object.metadata.name.as_deref().unwrap_or("").to_string();
+    let key = format!("{}:{}@{}", kind, name, namespace);
+
+    debug!(
+        "Applying priority object: kind={}, namespace={}, name={}",
+        kind, namespace, name
+    );
+
+    // Prepare object with annotations
+    let mut object = object.clone();
+    let annotations = object
+        .metadata
+        .annotations
+        .get_or_insert_with(BTreeMap::new);
+    annotations.insert(STACK_LABEL.to_string(), stack_id.to_string());
+    annotations.insert(CHECKSUM_ANNOTATION.to_string(), checksum.to_string());
+
+    let mut params = PatchParams::apply("brokkr-controller");
+    params.force = true;
+
+    if let Some(gvk) = object.types.as_ref() {
+        let gvk = GroupVersionKind::try_from(gvk)?;
+        if let Some((ar, caps)) = Discovery::new(client.clone())
+            .run()
+            .await?
+            .resolve_gvk(&gvk)
+        {
+            let api = dynamic_api(ar, caps, client.clone(), Some(&namespace), false);
+
+            let patch = Patch::Apply(&object);
+            match api.patch(&name, &params, &patch).await {
+                Ok(_) => {
+                    debug!("Successfully applied priority object {}", key);
+                    Ok(())
+                }
+                Err(e) => {
+                    error!("Failed to apply priority object {}: {}", key, e);
+                    Err(Box::new(e))
+                }
+            }
+        } else {
+            Err(format!("Failed to resolve GVK for {}", key).into())
+        }
+    } else {
+        Err(format!("Missing TypeMeta for {}", key).into())
+    }
+}
+
+/// Rolls back namespaces that were created during a failed reconciliation.
+///
+/// # Arguments
+/// * `client` - Kubernetes client
+/// * `namespaces` - List of namespace names to delete
+async fn rollback_namespaces(client: &Client, namespaces: &[String]) {
+    if namespaces.is_empty() {
+        return;
+    }
+
+    warn!(
+        "Rolling back {} namespace(s) due to reconciliation failure",
+        namespaces.len()
+    );
+
+    for ns_name in namespaces {
+        info!("Deleting namespace '{}' as part of rollback", ns_name);
+
+        // Create a namespace API
+        let ns_api: Api<Namespace> = Api::all(client.clone());
+
+        match ns_api.delete(ns_name, &DeleteParams::default()).await {
+            Ok(_) => {
+                info!("Successfully deleted namespace '{}' during rollback", ns_name);
+            }
+            Err(e) => {
+                // Log but don't fail - best effort cleanup
+                warn!(
+                    "Failed to delete namespace '{}' during rollback: {}",
+                    ns_name, e
+                );
+            }
+        }
+    }
+}
+
 /// Reconciles the target state of Kubernetes objects for a stack.
 ///
 /// This function:
-/// 1. Captures the original state of existing objects
-/// 2. Applies the new desired state
-/// 3. Prunes any objects that are no longer part of the desired state but belong to the same stack
-/// 4. Rolls back all changes if any part of the reconciliation fails
+/// 1. Applies priority resources (Namespaces, CRDs) first to ensure dependencies exist
+/// 2. Validates remaining objects against the API server
+/// 3. Applies all resources with server-side apply
+/// 4. Prunes any objects that are no longer part of the desired state but belong to the same stack
+/// 5. Rolls back namespace creation if any part of the reconciliation fails
 ///
 /// # Arguments
 /// * `k8s_objects` - List of DynamicObjects representing the desired state
@@ -563,16 +683,67 @@ pub async fn reconcile_target_state(
         stack_id, checksum
     );
 
-    // If we have objects to apply, validate them first
+    // If we have objects to apply, handle them in dependency order
     if !objects.is_empty() {
-        debug!("Validating {} objects", objects.len());
-        if let Err(e) = validate_k8s_objects(objects, client.clone()).await {
-            error!("Validation failed: {}", e);
-            return Err(e);
+        // Separate priority objects (Namespaces, CRDs) from regular objects
+        // Priority objects must be applied first before we can validate namespaced resources
+        let (priority_objects, regular_objects): (Vec<_>, Vec<_>) =
+            objects.iter().partition(|obj| {
+                obj.types
+                    .as_ref()
+                    .map(|t| t.kind == "Namespace" || t.kind == "CustomResourceDefinition")
+                    .unwrap_or(false)
+            });
+
+        // Track namespaces we create so we can roll them back on failure
+        let mut created_namespaces: Vec<String> = Vec::new();
+
+        // Apply priority objects (Namespaces, CRDs) first without validation
+        // These are cluster-scoped and don't have namespace dependencies
+        if !priority_objects.is_empty() {
+            info!(
+                "Applying {} priority resources (Namespaces/CRDs) first",
+                priority_objects.len()
+            );
+            for object in &priority_objects {
+                // Track namespace names for potential rollback
+                if object
+                    .types
+                    .as_ref()
+                    .map(|t| t.kind == "Namespace")
+                    .unwrap_or(false)
+                {
+                    if let Some(name) = &object.metadata.name {
+                        created_namespaces.push(name.clone());
+                    }
+                }
+
+                if let Err(e) =
+                    apply_single_object(object, &client, stack_id, checksum).await
+                {
+                    // Rollback: delete any namespaces we created
+                    rollback_namespaces(&client, &created_namespaces).await;
+                    return Err(e);
+                }
+            }
         }
-        debug!("All objects validated successfully");
+
+        // Now validate remaining objects (namespaces exist at this point)
+        if !regular_objects.is_empty() {
+            debug!("Validating {} regular objects", regular_objects.len());
+            let regular_refs: Vec<DynamicObject> =
+                regular_objects.iter().map(|o| (*o).clone()).collect();
+            if let Err(e) = validate_k8s_objects(&regular_refs, client.clone()).await {
+                error!("Validation failed: {}", e);
+                // Rollback: delete any namespaces we created
+                rollback_namespaces(&client, &created_namespaces).await;
+                return Err(e);
+            }
+            debug!("All objects validated successfully");
+        }
 
         // Apply all resources with server-side apply
+        // (Priority objects were already applied, but applying again is idempotent)
         info!("Applying {} resources", objects.len());
         for object in objects {
             let kind = object
@@ -620,6 +791,8 @@ pub async fn reconcile_target_state(
                         Ok(_) => debug!("Successfully applied {}", key),
                         Err(e) => {
                             error!("Failed to apply {}: {}", key, e);
+                            // Rollback: delete any namespaces we created
+                            rollback_namespaces(&client, &created_namespaces).await;
                             return Err(Box::new(e));
                         }
                     }

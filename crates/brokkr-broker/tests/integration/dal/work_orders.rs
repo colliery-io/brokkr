@@ -406,7 +406,7 @@ fn test_complete_failure_with_retries() {
     let result = fixture
         .dal
         .work_orders()
-        .complete_failure(work_order.id, "Build failed".to_string())
+        .complete_failure(work_order.id, "Build failed".to_string(), true)
         .expect("Failed to complete work order");
 
     // Should return None (scheduled for retry, not moved to log)
@@ -459,7 +459,7 @@ fn test_complete_failure_max_retries_exceeded() {
     let result = fixture
         .dal
         .work_orders()
-        .complete_failure(work_order.id, "Build failed".to_string())
+        .complete_failure(work_order.id, "Build failed".to_string(), true)
         .expect("Failed to complete work order");
 
     // Should return Some (moved to log)
@@ -469,6 +469,66 @@ fn test_complete_failure_max_retries_exceeded() {
     assert_eq!(log_entry.id, work_order.id);
     assert!(!log_entry.success);
     assert_eq!(log_entry.result_message, Some("Build failed".to_string()));
+
+    // Work order should be deleted
+    let deleted = fixture
+        .dal
+        .work_orders()
+        .get(work_order.id)
+        .expect("Failed to query work order");
+    assert!(deleted.is_none());
+}
+
+#[test]
+fn test_complete_failure_non_retryable() {
+    let fixture = TestFixture::new();
+
+    let agent = fixture.create_test_agent("Agent".to_string(), "Cluster".to_string());
+
+    // Create work order with retries available
+    let new_wo = NewWorkOrder::new(
+        WORK_TYPE_BUILD.to_string(),
+        "yaml".to_string(),
+        Some(3), // max_retries - would normally allow retry
+        None,
+        None,
+    )
+    .expect("Failed to create NewWorkOrder");
+
+    let work_order = fixture
+        .dal
+        .work_orders()
+        .create(&new_wo)
+        .expect("Failed to create work order");
+
+    fixture.create_test_work_order_target(work_order.id, agent.id);
+
+    // Claim the work order
+    fixture
+        .dal
+        .work_orders()
+        .claim(work_order.id, agent.id)
+        .expect("Failed to claim work order");
+
+    // Complete with non-retryable error - should immediately move to log
+    let result = fixture
+        .dal
+        .work_orders()
+        .complete_failure(work_order.id, "NotFound: resource does not exist".to_string(), false)
+        .expect("Failed to complete work order");
+
+    // Should return Some (moved to log immediately, no retry)
+    assert!(result.is_some());
+    let log_entry = result.unwrap();
+
+    assert_eq!(log_entry.id, work_order.id);
+    assert!(!log_entry.success);
+    assert_eq!(
+        log_entry.result_message,
+        Some("NotFound: resource does not exist".to_string())
+    );
+    // Should have 0 retries since it failed immediately
+    assert_eq!(log_entry.retries_attempted, 0);
 
     // Work order should be deleted
     let deleted = fixture
@@ -517,7 +577,7 @@ fn test_process_retry_pending() {
     fixture
         .dal
         .work_orders()
-        .complete_failure(work_order.id, "Failed".to_string())
+        .complete_failure(work_order.id, "Failed".to_string(), true)
         .expect("Failed to complete work order");
 
     // Wait for backoff to elapse
@@ -752,7 +812,7 @@ fn test_list_log_filtered() {
     fixture
         .dal
         .work_orders()
-        .complete_failure(wo2.id, "error".to_string())
+        .complete_failure(wo2.id, "error".to_string(), true)
         .expect("Failed to complete");
 
     // Filter by success

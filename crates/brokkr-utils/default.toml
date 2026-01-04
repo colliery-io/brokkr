@@ -3,10 +3,20 @@ url = "postgres://brokkr:brokkr@localhost:5432/brokkr"
 
 [log]
 level = "debug"
+# Log format: "text" for human-readable or "json" for structured JSON logs
+format = "text"
 
 [broker]
 pak_hash = "4c697273df3d764cba950bb5c04368097685f09259f5bd880d892cf1ff9f4cdd"
 # brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8
+# Diagnostic cleanup configuration
+diagnostic_cleanup_interval_seconds = 900  # 15 minutes
+diagnostic_max_age_hours = 1               # 1 hour
+# Webhook configuration
+# webhook_encryption_key = ""              # Hex-encoded 32-byte key (if empty, random key generated)
+webhook_delivery_interval_seconds = 5      # Poll for pending deliveries every 5 seconds
+webhook_delivery_batch_size = 50           # Process up to 50 deliveries per batch
+webhook_cleanup_retention_days = 7         # Keep completed/dead deliveries for 7 days
 
 [pak]
 prefix = "brokkr"
@@ -15,6 +25,13 @@ digest = 8
 short_token_length = 8
 long_token_length = 24
 short_token_prefix = "BR"
+
+[cors]
+# Allowed origins for CORS requests (use "*" in array to allow all, not recommended for production)
+allowed_origins = ["http://localhost:3001"]
+allowed_methods = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+allowed_headers = ["Authorization", "Content-Type"]
+max_age_seconds = 3600
 
 [agent]
 broker_url = "http://localhost:3000"
@@ -27,3 +44,26 @@ cluster_name='DEFAULT'
 max_event_message_retries = 2
 event_message_retry_delay = 5
 health_port = 8080
+# Deployment health checking configuration
+deployment_health_enabled = true
+deployment_health_interval = 60
+
+[telemetry]
+# Enable OpenTelemetry tracing (base setting, can be overridden per component)
+enabled = false
+# OTLP endpoint for trace export (gRPC) - shared default
+otlp_endpoint = "http://localhost:4317"
+# Service name for traces - base default
+service_name = "brokkr"
+# Sampling rate (0.0 to 1.0, where 1.0 = 100% of traces)
+sampling_rate = 0.1
+
+# Broker-specific telemetry overrides (inherits from [telemetry] if not set)
+[telemetry.broker]
+service_name = "brokkr-broker"
+# otlp_endpoint = "http://broker-collector:4317"  # uncomment to override
+
+# Agent-specific telemetry overrides (inherits from [telemetry] if not set)
+[telemetry.agent]
+service_name = "brokkr-agent"
+# otlp_endpoint = "http://agent-collector:4317"  # uncomment to override

@@ -29,9 +29,70 @@ pub mod build;
 use brokkr_models::models::agents::Agent;
 use brokkr_models::models::work_orders::WorkOrder;
 use brokkr_utils::config::Settings;
-use brokkr_utils::logging::prelude::*;
+use tracing::{debug, error, info, trace, warn};
 use kube::Client as K8sClient;
 use reqwest::Client;
+
+/// Determines if an error is retryable by inspecting the error message.
+///
+/// Non-retryable errors include:
+/// - 404 NotFound (resource doesn't exist)
+/// - 403 Forbidden (permission denied)
+/// - 400 BadRequest (malformed request)
+/// - Validation errors
+///
+/// Retryable errors include:
+/// - 429 TooManyRequests
+/// - 500 InternalServerError
+/// - 503 ServiceUnavailable
+/// - 504 GatewayTimeout
+/// - Network/connectivity errors
+fn is_error_retryable(error: &dyn std::error::Error) -> bool {
+    let error_str = error.to_string().to_lowercase();
+
+    // Non-retryable patterns (permanent failures)
+    let non_retryable_patterns = [
+        "notfound",
+        "not found",
+        "forbidden",
+        "unauthorized",
+        "badrequest",
+        "bad request",
+        "invalid",
+        "unprocessable",
+        "conflict",
+    ];
+
+    for pattern in &non_retryable_patterns {
+        if error_str.contains(pattern) {
+            debug!("Error classified as non-retryable (matched '{}'): {}", pattern, error);
+            return false;
+        }
+    }
+
+    // Retryable patterns (transient failures)
+    let retryable_patterns = [
+        "timeout",
+        "unavailable",
+        "connection",
+        "network",
+        "internal",
+        "too many requests",
+        "throttl",
+    ];
+
+    for pattern in &retryable_patterns {
+        if error_str.contains(pattern) {
+            debug!("Error classified as retryable (matched '{}'): {}", pattern, error);
+            return true;
+        }
+    }
+
+    // Default to non-retryable for unknown errors
+    // This prevents infinite retry loops for unhandled cases
+    debug!("Error classified as non-retryable (no pattern match): {}", error);
+    false
+}
 
 /// Processes pending work orders for the agent.
 ///
@@ -117,6 +178,9 @@ async fn process_single_work_order(
         "build" => {
             execute_build_work_order(config, http_client, k8s_client, agent, &claimed).await
         }
+        "custom" => {
+            execute_custom_work_order(k8s_client, agent, &claimed).await
+        }
         unknown => {
             Err(format!("Unknown work type: {}", unknown).into())
         }
@@ -125,14 +189,33 @@ async fn process_single_work_order(
     // Report completion
     match result {
         Ok(message) => {
-            broker::complete_work_order(config, http_client, work_order.id, true, message).await?;
+            broker::complete_work_order(config, http_client, work_order.id, true, message, true)
+                .await?;
             info!("Work order {} completed successfully", work_order.id);
         }
         Err(e) => {
             let error_msg = e.to_string();
-            broker::complete_work_order(config, http_client, work_order.id, false, Some(error_msg))
-                .await?;
-            error!("Work order {} failed: {}", work_order.id, e);
+            let retryable = is_error_retryable(e.as_ref());
+            if retryable {
+                warn!(
+                    "Work order {} failed with retryable error: {}",
+                    work_order.id, e
+                );
+            } else {
+                error!(
+                    "Work order {} failed with non-retryable error: {}",
+                    work_order.id, e
+                );
+            }
+            broker::complete_work_order(
+                config,
+                http_client,
+                work_order.id,
+                false,
+                Some(error_msg),
+                retryable,
+            )
+            .await?;
             return Err(e);
         }
     }
@@ -162,7 +245,7 @@ async fn execute_build_work_order(
 
     // Apply all K8s resources from the YAML
     // The YAML should contain Shipwright Build + brokkr WorkOrder CRD
-    for doc in &yaml_docs {
+    for _doc in &yaml_docs {
         debug!("Applying K8s resource from work order YAML");
         // We'll implement the actual application in the build module
     }
@@ -171,4 +254,63 @@ async fn execute_build_work_order(
     let result = build::execute_build(k8s_client, &work_order.yaml_content, &work_order.id.to_string()).await?;
 
     Ok(result)
+}
+
+/// Executes a custom work order by applying YAML resources to the cluster.
+async fn execute_custom_work_order(
+    k8s_client: &K8sClient,
+    agent: &Agent,
+    work_order: &WorkOrder,
+) -> Result<Option<String>, Box<dyn std::error::Error>> {
+    use kube::api::{DynamicObject, PatchParams};
+
+    info!(
+        "Executing custom work order {} for agent {}",
+        work_order.id, agent.name
+    );
+
+    // Parse the YAML content
+    let yaml_docs = crate::utils::multidoc_deserialize(&work_order.yaml_content)?;
+
+    if yaml_docs.is_empty() {
+        return Err("Work order YAML content is empty".into());
+    }
+
+    // Convert YAML docs to DynamicObjects
+    let mut objects: Vec<DynamicObject> = Vec::new();
+    for yaml_doc in &yaml_docs {
+        // Skip null documents
+        if yaml_doc.is_null() {
+            continue;
+        }
+
+        let object: DynamicObject = serde_yaml::from_value(yaml_doc.clone())?;
+        let gvk = object.types.as_ref().ok_or("Object missing type metadata")?;
+        debug!(
+            "Parsed {} {}/{}",
+            gvk.kind,
+            object.metadata.namespace.as_deref().unwrap_or("cluster"),
+            object.metadata.name.as_deref().unwrap_or("unnamed")
+        );
+        objects.push(object);
+    }
+
+    if objects.is_empty() {
+        return Err("No valid Kubernetes objects found in YAML".into());
+    }
+
+    info!(
+        "Applying {} resource(s) from custom work order {}",
+        objects.len(),
+        work_order.id
+    );
+
+    // Apply all resources using server-side apply
+    let patch_params = PatchParams::apply("brokkr-agent").force();
+    crate::k8s::api::apply_k8s_objects(&objects, k8s_client.clone(), patch_params).await?;
+
+    Ok(Some(format!(
+        "Successfully applied {} resource(s)",
+        objects.len()
+    )))
 }

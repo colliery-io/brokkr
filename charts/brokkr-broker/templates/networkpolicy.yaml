@@ -1,0 +1,89 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "brokkr-broker.fullname" . }}
+  labels:
+    {{- include "brokkr-broker.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "brokkr-broker.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow ingress from ingress controller (if specified)
+    {{- if .Values.networkPolicy.allowIngressFrom }}
+    {{- range .Values.networkPolicy.allowIngressFrom }}
+    - from:
+        {{- toYaml . | nindent 8 }}
+      ports:
+        - protocol: TCP
+          port: 3000
+    {{- end }}
+    {{- else }}
+    # Default: allow from any pod in the namespace
+    - from:
+        - podSelector: {}
+      ports:
+        - protocol: TCP
+          port: 3000
+    {{- end }}
+    # Allow metrics scraping from Prometheus (if enabled)
+    {{- if .Values.metrics.enabled }}
+    {{- if .Values.networkPolicy.allowMetricsFrom }}
+    - from:
+        {{- toYaml .Values.networkPolicy.allowMetricsFrom | nindent 8 }}
+      ports:
+        - protocol: TCP
+          port: 3000
+    {{- end }}
+    {{- end }}
+  egress:
+    # Allow DNS resolution
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Allow connection to PostgreSQL
+    {{- if .Values.postgresql.enabled }}
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: postgresql
+      ports:
+        - protocol: TCP
+          port: 5432
+    {{- else }}
+    # Allow connection to external PostgreSQL
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: {{ .Values.postgresql.external.port | default 5432 }}
+    {{- end }}
+    # Allow webhook deliveries to external endpoints
+    {{- if .Values.networkPolicy.allowWebhookEgress }}
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 80
+    {{- end }}
+    # Additional custom egress rules
+    {{- with .Values.networkPolicy.additionalEgressRules }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- end }}

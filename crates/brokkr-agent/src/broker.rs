@@ -8,15 +8,18 @@
 //!
 //! For detailed documentation, see the [Brokkr Documentation](https://brokkr.io/explanation/components#broker-module).
 
+use crate::deployment_health::{DeploymentObjectHealthUpdate, HealthStatusUpdate};
+use crate::diagnostics::{DiagnosticRequest, SubmitDiagnosticResult};
+use crate::metrics;
 use brokkr_models::models::agent_events::NewAgentEvent;
 use brokkr_models::models::agents::Agent;
 use brokkr_models::models::deployment_objects::DeploymentObject;
-use brokkr_utils::logging::prelude::*;
 use brokkr_utils::Settings;
 use reqwest::Client;
 use reqwest::StatusCode;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::time::sleep;
+use tracing::{debug, error, info, instrument, trace, warn};
 use uuid::Uuid;
 
 /// Waits for the broker service to become ready.
@@ -69,6 +72,7 @@ pub async fn wait_for_broker_ready(config: &Settings) {
 ///
 /// # Returns
 /// * `Result<(), Box<dyn std::error::Error>>` - Success or error with message
+#[instrument(skip(config), fields(broker_url = %config.agent.broker_url))]
 pub async fn verify_agent_pak(config: &Settings) -> Result<(), Box<dyn std::error::Error>> {
     let url = format!("{}/api/v1/auth/pak", config.agent.broker_url);
     debug!("Verifying agent PAK at {}", url);
@@ -199,6 +203,7 @@ pub async fn fetch_and_process_deployment_objects(
 
     debug!("Fetching deployment objects from {}", url);
 
+    let start = Instant::now();
     let response = client
         .get(&url)
         .header("Authorization", format!("Bearer {}", config.agent.pak))
@@ -206,9 +211,12 @@ pub async fn fetch_and_process_deployment_objects(
         .await
         .map_err(|e| {
             error!("Failed to send request to broker: {}", e);
+            metrics::poll_requests_total().with_label_values(&["error"]).inc();
+            metrics::poll_duration_seconds().with_label_values(&[]).observe(start.elapsed().as_secs_f64());
             Box::new(e) as Box<dyn std::error::Error>
         })?;
 
+    let duration = start.elapsed().as_secs_f64();
     match response.status() {
         StatusCode::OK => {
             let deployment_objects: Vec<DeploymentObject> = response.json().await.map_err(|e| {
@@ -222,6 +230,15 @@ pub async fn fetch_and_process_deployment_objects(
                 agent.name
             );
 
+            metrics::poll_requests_total().with_label_values(&["success"]).inc();
+            metrics::poll_duration_seconds().with_label_values(&[]).observe(duration);
+            metrics::last_successful_poll_timestamp().set(
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs_f64()
+            );
+
             Ok(deployment_objects)
         }
         status => {
@@ -230,6 +247,8 @@ pub async fn fetch_and_process_deployment_objects(
                 "Broker request failed with status {}: {}",
                 status, error_body
             );
+            metrics::poll_requests_total().with_label_values(&["error"]).inc();
+            metrics::poll_duration_seconds().with_label_values(&[]).observe(duration);
             Err(format!(
                 "Broker request failed. Status: {}, Body: {}",
                 status, error_body
@@ -399,6 +418,7 @@ pub async fn send_heartbeat(
         config.agent.broker_url, agent.id
     );
 
+    let start = Instant::now();
     let response = client
         .post(&url)
         .header("Authorization", format!("Bearer {}", config.agent.pak))
@@ -406,12 +426,20 @@ pub async fn send_heartbeat(
         .await
         .map_err(|e| {
             error!("Failed to send heartbeat for agent {}: {}", agent.name, e);
+            metrics::heartbeat_sent_total().inc();
             Box::new(e) as Box<dyn std::error::Error>
         })?;
 
     match response.status() {
         StatusCode::OK | StatusCode::NO_CONTENT => {
             trace!("Heartbeat sent successfully for agent {}", agent.name);
+            metrics::heartbeat_sent_total().inc();
+            metrics::last_successful_poll_timestamp().set(
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs_f64()
+            );
             Ok(())
         }
         StatusCode::UNAUTHORIZED => {
@@ -425,6 +453,262 @@ pub async fn send_heartbeat(
                 agent.name, status, error_body
             );
             Err(format!("Heartbeat failed. Status: {}, Body: {}", status, error_body).into())
+        }
+    }
+}
+
+/// Sends health status updates for deployment objects to the broker.
+///
+/// # Arguments
+/// * `config` - Application settings containing broker configuration
+/// * `client` - HTTP client for making requests to the broker
+/// * `agent` - Agent details
+/// * `health_updates` - List of deployment object health updates
+///
+/// # Returns
+/// * `Result<(), Box<dyn std::error::Error>>` - Success or error with message
+pub async fn send_health_status(
+    config: &Settings,
+    client: &Client,
+    agent: &Agent,
+    health_updates: Vec<DeploymentObjectHealthUpdate>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if health_updates.is_empty() {
+        return Ok(());
+    }
+
+    let url = format!(
+        "{}/api/v1/agents/{}/health-status",
+        config.agent.broker_url, agent.id
+    );
+
+    debug!(
+        "Sending health status update for {} deployment objects for agent {}",
+        health_updates.len(),
+        agent.name
+    );
+
+    let update = HealthStatusUpdate {
+        deployment_objects: health_updates,
+    };
+
+    let response = client
+        .patch(&url)
+        .header("Authorization", format!("Bearer {}", config.agent.pak))
+        .json(&update)
+        .send()
+        .await
+        .map_err(|e| {
+            error!("Failed to send health status for agent {}: {}", agent.name, e);
+            Box::new(e) as Box<dyn std::error::Error>
+        })?;
+
+    match response.status() {
+        StatusCode::OK | StatusCode::NO_CONTENT => {
+            debug!(
+                "Successfully sent health status for {} deployment objects",
+                update.deployment_objects.len()
+            );
+            Ok(())
+        }
+        StatusCode::UNAUTHORIZED => {
+            error!("Health status update unauthorized for agent {}", agent.name);
+            Err("Unauthorized: Invalid agent PAK".into())
+        }
+        status => {
+            let error_body = response.text().await.unwrap_or_default();
+            error!(
+                "Health status update failed for agent {}. Status {}: {}",
+                agent.name, status, error_body
+            );
+            Err(format!(
+                "Health status update failed. Status: {}, Body: {}",
+                status, error_body
+            )
+            .into())
+        }
+    }
+}
+
+/// Fetches pending diagnostic requests for the agent.
+///
+/// # Arguments
+/// * `config` - Application settings containing broker configuration
+/// * `client` - HTTP client for making requests to the broker
+/// * `agent` - Agent details
+///
+/// # Returns
+/// * `Result<Vec<DiagnosticRequest>, Box<dyn std::error::Error>>` - Pending diagnostic requests
+pub async fn fetch_pending_diagnostics(
+    config: &Settings,
+    client: &Client,
+    agent: &Agent,
+) -> Result<Vec<DiagnosticRequest>, Box<dyn std::error::Error>> {
+    let url = format!(
+        "{}/api/v1/agents/{}/diagnostics/pending",
+        config.agent.broker_url, agent.id
+    );
+
+    debug!("Fetching pending diagnostics from {}", url);
+
+    let response = client
+        .get(&url)
+        .header("Authorization", format!("Bearer {}", config.agent.pak))
+        .send()
+        .await
+        .map_err(|e| {
+            error!("Failed to fetch pending diagnostics: {}", e);
+            Box::new(e) as Box<dyn std::error::Error>
+        })?;
+
+    match response.status() {
+        StatusCode::OK => {
+            let requests: Vec<DiagnosticRequest> = response.json().await.map_err(|e| {
+                error!("Failed to deserialize diagnostic requests: {}", e);
+                Box::new(e) as Box<dyn std::error::Error>
+            })?;
+
+            if !requests.is_empty() {
+                debug!(
+                    "Found {} pending diagnostic requests for agent {}",
+                    requests.len(),
+                    agent.name
+                );
+            }
+
+            Ok(requests)
+        }
+        status => {
+            let error_body = response.text().await.unwrap_or_default();
+            error!(
+                "Failed to fetch pending diagnostics. Status {}: {}",
+                status, error_body
+            );
+            Err(format!(
+                "Failed to fetch pending diagnostics. Status: {}, Body: {}",
+                status, error_body
+            )
+            .into())
+        }
+    }
+}
+
+/// Claims a diagnostic request for processing.
+///
+/// # Arguments
+/// * `config` - Application settings containing broker configuration
+/// * `client` - HTTP client for making requests to the broker
+/// * `request_id` - ID of the diagnostic request to claim
+///
+/// # Returns
+/// * `Result<DiagnosticRequest, Box<dyn std::error::Error>>` - The claimed request
+pub async fn claim_diagnostic_request(
+    config: &Settings,
+    client: &Client,
+    request_id: Uuid,
+) -> Result<DiagnosticRequest, Box<dyn std::error::Error>> {
+    let url = format!(
+        "{}/api/v1/diagnostics/{}/claim",
+        config.agent.broker_url, request_id
+    );
+
+    debug!("Claiming diagnostic request {}", request_id);
+
+    let response = client
+        .post(&url)
+        .header("Authorization", format!("Bearer {}", config.agent.pak))
+        .send()
+        .await
+        .map_err(|e| {
+            error!("Failed to claim diagnostic request {}: {}", request_id, e);
+            Box::new(e) as Box<dyn std::error::Error>
+        })?;
+
+    match response.status() {
+        StatusCode::OK => {
+            let request: DiagnosticRequest = response.json().await.map_err(|e| {
+                error!("Failed to deserialize claimed diagnostic request: {}", e);
+                Box::new(e) as Box<dyn std::error::Error>
+            })?;
+
+            info!("Successfully claimed diagnostic request {}", request_id);
+            Ok(request)
+        }
+        StatusCode::CONFLICT => {
+            warn!("Diagnostic request {} already claimed or completed", request_id);
+            Err(format!("Diagnostic request {} already claimed or completed", request_id).into())
+        }
+        status => {
+            let error_body = response.text().await.unwrap_or_default();
+            error!(
+                "Failed to claim diagnostic request {}. Status {}: {}",
+                request_id, status, error_body
+            );
+            Err(format!(
+                "Failed to claim diagnostic request. Status: {}, Body: {}",
+                status, error_body
+            )
+            .into())
+        }
+    }
+}
+
+/// Submits diagnostic results for a request.
+///
+/// # Arguments
+/// * `config` - Application settings containing broker configuration
+/// * `client` - HTTP client for making requests to the broker
+/// * `request_id` - ID of the diagnostic request
+/// * `result` - The diagnostic result to submit
+///
+/// # Returns
+/// * `Result<(), Box<dyn std::error::Error>>` - Success or error
+pub async fn submit_diagnostic_result(
+    config: &Settings,
+    client: &Client,
+    request_id: Uuid,
+    result: SubmitDiagnosticResult,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let url = format!(
+        "{}/api/v1/diagnostics/{}/result",
+        config.agent.broker_url, request_id
+    );
+
+    debug!("Submitting diagnostic result for request {}", request_id);
+
+    let response = client
+        .post(&url)
+        .header("Authorization", format!("Bearer {}", config.agent.pak))
+        .json(&result)
+        .send()
+        .await
+        .map_err(|e| {
+            error!(
+                "Failed to submit diagnostic result for request {}: {}",
+                request_id, e
+            );
+            Box::new(e) as Box<dyn std::error::Error>
+        })?;
+
+    match response.status() {
+        StatusCode::OK | StatusCode::CREATED => {
+            info!(
+                "Successfully submitted diagnostic result for request {}",
+                request_id
+            );
+            Ok(())
+        }
+        status => {
+            let error_body = response.text().await.unwrap_or_default();
+            error!(
+                "Failed to submit diagnostic result for request {}. Status {}: {}",
+                request_id, status, error_body
+            );
+            Err(format!(
+                "Failed to submit diagnostic result. Status: {}, Body: {}",
+                status, error_body
+            )
+            .into())
         }
     }
 }

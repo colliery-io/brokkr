@@ -5,53 +5,90 @@ weight: 2
 
 # Quick Start Guide
 
-This guide will help you deploy your first application using Brokkr. We'll create a simple but complete application stack that demonstrates Brokkr's core features.
+This guide walks through deploying your first application using Brokkr. By the end, you will understand the core deployment workflow: creating stacks, associating them with agents, deploying Kubernetes resources, and cleaning up when you're done.
 
 ## Prerequisites
 
-- Completed the [Installation Guide](installation)
-- A running Kubernetes cluster
-- `kubectl` configured to access your cluster
-- Admin PAK from the broker setup
+Before starting, ensure you have completed the [Installation Guide](installation) with both the broker and at least one agent running. You will need the admin PAK (Prefixed API Key) from the broker setup and `kubectl` configured to access your target cluster. The examples below assume the broker is accessible at `http://localhost:3000` via port-forward.
 
-## Deploying Your First Application
+## Understanding the Deployment Model
 
-### 1. Create a Stack
+Brokkr organizes deployments around three interconnected concepts. A **stack** represents a logical grouping of Kubernetes resources that belong together—an application, a service, or any collection of related resources. An **agent** runs in a Kubernetes cluster and handles the actual application of resources. **Targeting** connects stacks to agents, telling Brokkr which agents should receive which stacks.
 
-First, let's create a stack to organize our deployment:
+The deployment flow works as follows: when you create a deployment object in a stack, Brokkr stores it in the broker's database. Agents that target that stack poll the broker on a regular interval and retrieve pending deployment objects. Each agent then applies the resources to its cluster using Kubernetes server-side apply, ensuring resources are created or updated to match the desired state.
+
+## Step 1: Create a Stack
+
+Stacks serve as containers for related Kubernetes resources. Every deployment in Brokkr belongs to a stack, so you'll start by creating one for your quick-start application.
 
 ```bash
-curl -X POST http://localhost:3000/api/v1/stacks \
+# Set your admin PAK for convenience
+export ADMIN_PAK="brokkr_BR..."  # Replace with your actual PAK
+
+# Create a stack
+curl -s -X POST http://localhost:3000/api/v1/stacks \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <admin_pak>" \
+  -H "Authorization: Bearer $ADMIN_PAK" \
   -d '{
     "name": "quick-start-app",
     "description": "My first Brokkr deployment"
-  }'
+  }' | jq .
 ```
 
-Save the returned stack ID for later use.
+The response includes a stack ID that you'll use in subsequent commands:
 
-### 2. Target the Stack with Your Agent
-
-If you haven't already, target the stack with your agent:
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "name": "quick-start-app",
+  "description": "My first Brokkr deployment",
+  "created_at": "2024-01-15T10:30:00Z"
+}
+```
 
 ```bash
-curl -X POST http://localhost:3000/api/v1/agents/<agent_id>/targets \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <admin_pak>" \
-  -d '{
-    "agent_id": "<agent_id>",
-    "stack_id": "<stack_id>"
-  }'
+# Save the stack ID for later use
+export STACK_ID="550e8400-e29b-41d4-a716-446655440000"  # Use your actual ID
 ```
 
-### 3. Deploy the Application
+## Step 2: Target the Stack to Your Agent
 
-Let's deploy a simple application stack. First, create a file named `quick-start.yaml` with the following content:
+Agents only receive deployment objects from stacks they're targeting. This targeting relationship must be created explicitly, giving you control over which agents manage which resources.
 
-```yaml
-# quick-start.yaml
+First, find your agent's ID by listing registered agents:
+
+```bash
+# List agents to find the ID
+curl -s http://localhost:3000/api/v1/agents \
+  -H "Authorization: Bearer $ADMIN_PAK" | jq '.[].id'
+```
+
+Then create the targeting relationship that connects your agent to the stack:
+
+```bash
+# Save the agent ID
+export AGENT_ID="your-agent-id-here"
+
+# Create the targeting relationship
+curl -s -X POST http://localhost:3000/api/v1/agents/$AGENT_ID/targets \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ADMIN_PAK" \
+  -d "{
+    \"agent_id\": \"$AGENT_ID\",
+    \"stack_id\": \"$STACK_ID\"
+  }" | jq .
+```
+
+With the targeting in place, the agent will poll for deployment objects from this stack on its next polling cycle.
+
+## Step 3: Deploy the Application
+
+Now you'll create a deployment object containing Kubernetes resources. This example deploys a simple application with a namespace, a ConfigMap for configuration, and a Deployment that reads from that ConfigMap.
+
+Create a YAML file with the resources:
+
+```bash
+cat > quick-start.yaml << 'EOF'
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -63,9 +100,8 @@ metadata:
   name: app-config
   namespace: quick-start
 data:
-  config.yaml: |
-    environment: development
-    debug: true
+  message: "Hello from Brokkr!"
+  environment: development
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -84,53 +120,65 @@ spec:
     spec:
       containers:
       - name: app
-        image: busybox
-        command: ["sleep", "3600"]
-        envFrom:
-        - configMapRef:
-            name: app-config
+        image: busybox:1.36
+        command: ["sh", "-c", "while true; do echo $MESSAGE; sleep 30; done"]
+        env:
+        - name: MESSAGE
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: message
+EOF
 ```
 
-Then, deploy the application using the YAML file:
+Submit this YAML to Brokkr as a deployment object. The `jq` command properly encodes the YAML content for the JSON request:
 
 ```bash
-curl -X POST http://localhost:3000/api/v1/stacks/<stack_id>/deployment-objects \
+curl -s -X POST "http://localhost:3000/api/v1/stacks/$STACK_ID/deployment-objects" \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <admin_pak>" \
-  -d "{
-    \"yaml_content\": \"$(cat quick-start.yaml | sed 's/"/\\"/g' | tr '\n' 'n')\",
-    \"is_deletion_marker\": false
-  }"
+  -H "Authorization: Bearer $ADMIN_PAK" \
+  -d "$(jq -n --arg yaml "$(cat quick-start.yaml)" '{yaml_content: $yaml, is_deletion_marker: false}')" | jq .
 ```
 
-This deployment:
-- Creates a `quick-start` namespace
-- Adds a ConfigMap with application configuration
-- Deploys a simple application using the busybox image
-- Uses proper resource ordering (namespace first)
-- Includes proper labeling for the application
+The broker stores this deployment object and marks it pending. On the agent's next polling cycle (default: every 30 seconds), it retrieves the object and applies the resources to the cluster.
 
-### 4. Verify the Deployment
+## Step 4: Verify the Deployment
 
-Check that your resources were created:
+After waiting a few seconds for the agent to poll and apply the resources, verify they were created correctly in your cluster:
 
 ```bash
-# Verify the namespace
+# Check the namespace was created
 kubectl get namespace quick-start
 
-# Check the ConfigMap
-kubectl get configmap app-config -n quick-start
+# Verify the ConfigMap contains your data
+kubectl get configmap app-config -n quick-start -o yaml
 
-# Verify the deployment
+# Check the Deployment and its pods
 kubectl get deployment quick-start-app -n quick-start
+kubectl get pods -n quick-start
+
+# View the application logs to confirm it's working
+kubectl logs -n quick-start -l app=quick-start-app
 ```
 
-### 5. Update the Application
+You should see the pod running and logging "Hello from Brokkr!" every 30 seconds.
 
-Let's update the application by modifying the ConfigMap. Create a new file `quick-start-updated.yaml` with the complete updated application stack:
+You can also check the deployment status through the Brokkr API to see how the broker tracked this deployment:
 
-```yaml
-# quick-start-updated.yaml
+```bash
+# View deployment objects in the stack
+curl -s "http://localhost:3000/api/v1/stacks/$STACK_ID/deployment-objects" \
+  -H "Authorization: Bearer $ADMIN_PAK" | jq '.[] | {id, sequence_id, status, created_at}'
+```
+
+## Step 5: Update the Application
+
+Updating resources in Brokkr works by submitting a new deployment object with the complete desired state. Brokkr uses full-state deployments rather than partial updates—each deployment object represents all the resources that should exist.
+
+Create an updated version of the application with more replicas and a changed message:
+
+```bash
+cat > quick-start-updated.yaml << 'EOF'
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -142,10 +190,9 @@ metadata:
   name: app-config
   namespace: quick-start
 data:
-  config.yaml: |
-    environment: development
-    debug: false
-    new_setting: enabled
+  message: "Updated: Brokkr is working!"
+  environment: production
+  debug: "false"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -153,7 +200,7 @@ metadata:
   name: quick-start-app
   namespace: quick-start
 spec:
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
       app: quick-start-app
@@ -164,92 +211,73 @@ spec:
     spec:
       containers:
       - name: app
-        image: busybox
-        command: ["sleep", "3600"]
-        envFrom:
-        - configMapRef:
-            name: app-config
+        image: busybox:1.36
+        command: ["sh", "-c", "while true; do echo $MESSAGE; sleep 30; done"]
+        env:
+        - name: MESSAGE
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: message
+EOF
 ```
 
-Then, deploy the updated application:
+Deploy the updated resources through Brokkr:
 
 ```bash
-curl -X POST http://localhost:3000/api/v1/stacks/<stack_id>/deployment-objects \
+curl -s -X POST "http://localhost:3000/api/v1/stacks/$STACK_ID/deployment-objects" \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <admin_pak>" \
-  -d "{
-    \"yaml_content\": \"$(cat quick-start-updated.yaml | sed 's/"/\\"/g' | tr '\n' 'n')\",
-    \"is_deletion_marker\": false
-  }"
+  -H "Authorization: Bearer $ADMIN_PAK" \
+  -d "$(jq -n --arg yaml "$(cat quick-start-updated.yaml)" '{yaml_content: $yaml, is_deletion_marker: false}')" | jq .
 ```
 
-Note: When updating an application in Brokkr, you must provide the complete set of resources, not just the changed ones. This ensures that the agent has the complete desired state of your application.
-
-### 6. Clean Up
-
-When you're done, you can delete the entire application. Create a file `quick-start-delete.yaml` with the complete application stack:
-
-```yaml
-# quick-start-delete.yaml
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: quick-start
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: app-config
-  namespace: quick-start
-data:
-  config.yaml: |
-    environment: development
-    debug: false
-    new_setting: enabled
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: quick-start-app
-  namespace: quick-start
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: quick-start-app
-  template:
-    metadata:
-      labels:
-        app: quick-start-app
-    spec:
-      containers:
-      - name: app
-        image: busybox
-        command: ["sleep", "3600"]
-        envFrom:
-        - configMapRef:
-            name: app-config
-```
-
-Then, send the deletion request with `is_deletion_marker: true`:
+After the agent polls and applies the update, verify the changes took effect:
 
 ```bash
-curl -X POST http://localhost:3000/api/v1/stacks/<stack_id>/deployment-objects \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <admin_pak>" \
-  -d "{
-    \"yaml_content\": \"$(cat quick-start-delete.yaml | sed 's/"/\\"/g' | tr '\n' 'n')\",
-    \"is_deletion_marker\": true
-  }"
+# Check that replicas scaled to 2
+kubectl get pods -n quick-start
+
+# Verify the ConfigMap was updated
+kubectl get configmap app-config -n quick-start -o jsonpath='{.data.message}'
 ```
 
-Note: When deleting an application in Brokkr, you must provide the complete set of resources with `is_deletion_marker: true`. The YAML content is required so that the agent knows exactly which resources to remove from the cluster.
+## Step 6: Clean Up
 
-## What's Next?
+To delete resources through Brokkr, submit a deployment object with `is_deletion_marker: true`. This signals the agent to remove the specified resources rather than apply them.
 
-Now that you've deployed your first application with Brokkr, you can:
+```bash
+curl -s -X POST "http://localhost:3000/api/v1/stacks/$STACK_ID/deployment-objects" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ADMIN_PAK" \
+  -d "$(jq -n --arg yaml "$(cat quick-start-updated.yaml)" '{yaml_content: $yaml, is_deletion_marker: true}')" | jq .
+```
 
-- Learn about [Core Concepts](../../explanation/core-concepts) in Brokkr
-- Check out our [Tutorials](../../tutorials) for more advanced use cases
-- Read about [Best Practices](../../how-to/best-practices) for managing your deployments
-- Explore the [API Reference](../../reference/api) for more details on available endpoints
+The YAML content is required even for deletions so the agent knows exactly which resources to remove. After the agent processes this deletion marker, verify the resources are gone:
+
+```bash
+# The namespace should be terminating or gone
+kubectl get namespace quick-start
+```
+
+Finally, clean up the Brokkr resources themselves if you no longer need them:
+
+```bash
+# Delete the targeting relationship
+curl -s -X DELETE "http://localhost:3000/api/v1/agents/$AGENT_ID/targets/$STACK_ID" \
+  -H "Authorization: Bearer $ADMIN_PAK"
+
+# Delete the stack
+curl -s -X DELETE "http://localhost:3000/api/v1/stacks/$STACK_ID" \
+  -H "Authorization: Bearer $ADMIN_PAK"
+```
+
+## Next Steps
+
+You have now completed the core Brokkr workflow: creating stacks, targeting them to agents, deploying resources, updating them, and cleaning up. This pattern—declarative state stored in the broker, pulled and applied by agents—scales to managing deployments across many clusters.
+
+From here, explore more advanced capabilities:
+
+- Read about [Core Concepts](../../explanation/core-concepts) to understand Brokkr's design philosophy
+- Learn about the [Data Model](../../explanation/data-model) to understand how entities relate
+- Explore the [Configuration Guide](configuration) for production deployment options
+- Check the [Work Orders](../../reference/work-orders) reference for container builds and other transient operations

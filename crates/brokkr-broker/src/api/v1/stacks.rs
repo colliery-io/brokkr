@@ -5,8 +5,14 @@
  */
 
 use crate::dal::DAL;
+use crate::metrics;
+use crate::utils::audit;
 use crate::utils::matching::template_matches_stack;
 use crate::utils::templating;
+use brokkr_models::models::audit_logs::{
+    ACTION_STACK_CREATED, ACTION_STACK_DELETED, ACTION_STACK_UPDATED,
+    ACTOR_TYPE_ADMIN, RESOURCE_TYPE_STACK,
+};
 
 use crate::api::v1::middleware::AuthPayload;
 use axum::{
@@ -20,8 +26,8 @@ use brokkr_models::models::rendered_deployment_objects::NewRenderedDeploymentObj
 use brokkr_models::models::stack_annotations::{NewStackAnnotation, StackAnnotation};
 use brokkr_models::models::stack_labels::{NewStackLabel, StackLabel};
 use brokkr_models::models::stacks::{NewStack, Stack};
-use brokkr_utils::logging::prelude::*;
 use serde::{Deserialize, Serialize};
+use tracing::{error, info, instrument, warn};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
@@ -67,6 +73,7 @@ pub fn routes() -> Router<DAL> {
         ("pak" = [])
     )
 )]
+#[instrument(skip(dal, auth_payload), fields(admin = auth_payload.admin))]
 async fn list_stacks(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
@@ -83,6 +90,8 @@ async fn list_stacks(
     match dal.stacks().list() {
         Ok(stacks) => {
             info!("Successfully retrieved {} stacks", stacks.len());
+            // Update stacks metric
+            metrics::set_stacks_total(stacks.len() as i64);
             Ok(Json(stacks))
         }
         Err(e) => {
@@ -140,6 +149,22 @@ async fn create_stack(
     match dal.stacks().create(&new_stack) {
         Ok(stack) => {
             info!("Successfully created stack with ID: {}", stack.id);
+
+            // Log audit entry for stack creation
+            audit::log_action(
+                ACTOR_TYPE_ADMIN,
+                None,
+                ACTION_STACK_CREATED,
+                RESOURCE_TYPE_STACK,
+                Some(stack.id),
+                Some(serde_json::json!({
+                    "name": stack.name,
+                    "generator_id": stack.generator_id,
+                })),
+                None,
+                None,
+            );
+
             Ok(Json(stack))
         }
         Err(e) => {
@@ -275,6 +300,21 @@ async fn update_stack(
     match dal.stacks().update(id, &updated_stack) {
         Ok(stack) => {
             info!("Successfully updated stack with ID: {}", id);
+
+            // Log audit entry for stack update
+            audit::log_action(
+                ACTOR_TYPE_ADMIN,
+                None,
+                ACTION_STACK_UPDATED,
+                RESOURCE_TYPE_STACK,
+                Some(id),
+                Some(serde_json::json!({
+                    "name": stack.name,
+                })),
+                None,
+                None,
+            );
+
             Ok(Json(stack))
         }
         Err(e) => {
@@ -343,6 +383,19 @@ async fn delete_stack(
     match dal.stacks().soft_delete(id) {
         Ok(_) => {
             info!("Successfully deleted stack with ID: {}", id);
+
+            // Log audit entry for stack deletion
+            audit::log_action(
+                ACTOR_TYPE_ADMIN,
+                None,
+                ACTION_STACK_DELETED,
+                RESOURCE_TYPE_STACK,
+                Some(id),
+                None,
+                None,
+                None,
+            );
+
             Ok(StatusCode::NO_CONTENT)
         }
         Err(e) => {
@@ -387,7 +440,11 @@ async fn list_deployment_objects(
 
     // Fetch deployment objects
     match dal.deployment_objects().list_for_stack(stack_id) {
-        Ok(objects) => Ok(Json(objects)),
+        Ok(objects) => {
+            // Update deployment objects metric
+            metrics::set_deployment_objects_total(objects.len() as i64);
+            Ok(Json(objects))
+        }
         Err(_) => Err((
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({"error": "Failed to fetch deployment objects"})),
@@ -561,17 +618,11 @@ async fn remove_label(
         }
     }
 
-    // Find the label to delete
-    match dal.stack_labels().list_for_stack(stack_id) {
-        Ok(labels) => {
-            if let Some(stack_label) = labels.into_iter().find(|l| l.label == label) {
-                match dal.stack_labels().delete(stack_label.id) {
-                    Ok(_) => Ok(StatusCode::NO_CONTENT),
-                    Err(_) => Err((
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(serde_json::json!({"error": "Failed to remove stack label"})),
-                    )),
-                }
+    // Delete the label directly using indexed query
+    match dal.stack_labels().delete_by_stack_and_label(stack_id, &label) {
+        Ok(deleted_count) => {
+            if deleted_count > 0 {
+                Ok(StatusCode::NO_CONTENT)
             } else {
                 Err((
                     StatusCode::NOT_FOUND,
@@ -581,7 +632,7 @@ async fn remove_label(
         }
         Err(_) => Err((
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({"error": "Failed to fetch stack labels"})),
+            Json(serde_json::json!({"error": "Failed to remove stack label"})),
         )),
     }
 }
@@ -736,17 +787,11 @@ async fn remove_annotation(
         }
     }
 
-    // Find the annotation to delete
-    match dal.stack_annotations().list_for_stack(stack_id) {
-        Ok(annotations) => {
-            if let Some(stack_annotation) = annotations.into_iter().find(|a| a.key == key) {
-                match dal.stack_annotations().delete(stack_annotation.id) {
-                    Ok(_) => Ok(StatusCode::NO_CONTENT),
-                    Err(_) => Err((
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(serde_json::json!({"error": "Failed to remove stack annotation"})),
-                    )),
-                }
+    // Delete the annotation directly using indexed query
+    match dal.stack_annotations().delete_by_stack_and_key(stack_id, &key) {
+        Ok(deleted_count) => {
+            if deleted_count > 0 {
+                Ok(StatusCode::NO_CONTENT)
             } else {
                 Err((
                     StatusCode::NOT_FOUND,
@@ -756,7 +801,7 @@ async fn remove_annotation(
         }
         Err(_) => Err((
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({"error": "Failed to fetch stack annotations"})),
+            Json(serde_json::json!({"error": "Failed to remove stack annotation"})),
         )),
     }
 }

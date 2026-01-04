@@ -31,12 +31,73 @@
 //! ```
 
 use crate::db::ConnectionPool;
+use axum::http::StatusCode;
+use axum::response::{IntoResponse, Response};
+use axum::Json;
+
+/// Error types for DAL operations.
+#[derive(Debug)]
+pub enum DalError {
+    /// Failed to get a connection from the pool
+    ConnectionPool(r2d2::Error),
+    /// Database query error
+    Query(diesel::result::Error),
+    /// Resource not found
+    NotFound,
+}
+
+impl std::fmt::Display for DalError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DalError::ConnectionPool(e) => write!(f, "Connection pool error: {}", e),
+            DalError::Query(e) => write!(f, "Database query error: {}", e),
+            DalError::NotFound => write!(f, "Resource not found"),
+        }
+    }
+}
+
+impl std::error::Error for DalError {}
+
+impl From<r2d2::Error> for DalError {
+    fn from(e: r2d2::Error) -> Self {
+        DalError::ConnectionPool(e)
+    }
+}
+
+impl From<diesel::result::Error> for DalError {
+    fn from(e: diesel::result::Error) -> Self {
+        match e {
+            diesel::result::Error::NotFound => DalError::NotFound,
+            _ => DalError::Query(e),
+        }
+    }
+}
+
+impl IntoResponse for DalError {
+    fn into_response(self) -> Response {
+        let (status, message) = match self {
+            DalError::ConnectionPool(_) => {
+                (StatusCode::SERVICE_UNAVAILABLE, "Service temporarily unavailable")
+            }
+            DalError::Query(_) => {
+                (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error")
+            }
+            DalError::NotFound => {
+                (StatusCode::NOT_FOUND, "Resource not found")
+            }
+        };
+        (status, Json(serde_json::json!({"error": message}))).into_response()
+    }
+}
 
 pub mod agents;
 use agents::AgentsDAL;
 
 pub mod agent_annotations;
 use agent_annotations::AgentAnnotationsDAL;
+
+pub mod audit_logs;
+use audit_logs::AuditLogsDAL;
 
 pub mod agent_events;
 use agent_events::AgentEventsDAL;
@@ -56,8 +117,17 @@ use stack_annotations::StackAnnotationsDAL;
 pub mod stack_labels;
 use stack_labels::StackLabelsDAL;
 
+pub mod deployment_health;
+use deployment_health::DeploymentHealthDAL;
+
 pub mod deployment_objects;
 use deployment_objects::DeploymentObjectsDAL;
+
+pub mod diagnostic_requests;
+use diagnostic_requests::DiagnosticRequestsDAL;
+
+pub mod diagnostic_results;
+use diagnostic_results::DiagnosticResultsDAL;
 
 pub mod generators;
 use generators::GeneratorsDAL;
@@ -76,6 +146,12 @@ use template_targets::TemplateTargetsDAL;
 
 pub mod rendered_deployment_objects;
 use rendered_deployment_objects::RenderedDeploymentObjectsDAL;
+
+pub mod webhook_deliveries;
+use webhook_deliveries::WebhookDeliveriesDAL;
+
+pub mod webhook_subscriptions;
+use webhook_subscriptions::WebhookSubscriptionsDAL;
 
 pub mod work_orders;
 use work_orders::WorkOrdersDAL;
@@ -177,6 +253,15 @@ impl DAL {
         StacksDAL { dal: self }
     }
 
+    /// Provides access to the Deployment Health Data Access Layer.
+    ///
+    /// # Returns
+    ///
+    /// An instance of DeploymentHealthDAL.
+    pub fn deployment_health(&self) -> DeploymentHealthDAL {
+        DeploymentHealthDAL { dal: self }
+    }
+
     /// Provides access to the Deployment Objects Data Access Layer.
     ///
     /// # Returns
@@ -247,6 +332,51 @@ impl DAL {
     /// An instance of WorkOrdersDAL.
     pub fn work_orders(&self) -> WorkOrdersDAL {
         WorkOrdersDAL { dal: self }
+    }
+
+    /// Provides access to the Diagnostic Requests Data Access Layer.
+    ///
+    /// # Returns
+    ///
+    /// An instance of DiagnosticRequestsDAL.
+    pub fn diagnostic_requests(&self) -> DiagnosticRequestsDAL {
+        DiagnosticRequestsDAL { dal: self }
+    }
+
+    /// Provides access to the Diagnostic Results Data Access Layer.
+    ///
+    /// # Returns
+    ///
+    /// An instance of DiagnosticResultsDAL.
+    pub fn diagnostic_results(&self) -> DiagnosticResultsDAL {
+        DiagnosticResultsDAL { dal: self }
+    }
+
+    /// Provides access to the Webhook Subscriptions Data Access Layer.
+    ///
+    /// # Returns
+    ///
+    /// An instance of WebhookSubscriptionsDAL.
+    pub fn webhook_subscriptions(&self) -> WebhookSubscriptionsDAL {
+        WebhookSubscriptionsDAL { dal: self }
+    }
+
+    /// Provides access to the Webhook Deliveries Data Access Layer.
+    ///
+    /// # Returns
+    ///
+    /// An instance of WebhookDeliveriesDAL.
+    pub fn webhook_deliveries(&self) -> WebhookDeliveriesDAL {
+        WebhookDeliveriesDAL { dal: self }
+    }
+
+    /// Provides access to the Audit Logs Data Access Layer.
+    ///
+    /// # Returns
+    ///
+    /// An instance of AuditLogsDAL.
+    pub fn audit_logs(&self) -> AuditLogsDAL {
+        AuditLogsDAL { dal: self }
     }
 }
 

@@ -37,6 +37,32 @@ def run_integration_tests(crate_name: str = "", test_filter: str = ""):
     result = subprocess.run(cmd, cwd=cwd)
     return result.returncode
 
+def run_e2e_tests():
+    """Run the holistic E2E test suite."""
+    import os
+
+    # Build the E2E test binary
+    print("Building E2E test suite...")
+    build_result = subprocess.run(
+        ["cargo", "build", "--release", "--manifest-path", "tests/e2e/Cargo.toml"],
+        cwd=cwd
+    )
+    if build_result.returncode != 0:
+        return build_result.returncode
+
+    # Run the E2E binary
+    print("Running E2E tests...")
+    env = os.environ.copy()
+    env["BROKER_URL"] = "http://localhost:3000"
+    env["ADMIN_PAK"] = "brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8"
+
+    result = subprocess.run(
+        ["./tests/e2e/target/release/brokkr-e2e"],
+        cwd=cwd,
+        env=env
+    )
+    return result.returncode
+
 
 CRATES = get_crates()
 
@@ -88,6 +114,34 @@ def integration_tests(crate_name: str, test_filter: str = "", skip_docker: bool 
                 print(f"Integration tests failed for {crate} with return code {rc}")
         else:
             rc = run_integration_tests(crate_name, test_filter)
+        if not skip_docker:
+            input("Press Enter to shutdown containers and clean up...")
+    finally:
+        if not skip_docker:
+            docker_down()
+            docker_clean()
+        return rc
+
+
+@test()
+@angreal.command(name="e2e", about="run holistic E2E tests (mirrors UI demo walkthrough)")
+@angreal.argument(name="skip_docker", long="skip-docker", required=False, help="Skip docker compose up", takes_value=False, is_flag=True)
+def e2e_tests(skip_docker: bool = False):
+    """Run holistic E2E tests that exercise the entire Brokkr system.
+
+    These tests mirror the UI demo walkthrough and test the complete
+    system from end to end: broker, agent, database, and kubernetes.
+    """
+    if not skip_docker:
+        docker_clean()
+        docker_up()
+
+    print("Sleeping for 30 seconds, waiting for services to stabilize - get some coffee")
+    time.sleep(30)
+
+    rc = None
+    try:
+        rc = run_e2e_tests()
         if not skip_docker:
             input("Press Enter to shutdown containers and clean up...")
     finally:

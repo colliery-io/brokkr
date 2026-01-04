@@ -154,4 +154,34 @@ impl StackAnnotationsDAL<'_> {
         diesel::delete(stack_annotations::table.filter(stack_annotations::stack_id.eq(stack_id)))
             .execute(conn)
     }
+
+    /// Deletes a specific annotation for a stack using a single indexed query.
+    ///
+    /// This is more efficient than fetching all annotations and filtering client-side.
+    ///
+    /// # Arguments
+    ///
+    /// * `stack_id` - The UUID of the stack.
+    /// * `key` - The annotation key to delete.
+    ///
+    /// # Returns
+    ///
+    /// The number of affected rows (0 or 1).
+    ///
+    /// # Errors
+    ///
+    /// Returns a `diesel::result::Error` if the database operation fails.
+    pub fn delete_by_stack_and_key(
+        &self,
+        stack_id: Uuid,
+        key: &str,
+    ) -> Result<usize, diesel::result::Error> {
+        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        diesel::delete(
+            stack_annotations::table
+                .filter(stack_annotations::stack_id.eq(stack_id))
+                .filter(stack_annotations::key.eq(key)),
+        )
+        .execute(conn)
+    }
 }

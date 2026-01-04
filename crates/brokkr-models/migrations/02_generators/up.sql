@@ -45,18 +45,12 @@ WHEN (OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL)
 EXECUTE FUNCTION cascade_soft_delete_generators();
 
 -- Function for handling hard delete of generators
+-- Note: Cascade deletes are handled by foreign key constraints,
+-- but RETURN OLD is required for BEFORE DELETE triggers
 CREATE OR REPLACE FUNCTION handle_generator_hard_delete()
 RETURNS TRIGGER AS $$
 BEGIN
-    -- -- Delete stacks associated with the generator
-    -- DELETE FROM stacks
-    -- WHERE generator_id = OLD.id;
-
-    -- -- Delete deployment_objects associated with the generator
-    -- DELETE FROM deployment_objects
-    -- WHERE generator_id = OLD.id;
-
-    -- RETURN OLD;
+    RETURN OLD;
 END;
 $$ LANGUAGE plpgsql;
 
