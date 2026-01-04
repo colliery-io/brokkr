@@ -2,12 +2,12 @@
 id: configmap-watcher-rbac-error-spam
 level: task
 title: "ConfigMap watcher RBAC error spam in broker logs"
-short_code: "BROKKR-T-0095"
+short_code: "BROKKR-T-0100"
 created_at: 2026-01-03T02:31:07.985638+00:00
-updated_at: 2026-01-04T14:27:31.467830+00:00
+updated_at: 2026-01-03T21:04:50.400233+00:00
 parent: 
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -69,6 +69,8 @@ Replace ConfigMap-based config watching with file-based watching to fix RBAC err
 - **Current Problems**: {What's difficult/slow/buggy now}
 - **Benefits of Fixing**: {What improves after refactoring}
 - **Risk Assessment**: {Risks of not addressing this}
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

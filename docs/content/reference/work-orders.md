@@ -157,6 +157,19 @@ Content-Type: application/json
 | `success` | boolean | Whether the work completed successfully |
 | `message` | string | Result message (image digest on success, error on failure) |
 
+### Get Work Order Details
+
+When retrieving a work order, the response includes error tracking fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `last_error` | string | Error message from the most recent failed attempt (null if no failures) |
+| `last_error_at` | timestamp | When the last error occurred (null if no failures) |
+| `retry_count` | integer | Number of retry attempts so far |
+| `next_retry_after` | timestamp | When the work order will be eligible for retry (null if not in retry) |
+
+These fields help diagnose failed work orders without needing to check the work order log.
+
 ### Work Order Log
 
 Completed work orders are moved to the log for audit purposes.
@@ -200,13 +213,23 @@ next_retry_after = now + (backoff_seconds * 2^retry_count)
 
 ## Stale Claim Detection
 
-If an agent claims a work order but doesn't complete it within `claim_timeout_seconds`:
+The broker runs a background job every 30 seconds to detect and recover stale claims. A claim is considered stale when an agent has held a work order for longer than `claim_timeout_seconds` without completing it.
 
-1. Broker background job detects stale claim
-2. Work order reset to `PENDING` status
-3. Different agent can claim and retry
+When a stale claim is detected:
 
-This handles agent crashes or network partitions.
+1. The work order's `claimed_at` timestamp is compared against the current time
+2. If the elapsed time exceeds `claim_timeout_seconds`, the claim is released
+3. The work order status returns to `PENDING`
+4. The `claimed_by` field is cleared, allowing any eligible agent to claim it
+5. The `retry_count` is incremented (counts as a failed attempt)
+
+This mechanism handles several failure scenarios:
+
+- **Agent crashes**: If an agent crashes mid-execution, the work order becomes claimable again
+- **Network partitions**: If an agent loses connectivity, work doesn't remain stuck indefinitely
+- **Slow operations**: Legitimate long-running operations should set an appropriate `claim_timeout_seconds` value
+
+The default `claim_timeout_seconds` is 3600 (1 hour). For build operations that may take longer, increase this value in the work order creation request.
 
 ## Example: Container Build
 

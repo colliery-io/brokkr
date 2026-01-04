@@ -439,11 +439,34 @@ Authorization: <configured auth_header>
 
 ## Security Considerations
 
-- **URL and auth header encryption**: Stored encrypted at rest using AES-256-GCM
+### Encryption at Rest
+
+Webhook URLs and authentication headers contain sensitive information and are encrypted before storage:
+
+- **Algorithm**: AES-256-GCM (Authenticated Encryption with Associated Data)
+- **Key management**: Encryption key configured via `BROKKR__WEBHOOKS__ENCRYPTION_KEY` environment variable
+- **Fields encrypted**: `url_encrypted`, `auth_header_encrypted`
+- **Response handling**: API responses show `has_url: true` and `has_auth_header: true/false` rather than the actual values
+
+When updating a subscription, provide the URL or auth header to re-encrypt with the current key.
+
+### Access Control
+
 - **Admin-only access**: All webhook endpoints require admin PAK authentication
 - **Agent authentication**: Agents use their PAK to fetch and report deliveries
 - **TLS recommended**: Use HTTPS endpoints in production
 - **Secret rotation**: Rotate auth headers by updating the subscription
+
+## Data Retention
+
+The webhook system automatically cleans up old delivery records to prevent unbounded database growth:
+
+- **Retention period**: 7 days
+- **Cleanup frequency**: Every hour
+- **Scope**: All deliveries older than 7 days are permanently deleted, regardless of status
+- **Subscriptions**: Deleted when explicitly removed; delivery history is cleaned up by the retention policy
+
+Deliveries in terminal states (`success`, `dead`) are retained for the full 7-day period to support troubleshooting and audit requirements. Adjust retention by modifying the cleanup background task configuration if needed.
 
 ## Performance Characteristics
 

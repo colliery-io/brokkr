@@ -23,6 +23,9 @@ initiative_id: NULL
 
 # ADR-2: Operator Sidecar Pattern for Agent Capabilities
 
+> **Implementation Status: Superseded for Builds**
+> The sidecar pattern described here was superseded by ADR-5 (Shipwright Integration) for container builds. Rather than a custom buildah-operator sidecar, Brokkr now uses Shipwright as the build execution engine, with the agent creating Shipwright CRDs directly. The sidecar pattern remains valid for future capabilities that don't have existing Kubernetes-native solutions.
+
 ## Context **[REQUIRED]**
 
 Brokkr agents need to support various optional capabilities beyond core deployment management. The first such capability is container image building via buildah, with future possibilities including:

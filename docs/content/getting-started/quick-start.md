@@ -5,23 +5,21 @@ weight: 2
 
 # Quick Start Guide
 
-This guide walks through deploying your first application using Brokkr. You will create a stack, associate it with an agent, deploy Kubernetes resources, and then clean up. By the end, you will understand the core deployment workflow that Brokkr provides.
+This guide walks through deploying your first application using Brokkr. By the end, you will understand the core deployment workflow: creating stacks, associating them with agents, deploying Kubernetes resources, and cleaning up when you're done.
 
 ## Prerequisites
 
-Before starting this guide, ensure you have completed the [Installation Guide](installation) and have both the broker and at least one agent running. You will also need the admin PAK (Prefixed API Key) from the broker setup and `kubectl` configured to access your target cluster.
-
-If you followed the installation guide's quick start, you should have the broker accessible at `http://localhost:3000` via port-forward. The examples below assume this setup.
+Before starting, ensure you have completed the [Installation Guide](installation) with both the broker and at least one agent running. You will need the admin PAK (Prefixed API Key) from the broker setup and `kubectl` configured to access your target cluster. The examples below assume the broker is accessible at `http://localhost:3000` via port-forward.
 
 ## Understanding the Deployment Model
 
-Brokkr organizes deployments around three concepts: stacks, agents, and targeting. A **stack** represents a logical grouping of Kubernetes resources that belong together—think of it as an application or service. An **agent** runs in a Kubernetes cluster and applies resources. **Targeting** connects stacks to agents, telling Brokkr which agents should receive which stacks.
+Brokkr organizes deployments around three interconnected concepts. A **stack** represents a logical grouping of Kubernetes resources that belong together—an application, a service, or any collection of related resources. An **agent** runs in a Kubernetes cluster and handles the actual application of resources. **Targeting** connects stacks to agents, telling Brokkr which agents should receive which stacks.
 
-When you create a deployment object in a stack, Brokkr stores it in the broker's database. Agents that target that stack poll the broker and retrieve pending deployment objects. Each agent then applies the resources to its cluster using Kubernetes server-side apply.
+The deployment flow works as follows: when you create a deployment object in a stack, Brokkr stores it in the broker's database. Agents that target that stack poll the broker on a regular interval and retrieve pending deployment objects. Each agent then applies the resources to its cluster using Kubernetes server-side apply, ensuring resources are created or updated to match the desired state.
 
 ## Step 1: Create a Stack
 
-Stacks serve as containers for related Kubernetes resources. Start by creating a stack for this quick start application:
+Stacks serve as containers for related Kubernetes resources. Every deployment in Brokkr belongs to a stack, so you'll start by creating one for your quick-start application.
 
 ```bash
 # Set your admin PAK for convenience
@@ -37,7 +35,7 @@ curl -s -X POST http://localhost:3000/api/v1/stacks \
   }' | jq .
 ```
 
-The response includes a stack ID—save this for subsequent commands:
+The response includes a stack ID that you'll use in subsequent commands:
 
 ```json
 {
@@ -49,13 +47,15 @@ The response includes a stack ID—save this for subsequent commands:
 ```
 
 ```bash
-# Save the stack ID
+# Save the stack ID for later use
 export STACK_ID="550e8400-e29b-41d4-a716-446655440000"  # Use your actual ID
 ```
 
 ## Step 2: Target the Stack to Your Agent
 
-For an agent to receive deployment objects from a stack, you must create a targeting relationship. First, find your agent's ID:
+Agents only receive deployment objects from stacks they're targeting. This targeting relationship must be created explicitly, giving you control over which agents manage which resources.
+
+First, find your agent's ID by listing registered agents:
 
 ```bash
 # List agents to find the ID
@@ -63,7 +63,7 @@ curl -s http://localhost:3000/api/v1/agents \
   -H "Authorization: Bearer $ADMIN_PAK" | jq '.[].id'
 ```
 
-Then create the targeting:
+Then create the targeting relationship that connects your agent to the stack:
 
 ```bash
 # Save the agent ID
@@ -79,11 +79,13 @@ curl -s -X POST http://localhost:3000/api/v1/agents/$AGENT_ID/targets \
   }" | jq .
 ```
 
-Once targeted, the agent will poll for deployment objects from this stack on its next polling cycle.
+With the targeting in place, the agent will poll for deployment objects from this stack on its next polling cycle.
 
 ## Step 3: Deploy the Application
 
-Create a YAML file containing the Kubernetes resources for a simple application. This example creates a namespace, a ConfigMap, and a Deployment:
+Now you'll create a deployment object containing Kubernetes resources. This example deploys a simple application with a namespace, a ConfigMap for configuration, and a Deployment that reads from that ConfigMap.
+
+Create a YAML file with the resources:
 
 ```bash
 cat > quick-start.yaml << 'EOF'
@@ -129,7 +131,7 @@ spec:
 EOF
 ```
 
-Now deploy this YAML through Brokkr. The `jq` command properly encodes the YAML content for the JSON request:
+Submit this YAML to Brokkr as a deployment object. The `jq` command properly encodes the YAML content for the JSON request:
 
 ```bash
 curl -s -X POST "http://localhost:3000/api/v1/stacks/$STACK_ID/deployment-objects" \
@@ -142,26 +144,26 @@ The broker stores this deployment object and marks it pending. On the agent's ne
 
 ## Step 4: Verify the Deployment
 
-Wait a few seconds for the agent to poll and apply the resources, then verify they were created:
+After waiting a few seconds for the agent to poll and apply the resources, verify they were created correctly in your cluster:
 
 ```bash
-# Check the namespace
+# Check the namespace was created
 kubectl get namespace quick-start
 
-# Verify the ConfigMap
+# Verify the ConfigMap contains your data
 kubectl get configmap app-config -n quick-start -o yaml
 
 # Check the Deployment and its pods
 kubectl get deployment quick-start-app -n quick-start
 kubectl get pods -n quick-start
 
-# View the application logs
+# View the application logs to confirm it's working
 kubectl logs -n quick-start -l app=quick-start-app
 ```
 
 You should see the pod running and logging "Hello from Brokkr!" every 30 seconds.
 
-You can also check the deployment status through the Brokkr API:
+You can also check the deployment status through the Brokkr API to see how the broker tracked this deployment:
 
 ```bash
 # View deployment objects in the stack
@@ -171,9 +173,9 @@ curl -s "http://localhost:3000/api/v1/stacks/$STACK_ID/deployment-objects" \
 
 ## Step 5: Update the Application
 
-To update an application in Brokkr, you submit a new deployment object with the complete desired state. Brokkr does not support partial updates—each deployment object represents the full set of resources for that deployment.
+Updating resources in Brokkr works by submitting a new deployment object with the complete desired state. Brokkr uses full-state deployments rather than partial updates—each deployment object represents all the resources that should exist.
 
-Create an updated version of the application:
+Create an updated version of the application with more replicas and a changed message:
 
 ```bash
 cat > quick-start-updated.yaml << 'EOF'
@@ -220,7 +222,7 @@ spec:
 EOF
 ```
 
-Deploy the updated resources:
+Deploy the updated resources through Brokkr:
 
 ```bash
 curl -s -X POST "http://localhost:3000/api/v1/stacks/$STACK_ID/deployment-objects" \
@@ -229,7 +231,7 @@ curl -s -X POST "http://localhost:3000/api/v1/stacks/$STACK_ID/deployment-object
   -d "$(jq -n --arg yaml "$(cat quick-start-updated.yaml)" '{yaml_content: $yaml, is_deletion_marker: false}')" | jq .
 ```
 
-After the agent polls and applies the update, verify the changes:
+After the agent polls and applies the update, verify the changes took effect:
 
 ```bash
 # Check that replicas scaled to 2
@@ -241,7 +243,7 @@ kubectl get configmap app-config -n quick-start -o jsonpath='{.data.message}'
 
 ## Step 6: Clean Up
 
-To delete resources through Brokkr, submit a deployment object with `is_deletion_marker: true`. This tells the agent to remove the resources rather than apply them.
+To delete resources through Brokkr, submit a deployment object with `is_deletion_marker: true`. This signals the agent to remove the specified resources rather than apply them.
 
 ```bash
 curl -s -X POST "http://localhost:3000/api/v1/stacks/$STACK_ID/deployment-objects" \
@@ -250,17 +252,17 @@ curl -s -X POST "http://localhost:3000/api/v1/stacks/$STACK_ID/deployment-object
   -d "$(jq -n --arg yaml "$(cat quick-start-updated.yaml)" '{yaml_content: $yaml, is_deletion_marker: true}')" | jq .
 ```
 
-The YAML content is required even for deletions so the agent knows exactly which resources to remove. After the agent processes this, verify the resources are gone:
+The YAML content is required even for deletions so the agent knows exactly which resources to remove. After the agent processes this deletion marker, verify the resources are gone:
 
 ```bash
 # The namespace should be terminating or gone
 kubectl get namespace quick-start
 ```
 
-Optionally, clean up the Brokkr resources:
+Finally, clean up the Brokkr resources themselves if you no longer need them:
 
 ```bash
-# Delete the targeting
+# Delete the targeting relationship
 curl -s -X DELETE "http://localhost:3000/api/v1/agents/$AGENT_ID/targets/$STACK_ID" \
   -H "Authorization: Bearer $ADMIN_PAK"
 
@@ -271,9 +273,11 @@ curl -s -X DELETE "http://localhost:3000/api/v1/stacks/$STACK_ID" \
 
 ## Next Steps
 
-You have now completed the basic Brokkr workflow: creating stacks, targeting them to agents, deploying resources, updating them, and cleaning up. From here, you can explore more advanced topics:
+You have now completed the core Brokkr workflow: creating stacks, targeting them to agents, deploying resources, updating them, and cleaning up. This pattern—declarative state stored in the broker, pulled and applied by agents—scales to managing deployments across many clusters.
 
-- Read about [Core Concepts](../explanation/core-concepts) to understand Brokkr's design philosophy
-- Learn about the [Data Model](../explanation/data-model) to understand how stacks, agents, and deployment objects relate
+From here, explore more advanced capabilities:
+
+- Read about [Core Concepts](../../explanation/core-concepts) to understand Brokkr's design philosophy
+- Learn about the [Data Model](../../explanation/data-model) to understand how entities relate
 - Explore the [Configuration Guide](configuration) for production deployment options
-- Check the [Work Orders](../reference/work-orders) reference for understanding deployment processing
+- Check the [Work Orders](../../reference/work-orders) reference for container builds and other transient operations

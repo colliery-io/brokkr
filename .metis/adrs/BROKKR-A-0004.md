@@ -23,6 +23,9 @@ initiative_id: BROKKR-I-0004
 
 # ADR-4: Schema-Per-Tenant Multi-Tenancy Architecture
 
+> **Implementation Status: Not Implemented**
+> This ADR documents the decision to use schema-per-tenant multi-tenancy. Implementation has not yet begun. The current broker operates in single-tenant mode using the public schema.
+
 ## Context
 
 Brokkr currently requires a dedicated PostgreSQL database per deployment instance. This creates significant operational overhead when managing:

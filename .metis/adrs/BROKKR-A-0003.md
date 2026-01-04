@@ -23,6 +23,11 @@ initiative_id: BROKKR-I-0003
 
 # ADR-3: OpenTelemetry for Vendor-Agnostic Observability
 
+> **Implementation Status: Partially Implemented**
+> - Phase 1 (Prometheus metrics): Complete - `/metrics` endpoint available in broker and agent
+> - Phase 2 (OTLP export): Not implemented
+> - Phase 3 (Distributed tracing): Not implemented
+
 ## Context **[REQUIRED]**
 
 Brokkr needs observability instrumentation to provide metrics, distributed tracing, and logging capabilities for both broker and agent components. The choice of observability framework affects:

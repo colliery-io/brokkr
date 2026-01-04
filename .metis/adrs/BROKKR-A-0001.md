@@ -50,7 +50,7 @@ Without a generic system, each new transient operation type would require:
 Implement a generic work system in the broker for managing transient operations, separate from the persistent deployment state system. This system will:
 
 1. Store work items as opaque CRD specifications (text) in broker database
-2. Use the same targeting patterns as stacks (ephemeral_work_targets table)
+2. Use the same targeting patterns as stacks (work_order_targets table)
 3. Provide unified retry logic (max retries, stale claim detection, exponential backoff)
 4. Support multiple work types through a type discriminator field
 5. Maintain consistent broker API patterns across all work types
@@ -73,7 +73,7 @@ The generic work system was chosen because:
 1. **Extensibility**: Clear path for adding test execution, backups, migrations without schema changes
 2. **Consistency**: All ephemeral work uses same broker APIs, targeting logic, and retry mechanisms
 3. **Separation of concerns**: Clear distinction between persistent state (deployments) and transient operations (work)
-4. **Proven patterns**: Leverages existing stack targeting approach (ephemeral_work_targets mirrors agent_targets)
+4. **Proven patterns**: Leverages existing stack targeting approach (work_order_targets mirrors agent_targets)
 5. **Future-proof**: Small upfront investment prevents accumulating technical debt from work-type-specific implementations
 
 The upfront design cost (2-3 weeks) is offset by avoiding repeated implementation for each new work type and establishing consistent patterns across the platform.
@@ -95,6 +95,6 @@ The upfront design cost (2-3 weeks) is offset by avoiding repeated implementatio
 - Some broker logic must handle polymorphic work types
 
 ### Neutral
-- Database migration 07 will add ephemeral_work and ephemeral_work_targets tables
+- Database migration 08 adds work_orders and work_order_targets tables
 - Work assignment follows same agent targeting patterns as stacks
 - CRD lifecycle managed by specialized operators (not broker responsibility)

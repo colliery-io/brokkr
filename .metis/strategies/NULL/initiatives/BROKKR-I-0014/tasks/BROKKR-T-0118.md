@@ -1,40 +1,35 @@
 ---
-id: configmap-watcher-rbac-error-spam
+id: create-how-to-understanding
 level: task
-title: "ConfigMap watcher RBAC error spam in broker logs"
-short_code: "BROKKR-T-0095"
-created_at: 2026-01-03T02:31:07.985638+00:00
-updated_at: 2026-01-04T14:27:31.467830+00:00
-parent: 
+title: "Create how-to/understanding-reconciliation.md guide"
+short_code: "BROKKR-T-0118"
+created_at: 2026-01-04T14:36:11.847815+00:00
+updated_at: 2026-01-04T15:04:01.112805+00:00
+parent: BROKKR-I-0014
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#bug"
   - "#phase/completed"
 
 
 exit_criteria_met: false
 strategy_id: NULL
-initiative_id: NULL
+initiative_id: BROKKR-I-0014
 ---
 
-# ConfigMap watcher RBAC error spam in broker logs
+# Create how-to/understanding-reconciliation.md guide
 
 *This template includes sections for various types of tasks. Delete sections that don't apply to your specific use case.*
 
 ## Parent Initiative **[CONDITIONAL: Assigned Task]**
 
-[[Parent Initiative]]
+[[BROKKR-I-0014]]
 
 ## Objective **[REQUIRED]**
 
-Replace ConfigMap-based config watching with file-based watching to fix RBAC error spam and enable hot-reload outside Kubernetes.
-
-**Problem**: The ConfigMap watcher spammed ERROR logs in a tight loop when RBAC permissions were missing, and only worked inside K8s.
-
-**Solution**: Use the `notify` crate to watch a config file specified by `BROKKR_CONFIG_FILE` env var. Works everywhere, no special permissions needed.
+{Clear statement of what this task accomplishes}
 
 ## Backlog Item Details **[CONDITIONAL: Backlog Item]**
 
@@ -69,8 +64,6 @@ Replace ConfigMap-based config watching with file-based watching to fix RBAC err
 - **Current Problems**: {What's difficult/slow/buggy now}
 - **Benefits of Fixing**: {What improves after refactoring}
 - **Risk Assessment**: {Risks of not addressing this}
-
-## Acceptance Criteria
 
 ## Acceptance Criteria
 

@@ -1,17 +1,17 @@
 ---
-id: configmap-watcher-rbac-error-spam
+id: review-soft-delete-implementation
 level: task
-title: "ConfigMap watcher RBAC error spam in broker logs"
-short_code: "BROKKR-T-0095"
-created_at: 2026-01-03T02:31:07.985638+00:00
-updated_at: 2026-01-04T14:27:31.467830+00:00
+title: "Review soft delete implementation and unique constraints"
+short_code: "BROKKR-T-0101"
+created_at: 2026-01-01T00:18:27.775499+00:00
+updated_at: 2026-01-02T20:06:05.362582+00:00
 parent: 
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
-  - "#bug"
+  - "#tech-debt"
   - "#phase/completed"
 
 
@@ -20,7 +20,7 @@ strategy_id: NULL
 initiative_id: NULL
 ---
 
-# ConfigMap watcher RBAC error spam in broker logs
+# Review soft delete implementation and unique constraints
 
 *This template includes sections for various types of tasks. Delete sections that don't apply to your specific use case.*
 
@@ -30,11 +30,7 @@ initiative_id: NULL
 
 ## Objective **[REQUIRED]**
 
-Replace ConfigMap-based config watching with file-based watching to fix RBAC error spam and enable hot-reload outside Kubernetes.
-
-**Problem**: The ConfigMap watcher spammed ERROR logs in a tight loop when RBAC permissions were missing, and only worked inside K8s.
-
-**Solution**: Use the `notify` crate to watch a config file specified by `BROKKR_CONFIG_FILE` env var. Works everywhere, no special permissions needed.
+Audit and fix unique constraints across all tables that use soft deletes to ensure deleted records don't block creation of new records with the same identifiers.
 
 ## Backlog Item Details **[CONDITIONAL: Backlog Item]**
 
@@ -66,9 +62,27 @@ Replace ConfigMap-based config watching with file-based watching to fix RBAC err
 - **Effort Estimate**: {Rough size - S/M/L/XL}
 
 ### Technical Debt Impact **[CONDITIONAL: Tech Debt]**
-- **Current Problems**: {What's difficult/slow/buggy now}
-- **Benefits of Fixing**: {What improves after refactoring}
-- **Risk Assessment**: {Risks of not addressing this}
+- **Current Problems**: Unique constraints don't exclude soft-deleted records. Example: `unique_agent_cluster` on agents(name, cluster_name) blocks recreation after soft delete.
+- **Benefits of Fixing**: Resources can be recreated after deletion without manual DB cleanup. Soft delete works as expected.
+- **Risk Assessment**: Affects user experience when reusing names. Requires hard deletes as workaround, losing audit trail.
+
+### Known Affected Tables
+- `agents`: `unique_agent_cluster` (name, cluster_name) ✓ confirmed
+- `stacks`: `unique_stack_name` (name) ✓ confirmed
+- `stack_templates`: `unique_template_version`
+- `agent_targets`: `unique_agent_stack` (agent_id, stack_id)
+- `template_targets`: `unique_template_stack` (template_id, stack_id)
+
+### Tables WITHOUT unique name constraint (may need one)
+- `generators`: no unique constraint on name (allows duplicates)
+
+### Recommended Fix
+Convert constraints to partial unique indexes:
+```sql
+CREATE UNIQUE INDEX unique_agent_cluster ON agents (name, cluster_name) WHERE deleted_at IS NULL;
+```
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 
@@ -78,9 +92,10 @@ Replace ConfigMap-based config watching with file-based watching to fix RBAC err
 
 ## Acceptance Criteria **[REQUIRED]**
 
-- [ ] {Specific, testable requirement 1}
-- [ ] {Specific, testable requirement 2}
-- [ ] {Specific, testable requirement 3}
+- [ ] All unique constraints exclude soft-deleted records (WHERE deleted_at IS NULL)
+- [ ] Can delete and recreate a resource with same name without DB errors
+- [ ] Generators have unique constraint on name added
+- [ ] Migration is reversible
 
 ## Test Cases **[CONDITIONAL: Testing Task]**
 
