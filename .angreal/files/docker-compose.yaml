@@ -108,7 +108,7 @@ services:
       - --cluster-init
       - --write-kubeconfig=/output/kubeconfig.yaml
       - --write-kubeconfig-mode=666
-      - --tls-san=brokkr-dev-k3s-1
+      - --tls-san=k3s
     privileged: true
     environment:
       - K3S_TOKEN=brokkr-secret
@@ -145,8 +145,9 @@ services:
         sed -i "s|server: https://127.0.0.1:6443|server: https://localhost:6443|g" /tmp/brokkr-keys/kubeconfig.local.yaml &&
 
         # Create docker kubeconfig (for containers in docker network)
+        # Use service name "k3s" which works regardless of project name
         cp /tmp/brokkr-keys/kubeconfig.yaml /tmp/brokkr-keys/kubeconfig.docker.yaml &&
-        sed -i "s|server: https://127.0.0.1:6443|server: https://brokkr-dev-k3s-1:6443|g" /tmp/brokkr-keys/kubeconfig.docker.yaml &&
+        sed -i "s|server: https://127.0.0.1:6443|server: https://k3s:6443|g" /tmp/brokkr-keys/kubeconfig.docker.yaml &&
 
         sleep 2
       '

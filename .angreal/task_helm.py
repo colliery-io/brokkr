@@ -1,4 +1,5 @@
 import angreal
+import json
 import subprocess
 import sys
 import time
@@ -353,7 +354,7 @@ def helm_uninstall(release_name, namespace="default", quiet=False):
 
 def wait_for_pods(release_name, namespace="default", timeout=180):
     """Wait for all pods in a release to be ready with fast failure detection."""
-    print(f"\nWaiting for pods in release '{release_name}' to be ready...")
+    print(f"\nWaiting for pods in release '{release_name}' to be ready...", flush=True)
 
     start_time = time.time()
     while time.time() - start_time < timeout:
@@ -382,7 +383,7 @@ def wait_for_pods(release_name, namespace="default", timeout=180):
                 for failure in terminal_failures:
                     if failure in status:
                         elapsed = int(time.time() - start_time)
-                        print(f"Pod in terminal failure state: {failure} (detected in {elapsed}s)")
+                        print(f"Pod in terminal failure state: {failure} (detected in {elapsed}s)", flush=True)
                         # Show pod details for debugging
                         run_in_k8s_container(
                             f"kubectl get pods -n {namespace} -l app.kubernetes.io/instance={release_name}",
@@ -397,22 +398,22 @@ def wait_for_pods(release_name, namespace="default", timeout=180):
             # Check if all pods are Running:True
             if pod_statuses and all("Running:True" in status for status in pod_statuses):
                 elapsed = int(time.time() - start_time)
-                print(f"All pods in release '{release_name}' are ready! ({elapsed}s)")
+                print(f"All pods in release '{release_name}' are ready! ({elapsed}s)", flush=True)
                 return True
 
         elapsed = int(time.time() - start_time)
-        print(f"  Waiting for pods... ({elapsed}s)")
+        print(f"  Waiting for pods... ({elapsed}s)", flush=True)
         time.sleep(3)  # Reduced from 5s
 
-    print(f"Timeout waiting for pods in release '{release_name}' to be ready")
+    print(f"Timeout waiting for pods in release '{release_name}' to be ready", flush=True)
     return False
 
 
 def log_broker_diagnostics(broker_release_name, namespace="default"):
     """Log broker pod diagnostics for debugging failures."""
-    print("\n" + "=" * 60)
-    print("BROKER DIAGNOSTICS")
-    print("=" * 60)
+    print("\n" + "=" * 60, flush=True)
+    print("BROKER DIAGNOSTICS", flush=True)
+    print("=" * 60, flush=True)
 
     run_in_k8s_container(
         f"kubectl get pods -n {namespace} -l app.kubernetes.io/instance={broker_release_name}",
@@ -429,12 +430,12 @@ def log_broker_diagnostics(broker_release_name, namespace="default"):
         "Broker pod description"
     )
 
-    print("=" * 60)
+    print("=" * 60, flush=True)
 
 
 def validate_health_endpoint(service_name, port, path, namespace="default"):
     """Validate a health check endpoint via the service."""
-    print(f"\nValidating health endpoint: {service_name}:{port}{path}")
+    print(f"\nValidating health endpoint: {service_name}:{port}{path}", flush=True)
 
     # Use kubectl run to create a temporary pod that curls the service
     cmd = f"""
@@ -761,43 +762,20 @@ spec:
             )
 
 
+ADMIN_PAK = "brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8"
+ADMIN_PAK_HASH = "4c697273df3d764cba950bb5c04368097685f09259f5bd880d892cf1ff9f4cdd"
+
+
 def create_agent_in_broker(broker_release_name, agent_name, cluster_name, namespace="default"):
-    """Create an agent via the broker CLI and return the PAK."""
-    print(f"\nCreating agent '{agent_name}' in cluster '{cluster_name}' via broker...")
+    """Create an agent via the broker API and return the PAK."""
+    print(f"\nCreating agent '{agent_name}' in cluster '{cluster_name}' via API...", flush=True)
 
-    # Get the broker pod name
-    # Use just name=brokkr-broker and instance labels (no component label)
-    get_pod_cmd = f"""
-        kubectl get pods -n {namespace} \
-            -l app.kubernetes.io/name=brokkr-broker,app.kubernetes.io/instance={broker_release_name} \
-            -o jsonpath='{{.items[0].metadata.name}}'
-    """
+    broker_url = f"http://{broker_release_name}:3000"
 
-    result = subprocess.run([
-        "docker", "run", "--rm",
-        "--network", get_network_name(),
-        "-v", f"{get_volume_name('brokkr-keys')}:/keys:ro",
-        "-e", "KUBECONFIG=/keys/kubeconfig.docker.yaml",
-        "alpine/k8s:1.30.10",
-        "sh", "-c", get_pod_cmd
-    ], capture_output=True, text=True, cwd=cwd)
-
-    if result.returncode != 0 or not result.stdout.strip():
-        print("Failed to get broker pod name")
-        print(f"  Return code: {result.returncode}")
-        print(f"  Stdout: {result.stdout}")
-        print(f"  Stderr: {result.stderr}")
-        return None
-
-    broker_pod = result.stdout.strip()
-    print(f"Broker pod: {broker_pod}")
-
-    # Run the create agent command in the broker pod
-    create_agent_cmd = f"""
-        kubectl exec {broker_pod} -n {namespace} -- \
-            brokkr-broker create agent --name {agent_name} --cluster-name {cluster_name}
-    """
-    print(f"Running: kubectl exec {broker_pod} -- brokkr-broker create agent --name {agent_name} --cluster-name {cluster_name}")
+    # Create agent via API using admin PAK - run inside k8s cluster to resolve service name
+    # Use kubectl run to create a temporary pod that curls the broker service
+    # Build the JSON body carefully to avoid quoting issues
+    json_body = json.dumps({"name": agent_name, "cluster_name": cluster_name})
 
     result = subprocess.run([
         "docker", "run", "--rm",
@@ -805,45 +783,47 @@ def create_agent_in_broker(broker_release_name, agent_name, cluster_name, namesp
         "-v", f"{get_volume_name('brokkr-keys')}:/keys:ro",
         "-e", "KUBECONFIG=/keys/kubeconfig.docker.yaml",
         "alpine/k8s:1.30.10",
-        "sh", "-c", create_agent_cmd
+        "kubectl", "run", f"create-agent-{uuid.uuid4().hex[:8]}", "--rm", "-i",
+        "--restart=Never", "--image=curlimages/curl:latest",
+        "-n", namespace,
+        "--", "curl", "-sf", "-X", "POST",
+        f"{broker_url}/api/v1/agents",
+        "-H", "Content-Type: application/json",
+        "-H", f"Authorization: Bearer {ADMIN_PAK}",
+        "-d", json_body
     ], capture_output=True, text=True, cwd=cwd)
-
-    # Always show output for debugging
-    print(f"  Return code: {result.returncode}")
-    if result.stdout.strip():
-        print(f"  Stdout: {result.stdout.strip()}")
-    if result.stderr.strip():
-        print(f"  Stderr: {result.stderr.strip()}")
 
     if result.returncode != 0:
-        print("ERROR: Failed to create agent via broker CLI")
+        print(f"ERROR: Failed to create agent via API", flush=True)
+        print(f"  Return code: {result.returncode}", flush=True)
+        print(f"  Stderr: {result.stderr}", flush=True)
+        print(f"  Stdout: {result.stdout}", flush=True)
         return None
 
-    # Parse the PAK from the output
-    output = result.stdout.strip()
-    if not output:
-        print("ERROR: No output from broker CLI command")
+    # Parse initial_pak from JSON response - the response is in stdout
+    # kubectl run outputs status messages, we need to find the JSON in the output
+    stdout = result.stdout.strip()
+
+    # Try to find and parse JSON from the output
+    try:
+        # Look for JSON object in output (starts with { and ends with })
+        json_start = stdout.find('{')
+        json_end = stdout.rfind('}')
+        if json_start >= 0 and json_end > json_start:
+            json_str = stdout[json_start:json_end + 1]
+            response = json.loads(json_str)
+            pak = response.get("initial_pak")
+            if pak:
+                print(f"Extracted PAK: {pak[:20]}...", flush=True)
+                return pak
+            print(f"ERROR: No initial_pak in response: {json_str[:200]}", flush=True)
+            return None
+        print(f"ERROR: No JSON found in response: {stdout[:200]}", flush=True)
         return None
-
-    # Look for PAK in the output (assuming it's printed)
-    # We'll need to parse this based on the actual output format
-    for line in output.split('\n'):
-        if 'PAK' in line or 'pak' in line or line.startswith('pak_'):
-            # Extract the PAK value
-            pak = line.split()[-1]  # Assume PAK is the last word on the line
-            print(f"Extracted PAK: {pak[:10]}...")
-            return pak
-
-    # If we can't find PAK in a labeled line, try to find a line that looks like a PAK
-    for line in output.split('\n'):
-        line = line.strip()
-        if line and not line.startswith('#') and not line.startswith('['):
-            # Might be the PAK itself
-            print(f"Potential PAK found: {line[:10]}...")
-            return line
-
-    print("Failed to extract PAK from output")
-    return None
+    except json.JSONDecodeError as e:
+        print(f"ERROR: Invalid JSON response: {stdout[:200]}", flush=True)
+        print(f"  Parse error: {e}", flush=True)
+        return None
 
 
 def test_broker_with_values_file(tag, registry, no_cleanup, values_file_name):
@@ -970,38 +950,34 @@ def test_agent_with_values_file(tag, registry, no_cleanup, values_file_name, bro
             helm_uninstall(release_name)
 
 
-def deploy_test_broker(tag, registry, with_admin_pak=False):
+def deploy_test_broker(tag, registry):
     """Deploy a broker instance for agent testing and return the release name.
 
     Args:
         tag: Image tag to deploy
         registry: Container registry URL
-        with_admin_pak: If True, configure broker with well-known admin PAK for API access
     """
     broker_release_name = "brokkr-broker-for-agent-test"
     broker_chart_name = "brokkr-broker"
 
-    print("\n" + "=" * 60)
-    print("Deploying broker for agent testing")
-    print("=" * 60)
+    print("\n" + "=" * 60, flush=True)
+    print("Deploying broker for agent testing", flush=True)
+    print("=" * 60, flush=True)
 
     broker_values = {
         "image.tag": tag,
         "image.repository": f"{registry}/brokkr-broker",
-                "postgresql.enabled": "true",
+        "postgresql.enabled": "true",
+        # Always include admin PAK for API access (agent creation)
+        "broker.pakHash": ADMIN_PAK_HASH,
     }
 
-    # Only include admin PAK hash when needed (for Shipwright tests that use admin API)
-    # PAK: brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8
-    if with_admin_pak:
-        broker_values["broker.pakHash"] = "4c697273df3d764cba950bb5c04368097685f09259f5bd880d892cf1ff9f4cdd"
-
     if not helm_install(broker_chart_name, broker_release_name, broker_values):
-        print("Failed to deploy broker for agent testing")
+        print("Failed to deploy broker for agent testing", flush=True)
         return None
 
     if not wait_for_pods(broker_release_name):
-        print("Broker pods failed to become ready")
+        print("Broker pods failed to become ready", flush=True)
         helm_uninstall(broker_release_name)
         return None
 
@@ -1028,9 +1004,9 @@ def test_agent_chart(tag, registry, no_cleanup, rbac_mode="cluster-wide", broker
 
     try:
         # Step 1: Create agent via broker CLI to get PAK
-        print("\n" + "=" * 60)
-        print(f"Step 1: Creating agent via broker CLI (RBAC: {rbac_mode})")
-        print("=" * 60)
+        print("\n" + "=" * 60, flush=True)
+        print(f"Step 1: Creating agent via broker CLI (RBAC: {rbac_mode})", flush=True)
+        print("=" * 60, flush=True)
 
         agent_name = f"test-agent-{rbac_mode}"
         pak = create_agent_in_broker(
@@ -1040,13 +1016,13 @@ def test_agent_chart(tag, registry, no_cleanup, rbac_mode="cluster-wide", broker
         )
 
         if not pak:
-            print("Failed to create agent and get PAK")
+            print("Failed to create agent and get PAK", flush=True)
             return False
 
         # Step 2: Deploy agent chart with real configuration
-        print("\n" + "=" * 60)
-        print(f"Step 2: Deploying agent chart (RBAC mode: {rbac_mode})")
-        print("=" * 60)
+        print("\n" + "=" * 60, flush=True)
+        print(f"Step 2: Deploying agent chart (RBAC mode: {rbac_mode})", flush=True)
+        print("=" * 60, flush=True)
 
         # The broker service URL uses the release name
         broker_url = f"http://{broker_release_name}:3000"
@@ -1727,7 +1703,7 @@ def run_smoke_tests(tag, registry, no_cleanup):
     broker_release_name = deploy_test_broker(tag, registry)
     if broker_release_name:
         # Single agent deployment (cluster-wide RBAC)
-        print("\nDeploying agent (cluster-wide RBAC)...")
+        print("\nDeploying agent (cluster-wide RBAC)...", flush=True)
         result = test_agent_chart(tag, registry, no_cleanup=True,
                                   rbac_mode="cluster-wide",
                                   broker_release_name=broker_release_name)
@@ -1827,7 +1803,7 @@ def run_shipwright_tests(tag, registry, no_cleanup):
     )
 
     # Shipwright tests need admin PAK for API access (work order creation)
-    broker_release_name = deploy_test_broker(tag, registry, with_admin_pak=True)
+    broker_release_name = deploy_test_broker(tag, registry)
     if not broker_release_name:
         results.append(("shipwright-broker-setup", False))
         return results
