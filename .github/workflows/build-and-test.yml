@@ -217,9 +217,45 @@ jobs:
           helm template test charts/brokkr-agent --kube-version 1.30.0 -f charts/brokkr-agent/values/development.yaml > /dev/null
           echo "✓ All agent template tests passed"
 
+  # Helm deployment tests - validates charts deploy and work correctly
+  helm-deployment-tests:
+    name: Helm Deployment Tests
+    needs: helm-template-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install angreal
+        run: pip install angreal
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: 'v3.12.0'
+
+      - name: Add Helm repositories
+        run: |
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo add openfunction https://openfunction.github.io/charts/
+
+      - name: Build Helm dependencies
+        run: |
+          helm dependency build charts/brokkr-broker
+          helm dependency build charts/brokkr-agent
+
+      - name: Run Helm smoke tests
+        run: |
+          echo "Running helm deployment smoke tests..."
+          angreal helm test smoke
+
   publish-dev-charts:
     name: Publish Development Helm Charts
-    needs: helm-template-tests
+    needs: [helm-template-tests, helm-deployment-tests]
     runs-on: ubuntu-latest
     if: github.event_name != 'pull_request'
     permissions:
