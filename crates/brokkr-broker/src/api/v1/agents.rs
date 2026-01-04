@@ -11,8 +11,16 @@
 
 use crate::api::v1::middleware::AuthPayload;
 use crate::dal::DAL;
-use crate::utils::pak;
+use crate::metrics;
+use crate::utils::{audit, event_bus, pak};
+use brokkr_models::models::webhooks::{
+    BrokkrEvent, EVENT_DEPLOYMENT_APPLIED, EVENT_DEPLOYMENT_FAILED,
+};
 use axum::http::StatusCode;
+use brokkr_models::models::audit_logs::{
+    ACTION_AGENT_CREATED, ACTION_AGENT_DELETED, ACTION_AGENT_UPDATED, ACTION_PAK_ROTATED,
+    ACTOR_TYPE_ADMIN, RESOURCE_TYPE_AGENT,
+};
 use axum::{
     extract::{Extension, Path, Query, State},
     routing::{delete, get, post},
@@ -25,7 +33,7 @@ use brokkr_models::models::agent_targets::{AgentTarget, NewAgentTarget};
 use brokkr_models::models::agents::{Agent, NewAgent};
 use brokkr_models::models::deployment_objects::DeploymentObject;
 use brokkr_models::models::stacks::Stack;
-use brokkr_utils::logging::prelude::*;
+use tracing::{debug, error, info, warn};
 use serde::Deserialize;
 use serde_json::Value;
 use uuid::Uuid;
@@ -89,6 +97,19 @@ async fn list_agents(
     match dal.agents().list() {
         Ok(agents) => {
             info!("Successfully retrieved {} agents", agents.len());
+            // Update active agents metric
+            let active_count = agents.iter().filter(|a| a.status == "ACTIVE").count();
+            metrics::set_active_agents(active_count as i64);
+
+            // Update heartbeat age metrics for all agents
+            let now = chrono::Utc::now();
+            for agent in &agents {
+                if let Some(last_hb) = agent.last_heartbeat {
+                    let age_seconds = (now - last_hb).num_seconds().max(0) as f64;
+                    metrics::set_agent_heartbeat_age(&agent.id.to_string(), &agent.name, age_seconds);
+                }
+            }
+
             Ok(Json(agents))
         }
         Err(e) => {
@@ -148,6 +169,22 @@ async fn create_agent(
             match dal.agents().update_pak_hash(agent.id, pak_hash) {
                 Ok(updated_agent) => {
                     info!("Successfully updated PAK hash for agent ID: {}", agent.id);
+
+                    // Log audit entry for agent creation
+                    audit::log_action(
+                        ACTOR_TYPE_ADMIN,
+                        None,
+                        ACTION_AGENT_CREATED,
+                        RESOURCE_TYPE_AGENT,
+                        Some(agent.id),
+                        Some(serde_json::json!({
+                            "name": updated_agent.name,
+                            "cluster_name": updated_agent.cluster_name,
+                        })),
+                        None,
+                        None,
+                    );
+
                     let response = serde_json::json!({
                         "agent": updated_agent,
                         "initial_pak": pak
@@ -380,6 +417,23 @@ async fn update_agent(
     match dal.agents().update(id, &agent) {
         Ok(updated_agent) => {
             info!("Successfully updated agent with ID: {}", id);
+
+            // Log audit entry for agent update
+            audit::log_action(
+                ACTOR_TYPE_ADMIN,
+                None,
+                ACTION_AGENT_UPDATED,
+                RESOURCE_TYPE_AGENT,
+                Some(id),
+                Some(serde_json::json!({
+                    "name": updated_agent.name,
+                    "cluster_name": updated_agent.cluster_name,
+                    "status": updated_agent.status,
+                })),
+                None,
+                None,
+            );
+
             Ok(Json(updated_agent))
         }
         Err(e) => {
@@ -429,6 +483,19 @@ async fn delete_agent(
     match dal.agents().soft_delete(id) {
         Ok(_) => {
             info!("Successfully deleted agent with ID: {}", id);
+
+            // Log audit entry for agent deletion
+            audit::log_action(
+                ACTOR_TYPE_ADMIN,
+                None,
+                ACTION_AGENT_DELETED,
+                RESOURCE_TYPE_AGENT,
+                Some(id),
+                None,
+                None,
+                None,
+            );
+
             Ok(StatusCode::NO_CONTENT)
         }
         Err(e) => {
@@ -546,6 +613,25 @@ async fn create_event(
     match dal.agent_events().create(&new_event) {
         Ok(event) => {
             info!("Successfully created event for agent with ID: {}", id);
+
+            // Emit deployment webhook event based on status
+            let webhook_event_type = if new_event.status.to_uppercase() == "SUCCESS" {
+                EVENT_DEPLOYMENT_APPLIED
+            } else {
+                EVENT_DEPLOYMENT_FAILED
+            };
+
+            let event_data = serde_json::json!({
+                "agent_event_id": event.id,
+                "agent_id": event.agent_id,
+                "deployment_object_id": event.deployment_object_id,
+                "event_type": event.event_type,
+                "status": event.status,
+                "message": event.message,
+                "created_at": event.created_at,
+            });
+            event_bus::emit_event(&dal, &BrokkrEvent::new(webhook_event_type, event_data));
+
             Ok(Json(event))
         }
         Err(e) => {
@@ -711,28 +797,14 @@ async fn remove_label(
         ));
     }
 
-    match dal.agent_labels().list_for_agent(id) {
-        Ok(labels) => {
-            if let Some(agent_label) = labels.into_iter().find(|l| l.label == label) {
-                match dal.agent_labels().delete(agent_label.id) {
-                    Ok(_) => {
-                        info!(
-                            "Successfully removed label '{}' from agent with ID: {}",
-                            label, id
-                        );
-                        Ok(StatusCode::NO_CONTENT)
-                    }
-                    Err(e) => {
-                        error!(
-                            "Failed to remove label '{}' from agent with ID {}: {:?}",
-                            label, id, e
-                        );
-                        Err((
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            Json(serde_json::json!({"error": "Failed to remove agent label"})),
-                        ))
-                    }
-                }
+    match dal.agent_labels().delete_by_agent_and_label(id, &label) {
+        Ok(deleted_count) => {
+            if deleted_count > 0 {
+                info!(
+                    "Successfully removed label '{}' from agent with ID: {}",
+                    label, id
+                );
+                Ok(StatusCode::NO_CONTENT)
             } else {
                 warn!("Label '{}' not found for agent with ID: {}", label, id);
                 Err((
@@ -742,10 +814,13 @@ async fn remove_label(
             }
         }
         Err(e) => {
-            error!("Failed to fetch labels for agent with ID {}: {:?}", id, e);
+            error!(
+                "Failed to remove label '{}' from agent with ID {}: {:?}",
+                label, id, e
+            );
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": "Failed to fetch agent labels"})),
+                Json(serde_json::json!({"error": "Failed to remove agent label"})),
             ))
         }
     }
@@ -913,28 +988,14 @@ async fn remove_annotation(
         ));
     }
 
-    match dal.agent_annotations().list_for_agent(id) {
-        Ok(annotations) => {
-            if let Some(agent_annotation) = annotations.into_iter().find(|a| a.key == key) {
-                match dal.agent_annotations().delete(agent_annotation.id) {
-                    Ok(_) => {
-                        info!(
-                            "Successfully removed annotation '{}' from agent with ID: {}",
-                            key, id
-                        );
-                        Ok(StatusCode::NO_CONTENT)
-                    }
-                    Err(e) => {
-                        error!(
-                            "Failed to remove annotation '{}' from agent with ID {}: {:?}",
-                            key, id, e
-                        );
-                        Err((
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            Json(serde_json::json!({"error": "Failed to remove agent annotation"})),
-                        ))
-                    }
-                }
+    match dal.agent_annotations().delete_by_agent_and_key(id, &key) {
+        Ok(deleted_count) => {
+            if deleted_count > 0 {
+                info!(
+                    "Successfully removed annotation '{}' from agent with ID: {}",
+                    key, id
+                );
+                Ok(StatusCode::NO_CONTENT)
             } else {
                 warn!("Annotation '{}' not found for agent with ID: {}", key, id);
                 Err((
@@ -945,12 +1006,12 @@ async fn remove_annotation(
         }
         Err(e) => {
             error!(
-                "Failed to fetch annotations for agent with ID {}: {:?}",
-                id, e
+                "Failed to remove annotation '{}' from agent with ID {}: {:?}",
+                key, id, e
             );
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": "Failed to fetch agent annotations"})),
+                Json(serde_json::json!({"error": "Failed to remove agent annotation"})),
             ))
         }
     }
@@ -1111,28 +1172,14 @@ async fn remove_target(
         ));
     }
 
-    match dal.agent_targets().list_for_agent(id) {
-        Ok(targets) => {
-            if let Some(target) = targets.into_iter().find(|t| t.stack_id == stack_id) {
-                match dal.agent_targets().delete(target.id) {
-                    Ok(_) => {
-                        info!(
-                            "Successfully removed target for stack {} from agent with ID: {}",
-                            stack_id, id
-                        );
-                        Ok(StatusCode::NO_CONTENT)
-                    }
-                    Err(e) => {
-                        error!(
-                            "Failed to remove target for stack {} from agent with ID {}: {:?}",
-                            stack_id, id, e
-                        );
-                        Err((
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            Json(serde_json::json!({"error": "Failed to remove agent target"})),
-                        ))
-                    }
-                }
+    match dal.agent_targets().delete_by_agent_and_stack(id, stack_id) {
+        Ok(deleted_count) => {
+            if deleted_count > 0 {
+                info!(
+                    "Successfully removed target for stack {} from agent with ID: {}",
+                    stack_id, id
+                );
+                Ok(StatusCode::NO_CONTENT)
             } else {
                 warn!(
                     "Target for stack {} not found for agent with ID: {}",
@@ -1145,10 +1192,13 @@ async fn remove_target(
             }
         }
         Err(e) => {
-            error!("Failed to fetch targets for agent with ID {}: {:?}", id, e);
+            error!(
+                "Failed to remove target for stack {} from agent with ID {}: {:?}",
+                stack_id, id, e
+            );
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": "Failed to fetch agent targets"})),
+                Json(serde_json::json!({"error": "Failed to remove agent target"})),
             ))
         }
     }
@@ -1197,6 +1247,13 @@ async fn record_heartbeat(
     match dal.agents().record_heartbeat(id) {
         Ok(_) => {
             info!("Successfully recorded heartbeat for agent with ID: {}", id);
+
+            // Update heartbeat age metric (age is now 0 since we just recorded it)
+            // Also get agent name for the metric label
+            if let Ok(Some(agent)) = dal.agents().get(id) {
+                metrics::set_agent_heartbeat_age(&id.to_string(), &agent.name, 0.0);
+            }
+
             Ok(StatusCode::NO_CONTENT)
         }
         Err(e) => {
@@ -1429,6 +1486,21 @@ async fn rotate_agent_pak(
     match dal.agents().update_pak_hash(id, pak_hash) {
         Ok(updated_agent) => {
             info!("Successfully rotated PAK for agent with ID: {}", id);
+
+            // Log audit entry for PAK rotation
+            audit::log_action(
+                ACTOR_TYPE_ADMIN,
+                None,
+                ACTION_PAK_ROTATED,
+                RESOURCE_TYPE_AGENT,
+                Some(id),
+                Some(serde_json::json!({
+                    "agent_name": updated_agent.name,
+                })),
+                None,
+                None,
+            );
+
             Ok(Json(serde_json::json!({
                 "agent": updated_agent,
                 "pak": pak

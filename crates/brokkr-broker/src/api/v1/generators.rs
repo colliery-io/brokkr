@@ -19,7 +19,7 @@ use axum::{
     Json, Router,
 };
 use brokkr_models::models::generator::{Generator, NewGenerator};
-use brokkr_utils::logging::prelude::*;
+use tracing::{debug, error, info, warn};
 use serde::Serialize;
 use utoipa::ToSchema;
 use uuid::Uuid;

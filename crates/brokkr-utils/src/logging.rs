@@ -50,12 +50,13 @@
 
 use log::{LevelFilter, Metadata, Record, SetLoggerError};
 use once_cell::sync::OnceCell;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 pub use log::{debug, error, info, trace, warn};
 
 static LOGGER: BrokkrLogger = BrokkrLogger;
 static CURRENT_LEVEL: AtomicUsize = AtomicUsize::new(LevelFilter::Info as usize);
+static JSON_FORMAT: AtomicBool = AtomicBool::new(false);
 static INIT: OnceCell<()> = OnceCell::new();
 
 /// Custom logger for the Brokkr application
@@ -69,12 +70,27 @@ impl log::Log for BrokkrLogger {
 
     fn log(&self, record: &Record) {
         if self.enabled(record.metadata()) {
-            eprintln!(
-                "{} - {}: {}",
-                chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
-                record.level(),
-                record.args()
-            );
+            if JSON_FORMAT.load(Ordering::Relaxed) {
+                // JSON structured logging format
+                let log_entry = serde_json::json!({
+                    "timestamp": chrono::Utc::now().to_rfc3339(),
+                    "level": record.level().to_string().to_lowercase(),
+                    "target": record.target(),
+                    "message": format!("{}", record.args()),
+                    "module": record.module_path(),
+                    "file": record.file(),
+                    "line": record.line()
+                });
+                eprintln!("{}", log_entry);
+            } else {
+                // Human-readable text format
+                eprintln!(
+                    "{} - {}: {}",
+                    chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
+                    record.level(),
+                    record.args()
+                );
+            }
         }
     }
 
@@ -113,7 +129,20 @@ impl log::Log for BrokkrLogger {
 /// - Logger already initialized
 /// - System permission issues
 pub fn init(level: &str) -> Result<(), SetLoggerError> {
+    init_with_format(level, "text")
+}
+
+/// Initializes the Brokkr logging system with the specified log level and format.
+///
+/// # Arguments
+/// * `level` - String representation of the log level ("debug", "info", "warn", "error")
+/// * `format` - Log output format ("text" for human-readable, "json" for structured JSON)
+///
+/// # Returns
+/// * `Result<(), SetLoggerError>` - Success/failure of logger initialization
+pub fn init_with_format(level: &str, format: &str) -> Result<(), SetLoggerError> {
     let level_filter = str_to_level_filter(level);
+    let use_json = format.eq_ignore_ascii_case("json");
 
     INIT.get_or_init(|| {
         log::set_logger(&LOGGER)
@@ -121,6 +150,7 @@ pub fn init(level: &str) -> Result<(), SetLoggerError> {
             .expect("Failed to set logger");
     });
 
+    JSON_FORMAT.store(use_json, Ordering::Relaxed);
     CURRENT_LEVEL.store(level_filter as usize, Ordering::Relaxed);
     log::set_max_level(level_filter);
     Ok(())

@@ -9,7 +9,7 @@
 //! This module provides functionality to collect detailed diagnostic information
 //! about Kubernetes resources, including pod statuses, events, and log tails.
 
-use brokkr_utils::logging::prelude::*;
+use tracing::{debug, error, info, trace, warn};
 use chrono::{DateTime, Utc};
 use k8s_openapi::api::core::v1::{Event, Pod};
 use kube::{

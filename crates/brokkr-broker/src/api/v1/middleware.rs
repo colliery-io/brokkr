@@ -19,7 +19,7 @@ use axum::{
     response::Response,
 };
 use brokkr_models::schema::admin_role;
-use brokkr_utils::logging::prelude::*;
+use tracing::{debug, error, info, warn};
 use diesel::prelude::*;
 use serde::Serialize;
 use utoipa::ToSchema;
@@ -94,8 +94,8 @@ pub async fn auth_middleware<B>(
 
 /// Verifies the provided PAK and returns the corresponding `AuthPayload`.
 ///
-/// This function checks the PAK against admin roles, agents, and generators
-/// to determine the type and permissions of the authenticated entity.
+/// This function checks the PAK against agents, generators, and admin roles
+/// using indexed lookups for O(1) performance instead of O(n) table scans.
 ///
 /// # Arguments
 ///
@@ -133,13 +133,10 @@ async fn verify_pak(dal: &DAL, pak: &str) -> Result<AuthPayload, StatusCode> {
         }
     }
 
-    // Check agents
-    let agents = dal.agents().list().map_err(|e| {
-        error!("Failed to fetch agents: {:?}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
-    for agent in agents {
-        if pak::verify_pak(pak.to_string(), agent.pak_hash) {
+    // Check agents using indexed lookup for O(1) performance
+    let pak_hash = pak::generate_pak_hash(pak.to_string());
+    match dal.agents().get_by_pak_hash(&pak_hash) {
+        Ok(Some(agent)) => {
             info!("Agent PAK verified for agent ID: {}", agent.id);
             return Ok(AuthPayload {
                 admin: false,
@@ -147,21 +144,27 @@ async fn verify_pak(dal: &DAL, pak: &str) -> Result<AuthPayload, StatusCode> {
                 generator: None,
             });
         }
+        Ok(None) => {} // Not an agent, continue checking
+        Err(e) => {
+            error!("Failed to lookup agent by PAK hash: {:?}", e);
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        }
     }
 
-    // Check generators
-    let generators = dal.generators().list().map_err(|e| {
-        error!("Failed to fetch generators: {:?}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
-    for generator in generators {
-        if pak::verify_pak(pak.to_string(), generator.pak_hash.unwrap_or_default()) {
+    // Check generators using indexed lookup for O(1) performance
+    match dal.generators().get_by_pak_hash(&pak_hash) {
+        Ok(Some(generator)) => {
             info!("Generator PAK verified for generator ID: {}", generator.id);
             return Ok(AuthPayload {
                 admin: false,
                 agent: None,
                 generator: Some(generator.id),
             });
+        }
+        Ok(None) => {} // Not a generator, continue checking
+        Err(e) => {
+            error!("Failed to lookup generator by PAK hash: {:?}", e);
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
         }
     }
 

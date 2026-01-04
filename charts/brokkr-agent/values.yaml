@@ -5,16 +5,62 @@ image:
 
 replicaCount: 1
 
+# Host aliases for pod DNS resolution
+# Useful for dev environments where the broker runs outside the cluster
+# Example:
+#   hostAliases:
+#     - ip: "192.168.1.100"
+#       hostnames:
+#         - "brokkr-broker"
+hostAliases: []
+
 # Shipwright Build integration for container image builds
-# When enabled, installs Shipwright Build and Tekton Pipelines as dependencies
+# When enabled, can install Shipwright Build and Tekton Pipelines via pre-install hooks
 shipwright:
-  # Enable Shipwright Build integration (includes Tekton Pipelines)
-  # Set to false if Shipwright/Tekton are already installed or not needed
+  # Enable Shipwright Build integration
+  # Set to false if not using build work orders
   enabled: true
 
-  # Install sample ClusterBuildStrategies (buildah, kaniko, etc.)
-  # Recommended for most deployments
-  installSampleStrategies: true
+  # Installation settings - controls whether to install Tekton/Shipwright
+  # Set to false if they're already installed in your cluster
+  install:
+    # Install Tekton Pipelines via official manifests
+    tekton: true
+    tektonVersion: "v0.68.1"
+
+    # Install Shipwright Build via official manifests
+    shipwright: true
+    shipwrightVersion: "v0.18.1"
+
+    # Install official sample ClusterBuildStrategies (buildah, kaniko, etc.)
+    sampleStrategies: true
+
+    # Image to use for the installer job (needs kubectl and openssl)
+    image: alpine/k8s:1.30.2
+
+    # Job timeout in seconds
+    timeout: 600
+
+  # Certificate management for Shipwright webhook
+  # Options:
+  #   - "self-signed": Generate self-signed certs (default, works out of box)
+  #   - "cert-manager": Use cert-manager for automatic certificate management (recommended for production)
+  certManagement: "self-signed"
+
+  # cert-manager settings (only used when certManagement: "cert-manager")
+  certManager:
+    # Issuer to use for the certificate
+    # Set issuerKind to "ClusterIssuer" for cluster-wide issuers
+    issuerName: "selfsigned-issuer"
+    issuerKind: "Issuer"
+    # Certificate duration (default 90 days)
+    duration: "2160h"
+    # Renew before expiry (default 30 days)
+    renewBefore: "720h"
+
+  # Install custom ClusterBuildStrategies from this chart
+  # Only used if install.sampleStrategies is false
+  installSampleStrategies: false
 
 broker:
   url: http://brokkr-broker:3000
@@ -34,6 +80,16 @@ agent:
 rbac:
   create: true
   clusterWide: true
+  # Secret access configuration
+  # By default, the agent does NOT have access to secrets for security reasons
+  secretAccess:
+    # Enable secret access (list/watch only by default)
+    # WARNING: Enabling this grants access to potentially sensitive data
+    enabled: false
+    # Allow reading secret contents (get verb)
+    # Only enable if the agent needs to read actual secret data
+    # When false, agent can only see secret metadata (names, namespaces, labels)
+    readContents: false
   # Additional custom RBAC rules to append to the agent role
   # Example:
   # additionalRules:
@@ -112,3 +168,86 @@ metrics:
     # Additional labels for ServiceMonitor (for Prometheus selector matching)
     # additionalLabels:
     #   prometheus: kube-prometheus
+
+# NetworkPolicy configuration for restricting agent network access
+networkPolicy:
+  # Enable NetworkPolicy creation
+  enabled: false
+
+  # CIDR for Kubernetes API server (default allows any)
+  # Set to your cluster's API server CIDR for stricter security
+  # Example: "10.0.0.1/32" for a specific API server IP
+  kubernetesApiCidr: "0.0.0.0/0"
+
+  # Broker endpoint configuration for egress rules
+  # brokerEndpoint:
+  #   podSelector:
+  #     matchLabels:
+  #       app.kubernetes.io/name: brokkr-broker
+  #   namespaceSelector:
+  #     matchLabels:
+  #       kubernetes.io/metadata.name: brokkr
+
+  # Allow metrics scraping from Prometheus namespace
+  # Example:
+  #   allowMetricsFrom:
+  #     - namespaceSelector:
+  #         matchLabels:
+  #           kubernetes.io/metadata.name: monitoring
+  allowMetricsFrom: []
+
+  # Additional custom egress rules
+  # additionalEgressRules:
+  #   - to:
+  #       - ipBlock:
+  #           cidr: 10.0.0.0/8
+  #     ports:
+  #       - protocol: TCP
+  #         port: 443
+  additionalEgressRules: []
+
+# OpenTelemetry telemetry configuration for distributed tracing
+telemetry:
+  # Enable OpenTelemetry tracing
+  enabled: false
+
+  # OTLP endpoint for trace export (gRPC)
+  # This can be different from the broker's collector if agents are in separate clusters
+  # Examples:
+  #   - Local collector: http://otel-collector:4317
+  #   - Cluster-local collector: http://otel-collector.monitoring:4317
+  #   - External collector: https://otel.example.com:4317
+  otlpEndpoint: "http://otel-collector:4317"
+
+  # Sampling rate (0.0 to 1.0)
+  # 0.1 = 10% of traces sampled (recommended for production)
+  # 1.0 = 100% of traces sampled (development/debugging)
+  samplingRate: 0.1
+
+  # Optional: Deploy OpenTelemetry Collector as a sidecar
+  # Useful for agents in air-gapped or restricted network environments
+  collector:
+    # Enable OTel collector sidecar
+    enabled: false
+
+    # Collector image
+    image:
+      repository: otel/opentelemetry-collector-contrib
+      tag: "0.96.0"
+      pullPolicy: IfNotPresent
+
+    # Resource limits for collector sidecar
+    resources:
+      requests:
+        memory: 64Mi
+        cpu: 50m
+      limits:
+        memory: 128Mi
+        cpu: 100m
+
+    # OTLP exporters configuration
+    exporters:
+      # OTLP exporter endpoint
+      otlpEndpoint: ""
+      # Enable debug exporter
+      debug: false

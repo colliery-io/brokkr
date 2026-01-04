@@ -58,9 +58,9 @@
 //! - JSON output format
 //! - Contextual information
 
-use crate::{broker, deployment_health, diagnostics, health, k8s, work_orders};
+use crate::{broker, deployment_health, diagnostics, health, k8s, webhooks, work_orders};
 use brokkr_utils::config::Settings;
-use brokkr_utils::logging::prelude::*;
+use brokkr_utils::telemetry::prelude::*;
 use reqwest::Client;
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -74,7 +74,12 @@ use uuid::Uuid;
 
 pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
     let config = Settings::new(None).expect("Failed to load configuration");
-    brokkr_utils::logging::init(&config.log.level).expect("Failed to initialize logger");
+
+    // Initialize telemetry (includes tracing/logging setup)
+    let telemetry_config = config.telemetry.for_agent();
+    brokkr_utils::telemetry::init(&telemetry_config, &config.log.level, &config.log.format)
+        .expect("Failed to initialize telemetry");
+
     info!("Starting Brokkr Agent");
 
     info!("Waiting for broker to be ready");
@@ -171,6 +176,9 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
     // Diagnostics configuration - poll every 10 seconds for diagnostic requests
     let mut diagnostics_interval = interval(Duration::from_secs(10));
     let diagnostics_handler = diagnostics::DiagnosticsHandler::new(k8s_client.clone());
+
+    // Webhook delivery configuration - poll every 10 seconds for pending webhooks
+    let mut webhook_interval = interval(Duration::from_secs(10));
 
     // Main control loop
     while running.load(Ordering::SeqCst) {
@@ -393,6 +401,27 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
             }
+            _ = webhook_interval.tick() => {
+                // Skip webhook processing if agent is inactive
+                if agent.status != "ACTIVE" {
+                    debug!("Agent '{}' (id: {}) is not active, skipping webhook delivery",
+                        agent.name, agent.id);
+                    continue;
+                }
+
+                // Process pending webhook deliveries
+                match webhooks::process_pending_webhooks(&config, &client, &agent).await {
+                    Ok(count) => {
+                        if count > 0 {
+                            info!("Processed {} webhook deliveries for agent '{}' (id: {})",
+                                count, agent.name, agent.id);
+                        }
+                    }
+                    Err(e) => {
+                        debug!("Failed to process webhook deliveries: {}", e);
+                    }
+                }
+            }
             _ = shutdown_rx.recv() => {
                 info!("Initiating shutdown for agent '{}' (id: {})...", agent.name, agent.id);
                 break;
@@ -404,6 +433,9 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
         "Shutdown complete for agent '{}' (id: {})",
         agent.name, agent.id
     );
+
+    // Shutdown telemetry, flushing any pending traces
+    brokkr_utils::telemetry::shutdown();
 
     Ok(())
 }

@@ -5,601 +5,462 @@ weight: 2
 
 # Component Implementation Details
 
-This document provides detailed technical implementation information about each component in the Brokkr system, including code examples, configuration options, and debugging information.
+This document provides detailed technical implementation information about each component in the Brokkr system. Understanding these implementation details helps operators debug issues, extend functionality, and optimize performance.
 
 ## Broker Components
 
+The broker is implemented in Rust using the Axum web framework with Tokio as the async runtime. It uses Diesel ORM with r2d2 connection pooling for PostgreSQL database access.
+
 ### API Module
 
-#### Implementation Details
+The API module implements the broker's RESTful interface using Axum's router and middleware patterns. Routes are organized hierarchically with authentication applied uniformly through middleware.
+
+#### Route Organization
+
+Routes are defined in submodules and merged into a unified router with authentication middleware applied:
+
 ```rust
-// Example of API route definition
-pub async fn create_stack(
-    State(state): State<AppState>,
-    Json(payload): Json<CreateStackRequest>,
-) -> Result<Json<StackResponse>, ApiError> {
-    let stack = state.dal.create_stack(payload).await?;
-    Ok(Json(stack.into()))
-}
+pub fn routes(dal: DAL, cors_config: &Cors, reloadable_config: Option<ReloadableConfig>) -> Router<DAL> {
+    let cors = build_cors_layer(cors_config);
+    let api_routes = Router::new()
+        .merge(agent_events::routes())
+        .merge(agents::routes())
+        .merge(stacks::routes())
+        .merge(webhooks::routes())
+        .merge(work_orders::routes())
+        // Additional route modules...
+        .layer(from_fn_with_state(dal.clone(), middleware::auth_middleware))
+        .layer(cors);
 
-// Example of middleware
-pub async fn auth_middleware(
-    State(state): State<AppState>,
-    request: Request<Body>,
-    next: Next<Body>,
-) -> Result<Response, ApiError> {
-    let auth_header = request.headers()
-        .get("Authorization")
-        .ok_or(ApiError::Unauthorized)?;
-
-    let pak = extract_pak(auth_header)?;
-    let identity = state.auth.verify_pak(pak).await?;
-
-    let mut request = request;
-    request.extensions_mut().insert(identity);
-
-    Ok(next.run(request).await)
+    Router::new().nest("/api/v1", api_routes)
 }
 ```
 
-#### Configuration Options
-```toml
-[api]
-port = 3000
-host = "0.0.0.0"
-workers = 4
-request_timeout = "30s"
-max_body_size = "10mb"
-cors_origins = ["*"]
-rate_limit = 1000
+The authentication middleware intercepts every request, extracts the PAK from the Authorization header, verifies it against the database, and attaches an `AuthPayload` to the request extensions. Handlers can then access the authenticated identity to make authorization decisions.
+
+#### CORS Configuration
+
+CORS is configured dynamically based on settings, supporting three modes: allow all origins when `"*"` is specified, restrict to specific origins otherwise, with configurable methods, headers, and preflight cache duration.
+
+```rust
+pub struct Cors {
+    pub allowed_origins: Vec<String>,
+    pub allowed_methods: Vec<String>,
+    pub allowed_headers: Vec<String>,
+    pub max_age_seconds: u64,
+}
 ```
 
 #### Debugging
-- Enable debug logging: `RUST_LOG=debug`
-- Enable request tracing: `TRACE_REQUESTS=true`
-- Enable performance profiling: `PROFILE_API=true`
-- Enable request logging: `LOG_REQUESTS=true`
 
-### CLI Module
-
-The CLI module provides command-line interface functionality for the broker:
-
-- Command parsing and validation
-- Configuration management
-- Service initialization
-- Runtime control
-- Logging setup
-- Database migration handling
+Enable debug logging with environment variables:
+- `RUST_LOG=debug` - General debug output
+- `RUST_LOG=brokkr_broker=trace` - Detailed broker tracing
+- `RUST_LOG=tower_http=debug` - HTTP layer debugging
 
 ### DAL (Data Access Layer) Module
 
-#### Implementation Details
+The Data Access Layer provides structured access to the PostgreSQL database using Diesel ORM with r2d2 connection pooling. Each entity type has a dedicated accessor class that encapsulates all database operations.
+
+#### Implementation Architecture
+
+The DAL uses Diesel's compile-time query checking and type-safe schema definitions. Connection management uses r2d2's pooling with automatic connection recycling:
+
 ```rust
-// Example of database operation
-pub async fn create_stack(
-    &self,
-    payload: CreateStackRequest,
-) -> Result<Stack, DalError> {
-    let mut tx = self.pool.begin().await?;
+pub struct DAL {
+    pool: Pool<ConnectionManager<PgConnection>>,
+    schema: Option<String>,
+}
 
-    let stack = sqlx::query_as!(
-        Stack,
-        r#"
-        INSERT INTO stacks (name, description)
-        VALUES ($1, $2)
-        RETURNING *
-        "#,
-        payload.name,
-        payload.description
-    )
-    .fetch_one(&mut *tx)
-    .await?;
+impl DAL {
+    pub fn agents(&self) -> AgentsAccessor {
+        AgentsAccessor::new(self.pool.clone(), self.schema.clone())
+    }
 
-    tx.commit().await?;
-    Ok(stack)
+    pub fn stacks(&self) -> StacksAccessor {
+        StacksAccessor::new(self.pool.clone(), self.schema.clone())
+    }
+    // Additional accessors...
 }
 ```
 
-#### Configuration Options
-```toml
-[database]
-url = "postgres://user:pass@localhost:5432/brokkr"
-pool_size = 20
-max_lifetime = "30m"
-idle_timeout = "10m"
-statement_cache_size = 100
+Each accessor obtains a connection from the pool, optionally sets the PostgreSQL search path for multi-tenant schema isolation, executes the query, and returns the connection to the pool.
+
+#### Multi-Tenant Schema Support
+
+The DAL supports PostgreSQL schema isolation for multi-tenant deployments. When a schema is configured, every connection sets `search_path` before executing queries:
+
+```rust
+if let Some(schema) = &self.schema {
+    diesel::sql_query(format!("SET search_path TO {}", schema))
+        .execute(&mut conn)?;
+}
 ```
 
-#### Debugging
-- Enable SQL logging: `RUST_LOG=sqlx=debug`
-- Enable query timing: `LOG_QUERY_TIME=true`
-- Enable connection pool stats: `LOG_POOL_STATS=true`
-- Enable transaction logging: `LOG_TRANSACTIONS=true`
+Schema names are validated to prevent SQL injection before use.
 
-### Database Module
+#### Error Handling
 
-The database module handles database-specific operations:
+Database errors are wrapped in a unified `DalError` type:
 
-- Schema management
-- Migration handling
-- Connection management
-- Query building
-- Data type mapping
-- Error handling
+```rust
+pub enum DalError {
+    ConnectionPool(r2d2::Error),
+    Query(diesel::result::Error),
+    NotFound,
+}
+```
 
-### Utils Module
-
-The utils module provides common utilities used across the broker:
-
-- Logging helpers
-- Configuration management
-- Error handling
-- Common data structures
-- Helper functions
-- Constants
-
-## Agent Components
-
-### Broker Module
-
-The broker module handles communication with the Brokkr Broker service:
-
-#### Key Responsibilities
-- Deployment object fetching and caching
-- Event reporting and status updates
-- Agent heartbeat management
-- PAK verification and authentication
-- Connection management
-- Retry logic
-
-#### Features
-- Automatic reconnection
-- Request batching
-- Error handling
-- Status reporting
-- Event queuing
-
-### Kubernetes Module
-
-The Kubernetes module manages all interactions with the Kubernetes API:
-
-#### Key Responsibilities
-- Resource creation and deletion
-- State reconciliation
-- Object validation
-- Dynamic client management
-- Resource watching
-- Status monitoring
-
-#### Features
-- Resource validation
-- Conflict resolution
-- Status tracking
-- Error recovery
-- Resource cleanup
-- Health checking
+This provides consistent error handling across all database operations while preserving the underlying error details for debugging.
 
 ### CLI Module
 
-The CLI module provides command-line interface functionality for the agent:
+The CLI module handles command-line argument parsing, configuration loading, and service initialization. It supports running database migrations, starting the broker server, and administrative operations.
 
-#### Key Responsibilities
-- Command parsing
-- Agent initialization
-- Runtime control
-- Configuration management
-- Logging setup
+Configuration is loaded from environment variables using the `BROKKR__` prefix with double underscore separators for nesting:
 
-#### Features
-- Command validation
-- Configuration loading
-- Signal handling
-- Graceful shutdown
-- Status reporting
+```bash
+BROKKR__DATABASE__URL=postgres://user:pass@localhost/brokkr
+BROKKR__DATABASE__SCHEMA=tenant_a
+BROKKR__LOG__LEVEL=info
+BROKKR__BROKER__WEBHOOK_DELIVERY_INTERVAL_SECONDS=5
+```
+
+### Background Tasks Module
+
+The broker runs several background tasks for maintenance operations:
+
+**Diagnostic Cleanup** runs every 15 minutes (configurable) to remove diagnostic results older than 1 hour (configurable).
+
+**Work Order Maintenance** runs every 10 seconds to process retry scheduling and detect stale claims.
+
+**Webhook Delivery** runs every 5 seconds (configurable) to process pending webhook deliveries in batches of 50 (configurable).
+
+**Webhook Cleanup** runs hourly to remove delivery records older than 7 days (configurable).
+
+**Audit Log Cleanup** runs daily to remove audit entries older than 90 days (configurable).
 
 ### Utils Module
 
-The utils module provides common utilities used across the agent:
+The utils module provides shared functionality:
 
-#### Key Responsibilities
-- Logging helpers
-- Configuration management
-- Error handling
-- Common data structures
-- Helper functions
+**Event Bus** implements pub/sub for internal event propagation using Tokio mpsc channels with a 1000-entry buffer.
 
-#### Features
-- Structured logging
-- Error wrapping
-- Configuration validation
-- Common utilities
-- Constants
+**Audit Logger** provides non-blocking audit logging with batched database writes (100 entries or 1 second flush).
 
-## Component Interactions
+**Encryption** implements AES-256-GCM encryption for webhook secrets with versioned format for algorithm upgrades.
 
-### Broker-Agent Communication
+**PAK Controller** generates and verifies Prefixed API Keys using SHA-256 hashing with indexed lookups.
 
-The broker and agent components communicate through several mechanisms:
+## Agent Components
 
-1. **REST API**
-   - Deployment management
-   - Status updates
-   - Configuration changes
-   - Health checks
+The agent is implemented in Rust using Tokio for async operations and kube-rs for Kubernetes API interaction. It runs a continuous control loop that polls the broker and reconciles cluster state.
 
-2. **WebSocket**
-   - Real-time updates
-   - Event streaming
-   - Status notifications
-   - Heartbeat monitoring
+### Broker Communication Module
 
-3. **Event System**
-   - Deployment events
-   - Status changes
-   - Error notifications
-   - System events
+The broker module handles all communication with the Brokkr Broker service using REST API calls with PAK authentication. The agent polls the broker at configurable intervals rather than maintaining persistent connections.
 
-### Agent-Kubernetes Interaction
+#### Communication Pattern
 
-The agent interacts with Kubernetes through:
+All broker communication uses HTTP requests with Bearer token authentication:
 
-1. **Kubernetes API**
-   - Resource management
-   - Status monitoring
-   - Event watching
-   - Configuration updates
+```rust
+pub async fn fetch_deployment_objects(
+    config: &Settings,
+    client: &Client,
+    agent: &Agent,
+) -> Result<Vec<DeploymentObject>, Error> {
+    let url = format!(
+        "{}/api/v1/agents/{}/target-state",
+        config.agent.broker_url, agent.id
+    );
 
-2. **Custom Resources**
-   - Brokkr-specific resources
-   - Status tracking
-   - Configuration management
-   - State management
+    let response = client
+        .get(&url)
+        .header("Authorization", format!("Bearer {}", config.agent.pak))
+        .send()
+        .await?;
+
+    response.json().await
+}
+```
+
+#### Key Endpoints
+
+The agent communicates with these broker endpoints:
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/v1/auth/pak` | POST | Verify PAK and retrieve agent identity |
+| `/api/v1/agents/{id}/target-state` | GET | Fetch deployment objects to apply |
+| `/api/v1/agents/{id}/events` | POST | Report deployment outcomes |
+| `/api/v1/agents/{id}/heartbeat` | POST | Send periodic heartbeat |
+| `/api/v1/agents/{id}/health-status` | PATCH | Report deployment health |
+| `/api/v1/agents/{id}/work-orders/pending` | GET | Fetch claimable work orders |
+| `/api/v1/agents/{id}/diagnostics/pending` | GET | Fetch diagnostic requests |
+
+#### Retry Logic
+
+Failed broker requests use exponential backoff with configurable parameters:
+
+```rust
+pub struct Agent {
+    pub max_retries: u32,
+    pub event_message_retry_delay: u64,
+    // ...
+}
+```
+
+### Kubernetes Module
+
+The Kubernetes module manages all interactions with the Kubernetes API using the kube-rs client library. It implements server-side apply for resource management with intelligent ordering and ownership tracking.
+
+#### Server-Side Apply
+
+Resources are applied using Kubernetes server-side apply, which provides declarative management with conflict detection:
+
+```rust
+pub async fn apply_k8s_objects(
+    k8s_objects: &[DynamicObject],
+    k8s_client: Client,
+    patch_params: PatchParams,
+) -> Result<(), Error> {
+    for obj in k8s_objects {
+        let api = get_api_for_object(&k8s_client, obj)?;
+        let patch = Patch::Apply(obj);
+        api.patch(&obj.name_any(), &patch_params, &patch).await?;
+    }
+    Ok(())
+}
+```
+
+#### Resource Ordering
+
+Resources are applied in priority order to respect dependencies:
+
+1. **Namespaces** are applied first as other resources may depend on them
+2. **CustomResourceDefinitions** are applied second as custom resources require their definitions
+3. **All other resources** are applied after dependencies exist
+
+This ordering prevents failures from missing dependencies during initial deployment.
+
+#### Ownership Tracking
+
+The agent tracks resource ownership using annotations:
+
+```rust
+const STACK_ID_ANNOTATION: &str = "brokkr.io/stack-id";
+const CHECKSUM_ANNOTATION: &str = "brokkr.io/checksum";
+```
+
+Before deleting resources, the agent verifies ownership to prevent removing resources managed by other systems. The checksum annotation enables detection of configuration drift.
+
+#### Reconciliation
+
+Full reconciliation applies the desired state and prunes resources that no longer belong:
+
+```rust
+pub async fn reconcile_target_state(
+    objects: &[DynamicObject],
+    client: Client,
+    stack_id: &str,
+    checksum: &str,
+) -> Result<(), Error> {
+    // Apply priority objects first
+    apply_priority_objects(&objects, &client).await?;
+
+    // Validate remaining objects
+    validate_objects(&objects)?;
+
+    // Apply all resources
+    apply_all_objects(&objects, &client).await?;
+
+    // Prune old resources with mismatched checksums
+    prune_old_resources(&client, stack_id, checksum).await?;
+
+    Ok(())
+}
+```
+
+#### Error Handling
+
+Kubernetes operations use retry logic for transient failures:
+
+```rust
+// Retryable HTTP status codes
+const RETRYABLE_CODES: [u16; 4] = [429, 500, 503, 504];
+
+// Retryable error reasons
+const RETRYABLE_REASONS: [&str; 3] = [
+    "ServiceUnavailable",
+    "InternalError",
+    "Timeout",
+];
+```
+
+Exponential backoff prevents overwhelming a recovering API server.
+
+### Health Module
+
+The health module exposes HTTP endpoints for Kubernetes probes and Prometheus metrics:
+
+| Endpoint | Purpose |
+|----------|---------|
+| `/healthz` | Liveness probe - returns 200 if process is alive |
+| `/readyz` | Readiness probe - returns 200 if agent can serve traffic |
+| `/health` | Detailed health status with JSON response |
+| `/metrics` | Prometheus metrics in text exposition format |
+
+The health server runs on a configurable port (default: 8080) separately from the main control loop.
+
+### CLI Module
+
+The agent CLI handles configuration loading and service initialization. Configuration uses the same environment variable pattern as the broker:
+
+```bash
+BROKKR__AGENT__BROKER_URL=https://broker.example.com:3000
+BROKKR__AGENT__PAK=brokkr_BR...
+BROKKR__AGENT__AGENT_NAME=production-cluster
+BROKKR__AGENT__CLUSTER_NAME=prod-us-east-1
+BROKKR__AGENT__POLLING_INTERVAL=30
+BROKKR__AGENT__HEALTH_PORT=8080
+```
+
+## Configuration Reference
+
+### Broker Configuration
+
+```rust
+pub struct Settings {
+    pub database: Database,
+    pub log: Log,
+    pub broker: Broker,
+    pub cors: Cors,
+    pub telemetry: Telemetry,
+}
+
+pub struct Database {
+    pub url: String,
+    pub schema: Option<String>,
+}
+
+pub struct Broker {
+    pub diagnostic_cleanup_interval_seconds: Option<u64>,  // default: 900
+    pub diagnostic_max_age_hours: Option<i64>,              // default: 1
+    pub webhook_encryption_key: Option<String>,
+    pub webhook_delivery_interval_seconds: Option<u64>,     // default: 5
+    pub webhook_delivery_batch_size: Option<i64>,           // default: 50
+    pub webhook_cleanup_retention_days: Option<i64>,        // default: 7
+    pub audit_log_retention_days: Option<i64>,              // default: 90
+}
+
+pub struct Cors {
+    pub allowed_origins: Vec<String>,
+    pub allowed_methods: Vec<String>,
+    pub allowed_headers: Vec<String>,
+    pub max_age_seconds: u64,
+}
+```
+
+### Agent Configuration
+
+```rust
+pub struct Settings {
+    pub agent: Agent,
+    pub log: Log,
+    pub telemetry: Telemetry,
+}
+
+pub struct Agent {
+    pub broker_url: String,
+    pub pak: String,
+    pub agent_name: String,
+    pub cluster_name: String,
+    pub polling_interval: u64,                    // default: 30
+    pub kubeconfig_path: Option<String>,
+    pub max_retries: u32,
+    pub max_event_message_retries: usize,
+    pub event_message_retry_delay: u64,
+    pub health_port: Option<u16>,                 // default: 8080
+    pub deployment_health_enabled: Option<bool>,  // default: true
+    pub deployment_health_interval: Option<u64>,  // default: 60
+}
+```
+
+### Hot-Reload Configuration
+
+The broker supports dynamic configuration reloading for certain settings:
+
+**Hot-reloadable** (apply without restart):
+- Log level
+- CORS settings (origins, methods, headers, max-age)
+- Webhook delivery interval and batch size
+- Diagnostic cleanup settings
+
+**Static** (require restart):
+- Database URL and schema
+- Webhook encryption key
+- PAK configuration
+- Telemetry settings
+
+Trigger a manual reload via the admin API:
+
+```bash
+curl -X POST https://broker/api/v1/admin/config/reload \
+  -H "Authorization: Bearer <admin-pak>"
+```
+
+In Kubernetes, the broker automatically watches its ConfigMap for changes with a 5-second debounce.
 
 ## Component Lifecycle
 
-### Broker Lifecycle
+### Broker Startup Sequence
 
-1. **Initialization**
-   - Configuration loading
-   - Database connection
-   - API server startup
-   - Service registration
+1. **Configuration Loading** - Parse environment variables and configuration files
+2. **Database Connection** - Establish r2d2 connection pool to PostgreSQL
+3. **Migration Check** - Verify database schema is current
+4. **Encryption Initialization** - Load or generate webhook encryption key
+5. **Event Bus Initialization** - Start event dispatcher with mpsc channel
+6. **Audit Logger Initialization** - Start background writer with batching
+7. **Background Tasks** - Spawn diagnostic cleanup, work order, webhook, and audit tasks
+8. **API Server** - Bind to configured port and start accepting requests
 
-2. **Runtime**
-   - Request handling
-   - Event processing
-   - Status monitoring
-   - Health checking
+### Agent Startup Sequence
 
-3. **Shutdown**
-   - Graceful termination
-   - Connection cleanup
-   - Resource release
-   - State persistence
+1. **Configuration Loading** - Parse environment variables
+2. **PAK Verification** - Authenticate with broker and retrieve agent identity
+3. **Kubernetes Client** - Initialize kube-rs client with in-cluster or kubeconfig credentials
+4. **Health Server** - Start HTTP server for probes and metrics
+5. **Control Loop** - Enter main loop with polling, health checks, and work order processing
 
-### Agent Lifecycle
+### Graceful Shutdown
 
-1. **Initialization**
-   - Configuration loading
-   - Broker connection
-   - Kubernetes client setup
-   - Resource initialization
+Both components handle SIGTERM and SIGINT for graceful shutdown:
 
-2. **Runtime**
-   - Deployment management
-   - Status monitoring
-   - Event processing
-   - Health checking
+1. Stop accepting new requests
+2. Complete in-flight operations
+3. Flush pending data (audit logs, events)
+4. Close database connections
+5. Exit cleanly
 
-3. **Shutdown**
-   - Graceful termination
-   - Resource cleanup
-   - Connection closure
-   - State persistence
-
-## Error Handling
-
-### Broker Error Handling
-
-1. **API Errors**
-   - Input validation
-   - Authentication
-   - Authorization
-   - Rate limiting
-
-2. **Database Errors**
-   - Connection issues
-   - Query errors
-   - Transaction failures
-   - Data validation
-
-3. **System Errors**
-   - Resource exhaustion
-   - Service failures
-   - Configuration errors
-   - Network issues
-
-### Agent Error Handling
-
-1. **Broker Communication**
-   - Connection issues
-   - Authentication failures
-   - Request timeouts
-   - Response errors
-
-2. **Kubernetes Operations**
-   - API errors
-   - Resource conflicts
-   - Validation failures
-   - Status errors
-
-3. **System Errors**
-   - Resource exhaustion
-   - Configuration issues
-   - Network problems
-   - Service failures
-
-## Monitoring and Metrics
-
-### Broker Metrics
-
-1. **API Metrics**
-   - Request counts
-   - Response times
-   - Error rates
-   - Rate limiting
-
-2. **System Metrics**
-   - Resource usage
-   - Connection counts
-   - Queue lengths
-   - Cache statistics
-
-3. **Business Metrics**
-   - Deployment counts
-   - Agent status
-   - Error rates
-   - Success rates
-
-### Agent Metrics
-
-1. **Broker Communication**
-   - Request counts
-   - Response times
-   - Error rates
-   - Connection status
-
-2. **Kubernetes Operations**
-   - Resource counts
-   - Operation times
-   - Error rates
-   - Status updates
-
-3. **System Metrics**
-   - Resource usage
-   - Queue lengths
-   - Cache statistics
-   - Health status
-
-## Kubernetes Client
-
-#### Implementation Details
-```rust
-// Example of resource application
-pub async fn apply_resource(
-    &self,
-    resource: Resource,
-) -> Result<(), K8sError> {
-    let client = self.get_client().await?;
-    let api = client.resource_api(&resource);
-
-    match api.get(&resource.name, None).await {
-        Ok(_) => api.replace(&resource).await?,
-        Err(_) => api.create(&resource).await?,
-    }
-
-    Ok(())
-}
-
-// Example of resource watching
-pub async fn watch_resources(
-    &self,
-    resource_type: &str,
-) -> Result<WatchStream, K8sError> {
-    let client = self.get_client().await?;
-    let api = client.resource_api(resource_type);
-
-    let stream = api.watch(None, None).await?;
-    Ok(WatchStream::new(stream))
-}
-```
-
-#### Configuration Options
-```toml
-[kubernetes]
-kubeconfig_path = "/etc/kubernetes/kubeconfig"
-context = "default"
-namespace = "default"
-qps = 100
-burst = 200
-timeout = "30s"
-```
-
-#### Debugging
-- Enable K8s API logging: `RUST_LOG=kube=debug`
-- Enable resource tracing: `TRACE_RESOURCES=true`
-- Enable watch logging: `LOG_WATCH=true`
-- Enable client stats: `LOG_CLIENT_STATS=true`
-
-## State Management
-
-#### Implementation Details
-```rust
-// Example of state reconciliation
-pub async fn reconcile_state(
-    &self,
-) -> Result<(), StateError> {
-    let current = self.get_current_state().await?;
-    let desired = self.get_desired_state().await?;
-
-    let diff = self.calculate_diff(&current, &desired)?;
-    for change in diff {
-        self.apply_change(change).await?;
-    }
-
-    Ok(())
-}
-
-// Example of state persistence
-pub async fn persist_state(
-    &self,
-    state: &State,
-) -> Result<(), StateError> {
-    let serialized = serde_json::to_string(state)?;
-    tokio::fs::write(
-        self.state_path(),
-        serialized
-    ).await?;
-    Ok(())
-}
-```
-
-#### Configuration Options
-```toml
-[state]
-cache_size = 1000
-reconciliation_interval = "30s"
-persistence_interval = "5m"
-cleanup_interval = "1h"
-max_history = 100
-```
-
-#### Debugging
-- Enable state logging: `RUST_LOG=state=debug`
-- Enable reconciliation tracing: `TRACE_RECONCILIATION=true`
-- Enable cache monitoring: `MONITOR_CACHE=true`
-- Enable persistence logging: `LOG_PERSISTENCE=true`
-
-## Extension Points
-
-### Custom Resource Types
-
-```rust
-// Example of custom resource definition
-#[derive(CustomResource, Serialize, Deserialize, Clone, Debug)]
-#[kube(
-    group = "brokkr.io",
-    version = "v1",
-    kind = "CustomResource",
-    namespaced
-)]
-pub struct CustomResourceSpec {
-    pub name: String,
-    pub value: String,
-}
-
-// Example of custom resource handler
-pub async fn handle_custom_resource(
-    &self,
-    resource: CustomResource,
-) -> Result<(), Error> {
-    // Custom resource handling logic
-    Ok(())
-}
-```
-
-### Custom Validators
-
-```rust
-// Example of custom validator
-pub struct CustomValidator {
-    rules: Vec<ValidationRule>,
-}
-
-impl Validator for CustomValidator {
-    fn validate(
-        &self,
-        resource: &Resource,
-    ) -> Result<(), ValidationError> {
-        for rule in &self.rules {
-            rule.validate(resource)?;
-        }
-        Ok(())
-    }
-}
-```
-
-### Custom Event Handlers
-
-```rust
-// Example of custom event handler
-pub struct CustomEventHandler {
-    handler: Box<dyn Fn(Event) -> Result<(), Error>>,
-}
-
-impl EventHandler for CustomEventHandler {
-    fn handle(
-        &self,
-        event: Event,
-    ) -> Result<(), Error> {
-        (self.handler)(event)
-    }
-}
-```
-
-## Performance Optimization
+## Performance Considerations
 
 ### Broker Optimization
 
-#### API Server
-- Use connection pooling
-- Enable request compression
-- Implement response caching
-- Use async I/O
-- Optimize serialization
+**Connection Pooling** - r2d2 maintains a pool of database connections, avoiding connection establishment overhead for each request.
 
-#### Database
-- Use prepared statements
-- Implement query caching
-- Optimize indexes
-- Use batch operations
-- Implement connection pooling
+**Batched Writes** - Audit logs and webhook deliveries are batched to reduce database round trips.
+
+**Indexed Lookups** - PAK verification uses indexed columns for O(1) authentication performance.
+
+**Async I/O** - Tokio provides non-blocking I/O for high concurrency without thread-per-request overhead.
 
 ### Agent Optimization
 
-#### Kubernetes Client
-- Use resource caching
-- Implement batch operations
-- Optimize watch connections
-- Use efficient serialization
-- Implement retry strategies
+**Incremental Fetching** - Agents track processed sequence IDs to fetch only new deployment objects.
 
-#### State Management
-- Use efficient diff algorithms
-- Implement state caching
-- Optimize persistence
-- Use batch operations
-- Implement cleanup strategies
+**Parallel Apply** - Independent resources can be applied concurrently within priority groups.
 
-## Security Considerations
+**Connection Reuse** - HTTP client maintains connection pools to the broker and Kubernetes API.
 
-### API Security
-- Implement rate limiting
-- Use secure headers
-- Enable CORS properly
-- Implement request validation
-- Use secure cookies
-
-### Database Security
-- Use connection encryption
-- Implement row-level security
-- Use prepared statements
-- Implement access control
-- Use secure credentials
-
-### Kubernetes Security
-- Use service accounts
-- Implement RBAC
-- Use network policies
-- Implement pod security
-- Use secure configurations
+**Efficient Diffing** - Checksum-based change detection avoids unnecessary applies for unchanged resources.
