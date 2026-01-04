@@ -4,7 +4,7 @@ level: task
 title: "Deployment Health Monitoring"
 short_code: "BROKKR-T-0045"
 created_at: 2025-12-14T21:09:43.602084+00:00
-updated_at: 2025-12-20T14:15:13.834112+00:00
+updated_at: 2025-12-29T01:17:02.089641+00:00
 parent: 
 blocked_by: []
 archived: false
@@ -12,7 +12,7 @@ archived: false
 tags:
   - "#task"
   - "#feature"
-  - "#phase/active"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -44,6 +44,8 @@ This enables catching common issues like malformed YAML, ImagePullBackOff, Crash
 - **User Value**: Operators get visibility into deployment health across all clusters and can quickly diagnose failures without direct cluster access
 - **Business Value**: Reduces time-to-resolution for deployment issues, catches problems proactively before users report them
 - **Effort Estimate**: M (Medium) - simpler than continuous log aggregation; extends existing agent/broker patterns
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

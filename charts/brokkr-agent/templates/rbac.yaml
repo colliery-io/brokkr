@@ -26,7 +26,6 @@ rules:
   - services
   - endpoints
   - configmaps
-  - secrets
   {{- if .Values.rbac.clusterWide }}
   - persistentvolumes
   {{- end }}
@@ -35,6 +34,19 @@ rules:
   - get
   - list
   - watch
+{{- if .Values.rbac.secretAccess.enabled }}
+# Secrets - restricted access based on configuration
+# WARNING: Secret access should be limited to specific namespaces in production
+- apiGroups: [""]
+  resources:
+  - secrets
+  verbs:
+  {{- if .Values.rbac.secretAccess.readContents }}
+  - get
+  {{- end }}
+  - list
+  - watch
+{{- end }}
 
 # Apps API - workload inventory
 - apiGroups: ["apps"]
@@ -98,31 +110,38 @@ rules:
   - list
   - watch
 
-{{- if .Values.shipwright.enabled }}
-# Shipwright Build API - container image builds
-# Agent needs to create BuildRuns and watch their status
-- apiGroups: ["shipwright.io"]
-  resources:
-  - builds
-  - buildruns
-  verbs:
-  - get
-  - list
-  - watch
-  - create
-  - update
-  - patch
-  - delete
+# Stack Deployment - full permissions for applying arbitrary manifests
+# Agents are operators that need to deploy any K8s resources
+- apiGroups: [""]
+  resources: ["*"]
+  verbs: ["*"]
 
-# Shipwright Build strategies (read-only)
+- apiGroups: ["apps"]
+  resources: ["*"]
+  verbs: ["*"]
+
+- apiGroups: ["batch"]
+  resources: ["*"]
+  verbs: ["*"]
+
+- apiGroups: ["networking.k8s.io"]
+  resources: ["*"]
+  verbs: ["*"]
+
+{{- if .Values.rbac.clusterWide }}
+- apiGroups: ["rbac.authorization.k8s.io"]
+  resources: ["*"]
+  verbs: ["*"]
+{{- end }}
+
+{{- if .Values.shipwright.enabled }}
 - apiGroups: ["shipwright.io"]
-  resources:
-  - buildstrategies
-  - clusterbuildstrategies
-  verbs:
-  - get
-  - list
-  - watch
+  resources: ["*"]
+  verbs: ["*"]
+
+- apiGroups: ["tekton.dev"]
+  resources: ["*"]
+  verbs: ["*"]
 {{- end }}
 
 {{- with .Values.rbac.additionalRules }}

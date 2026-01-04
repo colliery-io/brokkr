@@ -1,0 +1,20 @@
+{{- if .Values.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "brokkr-broker.fullname" . }}
+  labels:
+    {{- include "brokkr-broker.labels" . | nindent 4 }}
+spec:
+  {{- if .Values.podDisruptionBudget.minAvailable }}
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  {{- else if .Values.podDisruptionBudget.maxUnavailable }}
+  maxUnavailable: {{ .Values.podDisruptionBudget.maxUnavailable }}
+  {{- else }}
+  # Default: ensure at least 1 replica is available during updates
+  minAvailable: 1
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "brokkr-broker.selectorLabels" . | nindent 6 }}
+{{- end }}

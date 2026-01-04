@@ -10,8 +10,10 @@
 //! including creating, retrieving, listing, and soft-deleting deployment objects.
 
 use crate::dal::DAL;
+use crate::utils::event_bus;
 use brokkr_models::models::agent_targets::AgentTarget;
 use brokkr_models::models::deployment_objects::{DeploymentObject, NewDeploymentObject};
+use brokkr_models::models::webhooks::{BrokkrEvent, EVENT_DEPLOYMENT_CREATED, EVENT_DEPLOYMENT_DELETED};
 use brokkr_models::schema::agent_targets;
 use brokkr_models::schema::deployment_objects;
 use chrono::Utc;
@@ -39,9 +41,20 @@ impl DeploymentObjectsDAL<'_> {
         new_deployment_object: &NewDeploymentObject,
     ) -> Result<DeploymentObject, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
-        diesel::insert_into(deployment_objects::table)
+        let deployment_object: DeploymentObject = diesel::insert_into(deployment_objects::table)
             .values(new_deployment_object)
-            .get_result(conn)
+            .get_result(conn)?;
+
+        // Emit deployment.created event
+        let event_data = serde_json::json!({
+            "deployment_object_id": deployment_object.id,
+            "stack_id": deployment_object.stack_id,
+            "sequence_id": deployment_object.sequence_id,
+            "created_at": deployment_object.created_at,
+        });
+        event_bus::emit_event(self.dal, &BrokkrEvent::new(EVENT_DEPLOYMENT_CREATED, event_data));
+
+        Ok(deployment_object)
     }
 
     /// Retrieves a non-deleted deployment object by its UUID.
@@ -140,11 +153,30 @@ impl DeploymentObjectsDAL<'_> {
         deployment_object_uuid: Uuid,
     ) -> Result<usize, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
-        diesel::update(
+
+        // Get the deployment object first for event data
+        let deployment_object: Option<DeploymentObject> = deployment_objects::table
+            .filter(deployment_objects::id.eq(deployment_object_uuid))
+            .first(conn)
+            .optional()?;
+
+        let rows = diesel::update(
             deployment_objects::table.filter(deployment_objects::id.eq(deployment_object_uuid)),
         )
         .set(deployment_objects::deleted_at.eq(Utc::now()))
-        .execute(conn)
+        .execute(conn)?;
+
+        if rows > 0 {
+            // Emit deployment.deleted event
+            let event_data = serde_json::json!({
+                "deployment_object_id": deployment_object_uuid,
+                "stack_id": deployment_object.map(|d| d.stack_id),
+                "deleted_at": Utc::now(),
+            });
+            event_bus::emit_event(self.dal, &BrokkrEvent::new(EVENT_DEPLOYMENT_DELETED, event_data));
+        }
+
+        Ok(rows)
     }
 
     /// Retrieves the latest non-deleted deployment object for a specific stack.

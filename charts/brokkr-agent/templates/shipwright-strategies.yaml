@@ -1,4 +1,5 @@
-{{- if and .Values.shipwright.enabled .Values.shipwright.installSampleStrategies }}
+{{- if and .Values.shipwright.enabled .Values.shipwright.installSampleStrategies (not .Values.shipwright.install.sampleStrategies) }}
+# Custom ClusterBuildStrategy - only used when NOT installing official sample strategies
 # Sample ClusterBuildStrategies for Shipwright
 # These provide out-of-the-box build capabilities using buildah
 # Source: https://github.com/shipwright-io/build/blob/main/samples/v1beta1/buildstrategy/buildah/buildstrategy_buildah_cr.yaml

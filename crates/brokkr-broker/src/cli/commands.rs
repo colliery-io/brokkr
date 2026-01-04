@@ -11,8 +11,8 @@ use crate::utils;
 use crate::utils::pak;
 use brokkr_models::models::agents::NewAgent;
 use brokkr_models::models::generator::NewGenerator;
-use brokkr_utils::config::Settings;
-use brokkr_utils::logging::prelude::*;
+use brokkr_utils::config::{ReloadableConfig, Settings};
+use tracing::{debug, error, info, warn};
 use diesel::prelude::*;
 use diesel::result::Error as DieselError;
 use diesel::sql_query;
@@ -39,11 +39,15 @@ pub async fn serve(config: &Settings) -> Result<(), Box<dyn std::error::Error>> 
     info!("Starting Brokkr Broker application");
 
     // Create database connection pool
+    // Pool size needs to accommodate:
+    // - 5 background tasks (diagnostic cleanup, work order maintenance, webhook delivery/cleanup, audit cleanup)
+    // - HTTP requests (middleware holds 1 connection while DAL methods need another)
+    // - Concurrent request handling and webhook event emission
     info!("Creating database connection pool");
     let connection_pool = create_shared_connection_pool(
         &config.database.url,
         "brokkr",
-        5,
+        50,
         config.database.schema.as_deref(),
     );
     info!("Database connection pool created successfully");
@@ -92,6 +96,16 @@ pub async fn serve(config: &Settings) -> Result<(), Box<dyn std::error::Error>> 
     info!("Initializing Data Access Layer");
     let dal = DAL::new(connection_pool.clone());
 
+    // Initialize encryption key for webhooks
+    info!("Initializing encryption key");
+    utils::encryption::init_encryption_key(config.broker.webhook_encryption_key.as_deref())
+        .expect("Failed to initialize encryption key");
+
+    // Initialize audit logger for compliance tracking
+    info!("Initializing audit logger");
+    utils::audit::init_audit_logger(dal.clone())
+        .expect("Failed to initialize audit logger");
+
     // Start background tasks
     info!("Starting background tasks");
     let cleanup_config = utils::background_tasks::DiagnosticCleanupConfig {
@@ -107,9 +121,43 @@ pub async fn serve(config: &Settings) -> Result<(), Box<dyn std::error::Error>> 
     let work_order_config = utils::background_tasks::WorkOrderMaintenanceConfig::default();
     utils::background_tasks::start_work_order_maintenance_task(dal.clone(), work_order_config);
 
+    // Start webhook delivery worker
+    let webhook_delivery_config = utils::background_tasks::WebhookDeliveryConfig {
+        interval_seconds: config
+            .broker
+            .webhook_delivery_interval_seconds
+            .unwrap_or(5),
+        batch_size: config.broker.webhook_delivery_batch_size.unwrap_or(50),
+    };
+    utils::background_tasks::start_webhook_delivery_task(dal.clone(), webhook_delivery_config);
+
+    // Start webhook cleanup task
+    let webhook_cleanup_config = utils::background_tasks::WebhookCleanupConfig {
+        interval_seconds: 3600, // Every hour
+        retention_days: config.broker.webhook_cleanup_retention_days.unwrap_or(7),
+    };
+    utils::background_tasks::start_webhook_cleanup_task(dal.clone(), webhook_cleanup_config);
+
+    // Start audit log cleanup task
+    let audit_cleanup_config = utils::background_tasks::AuditLogCleanupConfig {
+        interval_seconds: 86400, // Daily
+        retention_days: config.broker.audit_log_retention_days.unwrap_or(90),
+    };
+    utils::background_tasks::start_audit_log_cleanup_task(dal.clone(), audit_cleanup_config);
+
+    // Create reloadable configuration for hot-reload support
+    info!("Initializing reloadable configuration");
+    let reloadable_config = ReloadableConfig::from_settings(config.clone(), None);
+
+    // Start ConfigMap watcher for Kubernetes hot-reload (if running in K8s)
+    if let Some(watcher_config) = utils::config_watcher::ConfigWatcherConfig::from_environment() {
+        utils::config_watcher::start_config_watcher(reloadable_config.clone(), watcher_config);
+    }
+
     // Configure API routes
     info!("Configuring API routes");
-    let app = api::configure_api_routes(dal.clone()).with_state(dal);
+    let app = api::configure_api_routes(dal.clone(), &config.cors, Some(reloadable_config))
+        .with_state(dal);
 
     // Set up the server address
     let addr = "0.0.0.0:3000";
@@ -202,10 +250,12 @@ pub fn create_agent(
 ) -> Result<(), Box<dyn std::error::Error>> {
     info!("Creating new agent: {}", name);
 
+    // Use pool size 2 because agent creation emits webhook events
+    // which require a second connection while the first is still held
     let pool = create_shared_connection_pool(
         &config.database.url,
         "brokkr",
-        1,
+        2,
         config.database.schema.as_deref(),
     );
     let dal = DAL::new(pool.clone());

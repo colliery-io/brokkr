@@ -12,3 +12,17 @@ data:
   BROKKR__AGENT__PAK: {{ .Values.broker.pak | quote }}
   BROKKR__AGENT__DEPLOYMENT_HEALTH_ENABLED: {{ .Values.agent.deploymentHealth.enabled | quote }}
   BROKKR__AGENT__DEPLOYMENT_HEALTH_INTERVAL: {{ .Values.agent.deploymentHealth.intervalSeconds | quote }}
+  # Telemetry configuration
+  {{- if .Values.telemetry.enabled }}
+  BROKKR__TELEMETRY__ENABLED: "true"
+  {{- if .Values.telemetry.collector.enabled }}
+  # When using sidecar collector, point to localhost
+  BROKKR__TELEMETRY__OTLP_ENDPOINT: "http://localhost:4317"
+  {{- else }}
+  BROKKR__TELEMETRY__OTLP_ENDPOINT: {{ .Values.telemetry.otlpEndpoint | quote }}
+  {{- end }}
+  BROKKR__TELEMETRY__AGENT__SERVICE_NAME: "brokkr-agent"
+  BROKKR__TELEMETRY__SAMPLING_RATE: {{ .Values.telemetry.samplingRate | quote }}
+  {{- else }}
+  BROKKR__TELEMETRY__ENABLED: "false"
+  {{- end }}

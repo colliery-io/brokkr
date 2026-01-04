@@ -29,7 +29,7 @@ pub mod build;
 use brokkr_models::models::agents::Agent;
 use brokkr_models::models::work_orders::WorkOrder;
 use brokkr_utils::config::Settings;
-use brokkr_utils::logging::prelude::*;
+use tracing::{debug, error, info, trace, warn};
 use kube::Client as K8sClient;
 use reqwest::Client;
 

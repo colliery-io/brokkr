@@ -168,4 +168,34 @@ impl AgentAnnotationsDAL<'_> {
         diesel::delete(agent_annotations::table.filter(agent_annotations::agent_id.eq(agent_id)))
             .execute(conn)
     }
+
+    /// Deletes a specific annotation for an agent using a single indexed query.
+    ///
+    /// This is more efficient than fetching all annotations and filtering client-side.
+    ///
+    /// # Arguments
+    ///
+    /// * `agent_id` - The UUID of the agent.
+    /// * `key` - The annotation key to delete.
+    ///
+    /// # Returns
+    ///
+    /// The number of affected rows (0 or 1).
+    ///
+    /// # Errors
+    ///
+    /// Returns a `diesel::result::Error` if the database operation fails.
+    pub fn delete_by_agent_and_key(
+        &self,
+        agent_id: Uuid,
+        key: &str,
+    ) -> Result<usize, diesel::result::Error> {
+        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        diesel::delete(
+            agent_annotations::table
+                .filter(agent_annotations::agent_id.eq(agent_id))
+                .filter(agent_annotations::key.eq(key)),
+        )
+        .execute(conn)
+    }
 }

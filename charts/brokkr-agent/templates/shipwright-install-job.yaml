@@ -1,0 +1,170 @@
+{{- if and .Values.shipwright.enabled (or .Values.shipwright.install.tekton .Values.shipwright.install.shipwright) }}
+# Pre-install Job to install Tekton and/or Shipwright using official manifests
+# This runs before the agent is deployed to ensure build infrastructure is ready
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "brokkr-agent.fullname" . }}-shipwright-install
+  labels:
+    {{- include "brokkr-agent.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  ttlSecondsAfterFinished: 300
+  activeDeadlineSeconds: {{ .Values.shipwright.install.timeout }}
+  template:
+    metadata:
+      labels:
+        {{- include "brokkr-agent.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: shipwright-installer
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: {{ include "brokkr-agent.fullname" . }}-installer
+      containers:
+        - name: installer
+          image: {{ .Values.shipwright.install.image }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+
+              # Install openssl for certificate generation (alpine/k8s doesn't include it)
+              echo "Installing openssl..."
+              apk add --no-cache openssl >/dev/null 2>&1 || true
+
+              {{- if .Values.shipwright.install.tekton }}
+              echo "=== Installing Tekton Pipelines {{ .Values.shipwright.install.tektonVersion }} ==="
+              kubectl apply --filename https://storage.googleapis.com/tekton-releases/pipeline/previous/{{ .Values.shipwright.install.tektonVersion }}/release.yaml --server-side=true
+
+              echo "Waiting for Tekton Pipelines controller..."
+              kubectl wait --for=condition=available --timeout=300s deployment/tekton-pipelines-controller -n tekton-pipelines
+
+              echo "Waiting for Tekton Pipelines webhook..."
+              kubectl wait --for=condition=available --timeout=300s deployment/tekton-pipelines-webhook -n tekton-pipelines
+
+              echo "Tekton Pipelines {{ .Values.shipwright.install.tektonVersion }} installed successfully"
+              {{- end }}
+
+              {{- if .Values.shipwright.install.shipwright }}
+              echo "=== Installing Shipwright Build {{ .Values.shipwright.install.shipwrightVersion }} ==="
+              kubectl apply --filename https://github.com/shipwright-io/build/releases/download/{{ .Values.shipwright.install.shipwrightVersion }}/release.yaml --server-side=true
+
+              echo "Waiting for Shipwright Build controller..."
+              kubectl wait --for=condition=available --timeout=300s deployment/shipwright-build-controller -n shipwright-build
+
+              {{- if eq .Values.shipwright.certManagement "self-signed" }}
+              echo "Setting up Shipwright webhook certificates (self-signed)..."
+              cd /tmp
+
+              # Generate self-signed CA
+              openssl genrsa -out ca.key 4096 2>/dev/null
+              openssl req -new -x509 -days 365 -key ca.key -out ca.crt -subj "/CN=shipwright-webhook-ca" 2>/dev/null
+
+              # Generate server certificate signed by CA
+              openssl genrsa -out tls.key 4096 2>/dev/null
+              cat > san.cnf << 'SANEOF'
+              [req]
+              distinguished_name = req_distinguished_name
+              req_extensions = v3_req
+              [req_distinguished_name]
+              CN = shp-build-webhook.shipwright-build.svc
+              [v3_req]
+              subjectAltName = DNS:shp-build-webhook.shipwright-build.svc,DNS:shp-build-webhook.shipwright-build.svc.cluster.local
+              SANEOF
+              openssl req -new -key tls.key -out tls.csr -subj "/CN=shp-build-webhook.shipwright-build.svc" -config san.cnf 2>/dev/null
+              openssl x509 -req -in tls.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out tls.crt -days 365 -extensions v3_req -extfile san.cnf 2>/dev/null
+
+              # Create TLS secret for webhook
+              kubectl create secret tls shipwright-build-webhook-cert \
+                --cert=/tmp/tls.crt --key=/tmp/tls.key -n shipwright-build
+
+              # Patch CRDs with CA bundle (use tr -d for portability instead of base64 -w0)
+              CA_BUNDLE=$(cat /tmp/ca.crt | base64 | tr -d '\n')
+              for crd in clusterbuildstrategies.shipwright.io buildstrategies.shipwright.io builds.shipwright.io buildruns.shipwright.io; do
+                kubectl patch crd $crd --type=merge -p "{\"spec\":{\"conversion\":{\"strategy\":\"Webhook\",\"webhook\":{\"clientConfig\":{\"caBundle\":\"$CA_BUNDLE\",\"service\":{\"name\":\"shp-build-webhook\",\"namespace\":\"shipwright-build\",\"path\":\"/convert\",\"port\":443}},\"conversionReviewVersions\":[\"v1\"]}}}}"
+              done
+              {{- else if eq .Values.shipwright.certManagement "cert-manager" }}
+              echo "Setting up Shipwright webhook certificates (cert-manager)..."
+
+              # Wait for cert-manager to create the secret (Certificate resource is applied by Helm)
+              echo "Waiting for cert-manager to provision certificate..."
+              for i in $(seq 1 60); do
+                if kubectl get secret shipwright-build-webhook-cert -n shipwright-build >/dev/null 2>&1; then
+                  echo "Certificate secret created by cert-manager"
+                  break
+                fi
+                echo "Waiting for certificate... ($i/60)"
+                sleep 5
+              done
+
+              # Extract CA bundle from the cert-manager secret
+              CA_BUNDLE=$(kubectl get secret shipwright-build-webhook-cert -n shipwright-build -o jsonpath='{.data.ca\.crt}')
+              if [ -z "$CA_BUNDLE" ]; then
+                # Some issuers don't include ca.crt, use tls.crt as CA for self-signed
+                CA_BUNDLE=$(kubectl get secret shipwright-build-webhook-cert -n shipwright-build -o jsonpath='{.data.tls\.crt}')
+              fi
+
+              # Patch CRDs with CA bundle
+              for crd in clusterbuildstrategies.shipwright.io buildstrategies.shipwright.io builds.shipwright.io buildruns.shipwright.io; do
+                kubectl patch crd $crd --type=merge -p "{\"spec\":{\"conversion\":{\"strategy\":\"Webhook\",\"webhook\":{\"clientConfig\":{\"caBundle\":\"$CA_BUNDLE\",\"service\":{\"name\":\"shp-build-webhook\",\"namespace\":\"shipwright-build\",\"path\":\"/convert\",\"port\":443}},\"conversionReviewVersions\":[\"v1\"]}}}}"
+              done
+              {{- end }}
+
+              echo "Waiting for Shipwright webhook to be ready..."
+              kubectl wait --for=condition=available --timeout=300s deployment/shipwright-build-webhook -n shipwright-build
+
+              echo "Shipwright Build {{ .Values.shipwright.install.shipwrightVersion }} installed successfully"
+              {{- end }}
+
+              {{- if and .Values.shipwright.install.shipwright .Values.shipwright.install.sampleStrategies }}
+              echo "=== Installing sample ClusterBuildStrategies ==="
+              kubectl apply --filename https://github.com/shipwright-io/build/releases/download/{{ .Values.shipwright.install.shipwrightVersion }}/sample-strategies.yaml --server-side=true
+
+              echo "Sample strategies installed:"
+              kubectl get clusterbuildstrategies
+              {{- end }}
+
+              echo "=== Installation complete ==="
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+---
+# ServiceAccount for the installer job with cluster-admin privileges
+# Required to install CRDs and cluster-scoped resources
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "brokkr-agent.fullname" . }}-installer
+  labels:
+    {{- include "brokkr-agent.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "brokkr-agent.fullname" . }}-installer
+  labels:
+    {{- include "brokkr-agent.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "brokkr-agent.fullname" . }}-installer
+    namespace: {{ .Release.Namespace }}
+{{- end }}

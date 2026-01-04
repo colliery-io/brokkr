@@ -6,6 +6,7 @@
 
 pub mod config;
 pub mod logging;
+pub mod telemetry;
 
-pub use config::Settings;
+pub use config::{ResolvedTelemetry, Settings, Telemetry};
 pub use logging::BrokkrLogger;

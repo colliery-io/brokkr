@@ -4,15 +4,15 @@ level: task
 title: "Work order failure messages not stored during retry cycles"
 short_code: "BROKKR-T-0047"
 created_at: 2025-12-22T02:39:54.259681+00:00
-updated_at: 2025-12-22T02:39:54.259681+00:00
+updated_at: 2025-12-29T01:17:22.533215+00:00
 parent: 
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/backlog"
   - "#bug"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -51,6 +51,12 @@ The `work_orders` table lacks columns for storing error information:
 - No `last_error` column for the most recent failure message
 - No `last_error_at` column for when the error occurred
 - The `complete_failure` DAL function discards the error message when scheduling retries
+
+## Acceptance Criteria
+
+## Acceptance Criteria
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

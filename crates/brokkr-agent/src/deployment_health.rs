@@ -11,7 +11,7 @@
 //! OOMKilled, and other problematic conditions.
 
 use crate::k8s::objects::DEPLOYMENT_OBJECT_ID_LABEL;
-use brokkr_utils::logging::prelude::*;
+use tracing::{debug, error, info, trace, warn};
 use chrono::{DateTime, Utc};
 use k8s_openapi::api::core::v1::Pod;
 use kube::{api::ListParams, Api, Client};

@@ -12,6 +12,7 @@
 use axum::Router;
 use brokkr_broker::api;
 use brokkr_broker::dal::DAL;
+use brokkr_utils::config::{Cors, ReloadableConfig};
 use brokkr_broker::db::create_shared_connection_pool;
 use brokkr_broker::utils;
 use brokkr_broker::utils::pak;
@@ -62,12 +63,21 @@ impl Default for TestFixture {
 impl TestFixture {
     /// Creates and returns an Axum Router with configured API routes.
     ///
+    /// This matches the production code path by always including ReloadableConfig.
+    ///
     /// # Returns
     ///
     /// Returns a configured Axum Router.
     #[allow(dead_code)]
     pub fn create_test_router(&self) -> Router<DAL> {
-        api::configure_api_routes(self.dal.clone())
+        let test_cors = Cors {
+            allowed_origins: vec!["*".to_string()],
+            allowed_methods: vec!["GET".to_string(), "POST".to_string(), "PUT".to_string(), "DELETE".to_string()],
+            allowed_headers: vec!["Authorization".to_string(), "Content-Type".to_string()],
+            max_age_seconds: 3600,
+        };
+        let reloadable_config = ReloadableConfig::from_settings(self.settings.clone(), None);
+        api::configure_api_routes(self.dal.clone(), &test_cors, Some(reloadable_config))
     }
 
     /// Creates a new TestFixture instance.
@@ -104,6 +114,9 @@ impl TestFixture {
         utils::pak::create_pak_controller(Some(&settings))
             .expect("Failed to create PAK controller");
         utils::first_startup(&mut conn, &settings).expect("Failed to run first startup");
+
+        // Initialize encryption key for webhook tests (ignore if already initialized)
+        let _ = utils::encryption::init_encryption_key(None);
 
         // Read the admin PAK from the temporary file
         let admin_pak = "brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8".to_string();

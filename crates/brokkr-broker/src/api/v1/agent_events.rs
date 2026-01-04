@@ -16,7 +16,7 @@ use axum::{
     Json, Router,
 };
 use brokkr_models::models::agent_events::AgentEvent;
-use brokkr_utils::logging::prelude::*;
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 /// Creates and returns a router for agent event-related endpoints.

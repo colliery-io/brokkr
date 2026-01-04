@@ -578,6 +578,155 @@ metadata:
 
 ---
 
+## Part 8: Webhooks (Event Notifications)
+
+Webhooks enable external systems to receive real-time notifications about deployment health changes and work order completions.
+
+### 8.1 Available Event Types
+
+Brokkr emits the following event types:
+
+| Event Type | Description |
+|------------|-------------|
+| `health.degraded` | A deployment's health changed to degraded |
+| `health.failing` | A deployment's health changed to failing/error |
+| `health.recovered` | A deployment recovered from degraded/failing to healthy |
+| `workorder.completed` | A work order finished (success or failure) |
+
+### 8.2 Create a Webhook Subscription (API)
+
+Webhooks are managed via the Admin API. Use the admin PAK to create a subscription:
+
+```bash
+curl -X POST http://localhost:3000/api/v1/webhooks \
+  -H "Authorization: Bearer $ADMIN_PAK" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Slack Alerts",
+    "url": "https://hooks.slack.com/services/YOUR/WEBHOOK/URL",
+    "auth_header": "Bearer your-auth-token",
+    "event_types": ["health.degraded", "health.failing"]
+  }'
+```
+
+**Wildcard Subscriptions:**
+
+Subscribe to all events of a category using wildcards:
+
+```bash
+# Subscribe to all health events
+curl -X POST http://localhost:3000/api/v1/webhooks \
+  -H "Authorization: Bearer $ADMIN_PAK" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "All Health Events",
+    "url": "https://your-endpoint.com/webhook",
+    "event_types": ["health.*"]
+  }'
+
+# Subscribe to ALL events
+curl -X POST http://localhost:3000/api/v1/webhooks \
+  -H "Authorization: Bearer $ADMIN_PAK" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "All Events",
+    "url": "https://your-endpoint.com/webhook",
+    "event_types": ["*"]
+  }'
+```
+
+### 8.3 List Webhook Subscriptions
+
+```bash
+curl http://localhost:3000/api/v1/webhooks \
+  -H "Authorization: Bearer $ADMIN_PAK"
+```
+
+### 8.4 View Available Event Types
+
+```bash
+curl http://localhost:3000/api/v1/webhooks/event-types \
+  -H "Authorization: Bearer $ADMIN_PAK"
+```
+
+### 8.5 Test a Webhook
+
+Send a test event to verify your endpoint is working:
+
+```bash
+curl -X POST http://localhost:3000/api/v1/webhooks/{webhook-id}/test \
+  -H "Authorization: Bearer $ADMIN_PAK"
+```
+
+### 8.6 View Delivery History
+
+Check the delivery status for a webhook subscription:
+
+```bash
+# All deliveries
+curl http://localhost:3000/api/v1/webhooks/{webhook-id}/deliveries \
+  -H "Authorization: Bearer $ADMIN_PAK"
+
+# Filter by status (pending, success, failed, dead)
+curl "http://localhost:3000/api/v1/webhooks/{webhook-id}/deliveries?status=failed" \
+  -H "Authorization: Bearer $ADMIN_PAK"
+```
+
+### 8.7 Update a Webhook
+
+Disable a webhook or change its configuration:
+
+```bash
+curl -X PUT http://localhost:3000/api/v1/webhooks/{webhook-id} \
+  -H "Authorization: Bearer $ADMIN_PAK" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "enabled": false
+  }'
+```
+
+### 8.8 Delete a Webhook
+
+```bash
+curl -X DELETE http://localhost:3000/api/v1/webhooks/{webhook-id} \
+  -H "Authorization: Bearer $ADMIN_PAK"
+```
+
+### 8.9 Webhook Payload Format
+
+Events are delivered as JSON with this structure:
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "event_type": "health.degraded",
+  "timestamp": "2025-01-15T10:30:00Z",
+  "data": {
+    "deployment_health_id": "...",
+    "agent_id": "...",
+    "deployment_object_id": "...",
+    "status": "degraded",
+    "previous_status": "healthy",
+    "summary": "Pod demo-web-abc123 not ready",
+    "checked_at": "2025-01-15T10:30:00Z"
+  }
+}
+```
+
+### 8.10 Retry Behavior
+
+Failed deliveries are automatically retried with exponential backoff:
+
+- **Retry 1:** 2 seconds after failure
+- **Retry 2:** 4 seconds after failure
+- **Retry 3:** 8 seconds after failure
+- **Retry 4:** 16 seconds after failure
+- **Retry 5:** 32 seconds after failure (default max)
+
+After max retries, the delivery is marked as `dead`.
+
+---
+
 ## Summary
 
 This walkthrough covered:
@@ -590,6 +739,7 @@ This walkthrough covered:
 | Health Monitoring | View status, run diagnostics | Observe failure states |
 | Templates | Create, instantiate | Invalid parameters |
 | Work Orders | Create jobs, target by labels | Job failures, retries |
+| Webhooks | Subscribe, test, view deliveries | Failed deliveries, retries |
 | Cleanup | Deletion markers | Cascading deletes |
 
 For programmatic access, use the PAKs created in the Admin panel with the Broker API at `http://localhost:3000/api/v1/`.

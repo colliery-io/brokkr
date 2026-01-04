@@ -119,4 +119,34 @@ impl StackLabelsDAL<'_> {
         diesel::delete(stack_labels::table.filter(stack_labels::stack_id.eq(stack_id)))
             .execute(conn)
     }
+
+    /// Deletes a specific label for a stack using a single indexed query.
+    ///
+    /// This is more efficient than fetching all labels and filtering client-side.
+    ///
+    /// # Arguments
+    ///
+    /// * `stack_id` - The UUID of the stack.
+    /// * `label` - The label string to delete.
+    ///
+    /// # Returns
+    ///
+    /// The number of affected rows (0 or 1).
+    ///
+    /// # Errors
+    ///
+    /// Returns a `diesel::result::Error` if the database operation fails.
+    pub fn delete_by_stack_and_label(
+        &self,
+        stack_id: Uuid,
+        label: &str,
+    ) -> Result<usize, diesel::result::Error> {
+        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        diesel::delete(
+            stack_labels::table
+                .filter(stack_labels::stack_id.eq(stack_id))
+                .filter(stack_labels::label.eq(label)),
+        )
+        .execute(conn)
+    }
 }

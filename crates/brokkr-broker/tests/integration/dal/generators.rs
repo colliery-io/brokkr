@@ -256,3 +256,64 @@ fn test_get_by_active_status() {
 
     assert_eq!(inactive_generators.len(), 0);
 }
+
+#[test]
+fn test_recreate_generator_after_soft_delete() {
+    let fixture = TestFixture::new();
+
+    // Create a generator with a specific name
+    let original_generator = fixture.create_test_generator(
+        "Recreatable Generator".to_string(),
+        Some("Original description".to_string()),
+        "".to_string(),
+    );
+
+    // Soft delete the generator
+    fixture
+        .dal
+        .generators()
+        .soft_delete(original_generator.id)
+        .expect("Failed to soft delete generator");
+
+    // Verify the generator is soft-deleted
+    let deleted = fixture
+        .dal
+        .generators()
+        .get(original_generator.id)
+        .expect("Failed to check deleted generator");
+    assert!(deleted.is_none(), "Generator should not be visible after soft delete");
+
+    // Create a new generator with the SAME name
+    // This should succeed because the partial unique index excludes soft-deleted records
+    let new_generator = NewGenerator::new(
+        "Recreatable Generator".to_string(),
+        Some("New description".to_string()),
+    )
+    .expect("Failed to create NewGenerator");
+
+    let recreated_generator = fixture
+        .dal
+        .generators()
+        .create(&new_generator)
+        .expect("Should be able to recreate generator with same name after soft delete");
+
+    // Verify the new generator was created with a different ID
+    assert_ne!(recreated_generator.id, original_generator.id);
+    assert_eq!(recreated_generator.name, "Recreatable Generator");
+
+    // Both generators should exist in the database (one active, one soft-deleted)
+    let all_generators = fixture
+        .dal
+        .generators()
+        .list_all()
+        .expect("Failed to list all generators");
+    // Should have: admin generator (from fixture) + 2 "Recreatable Generator" (one deleted, one active)
+    assert!(all_generators.len() >= 2);
+
+    // Verify both Recreatable Generators exist
+    let recreatable_generators: Vec<_> = all_generators
+        .iter()
+        .filter(|g| g.name == "Recreatable Generator")
+        .collect();
+    assert_eq!(recreatable_generators.len(), 2);
+}

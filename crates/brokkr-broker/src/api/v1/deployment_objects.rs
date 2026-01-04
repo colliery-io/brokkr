@@ -17,7 +17,7 @@ use axum::{
     Json, Router,
 };
 use brokkr_models::models::deployment_objects::DeploymentObject;
-use brokkr_utils::logging::prelude::*;
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 /// Creates and returns the router for deployment object endpoints.

@@ -20,7 +20,7 @@ use axum::{
 };
 use brokkr_models::models::diagnostic_requests::{DiagnosticRequest, NewDiagnosticRequest};
 use brokkr_models::models::diagnostic_results::{DiagnosticResult, NewDiagnosticResult};
-use brokkr_utils::logging::prelude::*;
+use tracing::{debug, error, info, warn};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;

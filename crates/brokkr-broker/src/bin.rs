@@ -27,8 +27,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Load configuration
     let config = Settings::new(None).expect("Failed to load configuration");
 
-    // Initialize logger
-    brokkr_utils::logging::init(&config.log.level).expect("Failed to initialize logger");
+    // Initialize telemetry (includes tracing/logging setup)
+    let telemetry_config = config.telemetry.for_broker();
+    brokkr_utils::telemetry::init(&telemetry_config, &config.log.level, &config.log.format)
+        .expect("Failed to initialize telemetry");
 
     // Create PAK controller
     let _ =
@@ -51,5 +53,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             RotateSubcommands::Generator { uuid } => commands::rotate_generator_key(&config, uuid)?,
         },
     }
+
+    // Shutdown telemetry on exit
+    brokkr_utils::telemetry::shutdown();
+
     Ok(())
 }

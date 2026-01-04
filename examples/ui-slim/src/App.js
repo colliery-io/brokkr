@@ -2,87 +2,20 @@ import React, { useState, useEffect, useCallback } from 'react';
 import * as api from './api';
 import './styles.css';
 
-// Reusable tag/chip component
-const Tag = ({ children, onRemove, variant = 'default' }) => (
-  <span className={`tag tag-${variant}`}>
-    {children}
-    {onRemove && <button onClick={onRemove} className="tag-remove">×</button>}
-  </span>
-);
-
-// Collapsible section
-const Section = ({ title, icon, children, defaultOpen = false, count }) => {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <div className={`section ${open ? 'open' : ''}`}>
-      <button className="section-header" onClick={() => setOpen(!open)}>
-        <span className="section-icon">{icon}</span>
-        <span className="section-title">{title}</span>
-        {count !== undefined && <span className="section-count">{count}</span>}
-        <span className="section-arrow">{open ? '▼' : '▶'}</span>
-      </button>
-      {open && <div className="section-content">{children}</div>}
-    </div>
-  );
-};
-
-// Inline form for adding items
-const InlineAdd = ({ placeholder, onAdd, fields = 1 }) => {
-  const [values, setValues] = useState(fields === 1 ? '' : { key: '', value: '' });
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (fields === 1 && values.trim()) {
-      onAdd(values.trim());
-      setValues('');
-    } else if (fields === 2 && values.key.trim() && values.value.trim()) {
-      onAdd(values.key.trim(), values.value.trim());
-      setValues({ key: '', value: '' });
-    }
-  };
-  return (
-    <form onSubmit={handleSubmit} className="inline-add">
-      {fields === 1 ? (
-        <input value={values} onChange={(e) => setValues(e.target.value)} placeholder={placeholder} />
-      ) : (
-        <>
-          <input value={values.key} onChange={(e) => setValues({ ...values, key: e.target.value })} placeholder="key" />
-          <input value={values.value} onChange={(e) => setValues({ ...values, value: e.target.value })} placeholder="value" />
-        </>
-      )}
-      <button type="submit">+</button>
-    </form>
-  );
-};
-
-// Status indicator
-const Status = ({ status }) => {
-  const s = (status || '').toLowerCase();
-  const color = s === 'active' || s === 'success' || s === 'healthy' ? 'green' :
-                s === 'inactive' || s === 'failure' || s === 'failed' ? 'red' :
-                s === 'pending' || s === 'in_progress' ? 'yellow' : 'gray';
-  return <span className={`status status-${color}`}>{status}</span>;
-};
-
-// Modal component
-const Modal = ({ title, onClose, children }) => (
-  <div className="modal-overlay" onClick={onClose}>
-    <div className="modal" onClick={(e) => e.stopPropagation()}>
-      <div className="modal-header">
-        <h3>{title}</h3>
-        <button onClick={onClose} className="modal-close">×</button>
-      </div>
-      <div className="modal-body">{children}</div>
-    </div>
-  </div>
-);
-
-// Toast notification
-const Toast = ({ message, type = 'info', onClose }) => (
-  <div className={`toast toast-${type}`}>
-    {message}
-    <button onClick={onClose}>×</button>
-  </div>
-);
+// Import shared components from modular components file
+import {
+  Tag,
+  Section,
+  InlineAdd,
+  Status,
+  HeartbeatIndicator,
+  Pagination,
+  usePagination,
+  Modal,
+  ToastProvider,
+  useToast,
+  getErrorMessage
+} from './components';
 
 // ==================== AGENTS PANEL ====================
 const AgentsPanel = ({ stacks, onRefresh }) => {
@@ -91,11 +24,19 @@ const AgentsPanel = ({ stacks, onRefresh }) => {
   const [selected, setSelected] = useState(null);
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
+  const toast = useToast();
+  const pagination = usePagination(agents);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const data = await api.getAgents();
+      // Sort agents: ACTIVE first, then by name
+      data.sort((a, b) => {
+        if (a.status === 'ACTIVE' && b.status !== 'ACTIVE') return -1;
+        if (a.status !== 'ACTIVE' && b.status === 'ACTIVE') return 1;
+        return a.name.localeCompare(b.name);
+      });
       setAgents(data);
       onRefresh?.(data);
       const d = {};
@@ -106,60 +47,99 @@ const AgentsPanel = ({ stacks, onRefresh }) => {
         d[a.id] = { labels, annotations, targets };
       }));
       setDetails(d);
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      toast?.('Failed to load agents: ' + getErrorMessage(e), 'error');
+    }
     setLoading(false);
-  }, [onRefresh]);
+  }, [onRefresh, toast]);
 
   useEffect(() => { load(); }, [load]);
 
   const selectAgent = async (agent) => {
     setSelected(agent);
-    const evts = await api.getAgentEvents(agent.id);
-    setEvents(evts);
+    try {
+      const evts = await api.getAgentEvents(agent.id);
+      setEvents(evts);
+    } catch (e) {
+      toast?.('Failed to load agent events: ' + getErrorMessage(e), 'error');
+      setEvents([]);
+    }
   };
 
   const addLabel = async (label) => {
-    await api.addAgentLabel(selected.id, label);
-    const labels = await api.getAgentLabels(selected.id);
-    setDetails({ ...details, [selected.id]: { ...details[selected.id], labels } });
+    try {
+      await api.addAgentLabel(selected.id, label);
+      const labels = await api.getAgentLabels(selected.id);
+      setDetails({ ...details, [selected.id]: { ...details[selected.id], labels } });
+      toast?.('Label added', 'success');
+    } catch (e) {
+      toast?.('Failed to add label: ' + getErrorMessage(e), 'error');
+    }
   };
 
   const removeLabel = async (label) => {
-    await api.removeAgentLabel(selected.id, label);
-    const labels = await api.getAgentLabels(selected.id);
-    setDetails({ ...details, [selected.id]: { ...details[selected.id], labels } });
+    try {
+      await api.removeAgentLabel(selected.id, label);
+      const labels = await api.getAgentLabels(selected.id);
+      setDetails({ ...details, [selected.id]: { ...details[selected.id], labels } });
+    } catch (e) {
+      toast?.('Failed to remove label: ' + getErrorMessage(e), 'error');
+    }
   };
 
   const addAnnotation = async (key, value) => {
-    await api.addAgentAnnotation(selected.id, key, value);
-    const annotations = await api.getAgentAnnotations(selected.id);
-    setDetails({ ...details, [selected.id]: { ...details[selected.id], annotations } });
+    try {
+      await api.addAgentAnnotation(selected.id, key, value);
+      const annotations = await api.getAgentAnnotations(selected.id);
+      setDetails({ ...details, [selected.id]: { ...details[selected.id], annotations } });
+      toast?.('Annotation added', 'success');
+    } catch (e) {
+      toast?.('Failed to add annotation: ' + getErrorMessage(e), 'error');
+    }
   };
 
   const removeAnnotation = async (key) => {
-    await api.removeAgentAnnotation(selected.id, key);
-    const annotations = await api.getAgentAnnotations(selected.id);
-    setDetails({ ...details, [selected.id]: { ...details[selected.id], annotations } });
+    try {
+      await api.removeAgentAnnotation(selected.id, key);
+      const annotations = await api.getAgentAnnotations(selected.id);
+      setDetails({ ...details, [selected.id]: { ...details[selected.id], annotations } });
+    } catch (e) {
+      toast?.('Failed to remove annotation: ' + getErrorMessage(e), 'error');
+    }
   };
 
   const addTarget = async (stackId) => {
-    await api.addAgentTarget(selected.id, stackId);
-    const targets = await api.getAgentTargets(selected.id);
-    setDetails({ ...details, [selected.id]: { ...details[selected.id], targets } });
+    try {
+      await api.addAgentTarget(selected.id, stackId);
+      const targets = await api.getAgentTargets(selected.id);
+      setDetails({ ...details, [selected.id]: { ...details[selected.id], targets } });
+      toast?.('Target added', 'success');
+    } catch (e) {
+      toast?.('Failed to add target: ' + getErrorMessage(e), 'error');
+    }
   };
 
   const removeTarget = async (stackId) => {
-    await api.removeAgentTarget(selected.id, stackId);
-    const targets = await api.getAgentTargets(selected.id);
-    setDetails({ ...details, [selected.id]: { ...details[selected.id], targets } });
+    try {
+      await api.removeAgentTarget(selected.id, stackId);
+      const targets = await api.getAgentTargets(selected.id);
+      setDetails({ ...details, [selected.id]: { ...details[selected.id], targets } });
+    } catch (e) {
+      toast?.('Failed to remove target: ' + getErrorMessage(e), 'error');
+    }
   };
 
   const toggleStatus = async () => {
-    const newStatus = selected.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
-    const updated = await api.updateAgent(selected.id, { status: newStatus });
-    setSelected(updated);
-    setAgents(agents.map(a => a.id === updated.id ? updated : a));
-    onRefresh?.(agents.map(a => a.id === updated.id ? updated : a));
+    try {
+      const newStatus = selected.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+      const updated = await api.updateAgent(selected.id, { status: newStatus });
+      setSelected(updated);
+      setAgents(agents.map(a => a.id === updated.id ? updated : a));
+      onRefresh?.(agents.map(a => a.id === updated.id ? updated : a));
+      toast?.(`Agent ${newStatus.toLowerCase()}`, 'success');
+    } catch (e) {
+      toast?.('Failed to update agent status: ' + getErrorMessage(e), 'error');
+    }
   };
 
   if (loading) return <div className="loading">Loading agents...</div>;
@@ -174,36 +154,48 @@ const AgentsPanel = ({ stacks, onRefresh }) => {
       {agents.length === 0 ? (
         <div className="empty">No agents registered</div>
       ) : (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Cluster</th>
-                <th>Status</th>
-                <th>Labels</th>
-                <th>Targets</th>
-                <th>Last Seen</th>
-              </tr>
-            </thead>
-            <tbody>
-              {agents.map((a) => (
-                <tr key={a.id} onClick={() => selectAgent(a)} className="clickable">
-                  <td className="mono">{a.name}</td>
-                  <td className="mono dim">{a.cluster_name}</td>
-                  <td><Status status={a.status} /></td>
-                  <td>
-                    {details[a.id]?.labels?.map((l) => (
-                      <Tag key={l.id} variant="label">{l.label}</Tag>
-                    ))}
-                  </td>
-                  <td>{details[a.id]?.targets?.length || 0}</td>
-                  <td className="dim">{a.last_heartbeat ? new Date(a.last_heartbeat).toLocaleString() : 'Never'}</td>
+        <>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Cluster</th>
+                  <th>Status</th>
+                  <th>Labels</th>
+                  <th>Targets</th>
+                  <th>Last Seen</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {pagination.paginatedItems.map((a) => (
+                  <tr key={a.id} onClick={() => selectAgent(a)} className="clickable">
+                    <td className="mono">{a.name}</td>
+                    <td className="mono dim">{a.cluster_name}</td>
+                    <td><HeartbeatIndicator lastHeartbeat={a.last_heartbeat} /><Status status={a.status} /></td>
+                    <td>
+                      {details[a.id]?.labels?.map((l) => (
+                        <Tag key={l.id} variant="label">{l.label}</Tag>
+                      ))}
+                    </td>
+                    <td>{details[a.id]?.targets?.length || 0}</td>
+                    <td className="dim">{a.last_heartbeat ? new Date(a.last_heartbeat).toLocaleString() : 'Never'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {agents.length > 10 && (
+            <Pagination
+              page={pagination.page}
+              totalPages={pagination.totalPages}
+              onPageChange={pagination.setPage}
+              pageSize={pagination.pageSize}
+              onPageSizeChange={pagination.setPageSize}
+              total={pagination.total}
+            />
+          )}
+        </>
       )}
 
       {selected && (
@@ -219,10 +211,15 @@ const AgentsPanel = ({ stacks, onRefresh }) => {
             </div>
             <div className="detail-row">
               <span className="detail-label">Status</span>
+              <HeartbeatIndicator lastHeartbeat={selected.last_heartbeat} />
               <Status status={selected.status} />
               <button onClick={toggleStatus} className={`btn-toggle ${selected.status === 'ACTIVE' ? 'active' : ''}`}>
                 {selected.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
               </button>
+            </div>
+            <div className="detail-row">
+              <span className="detail-label">Last Heartbeat</span>
+              <span className="dim">{selected.last_heartbeat ? new Date(selected.last_heartbeat).toLocaleString() : 'Never'}</span>
             </div>
           </div>
 
@@ -299,6 +296,8 @@ const StacksPanel = ({ generators, agents, onRefresh }) => {
   const [yaml, setYaml] = useState('');
   const [isDeletion, setIsDeletion] = useState(false);
   const [loading, setLoading] = useState(true);
+  const toast = useToast();
+  const pagination = usePagination(stacks);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -312,76 +311,115 @@ const StacksPanel = ({ generators, agents, onRefresh }) => {
       }));
       setDetails(d);
       onRefresh?.(data);
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      toast?.('Failed to load stacks: ' + getErrorMessage(e), 'error');
+    }
     setLoading(false);
-  }, [onRefresh]);
+  }, [onRefresh, toast]);
 
   useEffect(() => { load(); }, [load]);
 
   const selectStack = async (stack) => {
     setSelected(stack);
     setStackHealth(null);
-    const [deps, health] = await Promise.all([
-      api.getStackDeployments(stack.id),
-      api.getStackHealth(stack.id).catch(() => null)
-    ]);
-    setDeployments(deps);
-    setStackHealth(health);
+    try {
+      const [deps, health] = await Promise.all([
+        api.getStackDeployments(stack.id),
+        api.getStackHealth(stack.id).catch(() => null)
+      ]);
+      setDeployments(deps);
+      setStackHealth(health);
+    } catch (e) {
+      toast?.('Failed to load stack details: ' + getErrorMessage(e), 'error');
+    }
   };
 
   const create = async (e) => {
     e.preventDefault();
-    await api.createStack(newStack.name, newStack.description, newStack.generatorId);
-    setShowCreate(false);
-    setNewStack({ name: '', description: '', generatorId: '' });
-    load();
+    try {
+      await api.createStack(newStack.name, newStack.description, newStack.generatorId);
+      setShowCreate(false);
+      setNewStack({ name: '', description: '', generatorId: '' });
+      toast?.('Stack created', 'success');
+      load();
+    } catch (e) {
+      toast?.('Failed to create stack: ' + getErrorMessage(e), 'error');
+    }
   };
 
   const deploy = async (e) => {
     e.preventDefault();
-    await api.createDeployment(selected.id, yaml, isDeletion);
-    setShowDeploy(false);
-    setYaml('');
-    setIsDeletion(false);
-    const deps = await api.getStackDeployments(selected.id);
-    setDeployments(deps);
+    try {
+      await api.createDeployment(selected.id, yaml, isDeletion);
+      setShowDeploy(false);
+      setYaml('');
+      setIsDeletion(false);
+      const deps = await api.getStackDeployments(selected.id);
+      setDeployments(deps);
+      toast?.('Deployment created', 'success');
+    } catch (e) {
+      toast?.('Failed to create deployment: ' + getErrorMessage(e), 'error');
+    }
   };
 
   const addLabel = async (label) => {
-    await api.addStackLabel(selected.id, label);
-    const labels = await api.getStackLabels(selected.id);
-    setDetails({ ...details, [selected.id]: { ...details[selected.id], labels } });
+    try {
+      await api.addStackLabel(selected.id, label);
+      const labels = await api.getStackLabels(selected.id);
+      setDetails({ ...details, [selected.id]: { ...details[selected.id], labels } });
+      toast?.('Label added', 'success');
+    } catch (e) {
+      toast?.('Failed to add label: ' + getErrorMessage(e), 'error');
+    }
   };
 
   const removeLabel = async (label) => {
-    await api.removeStackLabel(selected.id, label);
-    const labels = await api.getStackLabels(selected.id);
-    setDetails({ ...details, [selected.id]: { ...details[selected.id], labels } });
+    try {
+      await api.removeStackLabel(selected.id, label);
+      const labels = await api.getStackLabels(selected.id);
+      setDetails({ ...details, [selected.id]: { ...details[selected.id], labels } });
+    } catch (e) {
+      toast?.('Failed to remove label: ' + getErrorMessage(e), 'error');
+    }
   };
 
   const addAnnotation = async (key, value) => {
-    await api.addStackAnnotation(selected.id, key, value);
-    const annotations = await api.getStackAnnotations(selected.id);
-    setDetails({ ...details, [selected.id]: { ...details[selected.id], annotations } });
+    try {
+      await api.addStackAnnotation(selected.id, key, value);
+      const annotations = await api.getStackAnnotations(selected.id);
+      setDetails({ ...details, [selected.id]: { ...details[selected.id], annotations } });
+      toast?.('Annotation added', 'success');
+    } catch (e) {
+      toast?.('Failed to add annotation: ' + getErrorMessage(e), 'error');
+    }
   };
 
   const removeAnnotation = async (key) => {
-    await api.removeStackAnnotation(selected.id, key);
-    const annotations = await api.getStackAnnotations(selected.id);
-    setDetails({ ...details, [selected.id]: { ...details[selected.id], annotations } });
+    try {
+      await api.removeStackAnnotation(selected.id, key);
+      const annotations = await api.getStackAnnotations(selected.id);
+      setDetails({ ...details, [selected.id]: { ...details[selected.id], annotations } });
+    } catch (e) {
+      toast?.('Failed to remove annotation: ' + getErrorMessage(e), 'error');
+    }
   };
 
   const copyDeployment = async (depId) => {
-    const dep = await api.getDeployment(depId);
-    setYaml(dep.yaml_content);
-    setIsDeletion(dep.is_deletion_marker);
-    setShowDeploy(true);
+    try {
+      const dep = await api.getDeployment(depId);
+      setYaml(dep.yaml_content);
+      setIsDeletion(dep.is_deletion_marker);
+      setShowDeploy(true);
+    } catch (e) {
+      toast?.('Failed to load deployment: ' + getErrorMessage(e), 'error');
+    }
   };
 
   const requestDiagnostic = async (depId, agentId) => {
     try {
       const req = await api.createDiagnostic(depId, agentId, 'ui-slim', 60);
       setDiagnosticResult({ status: 'pending', request: req, id: req.id });
+      toast?.('Diagnostic requested', 'success');
       // Poll for result
       const pollResult = async () => {
         try {
@@ -394,10 +432,14 @@ const StacksPanel = ({ generators, agents, onRefresh }) => {
           } else if (res.request.status === 'pending') {
             setTimeout(pollResult, 2000);
           }
-        } catch (e) { console.error(e); }
+        } catch (e) {
+          toast?.('Failed to poll diagnostic: ' + getErrorMessage(e), 'error');
+        }
       };
       setTimeout(pollResult, 2000);
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      toast?.('Failed to request diagnostic: ' + getErrorMessage(e), 'error');
+    }
   };
 
   if (loading) return <div className="loading">Loading stacks...</div>;
@@ -415,32 +457,44 @@ const StacksPanel = ({ generators, agents, onRefresh }) => {
       {stacks.length === 0 ? (
         <div className="empty">No stacks found</div>
       ) : (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Description</th>
-                <th>Labels</th>
-                <th>Deployments</th>
-              </tr>
-            </thead>
-            <tbody>
-              {stacks.map((s) => (
-                <tr key={s.id} onClick={() => selectStack(s)} className="clickable">
-                  <td className="mono">{s.name}</td>
-                  <td className="dim">{s.description || '—'}</td>
-                  <td>
-                    {details[s.id]?.labels?.map((l) => (
-                      <Tag key={l.id} variant="label">{l.label}</Tag>
-                    ))}
-                  </td>
-                  <td>—</td>
+        <>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Description</th>
+                  <th>Labels</th>
+                  <th>Deployments</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {pagination.paginatedItems.map((s) => (
+                  <tr key={s.id} onClick={() => selectStack(s)} className="clickable">
+                    <td className="mono">{s.name}</td>
+                    <td className="dim">{s.description || '—'}</td>
+                    <td>
+                      {details[s.id]?.labels?.map((l) => (
+                        <Tag key={l.id} variant="label">{l.label}</Tag>
+                      ))}
+                    </td>
+                    <td>—</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {stacks.length > 10 && (
+            <Pagination
+              page={pagination.page}
+              totalPages={pagination.totalPages}
+              onPageChange={pagination.setPage}
+              pageSize={pagination.pageSize}
+              onPageSizeChange={pagination.setPageSize}
+              total={pagination.total}
+            />
+          )}
+        </>
       )}
 
       {showCreate && (
@@ -602,6 +656,8 @@ const TemplatesPanel = ({ stacks }) => {
   const [newTemplate, setNewTemplate] = useState({ name: '', description: '', content: '', schema: '{}' });
   const [instantiateForm, setInstantiateForm] = useState({ stackId: '', params: '{}' });
   const [loading, setLoading] = useState(true);
+  const toast = useToast();
+  const pagination = usePagination(templates);
 
   const defaultContent = `apiVersion: v1
 kind: ConfigMap
@@ -622,46 +678,72 @@ data:
         d[t.id] = { labels, annotations };
       }));
       setDetails(d);
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      toast?.('Failed to load templates: ' + getErrorMessage(e), 'error');
+    }
     setLoading(false);
-  }, []);
+  }, [toast]);
 
   useEffect(() => { load(); }, [load]);
 
   const create = async (e) => {
     e.preventDefault();
-    await api.createTemplate(newTemplate.name, newTemplate.description, newTemplate.content, newTemplate.schema);
-    setShowCreate(false);
-    setNewTemplate({ name: '', description: '', content: '', schema: '{}' });
-    load();
+    try {
+      await api.createTemplate(newTemplate.name, newTemplate.description, newTemplate.content, newTemplate.schema);
+      setShowCreate(false);
+      setNewTemplate({ name: '', description: '', content: '', schema: '{}' });
+      toast?.('Template created', 'success');
+      load();
+    } catch (e) {
+      toast?.('Failed to create template: ' + getErrorMessage(e), 'error');
+    }
   };
 
   const instantiate = async (e) => {
     e.preventDefault();
-    const params = JSON.parse(instantiateForm.params);
-    await api.instantiateTemplate(instantiateForm.stackId, selected.id, params);
-    setShowInstantiate(false);
-    setInstantiateForm({ stackId: '', params: '{}' });
+    try {
+      const params = JSON.parse(instantiateForm.params);
+      await api.instantiateTemplate(instantiateForm.stackId, selected.id, params);
+      setShowInstantiate(false);
+      setInstantiateForm({ stackId: '', params: '{}' });
+      toast?.('Template instantiated', 'success');
+    } catch (e) {
+      toast?.('Failed to instantiate template: ' + getErrorMessage(e), 'error');
+    }
   };
 
   const remove = async (id) => {
     if (window.confirm('Delete this template?')) {
-      await api.deleteTemplate(id);
-      setSelected(null);
-      load();
+      try {
+        await api.deleteTemplate(id);
+        setSelected(null);
+        toast?.('Template deleted', 'success');
+        load();
+      } catch (e) {
+        toast?.('Failed to delete template: ' + getErrorMessage(e), 'error');
+      }
     }
   };
 
   const addLabel = async (label) => {
-    await api.addTemplateLabel(selected.id, label);
-    const labels = await api.getTemplateLabels(selected.id);
-    setDetails({ ...details, [selected.id]: { ...details[selected.id], labels } });
+    try {
+      await api.addTemplateLabel(selected.id, label);
+      const labels = await api.getTemplateLabels(selected.id);
+      setDetails({ ...details, [selected.id]: { ...details[selected.id], labels } });
+      toast?.('Label added', 'success');
+    } catch (e) {
+      toast?.('Failed to add label: ' + getErrorMessage(e), 'error');
+    }
   };
 
   const removeLabel = async (label) => {
-    await api.removeTemplateLabel(selected.id, label);
-    const labels = await api.getTemplateLabels(selected.id);
-    setDetails({ ...details, [selected.id]: { ...details[selected.id], labels } });
+    try {
+      await api.removeTemplateLabel(selected.id, label);
+      const labels = await api.getTemplateLabels(selected.id);
+      setDetails({ ...details, [selected.id]: { ...details[selected.id], labels } });
+    } catch (e) {
+      toast?.('Failed to remove label: ' + getErrorMessage(e), 'error');
+    }
   };
 
   if (loading) return <div className="loading">Loading templates...</div>;
@@ -679,36 +761,48 @@ data:
       {templates.length === 0 ? (
         <div className="empty">No templates found</div>
       ) : (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Version</th>
-                <th>Description</th>
-                <th>Labels</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {templates.map((t) => (
-                <tr key={t.id} onClick={() => setSelected(t)} className="clickable">
-                  <td className="mono">{t.name}</td>
-                  <td><Tag variant="version">v{t.version}</Tag></td>
-                  <td className="dim">{t.description || '—'}</td>
-                  <td>
-                    {details[t.id]?.labels?.map((l) => (
-                      <Tag key={l.id} variant="label">{l.label}</Tag>
-                    ))}
-                  </td>
-                  <td>
-                    <button onClick={(e) => { e.stopPropagation(); setSelected(t); setShowInstantiate(true); }} className="btn-small">▶ Use</button>
-                  </td>
+        <>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Version</th>
+                  <th>Description</th>
+                  <th>Labels</th>
+                  <th>Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {pagination.paginatedItems.map((t) => (
+                  <tr key={t.id} onClick={() => setSelected(t)} className="clickable">
+                    <td className="mono">{t.name}</td>
+                    <td><Tag variant="version">v{t.version}</Tag></td>
+                    <td className="dim">{t.description || '—'}</td>
+                    <td>
+                      {details[t.id]?.labels?.map((l) => (
+                        <Tag key={l.id} variant="label">{l.label}</Tag>
+                      ))}
+                    </td>
+                    <td>
+                      <button onClick={(e) => { e.stopPropagation(); setSelected(t); setShowInstantiate(true); }} className="btn-small">▶ Use</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {templates.length > 10 && (
+            <Pagination
+              page={pagination.page}
+              totalPages={pagination.totalPages}
+              onPageChange={pagination.setPage}
+              pageSize={pagination.pageSize}
+              onPageSizeChange={pagination.setPageSize}
+              total={pagination.total}
+            />
+          )}
+        </>
       )}
 
       {showCreate && (
@@ -809,6 +903,9 @@ const JobsPanel = ({ agents }) => {
     backoffSeconds: 60
   });
   const [loading, setLoading] = useState(true);
+  const [buildDemoRunning, setBuildDemoRunning] = useState(false);
+  const [buildDemoStatus, setBuildDemoStatus] = useState(null);
+  const toast = useToast();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -819,32 +916,130 @@ const JobsPanel = ({ agents }) => {
       ]);
       setWorkOrders(orders);
       setWorkOrderLog(log);
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      toast?.('Failed to load jobs: ' + getErrorMessage(e), 'error');
+    }
     setLoading(false);
-  }, []);
+  }, [toast]);
 
   useEffect(() => { load(); }, [load]);
 
   const create = async (e) => {
     e.preventDefault();
-    const targeting = {};
-    if (form.targetAgentIds.length > 0) targeting.agent_ids = form.targetAgentIds;
-    if (form.targetLabels.trim()) targeting.labels = form.targetLabels.split(',').map(l => l.trim()).filter(Boolean);
+    try {
+      const targeting = {};
+      if (form.targetAgentIds.length > 0) targeting.agent_ids = form.targetAgentIds;
+      if (form.targetLabels.trim()) targeting.labels = form.targetLabels.split(',').map(l => l.trim()).filter(Boolean);
 
-    await api.createWorkOrder(form.workType, form.yamlContent, targeting, {
-      maxRetries: form.maxRetries,
-      backoffSeconds: form.backoffSeconds
-    });
-    setShowCreate(false);
-    setForm({ workType: 'build', yamlContent: '', targetAgentIds: [], targetLabels: '', maxRetries: 3, backoffSeconds: 60 });
-    load();
+      await api.createWorkOrder(form.workType, form.yamlContent, targeting, {
+        maxRetries: form.maxRetries,
+        backoffSeconds: form.backoffSeconds
+      });
+      setShowCreate(false);
+      setForm({ workType: 'build', yamlContent: '', targetAgentIds: [], targetLabels: '', maxRetries: 3, backoffSeconds: 60 });
+      toast?.('Work order created', 'success');
+      load();
+    } catch (e) {
+      toast?.('Failed to create work order: ' + getErrorMessage(e), 'error');
+    }
   };
 
   const cancel = async (id) => {
     if (window.confirm('Cancel this work order?')) {
-      await api.deleteWorkOrder(id);
-      load();
+      try {
+        await api.deleteWorkOrder(id);
+        toast?.('Work order cancelled', 'success');
+        load();
+      } catch (e) {
+        toast?.('Failed to cancel work order: ' + getErrorMessage(e), 'error');
+      }
     }
+  };
+
+  // Build Demo - creates a build work order for the webhook-catcher
+  const runBuildDemo = async () => {
+    if (buildDemoRunning) return;
+    setBuildDemoRunning(true);
+    setBuildDemoStatus({ step: 'creating', message: 'Creating build work order...' });
+
+    try {
+      // Create the build work order
+      const workOrder = await api.createBuildWorkOrder();
+      setBuildDemoStatus({ step: 'pending', message: 'Build work order created, waiting for agent to claim...', workOrderId: workOrder.id });
+      toast?.('Build work order created', 'success');
+
+      // Poll for completion
+      const pollInterval = setInterval(async () => {
+        try {
+          // Check if still in active work orders
+          const orders = await api.getWorkOrders();
+          const current = orders.find(o => o.id === workOrder.id);
+
+          if (current) {
+            if (current.status === 'CLAIMED') {
+              setBuildDemoStatus({ step: 'building', message: 'Agent claimed work order, building...', workOrderId: workOrder.id });
+            } else if (current.status === 'RETRY_PENDING') {
+              setBuildDemoStatus({ step: 'retrying', message: `Build failed, retrying (${current.retry_count}/${current.max_retries})...`, workOrderId: workOrder.id, error: current.last_error });
+            }
+          } else {
+            // Check work order log for completion
+            const log = await api.getWorkOrderLog('build', null, null, 10);
+            const completed = log.find(l => l.original_work_order_id === workOrder.id);
+
+            if (completed) {
+              clearInterval(pollInterval);
+              if (completed.success) {
+                setBuildDemoStatus({
+                  step: 'completed',
+                  message: 'Build completed successfully!',
+                  workOrderId: workOrder.id,
+                  result: completed.result_message
+                });
+                toast?.('Build completed successfully!', 'success');
+              } else {
+                setBuildDemoStatus({
+                  step: 'failed',
+                  message: 'Build failed',
+                  workOrderId: workOrder.id,
+                  error: completed.result_message
+                });
+                toast?.('Build failed: ' + completed.result_message, 'error');
+              }
+              setBuildDemoRunning(false);
+              load();
+            }
+          }
+        } catch (e) {
+          console.error('Error polling build status:', e);
+        }
+      }, 3000);
+
+      // Timeout after 15 minutes
+      setTimeout(() => {
+        clearInterval(pollInterval);
+        if (buildDemoRunning) {
+          setBuildDemoRunning(false);
+          setBuildDemoStatus({ step: 'timeout', message: 'Build timed out after 15 minutes' });
+          toast?.('Build timed out', 'error');
+        }
+      }, 15 * 60 * 1000);
+
+      load();
+    } catch (e) {
+      setBuildDemoRunning(false);
+      setBuildDemoStatus({ step: 'error', message: 'Failed to create build work order: ' + getErrorMessage(e) });
+      toast?.('Failed to create build work order: ' + getErrorMessage(e), 'error');
+    }
+  };
+
+  // Pre-fill the create form with the webhook-catcher build YAML
+  const prefillBuildDemo = () => {
+    setForm({
+      ...form,
+      workType: 'build',
+      yamlContent: api.getDemoBuildYaml()
+    });
+    setShowCreate(true);
   };
 
   if (loading) return <div className="loading">Loading jobs...</div>;
@@ -858,6 +1053,55 @@ const JobsPanel = ({ agents }) => {
           <button onClick={load} className="btn-icon">↻</button>
         </div>
       </div>
+
+      <Section title="Build Demo" icon="🔨" defaultOpen>
+        <p className="dim" style={{ marginBottom: '12px' }}>
+          Build the webhook-catcher service from source using Shipwright. This demonstrates the complete build pipeline: Git clone → Container build → Push to registry.
+        </p>
+        <div className="build-demo-actions">
+          <button
+            onClick={runBuildDemo}
+            className={`btn-primary ${buildDemoRunning ? 'disabled' : ''}`}
+            disabled={buildDemoRunning}
+          >
+            {buildDemoRunning ? '⏳ Building...' : '▶ Run Build'}
+          </button>
+          <button onClick={prefillBuildDemo} className="btn-secondary">
+            📝 View Build YAML
+          </button>
+        </div>
+
+        {buildDemoStatus && (
+          <div className={`build-demo-status build-demo-${buildDemoStatus.step}`}>
+            <div className="build-demo-step">
+              {buildDemoStatus.step === 'creating' && '⏳'}
+              {buildDemoStatus.step === 'pending' && '⏳'}
+              {buildDemoStatus.step === 'building' && '🔨'}
+              {buildDemoStatus.step === 'retrying' && '🔄'}
+              {buildDemoStatus.step === 'completed' && '✅'}
+              {buildDemoStatus.step === 'failed' && '❌'}
+              {buildDemoStatus.step === 'error' && '❌'}
+              {buildDemoStatus.step === 'timeout' && '⏰'}
+              <span>{buildDemoStatus.message}</span>
+            </div>
+            {buildDemoStatus.workOrderId && (
+              <div className="build-demo-id dim">
+                Work Order: {buildDemoStatus.workOrderId.slice(0, 8)}...
+              </div>
+            )}
+            {buildDemoStatus.result && (
+              <div className="build-demo-result">
+                <strong>Image Digest:</strong> <code>{buildDemoStatus.result}</code>
+              </div>
+            )}
+            {buildDemoStatus.error && (
+              <div className="build-demo-error error-text">
+                {buildDemoStatus.error}
+              </div>
+            )}
+          </div>
+        )}
+      </Section>
 
       <Section title="Active Work Orders" icon="▶" count={workOrders.length} defaultOpen>
         {workOrders.length === 0 ? (
@@ -1025,6 +1269,7 @@ const AdminPanel = ({ onGeneratorsChange, onAgentsChange }) => {
   const [newPak, setNewPak] = useState(null);
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(true);
+  const toast = useToast();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1034,9 +1279,11 @@ const AdminPanel = ({ onGeneratorsChange, onAgentsChange }) => {
       setGenerators(g);
       onAgentsChange?.(a);
       onGeneratorsChange?.(g);
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      toast?.('Failed to load admin data: ' + getErrorMessage(e), 'error');
+    }
     setLoading(false);
-  }, [onAgentsChange, onGeneratorsChange]);
+  }, [onAgentsChange, onGeneratorsChange, toast]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -1046,13 +1293,17 @@ const AdminPanel = ({ onGeneratorsChange, onAgentsChange }) => {
       if (showCreate === 'agent') {
         const res = await api.createAgent(form.name, form.cluster);
         setNewPak(res.initial_pak);
+        toast?.('Agent created', 'success');
       } else {
         const res = await api.createGenerator(form.name, form.description);
         setNewPak(res.pak);
+        toast?.('Generator created', 'success');
       }
       setCopied(false);
       load();
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      toast?.('Failed to create: ' + getErrorMessage(e), 'error');
+    }
   };
 
   const rotate = async (type, id) => {
@@ -1061,7 +1312,10 @@ const AdminPanel = ({ onGeneratorsChange, onAgentsChange }) => {
       setNewPak(res.pak);
       setCopied(false);
       setShowCreate(type);
-    } catch (e) { console.error(e); }
+      toast?.('PAK rotated', 'success');
+    } catch (e) {
+      toast?.('Failed to rotate PAK: ' + getErrorMessage(e), 'error');
+    }
   };
 
   const copy = () => {
@@ -1156,23 +1410,1733 @@ const AdminPanel = ({ onGeneratorsChange, onAgentsChange }) => {
   );
 };
 
+// ==================== WEBHOOKS PANEL ====================
+const WebhooksPanel = () => {
+  const [webhooks, setWebhooks] = useState([]);
+  const [eventTypes, setEventTypes] = useState([]);
+  const [selected, setSelected] = useState(null);
+  const [deliveries, setDeliveries] = useState([]);
+  const [showCreate, setShowCreate] = useState(false);
+  const [autoRefresh, setAutoRefresh] = useState(false);
+  const [form, setForm] = useState({
+    name: '',
+    url: '',
+    eventTypes: [],
+    authHeader: '',
+    maxRetries: 5,
+    timeoutSeconds: 30
+  });
+  const [loading, setLoading] = useState(true);
+  const toast = useToast();
+  const pagination = usePagination(webhooks);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [wh, types] = await Promise.all([api.getWebhooks(), api.getWebhookEventTypes()]);
+      setWebhooks(wh);
+      setEventTypes(types);
+    } catch (e) {
+      toast?.('Failed to load webhooks: ' + getErrorMessage(e), 'error');
+    }
+    setLoading(false);
+  }, [toast]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const selectWebhook = async (webhook) => {
+    setSelected(webhook);
+    try {
+      const dels = await api.getWebhookDeliveries(webhook.id, null, 50);
+      setDeliveries(dels);
+    } catch (e) {
+      toast?.('Failed to load deliveries: ' + getErrorMessage(e), 'error');
+      setDeliveries([]);
+    }
+  };
+
+  const create = async (e) => {
+    e.preventDefault();
+    try {
+      await api.createWebhook(
+        form.name,
+        form.url,
+        form.eventTypes,
+        form.authHeader || null,
+        { maxRetries: form.maxRetries, timeoutSeconds: form.timeoutSeconds }
+      );
+      setShowCreate(false);
+      setForm({ name: '', url: '', eventTypes: [], authHeader: '', maxRetries: 5, timeoutSeconds: 30 });
+      toast?.('Webhook created', 'success');
+      load();
+    } catch (e) {
+      toast?.('Failed to create webhook: ' + getErrorMessage(e), 'error');
+    }
+  };
+
+  const toggleEnabled = async (webhook) => {
+    try {
+      await api.updateWebhook(webhook.id, { enabled: !webhook.enabled });
+      load();
+      if (selected?.id === webhook.id) {
+        setSelected({ ...selected, enabled: !webhook.enabled });
+      }
+      toast?.(webhook.enabled ? 'Webhook disabled' : 'Webhook enabled', 'success');
+    } catch (e) {
+      toast?.('Failed to update webhook: ' + getErrorMessage(e), 'error');
+    }
+  };
+
+  const remove = async (id) => {
+    if (window.confirm('Delete this webhook?')) {
+      try {
+        await api.deleteWebhook(id);
+        setSelected(null);
+        toast?.('Webhook deleted', 'success');
+        load();
+      } catch (e) {
+        toast?.('Failed to delete webhook: ' + getErrorMessage(e), 'error');
+      }
+    }
+  };
+
+  const toggleEventType = (type) => {
+    if (form.eventTypes.includes(type)) {
+      setForm({ ...form, eventTypes: form.eventTypes.filter(t => t !== type) });
+    } else {
+      setForm({ ...form, eventTypes: [...form.eventTypes, type] });
+    }
+  };
+
+  if (loading) return <div className="loading">Loading webhooks...</div>;
+
+  return (
+    <div className="panel">
+      <div className="panel-header">
+        <h2>🔔 Webhooks</h2>
+        <div className="panel-actions">
+          <button onClick={() => setShowCreate(true)} className="btn-primary">+ New Webhook</button>
+          <button onClick={load} className="btn-icon">↻</button>
+        </div>
+      </div>
+
+      {webhooks.length === 0 ? (
+        <div className="empty">No webhooks configured</div>
+      ) : (
+        <>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Status</th>
+                  <th>Events</th>
+                  <th>URL</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pagination.paginatedItems.map((w) => (
+                  <tr key={w.id} onClick={() => selectWebhook(w)} className="clickable">
+                    <td className="mono">{w.name}</td>
+                    <td>
+                      <span className={`status status-${w.enabled ? 'green' : 'gray'}`}>
+                        {w.enabled ? 'enabled' : 'disabled'}
+                      </span>
+                    </td>
+                    <td>
+                      {w.event_types?.slice(0, 3).map((e, i) => (
+                        <Tag key={i} variant="info">{e}</Tag>
+                      ))}
+                      {w.event_types?.length > 3 && <span className="dim">+{w.event_types.length - 3}</span>}
+                    </td>
+                    <td className="dim">{w.has_url ? '••••••••' : '—'}</td>
+                    <td>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); toggleEnabled(w); }}
+                        className="btn-icon"
+                        title={w.enabled ? 'Disable' : 'Enable'}
+                      >
+                        {w.enabled ? '⏸' : '▶'}
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); remove(w.id); }}
+                        className="btn-icon"
+                        title="Delete"
+                      >
+                        ✕
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {webhooks.length > 10 && (
+            <Pagination
+              page={pagination.page}
+              totalPages={pagination.totalPages}
+              onPageChange={pagination.setPage}
+              pageSize={pagination.pageSize}
+              onPageSizeChange={pagination.setPageSize}
+              total={pagination.total}
+            />
+          )}
+        </>
+      )}
+
+      {showCreate && (
+        <Modal title="Create Webhook" onClose={() => setShowCreate(false)}>
+          <form onSubmit={create} className="form">
+            <label>Name
+              <input
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                placeholder="My Webhook"
+                required
+              />
+            </label>
+            <label>URL
+              <input
+                value={form.url}
+                onChange={(e) => setForm({ ...form, url: e.target.value })}
+                placeholder="https://example.com/webhook"
+                type="url"
+                required
+              />
+            </label>
+            <label>Authorization Header (optional)
+              <input
+                value={form.authHeader}
+                onChange={(e) => setForm({ ...form, authHeader: e.target.value })}
+                placeholder="Bearer your-token"
+              />
+            </label>
+            <label>Event Types
+              <div className="event-type-grid">
+                {eventTypes.map((type) => (
+                  <label key={type} className="checkbox-inline">
+                    <input
+                      type="checkbox"
+                      checked={form.eventTypes.includes(type)}
+                      onChange={() => toggleEventType(type)}
+                    />
+                    <span>{type}</span>
+                  </label>
+                ))}
+              </div>
+            </label>
+            <div className="form-row">
+              <label>Max Retries
+                <input
+                  type="number"
+                  value={form.maxRetries}
+                  onChange={(e) => setForm({ ...form, maxRetries: parseInt(e.target.value) })}
+                  min="0"
+                  max="10"
+                />
+              </label>
+              <label>Timeout (seconds)
+                <input
+                  type="number"
+                  value={form.timeoutSeconds}
+                  onChange={(e) => setForm({ ...form, timeoutSeconds: parseInt(e.target.value) })}
+                  min="1"
+                  max="300"
+                />
+              </label>
+            </div>
+            <div className="form-actions">
+              <button type="button" onClick={() => setShowCreate(false)}>Cancel</button>
+              <button type="submit" className="btn-primary" disabled={form.eventTypes.length === 0}>Create</button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {selected && (
+        <Modal title={`Webhook: ${selected.name}`} onClose={() => setSelected(null)}>
+          <div className="detail-grid">
+            <div className="detail-row">
+              <span className="detail-label">ID</span>
+              <span className="mono">{selected.id}</span>
+            </div>
+            <div className="detail-row">
+              <span className="detail-label">Status</span>
+              <span className={`status status-${selected.enabled ? 'green' : 'gray'}`}>
+                {selected.enabled ? 'enabled' : 'disabled'}
+              </span>
+              <button
+                onClick={() => toggleEnabled(selected)}
+                className={`btn-toggle ${selected.enabled ? 'active' : ''}`}
+              >
+                {selected.enabled ? 'Disable' : 'Enable'}
+              </button>
+            </div>
+            <div className="detail-row">
+              <span className="detail-label">URL</span>
+              <span className="dim">{selected.has_url ? '(encrypted)' : '—'}</span>
+            </div>
+            <div className="detail-row">
+              <span className="detail-label">Auth Header</span>
+              <span className="dim">{selected.has_auth_header ? '(configured)' : 'none'}</span>
+            </div>
+            <div className="detail-row">
+              <span className="detail-label">Max Retries</span>
+              <span>{selected.max_retries}</span>
+            </div>
+            <div className="detail-row">
+              <span className="detail-label">Timeout</span>
+              <span>{selected.timeout_seconds}s</span>
+            </div>
+          </div>
+
+          <div className="detail-section">
+            <h4>Event Types</h4>
+            <div className="tags">
+              {selected.event_types?.map((e, i) => (
+                <Tag key={i} variant="info">{e}</Tag>
+              ))}
+            </div>
+          </div>
+
+          <div className="detail-section">
+            <h4>Recent Deliveries</h4>
+            {deliveries.length === 0 ? (
+              <div className="empty-small">No deliveries yet</div>
+            ) : (
+              <div className="table-wrap">
+                <table className="table-compact">
+                  <thead>
+                    <tr>
+                      <th>Event</th>
+                      <th>Status</th>
+                      <th>Attempts</th>
+                      <th>Created</th>
+                      <th>Error</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {deliveries.map((d) => (
+                      <tr key={d.id}>
+                        <td><Tag variant="info">{d.event_type}</Tag></td>
+                        <td><Status status={d.status} /></td>
+                        <td>{d.attempts}</td>
+                        <td className="dim">{new Date(d.created_at).toLocaleString()}</td>
+                        <td className="dim" title={d.last_error || ''}>
+                          {d.last_error ? (d.last_error.slice(0, 30) + (d.last_error.length > 30 ? '...' : '')) : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          <div className="form-actions">
+            <button onClick={() => remove(selected.id)} className="btn-danger">Delete</button>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+};
+
+// ==================== METRICS PANEL ====================
+const MetricsPanel = () => {
+  const [metrics, setMetrics] = useState(null);
+  const [parsedMetrics, setParsedMetrics] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [autoRefresh, setAutoRefresh] = useState(false);
+  const toast = useToast();
+
+  const load = useCallback(async () => {
+    try {
+      const raw = await api.getMetrics();
+      setMetrics(raw);
+      setParsedMetrics(api.parseMetrics(raw));
+    } catch (e) {
+      toast?.('Failed to load metrics: ' + getErrorMessage(e), 'error');
+    }
+    setLoading(false);
+  }, [toast]);
+
+  useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    if (!autoRefresh) return;
+    const interval = setInterval(load, 5000);
+    return () => clearInterval(interval);
+  }, [autoRefresh, load]);
+
+  // Helper to get metric value
+  const getMetricValue = (name, labels = {}) => {
+    if (!parsedMetrics || !parsedMetrics[name]) return null;
+    const match = parsedMetrics[name].find(m =>
+      Object.entries(labels).every(([k, v]) => m.labels[k] === v)
+    );
+    return match ? match.value : null;
+  };
+
+  // Get all values for a metric
+  const getMetricValues = (name) => parsedMetrics?.[name] || [];
+
+  // Sum all values for a counter/gauge
+  const sumMetric = (name) => {
+    const values = getMetricValues(name);
+    return values.reduce((sum, m) => sum + m.value, 0);
+  };
+
+  if (loading) return <div className="loading">Loading metrics...</div>;
+
+  // Calculate summary stats
+  const totalRequests = sumMetric('brokkr_http_requests_total');
+  const activeAgents = getMetricValue('brokkr_active_agents') || 0;
+  const totalStacks = getMetricValue('brokkr_stacks_total') || 0;
+  const totalDeployments = getMetricValue('brokkr_deployment_objects_total') || 0;
+
+  // Get request breakdown by endpoint
+  const requestsByEndpoint = {};
+  getMetricValues('brokkr_http_requests_total').forEach(m => {
+    const endpoint = m.labels.endpoint || 'unknown';
+    requestsByEndpoint[endpoint] = (requestsByEndpoint[endpoint] || 0) + m.value;
+  });
+
+  // Get agent heartbeat ages
+  const heartbeatAges = getMetricValues('brokkr_agent_heartbeat_age_seconds');
+
+  return (
+    <div className="panel">
+      <div className="panel-header">
+        <h2>📊 Metrics</h2>
+        <div className="panel-actions">
+          <label className="checkbox-inline">
+            <input
+              type="checkbox"
+              checked={autoRefresh}
+              onChange={(e) => setAutoRefresh(e.target.checked)}
+            />
+            <span>Auto-refresh</span>
+          </label>
+          <button onClick={load} className="btn-icon">↻</button>
+        </div>
+      </div>
+
+      <Section title="System Overview" icon="◈" defaultOpen>
+        <div className="metrics-grid">
+          <div className="metric-card">
+            <div className="metric-value">{totalRequests.toLocaleString()}</div>
+            <div className="metric-label">Total HTTP Requests</div>
+          </div>
+          <div className="metric-card">
+            <div className="metric-value">{activeAgents}</div>
+            <div className="metric-label">Active Agents</div>
+          </div>
+          <div className="metric-card">
+            <div className="metric-value">{totalStacks}</div>
+            <div className="metric-label">Total Stacks</div>
+          </div>
+          <div className="metric-card">
+            <div className="metric-value">{totalDeployments}</div>
+            <div className="metric-label">Deployment Objects</div>
+          </div>
+        </div>
+      </Section>
+
+      <Section title="HTTP Request Breakdown" icon="▶" defaultOpen>
+        {Object.keys(requestsByEndpoint).length === 0 ? (
+          <div className="empty-small">No HTTP requests recorded yet</div>
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Endpoint</th>
+                  <th>Requests</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(requestsByEndpoint)
+                  .sort((a, b) => b[1] - a[1])
+                  .slice(0, 15)
+                  .map(([endpoint, count]) => (
+                    <tr key={endpoint}>
+                      <td className="mono">{endpoint}</td>
+                      <td>{count.toLocaleString()}</td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Section>
+
+      <Section title="Agent Heartbeats" icon="♥">
+        {heartbeatAges.length === 0 ? (
+          <div className="empty-small">No agent heartbeat data</div>
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Agent</th>
+                  <th>Last Heartbeat Age</th>
+                </tr>
+              </thead>
+              <tbody>
+                {heartbeatAges.map((m, i) => (
+                  <tr key={i}>
+                    <td className="mono">{m.labels.agent_name || m.labels.agent_id}</td>
+                    <td>
+                      <span className={m.value > 300 ? 'error-text' : m.value > 60 ? 'warning-text' : ''}>
+                        {m.value.toFixed(1)}s
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Section>
+
+      <Section title="Raw Metrics" icon="📄">
+        <div className="metrics-raw">
+          <pre className="code-block">{metrics?.slice(0, 5000)}{metrics?.length > 5000 && '\n... (truncated)'}</pre>
+        </div>
+      </Section>
+    </div>
+  );
+};
+
+// ==================== DEMO PANEL ====================
+const DemoPanel = () => {
+  const toast = useToast();
+  const [demoState, setDemoState] = useState({
+    status: 'idle', // idle, running, completed, error
+    currentPhase: 0,
+    startTime: null,
+    integrationAgent: null, // Stored from Phase 1 for use in other phases
+    phases: {
+      1: { name: 'Health Check', status: 'pending', steps: [], duration: null },
+      2: { name: 'Agent Setup', status: 'pending', steps: [], duration: null },
+      3: { name: 'Webhook Subscriptions', status: 'pending', steps: [], duration: null },
+      4: { name: 'Stack Deployment', status: 'pending', steps: [], duration: null },
+      5: { name: 'Work Order', status: 'pending', steps: [], workOrder: null, duration: null },
+      6: { name: 'Template Deployment', status: 'pending', steps: [], duration: null },
+      7: { name: 'Container Build', status: 'pending', steps: [], workOrder: null, duration: null, async: true },
+      8: { name: 'Event Summary', status: 'pending', steps: [], duration: null }
+    },
+    summary: { builds: 0, generators: 0, agents: 0, stacks: 0, deployments: 0, webhooks: 0, templates: 0, workOrders: 0 },
+    createdResources: { workOrderIds: [], agentIds: [], stackIds: [], webhookIds: [], templateIds: [], deploymentIds: [] }
+  });
+  const [cleanupRunning, setCleanupRunning] = useState(false);
+
+  // Webhook events state for real-time event log
+  const [webhookEvents, setWebhookEvents] = useState([]);
+  const [eventPolling, setEventPolling] = useState(false);
+  const pollingIntervalRef = React.useRef(null);
+
+  // Start polling for webhook events
+  const startEventPolling = () => {
+    if (pollingIntervalRef.current) return;
+    setEventPolling(true);
+    const poll = async () => {
+      try {
+        const stats = await api.getWebhookCatcherStats();
+        if (stats.messages) {
+          // Sort by received_at descending (newest first)
+          const sorted = [...stats.messages].sort((a, b) =>
+            new Date(b.received_at) - new Date(a.received_at)
+          );
+          setWebhookEvents(sorted);
+        }
+      } catch (e) {
+        // Webhook catcher might not be running
+      }
+    };
+    poll(); // Initial poll
+    pollingIntervalRef.current = setInterval(poll, 3000);
+  };
+
+  // Stop polling for webhook events
+  const stopEventPolling = () => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+    setEventPolling(false);
+  };
+
+  // Clear webhook events
+  const clearWebhookEvents = async () => {
+    try {
+      await api.clearWebhookCatcher();
+      setWebhookEvents([]);
+    } catch (e) {
+      toast?.('Failed to clear events', 'error');
+    }
+  };
+
+  // Cleanup polling on unmount
+  React.useEffect(() => {
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
+    };
+  }, []);
+
+  // Get event type category for styling
+  const getEventTypeClass = (eventType) => {
+    if (!eventType) return '';
+    if (eventType.startsWith('workorder.')) return 'type-workorder';
+    if (eventType.startsWith('deployment.')) return 'type-deployment';
+    if (eventType.startsWith('health.')) return 'type-health';
+    if (eventType.startsWith('agent.')) return 'type-agent';
+    return '';
+  };
+
+  // Get event status class
+  const getEventStatusClass = (event) => {
+    const eventType = event?.body?.event_type || '';
+    if (eventType.includes('completed') || eventType.includes('applied') || eventType.includes('recovered') || eventType.includes('online')) {
+      return 'event-success';
+    }
+    if (eventType.includes('failed') || eventType.includes('failing') || eventType.includes('offline')) {
+      return 'event-failure';
+    }
+    if (eventType.includes('degraded')) {
+      return 'event-warning';
+    }
+    return '';
+  };
+
+  // Format event payload for display
+  const formatEventPayload = (event) => {
+    const body = event?.body;
+    if (!body) return '';
+    if (body.work_order_id) return `Work Order: ${body.work_order_id.slice(0, 8)}...`;
+    if (body.deployment_object_id) return `Deployment: ${body.deployment_object_id.slice(0, 8)}...`;
+    if (body.agent_id) return `Agent: ${body.agent_name || body.agent_id.slice(0, 8)}...`;
+    if (body.stack_id) return `Stack: ${body.stack_name || body.stack_id.slice(0, 8)}...`;
+    return '';
+  };
+
+  // EventLogPanel component
+  const EventLogPanel = () => (
+    <div className="demo-events-panel">
+      <div className="demo-events-header">
+        <h3>
+          Event Log
+          {webhookEvents.length > 0 && (
+            <span className="event-count">{webhookEvents.length}</span>
+          )}
+        </h3>
+        <div className="demo-events-actions">
+          <button onClick={clearWebhookEvents} title="Clear all events">Clear</button>
+          <button onClick={() => startEventPolling()} title="Refresh events">Refresh</button>
+        </div>
+      </div>
+      <div className="demo-events-list-container">
+        {webhookEvents.length === 0 ? (
+          <div className="demo-events-empty">
+            <span className="empty-icon">📭</span>
+            <span>No events yet</span>
+            <span>Events will appear here as they occur</span>
+          </div>
+        ) : (
+          webhookEvents.map((event, idx) => (
+            <div key={idx} className={`demo-event-item ${getEventStatusClass(event)}`}>
+              <div className="demo-event-top">
+                <span className={`demo-event-type-badge ${getEventTypeClass(event?.body?.event_type)}`}>
+                  {event?.body?.event_type || 'unknown'}
+                </span>
+                <span className="demo-event-timestamp">
+                  {new Date(event.received_at).toLocaleTimeString()}
+                </span>
+              </div>
+              <div className="demo-event-payload">
+                {formatEventPayload(event)}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+      <div className="demo-events-status">
+        {eventPolling ? (
+          <div className="polling-indicator">
+            <span className="polling-dot"></span>
+            Polling every 3s
+          </div>
+        ) : (
+          <span>Polling paused</span>
+        )}
+        <span>webhook-catcher:8090</span>
+      </div>
+    </div>
+  );
+
+  // Helper to update a specific phase
+  const updatePhase = (phaseNum, updates) => {
+    setDemoState(prev => ({
+      ...prev,
+      phases: {
+        ...prev.phases,
+        [phaseNum]: { ...prev.phases[phaseNum], ...updates }
+      }
+    }));
+  };
+
+  // Helper to add a step to a phase
+  const addStep = (phaseNum, step) => {
+    setDemoState(prev => ({
+      ...prev,
+      phases: {
+        ...prev.phases,
+        [phaseNum]: {
+          ...prev.phases[phaseNum],
+          steps: [...prev.phases[phaseNum].steps, { time: new Date(), ...step }]
+        }
+      }
+    }));
+  };
+
+  // Format duration
+  const formatDuration = (ms) => {
+    if (!ms) return '';
+    const seconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(seconds / 60);
+    if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
+    return `${seconds}s`;
+  };
+
+  // Initialize/reset the demo
+  const resetDemo = async () => {
+    // Clear webhook catcher events first
+    try {
+      await api.clearWebhookCatcher();
+      setWebhookEvents([]);
+    } catch (e) {
+      // Webhook catcher might not be running
+    }
+
+    setDemoState(prev => ({
+      ...prev,
+      status: 'ready',
+      startTime: Date.now(),
+      currentPhase: 0,
+      phases: {
+        1: { name: 'Health Check', status: 'pending', steps: [], duration: null },
+        2: { name: 'Agent Setup', status: 'pending', steps: [], duration: null },
+        3: { name: 'Webhook Subscriptions', status: 'pending', steps: [], duration: null },
+        4: { name: 'Stack Deployment', status: 'pending', steps: [], duration: null },
+        5: { name: 'Work Order', status: 'pending', steps: [], workOrder: null, duration: null },
+        6: { name: 'Template Deployment', status: 'pending', steps: [], duration: null },
+        7: { name: 'Container Build', status: 'pending', steps: [], workOrder: null, duration: null, async: true },
+        8: { name: 'Event Summary', status: 'pending', steps: [], duration: null }
+      },
+      summary: { builds: 0, generators: 0, agents: 0, stacks: 0, deployments: 0, webhooks: 0, templates: 0, workOrders: 0 },
+      createdResources: { workOrderIds: [], agentIds: [], stackIds: [], webhookIds: [], templateIds: [], deploymentIds: [] }
+    }));
+
+    // Start polling for events
+    startEventPolling();
+  };
+
+  // Check if a phase can be started
+  // Hybrid flow: phases run sequentially (1-8), manual advance between phases
+  // Phase 7 (build) is optional and can run async
+  const canStartPhase = (phaseNum) => {
+    if (demoState.status === 'idle') return false;
+    if (demoState.phases[phaseNum]?.status === 'running') return false;
+    if (demoState.phases[phaseNum]?.status === 'success') return false;
+
+    // Phase 1 can start anytime when demo is ready
+    if (phaseNum === 1) return demoState.phases[1]?.status === 'pending';
+
+    // Phases 2-6 require the previous phase to complete
+    if (phaseNum >= 2 && phaseNum <= 6) {
+      return demoState.phases[phaseNum - 1]?.status === 'success' &&
+             demoState.phases[phaseNum]?.status === 'pending';
+    }
+
+    // Phase 7 (container build) requires phase 6 to complete, is optional/async
+    if (phaseNum === 7) {
+      return demoState.phases[6]?.status === 'success' &&
+             demoState.phases[7]?.status === 'pending';
+    }
+
+    // Phase 8 (event summary) requires phase 6 to complete (can run while phase 7 is in progress)
+    if (phaseNum === 8) {
+      return demoState.phases[6]?.status === 'success' &&
+             demoState.phases[8]?.status === 'pending';
+    }
+
+    return false;
+  };
+
+  // Run a specific phase
+  const runPhase = async (phaseNum) => {
+    if (!canStartPhase(phaseNum)) return;
+
+    setDemoState(prev => ({ ...prev, currentPhase: phaseNum }));
+
+    try {
+      switch (phaseNum) {
+        case 1: await runPhase1(); break;
+        case 2: await runPhase2(); break;
+        case 3: await runPhase3(); break;
+        case 4: await runPhase4(); break;
+        case 5: await runPhase5(); break;
+        case 6: await runPhase6(); break;
+        case 7: await runPhase7(); break;
+        case 8: await runPhase8(); break;
+        default: break;
+      }
+
+      // Check if demo is complete (phase 8 finished or phases 1-6 + 8 done)
+      const allCoreComplete = [1, 2, 3, 4, 5, 6, 8].every(
+        p => demoState.phases[p]?.status === 'success'
+      );
+      if (phaseNum === 8 && allCoreComplete) {
+        stopEventPolling();
+        setDemoState(prev => ({ ...prev, status: 'completed', currentPhase: 0 }));
+        toast?.('Demo completed successfully!', 'success');
+      }
+    } catch (error) {
+      updatePhase(phaseNum, { status: 'error' });
+      toast?.(`Phase ${phaseNum} failed: ${error.message}`, 'error');
+    }
+  };
+
+  // Phase 1: Health Check
+  const runPhase1 = async () => {
+    const phaseStart = Date.now();
+    updatePhase(1, { status: 'running' });
+
+    // Check broker health
+    addStep(1, { text: 'Checking broker API...', status: 'running' });
+    try {
+      const res = await fetch(`${window.location.origin}/healthz`);
+      if (res.ok) {
+        addStep(1, { text: 'Broker API healthy', status: 'success', icon: '✓' });
+      } else {
+        throw new Error('Broker returned unhealthy status');
+      }
+    } catch (e) {
+      // Try localhost:3000 fallback
+      try {
+        const res = await fetch('http://localhost:3000/healthz');
+        if (res.ok) {
+          addStep(1, { text: 'Broker API healthy (localhost)', status: 'success', icon: '✓' });
+        } else {
+          throw e;
+        }
+      } catch (e2) {
+        addStep(1, { text: 'Broker API unreachable', status: 'error', icon: '✗' });
+        throw new Error('Broker API not available');
+      }
+    }
+
+    // Find integration agent
+    addStep(1, { text: 'Finding integration agent...', status: 'running' });
+    const agents = await api.getAgents();
+    let integrationAgent = agents.find(a => a.name === 'brokkr-integration-test-agent');
+    if (!integrationAgent) {
+      addStep(1, { text: 'Integration agent not found', status: 'error', icon: '✗' });
+      throw new Error('Integration agent not found. Run `angreal local up` first.');
+    }
+
+    const heartbeatAge = integrationAgent.last_heartbeat
+      ? Math.floor((Date.now() - new Date(integrationAgent.last_heartbeat).getTime()) / 1000)
+      : null;
+    addStep(1, {
+      text: `Agent found: ${integrationAgent.name}`,
+      status: 'success',
+      icon: '✓',
+      detail: `Status: ${integrationAgent.status}${heartbeatAge !== null ? `, heartbeat: ${heartbeatAge}s ago` : ''}`
+    });
+
+    // Store the integration agent for use in other phases
+    setDemoState(prev => ({ ...prev, integrationAgent }));
+
+    // Check webhook catcher
+    addStep(1, { text: 'Checking webhook catcher...', status: 'running' });
+    try {
+      const res = await fetch('http://localhost:8090/healthz');
+      if (res.ok) {
+        addStep(1, { text: 'Webhook catcher ready', status: 'success', icon: '✓' });
+      } else {
+        addStep(1, { text: 'Webhook catcher not healthy', status: 'warning', icon: '⚠' });
+      }
+    } catch (e) {
+      addStep(1, { text: 'Webhook catcher not reachable', status: 'warning', icon: '⚠', detail: 'Events will not be captured' });
+    }
+
+    // Clear any existing webhook events
+    addStep(1, { text: 'Clearing existing webhook events...', status: 'running' });
+    try {
+      await api.clearWebhookCatcher();
+      setWebhookEvents([]);
+      addStep(1, { text: 'Webhook events cleared', status: 'success', icon: '✓' });
+    } catch (e) {
+      addStep(1, { text: 'Could not clear events (continuing)', status: 'info', icon: '○' });
+    }
+
+    updatePhase(1, { status: 'success', duration: Date.now() - phaseStart });
+  };
+
+  // Phase 2: Agent Setup - activate agent and add demo labels
+  const runPhase2 = async () => {
+    const phaseStart = Date.now();
+    updatePhase(2, { status: 'running' });
+
+    let agent = demoState.integrationAgent;
+    if (!agent) {
+      addStep(2, { text: 'No integration agent found - run Phase 1 first', status: 'error', icon: '✗' });
+      throw new Error('Integration agent not found');
+    }
+
+    // Refresh agent status
+    addStep(2, { text: `Checking agent status: ${agent.name}...`, status: 'running' });
+    const agents = await api.getAgents();
+    agent = agents.find(a => a.id === agent.id);
+    if (!agent) {
+      addStep(2, { text: 'Agent not found', status: 'error', icon: '✗' });
+      throw new Error('Agent not found in database');
+    }
+
+    // Activate agent if not ACTIVE
+    if (agent.status !== 'ACTIVE') {
+      addStep(2, { text: `Agent is ${agent.status}, activating...`, status: 'running' });
+      try {
+        await api.updateAgent(agent.id, { status: 'ACTIVE' });
+        const refreshedAgents = await api.getAgents();
+        agent = refreshedAgents.find(a => a.id === agent.id) || agent;
+        addStep(2, { text: 'Agent activated', status: 'success', icon: '✓' });
+      } catch (e) {
+        addStep(2, { text: `Failed to activate: ${e.message}`, status: 'error', icon: '✗' });
+        throw e;
+      }
+    } else {
+      addStep(2, { text: 'Agent already ACTIVE', status: 'success', icon: '✓' });
+    }
+
+    // Add demo labels for label-based targeting
+    addStep(2, { text: 'Adding demo labels...', status: 'running' });
+    try {
+      await api.addAgentLabel(agent.id, 'demo:true').catch(() => {});
+      await api.addAgentLabel(agent.id, 'environment:integration').catch(() => {});
+      addStep(2, { text: 'Labels added: demo:true, environment:integration', status: 'success', icon: '✓' });
+    } catch (e) {
+      addStep(2, { text: 'Labels may already exist (continuing)', status: 'info', icon: '○' });
+    }
+
+    // Update stored agent
+    setDemoState(prev => ({
+      ...prev,
+      integrationAgent: agent,
+      summary: { ...prev.summary, agents: 1 }
+    }));
+
+    updatePhase(2, { status: 'success', duration: Date.now() - phaseStart });
+  };
+
+  // Phase 3: Webhook Subscriptions - create webhooks to capture events
+  const runPhase3 = async () => {
+    const phaseStart = Date.now();
+    updatePhase(3, { status: 'running' });
+
+    // Create webhook for work order events
+    addStep(3, { text: 'Creating webhook for WorkOrder events...', status: 'running' });
+    try {
+      const webhook = await api.createWebhook(
+        'demo-workorder-events',
+        'http://host.docker.internal:8090/receive',
+        ['workorder.completed', 'workorder.failed'],
+        null,
+        { enabled: true, maxRetries: 3, timeoutSeconds: 30 }
+      );
+      addStep(3, { text: 'WorkOrder webhook created', status: 'success', icon: '✓', detail: 'workorder.completed, workorder.failed' });
+      setDemoState(prev => ({
+        ...prev,
+        createdResources: { ...prev.createdResources, webhookIds: [...prev.createdResources.webhookIds, webhook.id] },
+        summary: { ...prev.summary, webhooks: prev.summary.webhooks + 1 }
+      }));
+    } catch (e) {
+      if (e.message.includes('already exists')) {
+        addStep(3, { text: 'WorkOrder webhook exists (reusing)', status: 'info', icon: '○' });
+      } else {
+        addStep(3, { text: `Failed: ${e.message}`, status: 'error', icon: '✗' });
+        throw e;
+      }
+    }
+
+    // Create webhook for deployment events
+    addStep(3, { text: 'Creating webhook for Deployment events...', status: 'running' });
+    try {
+      const webhook = await api.createWebhook(
+        'demo-deployment-events',
+        'http://host.docker.internal:8090/receive',
+        ['deployment.created', 'deployment.applied', 'deployment.failed'],
+        null,
+        { enabled: true, maxRetries: 3, timeoutSeconds: 30 }
+      );
+      addStep(3, { text: 'Deployment webhook created', status: 'success', icon: '✓', detail: 'deployment.created, deployment.applied, deployment.failed' });
+      setDemoState(prev => ({
+        ...prev,
+        createdResources: { ...prev.createdResources, webhookIds: [...prev.createdResources.webhookIds, webhook.id] },
+        summary: { ...prev.summary, webhooks: prev.summary.webhooks + 1 }
+      }));
+    } catch (e) {
+      if (e.message.includes('already exists')) {
+        addStep(3, { text: 'Deployment webhook exists (reusing)', status: 'info', icon: '○' });
+      } else {
+        addStep(3, { text: `Failed: ${e.message}`, status: 'error', icon: '✗' });
+        throw e;
+      }
+    }
+
+    // Create webhook for stack events
+    addStep(3, { text: 'Creating webhook for Stack events...', status: 'running' });
+    try {
+      const webhook = await api.createWebhook(
+        'demo-stack-events',
+        'http://host.docker.internal:8090/receive',
+        ['stack.created', 'stack.deleted'],
+        null,
+        { enabled: true, maxRetries: 3, timeoutSeconds: 30 }
+      );
+      addStep(3, { text: 'Stack webhook created', status: 'success', icon: '✓', detail: 'stack.created, stack.deleted' });
+      setDemoState(prev => ({
+        ...prev,
+        createdResources: { ...prev.createdResources, webhookIds: [...prev.createdResources.webhookIds, webhook.id] },
+        summary: { ...prev.summary, webhooks: prev.summary.webhooks + 1 }
+      }));
+    } catch (e) {
+      if (e.message.includes('already exists')) {
+        addStep(3, { text: 'Stack webhook exists (reusing)', status: 'info', icon: '○' });
+      } else {
+        addStep(3, { text: `Failed: ${e.message}`, status: 'error', icon: '✗' });
+        throw e;
+      }
+    }
+
+    addStep(3, { text: 'All webhooks configured and ready', status: 'success', icon: '✓' });
+    updatePhase(3, { status: 'success', duration: Date.now() - phaseStart });
+  };
+
+  // Phase 4: Stack & Namespace Deployment
+  const runPhase4 = async () => {
+    const phaseStart = Date.now();
+    updatePhase(4, { status: 'running' });
+
+    const agent = demoState.integrationAgent;
+    if (!agent) {
+      addStep(4, { text: 'No integration agent found - run Phase 1 first', status: 'error', icon: '✗' });
+      throw new Error('Integration agent not found');
+    }
+
+    // Get or create generator
+    addStep(4, { text: 'Creating demo generator...', status: 'running' });
+    let generator;
+    try {
+      const genResult = await api.createGenerator('demo-generator', 'Demo generator for stack deployment');
+      generator = genResult.generator || genResult;
+      addStep(4, { text: 'Generator created', status: 'success', icon: '✓' });
+      setDemoState(prev => ({ ...prev, summary: { ...prev.summary, generators: prev.summary.generators + 1 } }));
+    } catch (e) {
+      if (e.message.includes('already exists') || e.message.includes('duplicate')) {
+        const generators = await api.getGenerators();
+        generator = generators.find(g => g.name === 'demo-generator');
+        addStep(4, { text: 'Generator exists (reusing)', status: 'info', icon: '○' });
+      } else {
+        throw e;
+      }
+    }
+
+    // Create stack with labels matching agent
+    addStep(4, { text: 'Creating demo-namespace stack...', status: 'running' });
+    let stack;
+    try {
+      stack = await api.createStack('demo-namespace-stack', 'Demo namespace deployment', generator.id);
+      await api.addStackLabel(stack.id, 'demo:true');
+      await api.addStackLabel(stack.id, 'environment:integration');
+      addStep(4, { text: 'Stack created with labels: demo:true, environment:integration', status: 'success', icon: '✓' });
+      setDemoState(prev => ({
+        ...prev,
+        createdResources: { ...prev.createdResources, stackIds: [...prev.createdResources.stackIds, stack.id] },
+        summary: { ...prev.summary, stacks: prev.summary.stacks + 1 }
+      }));
+    } catch (e) {
+      if (e.message.includes('already exists')) {
+        addStep(4, { text: 'Stack exists (reusing)', status: 'info', icon: '○' });
+        const stacks = await api.getStacks();
+        stack = stacks.find(s => s.name === 'demo-namespace-stack');
+      } else {
+        throw e;
+      }
+    }
+
+    // Create namespace deployment YAML
+    addStep(4, { text: 'Creating namespace deployment...', status: 'running' });
+    const namespaceYaml = `apiVersion: v1
+kind: Namespace
+metadata:
+  name: demo-namespace
+  labels:
+    app.kubernetes.io/managed-by: brokkr
+    demo: "true"`;
+
+    try {
+      const deployment = await api.createDeployment(stack.id, namespaceYaml);
+      addStep(4, { text: 'Namespace deployment created', status: 'success', icon: '✓', detail: 'demo-namespace' });
+      setDemoState(prev => ({
+        ...prev,
+        createdResources: { ...prev.createdResources, deploymentIds: [...prev.createdResources.deploymentIds, { id: deployment.id, stackId: stack.id, yaml: namespaceYaml }] },
+        summary: { ...prev.summary, deployments: prev.summary.deployments + 1 }
+      }));
+    } catch (e) {
+      addStep(4, { text: `Warning: ${e.message}`, status: 'warning', icon: '⚠' });
+    }
+
+    // Target stack to agent
+    addStep(4, { text: 'Targeting stack to integration agent...', status: 'running' });
+    try {
+      await api.addAgentTarget(agent.id, stack.id);
+      addStep(4, { text: `Stack targeted to ${agent.name}`, status: 'success', icon: '✓' });
+      setDemoState(prev => ({
+        ...prev,
+        createdResources: { ...prev.createdResources, agentTargets: [...(prev.createdResources.agentTargets || []), { agentId: agent.id, stackId: stack.id }] }
+      }));
+    } catch (e) {
+      addStep(4, { text: `Already targeted (continuing)`, status: 'info', icon: '○' });
+    }
+
+    // Wait briefly for deployment to be applied (triggers deployment.applied event)
+    addStep(4, { text: 'Waiting for agent to apply deployment...', status: 'running' });
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    addStep(4, { text: 'Deployment should be applied (check Event Log)', status: 'success', icon: '✓' });
+
+    updatePhase(4, { status: 'success', duration: Date.now() - phaseStart });
+  };
+
+  // Phase 5: Work Order Execution
+  const runPhase5 = async () => {
+    const phaseStart = Date.now();
+    updatePhase(5, { status: 'running' });
+
+    const agent = demoState.integrationAgent;
+    if (!agent) {
+      addStep(5, { text: 'No integration agent found - run Phase 1 first', status: 'error', icon: '✗' });
+      throw new Error('Integration agent not found');
+    }
+
+    // Create a custom work order that applies a ConfigMap
+    addStep(5, { text: 'Creating custom work order...', status: 'running' });
+    const timestamp = new Date().toISOString().toLowerCase().replace(/[:.]/g, '-');
+    const customYaml = `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: brokkr-demo-wo-${timestamp.slice(0, 19)}
+  namespace: default
+  labels:
+    app: brokkr-demo
+    created-by: work-order
+data:
+  message: "Hello from Brokkr Demo Work Order"
+  timestamp: "${timestamp}"`;
+
+    let workOrder;
+    try {
+      workOrder = await api.createWorkOrder('custom', customYaml, { agent_ids: [agent.id] }, {
+        maxRetries: 2,
+        backoffSeconds: 5,
+        claimTimeoutSeconds: 60
+      });
+      addStep(5, { text: `Work order created: ${workOrder.id.slice(0, 8)}...`, status: 'success', icon: '✓' });
+      setDemoState(prev => ({
+        ...prev,
+        createdResources: { ...prev.createdResources, workOrderIds: [...prev.createdResources.workOrderIds, workOrder.id] },
+        phases: { ...prev.phases, 5: { ...prev.phases[5], workOrder } },
+        summary: { ...prev.summary, workOrders: prev.summary.workOrders + 1 }
+      }));
+    } catch (e) {
+      addStep(5, { text: `Failed to create work order: ${e.message}`, status: 'error', icon: '✗' });
+      throw e;
+    }
+
+    // Poll for work order status
+    addStep(5, { text: 'Waiting for agent to claim and execute...', status: 'running', detail: 'Status: PENDING' });
+    const pollStartTime = Date.now();
+    const maxPollTime = 60000; // 1 minute max for exec
+    let lastStatus = 'PENDING';
+
+    while (Date.now() - pollStartTime < maxPollTime) {
+      try {
+        const wo = await api.getWorkOrder(workOrder.id);
+        if (wo.status !== lastStatus) {
+          lastStatus = wo.status;
+          const statusMessages = {
+            'PENDING': { text: 'Waiting for agent to claim...', icon: '○', detail: 'Status: PENDING' },
+            'CLAIMED': { text: 'Agent claimed work order', icon: '◐', detail: 'Status: CLAIMED' },
+            'IN_PROGRESS': { text: 'Applying ConfigMap to cluster...', icon: '◐', detail: 'Status: IN_PROGRESS' },
+            'COMPLETED': { text: 'Work order completed!', icon: '✓', detail: wo.result_message || 'ConfigMap applied' },
+            'FAILED': { text: 'Work order failed', icon: '✗', detail: wo.result_message || 'Unknown error' },
+            'CANCELLED': { text: 'Work order cancelled', icon: '✗', detail: 'Work order was cancelled' }
+          };
+          const msg = statusMessages[wo.status] || { text: `Status: ${wo.status}`, icon: '○' };
+          addStep(5, {
+            text: msg.text,
+            status: wo.status === 'COMPLETED' ? 'success' : (wo.status === 'FAILED' || wo.status === 'CANCELLED') ? 'error' : 'running',
+            icon: msg.icon,
+            detail: msg.detail
+          });
+        }
+
+        if (wo.status === 'COMPLETED') {
+          updatePhase(5, { status: 'success', duration: Date.now() - phaseStart, workOrder: wo });
+          addStep(5, { text: 'Check Event Log for workorder.completed event', status: 'success', icon: '✓' });
+          return;
+        }
+        if (wo.status === 'FAILED' || wo.status === 'CANCELLED') {
+          throw new Error(`Work order ${wo.status.toLowerCase()}: ${wo.result_message || 'Unknown error'}`);
+        }
+        setDemoState(prev => ({
+          ...prev,
+          phases: { ...prev.phases, 5: { ...prev.phases[5], workOrder: wo } }
+        }));
+      } catch (e) {
+        if (e.message.includes('failed') || e.message.includes('cancelled')) throw e;
+      }
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+
+    addStep(5, { text: 'Work order timed out after 1 minute', status: 'error', icon: '✗' });
+    throw new Error('Work order timed out');
+  };
+
+  // Phase 6: Template Deployment
+  const runPhase6 = async () => {
+    const phaseStart = Date.now();
+    updatePhase(6, { status: 'running' });
+
+    const agent = demoState.integrationAgent;
+    if (!agent) {
+      addStep(6, { text: 'No integration agent found - run Phase 1 first', status: 'error', icon: '✗' });
+      throw new Error('Integration agent not found');
+    }
+
+    // Create template
+    addStep(6, { text: 'Creating parameterized template...', status: 'running' });
+    let templateId = null;
+    try {
+      const templateContent = `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ name }}
+  namespace: {{ namespace | default(value="default") }}
+data:
+  config.json: |
+    {
+      "app": "{{ app_name }}",
+      "environment": "{{ environment }}",
+      "deployed_by": "brokkr-demo"
+    }`;
+      const templateSchema = JSON.stringify({
+        type: 'object',
+        required: ['name', 'app_name', 'environment'],
+        properties: {
+          name: { type: 'string', description: 'ConfigMap name' },
+          namespace: { type: 'string', default: 'default' },
+          app_name: { type: 'string', description: 'Application name' },
+          environment: { type: 'string', enum: ['dev', 'staging', 'prod'] }
+        }
+      });
+      const template = await api.createTemplate('demo-config-template', 'Parameterized ConfigMap template', templateContent, templateSchema);
+      templateId = template.id;
+      addStep(6, { text: 'Template created: demo-config-template', status: 'success', icon: '✓' });
+      setDemoState(prev => ({
+        ...prev,
+        createdResources: { ...prev.createdResources, templateIds: [...prev.createdResources.templateIds, template.id] },
+        summary: { ...prev.summary, templates: prev.summary.templates + 1 }
+      }));
+    } catch (e) {
+      if (e.message.includes('already exists')) {
+        addStep(6, { text: 'Template exists (reusing)', status: 'info', icon: '○' });
+        const templates = await api.getTemplates();
+        const existing = templates.find(t => t.name === 'demo-config-template');
+        if (existing) templateId = existing.id;
+      } else {
+        throw e;
+      }
+    }
+
+    // Get or create generator
+    let generator;
+    const generators = await api.getGenerators();
+    generator = generators.find(g => g.name === 'demo-generator');
+    if (!generator) {
+      const genResult = await api.createGenerator('demo-generator', 'Demo generator');
+      generator = genResult.generator || genResult;
+    }
+
+    // Create stack for template instantiation
+    addStep(6, { text: 'Creating stack for template deployment...', status: 'running' });
+    let stack;
+    try {
+      stack = await api.createStack('demo-template-stack', 'Stack for template-based deployment', generator.id);
+      await api.addStackLabel(stack.id, 'demo:true');
+      await api.addStackLabel(stack.id, 'source:template');
+      addStep(6, { text: 'Stack created: demo-template-stack', status: 'success', icon: '✓' });
+      setDemoState(prev => ({
+        ...prev,
+        createdResources: { ...prev.createdResources, stackIds: [...prev.createdResources.stackIds, stack.id] },
+        summary: { ...prev.summary, stacks: prev.summary.stacks + 1 }
+      }));
+    } catch (e) {
+      if (e.message.includes('already exists')) {
+        addStep(6, { text: 'Stack exists (reusing)', status: 'info', icon: '○' });
+        const stacks = await api.getStacks();
+        stack = stacks.find(s => s.name === 'demo-template-stack');
+      } else {
+        throw e;
+      }
+    }
+
+    // Instantiate template with parameters
+    if (templateId && stack) {
+      addStep(6, { text: 'Instantiating template with parameters...', status: 'running' });
+      const params = {
+        name: 'demo-app-config',
+        app_name: 'demo-app',
+        environment: 'staging'
+      };
+      try {
+        const deployment = await api.instantiateTemplate(stack.id, templateId, params);
+        addStep(6, { text: `Template instantiated with: ${JSON.stringify(params)}`, status: 'success', icon: '✓' });
+        setDemoState(prev => ({
+          ...prev,
+          createdResources: { ...prev.createdResources, deploymentIds: [...prev.createdResources.deploymentIds, { id: deployment.id, stackId: stack.id }] },
+          summary: { ...prev.summary, deployments: prev.summary.deployments + 1 }
+        }));
+      } catch (e) {
+        addStep(6, { text: `Warning: ${e.message}`, status: 'warning', icon: '⚠' });
+      }
+
+      // Target to integration agent
+      addStep(6, { text: 'Targeting to integration agent...', status: 'running' });
+      try {
+        await api.addAgentTarget(agent.id, stack.id);
+        addStep(6, { text: `ConfigMap will be deployed by ${agent.name}`, status: 'success', icon: '✓' });
+        setDemoState(prev => ({
+          ...prev,
+          createdResources: { ...prev.createdResources, agentTargets: [...(prev.createdResources.agentTargets || []), { agentId: agent.id, stackId: stack.id }] }
+        }));
+      } catch (e) {
+        addStep(6, { text: 'Already targeted (continuing)', status: 'info', icon: '○' });
+      }
+
+      // Wait for deployment
+      addStep(6, { text: 'Waiting for agent to apply template deployment...', status: 'running' });
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      addStep(6, { text: 'Template deployment should be applied (check Event Log)', status: 'success', icon: '✓' });
+    } else {
+      addStep(6, { text: 'Skipping template instantiation (missing template or stack)', status: 'warning', icon: '⚠' });
+    }
+
+    updatePhase(6, { status: 'success', duration: Date.now() - phaseStart });
+  };
+
+  // Phase 7: Container Build (optional, async)
+  const runPhase7 = async () => {
+    const phaseStart = Date.now();
+    updatePhase(7, { status: 'running' });
+
+    const agent = demoState.integrationAgent;
+    if (!agent) {
+      addStep(7, { text: 'No integration agent found - run Phase 1 first', status: 'error', icon: '✗' });
+      throw new Error('Integration agent not found');
+    }
+
+    const imageTag = `demo-${Date.now()}`;
+
+    addStep(7, { text: 'Creating build work order...', status: 'running', detail: `Target: ${agent.name}` });
+    let workOrder;
+    try {
+      workOrder = await api.createBuildWorkOrder(imageTag, agent.id);
+      addStep(7, { text: `Build work order created: ${workOrder.id.slice(0, 8)}...`, status: 'success', icon: '✓' });
+      setDemoState(prev => ({
+        ...prev,
+        createdResources: { ...prev.createdResources, workOrderIds: [...prev.createdResources.workOrderIds, workOrder.id] },
+        phases: { ...prev.phases, 7: { ...prev.phases[7], workOrder } }
+      }));
+    } catch (e) {
+      addStep(7, { text: `Failed to create build work order: ${e.message}`, status: 'error', icon: '✗' });
+      throw e;
+    }
+
+    addStep(7, { text: 'Build starting (this may take 2-5 minutes)...', status: 'running', detail: 'Uses Shipwright + Tekton' });
+
+    // Poll for build status
+    const pollStartTime = Date.now();
+    const maxPollTime = 300000; // 5 minutes
+    let lastStatus = 'PENDING';
+
+    while (Date.now() - pollStartTime < maxPollTime) {
+      try {
+        const wo = await api.getWorkOrder(workOrder.id);
+        if (wo.status !== lastStatus) {
+          lastStatus = wo.status;
+          const statusMessages = {
+            'PENDING': { text: 'Waiting for agent to claim...', icon: '○', detail: 'Status: PENDING' },
+            'CLAIMED': { text: 'Agent claimed build work order', icon: '◐', detail: 'Status: CLAIMED - preparing' },
+            'IN_PROGRESS': { text: 'Building container image...', icon: '◐', detail: 'Status: IN_PROGRESS - Kaniko building' },
+            'COMPLETED': { text: 'Build completed!', icon: '✓', detail: `Image: ttl.sh/brokkr-demo-build:1h` },
+            'FAILED': { text: 'Build failed', icon: '✗', detail: wo.result_message || 'Unknown error' },
+            'CANCELLED': { text: 'Build cancelled', icon: '✗', detail: 'Work order was cancelled' }
+          };
+          const msg = statusMessages[wo.status] || { text: `Status: ${wo.status}`, icon: '○' };
+          addStep(7, {
+            text: msg.text,
+            status: wo.status === 'COMPLETED' ? 'success' : (wo.status === 'FAILED' || wo.status === 'CANCELLED') ? 'error' : 'running',
+            icon: msg.icon,
+            detail: msg.detail
+          });
+        }
+
+        if (wo.status === 'COMPLETED') {
+          updatePhase(7, { status: 'success', duration: Date.now() - phaseStart, workOrder: wo });
+          setDemoState(prev => ({ ...prev, summary: { ...prev.summary, builds: 1 } }));
+          addStep(7, { text: 'Check Event Log for workorder.completed event', status: 'success', icon: '✓' });
+          return;
+        }
+        if (wo.status === 'FAILED' || wo.status === 'CANCELLED') {
+          throw new Error(`Build ${wo.status.toLowerCase()}: ${wo.result_message || 'Unknown error'}`);
+        }
+        setDemoState(prev => ({
+          ...prev,
+          phases: { ...prev.phases, 7: { ...prev.phases[7], workOrder: wo } }
+        }));
+      } catch (e) {
+        if (e.message.includes('Build failed') || e.message.includes('Build cancelled')) throw e;
+      }
+      await new Promise(resolve => setTimeout(resolve, 5000));
+    }
+
+    addStep(7, { text: 'Build timed out after 5 minutes', status: 'error', icon: '✗' });
+    throw new Error('Build timed out - check agent logs');
+  };
+
+  // Phase 8: Event Summary
+  const runPhase8 = async () => {
+    const phaseStart = Date.now();
+    updatePhase(8, { status: 'running' });
+
+    addStep(8, { text: 'Fetching captured webhook events...', status: 'running' });
+
+    let events = [];
+    try {
+      const stats = await api.getWebhookCatcherStats();
+      events = stats.messages || [];
+      setWebhookEvents([...events].sort((a, b) => new Date(b.received_at) - new Date(a.received_at)));
+      addStep(8, { text: `Retrieved ${events.length} events from webhook catcher`, status: 'success', icon: '✓' });
+    } catch (e) {
+      addStep(8, { text: 'Could not retrieve events (webhook catcher may not be running)', status: 'warning', icon: '⚠' });
+    }
+
+    // Analyze events by type
+    const eventCounts = {};
+    events.forEach(evt => {
+      const type = evt?.body?.event_type || 'unknown';
+      eventCounts[type] = (eventCounts[type] || 0) + 1;
+    });
+
+    if (Object.keys(eventCounts).length > 0) {
+      addStep(8, { text: 'Event breakdown:', status: 'success', icon: '📊' });
+      Object.entries(eventCounts).forEach(([type, count]) => {
+        addStep(8, { text: `  ${type}: ${count}`, status: 'info', icon: '•' });
+      });
+    }
+
+    // Summary stats
+    const { summary } = demoState;
+    addStep(8, { text: 'Demo summary:', status: 'success', icon: '📈' });
+    addStep(8, { text: `  Webhooks: ${summary.webhooks}`, status: 'info', icon: '•' });
+    addStep(8, { text: `  Stacks: ${summary.stacks}`, status: 'info', icon: '•' });
+    addStep(8, { text: `  Deployments: ${summary.deployments}`, status: 'info', icon: '•' });
+    addStep(8, { text: `  Work Orders: ${summary.workOrders}`, status: 'info', icon: '•' });
+    addStep(8, { text: `  Templates: ${summary.templates}`, status: 'info', icon: '•' });
+    if (summary.builds > 0) {
+      addStep(8, { text: `  Builds: ${summary.builds}`, status: 'info', icon: '•' });
+    }
+
+    addStep(8, { text: 'Demo complete! All events visible in Event Log panel.', status: 'success', icon: '✓' });
+    updatePhase(8, { status: 'success', duration: Date.now() - phaseStart });
+  };
+
+  // Cleanup demo resources
+  const runCleanup = async () => {
+    setCleanupRunning(true);
+    stopEventPolling();
+
+    try {
+      toast?.('Cleanup started...', 'info');
+
+      // 1. Delete all webhooks with 'demo' in name
+      try {
+        const webhooks = await api.getWebhooks();
+        for (const wh of webhooks.filter(w => w.name.includes('demo'))) {
+          try { await api.deleteWebhook(wh.id); } catch (e) { /* ignore */ }
+        }
+      } catch (e) { /* ignore */ }
+
+      // 2. Delete all stacks with 'demo' in name
+      try {
+        const stacks = await api.getStacks();
+        for (const stack of stacks.filter(s => s.name.includes('demo'))) {
+          // First remove agent targets
+          try {
+            const agents = await api.getAgents();
+            for (const agent of agents) {
+              try { await api.removeAgentTarget(agent.id, stack.id); } catch (e) { /* ignore */ }
+            }
+          } catch (e) { /* ignore */ }
+          // Then delete the stack
+          try { await api.deleteStack(stack.id); } catch (e) { /* ignore */ }
+        }
+      } catch (e) { /* ignore */ }
+
+      // 3. Delete all templates with 'demo' in name
+      try {
+        const templates = await api.getTemplates();
+        for (const tpl of templates.filter(t => t.name.includes('demo'))) {
+          try { await api.deleteTemplate(tpl.id); } catch (e) { /* ignore */ }
+        }
+      } catch (e) { /* ignore */ }
+
+      // 4. Delete generators with 'demo' in name
+      try {
+        const generators = await api.getGenerators();
+        for (const gen of generators.filter(g => g.name.includes('demo'))) {
+          try { await api.deleteGenerator(gen.id); } catch (e) { /* ignore */ }
+        }
+      } catch (e) { /* ignore */ }
+
+      // 5. Remove demo labels from integration agent
+      try {
+        const agents = await api.getAgents();
+        const integrationAgent = agents.find(a => a.name === 'brokkr-integration-test-agent');
+        if (integrationAgent) {
+          try { await api.removeAgentLabel(integrationAgent.id, 'demo:true'); } catch (e) { /* ignore */ }
+          try { await api.removeAgentLabel(integrationAgent.id, 'environment:integration'); } catch (e) { /* ignore */ }
+        }
+      } catch (e) { /* ignore */ }
+
+      // 6. Clear webhook catcher events
+      try {
+        await api.clearWebhookCatcher();
+        setWebhookEvents([]);
+      } catch (e) { /* ignore */ }
+
+      toast?.('Cleanup completed - ready for fresh demo', 'success');
+
+      // Reset state completely
+      setDemoState({
+        status: 'idle',
+        currentPhase: 0,
+        startTime: null,
+        integrationAgent: null,
+        phases: {
+          1: { name: 'Health Check', status: 'pending', steps: [], duration: null },
+          2: { name: 'Agent Setup', status: 'pending', steps: [], duration: null },
+          3: { name: 'Webhook Subscriptions', status: 'pending', steps: [], duration: null },
+          4: { name: 'Stack Deployment', status: 'pending', steps: [], duration: null },
+          5: { name: 'Work Order', status: 'pending', steps: [], workOrder: null, duration: null },
+          6: { name: 'Template Deployment', status: 'pending', steps: [], duration: null },
+          7: { name: 'Container Build', status: 'pending', steps: [], workOrder: null, duration: null, async: true },
+          8: { name: 'Event Summary', status: 'pending', steps: [], duration: null }
+        },
+        summary: { builds: 0, generators: 0, agents: 0, stacks: 0, deployments: 0, webhooks: 0, templates: 0, workOrders: 0 },
+        createdResources: { workOrderIds: [], agentIds: [], stackIds: [], webhookIds: [], templateIds: [], deploymentIds: [], agentTargets: [] }
+      });
+    } catch (e) {
+      toast?.('Cleanup failed: ' + e.message, 'error');
+    }
+    setCleanupRunning(false);
+  };
+
+  // Get total duration
+  const totalDuration = demoState.startTime ? Date.now() - demoState.startTime : 0;
+
+  // Render phase card
+  const PhaseCard = ({ num, phase }) => {
+    const phaseNum = parseInt(num, 10);
+    const canStart = canStartPhase(phaseNum);
+    const isOptional = phaseNum === 7; // Phase 7 (build) is optional
+
+    const statusClass = {
+      pending: 'phase-pending',
+      running: 'phase-running',
+      success: 'phase-success',
+      error: 'phase-error'
+    }[phase.status] || '';
+
+    return (
+      <div className={`demo-phase ${statusClass}`}>
+        <div className="demo-phase-header">
+          <button
+            className={`demo-phase-play ${canStart ? 'active' : ''}`}
+            onClick={() => canStart && runPhase(phaseNum)}
+            disabled={!canStart}
+            title={canStart ? `Start Phase ${num}` : phase.status === 'success' ? 'Completed' : phase.status === 'running' ? 'Running...' : 'Complete previous phase first'}
+          >
+            {phase.status === 'running' ? '◐' : phase.status === 'success' ? '✓' : '▶'}
+          </button>
+          <span className="demo-phase-title">
+            Phase {num}: {phase.name}
+            {isOptional && <span style={{ fontSize: '10px', marginLeft: '6px', color: 'var(--text-dim)' }}>(optional)</span>}
+          </span>
+          <span className="demo-phase-status">
+            {phase.status === 'running' && '⏳ Running'}
+            {phase.status === 'success' && `✅ ${formatDuration(phase.duration)}`}
+            {phase.status === 'error' && '❌ Failed'}
+            {phase.status === 'pending' && '○ Pending'}
+          </span>
+        </div>
+        {phase.steps.length > 0 && (
+          <div className="demo-phase-steps">
+            {phase.steps.map((step, i) => (
+              <div key={i} className={`demo-step demo-step-${step.status}`}>
+                <span className="demo-step-icon">{step.icon || (step.status === 'running' ? '...' : '•')}</span>
+                <span className="demo-step-text">{step.text}</span>
+                {step.detail && <span className="demo-step-detail">{step.detail}</span>}
+              </div>
+            ))}
+          </div>
+        )}
+        {/* Show build progress stages in phase 7 (Container Build) */}
+        {num === '7' && phase.workOrder && phase.status === 'running' && (
+          <div className="demo-build-progress">
+            <h4>Build Progress</h4>
+            <div className="demo-build-stages">
+              <span className={`demo-build-stage ${phase.workOrder.status === 'PENDING' ? 'active' : ['CLAIMED', 'IN_PROGRESS', 'COMPLETED'].includes(phase.workOrder.status) ? 'complete' : ''}`}>
+                ● PENDING
+              </span>
+              <span className="demo-build-stage-arrow">→</span>
+              <span className={`demo-build-stage ${phase.workOrder.status === 'CLAIMED' ? 'active' : ['IN_PROGRESS', 'COMPLETED'].includes(phase.workOrder.status) ? 'complete' : ''}`}>
+                ● CLAIMED
+              </span>
+              <span className="demo-build-stage-arrow">→</span>
+              <span className={`demo-build-stage ${phase.workOrder.status === 'IN_PROGRESS' ? 'active' : phase.workOrder.status === 'COMPLETED' ? 'complete' : ''}`}>
+                ◐ BUILDING
+              </span>
+              <span className="demo-build-stage-arrow">→</span>
+              <span className={`demo-build-stage ${phase.workOrder.status === 'COMPLETED' ? 'complete' : ''}`}>
+                ○ COMPLETED
+              </span>
+            </div>
+            <div className="demo-build-meta">
+              <span>Strategy: kaniko (ClusterBuildStrategy)</span>
+              <span>Agent: {phase.workOrder.claimed_by_agent_name || 'waiting...'}</span>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="panel demo-panel">
+      <div className="panel-header">
+        <h2>🎯 Platform Demo</h2>
+        <div className="panel-actions">
+          {demoState.status === 'idle' && (
+            <button onClick={resetDemo} className="btn-primary">▶ Initialize Demo</button>
+          )}
+          {(demoState.status === 'ready' || demoState.currentPhase > 0) && demoState.status !== 'completed' && (
+            <button onClick={resetDemo} className="btn-secondary">↺ Reset</button>
+          )}
+          {demoState.status === 'completed' && (
+            <>
+              <button onClick={resetDemo} className="btn-primary">🔄 Run Again</button>
+              <button onClick={runCleanup} className="btn-danger" disabled={cleanupRunning}>
+                {cleanupRunning ? '🗑 Cleaning...' : '🗑 Cleanup'}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {demoState.status === 'idle' && (
+        <div className="demo-intro" style={{ padding: '20px' }}>
+          <p>This demo walks through all major Brokkr features with real-time webhook event visualization. Click <strong>Initialize Demo</strong> to begin, then click the play button on each phase to progress.</p>
+          <ul className="demo-feature-list">
+            <li><strong>Phase 1: Health Check</strong> — Verify broker, agent, and webhook catcher</li>
+            <li><strong>Phase 2: Agent Setup</strong> — Activate agent and add demo labels</li>
+            <li><strong>Phase 3: Webhook Subscriptions</strong> — Create webhooks to capture events</li>
+            <li><strong>Phase 4: Stack Deployment</strong> — Create stack and deploy namespace</li>
+            <li><strong>Phase 5: Work Order</strong> — Execute a command via work order</li>
+            <li><strong>Phase 6: Template Deployment</strong> — Instantiate parameterized template</li>
+            <li><strong>Phase 7: Container Build</strong> — Build image with Shipwright (optional)</li>
+            <li><strong>Phase 8: Event Summary</strong> — Review captured webhook events</li>
+          </ul>
+          <p className="demo-prereq">⚠ Prerequisites: Run <code>angreal local up</code> first</p>
+        </div>
+      )}
+
+      {demoState.status !== 'idle' && (
+        <>
+          {demoState.status === 'ready' && demoState.phases[1]?.status === 'pending' && (
+            <div className="demo-ready-banner">
+              <span>👆 Click the play button on <strong>Phase 1</strong> to begin</span>
+            </div>
+          )}
+
+          {demoState.status === 'completed' && (
+            <div className="demo-complete-banner">
+              <div className="demo-complete-icon">✅</div>
+              <div className="demo-complete-text">
+                <strong>Demo Complete!</strong>
+                <span>Completed in {formatDuration(totalDuration)}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Split view: Phases on left, Event Log on right */}
+          <div className="demo-split-view">
+            <div className="demo-phases-panel">
+              {Object.entries(demoState.phases).map(([num, phase]) => (
+                <PhaseCard key={num} num={num} phase={phase} />
+              ))}
+            </div>
+            <EventLogPanel />
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
 // ==================== MAIN APP ====================
-export default function App() {
+// Inner app component that uses toast context
+const AppContent = () => {
   const [activePanel, setActivePanel] = useState('agents');
   const [stacks, setStacks] = useState([]);
   const [agents, setAgents] = useState([]);
   const [generators, setGenerators] = useState([]);
-  const [toast, setToast] = useState(null);
+  const showToast = useToast();
 
   useEffect(() => {
-    api.getGenerators().then(setGenerators).catch(console.error);
-    api.getAgents().then(setAgents).catch(console.error);
-  }, []);
-
-  const showToast = (message, type = 'info') => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
-  };
+    api.getGenerators().then(setGenerators).catch((e) => {
+      showToast('Failed to load generators: ' + getErrorMessage(e), 'error');
+    });
+    api.getAgents().then(setAgents).catch((e) => {
+      showToast('Failed to load agents: ' + getErrorMessage(e), 'error');
+    });
+  }, [showToast]);
 
   return (
     <div className="app">
@@ -1182,7 +3146,7 @@ export default function App() {
           <span className="logo-text">BROKKR</span>
         </div>
         <nav className="nav">
-          {['agents', 'stacks', 'templates', 'jobs', 'admin'].map((p) => (
+          {['agents', 'stacks', 'templates', 'jobs', 'webhooks', 'metrics', 'demo', 'admin'].map((p) => (
             <button key={p} className={`nav-item ${activePanel === p ? 'active' : ''}`} onClick={() => setActivePanel(p)}>
               {p}
             </button>
@@ -1195,10 +3159,20 @@ export default function App() {
         {activePanel === 'stacks' && <StacksPanel generators={generators} agents={agents} onRefresh={setStacks} />}
         {activePanel === 'templates' && <TemplatesPanel stacks={stacks} />}
         {activePanel === 'jobs' && <JobsPanel agents={agents} />}
+        {activePanel === 'webhooks' && <WebhooksPanel />}
+        {activePanel === 'metrics' && <MetricsPanel />}
+        {activePanel === 'demo' && <DemoPanel />}
         {activePanel === 'admin' && <AdminPanel onGeneratorsChange={setGenerators} onAgentsChange={setAgents} />}
       </main>
-
-      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </div>
+  );
+};
+
+// Main App with ToastProvider wrapper
+export default function App() {
+  return (
+    <ToastProvider>
+      <AppContent />
+    </ToastProvider>
   );
 }

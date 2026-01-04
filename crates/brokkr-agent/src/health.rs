@@ -27,7 +27,7 @@
 
 use crate::metrics;
 use axum::{extract::State, http::StatusCode, response::IntoResponse, routing::get, Json, Router};
-use brokkr_utils::logging::prelude::*;
+use tracing::{debug, error, info, trace, warn};
 use kube::Client;
 use serde::Serialize;
 use std::sync::Arc;

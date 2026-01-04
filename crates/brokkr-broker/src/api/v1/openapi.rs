@@ -18,8 +18,9 @@ use crate::api::v1::health::{
 use crate::api::v1::work_orders::{
     ClaimWorkOrderRequest, CompleteWorkOrderRequest, CreateWorkOrderRequest, WorkOrderTargeting,
 };
+use crate::api::v1::admin::{AuditLogListResponse, ConfigChangeInfo, ConfigReloadResponse};
 use crate::api::v1::{
-    agent_events, agents, auth, deployment_objects, diagnostics, generators, health, stacks,
+    admin, agent_events, agents, auth, deployment_objects, diagnostics, generators, health, stacks,
     templates, work_orders,
 };
 use crate::dal::DAL;
@@ -30,6 +31,7 @@ use brokkr_models::models::{
     agent_labels::{AgentLabel, NewAgentLabel},
     agent_targets::{AgentTarget, NewAgentTarget},
     agents::{Agent, NewAgent},
+    audit_logs::AuditLog,
     deployment_health::{DeploymentHealth, HealthSummary, ResourceHealth},
     deployment_objects::{DeploymentObject, NewDeploymentObject},
     diagnostic_requests::DiagnosticRequest,
@@ -109,6 +111,8 @@ use utoipa_swagger_ui::SwaggerUi;
         diagnostics::get_pending_diagnostics,
         diagnostics::claim_diagnostic,
         diagnostics::submit_diagnostic_result,
+        admin::reload_config,
+        admin::list_audit_logs,
     ),
     components(
         schemas(
@@ -158,6 +162,10 @@ use utoipa_swagger_ui::SwaggerUi;
             CreateDiagnosticRequest,
             DiagnosticResponse,
             SubmitDiagnosticResult,
+            ConfigReloadResponse,
+            ConfigChangeInfo,
+            AuditLog,
+            AuditLogListResponse,
         )
     ),
     tags(
@@ -174,7 +182,8 @@ use utoipa_swagger_ui::SwaggerUi;
         (name = "work-order-log", description = "Work Order Log API"),
         (name = "auth", description = "Authentication API"),
         (name = "health", description = "Deployment Health monitoring API"),
-        (name = "diagnostics", description = "On-demand diagnostics API")
+        (name = "diagnostics", description = "On-demand diagnostics API"),
+        (name = "Admin", description = "Administrative operations API")
     ),
     modifiers(&SecurityAddon)
 )]

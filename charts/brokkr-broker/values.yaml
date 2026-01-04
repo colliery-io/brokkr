@@ -1,4 +1,40 @@
 ---
+# =============================================================================
+# CONFIGURATION HOT-RELOAD SUPPORT
+# =============================================================================
+# Some settings can be changed without restarting the broker pod. These are
+# marked with "@hot-reload: true" comments throughout this file.
+#
+# Hot-reloadable settings:
+#   - log.level
+#   - broker.diagnosticCleanupIntervalSeconds
+#   - broker.diagnosticMaxAgeHours
+#   - broker.webhookDeliveryIntervalSeconds
+#   - broker.webhookDeliveryBatchSize
+#   - broker.webhookCleanupRetentionDays
+#   - cors.allowedOrigins
+#   - cors.maxAgeSeconds
+#
+# Static settings (require pod restart):
+#   - database.url, database.schema
+#   - broker.webhookEncryptionKey
+#   - telemetry.* (all telemetry settings)
+#   - tls.* (all TLS settings)
+#
+# To trigger a manual reload, call: POST /api/v1/admin/config/reload
+# In Kubernetes, the broker automatically watches its ConfigMap for changes.
+# =============================================================================
+
+# Configuration hot-reload settings
+configReload:
+  # Enable automatic ConfigMap watching in Kubernetes
+  # When enabled, the broker watches for ConfigMap changes and reloads
+  # hot-reloadable settings automatically (with 5-second debounce)
+  enabled: true
+
+  # Debounce duration in seconds to prevent rapid successive reloads
+  debounceSeconds: 5
+
 # Broker container image configuration
 image:
   # Container registry and repository for the broker image
@@ -14,6 +50,46 @@ image:
 # Number of broker replicas to run
 # Note: Multiple replicas require session affinity or external session storage
 replicaCount: 1
+
+# HorizontalPodAutoscaler configuration for automatic scaling
+# When enabled, overrides replicaCount with dynamic scaling
+autoscaling:
+  # Enable horizontal pod autoscaling
+  enabled: false
+
+  # Minimum number of replicas
+  minReplicas: 1
+
+  # Maximum number of replicas
+  maxReplicas: 5
+
+  # Target CPU utilization percentage for scaling
+  # When average CPU exceeds this, HPA scales up
+  targetCPUUtilizationPercentage: 70
+
+  # Target memory utilization percentage for scaling (optional)
+  # Uncomment to also scale on memory
+  # targetMemoryUtilizationPercentage: 80
+
+  # Scaling behavior configuration (optional)
+  # Controls how fast HPA scales up/down
+  # behavior:
+  #   scaleDown:
+  #     stabilizationWindowSeconds: 300
+  #     policies:
+  #       - type: Percent
+  #         value: 50
+  #         periodSeconds: 60
+  #   scaleUp:
+  #     stabilizationWindowSeconds: 0
+  #     policies:
+  #       - type: Percent
+  #         value: 100
+  #         periodSeconds: 15
+  #       - type: Pods
+  #         value: 4
+  #         periodSeconds: 15
+  #     selectPolicy: Max
 
 # Kubernetes Service configuration
 service:
@@ -104,6 +180,58 @@ postgresql:
 #         name: my-config
 #         key: custom-value
 extraEnv: []
+
+# Broker application settings
+# These control runtime behavior of the broker
+broker:
+  # Log level for the broker application
+  # @hot-reload: true - changes apply without restart
+  # Valid values: trace, debug, info, warn, error
+  logLevel: info
+
+  # Diagnostic cleanup settings
+  # @hot-reload: true - changes apply without restart
+  diagnosticCleanupIntervalSeconds: 900  # 15 minutes
+  diagnosticMaxAgeHours: 1
+
+  # Webhook delivery settings
+  # @hot-reload: true - changes apply without restart
+  webhookDeliveryIntervalSeconds: 5
+  webhookDeliveryBatchSize: 50
+  webhookCleanupRetentionDays: 7
+
+  # Webhook encryption key (hex-encoded 32-byte key)
+  # @hot-reload: false - requires restart
+  # If not set, a random key is generated on startup
+  # WARNING: Changing this will make existing encrypted webhook data unreadable
+  # webhookEncryptionKey: ""
+
+# CORS configuration for API access
+# @hot-reload: true - changes apply without restart (except allowCredentials)
+cors:
+  # Allowed origins for CORS requests
+  # Use "*" to allow all origins (not recommended for production)
+  allowedOrigins:
+    - "*"
+
+  # Allowed HTTP methods
+  allowedMethods:
+    - GET
+    - POST
+    - PUT
+    - PATCH
+    - DELETE
+    - OPTIONS
+
+  # Allowed request headers
+  allowedHeaders:
+    - Authorization
+    - Content-Type
+    - Accept
+
+  # Max age for CORS preflight cache (seconds)
+  # @hot-reload: true
+  maxAgeSeconds: 3600
 
 # Resource requests and limits for broker pods
 # Requests: minimum guaranteed resources
@@ -230,3 +358,100 @@ metrics:
     # Additional labels for ServiceMonitor (for Prometheus selector matching)
     # additionalLabels:
     #   prometheus: kube-prometheus
+
+# NetworkPolicy configuration for restricting pod network access
+networkPolicy:
+  # Enable NetworkPolicy creation
+  enabled: false
+
+  # Allow ingress from specific sources (list of podSelector/namespaceSelector)
+  # If empty, allows from any pod in the same namespace
+  # Example:
+  #   allowIngressFrom:
+  #     - namespaceSelector:
+  #         matchLabels:
+  #           kubernetes.io/metadata.name: ingress-nginx
+  #       podSelector:
+  #         matchLabels:
+  #           app.kubernetes.io/name: ingress-nginx
+  allowIngressFrom: []
+
+  # Allow metrics scraping from Prometheus namespace
+  # Example:
+  #   allowMetricsFrom:
+  #     - namespaceSelector:
+  #         matchLabels:
+  #           kubernetes.io/metadata.name: monitoring
+  allowMetricsFrom: []
+
+  # Allow egress for webhook deliveries to external HTTPS endpoints
+  allowWebhookEgress: true
+
+  # Additional custom egress rules
+  # additionalEgressRules:
+  #   - to:
+  #       - ipBlock:
+  #           cidr: 10.0.0.0/8
+  #     ports:
+  #       - protocol: TCP
+  #         port: 443
+  additionalEgressRules: []
+
+# PodDisruptionBudget configuration for high availability during updates
+podDisruptionBudget:
+  # Enable PodDisruptionBudget creation
+  enabled: false
+
+  # Minimum number of pods that must be available during voluntary disruptions
+  # Can be an integer or a percentage (e.g., "50%")
+  minAvailable: 1
+
+  # Maximum number of pods that can be unavailable during voluntary disruptions
+  # Alternative to minAvailable - only set one
+  # maxUnavailable: 1
+
+# OpenTelemetry telemetry configuration for distributed tracing
+telemetry:
+  # Enable OpenTelemetry tracing
+  enabled: false
+
+  # OTLP endpoint for trace export (gRPC)
+  # Examples:
+  #   - Local collector: http://otel-collector:4317
+  #   - Jaeger OTLP: http://jaeger-collector:4317
+  #   - Tempo: http://tempo:4317
+  otlpEndpoint: "http://otel-collector:4317"
+
+  # Sampling rate (0.0 to 1.0)
+  # 0.1 = 10% of traces sampled (recommended for production)
+  # 1.0 = 100% of traces sampled (development/debugging)
+  samplingRate: 0.1
+
+  # Optional: Deploy OpenTelemetry Collector as a sidecar
+  # This is useful when the main collector is not accessible from the broker
+  collector:
+    # Enable OTel collector sidecar
+    enabled: false
+
+    # Collector image
+    image:
+      repository: otel/opentelemetry-collector-contrib
+      tag: "0.96.0"
+      pullPolicy: IfNotPresent
+
+    # Resource limits for collector sidecar
+    resources:
+      requests:
+        memory: 64Mi
+        cpu: 50m
+      limits:
+        memory: 128Mi
+        cpu: 100m
+
+    # OTLP exporters configuration
+    # Where the sidecar collector sends traces
+    exporters:
+      # OTLP exporter endpoint (e.g., central collector, Jaeger, Tempo)
+      otlpEndpoint: ""
+      # Enable debug exporter (logs traces to stdout)
+      debug: false

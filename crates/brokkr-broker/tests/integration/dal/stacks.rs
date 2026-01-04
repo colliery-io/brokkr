@@ -579,3 +579,56 @@ fn test_get_associated_stacks() {
     assert_eq!(associated_stacks.len(), 1);
     assert!(associated_stacks.iter().any(|s| s.id == stack4.id));
 }
+
+#[test]
+fn test_recreate_stack_after_soft_delete() {
+    let fixture = TestFixture::new();
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
+
+    // Create a stack with a specific name
+    let original_stack =
+        fixture.create_test_stack("Recreatable Stack".to_string(), None, generator.id);
+
+    // Soft delete the stack
+    fixture
+        .dal
+        .stacks()
+        .soft_delete(original_stack.id)
+        .expect("Failed to soft delete stack");
+
+    // Verify the stack is soft-deleted
+    let search_ids = vec![original_stack.id];
+    let deleted = fixture
+        .dal
+        .stacks()
+        .get(search_ids)
+        .expect("Failed to check deleted stack");
+    assert!(deleted.is_empty(), "Stack should not be visible after soft delete");
+
+    // Create a new stack with the SAME name
+    // This should succeed because the partial unique index excludes soft-deleted records
+    let new_stack = NewStack::new("Recreatable Stack".to_string(), None, generator.id)
+        .expect("Failed to create NewStack");
+
+    let recreated_stack = fixture
+        .dal
+        .stacks()
+        .create(&new_stack)
+        .expect("Should be able to recreate stack with same name after soft delete");
+
+    // Verify the new stack was created with a different ID
+    assert_ne!(recreated_stack.id, original_stack.id);
+    assert_eq!(recreated_stack.name, "Recreatable Stack");
+
+    // Both stacks should exist in the database (one active, one soft-deleted)
+    let all_stacks = fixture
+        .dal
+        .stacks()
+        .list_all()
+        .expect("Failed to list all stacks");
+    assert_eq!(all_stacks.len(), 2);
+}

@@ -166,6 +166,14 @@ impl Client {
         self.get(&format!("/api/v1/agents/{}/stacks", id)).await
     }
 
+    pub async fn get_agent_target_state(&self, id: Uuid, mode: Option<&str>) -> Result<Vec<Value>> {
+        let path = match mode {
+            Some(m) => format!("/api/v1/agents/{}/target-state?mode={}", id, m),
+            None => format!("/api/v1/agents/{}/target-state", id),
+        };
+        self.get(&path).await
+    }
+
     // =========================================================================
     // Generators
     // =========================================================================
@@ -327,6 +335,10 @@ impl Client {
         self.get(&format!("/api/v1/work-orders/{}", id)).await
     }
 
+    pub async fn get_work_order_log(&self, id: Uuid) -> Result<Value> {
+        self.get(&format!("/api/v1/work-order-log/{}", id)).await
+    }
+
     pub async fn delete_work_order(&self, id: Uuid) -> Result<()> {
         self.delete(&format!("/api/v1/work-orders/{}", id)).await
     }
@@ -352,6 +364,178 @@ impl Client {
 
     pub async fn get_diagnostic(&self, id: Uuid) -> Result<Value> {
         self.get(&format!("/api/v1/diagnostics/{}", id)).await
+    }
+
+    // =========================================================================
+    // Webhooks
+    // =========================================================================
+
+    pub async fn create_webhook(
+        &self,
+        name: &str,
+        url: &str,
+        event_types: Vec<&str>,
+        auth_header: Option<&str>,
+    ) -> Result<Value> {
+        self.create_webhook_with_options(name, url, event_types, auth_header, None, None).await
+    }
+
+    pub async fn create_webhook_with_options(
+        &self,
+        name: &str,
+        url: &str,
+        event_types: Vec<&str>,
+        auth_header: Option<&str>,
+        delivery_mode: Option<&str>,
+        delivery_target_labels: Option<Vec<&str>>,
+    ) -> Result<Value> {
+        let mut body = json!({
+            "name": name,
+            "url": url,
+            "event_types": event_types
+        });
+        if let Some(auth) = auth_header {
+            body["auth_header"] = json!(auth);
+        }
+        if let Some(mode) = delivery_mode {
+            body["delivery_mode"] = json!(mode);
+        }
+        if let Some(labels) = delivery_target_labels {
+            body["delivery_target_labels"] = json!(labels);
+        }
+        self.post("/api/v1/webhooks", body).await
+    }
+
+    pub async fn list_webhooks(&self) -> Result<Vec<Value>> {
+        self.get("/api/v1/webhooks").await
+    }
+
+    pub async fn get_webhook(&self, id: Uuid) -> Result<Value> {
+        self.get(&format!("/api/v1/webhooks/{}", id)).await
+    }
+
+    pub async fn update_webhook(&self, id: Uuid, updates: Value) -> Result<Value> {
+        self.put(&format!("/api/v1/webhooks/{}", id), updates).await
+    }
+
+    pub async fn delete_webhook(&self, id: Uuid) -> Result<()> {
+        self.delete(&format!("/api/v1/webhooks/{}", id)).await
+    }
+
+    pub async fn list_webhook_deliveries(&self, webhook_id: Uuid) -> Result<Vec<Value>> {
+        self.get(&format!("/api/v1/webhooks/{}/deliveries", webhook_id)).await
+    }
+
+    pub async fn test_webhook(&self, id: Uuid) -> Result<Value> {
+        self.post(&format!("/api/v1/webhooks/{}/test", id), json!({})).await
+    }
+
+    // =========================================================================
+    // Audit Logs
+    // =========================================================================
+
+    pub async fn list_audit_logs(&self, limit: Option<i32>) -> Result<Value> {
+        let path = match limit {
+            Some(l) => format!("/api/v1/admin/audit-logs?limit={}", l),
+            None => "/api/v1/admin/audit-logs".to_string(),
+        };
+        self.get(&path).await
+    }
+
+    // =========================================================================
+    // Metrics
+    // =========================================================================
+
+    /// Fetch Prometheus metrics from the broker
+    pub async fn get_metrics(&self) -> Result<String> {
+        let url = format!("{}/metrics", self.base_url);
+        let resp = self.http.get(&url).send().await?;
+        let status = resp.status();
+        let text = resp.text().await?;
+
+        if !status.is_success() {
+            return Err(format!("HTTP {}: {}", status, text).into());
+        }
+
+        Ok(text)
+    }
+
+    /// Fetch health check endpoint
+    pub async fn get_healthz(&self) -> Result<String> {
+        let url = format!("{}/healthz", self.base_url);
+        let resp = self.http.get(&url).send().await?;
+        let status = resp.status();
+        let text = resp.text().await?;
+
+        if !status.is_success() {
+            return Err(format!("HTTP {}: {}", status, text).into());
+        }
+
+        Ok(text)
+    }
+}
+
+/// Client for webhook-catcher test service
+pub struct WebhookCatcher {
+    http: reqwest::Client,
+    base_url: String,
+}
+
+impl WebhookCatcher {
+    pub fn new(base_url: &str) -> Self {
+        Self {
+            http: reqwest::Client::new(),
+            base_url: base_url.to_string(),
+        }
+    }
+
+    /// Get all messages received by webhook-catcher
+    pub async fn get_messages(&self) -> Result<Value> {
+        let url = format!("{}/messages", self.base_url);
+        let resp = self.http.get(&url).send().await?;
+        let status = resp.status();
+        let text = resp.text().await?;
+
+        if !status.is_success() {
+            return Err(format!("HTTP {}: {}", status, text).into());
+        }
+
+        Ok(serde_json::from_str(&text)?)
+    }
+
+    /// Clear all messages from webhook-catcher
+    pub async fn clear_messages(&self) -> Result<()> {
+        let url = format!("{}/messages", self.base_url);
+        let resp = self.http.delete(&url).send().await?;
+
+        if !resp.status().is_success() {
+            let text = resp.text().await?;
+            return Err(format!("Failed to clear: {}", text).into());
+        }
+
+        Ok(())
+    }
+
+    /// Wait for at least N messages to arrive, with timeout
+    pub async fn wait_for_messages(&self, count: usize, timeout_secs: u64) -> Result<Value> {
+        let start = std::time::Instant::now();
+        loop {
+            let result = self.get_messages().await?;
+            let msg_count = result["count"].as_u64().unwrap_or(0) as usize;
+
+            if msg_count >= count {
+                return Ok(result);
+            }
+
+            if start.elapsed() > std::time::Duration::from_secs(timeout_secs) {
+                return Err(format!(
+                    "Timeout waiting for {} messages, only got {}",
+                    count, msg_count
+                ).into());
+            }
+
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        }
     }
 }
 
