@@ -56,7 +56,7 @@ helm install my-agent charts/brokkr-agent \
   --set broker.url=http://my-broker:3000 \
   --set broker.clusterName=production \
   --set broker.pak="" \
-  --set-string 'extraEnv[0].name=BROKKR__BROKER__PAK' \
+  --set-string 'extraEnv[0].name=BROKKR__AGENT__PAK' \
   --set-string 'extraEnv[0].valueFrom.secretKeyRef.name=agent-credentials' \
   --set-string 'extraEnv[0].valueFrom.secretKeyRef.key=pak'
 ```
@@ -251,19 +251,11 @@ helm install agent-with-crds charts/brokkr-agent \
 
 ## RBAC Permissions
 
-The agent requires read-only access to Kubernetes resources for cluster observation. Default permissions include:
+The agent requires broad Kubernetes permissions for both cluster observation and resource deployment. Default permissions include:
 
-**Core API**: pods, namespaces, nodes, services, endpoints, configmaps, secrets, persistentvolumes, persistentvolumeclaims, events
+**Observation (get, list, watch)**: pods, namespaces, nodes, services, endpoints, configmaps, persistentvolumes, persistentvolumeclaims, events, deployments, statefulsets, daemonsets, replicasets, jobs, cronjobs, ingresses, networkpolicies, roles, rolebindings, clusterroles, clusterrolebindings
 
-**Apps API**: deployments, statefulsets, daemonsets, replicasets
-
-**Batch API**: jobs, cronjobs
-
-**Networking API**: ingresses, networkpolicies
-
-**RBAC API**: roles, rolebindings, clusterroles, clusterrolebindings
-
-**Verbs**: `get`, `list`, `watch` (read-only)
+**Deployment (all verbs)**: The agent also receives wildcard permissions (`"*"` resources, `"*"` verbs) on core, apps, batch, networking, and RBAC API groups to enable server-side apply of arbitrary Kubernetes manifests. When Shipwright is enabled, wildcard access to `shipwright.io` and `tekton.dev` API groups is also granted.
 
 For detailed information about why each permission is needed and security implications, see [RBAC.md](./RBAC.md).
 
@@ -363,7 +355,6 @@ This removes all resources created by the chart.
 ## Development Phases
 
 **Phase 1** (Complete): Basic agent deployment and broker connection
-**Phase 2** (Current): Comprehensive RBAC for cluster observation
-**Phase 3** (Future): Reconciliation operations with write permissions
+**Phase 2** (Complete): Comprehensive RBAC for cluster observation and deployment management
 
-See [RBAC.md](./RBAC.md) for information about future write permissions.
+See [RBAC.md](./RBAC.md) for detailed information about RBAC permissions.

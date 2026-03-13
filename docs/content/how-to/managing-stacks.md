@@ -247,16 +247,15 @@ curl -X DELETE http://localhost:3000/api/v1/stacks/$STACK_ID \
   -H "Authorization: Bearer $ADMIN_PAK"
 ```
 
-Soft deletion triggers several cascading actions:
-- All deployment objects in the stack are soft-deleted
-- A deletion marker deployment object is created so agents know to remove resources
+Soft deletion marks the stack with a `deleted_at` timestamp:
 - The stack stops appearing in list queries
+- The underlying data remains intact for audit purposes and potential recovery
 
-The underlying data remains intact for audit purposes and potential recovery.
+Note that soft-deleting a stack does not automatically cascade to its deployment objects or create deletion markers. To ensure agents remove resources from clusters, create a deletion marker deployment object before deleting the stack.
 
 ### Understanding Deletion Markers
 
-When a stack is soft-deleted, Brokkr creates a special deployment object with `is_deletion_marker: true`. Agents receiving this marker understand they should delete the resources rather than apply them. This ensures resources are cleaned up from clusters even after the stack is deleted.
+To clean up cluster resources, create a deployment object with `is_deletion_marker: true` for the stack before deleting it. Agents receiving this marker understand they should delete the stack's resources rather than apply them. This ensures resources are cleaned up from clusters.
 
 ## Generator Integration
 

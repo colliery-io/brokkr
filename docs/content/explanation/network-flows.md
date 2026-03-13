@@ -12,34 +12,34 @@ Understanding the network architecture of a distributed system is essential for 
 Brokkr implements a hub-and-spoke network topology where the broker acts as the central coordination point. All agents initiate outbound connections to the broker—there are no inbound connections required to agents. This pull-based model simplifies firewall configuration and enables agents to operate behind NAT without special accommodations.
 
 {{< mermaid >}}
-flowchart TB
-    subgraph External["External Traffic"]
-        Admin[Admin Users]
-        Generator[Generators/CI]
-        Webhook[Webhook Endpoints]
-    end
+C4Context
+    title Brokkr Network Topology (C4 System Context)
 
-    subgraph BrokerCluster["Broker Cluster"]
-        Ingress[Ingress Controller]
-        Broker[Broker Service :3000]
-        DB[(PostgreSQL :5432)]
-    end
+    Person(admin, "Platform Engineer", "Manages deployments and configuration")
+    System_Ext(generator, "Generator / CI Pipeline", "Automated deployment source")
+    System_Ext(webhook, "Webhook Endpoints", "External notification receivers")
+    System_Ext(otlp, "OTLP Collector", "Distributed tracing (optional)")
 
-    subgraph TargetClusters["Target Cluster(s)"]
-        Agent[Agent]
-        K8sAPI[K8s API :6443]
-        Workloads[Deployed Workloads]
-    end
+    Enterprise_Boundary(broker_cluster, "Broker Cluster") {
+        System_Ext(ingress, "Ingress Controller", "TLS termination")
+        System(broker, "Broker Service", "Central API on :3000")
+        SystemDb(db, "PostgreSQL", "Persistent state on :5432")
+    }
 
-    Admin -->|HTTPS| Ingress
-    Generator -->|HTTPS| Ingress
-    Ingress -->|HTTP| Broker
-    Broker -->|TCP| DB
-    Broker -->|HTTPS| Webhook
+    Enterprise_Boundary(target_cluster, "Target Cluster(s)") {
+        System(agent, "Brokkr Agent", "Cluster-local operator")
+        System_Ext(k8sapi, "Kubernetes API", "Cluster API on :6443")
+    }
 
-    Agent -->|HTTPS| Broker
-    Agent -->|HTTPS| K8sAPI
-    Agent -.->|Manages| Workloads
+    Rel(admin, ingress, "Manages", "HTTPS :443")
+    Rel(generator, ingress, "Deploys", "HTTPS :443")
+    Rel(ingress, broker, "Forwards", "HTTP :3000")
+    Rel(broker, db, "Queries", "TCP :5432")
+    Rel(broker, webhook, "Delivers events", "HTTPS :443")
+    Rel(broker, otlp, "Traces", "gRPC :4317")
+    Rel(agent, broker, "Polls & reports", "HTTPS :3000")
+    Rel(agent, k8sapi, "Applies resources", "HTTPS :6443")
+    Rel(agent, otlp, "Traces", "gRPC :4317")
 {{< /mermaid >}}
 
 The diagram above illustrates the three primary network zones in a typical Brokkr deployment. External traffic from administrators and generators enters through an ingress controller, which terminates TLS and forwards requests to the broker service. The broker maintains persistent connectivity to its PostgreSQL database and sends outbound webhook deliveries to configured external endpoints. Meanwhile, agents in target clusters poll the broker for deployment instructions and interact with their local Kubernetes API servers to apply resources.
@@ -65,7 +65,7 @@ The following table enumerates every network connection in the Brokkr system, in
 
 ### Port Assignments
 
-Brokkr uses a small number of well-defined ports. The broker service listens on port 3000 for all API traffic, including agent communication, administrator operations, and generator requests. This single-port design simplifies ingress configuration and firewall rules. Agents expose a health and metrics server on port 8080, which serves the `/healthz`, `/ready`, `/health`, and `/metrics` endpoints used by Kubernetes liveness probes and Prometheus scraping.
+Brokkr uses a small number of well-defined ports. The broker service listens on port 3000 for all API traffic, including agent communication, administrator operations, and generator requests. This single-port design simplifies ingress configuration and firewall rules. Agents expose a health and metrics server on port 8080, which serves the `/healthz`, `/readyz`, `/health`, and `/metrics` endpoints used by Kubernetes liveness probes and Prometheus scraping.
 
 The PostgreSQL database uses the standard port 5432. When deploying the bundled PostgreSQL instance via the Helm chart, this connection remains internal to the broker cluster. External PostgreSQL deployments may use different ports, which can be configured via the `postgresql.external.port` value.
 
@@ -125,7 +125,7 @@ The Helm chart creates RBAC resources that grant agents permission to manage res
 
 ### Broker Connectivity
 
-Agents poll the broker at a configurable interval (default: 30 seconds, set via `agent.pollingInterval`). Each polling cycle fetches pending deployment objects and reports events for completed operations. The agent also sends deployment health status updates at a separate interval (default: 60 seconds, set via `agent.deploymentHealth.intervalSeconds`).
+Agents poll the broker at a configurable interval (default: 10 seconds, set via `agent.pollingInterval`). Each polling cycle fetches pending deployment objects and reports events for completed operations. The agent also sends deployment health status updates at a separate interval (default: 60 seconds, set via `agent.deploymentHealth.intervalSeconds`).
 
 The broker URL is configured via the `broker.url` value in the agent's Helm chart. For deployments where the agent and broker share a cluster, an internal URL like `http://brokkr-broker:3000` provides optimal performance. For multi-cluster deployments, agents use the broker's external URL with TLS: `https://broker.example.com`.
 

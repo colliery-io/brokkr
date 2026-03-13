@@ -1,7 +1,7 @@
 ---
 title: "Technical Reference"
 description: "Complete technical documentation for Brokkr"
-weight: 1
+weight: 5
 ---
 
 # Technical Reference
@@ -27,23 +27,31 @@ Our interactive Swagger UI provides a complete reference of all available endpoi
 The Brokkr API is organized into the following main sections:
 
 #### Health Check
-- `GET /health` - Check the health status of the broker
-- `GET /health/ready` - Check if the broker is ready to accept requests
+- `GET /healthz` - Liveness check
+- `GET /readyz` - Readiness check
+- `GET /api/v1/health` - Detailed health diagnostics
 
 #### Agent Management
-- `POST /v1/agents/register` - Register a new agent
-- `GET /v1/agents/{agent_id}` - Get agent details
-- `DELETE /v1/agents/{agent_id}` - Deregister an agent
+- `POST /api/v1/agents` - Create a new agent
+- `GET /api/v1/agents` - List all agents
+- `GET /api/v1/agents/{agent_id}` - Get agent details
+- `PUT /api/v1/agents/{agent_id}` - Update an agent
+- `DELETE /api/v1/agents/{agent_id}` - Delete an agent
 
-#### Deployment Management
-- `POST /v1/deployments` - Create a new deployment
-- `GET /v1/deployments/{deployment_id}` - Get deployment details
-- `PUT /v1/deployments/{deployment_id}` - Update a deployment
-- `DELETE /v1/deployments/{deployment_id}` - Delete a deployment
+#### Stack Management
+- `POST /api/v1/stacks` - Create a new stack
+- `GET /api/v1/stacks` - List all stacks
+- `GET /api/v1/stacks/{stack_id}` - Get stack details
+- `PUT /api/v1/stacks/{stack_id}` - Update a stack
+- `DELETE /api/v1/stacks/{stack_id}` - Delete a stack
+
+#### Deployment Object Management
+- `POST /api/v1/stacks/{stack_id}/deployment-objects` - Create a deployment object
+- `GET /api/v1/stacks/{stack_id}/deployment-objects` - List deployment objects
 
 #### Event Management
-- `POST /v1/events` - Report a deployment event
-- `GET /v1/events/{deployment_id}` - Get events for a deployment
+- `POST /api/v1/events` - Report a deployment event
+- `GET /api/v1/events` - List events
 
 For detailed information about each endpoint, including request/response formats and examples, please refer to the [Interactive API Documentation](/openapi).
 

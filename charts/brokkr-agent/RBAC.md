@@ -5,12 +5,12 @@ This document explains the Role-Based Access Control (RBAC) permissions required
 ## Overview
 
 The Brokkr agent is a Kubernetes control loop that:
-1. Polls the broker for desired state instructions
-2. Reads the Kubernetes API to gather current cluster state
-3. Reports state back to the broker
-4. (Future) Executes reconciliation actions based on broker directives
+1. Polls the broker for desired state (deployment objects)
+2. Applies resources to the cluster using server-side apply
+3. Monitors deployed resource health
+4. Reports events and status back to the broker
 
-The agent requires read-only access to various Kubernetes resources to perform cluster observation and reporting. All permissions follow the principle of least privilege.
+The agent requires both read and write access to Kubernetes resources. Observation permissions (get, list, watch) support cluster monitoring, while wildcard permissions on major API groups enable the agent to deploy arbitrary Kubernetes manifests via server-side apply.
 
 ## Permission Justification
 
@@ -309,18 +309,37 @@ rbac:
 
 6. **Service Account Security**: Never share the agent's service account with other workloads.
 
-## Future Write Permissions (Phase 3+)
+## Deployment Write Permissions
 
-The current RBAC configuration is **read-only**. Future versions of Brokkr will support reconciliation operations that require write permissions:
+In addition to the observation permissions documented above, the agent's ClusterRole includes **wildcard permissions** on major API groups to support deploying arbitrary Kubernetes manifests:
 
-**Potential future verbs**: `create`, `update`, `patch`, `delete`
-**Target resources**: Resources that the broker will manage
+```yaml
+# Stack Deployment - full permissions for applying arbitrary manifests
+- apiGroups: [""]
+  resources: ["*"]
+  verbs: ["*"]
+- apiGroups: ["apps"]
+  resources: ["*"]
+  verbs: ["*"]
+- apiGroups: ["batch"]
+  resources: ["*"]
+  verbs: ["*"]
+- apiGroups: ["networking.k8s.io"]
+  resources: ["*"]
+  verbs: ["*"]
+- apiGroups: ["rbac.authorization.k8s.io"]  # cluster-wide mode only
+  resources: ["*"]
+  verbs: ["*"]
+```
 
-When write permissions are added:
-- They will be disabled by default and require explicit opt-in
-- More granular resource name restrictions will be implemented
-- Audit logging will be enhanced for all write operations
-- Separate roles may be created for read vs. write operations
+When Shipwright is enabled (`shipwright.enabled: true`), additional wildcard access is granted to `shipwright.io` and `tekton.dev` API groups for container image builds.
+
+**Why wildcard access?** The agent applies deployment objects containing arbitrary Kubernetes YAML via server-side apply. Since the content is user-defined, the agent cannot know in advance which resource types it will need to manage. Wildcard permissions ensure the agent can apply any resource type.
+
+**Security implications**: This grants the agent broad cluster access. Restrict the blast radius by:
+- Using namespace-scoped mode (`rbac.clusterWide: false`) where possible
+- Implementing network policies to limit the agent's network access
+- Monitoring audit logs for unexpected resource modifications
 
 ## Testing RBAC Configuration
 

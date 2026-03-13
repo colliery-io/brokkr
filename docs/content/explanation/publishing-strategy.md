@@ -217,5 +217,3 @@ Planned improvements to the publishing strategy:
 ## Related Documentation
 
 - [Container Images Reference](../reference/container-images.md) - Repository URLs and tag formats
-- [Multi-Architecture Builds](./multi-arch-builds.md) - Technical details on multi-arch support
-- [CI/CD Pipeline](../reference/cicd.md) - Automated build workflows

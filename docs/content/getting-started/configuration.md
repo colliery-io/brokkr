@@ -119,8 +119,8 @@ Cross-Origin Resource Sharing (CORS) settings control which origins can access t
 
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
-| `BROKKR__CORS__ALLOWED_ORIGINS` | list | `["*"]` | Allowed origins (use `*` for all) |
-| `BROKKR__CORS__ALLOWED_METHODS` | list | `["GET", "POST", "PUT", "DELETE"]` | Allowed HTTP methods |
+| `BROKKR__CORS__ALLOWED_ORIGINS` | list | `["http://localhost:3001"]` | Allowed origins (use `*` for all) |
+| `BROKKR__CORS__ALLOWED_METHODS` | list | `["GET", "POST", "PUT", "DELETE", "OPTIONS"]` | Allowed HTTP methods |
 | `BROKKR__CORS__ALLOWED_HEADERS` | list | `["Content-Type", "Authorization"]` | Allowed request headers |
 | `BROKKR__CORS__MAX_AGE_SECONDS` | integer | `3600` | Preflight cache duration |
 
@@ -143,9 +143,9 @@ The agent configuration controls the Kubernetes cluster agent's behavior.
 
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
-| `BROKKR__AGENT__POLLING_INTERVAL` | integer | `30` | Seconds between broker polls |
-| `BROKKR__AGENT__MAX_RETRIES` | integer | `3` | Maximum operation retry attempts |
-| `BROKKR__AGENT__MAX_EVENT_MESSAGE_RETRIES` | integer | `3` | Maximum event reporting retry attempts |
+| `BROKKR__AGENT__POLLING_INTERVAL` | integer | `10` | Seconds between broker polls |
+| `BROKKR__AGENT__MAX_RETRIES` | integer | `60` | Maximum operation retry attempts |
+| `BROKKR__AGENT__MAX_EVENT_MESSAGE_RETRIES` | integer | `2` | Maximum event reporting retry attempts |
 | `BROKKR__AGENT__EVENT_MESSAGE_RETRY_DELAY` | integer | `5` | Seconds between event retry attempts |
 
 ### Health and Monitoring
@@ -168,7 +168,7 @@ BROKKR__AGENT__BROKER_URL=https://broker.example.com:3000
 BROKKR__AGENT__PAK=brokkr_BRabc123_xyzSecretTokenHere
 BROKKR__AGENT__AGENT_NAME=production-east
 BROKKR__AGENT__CLUSTER_NAME=prod-us-east-1
-BROKKR__AGENT__POLLING_INTERVAL=30
+BROKKR__AGENT__POLLING_INTERVAL=10
 BROKKR__AGENT__HEALTH_PORT=8080
 BROKKR__AGENT__DEPLOYMENT_HEALTH_ENABLED=true
 BROKKR__AGENT__DEPLOYMENT_HEALTH_INTERVAL=60
@@ -253,7 +253,7 @@ audit_log_retention_days = 90
 
 [cors]
 allowed_origins = ["https://admin.example.com"]
-allowed_methods = ["GET", "POST", "PUT", "DELETE"]
+allowed_methods = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
 allowed_headers = ["Content-Type", "Authorization"]
 max_age_seconds = 3600
 
@@ -262,8 +262,8 @@ broker_url = "https://broker.example.com:3000"
 pak = "brokkr_BRabc123_xyzSecretTokenHere"
 agent_name = "production-east"
 cluster_name = "prod-us-east-1"
-polling_interval = 30
-max_retries = 3
+polling_interval = 10
+max_retries = 60
 health_port = 8080
 deployment_health_enabled = true
 deployment_health_interval = 60
@@ -326,7 +326,7 @@ curl -X POST https://broker.example.com/api/v1/admin/config/reload \
   -H "Authorization: Bearer $ADMIN_PAK"
 ```
 
-In Kubernetes deployments, the broker automatically watches its ConfigMap for changes with a 5-second debounce period.
+When a configuration file is specified via `BROKKR_CONFIG_FILE`, the broker automatically watches it for filesystem changes with a 5-second debounce period.
 
 ## Troubleshooting
 

@@ -33,16 +33,16 @@ Created when a git tag matching `v*.*.*` is pushed.
 
 | Tag Format | Example | Description | Mutable |
 |------------|---------|-------------|---------|
-| `v{major}.{minor}.{patch}` | `v1.2.3` | Full semantic version | No |
-| `v{major}.{minor}` | `v1.2` | Latest patch in minor version | Yes |
-| `v{major}` | `v1` | Latest minor in major version | Yes |
+| `{major}.{minor}.{patch}` | `1.2.3` | Full semantic version | No |
+| `{major}.{minor}` | `1.2` | Latest patch in minor version | Yes |
+| `{major}` | `1` | Latest minor in major version | Yes |
 | `latest` | `latest` | Most recent stable release | Yes |
 
 **Example**: Tagging release `v1.2.3` creates:
 ```
-ghcr.io/colliery-io/brokkr-broker:v1.2.3
-ghcr.io/colliery-io/brokkr-broker:v1.2
-ghcr.io/colliery-io/brokkr-broker:v1
+ghcr.io/colliery-io/brokkr-broker:1.2.3
+ghcr.io/colliery-io/brokkr-broker:1.2
+ghcr.io/colliery-io/brokkr-broker:1
 ghcr.io/colliery-io/brokkr-broker:latest
 ```
 
@@ -52,11 +52,11 @@ Created for every commit that triggers a container build.
 
 | Tag Format | Example | Description | Mutable |
 |------------|---------|-------------|---------|
-| `sha-{short-sha}` | `sha-abc1234` | 7-character commit SHA | No |
+| `{branch}-sha-{short-sha}` | `develop-sha-abc1234` | Branch-prefixed 7-character commit SHA | No |
 
-**Example**: Commit `abc1234def5678` creates:
+**Example**: Commit `abc1234def5678` on the `develop` branch creates:
 ```
-ghcr.io/colliery-io/brokkr-broker:sha-abc1234
+ghcr.io/colliery-io/brokkr-broker:develop-sha-abc1234
 ```
 
 ### Branch Tags
@@ -227,8 +227,7 @@ Brokkr images use multi-stage builds optimized for size and security.
 
 ### UI Image
 
-1. **Builder stage**: npm build
-2. **Final stage**: Node.js runtime
+1. **Single stage**: Node.js Alpine (`node:18-alpine`) with npm install and application start
 
 ## Kubernetes Deployment
 
@@ -277,4 +276,3 @@ Approximate compressed image sizes:
 ## Related Documentation
 
 - [Publishing Strategy](../explanation/publishing-strategy.md) - Understanding the tagging and distribution strategy
-- [Multi-Architecture Builds](../explanation/multi-arch-builds.md) - Technical details on multi-arch support

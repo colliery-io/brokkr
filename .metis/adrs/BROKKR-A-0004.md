@@ -23,8 +23,17 @@ initiative_id: BROKKR-I-0004
 
 # ADR-4: Schema-Per-Tenant Multi-Tenancy Architecture
 
-> **Implementation Status: Not Implemented**
-> This ADR documents the decision to use schema-per-tenant multi-tenancy. Implementation has not yet begun. The current broker operates in single-tenant mode using the public schema.
+> **Implementation Status: Core Infrastructure Implemented**
+> The schema-per-tenant multi-tenancy infrastructure has been implemented:
+> - `ConnectionPool` has `schema: Option<String>` field (in `brokkr-broker/src/db.rs`)
+> - `ConnectionPool::get()` automatically sets `SET search_path TO {schema}, public` on each connection
+> - `ConnectionPool::setup_schema()` creates schemas and configures search paths
+> - `validate_schema_name()` prevents SQL injection in schema names
+> - `BROKKR__DATABASE__SCHEMA` environment variable supported in configuration
+> - Integration tests verify: schema isolation, auto-provisioning, backward compatibility, and name validation
+> - Backward compatible: `schema: None` uses public schema (existing behavior preserved)
+>
+> The current broker defaults to single-tenant mode (public schema) when no schema is configured.
 
 ## Context
 

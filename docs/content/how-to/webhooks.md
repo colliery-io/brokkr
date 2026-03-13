@@ -223,7 +223,7 @@ All webhook deliveries include these headers:
 Content-Type: application/json
 X-Brokkr-Event-Type: deployment.applied
 X-Brokkr-Delivery-Id: a1b2c3d4-e5f6-7890-abcd-ef1234567890
-Authorization: Bearer <your-configured-auth-header>
+Authorization: <your-configured-auth-header>
 ```
 
 Payload structure:

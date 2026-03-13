@@ -405,7 +405,7 @@ For complete configuration options, see the chart values files:
 
 - Follow our [Quick Start Guide](quick-start) to deploy your first application
 - Learn about [Basic Concepts](../explanation/core-concepts) in Brokkr
-- Explore [Configuration Examples](../../how-to/configuration)
+- Explore [Configuration Guide](../configuration)
 
 ## Troubleshooting
 
@@ -446,7 +446,7 @@ kubectl get secret brokkr-broker-postgresql -o yaml
 ### Getting Help
 
 - Check our [GitHub Issues](https://github.com/colliery-io/brokkr/issues)
-- Read the [Troubleshooting Guide](../../how-to/troubleshoot)
+- Check our [GitHub Issues](https://github.com/colliery-io/brokkr/issues) for known issues and solutions
 
 ---
 
@@ -506,4 +506,4 @@ angreal local rebuild broker
 angreal local rebuild agent
 ```
 
-For more details on contributing, see our [Development Guide](../../contributing/development).
+For more details on contributing, see the [project README](https://github.com/colliery-io/brokkr).

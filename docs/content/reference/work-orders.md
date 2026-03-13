@@ -135,7 +135,7 @@ Content-Type: application/json
 }
 ```
 
-Atomically claims the work order. Returns 409 Conflict if already claimed.
+Atomically claims the work order. Returns 404 Not Found if the work order does not exist or is not in a claimable state.
 
 ### Complete Work Order (Agent)
 
@@ -155,7 +155,8 @@ Content-Type: application/json
 | Field | Type | Description |
 |-------|------|-------------|
 | `success` | boolean | Whether the work completed successfully |
-| `message` | string | Result message (image digest on success, error on failure) |
+| `message` | string | Optional result message (image digest on success, error on failure) |
+| `retryable` | boolean | Whether the work order can be retried on failure (default: true) |
 
 ### Get Work Order Details
 

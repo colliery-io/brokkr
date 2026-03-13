@@ -1,4 +1,4 @@
-baseURL = "http://localhost"
+baseURL = "https://colliery-io.github.io/brokkr/"
 title = "Brokkr"
 theme = "hugo-geekdoc"
 

@@ -1,6 +1,6 @@
 ---
 title: Health Check Endpoints
-weight: 20
+weight: 15
 ---
 
 # Health Check Endpoints

@@ -194,7 +194,7 @@ curl -X DELETE "http://broker:3000/api/v1/generators/$GENERATOR_ID" \
   -H "Authorization: Bearer $ADMIN_PAK"
 ```
 
-Deleting a generator does not delete its associated stacks and resources. Those remain in the system and can be managed by an admin.
+Deleting a generator cascades the soft-delete to all stacks owned by the generator and their deployment objects. This is handled by a database trigger, so the cascade is atomic.
 
 ## PAK Rotation
 

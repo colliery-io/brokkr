@@ -278,5 +278,4 @@ The CI workflows execute the same `angreal` commands, ensuring local/CI parity.
 ## Related Documentation
 
 - [Helm Chart Values Files](../charts/brokkr-broker/values/README.md)
-- [Multi-Arch Container Builds](../docs/multi-arch-builds.md)
 - [GitHub Environments Documentation](https://docs.github.com/en/actions/deployment/targeting-different-environments/using-environments-for-deployment)

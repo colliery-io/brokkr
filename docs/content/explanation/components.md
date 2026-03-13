@@ -1,6 +1,6 @@
 ---
 title: "Component Implementation"
-weight: 2
+weight: 3
 ---
 
 # Component Implementation Details
@@ -73,12 +73,12 @@ pub struct DAL {
 }
 
 impl DAL {
-    pub fn agents(&self) -> AgentsAccessor {
-        AgentsAccessor::new(self.pool.clone(), self.schema.clone())
+    pub fn agents(&self) -> AgentsDAL {
+        AgentsDAL::new(self.pool.clone(), self.schema.clone())
     }
 
-    pub fn stacks(&self) -> StacksAccessor {
-        StacksAccessor::new(self.pool.clone(), self.schema.clone())
+    pub fn stacks(&self) -> StacksDAL {
+        StacksDAL::new(self.pool.clone(), self.schema.clone())
     }
     // Additional accessors...
 }
@@ -144,7 +144,7 @@ The broker runs several background tasks for maintenance operations:
 
 The utils module provides shared functionality:
 
-**Event Bus** implements pub/sub for internal event propagation using Tokio mpsc channels with a 1000-entry buffer.
+**Event Emission** provides database-centric webhook dispatch by matching events against subscriptions and inserting delivery records directly.
 
 **Audit Logger** provides non-blocking audit logging with batched database writes (100 entries or 1 second flush).
 
@@ -246,14 +246,20 @@ This ordering prevents failures from missing dependencies during initial deploym
 
 #### Ownership Tracking
 
-The agent tracks resource ownership using annotations:
+The agent tracks resource ownership using a combination of labels and annotations:
 
 ```rust
-const STACK_ID_ANNOTATION: &str = "brokkr.io/stack-id";
-const CHECKSUM_ANNOTATION: &str = "brokkr.io/checksum";
+// Labels (used for selection and filtering)
+pub static STACK_LABEL: &str = "k8s.brokkr.io/stack";
+pub static DEPLOYMENT_OBJECT_ID_LABEL: &str = "brokkr.io/deployment-object-id";
+
+// Annotations (used for metadata)
+pub static CHECKSUM_ANNOTATION: &str = "k8s.brokkr.io/deployment-checksum";
+pub static LAST_CONFIG_ANNOTATION: &str = "k8s.brokkr.io/last-config-applied";
+pub static BROKKR_AGENT_OWNER_ANNOTATION: &str = "brokkr.io/owner-id";
 ```
 
-Before deleting resources, the agent verifies ownership to prevent removing resources managed by other systems. The checksum annotation enables detection of configuration drift.
+Before deleting resources, the agent verifies ownership by checking the owner annotation to prevent removing resources managed by other systems. The checksum annotation enables detection of configuration drift.
 
 #### Reconciliation
 
@@ -322,7 +328,7 @@ BROKKR__AGENT__BROKER_URL=https://broker.example.com:3000
 BROKKR__AGENT__PAK=brokkr_BR...
 BROKKR__AGENT__AGENT_NAME=production-cluster
 BROKKR__AGENT__CLUSTER_NAME=prod-us-east-1
-BROKKR__AGENT__POLLING_INTERVAL=30
+BROKKR__AGENT__POLLING_INTERVAL=10
 BROKKR__AGENT__HEALTH_PORT=8080
 ```
 
@@ -376,7 +382,7 @@ pub struct Agent {
     pub pak: String,
     pub agent_name: String,
     pub cluster_name: String,
-    pub polling_interval: u64,                    // default: 30
+    pub polling_interval: u64,                    // default: 10
     pub kubeconfig_path: Option<String>,
     pub max_retries: u32,
     pub max_event_message_retries: usize,
@@ -410,7 +416,7 @@ curl -X POST https://broker/api/v1/admin/config/reload \
   -H "Authorization: Bearer <admin-pak>"
 ```
 
-In Kubernetes, the broker automatically watches its ConfigMap for changes with a 5-second debounce.
+When a configuration file is specified, the broker automatically watches it for filesystem changes with a 5-second debounce.
 
 ## Component Lifecycle
 

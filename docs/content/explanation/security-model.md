@@ -12,36 +12,34 @@ Security in Brokkr follows a defense-in-depth approach, implementing multiple la
 Brokkr defines four distinct security zones, each with different trust levels and access controls. Understanding these boundaries is essential for secure deployment architecture and incident response.
 
 {{< mermaid >}}
-flowchart TB
-    subgraph Untrusted["Untrusted Zone"]
-        Internet[Internet/External]
-        Admin[Admin Users]
-        Generator[Generators/CI]
-    end
+C4Context
+    title Brokkr Security Trust Boundaries (C4 System Context)
 
-    subgraph DMZ["DMZ / Edge"]
-        Ingress[Ingress Controller]
-        TLS[TLS Termination]
-    end
+    Person(admin, "Admin Users", "Untrusted zone — must authenticate")
+    System_Ext(generator, "Generators / CI", "Untrusted zone — must authenticate")
+    System_Ext(internet, "Internet / External", "Untrusted zone")
 
-    subgraph Trusted["Trusted Zone"]
-        Broker[Broker Service]
-        DB[(PostgreSQL)]
-    end
+    Enterprise_Boundary(dmz, "DMZ / Edge") {
+        System_Ext(ingress, "Ingress Controller", "TLS termination and routing")
+    }
 
-    subgraph SemiTrusted["Semi-Trusted Zone (per cluster)"]
-        Agent[Agent]
-        K8s[Kubernetes API]
-    end
+    Enterprise_Boundary(trusted, "Trusted Zone") {
+        System(broker, "Broker Service", "Authenticated API with authorization")
+        SystemDb(db, "PostgreSQL", "Encrypted secrets, hashed credentials")
+    }
 
-    Internet --> Ingress
-    Admin --> Ingress
-    Generator --> Ingress
-    Ingress --> TLS
-    TLS --> Broker
-    Broker <--> DB
-    Agent --> Broker
-    Agent --> K8s
+    Enterprise_Boundary(semi_trusted, "Semi-Trusted Zone (per cluster)") {
+        System(agent, "Brokkr Agent", "Scoped access — own resources only")
+        System_Ext(k8s, "Kubernetes API", "Target cluster API server")
+    }
+
+    Rel(admin, ingress, "API requests", "HTTPS")
+    Rel(generator, ingress, "Deployment requests", "HTTPS")
+    Rel(internet, ingress, "External traffic", "HTTPS")
+    Rel(ingress, broker, "Authenticated traffic", "HTTP :3000")
+    Rel(broker, db, "Read/Write", "TCP :5432")
+    Rel(agent, broker, "Poll & report", "HTTPS :3000")
+    Rel(agent, k8s, "Manage resources", "HTTPS :6443")
 {{< /mermaid >}}
 
 The **Untrusted Zone** encompasses all external entities: internet traffic, administrator clients, and CI/CD generators. Nothing in this zone receives implicit trust—every request must authenticate before accessing protected resources.
@@ -271,7 +269,7 @@ curl -X POST https://broker/api/v1/agents/{id}/rotate-pak \
 # Returns: new PAK (store immediately; cannot be retrieved again)
 
 # Update agent configuration with new PAK
-kubectl set env deployment/brokkr-agent BROKKR__BROKER__PAK=<new-pak>
+kubectl set env deployment/brokkr-agent BROKKR__AGENT__PAK=<new-pak>
 ```
 
 After rotation, the old PAK becomes invalid immediately. Any requests using the old PAK receive 401 Unauthorized responses. The agent must be updated with the new PAK before its next broker communication.
@@ -401,7 +399,7 @@ containerSecurityContext:
 
 The agent requires Kubernetes permissions to manage resources in target clusters. The Helm chart creates RBAC resources that implement least-privilege access:
 
-**Read-only access** to core resources (pods, services, configmaps, deployments) enables the agent to monitor cluster state without modification capabilities beyond what's necessary for deployment management.
+**Resource management access** to core resources (pods, services, configmaps, deployments, and others) enables the agent to apply, update, and delete resources as part of deployment management. The agent requires create, get, list, watch, update, patch, and delete permissions on the resources it manages.
 
 **Shipwright access** (when enabled) grants create, update, and delete permissions on Build and BuildRun resources for container image builds.
 

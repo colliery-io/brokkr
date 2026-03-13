@@ -21,10 +21,11 @@ When you delete a resource through the Brokkr API, the system sets the `deleted_
 
 | Entity | Cascade Behavior | API Endpoint |
 |--------|------------------|--------------|
-| Agents | Soft deletes agent; events preserved | `DELETE /api/v1/agents/{id}` |
+| Agents | Soft deletes agent; cascade soft-deletes agent events | `DELETE /api/v1/agents/{id}` |
 | Stacks | Cascades to deployment objects; creates deletion marker | `DELETE /api/v1/stacks/{id}` |
 | Generators | Cascades to stacks and deployment objects | `DELETE /api/v1/generators/{id}` |
 | Templates | Soft deletes template only | `DELETE /api/v1/templates/{id}` |
+| Agent Events | Cascade soft-deleted when parent agent is soft-deleted | Not directly exposed |
 | Deployment Objects | Soft deletes object only | Generally not exposed directly |
 
 ## Cascade Behavior
@@ -59,7 +60,7 @@ This ensures that deleting a generator properly cleans up resources across all c
 
 ### Agent Deletion
 
-Agent soft deletion is simpler—only the agent record itself is marked deleted. Agent events are preserved for audit purposes, maintaining the historical record of what the agent did before deletion.
+When an agent is soft-deleted, a database trigger cascade soft-deletes all associated agent events by setting their `deleted_at` timestamps.
 
 ## Unique Constraints
 

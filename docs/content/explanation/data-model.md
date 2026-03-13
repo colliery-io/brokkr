@@ -21,9 +21,10 @@ classDiagram
     class agent_labels
     class agent_annotations
     class generators
+    class stack_templates
+    class work_orders
 
-    generators "1" -- "1..*" stacks : creates
-    generators "1" -- "1..*" deployment_objects : creates
+    generators "1" -- "0..*" stacks : owns
     stacks "1" -- "0..*" deployment_objects : contains
     stacks "1" -- "0..*" agent_targets : targeted by
     agents "1" -- "0..*" agent_events : reports
@@ -33,6 +34,8 @@ classDiagram
     stacks "1" -- "0..*" stack_annotations : has
     agents "1" -- "0..*" agent_labels : has
     agents "1" -- "0..*" agent_annotations : has
+    generators "1" -- "0..*" stack_templates : owns
+    stacks "1" -- "0..*" work_orders : targets
 {{< /mermaid >}}
 
 ## Design Philosophy

@@ -113,14 +113,19 @@ Response:
 ```json
 {
   "deployment_object_id": "a1b2c3d4-...",
-  "agent_id": "e5f6g7h8-...",
-  "status": "healthy",
-  "summary": {
-    "pods_ready": 3,
-    "pods_total": 3,
-    "conditions": []
-  },
-  "checked_at": "2025-01-02T10:00:00Z"
+  "overall_status": "healthy",
+  "health_records": [
+    {
+      "agent_id": "e5f6g7h8-...",
+      "status": "healthy",
+      "summary": {
+        "pods_ready": 3,
+        "pods_total": 3,
+        "conditions": []
+      },
+      "checked_at": "2025-01-02T10:00:00Z"
+    }
+  ]
 }
 ```
 
@@ -213,10 +218,10 @@ When status shows as `unknown`:
 
 When a deployment object is targeted to multiple agents, each agent reports its own health status. The broker stores health per agent, reflecting that the same deployment may have different health on different clusters.
 
-Query all health reports for a deployment:
+The health endpoint always returns records from all reporting agents in the `health_records` array, along with an `overall_status` that reflects the aggregate state:
 
 ```bash
-curl "http://broker:3000/api/v1/deployment-objects/{id}/health?all_agents=true" \
+curl "http://broker:3000/api/v1/deployment-objects/{id}/health" \
   -H "Authorization: Bearer $ADMIN_PAK"
 ```
 

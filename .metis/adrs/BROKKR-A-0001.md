@@ -95,6 +95,6 @@ The upfront design cost (2-3 weeks) is offset by avoiding repeated implementatio
 - Some broker logic must handle polymorphic work types
 
 ### Neutral
-- Database migration 08 adds work_orders and work_order_targets tables
+- Database migration 08 adds work_orders, work_order_log, and work_order_targets tables; migration 09 adds work_order_labels and work_order_annotations for label/annotation-based targeting
 - Work assignment follows same agent targeting patterns as stacks
 - CRD lifecycle managed by specialized operators (not broker responsibility)

@@ -11,7 +11,7 @@ Brokkr agents continuously reconcile the desired state defined in deployment obj
 
 Brokkr uses a pull-based reconciliation model where agents periodically fetch their target state from the broker and ensure their cluster matches. This differs from push-based systems where a central controller actively pushes changes—instead, each agent owns the reconciliation responsibility for its cluster.
 
-The core loop runs at a configurable polling interval (default: 30 seconds). On each cycle, the agent fetches deployment objects from the broker, validates the resources, applies them using Kubernetes server-side apply, and reports the result back to the broker as an event. This cycle continues indefinitely, ensuring clusters stay aligned with the desired state even if drift occurs.
+The core loop runs at a configurable polling interval (default: 10 seconds). On each cycle, the agent fetches deployment objects from the broker, validates the resources, applies them using Kubernetes server-side apply, and reports the result back to the broker as an event. This cycle continues indefinitely, ensuring clusters stay aligned with the desired state even if drift occurs.
 
 ## Polling and Target State
 
@@ -45,8 +45,8 @@ For each deployment object, the reconciliation proceeds through several stages:
 3. **Server-Side Apply**: Resources are applied using Kubernetes server-side apply with force enabled. This approach allows Brokkr to take ownership of fields it manages while preserving fields managed by other controllers.
 
 4. **Annotation Injection**: Each applied resource receives annotations identifying its stack and the deployment object checksum:
-   - `brokkr.io/stack-id`: Links the resource to its stack
-   - `brokkr.io/checksum`: Identifies which deployment object version created it
+   - `k8s.brokkr.io/stack`: Links the resource to its stack (label)
+   - `k8s.brokkr.io/deployment-checksum`: Identifies which deployment object version created it (annotation)
 
 5. **Pruning**: After applying desired resources, the agent queries the cluster for all resources with the stack annotation and deletes any that don't match the current checksum. This removes resources that were part of previous deployments but aren't in the current desired state.
 
@@ -90,10 +90,10 @@ Control how frequently the agent checks for changes:
 
 ```yaml
 agent:
-  polling_interval: 30  # seconds
+  polling_interval: 10  # seconds
 ```
 
-Shorter intervals mean faster propagation of changes but higher API load on both the broker and Kubernetes API server. For production deployments, 30-60 seconds is typically appropriate.
+Shorter intervals mean faster propagation of changes but higher API load on both the broker and Kubernetes API server. For production deployments, 10-60 seconds is typically appropriate.
 
 ### Retry Behavior
 
@@ -132,7 +132,7 @@ If resources persist after stack deletion:
 
 1. **Verify deletion marker**: Check that a deletion marker deployment object was created for the stack.
 
-2. **Check annotations**: Verify the resources have the `brokkr.io/stack-id` annotation. Resources without this annotation aren't managed by Brokkr.
+2. **Check labels**: Verify the resources have the `k8s.brokkr.io/stack` label. Resources without this label aren't managed by Brokkr.
 
 3. **Check owner references**: Resources with owner references are skipped during pruning. They'll be cleaned up when their owner is deleted.
 

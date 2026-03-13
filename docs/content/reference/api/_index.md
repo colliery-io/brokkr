@@ -55,6 +55,7 @@ Stacks are collections of Kubernetes resources managed as a unit.
 | GET | `/stacks/:id/annotations` | List stack annotations |
 | POST | `/stacks/:id/annotations` | Add annotation to stack |
 | DELETE | `/stacks/:id/annotations/:key` | Remove annotation |
+| GET | `/stacks/:id/deployment-objects` | List deployment objects |
 | POST | `/stacks/:id/deployment-objects` | Create deployment object |
 | POST | `/stacks/:id/deployment-objects/from-template` | Instantiate template |
 
@@ -74,6 +75,7 @@ Agents run in Kubernetes clusters and apply deployment objects.
 | POST | `/agents/:id/labels` | Add label to agent |
 | GET | `/agents/:id/annotations` | List agent annotations |
 | POST | `/agents/:id/annotations` | Add annotation to agent |
+| GET | `/agents/:id/stacks` | List agent's associated stacks |
 | GET | `/agents/:id/targets` | List agent's stack targets |
 | POST | `/agents/:id/targets` | Add stack target |
 | DELETE | `/agents/:id/targets/:stack_id` | Remove stack target |
@@ -130,6 +132,34 @@ External systems that create deployment objects.
 | GET | `/deployment-objects/:id` | Get deployment object by ID |
 | POST | `/auth/pak` | Verify a PAK |
 
+#### Webhooks
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/webhooks` | List webhook subscriptions |
+| POST | `/webhooks` | Create webhook subscription |
+| GET | `/webhooks/event-types` | List available event types |
+| GET | `/webhooks/:id` | Get webhook subscription |
+| PUT | `/webhooks/:id` | Update webhook subscription |
+| DELETE | `/webhooks/:id` | Delete webhook subscription |
+| POST | `/webhooks/:id/test` | Test webhook delivery |
+| GET | `/webhooks/:id/deliveries` | List webhook deliveries |
+
+#### Admin
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/admin/audit-logs` | Query audit logs |
+| POST | `/admin/config/reload` | Reload broker configuration |
+
+#### Health Monitoring
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/deployment-objects/:id/health` | Get deployment health |
+| GET | `/deployment-objects/:id/diagnostics` | Get diagnostics |
+| POST | `/deployment-objects/:id/diagnostics` | Request diagnostic |
+
 ## Health Endpoints
 
 The broker exposes health endpoints (not under `/api/v1/`):
@@ -137,8 +167,8 @@ The broker exposes health endpoints (not under `/api/v1/`):
 | Endpoint | Description |
 |----------|-------------|
 | `/healthz` | Basic health check |
-| `/health/live` | Liveness probe |
-| `/health/ready` | Readiness probe |
+| `/readyz` | Readiness probe |
+| `/metrics` | Prometheus metrics |
 
 See [Health Endpoints](../health-endpoints) for details.
 

@@ -23,10 +23,12 @@ initiative_id: BROKKR-I-0003
 
 # ADR-3: OpenTelemetry for Vendor-Agnostic Observability
 
-> **Implementation Status: Partially Implemented**
-> - Phase 1 (Prometheus metrics): Complete - `/metrics` endpoint available in broker and agent
-> - Phase 2 (OTLP export): Not implemented
-> - Phase 3 (Distributed tracing): Not implemented
+> **Implementation Status: Substantially Implemented**
+> - Phase 1 (Prometheus metrics): Complete - `/metrics` endpoint available in broker and agent with comprehensive metrics (HTTP requests, DB queries, agent heartbeats, K8s operations)
+> - Phase 2 (OTLP export): Complete - `brokkr-utils` telemetry module supports OTLP trace export via `opentelemetry-otlp` with configurable endpoint and sampling rate
+> - Phase 3 (Distributed tracing): Infrastructure complete - tracing subscriber with OpenTelemetry layer configured; `tracing` crate used throughout codebase for instrumented logging
+>
+> Note: Metrics use the `prometheus` crate directly (not `opentelemetry-prometheus`). Tracing uses OpenTelemetry OTLP export. This is a pragmatic split rather than pure OTel for both signals.
 
 ## Context **[REQUIRED]**
 
@@ -60,11 +62,11 @@ Brokkr needs observability instrumentation to provide metrics, distributed traci
 - Debugging failures across component boundaries is critical
 - Metrics alone cannot capture causality chains
 
-**Current state:**
-- Broker has stub `/metrics` endpoint (returns "Metrics" string)
-- Agent has no observability endpoints
-- No instrumentation framework in place
-- No dependency on observability libraries
+**Current state (as of decision date, now superseded by implementation):**
+- Broker has full `/metrics` endpoint with Prometheus metrics (HTTP requests, DB queries, agent/stack/deployment gauges)
+- Agent has `/metrics` endpoint with Prometheus metrics (poll requests, K8s operations, heartbeat counters)
+- OpenTelemetry tracing infrastructure in `brokkr-utils` with OTLP export support
+- Dependencies: `prometheus`, `opentelemetry`, `opentelemetry-otlp`, `opentelemetry_sdk`, `tracing`, `tracing-opentelemetry`, `tracing-subscriber`
 
 ## Decision **[REQUIRED]**
 
@@ -78,21 +80,21 @@ Implement observability using **OpenTelemetry (OTel)** with multiple export opti
 5. **Default mode**: Prometheus-compatible `/metrics` endpoint (most common expectation)
 
 **Implementation approach:**
-- **Phase 1**: Metrics with Prometheus export (BROKKR-T-0019)
-  - Add `opentelemetry`, `opentelemetry-prometheus`, `opentelemetry_sdk` crates
-  - Implement `/metrics` endpoint using Prometheus exporter
-  - Instrument key operations (HTTP requests, DB queries, K8s operations)
-  - Add ServiceMonitor CRD templates to Helm charts
+- **Phase 1**: Metrics with Prometheus export (BROKKR-T-0019) — **COMPLETE**
+  - Added `prometheus` crate for direct Prometheus metrics (not `opentelemetry-prometheus`)
+  - Implemented `/metrics` endpoint in both broker and agent
+  - Instrumented key operations (HTTP requests, DB queries, K8s operations, agent heartbeats)
+  - ServiceMonitor CRD templates to be added to Helm charts
 
-- **Phase 2**: OTLP export support (future task)
-  - Add `opentelemetry-otlp` crate
-  - Configuration for OTLP endpoint
-  - Support direct export to backends (Datadog, Honeycomb, etc.)
+- **Phase 2**: OTLP export support — **COMPLETE**
+  - Added `opentelemetry-otlp` crate with tonic/gRPC transport
+  - Configuration via `BROKKR__TELEMETRY__*` environment variables (endpoint, sampling rate, per-component overrides)
+  - Supports direct export to any OTLP-compatible backend
 
-- **Phase 3**: Distributed tracing (future task)
-  - Add trace spans to request flows
-  - Propagate trace context broker → agent → K8s
-  - Enable end-to-end request tracing
+- **Phase 3**: Distributed tracing — **INFRASTRUCTURE COMPLETE**
+  - Tracing subscriber with OpenTelemetry layer configured in `brokkr-utils/src/telemetry.rs`
+  - `tracing` crate used throughout codebase for structured, instrumented logging
+  - End-to-end trace context propagation broker → agent → K8s not yet implemented (requires explicit context propagation in HTTP headers)
 
 ## Alternatives Analysis **[CONDITIONAL: Complex Decision]**
 

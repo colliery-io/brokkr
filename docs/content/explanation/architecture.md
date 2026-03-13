@@ -1,6 +1,6 @@
 ---
 title: "Technical Architecture"
-weight: 1
+weight: 2
 ---
 
 # Technical Architecture
@@ -9,7 +9,51 @@ Brokkr is a deployment orchestration platform designed to manage Kubernetes reso
 
 ## System Overview
 
+{{< mermaid >}}
+C4Context
+    title Brokkr System Context (C4 Level 1)
+
+    Person(engineer, "Platform Engineer", "Manages deployments and configuration")
+    System_Ext(cicd, "CI/CD Pipeline", "Automated deployment source (Generator)")
+
+    System(brokkr, "Brokkr", "Deployment orchestration platform for multi-cluster Kubernetes")
+
+    System_Ext(k8s, "Kubernetes Clusters", "Target clusters where resources are deployed")
+    SystemDb(pg, "PostgreSQL", "Persistent state storage")
+    System_Ext(webhooks, "External Systems", "Receive event notifications via webhooks")
+
+    Rel(engineer, brokkr, "Manages stacks and deployments", "HTTPS REST API")
+    Rel(cicd, brokkr, "Creates stacks and deployment objects", "HTTPS REST API")
+    Rel(brokkr, pg, "Stores state", "SQL")
+    Rel(brokkr, k8s, "Deploys resources via agents", "HTTPS")
+    Rel(brokkr, webhooks, "Sends event notifications", "HTTPS")
+{{< /mermaid >}}
+
 At its core, Brokkr follows a hub-and-spoke architecture where a central broker service coordinates deployments across multiple agent instances. The broker maintains the desired state of all deployments in a PostgreSQL database, while agents running in target Kubernetes clusters continuously poll the broker to fetch their assigned work and reconcile the actual cluster state to match the desired state.
+
+{{< mermaid >}}
+C4Container
+    title Brokkr Container Diagram (C4 Level 2)
+
+    Person(engineer, "Platform Engineer", "Manages deployments")
+    System_Ext(cicd, "CI/CD Pipeline", "Generator identity")
+
+    Container_Boundary(brokkr, "Brokkr Platform") {
+        Container(broker, "Broker", "Rust, Axum", "REST API, background tasks, webhook dispatch")
+        Container(agent, "Agent", "Rust, kube-rs", "Polls broker, reconciles cluster state")
+        ContainerDb(db, "PostgreSQL", "PostgreSQL 15+", "Stacks, deployment objects, events, audit logs")
+    }
+
+    System_Ext(k8s, "Kubernetes API", "Target cluster")
+    System_Ext(webhooks, "Webhook Endpoints", "External notification receivers")
+
+    Rel(engineer, broker, "Manages", "HTTPS REST API")
+    Rel(cicd, broker, "Deploys", "HTTPS REST API")
+    Rel(agent, broker, "Polls for state, reports events", "HTTPS REST")
+    Rel(broker, db, "Reads/writes state", "SQL :5432")
+    Rel(agent, k8s, "Applies/deletes resources", "HTTPS :6443")
+    Rel(broker, webhooks, "Delivers events", "HTTPS")
+{{< /mermaid >}}
 
 This pull-based model was chosen deliberately over a push-based approach for several reasons. First, it simplifies network topology since agents only need outbound connectivity to the broker rather than requiring the broker to reach into potentially firewalled cluster networks. Second, it provides natural resilience since agents can continue operating with their cached state during temporary broker unavailability. Third, it allows agents to control their own reconciliation pace based on their cluster's capabilities and load.
 
@@ -21,11 +65,11 @@ The broker is implemented as an asynchronous Rust service built on the Axum web 
 
 The broker follows a carefully ordered startup sequence to ensure all dependencies are properly initialized before accepting requests. First, the configuration is loaded from environment variables and configuration files, establishing database connection parameters, authentication settings, and operational parameters like polling intervals.
 
-Next, a PostgreSQL connection pool is established using the r2d2 connection manager with Diesel as the ORM layer. The pool is configured with a default of five connections, though this is adjustable for production workloads. If multi-tenant mode is enabled, the broker sets up the appropriate PostgreSQL schema to isolate tenant data.
+Next, a PostgreSQL connection pool is established using the r2d2 connection manager with Diesel as the ORM layer. The pool is configured with a default of 50 connections to accommodate background tasks, middleware, and concurrent request handling. If multi-tenant mode is enabled, the broker sets up the appropriate PostgreSQL schema to isolate tenant data.
 
 After the database connection is established, Diesel migrations run automatically to ensure the schema is up to date. The broker then checks the `app_initialization` table to determine if this is a first-time startup. On first run, it creates the admin role and an associated admin generator, writing the initial admin PAK (Prefixed API Key) to a temporary file for retrieval.
 
-With the database ready, the broker initializes its runtime subsystems in sequence: the Data Access Layer (DAL), the encryption subsystem for webhook secrets, the event bus for asynchronous event dispatch, the audit logger for compliance tracking, and finally the five background task workers. If running in Kubernetes, it also starts a ConfigMap watcher for hot-reload capability.
+With the database ready, the broker initializes its runtime subsystems in sequence: the Data Access Layer (DAL), the encryption subsystem for webhook secrets, the event emission system for webhook dispatch, the audit logger for compliance tracking, and finally the five background task workers. If a configuration file is specified, it also starts a filesystem watcher for hot-reload capability.
 
 ### API Layer
 
@@ -36,36 +80,22 @@ The authentication middleware performs verification against three possible ident
 Upon successful authentication, the middleware injects an `AuthPayload` structure into the request context containing the authenticated identity's type and ID. Individual endpoint handlers then perform authorization checks against this payload to determine if the caller has permission for the requested operation.
 
 {{< mermaid >}}
-flowchart TB
-    subgraph Request["Incoming Request"]
-        HTTP[HTTP Request]
-    end
+C4Component
+    title Broker Request Processing (C4 Component)
 
-    subgraph Middleware["Authentication Layer"]
-        Extract[Extract PAK from Header]
-        Verify[Verify Against DB]
-        Inject[Inject AuthPayload]
-    end
+    Person(client, "API Client", "Admin, Agent, or Generator")
 
-    subgraph Handler["Endpoint Handler"]
-        AuthZ[Authorization Check]
-        Logic[Business Logic]
-        DAL[Data Access Layer]
-    end
+    Component(auth, "Auth Middleware", "Axum Middleware", "Extracts PAK, verifies against DB, injects AuthPayload")
+    Component(handler, "Route Handler", "Axum Handler", "Authorization check and business logic")
+    Component(dal, "Data Access Layer", "Diesel ORM", "Type-safe database operations via accessor types")
+    ComponentDb(pool, "Connection Pool", "r2d2", "Manages PostgreSQL connections (default: 50)")
+    ComponentDb(db, "PostgreSQL", "Database", "Persistent storage")
 
-    subgraph Database["PostgreSQL"]
-        Pool[Connection Pool]
-        Query[Execute Query]
-    end
-
-    HTTP --> Extract
-    Extract --> Verify
-    Verify --> Inject
-    Inject --> AuthZ
-    AuthZ --> Logic
-    Logic --> DAL
-    DAL --> Pool
-    Pool --> Query
+    Rel(client, auth, "HTTP Request", "Authorization: Bearer {PAK}")
+    Rel(auth, handler, "Authenticated request", "AuthPayload injected")
+    Rel(handler, dal, "Data operations", "Type-safe queries")
+    Rel(dal, pool, "Get connection", "")
+    Rel(pool, db, "SQL", "TCP :5432")
 {{< /mermaid >}}
 
 The API is organized into resource-specific modules: agents, generators, stacks, deployment objects, templates, work orders, webhooks, diagnostics, health status, and admin operations. Each module defines its routes, request/response structures, and authorization requirements.
@@ -80,13 +110,11 @@ The DAL uses Diesel's query builder for type-safe SQL generation, ensuring that 
 
 Soft deletion is implemented throughout the system using a `deleted_at` timestamp column. When an entity is "deleted," this timestamp is set rather than removing the row, preserving the audit trail and enabling potential recovery. Most queries automatically filter out soft-deleted records.
 
-### Event Bus
+### Event Emission
 
-The event bus provides an asynchronous publish-subscribe mechanism for internal event dispatch, primarily used to trigger webhook deliveries. It is implemented as a singleton using Rust's `OnceCell` pattern, ensuring only one event bus instance exists throughout the application lifecycle.
+The event emission system provides a database-centric approach to webhook dispatch. Rather than using an in-memory pub/sub bus, events are directly matched against webhook subscriptions and inserted into the `webhook_deliveries` table for processing by the webhook delivery worker.
 
-When initialized, the event bus spawns a background task that continuously receives events from a Tokio mpsc channel. The channel is configured with a default buffer size of 1,000 events, providing backpressure when the system is overwhelmed. Events can be emitted in fire-and-forget mode using `emit()` or with await capability using `emit_async()`.
-
-When an event arrives, the dispatcher queries the database for all webhook subscriptions whose event type pattern matches the event. Pattern matching supports exact matches like `workorder.completed`, wildcard suffixes like `health.*` that match any health-related event, and a catch-all `*` pattern that matches everything. For each matching subscription, a webhook delivery record is created in PENDING status for the webhook delivery worker to process.
+When an event occurs (such as a deployment being applied or a work order completing), the `emit_event()` function queries the database for all webhook subscriptions whose event type pattern matches the event. Pattern matching supports exact matches like `workorder.completed`, wildcard suffixes like `deployment.*` that match any deployment-related event, and a catch-all `*` pattern that matches everything. For each matching subscription, a webhook delivery record is created in PENDING status for the webhook delivery worker to process.
 
 ### Background Tasks
 
@@ -112,11 +140,11 @@ Audit entries capture the actor type (admin, agent, generator, or system), the a
 
 ### Configuration Hot-Reload
 
-When running in Kubernetes, the broker can automatically detect and apply configuration changes without requiring a pod restart. The config watcher uses the Kubernetes API to watch the broker's ConfigMap, detecting modifications through the watch stream.
+When a configuration file is specified via the `BROKKR_CONFIG_FILE` environment variable, the broker can automatically detect and apply configuration changes without requiring a pod restart. The config watcher uses the `notify` crate to monitor the configuration file's parent directory for filesystem events, detecting modifications through OS-level file watching.
 
-When a change is detected, the watcher applies a configurable debounce period (default: 5 seconds) to coalesce rapid successive changes into a single reload operation. Only certain configuration values support hot-reload: log level, diagnostic cleanup intervals, webhook delivery settings, and CORS configuration. Settings that affect initialization, like database connection parameters or TLS configuration, require a pod restart.
+When a change is detected, the watcher applies a configurable debounce period (default: 5 seconds, configurable via `BROKKR_CONFIG_WATCHER_DEBOUNCE_SECONDS`) to coalesce rapid successive changes into a single reload operation. The watcher can be disabled via `BROKKR_CONFIG_WATCHER_ENABLED=false`. Only certain configuration values support hot-reload: log level, diagnostic cleanup intervals, webhook delivery settings, and CORS configuration. Settings that affect initialization, like database connection parameters or TLS configuration, require a pod restart.
 
-The admin API also exposes a manual reload endpoint at `POST /api/v1/admin/config/reload` that triggers an immediate configuration reload, useful for non-Kubernetes deployments or when changes need to take effect immediately.
+The admin API also exposes a manual reload endpoint at `POST /api/v1/admin/config/reload` that triggers an immediate configuration reload, useful when changes need to take effect immediately.
 
 ## Agent Service Architecture
 
@@ -137,39 +165,35 @@ Finally, the agent starts an HTTP server on port 8080 for health checks and metr
 The agent's control loop is implemented using Tokio's `select!` macro to concurrently await multiple timer-based tasks. This design allows multiple activities to proceed in parallel while ensuring orderly shutdown when a termination signal is received.
 
 {{< mermaid >}}
-flowchart TB
-    subgraph Loop["Main Control Loop"]
-        direction TB
-        HB[Heartbeat Timer]
-        Deploy[Deployment Check Timer]
-        WO[Work Order Timer]
-        Health[Health Check Timer]
-        Diag[Diagnostics Timer]
-        Shutdown[Shutdown Signal]
-    end
+C4Component
+    title Agent Internal Architecture (C4 Component)
 
-    subgraph Broker["Broker Communication"]
-        Fetch[Fetch Deployments]
-        Report[Report Events]
-        Beat[Send Heartbeat]
-    end
+    Container_Boundary(agent, "Brokkr Agent") {
+        Component(loop, "Control Loop", "Tokio select!", "Concurrent timer-based task dispatcher")
+        Component(heartbeat, "Heartbeat", "Timer Task", "Sends periodic heartbeat to broker")
+        Component(deployer, "Deployment Checker", "Timer Task", "Polls for deployment objects and reconciles")
+        Component(workorder, "Work Order Processor", "Timer Task", "Claims and executes work orders")
+        Component(healthcheck, "Health Monitor", "Timer Task", "Evaluates deployment health status")
+        Component(diagnostics, "Diagnostics Handler", "Timer Task", "Processes on-demand diagnostic requests")
+        Component(reconciler, "Reconciliation Engine", "kube-rs", "Server-side apply with ordering and ownership")
+    }
 
-    subgraph K8s["Kubernetes Operations"]
-        Apply[Apply Resources]
-        Delete[Delete Resources]
-        Monitor[Monitor Health]
-    end
+    System_Ext(broker, "Broker API", "Central control plane")
+    System_Ext(k8s, "Kubernetes API", "Target cluster")
 
-    HB --> Beat
-    Deploy --> Fetch
-    Fetch --> Apply
-    Apply --> Report
-    WO --> Fetch
-    Health --> Monitor
-    Monitor --> Report
+    Rel(loop, heartbeat, "Triggers")
+    Rel(loop, deployer, "Triggers")
+    Rel(loop, workorder, "Triggers")
+    Rel(loop, healthcheck, "Triggers")
+    Rel(loop, diagnostics, "Triggers")
+    Rel(deployer, reconciler, "Delegates apply/delete")
+    Rel(heartbeat, broker, "POST heartbeat", "HTTPS")
+    Rel(deployer, broker, "GET target-state", "HTTPS")
+    Rel(reconciler, k8s, "Apply/Delete resources", "HTTPS :6443")
+    Rel(healthcheck, k8s, "Query pod status", "HTTPS :6443")
 {{< /mermaid >}}
 
-**Heartbeat Timer** fires at a configurable interval (default: 30 seconds) to send a heartbeat to the broker, maintaining the agent's "alive" status. The response includes updated agent details, allowing the broker to push configuration changes like label updates.
+**Heartbeat Timer** fires at a configurable interval (derived from the polling interval) to send a heartbeat to the broker, maintaining the agent's "alive" status. The response includes updated agent details, allowing the broker to push configuration changes like label updates.
 
 **Deployment Check Timer** fires at the configured polling interval to fetch the agent's target state from the broker. The agent compares this desired state against what it has previously applied and performs reconciliation to converge them.
 
@@ -251,11 +275,11 @@ On the agent side, the deployment check timer fires and requests the agent's tar
 
 ### Event and Webhook Flow
 
-Events flow from agents through the broker to external systems via webhooks. When an agent reports an event (success, failure, health change), the broker stores it in the database and publishes it to the event bus.
+Events flow from agents through the broker to external systems via webhooks. When an agent reports an event (success, failure, health change), the broker stores it in the database and emits it through the event emission system.
 
-The event bus dispatcher receives the event and queries for matching webhook subscriptions. For each match, it creates a webhook delivery record. The webhook delivery worker picks up these records and attempts HTTP delivery to the configured endpoints.
+The event emitter queries the database for matching webhook subscriptions. For each match, it creates a webhook delivery record. The webhook delivery worker picks up these records and attempts HTTP delivery to the configured endpoints.
 
-This decoupled architecture ensures that event processing doesn't block API responses—the agent receives an immediate acknowledgment while webhook delivery proceeds asynchronously with its own retry logic.
+This decoupled architecture ensures that webhook delivery proceeds asynchronously with its own retry logic, separate from the initial event recording.
 
 ## Performance Characteristics
 
@@ -263,11 +287,11 @@ The broker is designed to handle substantial load with modest resources. The API
 
 **API Performance**: Under typical conditions, API requests complete in under 50 milliseconds at the 95th percentile, with the broker capable of handling over 1,000 requests per second on a single instance.
 
-**Database Performance**: Query latency is typically under 20 milliseconds, with indexed lookups for authentication completing in single-digit milliseconds. The connection pool maintains 20-100 connections depending on configuration.
+**Database Performance**: Query latency is typically under 20 milliseconds, with indexed lookups for authentication completing in single-digit milliseconds. The connection pool defaults to 50 connections.
 
 **Agent Performance**: Resource application completes in under 100 milliseconds per resource, with the reconciliation loop typically completing in under 1 second. Event reporting has sub-50ms latency to the broker.
 
-For larger deployments, the broker can be horizontally scaled behind a load balancer since it maintains no in-memory state beyond caches—all persistent state lives in PostgreSQL. Session affinity is recommended for WebSocket connections if that feature is used.
+For larger deployments, the broker can be horizontally scaled behind a load balancer since it maintains no in-memory state beyond caches—all persistent state lives in PostgreSQL.
 
 ## Scaling Patterns
 
@@ -276,14 +300,27 @@ For larger deployments, the broker can be horizontally scaled behind a load bala
 The broker's stateless design enables straightforward horizontal scaling. Multiple broker instances can run behind a load balancer, all connecting to the same PostgreSQL database. Each instance runs its own background tasks, but these are designed to be safe for concurrent execution through database-level coordination (e.g., work order claiming uses atomic updates to prevent double-claiming).
 
 {{< mermaid >}}
-graph TD
-    LB[Load Balancer] --> B1[Broker 1]
-    LB --> B2[Broker 2]
-    LB --> B3[Broker 3]
-    B1 --> DB[(PostgreSQL Primary)]
-    B2 --> DB
-    B3 --> DB
-    DB --> DBR[(PostgreSQL Replica)]
+C4Container
+    title Horizontal Scaling Pattern (C4 Container)
+
+    System_Ext(lb, "Load Balancer", "Distributes API traffic")
+
+    Container_Boundary(brokers, "Broker Instances") {
+        Container(b1, "Broker 1", "Rust/Axum", "Stateless API + background tasks")
+        Container(b2, "Broker 2", "Rust/Axum", "Stateless API + background tasks")
+        Container(b3, "Broker 3", "Rust/Axum", "Stateless API + background tasks")
+    }
+
+    ContainerDb(db, "PostgreSQL Primary", "PostgreSQL", "All persistent state")
+    ContainerDb(dbr, "PostgreSQL Replica", "PostgreSQL", "Read replicas (optional)")
+
+    Rel(lb, b1, "Routes requests", "HTTPS")
+    Rel(lb, b2, "Routes requests", "HTTPS")
+    Rel(lb, b3, "Routes requests", "HTTPS")
+    Rel(b1, db, "Read/Write", "SQL :5432")
+    Rel(b2, db, "Read/Write", "SQL :5432")
+    Rel(b3, db, "Read/Write", "SQL :5432")
+    Rel(db, dbr, "Replication", "Streaming")
 {{< /mermaid >}}
 
 ### Agent Deployment

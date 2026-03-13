@@ -282,5 +282,4 @@ kubectl describe taskrun <taskrun-name>
 ## Next Steps
 
 - Learn about [Work Orders](../reference/work-orders) for managing builds through Brokkr
-- See [Build Examples](../tutorials/build-examples) for common build patterns
 - Configure [Monitoring](../reference/monitoring) for build metrics

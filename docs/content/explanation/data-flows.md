@@ -48,7 +48,7 @@ When a deployment object is created, the broker does not immediately push it to 
 
 ### Agent Reconciliation
 
-Agents continuously poll the broker and reconcile their cluster state to match the desired state defined by deployment objects. The reconciliation loop runs at a configurable interval, defaulting to 30 seconds.
+Agents continuously poll the broker and reconcile their cluster state to match the desired state defined by deployment objects. The reconciliation loop runs at a configurable interval, defaulting to 10 seconds.
 
 {{< mermaid >}}
 sequenceDiagram
@@ -58,7 +58,7 @@ sequenceDiagram
     participant K8s as Kubernetes API
     participant Cluster as Cluster State
 
-    loop Every polling interval (default: 30s)
+    loop Every polling interval (default: 10s)
         Agent->>Broker: GET /api/v1/agents/{id}/target-state
         Broker->>DB: Query targeted objects for agent
         DB-->>Broker: Deployment objects list
@@ -160,7 +160,7 @@ Events form the nervous system of Brokkr, propagating state changes from agents 
 
 ### Event Architecture
 
-The broker implements an event bus pattern using Tokio's asynchronous channels. Events flow through several processing stages before reaching their final destinations.
+The broker uses a database-centric approach to event emission. Rather than an in-memory pub/sub bus, events are directly matched against webhook subscriptions and inserted into the delivery queue. Audit logging operates independently through its own asynchronous channel.
 
 {{< mermaid >}}
 flowchart LR
@@ -172,7 +172,7 @@ flowchart LR
     subgraph Broker
         API[API Handler]
         DB[(Database)]
-        EventBus[Event Bus]
+        Emit[Event Emitter]
         Webhook[Webhook Worker]
         Audit[Audit Logger]
     end
@@ -185,16 +185,17 @@ flowchart LR
     Apply --> Report
     Report -->|POST /agents/{id}/events| API
     API --> DB
-    API --> EventBus
-    EventBus --> Webhook
-    EventBus --> Audit
+    API --> Emit
+    Emit -->|Match subscriptions & insert deliveries| DB
+    Webhook -->|Poll pending deliveries| DB
     Webhook --> Endpoints
+    API --> Audit
     Audit --> Logs
 {{< /mermaid >}}
 
-The event bus initializes with a 1000-entry bounded channel, providing backpressure when the system is under heavy load. Events are emitted using a fire-and-forget pattern—the emitter does not wait for downstream processing to complete. This design prevents slow webhook endpoints from blocking the main API handlers.
+When an event occurs, the `emit_event()` function queries the database for webhook subscriptions whose event type pattern matches the event. For each matching subscription, a delivery record is created in PENDING status. The webhook delivery worker then processes these records independently, ensuring webhook delivery doesn't block API responses.
 
-A dedicated dispatcher task receives events from the channel and routes them to appropriate handlers. For webhook events, the dispatcher queries matching subscriptions and creates delivery records in the database. For audit events, the dispatcher batches writes to optimize database performance.
+Audit logging uses a separate asynchronous channel with a 10,000-entry buffer. A background writer task batches entries (up to 100 per batch or every 1 second) for efficient database writes.
 
 ### Agent Event Reporting
 
@@ -310,7 +311,7 @@ Webhook subscriptions can filter by event type using exact matches or wildcards 
 
 ## Authentication Flows
 
-Authentication in Brokkr varies by actor type: agents use PAKs, administrators use bearer tokens, and generators use API keys. Each flow has distinct security properties appropriate to its use case.
+All actors in Brokkr authenticate using Prefixed API Keys (PAKs) sent via the `Authorization: Bearer` header. The authentication middleware checks the PAK against three tables in order—admin roles, agents, and generators—to determine the identity type.
 
 ### PAK Authentication
 
@@ -355,7 +356,7 @@ PAKs can be rotated through the `POST /api/v1/agents/{id}/rotate-pak` endpoint, 
 
 ### Admin Authentication
 
-Administrators authenticate using bearer tokens for management operations. These tokens grant broad access to system configuration and monitoring endpoints.
+Administrators authenticate using PAKs stored in the `admin_role` table. Admin PAKs grant access to sensitive management operations that regular agents and generators cannot perform.
 
 {{< mermaid >}}
 sequenceDiagram
@@ -365,28 +366,30 @@ sequenceDiagram
     participant DB as PostgreSQL
 
     Admin->>Broker: POST /api/v1/admin/config/reload
-    Note over Admin,Broker: Authorization: Bearer {token}
+    Note over Admin,Broker: Authorization: Bearer {PAK}
 
-    Broker->>Auth: Validate token
-    Auth->>DB: Lookup admin token
-    DB-->>Auth: Token record (if exists)
+    Broker->>Auth: Validate PAK
+    Auth->>Auth: Parse PAK structure
+    Auth->>Auth: Extract short token
+    Auth->>DB: Lookup admin by pak_hash
+    DB-->>Auth: Admin record with hash
+    Auth->>Auth: Hash long token and compare
 
-    alt Valid Token
-        Auth->>Auth: Verify permissions
-        Auth-->>Broker: Admin identity
+    alt Valid PAK
+        Auth-->>Broker: Admin identity (admin flag set)
         Broker->>Broker: Execute admin operation
         Broker-->>Admin: Response
-    else Invalid Token
+    else Invalid PAK
         Auth-->>Broker: Authentication failed
         Broker-->>Admin: 401 Unauthorized
     end
 {{< /mermaid >}}
 
-Admin tokens enable access to sensitive operations including configuration reload, audit log queries, agent management, and system health endpoints. The token is verified against stored hashes, following the same security pattern as PAK authentication.
+Admin PAKs enable access to sensitive operations including configuration reload, audit log queries, agent management, and system health endpoints. The PAK is verified using the same mechanism as agent authentication—SHA-256 hashing with constant-time comparison.
 
 ### Generator Authentication
 
-Generators, typically CI/CD systems, authenticate using API keys. These keys enable automated deployment workflows while maintaining security boundaries.
+Generators, typically CI/CD systems, authenticate using PAKs just like agents and admins. These keys enable automated deployment workflows while maintaining security boundaries.
 
 {{< mermaid >}}
 sequenceDiagram
@@ -396,17 +399,20 @@ sequenceDiagram
     participant DB as PostgreSQL
 
     Generator->>Broker: POST /api/v1/stacks
-    Note over Generator,Broker: X-Generator-Key: {api_key}
+    Note over Generator,Broker: Authorization: Bearer {PAK}
 
-    Broker->>Auth: Validate generator key
-    Auth->>DB: Lookup generator
-    DB-->>Auth: Generator record
+    Broker->>Auth: Validate PAK
+    Auth->>Auth: Parse PAK structure
+    Auth->>Auth: Extract short token
+    Auth->>DB: Lookup generator by pak_hash
+    DB-->>Auth: Generator record with hash
+    Auth->>Auth: Hash long token and compare
 
-    alt Valid Key
+    alt Valid PAK
         Auth-->>Broker: Generator identity
         Broker->>DB: Create stack (with generator_id)
         Broker-->>Generator: Stack created
-    else Invalid Key
+    else Invalid PAK
         Auth-->>Broker: Authentication failed
         Broker-->>Generator: 401 Unauthorized
     end

@@ -25,6 +25,8 @@ Generators are identity principals that enable external systems (CI/CD pipelines
 | `created_at` | timestamp | Creation timestamp |
 | `updated_at` | timestamp | Last update timestamp |
 | `deleted_at` | timestamp | Soft-delete timestamp (null if active) |
+| `last_active_at` | timestamp | Last activity timestamp (null if never active) |
+| `is_active` | boolean | Whether the generator is currently active |
 
 ### NewGenerator Object
 
@@ -94,7 +96,7 @@ Content-Type: application/json
 | `name` | string | Yes | Unique name (max 255 characters) |
 | `description` | string | No | Optional description |
 
-**Response: 201 Created**
+**Response: 200 OK**
 
 ```json
 {
@@ -228,7 +230,7 @@ Authorization: Bearer <admin_pak | generator_pak>
 
 **Response: 204 No Content**
 
-The generator is soft-deleted (marked with `deleted_at` timestamp). Its resources (stacks, templates, deployment objects) are not affected.
+The generator is soft-deleted (marked with `deleted_at` timestamp). A database trigger cascades the soft-delete to all stacks owned by this generator and their deployment objects.
 
 **Error Responses:**
 
@@ -339,6 +341,8 @@ Deployment objects inherit the `generator_id` from their parent stack.
 | `created_at` | TIMESTAMP | NOT NULL, DEFAULT NOW() |
 | `updated_at` | TIMESTAMP | NOT NULL, DEFAULT NOW() |
 | `deleted_at` | TIMESTAMP | NULL (soft delete) |
+| `last_active_at` | TIMESTAMP | NULL |
+| `is_active` | BOOLEAN | NOT NULL, DEFAULT false |
 
 ### Unique Constraint
 

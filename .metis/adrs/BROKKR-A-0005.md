@@ -67,7 +67,7 @@ Adopt a **hybrid approach** for container image builds:
 - Shipwright + Tekton (installed on agent clusters) handle build execution
 - Agent watches BuildRun status and reports to broker
 - Agent remains single-container (no buildah operator sidecar)
-- work_type: 'shipwright-build' in ephemeral work system
+- work_type: 'build' in ephemeral work system (not 'shipwright-build' as originally planned)
 
 ## Alternatives Analysis **[CONDITIONAL: Complex Decision]**
 
@@ -153,7 +153,7 @@ The Tekton dependency and operational complexity are accepted tradeoffs because:
 ### Neutral
 - Agent cluster resource consumption increases slightly (Tekton + Shipwright controllers vs single operator)
 - Documentation shifts from custom CRD to Shipwright Build/BuildRun usage
-- Work type identifier: 'shipwright-build' instead of 'build' in ephemeral work system
+- Work type identifier: 'build' in ephemeral work system (the originally-planned 'shipwright-build' name was simplified)
 - Agent uses kube-rs with Shipwright custom resource definitions
 - Build authentication follows Shipwright's secret patterns (pushSecret, cloneSecret)
 - BuildRun status conditions map to broker ephemeral work status

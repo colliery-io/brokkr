@@ -20,7 +20,7 @@ Before you begin, ensure you have:
 
 1. [Installation](installation) - Install Brokkr on your system
 2. [Quick Start](quick-start) - Get up and running quickly
-3. [First Steps](first-steps) - Learn the basics of Brokkr
+3. [Configuration](configuration) - Configure Brokkr for your environment
 
 ## What's Next?
 

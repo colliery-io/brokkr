@@ -117,7 +117,7 @@ metadata:
   name: {{ name | lower }}           # lowercase
   labels:
     version: "{{ version | upper }}" # uppercase
-    hash: {{ content | sha256 }}     # hash value
+    slug: {{ name | slugify }}        # URL-safe slug
 ```
 
 See the [Tera documentation](https://tera.netlify.app/docs/#filters) for all available filters.

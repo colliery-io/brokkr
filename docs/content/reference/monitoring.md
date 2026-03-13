@@ -596,4 +596,4 @@ metrics:
 
 - [Installation Guide](../getting-started/installation.md) - Helm chart installation
 - [Health Check Endpoints](./health-endpoints.md) - Liveness and readiness probes
-- [Configuration Reference](../how-to/configuration.md) - Advanced configuration options
+- [Configuration Guide](../getting-started/configuration.md) - Configuration options
