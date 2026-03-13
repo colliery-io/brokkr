@@ -1,13 +1,13 @@
 ---
-id: create-reference-soft-deletion-md
+id: improve-quick-start-md-prose-flow
 level: task
-title: "Create reference/soft-deletion.md documentation"
-short_code: "BROKKR-T-0117"
-created_at: 2026-01-04T14:36:11.711591+00:00
-updated_at: 2026-01-04T15:02:34.561824+00:00
+title: "Improve quick-start.md prose flow"
+short_code: "BROKKR-T-0115"
+created_at: 2026-01-04T14:36:11.438592+00:00
+updated_at: 2026-01-04T14:59:28.976827+00:00
 parent: BROKKR-I-0014
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -19,7 +19,7 @@ strategy_id: NULL
 initiative_id: BROKKR-I-0014
 ---
 
-# Create reference/soft-deletion.md documentation
+# Improve quick-start.md prose flow
 
 *This template includes sections for various types of tasks. Delete sections that don't apply to your specific use case.*
 
@@ -64,6 +64,8 @@ initiative_id: BROKKR-I-0014
 - **Current Problems**: {What's difficult/slow/buggy now}
 - **Benefits of Fixing**: {What improves after refactoring}
 - **Risk Assessment**: {Risks of not addressing this}
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

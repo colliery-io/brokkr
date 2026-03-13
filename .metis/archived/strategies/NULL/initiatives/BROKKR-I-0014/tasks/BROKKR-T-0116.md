@@ -1,13 +1,13 @@
 ---
-id: create-how-to-generators-and-ci-cd
+id: create-how-to-managing-stacks-md
 level: task
-title: "Create how-to/generators-and-ci-cd.md guide"
-short_code: "BROKKR-T-0110"
-created_at: 2026-01-04T14:35:51.948561+00:00
-updated_at: 2026-01-04T14:52:58.775830+00:00
+title: "Create how-to/managing-stacks.md guide"
+short_code: "BROKKR-T-0116"
+created_at: 2026-01-04T14:36:11.574907+00:00
+updated_at: 2026-01-04T15:01:11.270112+00:00
 parent: BROKKR-I-0014
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -19,7 +19,7 @@ strategy_id: NULL
 initiative_id: BROKKR-I-0014
 ---
 
-# Create how-to/generators-and-ci-cd.md guide
+# Create how-to/managing-stacks.md guide
 
 *This template includes sections for various types of tasks. Delete sections that don't apply to your specific use case.*
 
@@ -64,6 +64,8 @@ initiative_id: BROKKR-I-0014
 - **Current Problems**: {What's difficult/slow/buggy now}
 - **Benefits of Fixing**: {What improves after refactoring}
 - **Risk Assessment**: {Risks of not addressing this}
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

@@ -1,13 +1,13 @@
 ---
-id: add-implementation-status-banners
+id: create-how-to-understanding
 level: task
-title: "Add implementation status banners to ADR-3 and ADR-4"
-short_code: "BROKKR-T-0107"
-created_at: 2026-01-04T14:35:51.572080+00:00
-updated_at: 2026-01-04T14:44:19.389476+00:00
+title: "Create how-to/understanding-reconciliation.md guide"
+short_code: "BROKKR-T-0118"
+created_at: 2026-01-04T14:36:11.847815+00:00
+updated_at: 2026-01-04T15:04:01.112805+00:00
 parent: BROKKR-I-0014
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -19,7 +19,7 @@ strategy_id: NULL
 initiative_id: BROKKR-I-0014
 ---
 
-# Add implementation status banners to ADR-3 and ADR-4
+# Create how-to/understanding-reconciliation.md guide
 
 *This template includes sections for various types of tasks. Delete sections that don't apply to your specific use case.*
 
@@ -64,6 +64,8 @@ initiative_id: BROKKR-I-0014
 - **Current Problems**: {What's difficult/slow/buggy now}
 - **Benefits of Fixing**: {What improves after refactoring}
 - **Risk Assessment**: {Risks of not addressing this}
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

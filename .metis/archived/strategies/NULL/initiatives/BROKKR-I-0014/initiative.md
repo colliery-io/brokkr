@@ -7,7 +7,7 @@ created_at: 2026-01-04T14:34:26.165030+00:00
 updated_at: 2026-01-04T15:05:45.433690+00:00
 parent: BROKKR-V-0001
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#initiative"

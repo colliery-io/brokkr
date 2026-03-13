@@ -1,13 +1,13 @@
 ---
-id: update-work-orders-md-with-error
+id: create-how-to-deployment-health
 level: task
-title: "Update work-orders.md with error fields and claim TTL details"
-short_code: "BROKKR-T-0108"
-created_at: 2026-01-04T14:35:51.691991+00:00
-updated_at: 2026-01-04T14:45:03.654733+00:00
+title: "Create how-to/deployment-health-monitoring.md guide"
+short_code: "BROKKR-T-0112"
+created_at: 2026-01-04T14:35:52.224423+00:00
+updated_at: 2026-01-04T14:55:05.670737+00:00
 parent: BROKKR-I-0014
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -19,7 +19,7 @@ strategy_id: NULL
 initiative_id: BROKKR-I-0014
 ---
 
-# Update work-orders.md with error fields and claim TTL details
+# Create how-to/deployment-health-monitoring.md guide
 
 *This template includes sections for various types of tasks. Delete sections that don't apply to your specific use case.*
 
@@ -64,6 +64,8 @@ initiative_id: BROKKR-I-0014
 - **Current Problems**: {What's difficult/slow/buggy now}
 - **Benefits of Fixing**: {What improves after refactoring}
 - **Risk Assessment**: {Risks of not addressing this}
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

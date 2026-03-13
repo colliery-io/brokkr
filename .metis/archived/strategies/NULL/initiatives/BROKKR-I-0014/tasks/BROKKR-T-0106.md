@@ -1,13 +1,13 @@
 ---
-id: rewrite-core-concepts-md-with
+id: fix-adr-1-terminology-ephemeral
 level: task
-title: "Rewrite core-concepts.md with flowing narrative"
-short_code: "BROKKR-T-0114"
-created_at: 2026-01-04T14:36:11.305576+00:00
-updated_at: 2026-01-04T14:57:17.124370+00:00
+title: "Fix ADR-1 terminology (ephemeral_work_targets → work_order_targets)"
+short_code: "BROKKR-T-0106"
+created_at: 2026-01-04T14:35:51.459932+00:00
+updated_at: 2026-01-04T14:43:32.334589+00:00
 parent: BROKKR-I-0014
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -19,7 +19,7 @@ strategy_id: NULL
 initiative_id: BROKKR-I-0014
 ---
 
-# Rewrite core-concepts.md with flowing narrative
+# Fix ADR-1 terminology (ephemeral_work_targets → work_order_targets)
 
 *This template includes sections for various types of tasks. Delete sections that don't apply to your specific use case.*
 
@@ -64,6 +64,8 @@ initiative_id: BROKKR-I-0014
 - **Current Problems**: {What's difficult/slow/buggy now}
 - **Benefits of Fixing**: {What improves after refactoring}
 - **Risk Assessment**: {Risks of not addressing this}
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 
