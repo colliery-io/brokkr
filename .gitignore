@@ -19,10 +19,8 @@ examples/ui/node_modules/*
 # MSVC Windows builds of rustc generate these, which store debugging information
 *.pdb
 
-# Hugo documentation
-/docs/public/
-/docs/.hugo_build.lock
-/docs/static/api/
+# mdBook documentation
+/docs/book/
 
 # RustRover
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
@@ -194,8 +192,8 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
-# Ignore Hugo and static site build output
-/docs/public
+# Ignore mdBook build output
+/docs/book
 
 # Helm dependency charts (like node_modules)
 # Keep Chart.lock but ignore downloaded chart tarballs

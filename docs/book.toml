@@ -1,0 +1,25 @@
+[book]
+title = "Brokkr"
+authors = ["Colliery.io"]
+language = "en"
+src = "src"
+
+[build]
+build-dir = "book"
+
+[output.html]
+git-repository-url = "https://github.com/colliery-io/brokkr"
+site-url = "/brokkr/"
+default-theme = "navy"
+preferred-dark-theme = "navy"
+additional-js = ["mermaid.min.js", "mermaid-init.js"]
+
+[output.html.fold]
+enable = true
+level = 1
+
+[preprocessor.mermaid]
+command = "mdbook-mermaid"
+
+[output.html.playground]
+editable = false
