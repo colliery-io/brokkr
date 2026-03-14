@@ -19,7 +19,7 @@ concurrency:
 
 env:
   MDBOOK_VERSION: "0.5.2"
-  MDBOOK_MERMAID_VERSION: "0.14.0"
+  MDBOOK_MERMAID_VERSION: "0.17.0"
 
 jobs:
   build:
