@@ -1,6 +1,6 @@
 # Welcome to Brokkr
 
-Brokkr is an environment-aware control plane for Kubernetes that helps you dynamically manage applications across your infrastructure. It provides the framework to create and configure applications based on your environment's needs.
+Brokkr is an environment-aware control plane for Kubernetes that helps you dynamically manage applications across your infrastructure. It provides a framework to create and configure applications based on your environment's needs.
 
 ## Use Cases
 
