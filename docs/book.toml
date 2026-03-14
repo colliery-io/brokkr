@@ -10,9 +10,14 @@ build-dir = "book"
 [output.html]
 git-repository-url = "https://github.com/colliery-io/brokkr"
 site-url = "/brokkr/"
-default-theme = "navy"
-preferred-dark-theme = "navy"
+default-theme = "coal"
+preferred-dark-theme = "coal"
+theme = "theme"
+additional-css = ["theme/css/colliery.css"]
 additional-js = ["mermaid.min.js", "mermaid-init.js"]
+
+[output.html.search]
+enable = true
 
 [output.html.fold]
 enable = true

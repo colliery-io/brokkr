@@ -1,0 +1,425 @@
+/* ==========================================================================
+   Colliery Software — mdbook Theme
+   Brand colors, typography, and component overrides
+   ========================================================================== */
+
+/* Font faces are declared in theme/fonts/fonts.css using mdbook's
+   {{ resource }} helper so that hashed filenames resolve correctly. */
+
+/* --------------------------------------------------------------------------
+   Brand Tokens (CSS Custom Properties)
+   -------------------------------------------------------------------------- */
+
+:root {
+    /* Primary palette */
+    --colliery-navy: #1A3A5F;
+    --colliery-orange: #C58346;
+    --colliery-white: #FFFFFF;
+
+    /* Secondary palette */
+    --colliery-muted-blue: #47617E;
+    --colliery-tan: #DCB490;
+    --colliery-gray: #CCCCCC;
+    --colliery-charcoal: #2F343B;
+
+    /* Derived */
+    --colliery-navy-light: #234b7a;
+    --colliery-navy-dark: #122a45;
+    --colliery-orange-light: #d4995e;
+    --colliery-orange-dark: #a96d35;
+}
+
+/* --------------------------------------------------------------------------
+   Light Theme (Navy)
+   -------------------------------------------------------------------------- */
+
+.light,
+.rust {
+    --bg: var(--colliery-white);
+    --fg: var(--colliery-charcoal);
+
+    --sidebar-bg: var(--colliery-navy);
+    --sidebar-fg: #d0d8e2;
+    --sidebar-non-existant: #8899ad;
+    --sidebar-active: var(--colliery-orange);
+    --sidebar-spacer: #2a4f75;
+
+    --scrollbar: var(--colliery-muted-blue);
+
+    --icons: var(--colliery-muted-blue);
+    --icons-hover: var(--colliery-navy);
+
+    --links: var(--colliery-navy);
+
+    --inline-code-color: var(--colliery-navy);
+
+    --theme-popup-bg: var(--colliery-white);
+    --theme-popup-border: var(--colliery-gray);
+    --theme-hover: #e8e8e8;
+
+    --quote-bg: #f5f0eb;
+    --quote-border: var(--colliery-tan);
+
+    --warning-border: var(--colliery-orange);
+
+    --table-border-color: #d8d8d8;
+    --table-header-bg: #f0ece6;
+    --table-alternate-bg: #faf8f5;
+
+    --searchbar-border-color: var(--colliery-gray);
+    --searchbar-bg: var(--colliery-white);
+    --searchbar-fg: var(--colliery-charcoal);
+    --searchbar-shadow-color: rgba(26, 58, 95, 0.08);
+    --searchresults-header-fg: var(--colliery-muted-blue);
+    --searchresults-border-color: #e0dcd6;
+    --searchresults-li-bg: #faf8f5;
+
+    --search-mark-bg: rgba(197, 131, 70, 0.25);
+}
+
+/* --------------------------------------------------------------------------
+   Dark Theme (Coal / Charcoal)
+   -------------------------------------------------------------------------- */
+
+.coal,
+.navy,
+.ayu {
+    --bg: var(--colliery-charcoal);
+    --fg: #d0d4da;
+
+    --sidebar-bg: var(--colliery-navy-dark);
+    --sidebar-fg: #b0bcc9;
+    --sidebar-non-existant: #6a7a8c;
+    --sidebar-active: var(--colliery-orange);
+    --sidebar-spacer: #1f3550;
+
+    --scrollbar: var(--colliery-muted-blue);
+
+    --icons: #7a8fa5;
+    --icons-hover: #b0bcc9;
+
+    --links: var(--colliery-orange-light);
+
+    --inline-code-color: var(--colliery-orange-light);
+
+    --theme-popup-bg: #3a3f47;
+    --theme-popup-border: #4a4f57;
+    --theme-hover: #44494f;
+
+    --quote-bg: #363b42;
+    --quote-border: var(--colliery-muted-blue);
+
+    --warning-border: var(--colliery-orange);
+
+    --table-border-color: #444950;
+    --table-header-bg: #363b42;
+    --table-alternate-bg: #333840;
+
+    --searchbar-border-color: #4a4f57;
+    --searchbar-bg: #3a3f47;
+    --searchbar-fg: #d0d4da;
+    --searchbar-shadow-color: rgba(0, 0, 0, 0.2);
+    --searchresults-header-fg: #8899ad;
+    --searchresults-border-color: #444950;
+    --searchresults-li-bg: #363b42;
+
+    --search-mark-bg: rgba(197, 131, 70, 0.35);
+}
+
+/* --------------------------------------------------------------------------
+   Typography
+   -------------------------------------------------------------------------- */
+
+:root {
+    --body-font: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+        Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --heading-font: 'NHL Atlanta', 'Poppins', sans-serif;
+    --mono-font: 'JetBrains Mono', 'Fira Code', 'Source Code Pro', Consolas,
+        'Courier New', monospace;
+}
+
+body {
+    font-family: var(--body-font);
+    font-size: 2.25rem;
+    line-height: 1.7;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    font-family: var(--heading-font);
+    font-weight: bold;
+    letter-spacing: 0.02em;
+    line-height: 1.3;
+    margin-top: 1em;
+    margin-bottom: 0.4em;
+}
+
+h1 {
+    font-size: 4rem;
+    margin-top: 0;
+    padding-bottom: 0.4em;
+}
+
+.content main h1 {
+    border-bottom: 2px solid var(--colliery-orange);
+    width: 100%;
+}
+
+h2 {
+    font-size: 3.2rem;
+}
+
+h3 {
+    font-size: 2.6rem;
+}
+
+h4 {
+    font-size: 2.2rem;
+}
+
+/* --------------------------------------------------------------------------
+   Sidebar
+   -------------------------------------------------------------------------- */
+
+.sidebar {
+    font-family: var(--body-font);
+    font-size: 1.75rem;
+}
+
+/* Logo in sidebar — sits above the absolutely-positioned scrollbox */
+.sidebar .sidebar-logo {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 2;
+    background-color: var(--sidebar-bg);
+    border-bottom: 1px solid var(--sidebar-spacer);
+    padding: 0.75rem 1rem;
+}
+
+.sidebar .sidebar-logo a {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    text-decoration: none;
+    justify-content: center;
+    padding: 0;
+    margin: 0;
+    line-height: 0;
+}
+
+.sidebar .sidebar-logo-img {
+    max-width: 100%;
+    height: auto;
+    object-fit: contain;
+}
+
+/* Sidebar is always dark, so always use the white/light logo */
+.sidebar .sidebar-logo-light {
+    display: none;
+}
+
+.sidebar .sidebar-logo-dark {
+    display: block;
+}
+
+/* Push the scrollbox below the logo */
+.sidebar .sidebar-scrollbox {
+    top: 130px;
+}
+
+/* Sidebar chapter links */
+.sidebar li.chapter-item a {
+    padding: 5px 1.25rem;
+    transition: color 0.15s ease, background-color 0.15s ease;
+    border-radius: 3px;
+}
+
+.sidebar li.chapter-item a:hover {
+    color: var(--colliery-white);
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+.sidebar li.chapter-item.expanded > a,
+.sidebar li.active > a {
+    color: var(--sidebar-active);
+    font-weight: 600;
+}
+
+/* Sidebar section headers */
+.sidebar .chapter li > a.toggle {
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+}
+
+/* --------------------------------------------------------------------------
+   Content Area
+   -------------------------------------------------------------------------- */
+
+.content main {
+    max-width: 820px;
+    font-size: 1.75rem;
+    padding-top: 3rem;
+}
+
+/* Links */
+.content a {
+    text-decoration: underline;
+    text-decoration-color: rgba(197, 131, 70, 0.4);
+    text-underline-offset: 2px;
+    transition: color 0.15s ease, text-decoration-color 0.15s ease;
+}
+
+.content a:hover {
+    text-decoration-color: var(--colliery-orange);
+}
+
+/* Code blocks */
+code {
+    font-family: var(--mono-font);
+    font-size: 1.25em;
+    padding: 0.15em 0.35em;
+    border-radius: 3px;
+}
+
+pre {
+    border-radius: 6px;
+    border-left: 3px solid var(--colliery-orange);
+    padding: 1em;
+}
+
+pre > code {
+    padding: 0;
+}
+
+/* Blockquotes */
+blockquote {
+    border-left: 4px solid var(--quote-border);
+    border-radius: 0 6px 6px 0;
+    padding: 0.75em 1.25em;
+    margin: 1.5em 0;
+}
+
+/* Tables */
+table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 1.5em 0;
+}
+
+table thead th {
+    font-family: var(--heading-font);
+    font-weight: bold;
+    font-size: 0.9em;
+    letter-spacing: 0.02em;
+    text-align: left;
+    padding: 0.75em 1em;
+    border-bottom: 2px solid var(--colliery-orange);
+}
+
+table tbody td {
+    padding: 0.6em 1em;
+}
+
+table tbody tr:nth-child(even) {
+    background-color: var(--table-alternate-bg);
+}
+
+/* --------------------------------------------------------------------------
+   Top Menu Bar
+   -------------------------------------------------------------------------- */
+
+#menu-bar {
+    border-bottom: 1px solid var(--table-border-color);
+}
+
+#menu-bar h1.menu-title {
+    border-bottom: none;
+    width: auto;
+    padding-bottom: 0;
+    margin: 0;
+}
+
+#menu-bar .icon-button {
+    transition: color 0.15s ease;
+}
+
+/* --------------------------------------------------------------------------
+   Search
+   -------------------------------------------------------------------------- */
+
+#searchbar {
+    font-family: var(--body-font);
+    border-radius: 6px;
+}
+
+/* --------------------------------------------------------------------------
+   Theme Popup
+   -------------------------------------------------------------------------- */
+
+#theme-list {
+    border-radius: 6px;
+}
+
+/* --------------------------------------------------------------------------
+   Navigation Arrows
+   -------------------------------------------------------------------------- */
+
+.nav-chapters,
+.mobile-nav-chapters {
+    color: var(--colliery-muted-blue);
+    background: transparent;
+    transition: color 0.15s ease;
+}
+
+.nav-chapters .fa-svg svg,
+.mobile-nav-chapters .fa-svg svg {
+    fill: currentColor;
+}
+
+.nav-chapters:hover,
+.mobile-nav-chapters:hover {
+    color: var(--colliery-orange);
+    background-color: transparent;
+}
+
+/* --------------------------------------------------------------------------
+   Scrollbar
+   -------------------------------------------------------------------------- */
+
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--scrollbar);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--colliery-orange);
+}
+
+/* --------------------------------------------------------------------------
+   Print Styles
+   -------------------------------------------------------------------------- */
+
+@media print {
+    h1, h2, h3, h4, h5, h6 {
+        font-family: var(--heading-font);
+    }
+
+    body {
+        font-family: var(--body-font);
+    }
+
+    a {
+        color: var(--colliery-navy) !important;
+    }
+}

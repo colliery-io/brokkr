@@ -1,0 +1,64 @@
+/* Colliery Software — Font Declarations
+   NHL Atlanta: Headings | Poppins: Body | Source Code Pro: Monospace */
+
+/* NHL Atlanta — Bold (headings) */
+@font-face {
+  font-family: 'NHL Atlanta';
+  font-style: normal;
+  font-weight: bold;
+  font-display: swap;
+  src: url('{{ resource "fonts/NHLATLAN.TTF" }}') format('truetype');
+}
+
+/* Poppins — Regular */
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('{{ resource "fonts/Poppins-Regular.ttf" }}') format('truetype');
+}
+
+/* Poppins — Italic */
+@font-face {
+  font-family: 'Poppins';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url('{{ resource "fonts/Poppins-Italic.ttf" }}') format('truetype');
+}
+
+/* Poppins — Medium */
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('{{ resource "fonts/Poppins-Medium.ttf" }}') format('truetype');
+}
+
+/* Poppins — SemiBold */
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('{{ resource "fonts/Poppins-SemiBold.ttf" }}') format('truetype');
+}
+
+/* Poppins — Bold */
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('{{ resource "fonts/Poppins-Bold.ttf" }}') format('truetype');
+}
+
+/* Source Code Pro — Monospace */
+@font-face {
+  font-family: 'Source Code Pro';
+  font-style: normal;
+  font-weight: 500;
+  src: url('{{ resource "fonts/source-code-pro-v11-all-charsets-500.woff2" }}') format('woff2');
+}
