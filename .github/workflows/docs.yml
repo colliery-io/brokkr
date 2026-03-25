@@ -49,6 +49,26 @@ jobs:
           rm -rf docs/src/api/rust
           cp -r .plissken/output/src/rust docs/src/api/rust
 
+      - name: Update SUMMARY.md with API entries
+        run: |
+          python3 -c "
+          import re
+          with open('.plissken/output/src/SUMMARY.md') as f:
+              lines = f.readlines()
+          entries = []
+          for line in lines:
+              if line.strip().startswith('- ['):
+                  entry = re.sub(r'\]\(rust/', '](./api/rust/', line)
+                  entries.append('  ' + entry)
+          with open('docs/src/SUMMARY.md') as f:
+              summary = f.read()
+          idx = summary.find('# API Documentation')
+          api = '# API Documentation\n\n- [Rust API Reference](./api/README.md)\n' + ''.join(entries)
+          with open('docs/src/SUMMARY.md', 'w') as f:
+              f.write(summary[:idx] + api)
+          print(f'Updated SUMMARY.md with {len(entries)} API entries')
+          "
+
       - name: Build
         working-directory: docs
         run: mdbook build
