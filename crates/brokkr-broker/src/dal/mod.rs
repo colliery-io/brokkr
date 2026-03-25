@@ -30,10 +30,13 @@
 //! let agents = dal.agents().list().expect("Failed to list agents");
 //! ```
 
+use crate::api::v1::middleware::AuthPayload;
 use crate::db::ConnectionPool;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
+use moka::sync::Cache;
+use std::time::Duration;
 
 /// Error types for DAL operations.
 #[derive(Debug)]
@@ -165,6 +168,8 @@ use work_orders::WorkOrdersDAL;
 pub struct DAL {
     /// A connection pool for PostgreSQL database connections with schema support.
     pub pool: ConnectionPool,
+    /// In-memory cache for PAK authentication results, keyed by PAK hash.
+    pub auth_cache: Option<Cache<String, AuthPayload>>,
 }
 
 impl DAL {
@@ -178,7 +183,41 @@ impl DAL {
     ///
     /// A new DAL instance.
     pub fn new(pool: ConnectionPool) -> Self {
-        DAL { pool }
+        DAL { pool, auth_cache: None }
+    }
+
+    /// Creates a new DAL instance with an auth cache.
+    ///
+    /// # Arguments
+    ///
+    /// * `pool` - A connection pool for PostgreSQL database connections with schema support.
+    /// * `auth_cache_ttl_seconds` - TTL for cached auth results. 0 disables caching.
+    pub fn new_with_auth_cache(pool: ConnectionPool, auth_cache_ttl_seconds: u64) -> Self {
+        let auth_cache = if auth_cache_ttl_seconds > 0 {
+            Some(
+                Cache::builder()
+                    .time_to_live(Duration::from_secs(auth_cache_ttl_seconds))
+                    .max_capacity(10_000)
+                    .build(),
+            )
+        } else {
+            None
+        };
+        DAL { pool, auth_cache }
+    }
+
+    /// Invalidates a specific entry in the auth cache by PAK hash.
+    pub fn invalidate_auth_cache(&self, pak_hash: &str) {
+        if let Some(cache) = &self.auth_cache {
+            cache.invalidate(pak_hash);
+        }
+    }
+
+    /// Invalidates all entries in the auth cache.
+    pub fn invalidate_all_auth_cache(&self) {
+        if let Some(cache) = &self.auth_cache {
+            cache.invalidate_all();
+        }
     }
 
     /// Provides access to the Agents Data Access Layer.

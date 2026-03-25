@@ -30,6 +30,7 @@ diesel = { workspace = true }
 diesel_migrations = { workspace = true }
 dotenv = { workspace = true }
 hyper = { workspace = true }
+moka = { workspace = true }
 once_cell = { workspace = true }
 postgres = { workspace = true }
 prefixed-api-key = { workspace = true }

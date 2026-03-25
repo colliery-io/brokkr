@@ -1,28 +1,18 @@
-# Interactive API Documentation
-
-Our interactive Swagger UI provides a complete reference of all available endpoints, including:
-- Detailed request/response schemas
-- Authentication requirements
-- Example requests and responses
-- Interactive testing interface
-
-[View Interactive API Documentation](../reference/api/README.md)
-
 # Rust API Reference
 
-Welcome to the Brokkr code-level documentation! This section contains the complete, automatically generated Rust API docs for all major Brokkr crates. Here you'll find detailed information on every public type, function, trait, and module in the Brokkr ecosystem.
+This section contains the complete Rust API documentation for all Brokkr crates, automatically generated from source code doc comments using [plissken](https://github.com/colliery-io/plissken).
 
-Use these docs to:
-- Explore the internals of Brokkr's core components
-- Understand available APIs for integration or extension
-- Dive deep into implementation details and type signatures
-- Find examples and usage patterns directly from the source
+These docs are regenerated on every build, so they always reflect the current state of the codebase.
 
-Select a crate to view its documentation (opens in a new tab):
+## Crates
 
-- <a href="https://docs.rs/brokkr_broker/" target="_blank" rel="noopener">brokkr_broker</a> — The main control plane and API server
-- <a href="https://docs.rs/brokkr_agent/" target="_blank" rel="noopener">brokkr_agent</a> — The agent that applies resources to clusters
-- <a href="https://docs.rs/brokkr_models/" target="_blank" rel="noopener">brokkr_models</a> — Shared data models and database schema
-- <a href="https://docs.rs/brokkr_utils/" target="_blank" rel="noopener">brokkr_utils</a> — Utilities, configuration, and helpers
+- [**brokkr-broker**](rust/brokkr-broker.md) — The main control plane and API server
+- [**brokkr-agent**](rust/brokkr-agent.md) — The agent that applies resources to Kubernetes clusters
+- [**brokkr-models**](rust/brokkr-models.md) — Shared data models and database schema
+- [**brokkr-utils**](rust/brokkr-utils.md) — Utilities, configuration, and helpers
 
-Looking for higher-level guides? [Return to the main documentation](../README.md)
+## Interactive API Documentation
+
+For REST API endpoint documentation (request/response schemas, authentication, try-it-out), see the [API Reference](../reference/api/README.md) or access Swagger UI directly at `http://<broker-url>/swagger-ui`.
+
+Looking for higher-level guides? [Return to the main documentation](../README.md).

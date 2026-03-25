@@ -108,6 +108,22 @@ Audit logs record all significant actions for security and compliance.
 BROKKR__BROKER__AUDIT_LOG_RETENTION_DAYS=365
 ```
 
+### Auth Cache Settings
+
+The broker caches PAK authentication results in memory to reduce database queries per request. Each authenticated request would otherwise require 2-3 database lookups (admin, agent, generator tables). The cache is automatically invalidated when PAKs are rotated or entities are deleted.
+
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `BROKKR__BROKER__AUTH_CACHE_TTL_SECONDS` | integer | `60` | TTL for cached auth results (0 to disable) |
+
+```bash
+# Increase cache TTL for high-throughput deployments
+BROKKR__BROKER__AUTH_CACHE_TTL_SECONDS=120
+
+# Disable auth caching entirely
+BROKKR__BROKER__AUTH_CACHE_TTL_SECONDS=0
+```
+
 ## CORS Configuration
 
 Cross-Origin Resource Sharing (CORS) settings control which origins can access the broker API.
@@ -245,6 +261,7 @@ webhook_cleanup_retention_days = 7
 diagnostic_cleanup_interval_seconds = 900
 diagnostic_max_age_hours = 1
 audit_log_retention_days = 90
+auth_cache_ttl_seconds = 60
 
 [cors]
 allowed_origins = ["https://admin.example.com"]
@@ -309,6 +326,7 @@ These settings require an application restart to change:
 - `database.schema` - Database schema
 - `broker.webhook_encryption_key` - Encryption key
 - `broker.pak_hash` - Admin PAK hash
+- `broker.auth_cache_ttl_seconds` - Auth cache TTL
 - `telemetry.*` - All telemetry settings
 - `pak.*` - All PAK generation settings
 

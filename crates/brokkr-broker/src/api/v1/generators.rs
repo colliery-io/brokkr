@@ -347,9 +347,16 @@ async fn delete_generator(
         ));
     }
 
+    // Capture old PAK hash for cache invalidation before deletion
+    let old_pak_hash = dal.generators().get(id).ok().flatten().and_then(|g| g.pak_hash);
+
     match dal.generators().soft_delete(id) {
         Ok(_) => {
             info!("Successfully deleted generator with ID: {}", id);
+            // Invalidate old PAK hash from auth cache
+            if let Some(ref hash) = old_pak_hash {
+                dal.invalidate_auth_cache(hash);
+            }
             Ok(StatusCode::NO_CONTENT)
         }
         Err(e) => {
@@ -413,14 +420,23 @@ async fn rotate_generator_pak(
         ));
     }
 
-    // Verify generator exists
-    if let Err(e) = dal.generators().get(id) {
-        error!("Failed to fetch generator with ID {}: {:?}", id, e);
-        return Err((
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({"error": "Failed to fetch generator"})),
-        ));
-    }
+    // Verify generator exists and capture old PAK hash for cache invalidation
+    let old_pak_hash: Option<String> = match dal.generators().get(id) {
+        Ok(Some(generator)) => generator.pak_hash,
+        Ok(None) => {
+            return Err((
+                axum::http::StatusCode::NOT_FOUND,
+                Json(serde_json::json!({"error": "Generator not found"})),
+            ));
+        }
+        Err(e) => {
+            error!("Failed to fetch generator with ID {}: {:?}", id, e);
+            return Err((
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Failed to fetch generator"})),
+            ));
+        }
+    };
 
     // Generate new PAK and hash
     let (pak, pak_hash) = match pak::create_pak() {
@@ -438,6 +454,10 @@ async fn rotate_generator_pak(
     match dal.generators().update_pak_hash(id, pak_hash) {
         Ok(updated_generator) => {
             info!("Successfully rotated PAK for generator with ID: {}", id);
+            // Invalidate old PAK hash from auth cache
+            if let Some(ref hash) = old_pak_hash {
+                dal.invalidate_auth_cache(hash);
+            }
             Ok(Json(serde_json::json!({
                 "generator": updated_generator,
                 "pak": pak

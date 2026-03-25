@@ -195,6 +195,10 @@ cython_debug/
 # Ignore mdBook build output
 /docs/book
 
+# Plissken staging output and generated API docs (auto-generated from source)
+/.plissken/
+/docs/src/api/rust/
+
 # Helm dependency charts (like node_modules)
 # Keep Chart.lock but ignore downloaded chart tarballs
 charts/*/charts/

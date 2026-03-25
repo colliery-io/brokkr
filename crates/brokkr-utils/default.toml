@@ -17,6 +17,8 @@ diagnostic_max_age_hours = 1               # 1 hour
 webhook_delivery_interval_seconds = 5      # Poll for pending deliveries every 5 seconds
 webhook_delivery_batch_size = 50           # Process up to 50 deliveries per batch
 webhook_cleanup_retention_days = 7         # Keep completed/dead deliveries for 7 days
+# Auth cache configuration
+auth_cache_ttl_seconds = 60               # Cache PAK auth results for 60 seconds (0 to disable)
 
 [pak]
 prefix = "brokkr"

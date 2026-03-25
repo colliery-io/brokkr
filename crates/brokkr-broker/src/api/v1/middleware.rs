@@ -107,6 +107,19 @@ pub async fn auth_middleware<B>(
 /// A `Result` containing either the `AuthPayload` or an error status code.
 async fn verify_pak(dal: &DAL, pak: &str) -> Result<AuthPayload, StatusCode> {
     info!("Verifying PAK");
+
+    // Generate the PAK hash early so we can use it as cache key
+    let pak_hash = pak::generate_pak_hash(pak.to_string());
+
+    // Check the auth cache first
+    if let Some(cache) = &dal.auth_cache {
+        if let Some(cached) = cache.get(&pak_hash) {
+            debug!("Auth cache hit for PAK hash");
+            return Ok(cached);
+        }
+        debug!("Auth cache miss for PAK hash");
+    }
+
     let conn = &mut dal.pool.get().map_err(|e| {
         error!("Failed to get database connection: {:?}", e);
         StatusCode::INTERNAL_SERVER_ERROR
@@ -125,24 +138,31 @@ async fn verify_pak(dal: &DAL, pak: &str) -> Result<AuthPayload, StatusCode> {
     if let Some(admin_hash) = admin_key {
         if pak::verify_pak(pak.to_string(), admin_hash) {
             info!("Admin PAK verified");
-            return Ok(AuthPayload {
+            let payload = AuthPayload {
                 admin: true,
                 agent: None,
                 generator: None,
-            });
+            };
+            if let Some(cache) = &dal.auth_cache {
+                cache.insert(pak_hash, payload.clone());
+            }
+            return Ok(payload);
         }
     }
 
     // Check agents using indexed lookup for O(1) performance
-    let pak_hash = pak::generate_pak_hash(pak.to_string());
     match dal.agents().get_by_pak_hash(&pak_hash) {
         Ok(Some(agent)) => {
             info!("Agent PAK verified for agent ID: {}", agent.id);
-            return Ok(AuthPayload {
+            let payload = AuthPayload {
                 admin: false,
                 agent: Some(agent.id),
                 generator: None,
-            });
+            };
+            if let Some(cache) = &dal.auth_cache {
+                cache.insert(pak_hash, payload.clone());
+            }
+            return Ok(payload);
         }
         Ok(None) => {} // Not an agent, continue checking
         Err(e) => {
@@ -155,11 +175,15 @@ async fn verify_pak(dal: &DAL, pak: &str) -> Result<AuthPayload, StatusCode> {
     match dal.generators().get_by_pak_hash(&pak_hash) {
         Ok(Some(generator)) => {
             info!("Generator PAK verified for generator ID: {}", generator.id);
-            return Ok(AuthPayload {
+            let payload = AuthPayload {
                 admin: false,
                 agent: None,
                 generator: Some(generator.id),
-            });
+            };
+            if let Some(cache) = &dal.auth_cache {
+                cache.insert(pak_hash, payload.clone());
+            }
+            return Ok(payload);
         }
         Ok(None) => {} // Not a generator, continue checking
         Err(e) => {

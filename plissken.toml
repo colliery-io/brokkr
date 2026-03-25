@@ -1,0 +1,16 @@
+[project]
+name = "brokkr"
+version_from = "cargo"
+
+[output]
+format = "markdown"
+path = ".plissken/output"
+template = "mdbook"
+
+[rust]
+crates = [
+    "crates/brokkr-broker",
+    "crates/brokkr-agent",
+    "crates/brokkr-models",
+    "crates/brokkr-utils",
+]

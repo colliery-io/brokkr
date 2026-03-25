@@ -62,6 +62,9 @@
 //!
 //! - `BROKKR__PAK__SHORT_TOKEN_PREFIX`: Sets the prefix for short PAK tokens
 //!   Default: "BR"
+//!
+//! - `BROKKR__BROKER__AUTH_CACHE_TTL_SECONDS`: TTL for cached PAK auth results in seconds
+//!   Default: 60 (set to 0 to disable caching)
 
 use config::{Config, ConfigError, Environment, File};
 use serde::{Deserialize, Deserializer};
@@ -171,6 +174,8 @@ pub struct Broker {
     pub webhook_cleanup_retention_days: Option<i64>,
     /// Audit log retention in days (default: 90)
     pub audit_log_retention_days: Option<i64>,
+    /// Auth cache TTL in seconds (default: 60). Set to 0 to disable caching.
+    pub auth_cache_ttl_seconds: Option<u64>,
 }
 
 /// Represents the agent configuration

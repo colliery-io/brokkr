@@ -480,9 +480,16 @@ async fn delete_agent(
         ));
     }
 
+    // Capture old PAK hash for cache invalidation before deletion
+    let old_pak_hash = dal.agents().get(id).ok().flatten().map(|a| a.pak_hash);
+
     match dal.agents().soft_delete(id) {
         Ok(_) => {
             info!("Successfully deleted agent with ID: {}", id);
+            // Invalidate old PAK hash from auth cache
+            if let Some(ref hash) = old_pak_hash {
+                dal.invalidate_auth_cache(hash);
+            }
 
             // Log audit entry for agent deletion
             audit::log_action(
@@ -1461,14 +1468,23 @@ async fn rotate_agent_pak(
         ));
     }
 
-    // Verify agent exists
-    if let Err(e) = dal.agents().get(id) {
-        error!("Failed to fetch agent with ID {}: {:?}", id, e);
-        return Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({"error": "Failed to fetch agent"})),
-        ));
-    }
+    // Verify agent exists and capture old PAK hash for cache invalidation
+    let old_pak_hash = match dal.agents().get(id) {
+        Ok(Some(agent)) => agent.pak_hash,
+        Ok(None) => {
+            return Err((
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({"error": "Agent not found"})),
+            ));
+        }
+        Err(e) => {
+            error!("Failed to fetch agent with ID {}: {:?}", id, e);
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Failed to fetch agent"})),
+            ));
+        }
+    };
 
     // Generate new PAK and hash
     let (pak, pak_hash) = match crate::utils::pak::create_pak() {
@@ -1486,6 +1502,8 @@ async fn rotate_agent_pak(
     match dal.agents().update_pak_hash(id, pak_hash) {
         Ok(updated_agent) => {
             info!("Successfully rotated PAK for agent with ID: {}", id);
+            // Invalidate old PAK hash from auth cache
+            dal.invalidate_auth_cache(&old_pak_hash);
 
             // Log audit entry for PAK rotation
             audit::log_action(

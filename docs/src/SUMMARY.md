@@ -67,3 +67,7 @@
 # API Documentation
 
 - [Rust API Reference](./api/README.md)
+  - [brokkr-agent](./api/rust/brokkr-agent.md)
+  - [brokkr-broker](./api/rust/brokkr-broker.md)
+  - [brokkr-models](./api/rust/brokkr-models.md)
+  - [brokkr-utils](./api/rust/brokkr-utils.md)

@@ -1,20 +1,20 @@
 # Welcome to Brokkr
 
-Brokkr is an environment-aware control plane for Kubernetes that helps you dynamically manage applications across your infrastructure. It provides a framework to create and configure applications based on your environment's needs.
+Brokkr is a control plane for Kubernetes that lets you dynamically create and manage applications across clusters. Define what you need, fire it off, and the controller loop takes care of the rest — your applications get created, configured, and reconciled automatically.
 
 ## Use Cases
 
-### Automated Infrastructure Response
+### On-Demand Application Provisioning
 
-Automatically create and manage applications in response to changes in your infrastructure. Let Brokkr handle the complexity of deploying the right applications at the right time. Whether you're scaling up, adding new components, or responding to system events, Brokkr ensures your applications are always in sync with your infrastructure.
+A customer needs a new service spun up? A new tenant needs their own stack? Just create the deployment through Brokkr and it flows through the controller loop to your clusters. No manual kubectl, no waiting on CI pipelines — your infrastructure adapts to your needs in real time.
 
 ### Dynamic Service Management
 
-Respond to changing requirements by automatically creating and managing the necessary services. Perfect for systems that need to adapt to evolving infrastructure needs. Brokkr provides the flexibility to define how your services should be created, configured, and managed, allowing you to focus on your business logic rather than deployment details.
+As your requirements change, Brokkr lets you define, reconfigure, and scale the services running across your clusters. Generators can programmatically create deployment objects, templates let you stamp out standardized configurations, and the agent reconciliation loop keeps everything in the desired state.
 
-### Intelligent Application Orchestration
+### Multi-Cluster Orchestration
 
-Let Brokkr handle the complexity of managing your application ecosystem, automatically creating and configuring services based on your infrastructure's needs. With its environment-aware capabilities, Brokkr ensures consistent application behavior across different environments while adapting to their unique requirements.
+Manage applications across multiple Kubernetes clusters from a single control plane. Target specific clusters with labels, push updates to all of them at once, and let each agent independently reconcile its own state. Brokkr handles the coordination so you can focus on what to deploy, not where and how.
 
 ## Explore Brokkr
 
@@ -25,16 +25,16 @@ Let Brokkr handle the complexity of managing your application ecosystem, automat
 
 ## What Makes Brokkr Different?
 
-While tools like FluxCD and ArgoCD excel at GitOps-based state management and deployment, Brokkr provides a different approach to managing your Kubernetes applications:
+While tools like FluxCD and ArgoCD excel at GitOps-based state management, Brokkr takes a different approach — it's built for dynamic, on-demand application lifecycle management rather than static manifest synchronization.
 
-### Enabling Dynamic Responses
+### Programmatic Resource Creation
 
-Brokkr provides the framework to respond to infrastructure changes by creating new applications and services. You define the rules and patterns, and Brokkr helps you implement them consistently.
+Brokkr's generators and templates let external systems programmatically create Kubernetes resources through an API. CI/CD pipelines, customer provisioning systems, or internal tools can fire off deployments without touching git repos or manifest files.
 
-### Flexible Resource Generation
+### Controller Loop Reconciliation
 
-Rather than requiring manual definition of all resources, Brokkr gives you the tools to dynamically generate and manage resources based on your infrastructure's current state and requirements.
+Every agent runs its own reconciliation loop, continuously pulling its target state from the broker and applying it to its cluster. Resources drift? The agent corrects it. New deployment object pushed? The agent picks it up on the next poll.
 
-### Event-Driven Foundation
+### Built for Dynamic Workloads
 
-Brokkr provides the foundation for building event-driven architectures, allowing you to create and manage applications in response to infrastructure changes, while maintaining control over the implementation details.
+Where GitOps tools work best with a known, static set of manifests, Brokkr is designed for environments where the set of applications changes frequently — multi-tenant platforms, on-demand infrastructure, and systems where what needs to run is determined at runtime, not at commit time.

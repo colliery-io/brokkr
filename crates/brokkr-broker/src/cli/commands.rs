@@ -94,7 +94,9 @@ pub async fn serve(config: &Settings) -> Result<(), Box<dyn std::error::Error>> 
 
     // Initialize Data Access Layer
     info!("Initializing Data Access Layer");
-    let dal = DAL::new(connection_pool.clone());
+    let auth_cache_ttl = config.broker.auth_cache_ttl_seconds.unwrap_or(60);
+    let dal = DAL::new_with_auth_cache(connection_pool.clone(), auth_cache_ttl);
+    info!("Auth cache TTL: {}s ({})", auth_cache_ttl, if auth_cache_ttl > 0 { "enabled" } else { "disabled" });
 
     // Initialize encryption key for webhooks
     info!("Initializing encryption key");
