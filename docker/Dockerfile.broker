@@ -1,39 +1,4 @@
-# Stage 1: Plan the build
-FROM rust:1.90-slim-bookworm AS planner
-WORKDIR /app
-
-# Install cargo-chef
-RUN cargo install cargo-chef
-
-# Copy all files needed for dependency planning
-COPY . .
-
-# Create the recipe for dependencies
-RUN cargo chef prepare --recipe-path recipe.json
-
-# Stage 2: Cache dependencies
-FROM rust:1.90-slim-bookworm AS cacher
-WORKDIR /app
-
-# Install build dependencies
-RUN apt-get update && apt-get install -y \
-    libssl-dev \
-    pkg-config \
-    libpq-dev \
-    libc6 \
-    libc6-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install cargo-chef
-RUN cargo install cargo-chef
-
-# Copy the recipe from the planner
-COPY --from=planner /app/recipe.json recipe.json
-
-# Build dependencies only
-RUN cargo chef cook --release --recipe-path recipe.json
-
-# Stage 3: Build the application
+# Stage 1: Build the application
 FROM rust:1.90-slim-bookworm AS builder
 WORKDIR /app
 
@@ -42,43 +7,23 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     pkg-config \
     libpq-dev \
-    libc6 \
-    libc6-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy the cached dependencies
-COPY --from=cacher /app/target target
-COPY --from=cacher /usr/local/cargo /usr/local/cargo
-
-# Copy the source code
+# Copy source code and build
 COPY . .
-
-# Build the application
 RUN cargo build --bin brokkr-broker --release
 
-# Stage 4: Create the final image
-FROM debian:bookworm-slim AS brokkr-broker
+# Stage 2: Create the final image
+FROM debian:bookworm-slim
 
-# Install runtime dependencies in a single layer
 RUN apt-get update && apt-get install -y \
-    libssl-dev \
-    pkg-config \
     libpq-dev \
     curl \
-    libc6 \
-    libc6-dev \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Set the working directory
 WORKDIR /usr/local/bin
-
-# Copy the built binary from the builder stage
 COPY --from=builder /app/target/release/brokkr-broker .
-RUN chmod +x brokkr-broker
 
-# Expose the port the application runs on
 EXPOSE 3000
-
-# Command to run the application
 ENTRYPOINT ["./brokkr-broker"]
