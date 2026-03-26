@@ -35,7 +35,7 @@
 //! The following environment variables can be used to configure Brokkr:
 //!
 //! - `BROKKR__DATABASE__URL`: Sets the database connection URL
-//!   Default: "postgres://brokkr:brokkr@localhost:5432/brokkr"
+//!   Default: "postgres://brokkr:brokkr@localhost:5433/brokkr"
 //!
 //! - `BROKKR__DATABASE__SCHEMA`: Sets the PostgreSQL schema for multi-tenant isolation
 //!   Default: None (uses public schema)
@@ -707,7 +707,7 @@ mod tests {
         // Assert that the default database URL is set to the expected value
         assert_eq!(
             settings.database.url,
-            "postgres://brokkr:brokkr@localhost:5432/brokkr"
+            "postgres://brokkr:brokkr@localhost:5433/brokkr"
         );
     }
 
@@ -934,7 +934,7 @@ mod tests {
         // Verify static config is accessible
         assert_eq!(
             config.static_config().database.url,
-            "postgres://brokkr:brokkr@localhost:5432/brokkr"
+            "postgres://brokkr:brokkr@localhost:5433/brokkr"
         );
 
         // Verify dynamic config accessors work

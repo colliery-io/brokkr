@@ -3,6 +3,7 @@ name: brokkr-dev
 
 services:
   # PostgreSQL database for broker
+  # Uses port 5433 on host to avoid conflicts with other projects (e.g. cloacina on 5432)
   postgres:
     image: postgres:16-alpine
     environment:
@@ -10,7 +11,7 @@ services:
       POSTGRES_PASSWORD: brokkr
       POSTGRES_DB: brokkr
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - brokkr-postgres-data:/var/lib/postgresql/data
     healthcheck:
