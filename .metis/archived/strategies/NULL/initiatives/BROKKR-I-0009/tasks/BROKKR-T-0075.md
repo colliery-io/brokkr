@@ -35,7 +35,7 @@ Implement a Kubernetes ConfigMap watcher that automatically detects changes to t
 
 ### Type
 - [ ] Bug - Production issue that needs fixing
-- [ ] Feature - New functionality or enhancement  
+- [ ] Feature - New functionality or enhancement
 - [ ] Tech Debt - Code improvement or refactoring
 - [ ] Chore - Maintenance or setup work
 
@@ -47,7 +47,7 @@ Implement a Kubernetes ConfigMap watcher that automatically detects changes to t
 
 ### Impact Assessment **[CONDITIONAL: Bug]**
 - **Affected Users**: {Number/percentage of users affected}
-- **Reproduction Steps**: 
+- **Reproduction Steps**:
   1. {Step 1}
   2. {Step 2}
   3. {Step 3}
@@ -94,10 +94,10 @@ pub async fn watch_configmap(
 ) -> Result<(), Error> {
     let client = Client::try_default().await?;
     let cms: Api<ConfigMap> = Api::namespaced(client, namespace);
-    
+
     let watcher = watcher(cms, watcher::Config::default()
         .labels(&format!("app.kubernetes.io/name={}", configmap_name)));
-    
+
     // Debounce and reload on changes
 }
 ```

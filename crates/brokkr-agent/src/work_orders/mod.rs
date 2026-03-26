@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -29,9 +29,9 @@ pub mod build;
 use brokkr_models::models::agents::Agent;
 use brokkr_models::models::work_orders::WorkOrder;
 use brokkr_utils::config::Settings;
-use tracing::{debug, error, info, trace, warn};
 use kube::Client as K8sClient;
 use reqwest::Client;
+use tracing::{debug, error, info, trace, warn};
 
 /// Determines if an error is retryable by inspecting the error message.
 ///
@@ -65,7 +65,10 @@ fn is_error_retryable(error: &dyn std::error::Error) -> bool {
 
     for pattern in &non_retryable_patterns {
         if error_str.contains(pattern) {
-            debug!("Error classified as non-retryable (matched '{}'): {}", pattern, error);
+            debug!(
+                "Error classified as non-retryable (matched '{}'): {}",
+                pattern, error
+            );
             return false;
         }
     }
@@ -83,14 +86,20 @@ fn is_error_retryable(error: &dyn std::error::Error) -> bool {
 
     for pattern in &retryable_patterns {
         if error_str.contains(pattern) {
-            debug!("Error classified as retryable (matched '{}'): {}", pattern, error);
+            debug!(
+                "Error classified as retryable (matched '{}'): {}",
+                pattern, error
+            );
             return true;
         }
     }
 
     // Default to non-retryable for unknown errors
     // This prevents infinite retry loops for unhandled cases
-    debug!("Error classified as non-retryable (no pattern match): {}", error);
+    debug!(
+        "Error classified as non-retryable (no pattern match): {}",
+        error
+    );
     false
 }
 
@@ -175,15 +184,9 @@ async fn process_single_work_order(
 
     // Execute based on work type
     let result = match work_order.work_type.as_str() {
-        "build" => {
-            execute_build_work_order(config, http_client, k8s_client, agent, &claimed).await
-        }
-        "custom" => {
-            execute_custom_work_order(k8s_client, agent, &claimed).await
-        }
-        unknown => {
-            Err(format!("Unknown work type: {}", unknown).into())
-        }
+        "build" => execute_build_work_order(config, http_client, k8s_client, agent, &claimed).await,
+        "custom" => execute_custom_work_order(k8s_client, agent, &claimed).await,
+        unknown => Err(format!("Unknown work type: {}", unknown).into()),
     };
 
     // Report completion
@@ -251,7 +254,12 @@ async fn execute_build_work_order(
     }
 
     // Execute the build using the build handler
-    let result = build::execute_build(k8s_client, &work_order.yaml_content, &work_order.id.to_string()).await?;
+    let result = build::execute_build(
+        k8s_client,
+        &work_order.yaml_content,
+        &work_order.id.to_string(),
+    )
+    .await?;
 
     Ok(result)
 }
@@ -285,7 +293,10 @@ async fn execute_custom_work_order(
         }
 
         let object: DynamicObject = serde_yaml::from_value(yaml_doc.clone())?;
-        let gvk = object.types.as_ref().ok_or("Object missing type metadata")?;
+        let gvk = object
+            .types
+            .as_ref()
+            .ok_or("Object missing type metadata")?;
         debug!(
             "Parsed {} {}/{}",
             gvk.kind,

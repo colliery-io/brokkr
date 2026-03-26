@@ -5,7 +5,7 @@ title: "Agent should reconcile existing deployments when targeted to a stack"
 short_code: "BROKKR-T-0105"
 created_at: 2026-01-01T00:32:53.514089+00:00
 updated_at: 2026-01-02T20:05:59.422379+00:00
-parent: 
+parent:
 blocked_by: []
 archived: true
 
@@ -38,7 +38,7 @@ When an agent is targeted to a stack that already contains deployment objects, t
 
 ### Type
 - [ ] Bug - Production issue that needs fixing
-- [ ] Feature - New functionality or enhancement  
+- [ ] Feature - New functionality or enhancement
 - [ ] Tech Debt - Code improvement or refactoring
 - [ ] Chore - Maintenance or setup work
 
@@ -50,12 +50,12 @@ When an agent is targeted to a stack that already contains deployment objects, t
 
 ### Impact Assessment **[CONDITIONAL: Bug]**
 - **Affected Users**: Any user who creates deployments before targeting a stack to an agent
-- **Reproduction Steps**: 
+- **Reproduction Steps**:
   1. Create a stack
   2. Create a deployment object on the stack
   3. Target the stack to an agent
   4. Wait for agent reconciliation cycle
-- **Expected vs Actual**: 
+- **Expected vs Actual**:
   - **Expected**: Agent should deploy the existing deployment objects
   - **Actual**: Agent never sees the deployments (they were created before targeting)
 
@@ -90,7 +90,7 @@ When an agent is targeted to a stack that already contains deployment objects, t
 ### Test Case 1: {Test Case Name}
 - **Test ID**: TC-001
 - **Preconditions**: {What must be true before testing}
-- **Steps**: 
+- **Steps**:
   1. {Step 1}
   2. {Step 2}
   3. {Step 3}
@@ -101,7 +101,7 @@ When an agent is targeted to a stack that already contains deployment objects, t
 ### Test Case 2: {Test Case Name}
 - **Test ID**: TC-002
 - **Preconditions**: {What must be true before testing}
-- **Steps**: 
+- **Steps**:
   1. {Step 1}
   2. {Step 2}
 - **Expected Results**: {What should happen}

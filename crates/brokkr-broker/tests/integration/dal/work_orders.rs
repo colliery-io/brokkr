@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -514,7 +514,11 @@ fn test_complete_failure_non_retryable() {
     let result = fixture
         .dal
         .work_orders()
-        .complete_failure(work_order.id, "NotFound: resource does not exist".to_string(), false)
+        .complete_failure(
+            work_order.id,
+            "NotFound: resource does not exist".to_string(),
+            false,
+        )
         .expect("Failed to complete work order");
 
     // Should return Some (moved to log immediately, no retry)
@@ -553,8 +557,8 @@ fn test_process_retry_pending() {
     let new_wo = NewWorkOrder::new(
         WORK_TYPE_BUILD.to_string(),
         "yaml".to_string(),
-        Some(3),  // max_retries
-        Some(1),  // 1 second backoff
+        Some(3), // max_retries
+        Some(1), // 1 second backoff
         None,
     )
     .expect("Failed to create NewWorkOrder");
@@ -887,7 +891,11 @@ fn test_add_multiple_labels() {
     let fixture = TestFixture::new();
 
     let wo = fixture.create_test_work_order(WORK_TYPE_BUILD, "yaml");
-    let labels = vec!["production".to_string(), "gpu".to_string(), "us-east".to_string()];
+    let labels = vec![
+        "production".to_string(),
+        "gpu".to_string(),
+        "us-east".to_string(),
+    ];
 
     let count = fixture
         .dal
@@ -1112,7 +1120,12 @@ fn test_list_pending_for_agent_combined_targeting() {
             .list_pending_for_agent(agent.id, None)
             .expect("Failed to list pending");
 
-        assert_eq!(pending.len(), 1, "Agent {} should see the work order", agent.name);
+        assert_eq!(
+            pending.len(),
+            1,
+            "Agent {} should see the work order",
+            agent.name
+        );
         assert_eq!(pending[0].id, wo.id);
     }
 }

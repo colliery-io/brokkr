@@ -5,7 +5,7 @@ title: "Integrate plissken for auto-generated Rust API reference docs"
 short_code: "BROKKR-T-0129"
 created_at: 2026-03-25T20:50:57.370360+00:00
 updated_at: 2026-03-25T21:01:34.445117+00:00
-parent: 
+parent:
 blocked_by: []
 archived: false
 

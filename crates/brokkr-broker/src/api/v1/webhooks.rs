@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -13,21 +13,21 @@ use crate::api::v1::middleware::AuthPayload;
 use crate::dal::DAL;
 use crate::utils::audit;
 use axum::http::StatusCode;
-use brokkr_models::models::audit_logs::{
-    ACTION_WEBHOOK_CREATED, ACTION_WEBHOOK_DELETED, ACTION_WEBHOOK_UPDATED,
-    ACTOR_TYPE_ADMIN, RESOURCE_TYPE_WEBHOOK,
-};
 use axum::{
     extract::{Extension, Path, Query, State},
     routing::{delete, get, post, put},
     Json, Router,
 };
+use brokkr_models::models::audit_logs::{
+    ACTION_WEBHOOK_CREATED, ACTION_WEBHOOK_DELETED, ACTION_WEBHOOK_UPDATED, ACTOR_TYPE_ADMIN,
+    RESOURCE_TYPE_WEBHOOK,
+};
 use brokkr_models::models::webhooks::{
     NewWebhookSubscription, UpdateWebhookSubscription, WebhookDelivery, WebhookFilters,
     WebhookSubscription, VALID_EVENT_TYPES,
 };
-use tracing::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
+use tracing::{debug, error, info, warn};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
@@ -132,14 +132,15 @@ pub struct WebhookResponse {
 
 impl From<WebhookSubscription> for WebhookResponse {
     fn from(sub: WebhookSubscription) -> Self {
-        let filters = sub.filters.as_ref().and_then(|f| {
-            serde_json::from_str(f).ok()
-        });
+        let filters = sub
+            .filters
+            .as_ref()
+            .and_then(|f| serde_json::from_str(f).ok());
 
         // Convert target_labels from Option<Vec<Option<String>>> to Option<Vec<String>>
-        let target_labels = sub.target_labels.map(|labels| {
-            labels.into_iter().flatten().collect()
-        });
+        let target_labels = sub
+            .target_labels
+            .map(|labels| labels.into_iter().flatten().collect());
 
         Self {
             id: sub.id,
@@ -212,8 +213,14 @@ pub fn routes() -> Router<DAL> {
         .route("/webhooks/:id/deliveries", get(list_deliveries))
         .route("/webhooks/:id/test", post(test_webhook))
         // Agent webhook delivery endpoints
-        .route("/agents/:agent_id/webhooks/pending", get(get_pending_agent_webhooks))
-        .route("/webhook-deliveries/:id/result", post(report_delivery_result))
+        .route(
+            "/agents/:agent_id/webhooks/pending",
+            get(get_pending_agent_webhooks),
+        )
+        .route(
+            "/webhook-deliveries/:id/result",
+            post(report_delivery_result),
+        )
 }
 
 // =============================================================================
@@ -250,8 +257,12 @@ async fn list_webhooks(
 
     match dal.webhook_subscriptions().list(false) {
         Ok(subscriptions) => {
-            info!("Successfully retrieved {} webhook subscriptions", subscriptions.len());
-            let responses: Vec<WebhookResponse> = subscriptions.into_iter().map(Into::into).collect();
+            info!(
+                "Successfully retrieved {} webhook subscriptions",
+                subscriptions.len()
+            );
+            let responses: Vec<WebhookResponse> =
+                subscriptions.into_iter().map(Into::into).collect();
             Ok(Json(responses))
         }
         Err(e) => {
@@ -382,7 +393,10 @@ async fn create_webhook(
     // Create in database
     match dal.webhook_subscriptions().create(&new_sub) {
         Ok(subscription) => {
-            info!("Successfully created webhook subscription with ID: {}", subscription.id);
+            info!(
+                "Successfully created webhook subscription with ID: {}",
+                subscription.id
+            );
 
             // Log audit entry for webhook creation
             audit::log_action(
@@ -434,7 +448,10 @@ async fn get_webhook(
     Extension(auth_payload): Extension<AuthPayload>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<WebhookResponse>, (StatusCode, Json<serde_json::Value>)> {
-    info!("Handling request to get webhook subscription with ID: {}", id);
+    info!(
+        "Handling request to get webhook subscription with ID: {}",
+        id
+    );
 
     if !auth_payload.admin {
         warn!("Unauthorized attempt to access webhook with ID: {}", id);
@@ -446,7 +463,10 @@ async fn get_webhook(
 
     match dal.webhook_subscriptions().get(id) {
         Ok(Some(subscription)) => {
-            info!("Successfully retrieved webhook subscription with ID: {}", id);
+            info!(
+                "Successfully retrieved webhook subscription with ID: {}",
+                id
+            );
             Ok(Json(subscription.into()))
         }
         Ok(None) => {
@@ -457,7 +477,10 @@ async fn get_webhook(
             ))
         }
         Err(e) => {
-            error!("Failed to fetch webhook subscription with ID {}: {:?}", id, e);
+            error!(
+                "Failed to fetch webhook subscription with ID {}: {:?}",
+                id, e
+            );
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to fetch webhook subscription"})),
@@ -492,7 +515,10 @@ async fn update_webhook(
     Path(id): Path<Uuid>,
     Json(request): Json<UpdateWebhookRequest>,
 ) -> Result<Json<WebhookResponse>, (StatusCode, Json<serde_json::Value>)> {
-    info!("Handling request to update webhook subscription with ID: {}", id);
+    info!(
+        "Handling request to update webhook subscription with ID: {}",
+        id
+    );
 
     if !auth_payload.admin {
         warn!("Unauthorized attempt to update webhook with ID: {}", id);
@@ -532,18 +558,20 @@ async fn update_webhook(
     };
 
     // Convert target_labels to the format expected by the changeset
-    let target_labels = request.target_labels.map(|opt| {
-        opt.map(|labels| labels.into_iter().map(Some).collect())
-    });
+    let target_labels = request
+        .target_labels
+        .map(|opt| opt.map(|labels| labels.into_iter().map(Some).collect()));
 
     let changeset = UpdateWebhookSubscription {
         name: request.name,
         url_encrypted,
         auth_header_encrypted,
-        event_types: request.event_types.map(|types| types.into_iter().map(Some).collect()),
-        filters: request.filters.map(|opt| {
-            opt.map(|f| serde_json::to_string(&f).unwrap_or_default())
-        }),
+        event_types: request
+            .event_types
+            .map(|types| types.into_iter().map(Some).collect()),
+        filters: request
+            .filters
+            .map(|opt| opt.map(|f| serde_json::to_string(&f).unwrap_or_default())),
         target_labels,
         enabled: request.enabled,
         max_retries: request.max_retries,
@@ -572,7 +600,10 @@ async fn update_webhook(
             Ok(Json(subscription.into()))
         }
         Err(e) => {
-            error!("Failed to update webhook subscription with ID {}: {:?}", id, e);
+            error!(
+                "Failed to update webhook subscription with ID {}: {:?}",
+                id, e
+            );
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to update webhook subscription"})),
@@ -604,7 +635,10 @@ async fn delete_webhook(
     Extension(auth_payload): Extension<AuthPayload>,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, (StatusCode, Json<serde_json::Value>)> {
-    info!("Handling request to delete webhook subscription with ID: {}", id);
+    info!(
+        "Handling request to delete webhook subscription with ID: {}",
+        id
+    );
 
     if !auth_payload.admin {
         warn!("Unauthorized attempt to delete webhook with ID: {}", id);
@@ -640,7 +674,10 @@ async fn delete_webhook(
             ))
         }
         Err(e) => {
-            error!("Failed to delete webhook subscription with ID {}: {:?}", id, e);
+            error!(
+                "Failed to delete webhook subscription with ID {}: {:?}",
+                id, e
+            );
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to delete webhook subscription"})),
@@ -676,10 +713,16 @@ async fn list_deliveries(
     Path(id): Path<Uuid>,
     Query(query): Query<ListDeliveriesQuery>,
 ) -> Result<Json<Vec<WebhookDelivery>>, (StatusCode, Json<serde_json::Value>)> {
-    info!("Handling request to list deliveries for webhook subscription: {}", id);
+    info!(
+        "Handling request to list deliveries for webhook subscription: {}",
+        id
+    );
 
     if !auth_payload.admin {
-        warn!("Unauthorized attempt to list deliveries for webhook: {}", id);
+        warn!(
+            "Unauthorized attempt to list deliveries for webhook: {}",
+            id
+        );
         return Err((
             StatusCode::FORBIDDEN,
             Json(serde_json::json!({"error": "Admin access required"})),
@@ -707,13 +750,23 @@ async fn list_deliveries(
     let limit = query.limit.unwrap_or(50);
     let offset = query.offset.unwrap_or(0);
 
-    match dal.webhook_deliveries().list_for_subscription(id, query.status.as_deref(), limit, offset) {
+    match dal
+        .webhook_deliveries()
+        .list_for_subscription(id, query.status.as_deref(), limit, offset)
+    {
         Ok(deliveries) => {
-            info!("Successfully retrieved {} deliveries for subscription {}", deliveries.len(), id);
+            info!(
+                "Successfully retrieved {} deliveries for subscription {}",
+                deliveries.len(),
+                id
+            );
             Ok(Json(deliveries))
         }
         Err(e) => {
-            error!("Failed to fetch deliveries for subscription {}: {:?}", id, e);
+            error!(
+                "Failed to fetch deliveries for subscription {}: {:?}",
+                id, e
+            );
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to fetch deliveries"})),
@@ -746,7 +799,10 @@ async fn test_webhook(
     Extension(auth_payload): Extension<AuthPayload>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
-    info!("Handling request to test webhook subscription with ID: {}", id);
+    info!(
+        "Handling request to test webhook subscription with ID: {}",
+        id
+    );
 
     if !auth_payload.admin {
         warn!("Unauthorized attempt to test webhook with ID: {}", id);
@@ -812,7 +868,9 @@ async fn test_webhook(
 
     // Send test request
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(subscription.timeout_seconds as u64))
+        .timeout(std::time::Duration::from_secs(
+            subscription.timeout_seconds as u64,
+        ))
         .build()
         .map_err(|e| {
             error!("Failed to create HTTP client: {:?}", e);
@@ -843,7 +901,10 @@ async fn test_webhook(
                 })))
             } else {
                 let body = response.text().await.unwrap_or_default();
-                warn!("Test webhook delivery failed with status {}: {}", status, body);
+                warn!(
+                    "Test webhook delivery failed with status {}: {}",
+                    status, body
+                );
                 Err((
                     StatusCode::BAD_REQUEST,
                     Json(serde_json::json!({
@@ -935,11 +996,17 @@ async fn get_pending_agent_webhooks(
     Extension(auth_payload): Extension<AuthPayload>,
     Path(agent_id): Path<Uuid>,
 ) -> Result<Json<Vec<PendingWebhookDelivery>>, (StatusCode, Json<serde_json::Value>)> {
-    debug!("Handling request for pending webhooks for agent: {}", agent_id);
+    debug!(
+        "Handling request for pending webhooks for agent: {}",
+        agent_id
+    );
 
     // Verify the caller is the agent itself or an admin
     if !auth_payload.admin && auth_payload.agent != Some(agent_id) {
-        warn!("Unauthorized access to agent webhooks: {:?} != {:?}", auth_payload.agent, agent_id);
+        warn!(
+            "Unauthorized access to agent webhooks: {:?} != {:?}",
+            auth_payload.agent, agent_id
+        );
         return Err((
             StatusCode::FORBIDDEN,
             Json(serde_json::json!({"error": "Unauthorized - must be the agent or admin"})),
@@ -974,16 +1041,20 @@ async fn get_pending_agent_webhooks(
     };
 
     // Claim pending deliveries for this agent based on label matching
-    let deliveries = match dal.webhook_deliveries().claim_for_agent(agent_id, &agent_labels, 10, None) {
-        Ok(d) => d,
-        Err(e) => {
-            error!("Failed to claim pending deliveries: {:?}", e);
-            return Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": "Failed to claim pending deliveries"})),
-            ));
-        }
-    };
+    let deliveries =
+        match dal
+            .webhook_deliveries()
+            .claim_for_agent(agent_id, &agent_labels, 10, None)
+        {
+            Ok(d) => d,
+            Err(e) => {
+                error!("Failed to claim pending deliveries: {:?}", e);
+                return Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({"error": "Failed to claim pending deliveries"})),
+                ));
+            }
+        };
 
     // For each claimed delivery, get the subscription to decrypt URL/auth
     let mut pending = Vec::with_capacity(deliveries.len());
@@ -992,7 +1063,10 @@ async fn get_pending_agent_webhooks(
         let subscription = match dal.webhook_subscriptions().get(delivery.subscription_id) {
             Ok(Some(sub)) => sub,
             Ok(None) => {
-                warn!("Subscription {} not found for delivery {}", delivery.subscription_id, delivery.id);
+                warn!(
+                    "Subscription {} not found for delivery {}",
+                    delivery.subscription_id, delivery.id
+                );
                 continue;
             }
             Err(e) => {
@@ -1005,7 +1079,10 @@ async fn get_pending_agent_webhooks(
         let url = match decrypt_value(&subscription.url_encrypted) {
             Ok(u) => u,
             Err(e) => {
-                error!("Failed to decrypt URL for subscription {}: {}", subscription.id, e);
+                error!(
+                    "Failed to decrypt URL for subscription {}: {}",
+                    subscription.id, e
+                );
                 continue;
             }
         };
@@ -1015,7 +1092,10 @@ async fn get_pending_agent_webhooks(
             Some(ref encrypted) => match decrypt_value(encrypted) {
                 Ok(h) => Some(h),
                 Err(e) => {
-                    error!("Failed to decrypt auth header for subscription {}: {}", subscription.id, e);
+                    error!(
+                        "Failed to decrypt auth header for subscription {}: {}",
+                        subscription.id, e
+                    );
                     None
                 }
             },
@@ -1035,7 +1115,11 @@ async fn get_pending_agent_webhooks(
         });
     }
 
-    debug!("Returning {} pending webhook deliveries for agent {}", pending.len(), agent_id);
+    debug!(
+        "Returning {} pending webhook deliveries for agent {}",
+        pending.len(),
+        agent_id
+    );
     Ok(Json(pending))
 }
 
@@ -1064,7 +1148,10 @@ async fn report_delivery_result(
     Path(delivery_id): Path<Uuid>,
     Json(request): Json<DeliveryResultRequest>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
-    debug!("Handling delivery result report for delivery: {}", delivery_id);
+    debug!(
+        "Handling delivery result report for delivery: {}",
+        delivery_id
+    );
 
     // Must be an agent
     let agent_id = match auth_payload.agent {
@@ -1103,8 +1190,10 @@ async fn report_delivery_result(
 
     // Verify this delivery was acquired by this agent
     if delivery.acquired_by != Some(agent_id) {
-        warn!("Agent {} tried to report result for delivery {} acquired by {:?}",
-              agent_id, delivery_id, delivery.acquired_by);
+        warn!(
+            "Agent {} tried to report result for delivery {} acquired by {:?}",
+            agent_id, delivery_id, delivery.acquired_by
+        );
         return Err((
             StatusCode::FORBIDDEN,
             Json(serde_json::json!({"error": "Delivery not acquired by this agent"})),
@@ -1115,7 +1204,10 @@ async fn report_delivery_result(
     let subscription = match dal.webhook_subscriptions().get(delivery.subscription_id) {
         Ok(Some(sub)) => sub,
         Ok(None) => {
-            error!("Subscription {} not found for delivery {}", delivery.subscription_id, delivery_id);
+            error!(
+                "Subscription {} not found for delivery {}",
+                delivery.subscription_id, delivery_id
+            );
             return Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Subscription not found"})),
@@ -1134,7 +1226,10 @@ async fn report_delivery_result(
     if request.success {
         match dal.webhook_deliveries().mark_success(delivery_id) {
             Ok(_) => {
-                info!("Webhook delivery {} succeeded via agent {}", delivery_id, agent_id);
+                info!(
+                    "Webhook delivery {} succeeded via agent {}",
+                    delivery_id, agent_id
+                );
                 Ok(Json(serde_json::json!({
                     "status": "success",
                     "delivery_id": delivery_id
@@ -1156,7 +1251,10 @@ async fn report_delivery_result(
             subscription.max_retries,
         ) {
             Ok(updated) => {
-                info!("Webhook delivery {} failed via agent {}: {}", delivery_id, agent_id, error_msg);
+                info!(
+                    "Webhook delivery {} failed via agent {}: {}",
+                    delivery_id, agent_id, error_msg
+                );
                 Ok(Json(serde_json::json!({
                     "status": updated.status,
                     "delivery_id": delivery_id,

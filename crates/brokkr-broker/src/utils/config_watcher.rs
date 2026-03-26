@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -134,27 +134,23 @@ async fn run_config_watcher(
     let (tx, rx) = mpsc::channel();
 
     // Create a file watcher
-    let mut watcher: RecommendedWatcher = notify::recommended_watcher(move |res: Result<Event, notify::Error>| {
-        if let Ok(event) = res {
-            // Only send for modify/create events
-            if event.kind.is_modify() || event.kind.is_create() {
-                let _ = tx.send(());
+    let mut watcher: RecommendedWatcher =
+        notify::recommended_watcher(move |res: Result<Event, notify::Error>| {
+            if let Ok(event) = res {
+                // Only send for modify/create events
+                if event.kind.is_modify() || event.kind.is_create() {
+                    let _ = tx.send(());
+                }
             }
-        }
-    })?;
+        })?;
 
     // Watch the config file's parent directory (some editors replace files atomically)
     let config_path_ref = Path::new(&config_path);
-    let watch_path = config_path_ref
-        .parent()
-        .unwrap_or(config_path_ref);
+    let watch_path = config_path_ref.parent().unwrap_or(config_path_ref);
 
     watcher.watch(watch_path, RecursiveMode::NonRecursive)?;
 
-    info!(
-        "Config file watcher started for '{}'",
-        config_path
-    );
+    info!("Config file watcher started for '{}'", config_path);
 
     // Track last reload time for debouncing
     let mut last_reload: Option<Instant> = None;

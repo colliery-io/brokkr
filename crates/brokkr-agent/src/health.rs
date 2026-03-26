@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -27,12 +27,12 @@
 
 use crate::metrics;
 use axum::{extract::State, http::StatusCode, response::IntoResponse, routing::get, Json, Router};
-use tracing::{debug, error, info, trace, warn};
 use kube::Client;
 use serde::Serialize;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
+use tracing::{debug, error, info, trace, warn};
 
 /// Shared state for health endpoints
 #[derive(Clone)]

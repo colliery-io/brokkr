@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -11,7 +11,9 @@ use brokkr_models::models::agent_annotations::AgentAnnotation;
 use brokkr_models::models::agent_labels::AgentLabel;
 use brokkr_models::models::agent_targets::AgentTarget;
 use brokkr_models::models::agents::{Agent, NewAgent};
-use brokkr_models::models::webhooks::{BrokkrEvent, EVENT_AGENT_DEREGISTERED, EVENT_AGENT_REGISTERED};
+use brokkr_models::models::webhooks::{
+    BrokkrEvent, EVENT_AGENT_DEREGISTERED, EVENT_AGENT_REGISTERED,
+};
 use brokkr_models::schema::{agent_annotations, agent_labels, agent_targets, agents};
 use chrono::Utc;
 use diesel::prelude::*;
@@ -68,7 +70,10 @@ impl AgentsDAL<'_> {
             "status": agent.status,
             "created_at": agent.created_at,
         });
-        event_bus::emit_event(self.dal, &BrokkrEvent::new(EVENT_AGENT_REGISTERED, event_data));
+        event_bus::emit_event(
+            self.dal,
+            &BrokkrEvent::new(EVENT_AGENT_REGISTERED, event_data),
+        );
 
         Ok(agent)
     }
@@ -181,7 +186,10 @@ impl AgentsDAL<'_> {
                 "agent_id": agent_uuid,
                 "deleted_at": Utc::now(),
             });
-            event_bus::emit_event(self.dal, &BrokkrEvent::new(EVENT_AGENT_DEREGISTERED, event_data));
+            event_bus::emit_event(
+                self.dal,
+                &BrokkrEvent::new(EVENT_AGENT_DEREGISTERED, event_data),
+            );
         }
 
         Ok(rows)

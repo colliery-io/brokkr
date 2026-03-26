@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -9,7 +9,6 @@
 //! This module provides functionality for creating, verifying, and managing
 //! Prefixed API Keys using a singleton controller pattern.
 
-use tracing::{debug, error, info, warn};
 use brokkr_utils::Settings;
 use once_cell::sync::OnceCell;
 use prefixed_api_key::PrefixedApiKey;
@@ -17,6 +16,7 @@ use prefixed_api_key::PrefixedApiKeyController;
 use rand::rngs::OsRng;
 use sha2::Sha256;
 use std::sync::Arc;
+use tracing::{debug, error, info, warn};
 
 /// Singleton instance of the PAK controller.
 static PAK_CONTROLLER: OnceCell<Arc<PrefixedApiKeyController<OsRng, Sha256>>> = OnceCell::new();

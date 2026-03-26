@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -144,7 +144,11 @@ mod tests {
     fn test_template_multiple_missing_labels() {
         // Template has multiple labels that stack doesn't have
         let result = template_matches_stack(
-            &["env=prod".to_string(), "critical".to_string(), "tier=1".to_string()],
+            &[
+                "env=prod".to_string(),
+                "critical".to_string(),
+                "tier=1".to_string(),
+            ],
             &[],
             &["env=prod".to_string()],
             &[],

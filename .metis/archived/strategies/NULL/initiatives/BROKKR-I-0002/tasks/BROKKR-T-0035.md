@@ -40,7 +40,7 @@ Implement the core template instantiation endpoint that renders a template with 
 - [ ] `POST /api/v1/stacks/:stack_id/deployment-objects/from-template` endpoint implemented
 - [ ] Request body accepts `template_id` and `parameters` object
 - [ ] Validates template exists and is not deleted
-- [ ] Validates stack exists and is not deleted  
+- [ ] Validates stack exists and is not deleted
 - [ ] Validates template/stack label compatibility (422 on mismatch)
 - [ ] Validates parameters against JSON Schema (400 on invalid)
 - [ ] Renders template with Tera engine

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -79,15 +79,12 @@ impl From<diesel::result::Error> for DalError {
 impl IntoResponse for DalError {
     fn into_response(self) -> Response {
         let (status, message) = match self {
-            DalError::ConnectionPool(_) => {
-                (StatusCode::SERVICE_UNAVAILABLE, "Service temporarily unavailable")
-            }
-            DalError::Query(_) => {
-                (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error")
-            }
-            DalError::NotFound => {
-                (StatusCode::NOT_FOUND, "Resource not found")
-            }
+            DalError::ConnectionPool(_) => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Service temporarily unavailable",
+            ),
+            DalError::Query(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error"),
+            DalError::NotFound => (StatusCode::NOT_FOUND, "Resource not found"),
         };
         (status, Json(serde_json::json!({"error": message}))).into_response()
     }
@@ -183,7 +180,10 @@ impl DAL {
     ///
     /// A new DAL instance.
     pub fn new(pool: ConnectionPool) -> Self {
-        DAL { pool, auth_cache: None }
+        DAL {
+            pool,
+            auth_cache: None,
+        }
     }
 
     /// Creates a new DAL instance with an auth cache.

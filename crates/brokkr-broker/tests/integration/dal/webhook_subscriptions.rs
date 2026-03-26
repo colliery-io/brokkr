@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -22,7 +22,11 @@ fn create_test_subscription(name: &str, event_types: Vec<&str>) -> NewWebhookSub
     }
 }
 
-fn create_test_subscription_with_labels(name: &str, event_types: Vec<&str>, labels: Vec<String>) -> NewWebhookSubscription {
+fn create_test_subscription_with_labels(
+    name: &str,
+    event_types: Vec<&str>,
+    labels: Vec<String>,
+) -> NewWebhookSubscription {
     NewWebhookSubscription {
         name: name.to_string(),
         url_encrypted: b"https://example.com/webhook".to_vec(),
@@ -40,7 +44,10 @@ fn create_test_subscription_with_labels(name: &str, event_types: Vec<&str>, labe
 #[test]
 fn test_create_subscription() {
     let fixture = TestFixture::new();
-    let new_sub = create_test_subscription("Test Webhook", vec!["deployment.applied", "deployment.failed"]);
+    let new_sub = create_test_subscription(
+        "Test Webhook",
+        vec!["deployment.applied", "deployment.failed"],
+    );
 
     let created = fixture
         .dal
@@ -106,8 +113,16 @@ fn test_list_subscriptions() {
     let sub1 = create_test_subscription("Sub 1", vec!["deployment.applied"]);
     let sub2 = create_test_subscription("Sub 2", vec!["deployment.failed"]);
 
-    fixture.dal.webhook_subscriptions().create(&sub1).expect("Failed to create sub1");
-    fixture.dal.webhook_subscriptions().create(&sub2).expect("Failed to create sub2");
+    fixture
+        .dal
+        .webhook_subscriptions()
+        .create(&sub1)
+        .expect("Failed to create sub1");
+    fixture
+        .dal
+        .webhook_subscriptions()
+        .create(&sub2)
+        .expect("Failed to create sub2");
 
     let all_subs = fixture
         .dal
@@ -126,8 +141,16 @@ fn test_list_enabled_only() {
     let mut disabled_sub = create_test_subscription("Disabled Sub", vec!["deployment.failed"]);
     disabled_sub.enabled = false;
 
-    fixture.dal.webhook_subscriptions().create(&enabled_sub).expect("Failed to create enabled sub");
-    fixture.dal.webhook_subscriptions().create(&disabled_sub).expect("Failed to create disabled sub");
+    fixture
+        .dal
+        .webhook_subscriptions()
+        .create(&enabled_sub)
+        .expect("Failed to create enabled sub");
+    fixture
+        .dal
+        .webhook_subscriptions()
+        .create(&disabled_sub)
+        .expect("Failed to create disabled sub");
 
     let enabled_only = fixture
         .dal
@@ -239,11 +262,22 @@ fn test_delete_subscription() {
 fn test_get_matching_subscriptions_exact() {
     let fixture = TestFixture::new();
 
-    let sub1 = create_test_subscription("Deployment Sub", vec!["deployment.applied", "deployment.failed"]);
+    let sub1 = create_test_subscription(
+        "Deployment Sub",
+        vec!["deployment.applied", "deployment.failed"],
+    );
     let sub2 = create_test_subscription("Work Order Sub", vec!["workorder.completed"]);
 
-    fixture.dal.webhook_subscriptions().create(&sub1).expect("Failed to create sub1");
-    fixture.dal.webhook_subscriptions().create(&sub2).expect("Failed to create sub2");
+    fixture
+        .dal
+        .webhook_subscriptions()
+        .create(&sub1)
+        .expect("Failed to create sub1");
+    fixture
+        .dal
+        .webhook_subscriptions()
+        .create(&sub2)
+        .expect("Failed to create sub2");
 
     let deployment_matches = fixture
         .dal
@@ -272,8 +306,16 @@ fn test_get_matching_subscriptions_wildcard() {
     let wildcard_sub = create_test_subscription("All Deployment Events", vec!["deployment.*"]);
     let specific_sub = create_test_subscription("Only Applied", vec!["deployment.applied"]);
 
-    fixture.dal.webhook_subscriptions().create(&wildcard_sub).expect("Failed to create wildcard sub");
-    fixture.dal.webhook_subscriptions().create(&specific_sub).expect("Failed to create specific sub");
+    fixture
+        .dal
+        .webhook_subscriptions()
+        .create(&wildcard_sub)
+        .expect("Failed to create wildcard sub");
+    fixture
+        .dal
+        .webhook_subscriptions()
+        .create(&specific_sub)
+        .expect("Failed to create specific sub");
 
     // deployment.applied should match both
     let applied_matches = fixture
@@ -302,7 +344,11 @@ fn test_get_matching_subscriptions_star_wildcard() {
     // Subscribe to all events
     let all_events_sub = create_test_subscription("All Events", vec!["*"]);
 
-    fixture.dal.webhook_subscriptions().create(&all_events_sub).expect("Failed to create all events sub");
+    fixture
+        .dal
+        .webhook_subscriptions()
+        .create(&all_events_sub)
+        .expect("Failed to create all events sub");
 
     // Any event should match
     let deployment_matches = fixture
@@ -329,7 +375,11 @@ fn test_disabled_subscriptions_not_matched() {
     let mut disabled_sub = create_test_subscription("Disabled Sub", vec!["deployment.applied"]);
     disabled_sub.enabled = false;
 
-    fixture.dal.webhook_subscriptions().create(&disabled_sub).expect("Failed to create disabled sub");
+    fixture
+        .dal
+        .webhook_subscriptions()
+        .create(&disabled_sub)
+        .expect("Failed to create disabled sub");
 
     let matches = fixture
         .dal

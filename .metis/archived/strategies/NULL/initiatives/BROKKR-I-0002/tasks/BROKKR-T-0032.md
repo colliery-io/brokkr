@@ -65,16 +65,16 @@ impl TemplatesDAL<'_> {
     pub fn get(&self, template_id: Uuid) -> Result<Option<StackTemplate>, Error>
     pub fn list(&self) -> Result<Vec<StackTemplate>, Error>
     pub fn soft_delete(&self, template_id: Uuid) -> Result<usize, Error>
-    
+
     // Versioning
     pub fn get_latest_version(&self, generator_id: Option<Uuid>, name: &str) -> Result<Option<StackTemplate>, Error>
     pub fn list_versions(&self, generator_id: Option<Uuid>, name: &str) -> Result<Vec<StackTemplate>, Error>
     pub fn create_new_version(&self, new_template: &NewStackTemplate) -> Result<StackTemplate, Error>
-    
+
     // Filtering
     pub fn filter_by_labels(&self, labels: Vec<String>, filter_type: FilterType) -> Result<Vec<StackTemplate>, Error>
     pub fn filter_by_annotations(&self, annotations: Vec<(String, String)>, filter_type: FilterType) -> Result<Vec<StackTemplate>, Error>
-    
+
     // Ownership
     pub fn list_for_generator(&self, generator_id: Uuid) -> Result<Vec<StackTemplate>, Error>
     pub fn list_system_templates(&self) -> Result<Vec<StackTemplate>, Error>  // generator_id IS NULL

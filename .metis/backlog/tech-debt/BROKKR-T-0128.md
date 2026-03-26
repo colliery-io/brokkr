@@ -5,7 +5,7 @@ title: "Add caching layer to auth middleware to reduce per-request database quer
 short_code: "BROKKR-T-0128"
 created_at: 2026-03-14T01:51:48.466167+00:00
 updated_at: 2026-03-14T01:54:28.736668+00:00
-parent: 
+parent:
 blocked_by: []
 archived: false
 
@@ -38,10 +38,10 @@ Introduce a TTL-based in-memory cache for PAK-to-identity lookups in the auth mi
   1. `admin_role` table SELECT for PAK hash (lines 116-123)
   2. `agents` table SELECT by PAK hash via `dal.agents().get_by_pak_hash()` (line 138, impl in `dal/agents.rs:510-517`)
   3. `generators` table SELECT by PAK hash via `dal.generators().get_by_pak_hash()` (line 155, impl in `dal/generators.rs:249-259`)
-  
+
   The only cached component is the PAK controller singleton (`utils/pak.rs:22`, via `OnceCell`), but auth *results* are never cached. No `moka`, `lru`, `dashmap`, or any TTL cache crate is present in the dependency tree.
 
-- **Benefits of Fixing**: 
+- **Benefits of Fixing**:
   - Reduces database load proportional to request volume (agents poll frequently)
   - Lower p99 latency on auth-gated endpoints
   - PAK hashes rarely change — cache hit rates should be very high
@@ -71,7 +71,7 @@ Introduce a TTL-based in-memory cache for PAK-to-identity lookups in the auth mi
 - Consider a short TTL (30-60s) to balance freshness vs. query reduction
 
 ### Key Files
-- `crates/brokkr-broker/src/api/v1/middleware.rs` — main auth middleware, `verify_pak()` 
+- `crates/brokkr-broker/src/api/v1/middleware.rs` — main auth middleware, `verify_pak()`
 - `crates/brokkr-broker/src/utils/pak.rs` — PAK hashing/verification
 - `crates/brokkr-broker/src/dal/agents.rs` — agent PAK lookup
 - `crates/brokkr-broker/src/dal/generators.rs` — generator PAK lookup

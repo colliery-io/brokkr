@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -700,7 +700,10 @@ fn test_recreate_agent_after_soft_delete() {
         .agents()
         .get(original_agent.id)
         .expect("Failed to check deleted agent");
-    assert!(deleted.is_none(), "Agent should not be visible after soft delete");
+    assert!(
+        deleted.is_none(),
+        "Agent should not be visible after soft delete"
+    );
 
     // Create a new agent with the SAME name and cluster
     // This should succeed because the partial unique index excludes soft-deleted records

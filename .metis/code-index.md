@@ -5193,4 +5193,3 @@
 -  `MICROSERVICE_SCHEMA` variable L78-88 — `: &str` — Each scenario tests a complete user workflow through the system.
 -  `JOB_YAML` variable L91-105 — `: &str` — Job YAML for work order testing
 -  `BUILD_YAML` variable L110-127 — `: &str` — Shipwright Build YAML for build work order testing
-

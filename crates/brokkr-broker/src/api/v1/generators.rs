@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -19,8 +19,8 @@ use axum::{
     Json, Router,
 };
 use brokkr_models::models::generator::{Generator, NewGenerator};
-use tracing::{debug, error, info, warn};
 use serde::Serialize;
+use tracing::{debug, error, info, warn};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
@@ -348,7 +348,12 @@ async fn delete_generator(
     }
 
     // Capture old PAK hash for cache invalidation before deletion
-    let old_pak_hash = dal.generators().get(id).ok().flatten().and_then(|g| g.pak_hash);
+    let old_pak_hash = dal
+        .generators()
+        .get(id)
+        .ok()
+        .flatten()
+        .and_then(|g| g.pak_hash);
 
     match dal.generators().soft_delete(id) {
         Ok(_) => {

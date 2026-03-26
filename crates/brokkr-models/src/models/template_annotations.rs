@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -133,7 +133,8 @@ mod tests {
 
     #[test]
     fn test_new_template_annotation_invalid_template_id() {
-        let result = NewTemplateAnnotation::new(Uuid::nil(), "key".to_string(), "value".to_string());
+        let result =
+            NewTemplateAnnotation::new(Uuid::nil(), "key".to_string(), "value".to_string());
         assert!(result.is_err());
         assert_eq!(result.unwrap_err(), "Invalid template ID");
     }
@@ -155,8 +156,11 @@ mod tests {
 
     #[test]
     fn test_new_template_annotation_key_with_whitespace() {
-        let result =
-            NewTemplateAnnotation::new(Uuid::new_v4(), "has space".to_string(), "value".to_string());
+        let result = NewTemplateAnnotation::new(
+            Uuid::new_v4(),
+            "has space".to_string(),
+            "value".to_string(),
+        );
         assert!(result.is_err());
         assert_eq!(
             result.unwrap_err(),
@@ -178,8 +182,7 @@ mod tests {
     #[test]
     fn test_new_template_annotation_key_too_long() {
         let long_key = "a".repeat(65);
-        let result =
-            NewTemplateAnnotation::new(Uuid::new_v4(), long_key, "value".to_string());
+        let result = NewTemplateAnnotation::new(Uuid::new_v4(), long_key, "value".to_string());
         assert!(result.is_err());
         assert_eq!(
             result.unwrap_err(),
@@ -190,8 +193,7 @@ mod tests {
     #[test]
     fn test_new_template_annotation_value_too_long() {
         let long_value = "a".repeat(65);
-        let result =
-            NewTemplateAnnotation::new(Uuid::new_v4(), "key".to_string(), long_value);
+        let result = NewTemplateAnnotation::new(Uuid::new_v4(), "key".to_string(), long_value);
         assert!(result.is_err());
         assert_eq!(
             result.unwrap_err(),

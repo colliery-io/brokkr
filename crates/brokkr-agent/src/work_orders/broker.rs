@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -14,9 +14,9 @@
 use brokkr_models::models::agents::Agent;
 use brokkr_models::models::work_orders::WorkOrder;
 use brokkr_utils::config::Settings;
-use tracing::{debug, error, info, trace, warn};
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
+use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
 /// Request body for claiming a work order.
@@ -94,7 +94,10 @@ pub async fn fetch_pending_work_orders(
             Ok(work_orders)
         }
         StatusCode::FORBIDDEN => {
-            error!("Access denied when fetching pending work orders for agent {}", agent.id);
+            error!(
+                "Access denied when fetching pending work orders for agent {}",
+                agent.id
+            );
             Err("Access denied".into())
         }
         status => {
@@ -259,14 +262,14 @@ pub async fn complete_work_order(
             Ok(())
         }
         StatusCode::NOT_FOUND => {
-            warn!("Work order {} not found when reporting completion", work_order_id);
+            warn!(
+                "Work order {} not found when reporting completion",
+                work_order_id
+            );
             Err("Work order not found".into())
         }
         StatusCode::FORBIDDEN => {
-            error!(
-                "Access denied when completing work order {}",
-                work_order_id
-            );
+            error!("Access denied when completing work order {}", work_order_id);
             Err("Access denied".into())
         }
         status => {

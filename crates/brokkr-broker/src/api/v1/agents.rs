@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -13,14 +13,7 @@ use crate::api::v1::middleware::AuthPayload;
 use crate::dal::DAL;
 use crate::metrics;
 use crate::utils::{audit, event_bus, pak};
-use brokkr_models::models::webhooks::{
-    BrokkrEvent, EVENT_DEPLOYMENT_APPLIED, EVENT_DEPLOYMENT_FAILED,
-};
 use axum::http::StatusCode;
-use brokkr_models::models::audit_logs::{
-    ACTION_AGENT_CREATED, ACTION_AGENT_DELETED, ACTION_AGENT_UPDATED, ACTION_PAK_ROTATED,
-    ACTOR_TYPE_ADMIN, RESOURCE_TYPE_AGENT,
-};
 use axum::{
     extract::{Extension, Path, Query, State},
     routing::{delete, get, post},
@@ -31,11 +24,18 @@ use brokkr_models::models::agent_events::{AgentEvent, NewAgentEvent};
 use brokkr_models::models::agent_labels::{AgentLabel, NewAgentLabel};
 use brokkr_models::models::agent_targets::{AgentTarget, NewAgentTarget};
 use brokkr_models::models::agents::{Agent, NewAgent};
+use brokkr_models::models::audit_logs::{
+    ACTION_AGENT_CREATED, ACTION_AGENT_DELETED, ACTION_AGENT_UPDATED, ACTION_PAK_ROTATED,
+    ACTOR_TYPE_ADMIN, RESOURCE_TYPE_AGENT,
+};
 use brokkr_models::models::deployment_objects::DeploymentObject;
 use brokkr_models::models::stacks::Stack;
-use tracing::{debug, error, info, warn};
+use brokkr_models::models::webhooks::{
+    BrokkrEvent, EVENT_DEPLOYMENT_APPLIED, EVENT_DEPLOYMENT_FAILED,
+};
 use serde::Deserialize;
 use serde_json::Value;
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 /// Creates and returns the router for agent-related endpoints.
@@ -106,7 +106,11 @@ async fn list_agents(
             for agent in &agents {
                 if let Some(last_hb) = agent.last_heartbeat {
                     let age_seconds = (now - last_hb).num_seconds().max(0) as f64;
-                    metrics::set_agent_heartbeat_age(&agent.id.to_string(), &agent.name, age_seconds);
+                    metrics::set_agent_heartbeat_age(
+                        &agent.id.to_string(),
+                        &agent.name,
+                        age_seconds,
+                    );
                 }
             }
 

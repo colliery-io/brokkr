@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -41,8 +41,6 @@ use crate::k8s::objects::verify_object_ownership;
 use crate::k8s::objects::{CHECKSUM_ANNOTATION, STACK_LABEL};
 use crate::metrics;
 use backoff::ExponentialBackoffBuilder;
-use std::time::Instant;
-use tracing::{debug, error, info, trace, warn};
 use k8s_openapi::api::core::v1::Namespace;
 use kube::api::DeleteParams;
 use kube::api::DynamicObject;
@@ -61,6 +59,8 @@ use kube::Error as KubeError;
 use kube::ResourceExt;
 use std::collections::BTreeMap;
 use std::time::Duration;
+use std::time::Instant;
+use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
 /// Retry configuration for Kubernetes operations
@@ -158,8 +158,12 @@ pub async fn apply_k8s_objects(
         .await
         .map_err(|e| {
             error!("Failed to create Kubernetes discovery client: {}", e);
-            metrics::kubernetes_operations_total().with_label_values(&["apply"]).inc();
-            metrics::kubernetes_operation_duration_seconds().with_label_values(&["apply"]).observe(start.elapsed().as_secs_f64());
+            metrics::kubernetes_operations_total()
+                .with_label_values(&["apply"])
+                .inc();
+            metrics::kubernetes_operation_duration_seconds()
+                .with_label_values(&["apply"])
+                .observe(start.elapsed().as_secs_f64());
             e
         })?;
 
@@ -246,8 +250,12 @@ pub async fn apply_k8s_objects(
     );
 
     // Record metrics for successful apply
-    metrics::kubernetes_operations_total().with_label_values(&["apply"]).inc();
-    metrics::kubernetes_operation_duration_seconds().with_label_values(&["apply"]).observe(start.elapsed().as_secs_f64());
+    metrics::kubernetes_operations_total()
+        .with_label_values(&["apply"])
+        .inc();
+    metrics::kubernetes_operation_duration_seconds()
+        .with_label_values(&["apply"])
+        .observe(start.elapsed().as_secs_f64());
 
     Ok(())
 }
@@ -644,7 +652,10 @@ async fn rollback_namespaces(client: &Client, namespaces: &[String]) {
 
         match ns_api.delete(ns_name, &DeleteParams::default()).await {
             Ok(_) => {
-                info!("Successfully deleted namespace '{}' during rollback", ns_name);
+                info!(
+                    "Successfully deleted namespace '{}' during rollback",
+                    ns_name
+                );
             }
             Err(e) => {
                 // Log but don't fail - best effort cleanup
@@ -718,9 +729,7 @@ pub async fn reconcile_target_state(
                     }
                 }
 
-                if let Err(e) =
-                    apply_single_object(object, &client, stack_id, checksum).await
-                {
+                if let Err(e) = apply_single_object(object, &client, stack_id, checksum).await {
                     // Rollback: delete any namespaces we created
                     rollback_namespaces(&client, &created_namespaces).await;
                     return Err(e);

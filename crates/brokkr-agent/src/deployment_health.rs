@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -11,11 +11,11 @@
 //! OOMKilled, and other problematic conditions.
 
 use crate::k8s::objects::DEPLOYMENT_OBJECT_ID_LABEL;
-use tracing::{debug, error, info, trace, warn};
 use chrono::{DateTime, Utc};
 use k8s_openapi::api::core::v1::Pod;
 use kube::{api::ListParams, Api, Client};
 use serde::{Deserialize, Serialize};
+use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
 /// Known problematic waiting conditions that indicate degraded health
@@ -32,18 +32,10 @@ const DEGRADED_CONDITIONS: &[&str] = &[
 /// Conditions that indicate pending state (not yet problematic but not ready)
 /// Reserved for future use to track long-pending states
 #[allow(dead_code)]
-const PENDING_CONDITIONS: &[&str] = &[
-    "Pending",
-    "ContainerCreating",
-    "PodInitializing",
-];
+const PENDING_CONDITIONS: &[&str] = &["Pending", "ContainerCreating", "PodInitializing"];
 
 /// Reasons from terminated containers that indicate issues
-const TERMINATED_ISSUES: &[&str] = &[
-    "OOMKilled",
-    "Error",
-    "ContainerCannotRun",
-];
+const TERMINATED_ISSUES: &[&str] = &["OOMKilled", "Error", "ContainerCannotRun"];
 
 /// Health status for a deployment object
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -112,7 +104,8 @@ impl HealthChecker {
 
         let mut summary = HealthSummary::default();
         let mut overall_status = "healthy";
-        let mut conditions_set: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut conditions_set: std::collections::HashSet<String> =
+            std::collections::HashSet::new();
 
         summary.pods_total = pods.len();
 

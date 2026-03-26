@@ -5,7 +5,7 @@ title: "Webhook delivery should occur from agent (data plane) not broker (contro
 short_code: "BROKKR-T-0091"
 created_at: 2025-12-31T16:29:40.111362+00:00
 updated_at: 2026-01-02T12:47:19.450382+00:00
-parent: 
+parent:
 blocked_by: []
 archived: false
 
@@ -37,11 +37,11 @@ Refactor webhook delivery so that HTTP calls are made from the agent (data plane
 ### Impact Assessment
 
 - **Affected Users**: All users attempting to use webhooks with in-cluster targets
-- **Reproduction Steps**: 
+- **Reproduction Steps**:
   1. Deploy Brokkr with broker running outside the target cluster (standard CP/DP separation)
   2. Create a webhook subscription pointing to an in-cluster service (e.g., `http://my-service.my-namespace.svc.cluster.local:8080/webhook`)
   3. Trigger an event that should fire the webhook
-- **Expected vs Actual**: 
+- **Expected vs Actual**:
   - **Expected**: Webhook is delivered to the in-cluster service
   - **Actual**: Webhook delivery fails because broker cannot reach cluster-internal DNS/network
 

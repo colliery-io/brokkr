@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -9,7 +9,6 @@
 //! This module provides functionality to collect detailed diagnostic information
 //! about Kubernetes resources, including pod statuses, events, and log tails.
 
-use tracing::{debug, error, info, trace, warn};
 use chrono::{DateTime, Utc};
 use k8s_openapi::api::core::v1::{Event, Pod};
 use kube::{
@@ -18,6 +17,7 @@ use kube::{
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
 /// Maximum number of log lines to collect per container.
@@ -187,7 +187,10 @@ impl DiagnosticsHandler {
             let pod_namespace = pod.metadata.namespace.clone().unwrap_or_default();
 
             let status = if let Some(status) = &pod.status {
-                let phase = status.phase.clone().unwrap_or_else(|| "Unknown".to_string());
+                let phase = status
+                    .phase
+                    .clone()
+                    .unwrap_or_else(|| "Unknown".to_string());
 
                 let conditions: Vec<PodCondition> = status
                     .conditions

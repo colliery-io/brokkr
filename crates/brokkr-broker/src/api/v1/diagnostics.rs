@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -20,9 +20,9 @@ use axum::{
 };
 use brokkr_models::models::diagnostic_requests::{DiagnosticRequest, NewDiagnosticRequest};
 use brokkr_models::models::diagnostic_results::{DiagnosticResult, NewDiagnosticResult};
-use tracing::{debug, error, info, warn};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 /// Creates and returns the router for diagnostic endpoints.
@@ -178,7 +178,10 @@ async fn create_diagnostic_request(
         },
         Err(e) => {
             warn!("Invalid diagnostic request parameters: {}", e);
-            Err((StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": e}))))
+            Err((
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": e})),
+            ))
         }
     }
 }
@@ -227,7 +230,10 @@ async fn get_diagnostic(
             let result = match dal.diagnostic_results().get_by_request(id) {
                 Ok(result) => result,
                 Err(e) => {
-                    error!("Failed to fetch diagnostic result for request {}: {:?}", id, e);
+                    error!(
+                        "Failed to fetch diagnostic result for request {}: {:?}",
+                        id, e
+                    );
                     None
                 }
             };
@@ -394,7 +400,10 @@ async fn claim_diagnostic(
             ))
         }
         Err(e) => {
-            error!("Failed to fetch diagnostic request {} for claim: {:?}", id, e);
+            error!(
+                "Failed to fetch diagnostic request {} for claim: {:?}",
+                id, e
+            );
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to fetch diagnostic request"})),
@@ -495,19 +504,27 @@ async fn submit_diagnostic_result(
                             error!("Failed to create diagnostic result: {:?}", e);
                             Err((
                                 StatusCode::INTERNAL_SERVER_ERROR,
-                                Json(serde_json::json!({"error": "Failed to store diagnostic result"})),
+                                Json(
+                                    serde_json::json!({"error": "Failed to store diagnostic result"}),
+                                ),
                             ))
                         }
                     }
                 }
                 Err(e) => {
                     warn!("Invalid diagnostic result: {}", e);
-                    Err((StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": e}))))
+                    Err((
+                        StatusCode::BAD_REQUEST,
+                        Json(serde_json::json!({"error": e})),
+                    ))
                 }
             }
         }
         Ok(None) => {
-            warn!("Diagnostic request not found for result submission: {}", request_id);
+            warn!(
+                "Diagnostic request not found for result submission: {}",
+                request_id
+            );
             Err((
                 StatusCode::NOT_FOUND,
                 Json(serde_json::json!({"error": "Diagnostic request not found"})),

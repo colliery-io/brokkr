@@ -99,7 +99,7 @@ use brokkr_models::models::stack_templates::NewStackTemplate;
 async fn test_create_template() {
     let dal = setup_test_dal().await;
     let generator = create_test_generator(&dal).await;
-    
+
     let new_template = NewStackTemplate::new(
         Some(generator.id),
         "test-template".to_string(),
@@ -107,13 +107,13 @@ async fn test_create_template() {
         "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: {{ name }}".to_string(),
         r#"{"type":"object","properties":{"name":{"type":"string"}}}"#.to_string(),
     ).unwrap();
-    
+
     let template = dal.templates().create(&new_template).unwrap();
-    
+
     assert_eq!(template.name, "test-template");
     assert_eq!(template.version, 1);
     assert_eq!(template.generator_id, Some(generator.id));
-    
+
     cleanup_test_dal(dal).await;
 }
 ```

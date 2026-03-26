@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -12,13 +12,13 @@ use crate::utils::pak;
 use brokkr_models::models::agents::NewAgent;
 use brokkr_models::models::generator::NewGenerator;
 use brokkr_utils::config::{ReloadableConfig, Settings};
-use tracing::{debug, error, info, warn};
 use diesel::prelude::*;
 use diesel::result::Error as DieselError;
 use diesel::sql_query;
 use diesel::sql_types::BigInt;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use tokio::signal;
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 // Assuming MIGRATIONS is defined in the bin.rs file, we need to import it
@@ -96,7 +96,15 @@ pub async fn serve(config: &Settings) -> Result<(), Box<dyn std::error::Error>> 
     info!("Initializing Data Access Layer");
     let auth_cache_ttl = config.broker.auth_cache_ttl_seconds.unwrap_or(60);
     let dal = DAL::new_with_auth_cache(connection_pool.clone(), auth_cache_ttl);
-    info!("Auth cache TTL: {}s ({})", auth_cache_ttl, if auth_cache_ttl > 0 { "enabled" } else { "disabled" });
+    info!(
+        "Auth cache TTL: {}s ({})",
+        auth_cache_ttl,
+        if auth_cache_ttl > 0 {
+            "enabled"
+        } else {
+            "disabled"
+        }
+    );
 
     // Initialize encryption key for webhooks
     info!("Initializing encryption key");
@@ -105,8 +113,7 @@ pub async fn serve(config: &Settings) -> Result<(), Box<dyn std::error::Error>> 
 
     // Initialize audit logger for compliance tracking
     info!("Initializing audit logger");
-    utils::audit::init_audit_logger(dal.clone())
-        .expect("Failed to initialize audit logger");
+    utils::audit::init_audit_logger(dal.clone()).expect("Failed to initialize audit logger");
 
     // Start background tasks
     info!("Starting background tasks");
@@ -125,10 +132,7 @@ pub async fn serve(config: &Settings) -> Result<(), Box<dyn std::error::Error>> 
 
     // Start webhook delivery worker
     let webhook_delivery_config = utils::background_tasks::WebhookDeliveryConfig {
-        interval_seconds: config
-            .broker
-            .webhook_delivery_interval_seconds
-            .unwrap_or(5),
+        interval_seconds: config.broker.webhook_delivery_interval_seconds.unwrap_or(5),
         batch_size: config.broker.webhook_delivery_batch_size.unwrap_or(50),
     };
     utils::background_tasks::start_webhook_delivery_task(dal.clone(), webhook_delivery_config);

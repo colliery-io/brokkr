@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -20,9 +20,7 @@ use uuid::Uuid;
 pub const VALID_STATUSES: &[&str] = &["pending", "claimed", "completed", "failed", "expired"];
 
 /// A diagnostic request record from the database.
-#[derive(
-    Debug, Clone, Queryable, Selectable, Identifiable, Serialize, Deserialize, ToSchema,
-)]
+#[derive(Debug, Clone, Queryable, Selectable, Identifiable, Serialize, Deserialize, ToSchema)]
 #[diesel(table_name = diagnostic_requests)]
 pub struct DiagnosticRequest {
     /// Unique identifier for the diagnostic request.
@@ -142,12 +140,7 @@ mod tests {
 
     #[test]
     fn test_new_diagnostic_request_nil_agent_id() {
-        let result = NewDiagnosticRequest::new(
-            Uuid::nil(),
-            Uuid::new_v4(),
-            None,
-            None,
-        );
+        let result = NewDiagnosticRequest::new(Uuid::nil(), Uuid::new_v4(), None, None);
 
         assert!(result.is_err());
         assert_eq!(result.unwrap_err(), "Agent ID cannot be nil");
@@ -155,12 +148,7 @@ mod tests {
 
     #[test]
     fn test_new_diagnostic_request_nil_deployment_object_id() {
-        let result = NewDiagnosticRequest::new(
-            Uuid::new_v4(),
-            Uuid::nil(),
-            None,
-            None,
-        );
+        let result = NewDiagnosticRequest::new(Uuid::new_v4(), Uuid::nil(), None, None);
 
         assert!(result.is_err());
         assert_eq!(result.unwrap_err(), "Deployment object ID cannot be nil");
@@ -168,12 +156,7 @@ mod tests {
 
     #[test]
     fn test_new_diagnostic_request_invalid_retention() {
-        let result = NewDiagnosticRequest::new(
-            Uuid::new_v4(),
-            Uuid::new_v4(),
-            None,
-            Some(0),
-        );
+        let result = NewDiagnosticRequest::new(Uuid::new_v4(), Uuid::new_v4(), None, Some(0));
 
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Retention must be between"));
@@ -184,12 +167,7 @@ mod tests {
         let agent_id = Uuid::new_v4();
         let deployment_object_id = Uuid::new_v4();
 
-        let result = NewDiagnosticRequest::new(
-            agent_id,
-            deployment_object_id,
-            None,
-            None,
-        );
+        let result = NewDiagnosticRequest::new(agent_id, deployment_object_id, None, None);
 
         assert!(result.is_ok());
         let request = result.unwrap();

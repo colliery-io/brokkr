@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -138,7 +138,8 @@ impl RenderedDeploymentObjectsDAL<'_> {
     pub fn delete(&self, record_id: Uuid) -> Result<usize, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         diesel::delete(
-            rendered_deployment_objects::table.filter(rendered_deployment_objects::id.eq(record_id)),
+            rendered_deployment_objects::table
+                .filter(rendered_deployment_objects::id.eq(record_id)),
         )
         .execute(conn)
     }

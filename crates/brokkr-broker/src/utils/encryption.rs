@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -21,11 +21,11 @@ use aes_gcm::{
     aead::{Aead, KeyInit},
     Aes256Gcm, Nonce,
 };
-use tracing::{debug, error, info, warn};
 use once_cell::sync::OnceCell;
 use rand::RngCore;
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
+use tracing::{debug, error, info, warn};
 
 /// Version byte for AES-256-GCM encrypted data
 const VERSION_AES_GCM: u8 = 0x01;
@@ -61,7 +61,9 @@ impl std::fmt::Display for EncryptionError {
             EncryptionError::EncryptionFailed => write!(f, "Encryption failed"),
             EncryptionError::DecryptionFailed => write!(f, "Decryption failed"),
             EncryptionError::InvalidData(msg) => write!(f, "Invalid data: {}", msg),
-            EncryptionError::UnsupportedVersion(v) => write!(f, "Unsupported encryption version: {}", v),
+            EncryptionError::UnsupportedVersion(v) => {
+                write!(f, "Unsupported encryption version: {}", v)
+            }
         }
     }
 }

@@ -79,12 +79,12 @@ fn build_cors_layer(config: &CorsConfig) -> CorsLayer {
         .iter()
         .filter_map(|o| o.parse().ok())
         .collect();
-    
+
     let methods: Vec<Method> = config.allowed_methods
         .iter()
         .filter_map(|m| m.parse().ok())
         .collect();
-    
+
     CorsLayer::new()
         .allow_origin(origins)
         .allow_methods(methods)

@@ -86,7 +86,7 @@ impl IntoResponse for DalError {
         match self {
             DalError::ConnectionPool(e) => {
                 error!("Database connection pool exhausted: {}", e);
-                (StatusCode::SERVICE_UNAVAILABLE, 
+                (StatusCode::SERVICE_UNAVAILABLE,
                  Json(json!({"error": "Service temporarily unavailable"}))).into_response()
             }
             DalError::Query(e) => {

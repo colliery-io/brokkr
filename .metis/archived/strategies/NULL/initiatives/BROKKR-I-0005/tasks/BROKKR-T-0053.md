@@ -37,7 +37,7 @@ Migrate existing webhook subscription data from XOR encryption to AES-256-GCM. T
 ### Phase 1: Add new columns (migration)
 ```sql
 -- up.sql
-ALTER TABLE webhook_subscriptions 
+ALTER TABLE webhook_subscriptions
     ADD COLUMN url_encrypted_v2 BYTEA,
     ADD COLUMN auth_header_encrypted_v2 BYTEA;
 ```
@@ -48,20 +48,20 @@ ALTER TABLE webhook_subscriptions
 pub async fn migrate_webhook_encryption(dal: &Dal, old_key: &[u8], new_key: &[u8; 32]) {
     let old_encryption = XorEncryption::new(old_key);
     let new_encryption = AesGcmEncryption::new(new_key);
-    
+
     let subscriptions = dal.webhook_subscriptions().list_all()?;
-    
+
     for sub in subscriptions {
         // Decrypt with old method
         let url = old_encryption.decrypt(&sub.url_encrypted)?;
         let auth = sub.auth_header_encrypted
             .map(|h| old_encryption.decrypt(&h))
             .transpose()?;
-        
+
         // Re-encrypt with new method
         let url_v2 = new_encryption.encrypt(&url)?;
         let auth_v2 = auth.map(|a| new_encryption.encrypt(&a)).transpose()?;
-        
+
         // Update record
         dal.webhook_subscriptions().update_encryption(sub.id, url_v2, auth_v2)?;
     }
@@ -74,7 +74,7 @@ pub async fn migrate_webhook_encryption(dal: &Dal, old_key: &[u8], new_key: &[u8
 
 ### Phase 4: Drop old columns (future migration)
 ```sql
-ALTER TABLE webhook_subscriptions 
+ALTER TABLE webhook_subscriptions
     DROP COLUMN url_encrypted,
     DROP COLUMN auth_header_encrypted;
 ```

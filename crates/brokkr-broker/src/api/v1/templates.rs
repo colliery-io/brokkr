@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -21,8 +21,8 @@ use axum::{
 use brokkr_models::models::stack_templates::StackTemplate;
 use brokkr_models::models::template_annotations::{NewTemplateAnnotation, TemplateAnnotation};
 use brokkr_models::models::template_labels::{NewTemplateLabel, TemplateLabel};
-use tracing::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
+use tracing::{debug, error, info, warn};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
@@ -57,12 +57,11 @@ pub fn routes() -> Router<DAL> {
         .route("/templates", get(list_templates).post(create_template))
         .route(
             "/templates/:id",
-            get(get_template).put(update_template).delete(delete_template),
+            get(get_template)
+                .put(update_template)
+                .delete(delete_template),
         )
-        .route(
-            "/templates/:id/labels",
-            get(list_labels).post(add_label),
-        )
+        .route("/templates/:id/labels", get(list_labels).post(add_label))
         .route("/templates/:id/labels/:label", delete(remove_label))
         .route(
             "/templates/:id/annotations",
@@ -84,7 +83,6 @@ fn can_modify_template(auth: &AuthPayload, template: &StackTemplate) -> bool {
         _ => false,
     }
 }
-
 
 /// Lists all templates.
 ///
@@ -123,13 +121,16 @@ async fn list_templates(
             )
         })?;
 
-        let own = dal.templates().list_for_generator(generator_id).map_err(|e| {
-            error!("Failed to fetch generator templates: {:?}", e);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": "Failed to fetch templates"})),
-            )
-        })?;
+        let own = dal
+            .templates()
+            .list_for_generator(generator_id)
+            .map_err(|e| {
+                error!("Failed to fetch generator templates: {:?}", e);
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({"error": "Failed to fetch templates"})),
+                )
+            })?;
 
         let mut all = system;
         all.extend(own);
@@ -826,8 +827,8 @@ async fn add_annotation(
         ));
     }
 
-    let new_annotation =
-        NewTemplateAnnotation::new(template_id, request.key, request.value).map_err(|e| {
+    let new_annotation = NewTemplateAnnotation::new(template_id, request.key, request.value)
+        .map_err(|e| {
             (
                 StatusCode::BAD_REQUEST,
                 Json(serde_json::json!({"error": e})),

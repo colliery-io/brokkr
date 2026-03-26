@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -17,9 +17,7 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 /// A diagnostic result record from the database.
-#[derive(
-    Debug, Clone, Queryable, Selectable, Identifiable, Serialize, Deserialize, ToSchema,
-)]
+#[derive(Debug, Clone, Queryable, Selectable, Identifiable, Serialize, Deserialize, ToSchema)]
 #[diesel(table_name = diagnostic_results)]
 pub struct DiagnosticResult {
     /// Unique identifier for the diagnostic result.

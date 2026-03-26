@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -216,7 +216,9 @@ pub fn configure_api_routes(
                     )
                 })
                 .on_response(
-                    |response: &hyper::Response<_>, latency: std::time::Duration, _span: &tracing::Span| {
+                    |response: &hyper::Response<_>,
+                     latency: std::time::Duration,
+                     _span: &tracing::Span| {
                         tracing::info!(
                             status = %response.status(),
                             latency_ms = latency.as_millis(),

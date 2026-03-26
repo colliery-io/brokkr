@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -18,9 +18,7 @@ use crate::fixtures::TestFixture;
 #[tokio::test]
 async fn test_audit_logs_requires_auth() {
     let fixture = TestFixture::new();
-    let app = fixture
-        .create_test_router()
-        .with_state(fixture.dal.clone());
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
 
     // Send request without authentication
     let response = app
@@ -41,15 +39,11 @@ async fn test_audit_logs_requires_auth() {
 #[tokio::test]
 async fn test_audit_logs_requires_admin() {
     let fixture = TestFixture::new();
-    let app = fixture
-        .create_test_router()
-        .with_state(fixture.dal.clone());
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
 
     // Create a non-admin agent with PAK
-    let (_agent, agent_pak) = fixture.create_test_agent_with_pak(
-        "Test Agent".to_string(),
-        "Test Cluster".to_string(),
-    );
+    let (_agent, agent_pak) =
+        fixture.create_test_agent_with_pak("Test Agent".to_string(), "Test Cluster".to_string());
 
     // Send request with agent PAK (not admin)
     let response = app
@@ -71,9 +65,7 @@ async fn test_audit_logs_requires_admin() {
 #[tokio::test]
 async fn test_audit_logs_success_with_admin() {
     let fixture = TestFixture::new();
-    let app = fixture
-        .create_test_router()
-        .with_state(fixture.dal.clone());
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
 
     let admin_pak = fixture.admin_pak.clone();
 
@@ -107,9 +99,7 @@ async fn test_audit_logs_success_with_admin() {
 #[tokio::test]
 async fn test_audit_logs_pagination() {
     let fixture = TestFixture::new();
-    let app = fixture
-        .create_test_router()
-        .with_state(fixture.dal.clone());
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
 
     let admin_pak = fixture.admin_pak.clone();
 
@@ -140,9 +130,7 @@ async fn test_audit_logs_pagination() {
 #[tokio::test]
 async fn test_audit_logs_filtering() {
     let fixture = TestFixture::new();
-    let app = fixture
-        .create_test_router()
-        .with_state(fixture.dal.clone());
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
 
     let admin_pak = fixture.admin_pak.clone();
 
@@ -172,9 +160,7 @@ async fn test_audit_logs_filtering() {
 #[tokio::test]
 async fn test_audit_logs_denied_for_generator() {
     let fixture = TestFixture::new();
-    let app = fixture
-        .create_test_router()
-        .with_state(fixture.dal.clone());
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
 
     // Create a generator with PAK
     let (_generator, generator_pak) = fixture.create_test_generator_with_pak(

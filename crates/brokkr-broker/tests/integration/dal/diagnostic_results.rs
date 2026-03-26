@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -14,7 +14,8 @@ fn test_create_diagnostic_result() {
     let fixture = TestFixture::new();
 
     let agent = fixture.create_test_agent("Result Agent".to_string(), "Cluster".to_string());
-    let stack = fixture.create_test_stack("Result Stack".to_string(), None, fixture.admin_generator.id);
+    let stack =
+        fixture.create_test_stack("Result Stack".to_string(), None, fixture.admin_generator.id);
     let deployment_object = fixture.create_test_deployment_object(
         stack.id,
         "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: test".to_string(),
@@ -22,8 +23,13 @@ fn test_create_diagnostic_result() {
     );
 
     // Create a diagnostic request first
-    let new_request = NewDiagnosticRequest::new(agent.id, deployment_object.id, None, Some(60)).unwrap();
-    let request = fixture.dal.diagnostic_requests().create(&new_request).unwrap();
+    let new_request =
+        NewDiagnosticRequest::new(agent.id, deployment_object.id, None, Some(60)).unwrap();
+    let request = fixture
+        .dal
+        .diagnostic_requests()
+        .create(&new_request)
+        .unwrap();
 
     // Create a diagnostic result
     let new_result = NewDiagnosticResult::new(
@@ -52,15 +58,24 @@ fn test_get_diagnostic_result() {
     let fixture = TestFixture::new();
 
     let agent = fixture.create_test_agent("Get Result Agent".to_string(), "Cluster".to_string());
-    let stack = fixture.create_test_stack("Get Result Stack".to_string(), None, fixture.admin_generator.id);
+    let stack = fixture.create_test_stack(
+        "Get Result Stack".to_string(),
+        None,
+        fixture.admin_generator.id,
+    );
     let deployment_object = fixture.create_test_deployment_object(
         stack.id,
         "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: test".to_string(),
         false,
     );
 
-    let new_request = NewDiagnosticRequest::new(agent.id, deployment_object.id, None, Some(60)).unwrap();
-    let request = fixture.dal.diagnostic_requests().create(&new_request).unwrap();
+    let new_request =
+        NewDiagnosticRequest::new(agent.id, deployment_object.id, None, Some(60)).unwrap();
+    let request = fixture
+        .dal
+        .diagnostic_requests()
+        .create(&new_request)
+        .unwrap();
 
     let new_result = NewDiagnosticResult::new(
         request.id,
@@ -71,7 +86,11 @@ fn test_get_diagnostic_result() {
     )
     .unwrap();
 
-    let created = fixture.dal.diagnostic_results().create(&new_result).unwrap();
+    let created = fixture
+        .dal
+        .diagnostic_results()
+        .create(&new_result)
+        .unwrap();
 
     let retrieved = fixture
         .dal
@@ -89,15 +108,24 @@ fn test_get_diagnostic_result_by_request() {
     let fixture = TestFixture::new();
 
     let agent = fixture.create_test_agent("By Request Agent".to_string(), "Cluster".to_string());
-    let stack = fixture.create_test_stack("By Request Stack".to_string(), None, fixture.admin_generator.id);
+    let stack = fixture.create_test_stack(
+        "By Request Stack".to_string(),
+        None,
+        fixture.admin_generator.id,
+    );
     let deployment_object = fixture.create_test_deployment_object(
         stack.id,
         "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: test".to_string(),
         false,
     );
 
-    let new_request = NewDiagnosticRequest::new(agent.id, deployment_object.id, None, Some(60)).unwrap();
-    let request = fixture.dal.diagnostic_requests().create(&new_request).unwrap();
+    let new_request =
+        NewDiagnosticRequest::new(agent.id, deployment_object.id, None, Some(60)).unwrap();
+    let request = fixture
+        .dal
+        .diagnostic_requests()
+        .create(&new_request)
+        .unwrap();
 
     // Should be None initially
     let result = fixture
@@ -117,7 +145,11 @@ fn test_get_diagnostic_result_by_request() {
     )
     .unwrap();
 
-    fixture.dal.diagnostic_results().create(&new_result).unwrap();
+    fixture
+        .dal
+        .diagnostic_results()
+        .create(&new_result)
+        .unwrap();
 
     // Now should find it
     let result = fixture
@@ -135,15 +167,24 @@ fn test_delete_diagnostic_result() {
     let fixture = TestFixture::new();
 
     let agent = fixture.create_test_agent("Delete Result Agent".to_string(), "Cluster".to_string());
-    let stack = fixture.create_test_stack("Delete Result Stack".to_string(), None, fixture.admin_generator.id);
+    let stack = fixture.create_test_stack(
+        "Delete Result Stack".to_string(),
+        None,
+        fixture.admin_generator.id,
+    );
     let deployment_object = fixture.create_test_deployment_object(
         stack.id,
         "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: test".to_string(),
         false,
     );
 
-    let new_request = NewDiagnosticRequest::new(agent.id, deployment_object.id, None, Some(60)).unwrap();
-    let request = fixture.dal.diagnostic_requests().create(&new_request).unwrap();
+    let new_request =
+        NewDiagnosticRequest::new(agent.id, deployment_object.id, None, Some(60)).unwrap();
+    let request = fixture
+        .dal
+        .diagnostic_requests()
+        .create(&new_request)
+        .unwrap();
 
     let new_result = NewDiagnosticResult::new(
         request.id,
@@ -154,7 +195,11 @@ fn test_delete_diagnostic_result() {
     )
     .unwrap();
 
-    let created = fixture.dal.diagnostic_results().create(&new_result).unwrap();
+    let created = fixture
+        .dal
+        .diagnostic_results()
+        .create(&new_result)
+        .unwrap();
 
     let deleted = fixture
         .dal
@@ -177,15 +222,24 @@ fn test_delete_diagnostic_result_by_request() {
     let fixture = TestFixture::new();
 
     let agent = fixture.create_test_agent("Del By Req Agent".to_string(), "Cluster".to_string());
-    let stack = fixture.create_test_stack("Del By Req Stack".to_string(), None, fixture.admin_generator.id);
+    let stack = fixture.create_test_stack(
+        "Del By Req Stack".to_string(),
+        None,
+        fixture.admin_generator.id,
+    );
     let deployment_object = fixture.create_test_deployment_object(
         stack.id,
         "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: test".to_string(),
         false,
     );
 
-    let new_request = NewDiagnosticRequest::new(agent.id, deployment_object.id, None, Some(60)).unwrap();
-    let request = fixture.dal.diagnostic_requests().create(&new_request).unwrap();
+    let new_request =
+        NewDiagnosticRequest::new(agent.id, deployment_object.id, None, Some(60)).unwrap();
+    let request = fixture
+        .dal
+        .diagnostic_requests()
+        .create(&new_request)
+        .unwrap();
 
     let new_result = NewDiagnosticResult::new(
         request.id,
@@ -196,7 +250,11 @@ fn test_delete_diagnostic_result_by_request() {
     )
     .unwrap();
 
-    fixture.dal.diagnostic_results().create(&new_result).unwrap();
+    fixture
+        .dal
+        .diagnostic_results()
+        .create(&new_result)
+        .unwrap();
 
     let deleted = fixture
         .dal
@@ -219,15 +277,24 @@ fn test_cascade_delete_on_request_deletion() {
     let fixture = TestFixture::new();
 
     let agent = fixture.create_test_agent("Cascade Agent".to_string(), "Cluster".to_string());
-    let stack = fixture.create_test_stack("Cascade Stack".to_string(), None, fixture.admin_generator.id);
+    let stack = fixture.create_test_stack(
+        "Cascade Stack".to_string(),
+        None,
+        fixture.admin_generator.id,
+    );
     let deployment_object = fixture.create_test_deployment_object(
         stack.id,
         "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: test".to_string(),
         false,
     );
 
-    let new_request = NewDiagnosticRequest::new(agent.id, deployment_object.id, None, Some(60)).unwrap();
-    let request = fixture.dal.diagnostic_requests().create(&new_request).unwrap();
+    let new_request =
+        NewDiagnosticRequest::new(agent.id, deployment_object.id, None, Some(60)).unwrap();
+    let request = fixture
+        .dal
+        .diagnostic_requests()
+        .create(&new_request)
+        .unwrap();
 
     let new_result = NewDiagnosticResult::new(
         request.id,
@@ -238,7 +305,11 @@ fn test_cascade_delete_on_request_deletion() {
     )
     .unwrap();
 
-    let result = fixture.dal.diagnostic_results().create(&new_result).unwrap();
+    let result = fixture
+        .dal
+        .diagnostic_results()
+        .create(&new_result)
+        .unwrap();
 
     // Delete the request - result should cascade delete
     fixture

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -172,39 +172,24 @@ mod tests {
 
     #[test]
     fn test_new_rendered_deployment_object_invalid_deployment_object_id() {
-        let result = NewRenderedDeploymentObject::new(
-            Uuid::nil(),
-            Uuid::new_v4(),
-            1,
-            "{}".to_string(),
-        );
-        assert!(
-            result.is_err(),
-            "Should fail with nil deployment object ID"
-        );
+        let result =
+            NewRenderedDeploymentObject::new(Uuid::nil(), Uuid::new_v4(), 1, "{}".to_string());
+        assert!(result.is_err(), "Should fail with nil deployment object ID");
         assert_eq!(result.unwrap_err(), "Invalid deployment object ID");
     }
 
     #[test]
     fn test_new_rendered_deployment_object_invalid_template_id() {
-        let result = NewRenderedDeploymentObject::new(
-            Uuid::new_v4(),
-            Uuid::nil(),
-            1,
-            "{}".to_string(),
-        );
+        let result =
+            NewRenderedDeploymentObject::new(Uuid::new_v4(), Uuid::nil(), 1, "{}".to_string());
         assert!(result.is_err(), "Should fail with nil template ID");
         assert_eq!(result.unwrap_err(), "Invalid template ID");
     }
 
     #[test]
     fn test_new_rendered_deployment_object_invalid_version() {
-        let result = NewRenderedDeploymentObject::new(
-            Uuid::new_v4(),
-            Uuid::new_v4(),
-            0,
-            "{}".to_string(),
-        );
+        let result =
+            NewRenderedDeploymentObject::new(Uuid::new_v4(), Uuid::new_v4(), 0, "{}".to_string());
         assert!(result.is_err(), "Should fail with version less than 1");
         assert_eq!(result.unwrap_err(), "Template version must be at least 1");
     }
@@ -218,17 +203,16 @@ mod tests {
             "not valid json".to_string(),
         );
         assert!(result.is_err(), "Should fail with invalid JSON");
-        assert_eq!(result.unwrap_err(), "Template parameters must be valid JSON");
+        assert_eq!(
+            result.unwrap_err(),
+            "Template parameters must be valid JSON"
+        );
     }
 
     #[test]
     fn test_new_rendered_deployment_object_empty_json_object() {
-        let result = NewRenderedDeploymentObject::new(
-            Uuid::new_v4(),
-            Uuid::new_v4(),
-            1,
-            "{}".to_string(),
-        );
+        let result =
+            NewRenderedDeploymentObject::new(Uuid::new_v4(), Uuid::new_v4(), 1, "{}".to_string());
         assert!(result.is_ok(), "Empty JSON object should be valid");
     }
 }

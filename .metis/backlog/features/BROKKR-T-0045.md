@@ -5,7 +5,7 @@ title: "Deployment Health Monitoring"
 short_code: "BROKKR-T-0045"
 created_at: 2025-12-14T21:09:43.602084+00:00
 updated_at: 2025-12-29T01:17:02.089641+00:00
-parent: 
+parent:
 blocked_by: []
 archived: false
 
@@ -35,7 +35,7 @@ This enables catching common issues like malformed YAML, ImagePullBackOff, Crash
 ## Backlog Item Details
 
 ### Type
-- [x] Feature - New functionality or enhancement  
+- [x] Feature - New functionality or enhancement
 
 ### Priority
 - [ ] P1 - High (important for user experience)
@@ -145,16 +145,16 @@ CREATE TABLE deployment_health (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     agent_id UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
     deployment_object_id UUID NOT NULL REFERENCES deployment_objects(id) ON DELETE CASCADE,
-    
+
     -- Health status
     status VARCHAR(20) NOT NULL,              -- healthy, degraded, failing, unknown
     summary JSONB,                             -- structured health data
-    
+
     -- Timing
     checked_at TIMESTAMPTZ NOT NULL,          -- when agent checked health
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    
+
     -- One health record per agent+deployment combination
     CONSTRAINT unique_agent_deployment_health UNIQUE (agent_id, deployment_object_id)
 );
@@ -195,11 +195,11 @@ CREATE TABLE diagnostic_requests (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     agent_id UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
     deployment_object_id UUID NOT NULL REFERENCES deployment_objects(id) ON DELETE CASCADE,
-    
+
     -- Request state
     status VARCHAR(20) NOT NULL DEFAULT 'pending',  -- pending, claimed, completed, failed
     requested_by VARCHAR(255),                       -- operator who requested
-    
+
     -- Timing
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     claimed_at TIMESTAMPTZ,
@@ -210,23 +210,23 @@ CREATE TABLE diagnostic_requests (
 CREATE TABLE diagnostic_results (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     request_id UUID NOT NULL REFERENCES diagnostic_requests(id) ON DELETE CASCADE,
-    
+
     -- Diagnostic data (structured JSON)
     pod_statuses JSONB NOT NULL,      -- pod phase, conditions, container statuses
     events JSONB NOT NULL,            -- recent K8s events
     log_tails JSONB,                  -- optional log snippets per container
-    
+
     -- Metadata
     collected_at TIMESTAMPTZ NOT NULL,  -- when agent gathered the data
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Indexes
-CREATE INDEX idx_diagnostic_requests_agent_pending 
+CREATE INDEX idx_diagnostic_requests_agent_pending
     ON diagnostic_requests(agent_id) WHERE status = 'pending';
-CREATE INDEX idx_diagnostic_requests_expires 
+CREATE INDEX idx_diagnostic_requests_expires
     ON diagnostic_requests(expires_at);
-CREATE INDEX idx_diagnostic_results_request 
+CREATE INDEX idx_diagnostic_results_request
     ON diagnostic_results(request_id);
 ```
 
@@ -448,13 +448,13 @@ impl HealthChecker {
             summary: HealthSummary::default(),
             checked_at: Utc::now(),
         };
-        
+
         // Find pods matching this deployment object's resources
         let pods = self.find_pods_for_deployment(deploy_obj).await?;
-        
+
         status.summary.pods_total = pods.len();
         status.summary.pods_ready = pods.iter().filter(|p| p.is_ready()).count();
-        
+
         // Check each pod for problematic conditions
         for pod in &pods {
             for container_status in pod.container_statuses() {
@@ -466,7 +466,7 @@ impl HealthChecker {
                         }
                     }
                 }
-                
+
                 // Check for OOMKilled in last termination
                 if let Some(terminated) = &container_status.last_state.terminated {
                     if terminated.reason.as_deref() == Some("OOMKilled") {
@@ -476,12 +476,12 @@ impl HealthChecker {
                 }
             }
         }
-        
+
         // If no pods exist when expected, mark as failing
         if status.summary.pods_total == 0 && deploy_obj.expects_pods() {
             status.status = "failing".to_string();
         }
-        
+
         status
     }
 }
@@ -501,22 +501,22 @@ impl DiagnosticHandler {
     /// Gather diagnostic data for a deployment object
     pub async fn gather_diagnostics(&self, deploy_obj: &DeploymentObject) -> DiagnosticResult {
         let pods = self.find_pods_for_deployment(deploy_obj).await?;
-        
+
         let mut result = DiagnosticResult {
             collected_at: Utc::now(),
             pod_statuses: vec![],
             events: vec![],
             log_tails: HashMap::new(),
         };
-        
+
         for pod in pods {
             // Capture full pod status
             result.pod_statuses.push(PodStatus::from(&pod));
-            
+
             // Get recent events for this pod
             let events = self.get_pod_events(&pod, Duration::minutes(30)).await?;
             result.events.extend(events);
-            
+
             // Tail logs from each container (last 50 lines)
             for container in pod.containers() {
                 let key = format!("{}/{}", pod.name, container.name);
@@ -524,20 +524,20 @@ impl DiagnosticHandler {
                 result.log_tails.insert(key, logs);
             }
         }
-        
+
         result
     }
-    
+
     /// Called during agent poll loop
     pub async fn process_pending_requests(&self) -> Result<()> {
         let pending = self.broker_client.get_pending_diagnostics().await?;
-        
+
         for request in pending.requests {
             let deploy_obj = self.get_deployment_object(request.deployment_object_id).await?;
             let result = self.gather_diagnostics(&deploy_obj).await?;
             self.broker_client.post_diagnostic_result(request.id, result).await?;
         }
-        
+
         Ok(())
     }
 }
@@ -590,15 +590,15 @@ Diagnostic requests and results are ephemeral - clean up after 1 hour.
 ```rust
 pub async fn start_diagnostic_cleanup_task(dal: DAL, config: DiagnosticConfig) {
     let interval = config.cleanup_interval;  // Default: 15 minutes
-    
+
     tokio::spawn(async move {
         let mut ticker = tokio::time::interval(interval);
-        
+
         loop {
             ticker.tick().await;
-            
+
             let now = Utc::now();
-            
+
             // Delete expired diagnostic requests (cascades to results)
             match dal.diagnostic_requests().delete_expired(now).await {
                 Ok(deleted) => {

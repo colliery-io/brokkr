@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -20,7 +20,6 @@
 //! - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
 
 use crate::k8s;
-use tracing::{debug, error, info, trace, warn};
 use kube::{
     api::{Api, DynamicObject, PatchParams, PostParams},
     Client as K8sClient, Discovery,
@@ -29,6 +28,7 @@ use serde::Deserialize;
 use serde_json::json;
 use std::time::Duration;
 use tokio::time::sleep;
+use tracing::{debug, error, info, trace, warn};
 
 /// Shipwright API group
 const SHIPWRIGHT_API_GROUP: &str = "shipwright.io";
@@ -128,10 +128,16 @@ pub async fn execute_build(
             (Some(av), Some("Build")) if av.starts_with(SHIPWRIGHT_API_GROUP) => {
                 // Apply the Build resource
                 let metadata = doc.get("metadata");
-                if let Some(name) = metadata.and_then(|m| m.get("name")).and_then(|n| n.as_str()) {
+                if let Some(name) = metadata
+                    .and_then(|m| m.get("name"))
+                    .and_then(|n| n.as_str())
+                {
                     build_name = Some(name.to_string());
                 }
-                if let Some(ns) = metadata.and_then(|m| m.get("namespace")).and_then(|n| n.as_str()) {
+                if let Some(ns) = metadata
+                    .and_then(|m| m.get("namespace"))
+                    .and_then(|n| n.as_str())
+                {
                     build_namespace = ns.to_string();
                 }
 
@@ -141,7 +147,11 @@ pub async fn execute_build(
             (Some(av), Some("WorkOrder")) if av.starts_with("brokkr.io") => {
                 // Extract buildRef from WorkOrder if present
                 if let Some(spec) = doc.get("spec") {
-                    if let Some(build_ref) = spec.get("buildRef").and_then(|b| b.get("name")).and_then(|n| n.as_str()) {
+                    if let Some(build_ref) = spec
+                        .get("buildRef")
+                        .and_then(|b| b.get("name"))
+                        .and_then(|n| n.as_str())
+                    {
                         if build_name.is_none() {
                             build_name = Some(build_ref.to_string());
                         }
@@ -156,10 +166,17 @@ pub async fn execute_build(
     }
 
     let build_name = build_name.ok_or("No Build resource or buildRef found in YAML content")?;
-    info!("Using Build '{}' in namespace '{}'", build_name, build_namespace);
+    info!(
+        "Using Build '{}' in namespace '{}'",
+        build_name, build_namespace
+    );
 
     // Create BuildRun
-    let buildrun_name = format!("{}-{}", build_name, &work_order_id[..8.min(work_order_id.len())]);
+    let buildrun_name = format!(
+        "{}-{}",
+        build_name,
+        &work_order_id[..8.min(work_order_id.len())]
+    );
     info!("Creating BuildRun '{}'", buildrun_name);
 
     let buildrun = create_buildrun(
@@ -171,7 +188,10 @@ pub async fn execute_build(
     )
     .await?;
 
-    info!("BuildRun '{}' created, waiting for completion", buildrun_name);
+    info!(
+        "BuildRun '{}' created, waiting for completion",
+        buildrun_name
+    );
 
     // Watch BuildRun until completion
     let result = watch_buildrun_completion(k8s_client, &buildrun_name, &build_namespace).await?;
@@ -279,10 +299,7 @@ async fn watch_buildrun_completion(
                     match condition.status.as_str() {
                         "True" => {
                             // Build succeeded
-                            let digest = status
-                                .output
-                                .as_ref()
-                                .and_then(|o| o.digest.clone());
+                            let digest = status.output.as_ref().and_then(|o| o.digest.clone());
 
                             info!(
                                 "BuildRun '{}' completed successfully. Digest: {:?}",
@@ -313,8 +330,7 @@ async fn watch_buildrun_completion(
                             // Still running
                             debug!(
                                 "BuildRun '{}' still in progress: {:?}",
-                                name,
-                                condition.reason
+                                name, condition.reason
                             );
                         }
                     }
@@ -347,7 +363,9 @@ pub(crate) struct ParsedBuildInfo {
 ///
 /// # Returns
 /// ParsedBuildInfo with extracted build details
-pub(crate) fn parse_build_yaml(yaml_content: &str) -> Result<ParsedBuildInfo, Box<dyn std::error::Error>> {
+pub(crate) fn parse_build_yaml(
+    yaml_content: &str,
+) -> Result<ParsedBuildInfo, Box<dyn std::error::Error>> {
     let docs: Vec<serde_yaml::Value> = serde_yaml::Deserializer::from_str(yaml_content)
         .map(|doc| serde_yaml::Value::deserialize(doc))
         .collect::<Result<Vec<_>, _>>()?;
@@ -367,10 +385,16 @@ pub(crate) fn parse_build_yaml(yaml_content: &str) -> Result<ParsedBuildInfo, Bo
         match (api_version, kind) {
             (Some(av), Some("Build")) if av.starts_with(SHIPWRIGHT_API_GROUP) => {
                 let metadata = doc.get("metadata");
-                if let Some(name) = metadata.and_then(|m| m.get("name")).and_then(|n| n.as_str()) {
+                if let Some(name) = metadata
+                    .and_then(|m| m.get("name"))
+                    .and_then(|n| n.as_str())
+                {
                     build_name = Some(name.to_string());
                 }
-                if let Some(ns) = metadata.and_then(|m| m.get("namespace")).and_then(|n| n.as_str()) {
+                if let Some(ns) = metadata
+                    .and_then(|m| m.get("namespace"))
+                    .and_then(|n| n.as_str())
+                {
                     build_namespace = ns.to_string();
                 }
                 build_docs.push(doc.clone());
@@ -378,7 +402,11 @@ pub(crate) fn parse_build_yaml(yaml_content: &str) -> Result<ParsedBuildInfo, Bo
             (Some(av), Some("WorkOrder")) if av.starts_with("brokkr.io") => {
                 // Extract buildRef from WorkOrder if present
                 if let Some(spec) = doc.get("spec") {
-                    if let Some(build_ref) = spec.get("buildRef").and_then(|b| b.get("name")).and_then(|n| n.as_str()) {
+                    if let Some(build_ref) = spec
+                        .get("buildRef")
+                        .and_then(|b| b.get("name"))
+                        .and_then(|n| n.as_str())
+                    {
                         if build_name.is_none() {
                             build_name = Some(build_ref.to_string());
                         }
@@ -545,7 +573,10 @@ spec:
         let result = parse_build_yaml(yaml);
         assert!(result.is_err());
         // Empty string parses as no documents, which means no Build resource found
-        assert!(result.unwrap_err().to_string().contains("No Build resource"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("No Build resource"));
     }
 
     #[test]
@@ -561,7 +592,10 @@ data:
 "#;
         let result = parse_build_yaml(yaml);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("No Build resource"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("No Build resource"));
     }
 
     #[test]
@@ -615,7 +649,10 @@ spec: {}
         assert_eq!(status.conditions.len(), 1);
         assert_eq!(status.conditions[0].condition_type, "Succeeded");
         assert_eq!(status.conditions[0].status, "True");
-        assert_eq!(status.output.unwrap().digest, Some("sha256:abc123def456".to_string()));
+        assert_eq!(
+            status.output.unwrap().digest,
+            Some("sha256:abc123def456".to_string())
+        );
     }
 
     #[test]
@@ -821,7 +858,11 @@ spec: {}
     fn test_buildrun_name_generation_short_id() {
         let build_name = "my-build";
         let work_order_id = "abc123";
-        let buildrun_name = format!("{}-{}", build_name, &work_order_id[..8.min(work_order_id.len())]);
+        let buildrun_name = format!(
+            "{}-{}",
+            build_name,
+            &work_order_id[..8.min(work_order_id.len())]
+        );
         assert_eq!(buildrun_name, "my-build-abc123");
     }
 
@@ -829,7 +870,11 @@ spec: {}
     fn test_buildrun_name_generation_long_id() {
         let build_name = "my-build";
         let work_order_id = "12345678-abcd-efgh-ijkl-mnopqrstuvwx";
-        let buildrun_name = format!("{}-{}", build_name, &work_order_id[..8.min(work_order_id.len())]);
+        let buildrun_name = format!(
+            "{}-{}",
+            build_name,
+            &work_order_id[..8.min(work_order_id.len())]
+        );
         assert_eq!(buildrun_name, "my-build-12345678");
     }
 }

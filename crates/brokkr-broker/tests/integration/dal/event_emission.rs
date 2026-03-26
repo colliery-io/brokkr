@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -106,36 +106,53 @@ fn test_work_order_completion_emits_event() {
         None,
         None,
         None,
-    ).unwrap();
+    )
+    .unwrap();
     let work_order = fixture.dal.work_orders().create(&wo).unwrap();
 
     // Add target for the agent
-    fixture.dal.work_orders()
+    fixture
+        .dal
+        .work_orders()
         .add_targets(work_order.id, &[agent.id])
         .unwrap();
 
     // Claim the work order
-    fixture.dal.work_orders()
+    fixture
+        .dal
+        .work_orders()
         .claim(work_order.id, agent.id)
         .unwrap();
 
     // Complete the work order - this should emit an event
-    fixture.dal.work_orders()
+    fixture
+        .dal
+        .work_orders()
         .complete_success(work_order.id, Some("Completed successfully".to_string()))
         .unwrap();
 
     // Verify a webhook delivery was created
-    let deliveries = fixture.dal.webhook_deliveries()
+    let deliveries = fixture
+        .dal
+        .webhook_deliveries()
         .list_for_subscription(subscription.id, None, 100, 0)
         .unwrap();
 
-    assert_eq!(deliveries.len(), 1, "Should have created one delivery for workorder.completed");
+    assert_eq!(
+        deliveries.len(),
+        1,
+        "Should have created one delivery for workorder.completed"
+    );
     assert_eq!(deliveries[0].event_type, EVENT_WORKORDER_COMPLETED);
     assert_eq!(deliveries[0].status, "pending");
 
     // Verify payload contains work order info
     let payload: serde_json::Value = serde_json::from_str(&deliveries[0].payload).unwrap();
-    assert!(payload["data"]["work_order_log_id"].is_string(), "Expected work_order_log_id in payload: {:?}", payload);
+    assert!(
+        payload["data"]["work_order_log_id"].is_string(),
+        "Expected work_order_log_id in payload: {:?}",
+        payload
+    );
     assert!(payload["data"]["success"].as_bool().unwrap());
 }
 
@@ -144,10 +161,8 @@ fn test_wildcard_subscription_matches_events() {
     let fixture = TestFixture::new();
 
     // Create agent and work order first (these emit workorder.created and workorder.claimed)
-    let (agent, _) = fixture.create_test_agent_with_pak(
-        "Agent-wildcard".to_string(),
-        "cluster-wildcard".to_string(),
-    );
+    let (agent, _) = fixture
+        .create_test_agent_with_pak("Agent-wildcard".to_string(), "cluster-wildcard".to_string());
 
     let wo = NewWorkOrder::new(
         "custom".to_string(),
@@ -155,14 +170,19 @@ fn test_wildcard_subscription_matches_events() {
         None,
         None,
         None,
-    ).unwrap();
+    )
+    .unwrap();
     let work_order = fixture.dal.work_orders().create(&wo).unwrap();
 
-    fixture.dal.work_orders()
+    fixture
+        .dal
+        .work_orders()
         .add_targets(work_order.id, &[agent.id])
         .unwrap();
 
-    fixture.dal.work_orders()
+    fixture
+        .dal
+        .work_orders()
         .claim(work_order.id, agent.id)
         .unwrap();
 
@@ -171,16 +191,24 @@ fn test_wildcard_subscription_matches_events() {
     let subscription = fixture.dal.webhook_subscriptions().create(&sub).unwrap();
 
     // Complete the work order - this emits workorder.completed which matches workorder.*
-    fixture.dal.work_orders()
+    fixture
+        .dal
+        .work_orders()
         .complete_success(work_order.id, Some("Done".to_string()))
         .unwrap();
 
     // Verify wildcard matched the completion event
-    let deliveries = fixture.dal.webhook_deliveries()
+    let deliveries = fixture
+        .dal
+        .webhook_deliveries()
         .list_for_subscription(subscription.id, None, 100, 0)
         .unwrap();
 
-    assert_eq!(deliveries.len(), 1, "Wildcard should match workorder.completed");
+    assert_eq!(
+        deliveries.len(),
+        1,
+        "Wildcard should match workorder.completed"
+    );
     assert_eq!(deliveries[0].event_type, EVENT_WORKORDER_COMPLETED);
 }
 
@@ -204,27 +232,40 @@ fn test_disabled_subscription_receives_no_deliveries() {
         None,
         None,
         None,
-    ).unwrap();
+    )
+    .unwrap();
     let work_order = fixture.dal.work_orders().create(&wo).unwrap();
 
-    fixture.dal.work_orders()
+    fixture
+        .dal
+        .work_orders()
         .add_targets(work_order.id, &[agent.id])
         .unwrap();
 
-    fixture.dal.work_orders()
+    fixture
+        .dal
+        .work_orders()
         .claim(work_order.id, agent.id)
         .unwrap();
 
-    fixture.dal.work_orders()
+    fixture
+        .dal
+        .work_orders()
         .complete_success(work_order.id, Some("Done".to_string()))
         .unwrap();
 
     // Verify no delivery was created for disabled subscription
-    let deliveries = fixture.dal.webhook_deliveries()
+    let deliveries = fixture
+        .dal
+        .webhook_deliveries()
         .list_for_subscription(subscription.id, None, 100, 0)
         .unwrap();
 
-    assert_eq!(deliveries.len(), 0, "Disabled subscription should receive no deliveries");
+    assert_eq!(
+        deliveries.len(),
+        0,
+        "Disabled subscription should receive no deliveries"
+    );
 }
 
 #[test]
@@ -251,29 +292,40 @@ fn test_delivery_inherits_target_labels_from_subscription() {
         None,
         None,
         None,
-    ).unwrap();
+    )
+    .unwrap();
     let work_order = fixture.dal.work_orders().create(&wo).unwrap();
 
-    fixture.dal.work_orders()
+    fixture
+        .dal
+        .work_orders()
         .add_targets(work_order.id, &[agent.id])
         .unwrap();
 
-    fixture.dal.work_orders()
+    fixture
+        .dal
+        .work_orders()
         .claim(work_order.id, agent.id)
         .unwrap();
 
-    fixture.dal.work_orders()
+    fixture
+        .dal
+        .work_orders()
         .complete_success(work_order.id, Some("Done".to_string()))
         .unwrap();
 
     // Verify delivery has target_labels from subscription
-    let deliveries = fixture.dal.webhook_deliveries()
+    let deliveries = fixture
+        .dal
+        .webhook_deliveries()
         .list_for_subscription(subscription.id, None, 100, 0)
         .unwrap();
 
     assert_eq!(deliveries.len(), 1);
 
-    let target_labels = deliveries[0].target_labels.as_ref()
+    let target_labels = deliveries[0]
+        .target_labels
+        .as_ref()
         .expect("Delivery should have target_labels");
 
     assert_eq!(target_labels.len(), 2);
@@ -293,7 +345,8 @@ fn test_no_delivery_when_no_matching_subscription() {
 
     // Create subscription for a DIFFERENT event type (agent.registered, not workorder.completed)
     // Also add agent filter for test isolation
-    let sub = create_subscription_with_agent_filter("Agent Events Sub", "agent.registered", agent.id);
+    let sub =
+        create_subscription_with_agent_filter("Agent Events Sub", "agent.registered", agent.id);
     let subscription = fixture.dal.webhook_subscriptions().create(&sub).unwrap();
 
     // Complete a work order (emits workorder.completed, not agent.registered)
@@ -303,27 +356,40 @@ fn test_no_delivery_when_no_matching_subscription() {
         None,
         None,
         None,
-    ).unwrap();
+    )
+    .unwrap();
     let work_order = fixture.dal.work_orders().create(&wo).unwrap();
 
-    fixture.dal.work_orders()
+    fixture
+        .dal
+        .work_orders()
         .add_targets(work_order.id, &[agent.id])
         .unwrap();
 
-    fixture.dal.work_orders()
+    fixture
+        .dal
+        .work_orders()
         .claim(work_order.id, agent.id)
         .unwrap();
 
-    fixture.dal.work_orders()
+    fixture
+        .dal
+        .work_orders()
         .complete_success(work_order.id, Some("Done".to_string()))
         .unwrap();
 
     // Verify no delivery was created (event type doesn't match)
-    let deliveries = fixture.dal.webhook_deliveries()
+    let deliveries = fixture
+        .dal
+        .webhook_deliveries()
         .list_for_subscription(subscription.id, None, 100, 0)
         .unwrap();
 
-    assert_eq!(deliveries.len(), 0, "Non-matching subscription should receive no deliveries");
+    assert_eq!(
+        deliveries.len(),
+        0,
+        "Non-matching subscription should receive no deliveries"
+    );
 }
 
 #[test]
@@ -349,35 +415,57 @@ fn test_multiple_subscriptions_receive_same_event() {
         None,
         None,
         None,
-    ).unwrap();
+    )
+    .unwrap();
     let work_order = fixture.dal.work_orders().create(&wo).unwrap();
 
-    fixture.dal.work_orders()
+    fixture
+        .dal
+        .work_orders()
         .add_targets(work_order.id, &[agent.id])
         .unwrap();
 
-    fixture.dal.work_orders()
+    fixture
+        .dal
+        .work_orders()
         .claim(work_order.id, agent.id)
         .unwrap();
 
-    fixture.dal.work_orders()
+    fixture
+        .dal
+        .work_orders()
         .complete_success(work_order.id, Some("Done".to_string()))
         .unwrap();
 
     // Verify both subscriptions received a delivery
-    let deliveries1 = fixture.dal.webhook_deliveries()
+    let deliveries1 = fixture
+        .dal
+        .webhook_deliveries()
         .list_for_subscription(subscription1.id, None, 100, 0)
         .unwrap();
 
-    let deliveries2 = fixture.dal.webhook_deliveries()
+    let deliveries2 = fixture
+        .dal
+        .webhook_deliveries()
         .list_for_subscription(subscription2.id, None, 100, 0)
         .unwrap();
 
-    assert_eq!(deliveries1.len(), 1, "Subscription 1 should receive delivery");
-    assert_eq!(deliveries2.len(), 1, "Subscription 2 should receive delivery");
+    assert_eq!(
+        deliveries1.len(),
+        1,
+        "Subscription 1 should receive delivery"
+    );
+    assert_eq!(
+        deliveries2.len(),
+        1,
+        "Subscription 2 should receive delivery"
+    );
 
     // Deliveries should have the same event_id (same event, different subscriptions)
     let event_id1 = &deliveries1[0].event_id;
     let event_id2 = &deliveries2[0].event_id;
-    assert_eq!(event_id1, event_id2, "Both deliveries should have same event_id");
+    assert_eq!(
+        event_id1, event_id2,
+        "Both deliveries should have same event_id"
+    );
 }

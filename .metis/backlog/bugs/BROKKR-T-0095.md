@@ -5,7 +5,7 @@ title: "ConfigMap watcher RBAC error spam in broker logs"
 short_code: "BROKKR-T-0095"
 created_at: 2026-01-03T02:31:07.985638+00:00
 updated_at: 2026-01-04T14:27:31.467830+00:00
-parent: 
+parent:
 blocked_by: []
 archived: false
 
@@ -42,7 +42,7 @@ Replace ConfigMap-based config watching with file-based watching to fix RBAC err
 
 ### Type
 - [ ] Bug - Production issue that needs fixing
-- [ ] Feature - New functionality or enhancement  
+- [ ] Feature - New functionality or enhancement
 - [ ] Tech Debt - Code improvement or refactoring
 - [ ] Chore - Maintenance or setup work
 
@@ -54,7 +54,7 @@ Replace ConfigMap-based config watching with file-based watching to fix RBAC err
 
 ### Impact Assessment **[CONDITIONAL: Bug]**
 - **Affected Users**: {Number/percentage of users affected}
-- **Reproduction Steps**: 
+- **Reproduction Steps**:
   1. {Step 1}
   2. {Step 2}
   3. {Step 3}
@@ -89,7 +89,7 @@ Replace ConfigMap-based config watching with file-based watching to fix RBAC err
 ### Test Case 1: {Test Case Name}
 - **Test ID**: TC-001
 - **Preconditions**: {What must be true before testing}
-- **Steps**: 
+- **Steps**:
   1. {Step 1}
   2. {Step 2}
   3. {Step 3}
@@ -100,7 +100,7 @@ Replace ConfigMap-based config watching with file-based watching to fix RBAC err
 ### Test Case 2: {Test Case Name}
 - **Test ID**: TC-002
 - **Preconditions**: {What must be true before testing}
-- **Steps**: 
+- **Steps**:
   1. {Step 1}
   2. {Step 2}
 - **Expected Results**: {What should happen}

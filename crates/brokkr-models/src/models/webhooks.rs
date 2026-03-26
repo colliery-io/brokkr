@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -503,7 +503,9 @@ mod tests {
         let result = NewWebhookDelivery::new(Uuid::nil(), &event, None);
 
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Subscription ID cannot be nil"));
+        assert!(result
+            .unwrap_err()
+            .contains("Subscription ID cannot be nil"));
     }
 
     #[test]
@@ -511,9 +513,10 @@ mod tests {
         let filters = WebhookFilters {
             agent_id: Some(Uuid::new_v4()),
             stack_id: None,
-            labels: Some(std::collections::HashMap::from([
-                ("env".to_string(), "prod".to_string()),
-            ])),
+            labels: Some(std::collections::HashMap::from([(
+                "env".to_string(),
+                "prod".to_string(),
+            )])),
         };
 
         let json = serde_json::to_string(&filters).unwrap();

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -10,9 +10,9 @@
 //! system health and cleanup expired data.
 
 use crate::dal::DAL;
-use tracing::{debug, error, info, warn};
 use std::time::Duration;
 use tokio::time::interval;
+use tracing::{debug, error, info, warn};
 
 /// Configuration for diagnostic cleanup task.
 pub struct DiagnosticCleanupConfig {
@@ -158,8 +158,8 @@ pub struct WebhookDeliveryConfig {
 impl Default for WebhookDeliveryConfig {
     fn default() -> Self {
         Self {
-            interval_seconds: 5,  // Poll every 5 seconds
-            batch_size: 50,       // Process up to 50 deliveries per batch
+            interval_seconds: 5, // Poll every 5 seconds
+            batch_size: 50,      // Process up to 50 deliveries per batch
         }
     }
 }
@@ -226,7 +226,10 @@ pub fn start_webhook_delivery_task(dal: DAL, config: WebhookDeliveryConfig) {
             match dal.webhook_deliveries().process_retries() {
                 Ok(count) => {
                     if count > 0 {
-                        debug!("Moved {} webhook deliveries from failed to pending for retry", count);
+                        debug!(
+                            "Moved {} webhook deliveries from failed to pending for retry",
+                            count
+                        );
                     }
                 }
                 Err(e) => {
@@ -235,7 +238,10 @@ pub fn start_webhook_delivery_task(dal: DAL, config: WebhookDeliveryConfig) {
             }
 
             // Claim pending broker deliveries (target_labels is NULL)
-            let deliveries = match dal.webhook_deliveries().claim_for_broker(config.batch_size, None) {
+            let deliveries = match dal
+                .webhook_deliveries()
+                .claim_for_broker(config.batch_size, None)
+            {
                 Ok(d) => d,
                 Err(e) => {
                     error!("Failed to claim pending webhook deliveries: {:?}", e);
@@ -314,25 +320,25 @@ pub fn start_webhook_delivery_task(dal: DAL, config: WebhookDeliveryConfig) {
                 };
 
                 // Attempt delivery
-                let result = attempt_delivery(&client, &url, auth_header.as_deref(), &delivery.payload).await;
+                let result =
+                    attempt_delivery(&client, &url, auth_header.as_deref(), &delivery.payload)
+                        .await;
 
                 match result {
-                    Ok(_) => {
-                        match dal.webhook_deliveries().mark_success(delivery.id) {
-                            Ok(_) => {
-                                debug!(
-                                    "Webhook delivery {} succeeded for subscription {}",
-                                    delivery.id, subscription.id
-                                );
-                            }
-                            Err(e) => {
-                                error!(
-                                    "Failed to mark delivery {} as success: {:?}",
-                                    delivery.id, e
-                                );
-                            }
+                    Ok(_) => match dal.webhook_deliveries().mark_success(delivery.id) {
+                        Ok(_) => {
+                            debug!(
+                                "Webhook delivery {} succeeded for subscription {}",
+                                delivery.id, subscription.id
+                            );
                         }
-                    }
+                        Err(e) => {
+                            error!(
+                                "Failed to mark delivery {} as success: {:?}",
+                                delivery.id, e
+                            );
+                        }
+                    },
                     Err(error) => {
                         match dal.webhook_deliveries().mark_failed(
                             delivery.id,
@@ -382,17 +388,23 @@ async fn attempt_delivery(
         request = request.header("Authorization", auth);
     }
 
-    let response = request.send().await.map_err(|e| format!("Request failed: {}", e))?;
+    let response = request
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {}", e))?;
 
     let status = response.status();
     if status.is_success() {
         Ok(())
     } else {
         let body = response.text().await.unwrap_or_default();
-        Err(format!("HTTP {}: {}", status, body.chars().take(200).collect::<String>()))
+        Err(format!(
+            "HTTP {}: {}",
+            status,
+            body.chars().take(200).collect::<String>()
+        ))
     }
 }
-
 
 /// Starts the webhook cleanup background task.
 ///

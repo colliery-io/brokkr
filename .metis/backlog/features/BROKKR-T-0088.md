@@ -5,7 +5,7 @@ title: "DAL query instrumentation for Prometheus metrics"
 short_code: "BROKKR-T-0088"
 created_at: 2025-12-30T14:15:11.801469+00:00
 updated_at: 2025-12-30T14:15:11.801469+00:00
-parent: 
+parent:
 blocked_by: []
 archived: false
 
@@ -29,7 +29,7 @@ Add Prometheus metrics instrumentation to DAL (Data Access Layer) methods to tra
 ## Backlog Item Details
 
 ### Type
-- [x] Feature - New functionality or enhancement  
+- [x] Feature - New functionality or enhancement
 
 ### Priority
 - [x] P3 - Low (when time permits)

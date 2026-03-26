@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -170,7 +170,8 @@ async fn test_list_work_orders() {
     fixture.create_test_work_order(WORK_TYPE_BUILD, "yaml1");
     fixture.create_test_work_order(WORK_TYPE_BUILD, "yaml2");
 
-    let (status, body) = make_request(app, "GET", "/api/v1/work-orders", Some(&admin_pak), None).await;
+    let (status, body) =
+        make_request(app, "GET", "/api/v1/work-orders", Some(&admin_pak), None).await;
 
     assert_eq!(status, StatusCode::OK);
 
@@ -460,7 +461,11 @@ async fn test_complete_work_order_failure_with_retry() {
         None,
     )
     .expect("Failed to create");
-    let work_order = fixture.dal.work_orders().create(&new_wo).expect("Failed to create");
+    let work_order = fixture
+        .dal
+        .work_orders()
+        .create(&new_wo)
+        .expect("Failed to create");
 
     fixture.create_test_work_order_target(work_order.id, agent.id);
 
@@ -509,7 +514,11 @@ async fn test_complete_work_order_failure_max_retries() {
         None,
     )
     .expect("Failed to create");
-    let work_order = fixture.dal.work_orders().create(&new_wo).expect("Failed to create");
+    let work_order = fixture
+        .dal
+        .work_orders()
+        .create(&new_wo)
+        .expect("Failed to create");
 
     fixture.create_test_work_order_target(work_order.id, agent.id);
 
@@ -600,14 +609,8 @@ async fn test_list_work_order_log() {
         .complete_success(wo.id, Some("result".to_string()))
         .unwrap();
 
-    let (status, body) = make_request(
-        app,
-        "GET",
-        "/api/v1/work-order-log",
-        Some(&admin_pak),
-        None,
-    )
-    .await;
+    let (status, body) =
+        make_request(app, "GET", "/api/v1/work-order-log", Some(&admin_pak), None).await;
 
     assert_eq!(status, StatusCode::OK);
 
@@ -674,14 +677,8 @@ async fn test_list_work_order_log_forbidden() {
     let (_, agent_pak) =
         fixture.create_test_agent_with_pak("Agent".to_string(), "Cluster".to_string());
 
-    let (status, _) = make_request(
-        app,
-        "GET",
-        "/api/v1/work-order-log",
-        Some(&agent_pak),
-        None,
-    )
-    .await;
+    let (status, _) =
+        make_request(app, "GET", "/api/v1/work-order-log", Some(&agent_pak), None).await;
 
     assert_eq!(status, StatusCode::FORBIDDEN);
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -607,7 +607,10 @@ fn test_recreate_stack_after_soft_delete() {
         .stacks()
         .get(search_ids)
         .expect("Failed to check deleted stack");
-    assert!(deleted.is_empty(), "Stack should not be visible after soft delete");
+    assert!(
+        deleted.is_empty(),
+        "Stack should not be visible after soft delete"
+    );
 
     // Create a new stack with the SAME name
     // This should succeed because the partial unique index excludes soft-deleted records
