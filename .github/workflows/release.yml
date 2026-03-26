@@ -16,10 +16,21 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  # Note: Helm tests run on main branch via build-and-test.yml before tagging.
-  # By the time we tag a release, helm tests have already passed.
+  # Run the full test suite before building release artifacts
+  setup:
+    uses: ./.github/workflows/setup.yml
+  unit_tests:
+    needs: setup
+    uses: ./.github/workflows/unit_tests.yml
+  integration_tests:
+    needs: setup
+    uses: ./.github/workflows/integration_tests.yml
+  e2e_tests:
+    needs: integration_tests
+    uses: ./.github/workflows/e2e_tests.yml
 
   build-release-images:
+    needs: [unit_tests, e2e_tests]
     name: Build Release Images
     strategy:
       fail-fast: false
