@@ -16,9 +16,3 @@ jobs:
   unit_tests:
     needs: setup
     uses: ./.github/workflows/unit_tests.yml
-  integration_tests:
-    needs: setup
-    uses: ./.github/workflows/integration_tests.yml
-  e2e_tests:
-    needs: integration_tests
-    uses: ./.github/workflows/e2e_tests.yml

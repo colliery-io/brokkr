@@ -1,0 +1,24 @@
+---
+name: Nightly Test Suite
+on:
+  schedule:
+    # Run at 4 AM UTC every day
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: nightly-tests
+  cancel-in-progress: true
+
+jobs:
+  setup:
+    uses: ./.github/workflows/setup.yml
+  unit_tests:
+    needs: setup
+    uses: ./.github/workflows/unit_tests.yml
+  integration_tests:
+    needs: setup
+    uses: ./.github/workflows/integration_tests.yml
+  e2e_tests:
+    needs: integration_tests
+    uses: ./.github/workflows/e2e_tests.yml
