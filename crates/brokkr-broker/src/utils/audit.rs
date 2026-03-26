@@ -348,6 +348,7 @@ fn flush_buffer(dal: &DAL, buffer: &mut Vec<NewAuditLog>) {
 /// * `details` - Optional additional details.
 /// * `ip_address` - Optional client IP address.
 /// * `user_agent` - Optional client user agent.
+#[allow(clippy::too_many_arguments)]
 pub fn log_action(
     actor_type: &str,
     actor_id: Option<uuid::Uuid>,

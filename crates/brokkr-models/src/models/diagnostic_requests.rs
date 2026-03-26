@@ -85,7 +85,7 @@ impl NewDiagnosticRequest {
         }
 
         let retention = retention_minutes.unwrap_or(60);
-        if retention < 1 || retention > 1440 {
+        if !(1..=1440).contains(&retention) {
             return Err("Retention must be between 1 and 1440 minutes".to_string());
         }
 

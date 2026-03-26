@@ -28,7 +28,7 @@ use serde::Deserialize;
 use serde_json::json;
 use std::time::Duration;
 use tokio::time::sleep;
-use tracing::{debug, error, info, trace, warn};
+use tracing::{debug, error, info};
 
 /// Shipwright API group
 const SHIPWRIGHT_API_GROUP: &str = "shipwright.io";
@@ -109,7 +109,7 @@ pub async fn execute_build(
 
     // Parse YAML documents
     let docs: Vec<serde_yaml::Value> = serde_yaml::Deserializer::from_str(yaml_content)
-        .map(|doc| serde_yaml::Value::deserialize(doc))
+        .map(serde_yaml::Value::deserialize)
         .collect::<Result<Vec<_>, _>>()?;
 
     if docs.is_empty() {
@@ -179,7 +179,7 @@ pub async fn execute_build(
     );
     info!("Creating BuildRun '{}'", buildrun_name);
 
-    let buildrun = create_buildrun(
+    let _buildrun = create_buildrun(
         k8s_client,
         &buildrun_name,
         &build_name,
@@ -344,6 +344,7 @@ async fn watch_buildrun_completion(
 }
 
 /// Result of parsing build YAML content
+#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct ParsedBuildInfo {
     pub build_name: String,
@@ -363,11 +364,12 @@ pub(crate) struct ParsedBuildInfo {
 ///
 /// # Returns
 /// ParsedBuildInfo with extracted build details
+#[allow(dead_code)]
 pub(crate) fn parse_build_yaml(
     yaml_content: &str,
 ) -> Result<ParsedBuildInfo, Box<dyn std::error::Error>> {
     let docs: Vec<serde_yaml::Value> = serde_yaml::Deserializer::from_str(yaml_content)
-        .map(|doc| serde_yaml::Value::deserialize(doc))
+        .map(serde_yaml::Value::deserialize)
         .collect::<Result<Vec<_>, _>>()?;
 
     if docs.is_empty() {
@@ -434,6 +436,7 @@ pub(crate) fn parse_build_yaml(
 /// - `Ok(Some(digest))` if the build succeeded
 /// - `Err(message)` if the build failed
 /// - `Ok(None)` if the build is still in progress
+#[allow(dead_code)]
 pub(crate) fn interpret_buildrun_status(status: &BuildRunStatus) -> Result<Option<String>, String> {
     for condition in &status.conditions {
         if condition.condition_type == CONDITION_SUCCEEDED {

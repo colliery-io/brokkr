@@ -18,7 +18,7 @@ use diesel::sql_query;
 use diesel::sql_types::BigInt;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use tokio::signal;
-use tracing::{debug, error, info, warn};
+use tracing::info;
 use uuid::Uuid;
 
 // Assuming MIGRATIONS is defined in the bin.rs file, we need to import it

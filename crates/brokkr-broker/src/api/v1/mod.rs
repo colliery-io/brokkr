@@ -32,7 +32,7 @@ use brokkr_utils::config::{Cors, ReloadableConfig};
 use hyper::{header::HeaderName, Method};
 use std::time::Duration;
 use tower_http::cors::CorsLayer;
-use tracing::{debug, error, info, warn};
+use tracing::info;
 
 /// Constructs and returns the main router for API v1.
 ///

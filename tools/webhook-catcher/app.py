@@ -21,7 +21,7 @@ def receive():
     """Receive and store a webhook payload."""
     try:
         payload = request.get_json(force=True, silent=True) or {}
-    except:
+    except Exception:
         payload = {"raw": request.data.decode('utf-8', errors='replace')}
 
     message = {

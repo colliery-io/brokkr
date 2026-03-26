@@ -430,7 +430,7 @@ pub async fn send_heartbeat(
         config.agent.broker_url, agent.id
     );
 
-    let start = Instant::now();
+    let _start = Instant::now();
     let response = client
         .post(&url)
         .header("Authorization", format!("Bearer {}", config.agent.pak))

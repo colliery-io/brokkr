@@ -16,7 +16,7 @@ use brokkr_models::models::work_orders::WorkOrder;
 use brokkr_utils::config::Settings;
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
-use tracing::{debug, error, info, trace, warn};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 /// Request body for claiming a work order.
@@ -36,6 +36,7 @@ struct CompleteRequest {
 }
 
 /// Response for retry scheduling.
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct RetryResponse {
     status: String,

@@ -20,7 +20,7 @@ use axum::{
 };
 use brokkr_models::models::generator::{Generator, NewGenerator};
 use serde::Serialize;
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 use utoipa::ToSchema;
 use uuid::Uuid;
 

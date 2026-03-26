@@ -22,7 +22,7 @@ use brokkr_models::models::diagnostic_requests::{DiagnosticRequest, NewDiagnosti
 use brokkr_models::models::diagnostic_results::{DiagnosticResult, NewDiagnosticResult};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 use uuid::Uuid;
 
 /// Creates and returns the router for diagnostic endpoints.

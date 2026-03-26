@@ -1491,14 +1491,14 @@ def test_shipwright_e2e(tag, registry, no_cleanup, broker_release_name=None):
             kubectl wait --for=condition=available deployment/tekton-pipelines-controller \
                 -n tekton-pipelines --timeout=180s 2>/dev/null || echo "tekton-not-ready"
         """
-        tekton_result = run_in_k8s_container(tekton_ready_cmd, "Waiting for Tekton controller")
+        run_in_k8s_container(tekton_ready_cmd, "Waiting for Tekton controller")
 
         # Wait for Shipwright build controller
         shipwright_ready_cmd = f"""
             kubectl wait --for=condition=available deployment/shipwright-build-controller \
                 -n {shipwright_namespace} --timeout=180s 2>/dev/null || echo "shipwright-not-ready"
         """
-        shipwright_result = run_in_k8s_container(shipwright_ready_cmd, "Waiting for Shipwright controller")
+        run_in_k8s_container(shipwright_ready_cmd, "Waiting for Shipwright controller")
 
         # Wait for ClusterBuildStrategy to be created (install job might still be running)
         # Use 'kaniko' strategy as it works without registry credentials (pushes to ttl.sh)

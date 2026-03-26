@@ -17,7 +17,7 @@ use kube::{
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use tracing::{debug, error, info, trace, warn};
+use tracing::{debug, info};
 use uuid::Uuid;
 
 /// Maximum number of log lines to collect per container.

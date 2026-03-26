@@ -25,7 +25,7 @@ use once_cell::sync::OnceCell;
 use rand::RngCore;
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
-use tracing::{debug, error, info, warn};
+use tracing::{info, warn};
 
 /// Version byte for AES-256-GCM encrypted data
 const VERSION_AES_GCM: u8 = 0x01;
@@ -115,7 +115,7 @@ impl EncryptionKey {
 
     /// Returns the key as a hex string (for logging key fingerprint only).
     pub fn fingerprint(&self) -> String {
-        let hash = Sha256::digest(&self.key);
+        let hash = Sha256::digest(self.key);
         hex::encode(&hash[..8])
     }
 
@@ -205,7 +205,7 @@ impl EncryptionKey {
 
         // Derive same mask using SHA-256
         let mut hasher = Sha256::new();
-        hasher.update(&self.key);
+        hasher.update(self.key);
         hasher.update(nonce);
         let mask = hasher.finalize();
 

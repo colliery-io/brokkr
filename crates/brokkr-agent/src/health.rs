@@ -32,7 +32,7 @@ use serde::Serialize;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
-use tracing::{debug, error, info, trace, warn};
+use tracing::error;
 
 /// Shared state for health endpoints
 #[derive(Clone)]

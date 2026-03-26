@@ -35,7 +35,7 @@ use brokkr_models::models::webhooks::{
 };
 use serde::Deserialize;
 use serde_json::Value;
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 use uuid::Uuid;
 
 /// Creates and returns the router for agent-related endpoints.

@@ -22,7 +22,7 @@ use brokkr_models::models::stack_templates::StackTemplate;
 use brokkr_models::models::template_annotations::{NewTemplateAnnotation, TemplateAnnotation};
 use brokkr_models::models::template_labels::{NewTemplateLabel, TemplateLabel};
 use serde::{Deserialize, Serialize};
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 use utoipa::ToSchema;
 use uuid::Uuid;
 

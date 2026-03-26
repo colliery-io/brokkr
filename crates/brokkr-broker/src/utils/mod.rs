@@ -15,7 +15,7 @@ use diesel::prelude::*;
 use std::fs;
 use std::path::Path;
 use tokio::sync::oneshot;
-use tracing::{debug, error, info, warn};
+use tracing::info;
 use uuid::Uuid;
 pub mod audit;
 pub mod background_tasks;

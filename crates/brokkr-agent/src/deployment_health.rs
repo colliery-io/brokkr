@@ -15,7 +15,7 @@ use chrono::{DateTime, Utc};
 use k8s_openapi::api::core::v1::Pod;
 use kube::{api::ListParams, Api, Client};
 use serde::{Deserialize, Serialize};
-use tracing::{debug, error, info, trace, warn};
+use tracing::warn;
 use uuid::Uuid;
 
 /// Known problematic waiting conditions that indicate degraded health
