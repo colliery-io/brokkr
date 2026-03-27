@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -64,7 +64,10 @@ impl WorkOrdersDAL<'_> {
     /// # Returns
     ///
     /// Returns the created WorkOrder on success, or a diesel::result::Error on failure.
-    pub fn create(&self, new_work_order: &NewWorkOrder) -> Result<WorkOrder, diesel::result::Error> {
+    pub fn create(
+        &self,
+        new_work_order: &NewWorkOrder,
+    ) -> Result<WorkOrder, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         let work_order: WorkOrder = diesel::insert_into(work_orders::table)
             .values(new_work_order)
@@ -77,7 +80,10 @@ impl WorkOrdersDAL<'_> {
             "status": work_order.status,
             "created_at": work_order.created_at,
         });
-        event_bus::emit_event(self.dal, &BrokkrEvent::new(EVENT_WORKORDER_CREATED, event_data));
+        event_bus::emit_event(
+            self.dal,
+            &BrokkrEvent::new(EVENT_WORKORDER_CREATED, event_data),
+        );
 
         Ok(work_order)
     }
@@ -286,7 +292,8 @@ impl WorkOrdersDAL<'_> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
 
         // Check if agent is authorized via any targeting mechanism (OR logic)
-        let is_authorized = self.is_agent_authorized_for_work_order(conn, work_order_id, agent_id)?;
+        let is_authorized =
+            self.is_agent_authorized_for_work_order(conn, work_order_id, agent_id)?;
 
         if !is_authorized {
             return Err(diesel::result::Error::NotFound);
@@ -313,7 +320,10 @@ impl WorkOrdersDAL<'_> {
             "agent_id": agent_id,
             "claimed_at": now,
         });
-        event_bus::emit_event(self.dal, &BrokkrEvent::new(EVENT_WORKORDER_CLAIMED, event_data));
+        event_bus::emit_event(
+            self.dal,
+            &BrokkrEvent::new(EVENT_WORKORDER_CLAIMED, event_data),
+        );
 
         Ok(work_order)
     }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -132,7 +132,9 @@ spec:
 
 pub async fn test_agent_management(client: &Client) -> Result<()> {
     println!("  → Creating a new agent...");
-    let result = client.create_agent("e2e-test-agent", "e2e-test-cluster").await?;
+    let result = client
+        .create_agent("e2e-test-agent", "e2e-test-cluster")
+        .await?;
     let agent_id: Uuid = result["agent"]["id"].as_str().unwrap().parse()?;
     let _initial_pak = result["initial_pak"].as_str().unwrap();
     println!("    Created agent: {}", agent_id);
@@ -144,7 +146,9 @@ pub async fn test_agent_management(client: &Client) -> Result<()> {
 
     // Activate the agent
     println!("  → Activating agent...");
-    let updated = client.update_agent(agent_id, json!({"status": "ACTIVE"})).await?;
+    let updated = client
+        .update_agent(agent_id, json!({"status": "ACTIVE"}))
+        .await?;
     assert_eq!(updated["status"], "ACTIVE");
     println!("    Agent is now ACTIVE");
 
@@ -158,15 +162,21 @@ pub async fn test_agent_management(client: &Client) -> Result<()> {
 
     // Add annotations
     println!("  → Adding annotations...");
-    client.add_agent_annotation(agent_id, "owner", "e2e-test-suite").await?;
-    client.add_agent_annotation(agent_id, "environment", "test").await?;
+    client
+        .add_agent_annotation(agent_id, "owner", "e2e-test-suite")
+        .await?;
+    client
+        .add_agent_annotation(agent_id, "environment", "test")
+        .await?;
     let annotations = client.get_agent_annotations(agent_id).await?;
     assert_eq!(annotations.len(), 2, "Should have 2 annotations");
     println!("    Added {} annotations", annotations.len());
 
     // Deactivate agent
     println!("  → Deactivating agent...");
-    let updated = client.update_agent(agent_id, json!({"status": "INACTIVE"})).await?;
+    let updated = client
+        .update_agent(agent_id, json!({"status": "INACTIVE"}))
+        .await?;
     assert_eq!(updated["status"], "INACTIVE");
     println!("    Agent is now INACTIVE");
 
@@ -180,19 +190,25 @@ pub async fn test_agent_management(client: &Client) -> Result<()> {
 pub async fn test_stack_deployment(client: &Client) -> Result<()> {
     // Create a generator
     println!("  → Creating generator...");
-    let gen_result = client.create_generator("e2e-test-generator", Some("E2E test generator")).await?;
+    let gen_result = client
+        .create_generator("e2e-test-generator", Some("E2E test generator"))
+        .await?;
     let generator_id: Uuid = gen_result["generator"]["id"].as_str().unwrap().parse()?;
     println!("    Created generator: {}", generator_id);
 
     // Create a stack
     println!("  → Creating stack...");
-    let stack = client.create_stack("e2e-test-stack", Some("E2E test stack"), generator_id).await?;
+    let stack = client
+        .create_stack("e2e-test-stack", Some("E2E test stack"), generator_id)
+        .await?;
     let stack_id: Uuid = stack["id"].as_str().unwrap().parse()?;
     println!("    Created stack: {}", stack_id);
 
     // Deploy multi-resource YAML
     println!("  → Deploying multi-resource YAML...");
-    let deployment = client.create_deployment(stack_id, DEMO_DEPLOYMENT_YAML, false).await?;
+    let deployment = client
+        .create_deployment(stack_id, DEMO_DEPLOYMENT_YAML, false)
+        .await?;
     let deployment_id: Uuid = deployment["id"].as_str().unwrap().parse()?;
     assert_eq!(deployment["is_deletion_marker"], false);
     println!("    Created deployment object: {}", deployment_id);
@@ -225,14 +241,20 @@ pub async fn test_targeting(client: &Client) -> Result<()> {
     let generator_id: Uuid = gen_result["generator"]["id"].as_str().unwrap().parse()?;
 
     // Create agent with labels
-    let agent_result = client.create_agent("e2e-targeting-agent", "targeting-cluster").await?;
+    let agent_result = client
+        .create_agent("e2e-targeting-agent", "targeting-cluster")
+        .await?;
     let agent_id: Uuid = agent_result["agent"]["id"].as_str().unwrap().parse()?;
-    client.update_agent(agent_id, json!({"status": "ACTIVE"})).await?;
+    client
+        .update_agent(agent_id, json!({"status": "ACTIVE"}))
+        .await?;
     client.add_agent_label(agent_id, "targeting-test").await?;
     println!("    Created agent with label 'targeting-test'");
 
     // Create stack with matching label
-    let stack = client.create_stack("e2e-targeting-stack", None, generator_id).await?;
+    let stack = client
+        .create_stack("e2e-targeting-stack", None, generator_id)
+        .await?;
     let stack_id: Uuid = stack["id"].as_str().unwrap().parse()?;
     client.add_stack_label(stack_id, "targeting-test").await?;
     println!("    Created stack with label 'targeting-test'");
@@ -246,12 +268,16 @@ pub async fn test_targeting(client: &Client) -> Result<()> {
 
     // Test explicit targeting
     println!("  → Testing explicit targeting...");
-    let stack2 = client.create_stack("e2e-explicit-stack", None, generator_id).await?;
+    let stack2 = client
+        .create_stack("e2e-explicit-stack", None, generator_id)
+        .await?;
     let stack2_id: Uuid = stack2["id"].as_str().unwrap().parse()?;
 
     client.add_agent_target(agent_id, stack2_id).await?;
     let targets = client.get_agent_targets(agent_id).await?;
-    let has_target = targets.iter().any(|t| t["stack_id"] == stack2_id.to_string());
+    let has_target = targets
+        .iter()
+        .any(|t| t["stack_id"] == stack2_id.to_string());
     assert!(has_target, "Agent should have explicit target");
     println!("    Explicit target created ✓");
 
@@ -270,12 +296,14 @@ pub async fn test_targeting(client: &Client) -> Result<()> {
 pub async fn test_templates(client: &Client) -> Result<()> {
     // Create a template
     println!("  → Creating template...");
-    let template = client.create_template(
-        "e2e-microservice",
-        Some("E2E test microservice template"),
-        MICROSERVICE_TEMPLATE,
-        MICROSERVICE_SCHEMA,
-    ).await?;
+    let template = client
+        .create_template(
+            "e2e-microservice",
+            Some("E2E test microservice template"),
+            MICROSERVICE_TEMPLATE,
+            MICROSERVICE_SCHEMA,
+        )
+        .await?;
     let template_id: Uuid = template["id"].as_str().unwrap().parse()?;
     assert_eq!(template["name"], "e2e-microservice");
     println!("    Created template: {}", template_id);
@@ -283,25 +311,35 @@ pub async fn test_templates(client: &Client) -> Result<()> {
     // Create a stack for instantiation
     let gen_result = client.create_generator("e2e-template-gen", None).await?;
     let generator_id: Uuid = gen_result["generator"]["id"].as_str().unwrap().parse()?;
-    let stack = client.create_stack("e2e-template-stack", None, generator_id).await?;
+    let stack = client
+        .create_stack("e2e-template-stack", None, generator_id)
+        .await?;
     let stack_id: Uuid = stack["id"].as_str().unwrap().parse()?;
 
     // Instantiate the template
     println!("  → Instantiating template...");
-    let deployment = client.instantiate_template(
-        stack_id,
-        template_id,
-        json!({
-            "name": "e2e-service",
-            "image": "nginx:alpine",
-            "replicas": 2,
-            "port": 8080
-        }),
-    ).await?;
+    let deployment = client
+        .instantiate_template(
+            stack_id,
+            template_id,
+            json!({
+                "name": "e2e-service",
+                "image": "nginx:alpine",
+                "replicas": 2,
+                "port": 8080
+            }),
+        )
+        .await?;
 
     let yaml_content = deployment["yaml_content"].as_str().unwrap();
-    assert!(yaml_content.contains("name: e2e-service"), "Template should render name");
-    assert!(yaml_content.contains("replicas: 2"), "Template should render replicas");
+    assert!(
+        yaml_content.contains("name: e2e-service"),
+        "Template should render name"
+    );
+    assert!(
+        yaml_content.contains("replicas: 2"),
+        "Template should render replicas"
+    );
     println!("    Template instantiated successfully");
 
     // List templates
@@ -325,19 +363,20 @@ pub async fn test_templates(client: &Client) -> Result<()> {
 pub async fn test_work_orders(client: &Client) -> Result<()> {
     // Create an agent for work order targeting
     println!("  → Setting up work order test...");
-    let agent_result = client.create_agent("e2e-work-order-agent", "work-order-cluster").await?;
+    let agent_result = client
+        .create_agent("e2e-work-order-agent", "work-order-cluster")
+        .await?;
     let agent_id: Uuid = agent_result["agent"]["id"].as_str().unwrap().parse()?;
-    client.update_agent(agent_id, json!({"status": "ACTIVE"})).await?;
+    client
+        .update_agent(agent_id, json!({"status": "ACTIVE"}))
+        .await?;
     client.add_agent_label(agent_id, "work-order-test").await?;
 
     // Create work order with explicit agent targeting
     println!("  → Creating work order with agent targeting...");
-    let work_order = client.create_work_order(
-        "custom",
-        JOB_YAML,
-        Some(vec![agent_id]),
-        None,
-    ).await?;
+    let work_order = client
+        .create_work_order("custom", JOB_YAML, Some(vec![agent_id]), None)
+        .await?;
     let wo_id: Uuid = work_order["id"].as_str().unwrap().parse()?;
     assert_eq!(work_order["status"], "PENDING");
     println!("    Created work order: {}", wo_id);
@@ -356,12 +395,9 @@ pub async fn test_work_orders(client: &Client) -> Result<()> {
 
     // Create work order with label targeting
     println!("  → Creating work order with label targeting...");
-    let wo2 = client.create_work_order(
-        "custom",
-        JOB_YAML,
-        None,
-        Some(vec!["work-order-test"]),
-    ).await?;
+    let wo2 = client
+        .create_work_order("custom", JOB_YAML, None, Some(vec!["work-order-test"]))
+        .await?;
     assert_eq!(wo2["status"], "PENDING");
     println!("    Created label-targeted work order");
 
@@ -388,7 +424,8 @@ pub async fn test_build_work_orders(client: &Client) -> Result<()> {
     // Find the real running agent
     println!("  → Finding running agent...");
     let agents = client.list_agents().await?;
-    let agent = agents.iter()
+    let agent = agents
+        .iter()
         .find(|a| a["name"] == "brokkr-integration-test-agent")
         .ok_or("No running agent found - is brokkr-agent running?")?;
     let agent_id: Uuid = agent["id"].as_str().unwrap().parse()?;
@@ -398,7 +435,9 @@ pub async fn test_build_work_orders(client: &Client) -> Result<()> {
     let agent_status = agent["status"].as_str().unwrap_or("UNKNOWN");
     if agent_status != "ACTIVE" {
         println!("  → Activating agent (was {})...", agent_status);
-        client.update_agent(agent_id, json!({"status": "ACTIVE"})).await?;
+        client
+            .update_agent(agent_id, json!({"status": "ACTIVE"}))
+            .await?;
         println!("    Agent activated");
     } else {
         println!("    Agent is already ACTIVE");
@@ -406,12 +445,9 @@ pub async fn test_build_work_orders(client: &Client) -> Result<()> {
 
     // Create build work order targeting the real agent
     println!("  → Creating build work order...");
-    let work_order = client.create_work_order(
-        "build",
-        BUILD_YAML,
-        Some(vec![agent_id]),
-        None,
-    ).await?;
+    let work_order = client
+        .create_work_order("build", BUILD_YAML, Some(vec![agent_id]), None)
+        .await?;
     let wo_id: Uuid = work_order["id"].as_str().unwrap().parse()?;
     assert_eq!(work_order["work_type"], "build");
     assert_eq!(work_order["status"], "PENDING");
@@ -480,7 +516,9 @@ pub async fn test_build_work_orders(client: &Client) -> Result<()> {
                         }
                     }
                     Err(log_err) => {
-                        return Err(format!("Work order not found in active or log: {}", log_err).into());
+                        return Err(
+                            format!("Work order not found in active or log: {}", log_err).into(),
+                        );
                     }
                 }
             }
@@ -545,10 +583,14 @@ pub async fn test_health_diagnostics(client: &Client) -> Result<()> {
     let gen_result = client.create_generator("e2e-health-gen", None).await?;
     let generator_id: Uuid = gen_result["generator"]["id"].as_str().unwrap().parse()?;
 
-    let stack = client.create_stack("e2e-health-stack", None, generator_id).await?;
+    let stack = client
+        .create_stack("e2e-health-stack", None, generator_id)
+        .await?;
     let stack_id: Uuid = stack["id"].as_str().unwrap().parse()?;
 
-    let deployment = client.create_deployment(stack_id, DEMO_DEPLOYMENT_YAML, false).await?;
+    let deployment = client
+        .create_deployment(stack_id, DEMO_DEPLOYMENT_YAML, false)
+        .await?;
     let deployment_id: Uuid = deployment["id"].as_str().unwrap().parse()?;
     println!("    Created stack and deployment");
 
@@ -561,7 +603,10 @@ pub async fn test_health_diagnostics(client: &Client) -> Result<()> {
     println!("  → Checking deployment health...");
     let dep_health = client.get_deployment_health(deployment_id).await?;
     let records = dep_health.get("health_records").and_then(|r| r.as_array());
-    println!("    Deployment health: {} agent report(s)", records.map(|r| r.len()).unwrap_or(0));
+    println!(
+        "    Deployment health: {} agent report(s)",
+        records.map(|r| r.len()).unwrap_or(0)
+    );
 
     // Note: Diagnostics require an agent that has processed the deployment,
     // which may not be available in all test environments. We verify the
@@ -583,12 +628,14 @@ pub async fn test_webhooks(client: &Client, webhook_catcher_url: Option<&str>) -
 
     // Create a webhook subscription
     println!("  → Creating webhook subscription...");
-    let webhook = client.create_webhook(
-        "e2e-test-webhook",
-        &webhook_url,
-        vec!["workorder.completed"],
-        Some("Bearer e2e-test-token"),
-    ).await?;
+    let webhook = client
+        .create_webhook(
+            "e2e-test-webhook",
+            &webhook_url,
+            vec!["workorder.completed"],
+            Some("Bearer e2e-test-token"),
+        )
+        .await?;
     let webhook_id: Uuid = webhook["id"].as_str().unwrap().parse()?;
     println!("    Created webhook: {}", webhook_id);
 
@@ -610,19 +657,28 @@ pub async fn test_webhooks(client: &Client, webhook_catcher_url: Option<&str>) -
     assert_eq!(fetched["name"], "e2e-test-webhook");
 
     // Verify event_types
-    let event_types = fetched["event_types"].as_array().expect("event_types should be array");
+    let event_types = fetched["event_types"]
+        .as_array()
+        .expect("event_types should be array");
     assert_eq!(event_types.len(), 1);
-    println!("    Webhook subscribes to {} event type(s)", event_types.len());
+    println!(
+        "    Webhook subscribes to {} event type(s)",
+        event_types.len()
+    );
 
     // Update webhook (disable it)
     println!("  → Updating webhook (disable)...");
-    let updated = client.update_webhook(webhook_id, json!({"enabled": false})).await?;
+    let updated = client
+        .update_webhook(webhook_id, json!({"enabled": false}))
+        .await?;
     assert_eq!(updated["enabled"], false);
     println!("    Webhook disabled");
 
     // Re-enable
     println!("  → Re-enabling webhook...");
-    let updated = client.update_webhook(webhook_id, json!({"enabled": true})).await?;
+    let updated = client
+        .update_webhook(webhook_id, json!({"enabled": true}))
+        .await?;
     assert_eq!(updated["enabled"], true);
     println!("    Webhook re-enabled");
 
@@ -640,12 +696,14 @@ pub async fn test_webhooks(client: &Client, webhook_catcher_url: Option<&str>) -
 
         // Create a work order that will trigger workorder.completed event
         println!("    Creating work order to trigger event...");
-        let wo = client.create_work_order(
-            "custom",
-            "# Webhook test work order\necho 'test'",
-            None,
-            Some(vec!["integration-test"]), // Target any integration test agent
-        ).await?;
+        let wo = client
+            .create_work_order(
+                "custom",
+                "# Webhook test work order\necho 'test'",
+                None,
+                Some(vec!["integration-test"]), // Target any integration test agent
+            )
+            .await?;
         let wo_id: Uuid = wo["id"].as_str().unwrap().parse()?;
         println!("    Created work order: {}", wo_id);
 
@@ -691,7 +749,10 @@ pub async fn test_webhooks(client: &Client, webhook_catcher_url: Option<&str>) -
                             if let Some(body) = first_msg.get("body") {
                                 let event_type = body["event_type"].as_str().unwrap_or("unknown");
                                 println!("    ✓ Event type: {}", event_type);
-                                assert_eq!(event_type, "workorder.completed", "Expected workorder.completed event");
+                                assert_eq!(
+                                    event_type, "workorder.completed",
+                                    "Expected workorder.completed event"
+                                );
                             }
                         }
                     }
@@ -702,7 +763,8 @@ pub async fn test_webhooks(client: &Client, webhook_catcher_url: Option<&str>) -
                     let deliveries = client.list_webhook_deliveries(webhook_id).await?;
                     println!("    Broker shows {} delivery record(s)", deliveries.len());
                     for d in deliveries.iter() {
-                        println!("      - Status: {}, Error: {:?}",
+                        println!(
+                            "      - Status: {}, Error: {:?}",
                             d["status"].as_str().unwrap_or("unknown"),
                             d["last_error"].as_str()
                         );
@@ -759,16 +821,24 @@ pub async fn test_agent_reconciliation_existing_deployments(client: &Client) -> 
     println!("  → Test 1: Direct targeting with pre-existing deployment...");
 
     // 1a. Create stack with deployment FIRST
-    let stack1 = client.create_stack("e2e-reconcile-direct", None, generator_id).await?;
+    let stack1 = client
+        .create_stack("e2e-reconcile-direct", None, generator_id)
+        .await?;
     let stack1_id: Uuid = stack1["id"].as_str().unwrap().parse()?;
-    let deployment1 = client.create_deployment(stack1_id, "# Direct targeting test", false).await?;
+    let deployment1 = client
+        .create_deployment(stack1_id, "# Direct targeting test", false)
+        .await?;
     let deployment1_id: Uuid = deployment1["id"].as_str().unwrap().parse()?;
     println!("    Created stack and deployment: {}", deployment1_id);
 
     // 1b. Create agent (no targets yet)
-    let agent1_result = client.create_agent("e2e-reconcile-direct-agent", "reconcile-cluster-1").await?;
+    let agent1_result = client
+        .create_agent("e2e-reconcile-direct-agent", "reconcile-cluster-1")
+        .await?;
     let agent1_id: Uuid = agent1_result["agent"]["id"].as_str().unwrap().parse()?;
-    client.update_agent(agent1_id, json!({"status": "ACTIVE"})).await?;
+    client
+        .update_agent(agent1_id, json!({"status": "ACTIVE"}))
+        .await?;
     println!("    Created agent: {}", agent1_id);
 
     // 1c. NOW target agent to stack (after deployment exists)
@@ -778,7 +848,9 @@ pub async fn test_agent_reconciliation_existing_deployments(client: &Client) -> 
     // 1d. Verify agent sees the pre-existing deployment
     let target_state1 = client.get_agent_target_state(agent1_id, None).await?;
     assert!(
-        target_state1.iter().any(|d| d["id"] == deployment1_id.to_string()),
+        target_state1
+            .iter()
+            .any(|d| d["id"] == deployment1_id.to_string()),
         "Agent should see pre-existing deployment via direct targeting"
     );
     println!("    ✓ Agent sees pre-existing deployment via direct targeting");
@@ -789,27 +861,44 @@ pub async fn test_agent_reconciliation_existing_deployments(client: &Client) -> 
     println!("  → Test 2: Label targeting with pre-existing deployment...");
 
     // 2a. Create stack with label and deployment FIRST
-    let stack2 = client.create_stack("e2e-reconcile-label", None, generator_id).await?;
+    let stack2 = client
+        .create_stack("e2e-reconcile-label", None, generator_id)
+        .await?;
     let stack2_id: Uuid = stack2["id"].as_str().unwrap().parse()?;
-    client.add_stack_label(stack2_id, "reconcile-test-label").await?;
-    let deployment2 = client.create_deployment(stack2_id, "# Label targeting test", false).await?;
+    client
+        .add_stack_label(stack2_id, "reconcile-test-label")
+        .await?;
+    let deployment2 = client
+        .create_deployment(stack2_id, "# Label targeting test", false)
+        .await?;
     let deployment2_id: Uuid = deployment2["id"].as_str().unwrap().parse()?;
-    println!("    Created labeled stack and deployment: {}", deployment2_id);
+    println!(
+        "    Created labeled stack and deployment: {}",
+        deployment2_id
+    );
 
     // 2b. Create agent (no labels yet)
-    let agent2_result = client.create_agent("e2e-reconcile-label-agent", "reconcile-cluster-2").await?;
+    let agent2_result = client
+        .create_agent("e2e-reconcile-label-agent", "reconcile-cluster-2")
+        .await?;
     let agent2_id: Uuid = agent2_result["agent"]["id"].as_str().unwrap().parse()?;
-    client.update_agent(agent2_id, json!({"status": "ACTIVE"})).await?;
+    client
+        .update_agent(agent2_id, json!({"status": "ACTIVE"}))
+        .await?;
     println!("    Created agent: {}", agent2_id);
 
     // 2c. NOW add matching label to agent (after deployment exists)
-    client.add_agent_label(agent2_id, "reconcile-test-label").await?;
+    client
+        .add_agent_label(agent2_id, "reconcile-test-label")
+        .await?;
     println!("    Added matching label to agent");
 
     // 2d. Verify agent sees the pre-existing deployment
     let target_state2 = client.get_agent_target_state(agent2_id, None).await?;
     assert!(
-        target_state2.iter().any(|d| d["id"] == deployment2_id.to_string()),
+        target_state2
+            .iter()
+            .any(|d| d["id"] == deployment2_id.to_string()),
         "Agent should see pre-existing deployment via label targeting"
     );
     println!("    ✓ Agent sees pre-existing deployment via label targeting");
@@ -820,27 +909,44 @@ pub async fn test_agent_reconciliation_existing_deployments(client: &Client) -> 
     println!("  → Test 3: Annotation targeting with pre-existing deployment...");
 
     // 3a. Create stack with annotation and deployment FIRST
-    let stack3 = client.create_stack("e2e-reconcile-annotation", None, generator_id).await?;
+    let stack3 = client
+        .create_stack("e2e-reconcile-annotation", None, generator_id)
+        .await?;
     let stack3_id: Uuid = stack3["id"].as_str().unwrap().parse()?;
-    client.add_stack_annotation(stack3_id, "reconcile-key", "reconcile-value").await?;
-    let deployment3 = client.create_deployment(stack3_id, "# Annotation targeting test", false).await?;
+    client
+        .add_stack_annotation(stack3_id, "reconcile-key", "reconcile-value")
+        .await?;
+    let deployment3 = client
+        .create_deployment(stack3_id, "# Annotation targeting test", false)
+        .await?;
     let deployment3_id: Uuid = deployment3["id"].as_str().unwrap().parse()?;
-    println!("    Created annotated stack and deployment: {}", deployment3_id);
+    println!(
+        "    Created annotated stack and deployment: {}",
+        deployment3_id
+    );
 
     // 3b. Create agent (no annotations yet)
-    let agent3_result = client.create_agent("e2e-reconcile-annotation-agent", "reconcile-cluster-3").await?;
+    let agent3_result = client
+        .create_agent("e2e-reconcile-annotation-agent", "reconcile-cluster-3")
+        .await?;
     let agent3_id: Uuid = agent3_result["agent"]["id"].as_str().unwrap().parse()?;
-    client.update_agent(agent3_id, json!({"status": "ACTIVE"})).await?;
+    client
+        .update_agent(agent3_id, json!({"status": "ACTIVE"}))
+        .await?;
     println!("    Created agent: {}", agent3_id);
 
     // 3c. NOW add matching annotation to agent (after deployment exists)
-    client.add_agent_annotation(agent3_id, "reconcile-key", "reconcile-value").await?;
+    client
+        .add_agent_annotation(agent3_id, "reconcile-key", "reconcile-value")
+        .await?;
     println!("    Added matching annotation to agent");
 
     // 3d. Verify agent sees the pre-existing deployment
     let target_state3 = client.get_agent_target_state(agent3_id, None).await?;
     assert!(
-        target_state3.iter().any(|d| d["id"] == deployment3_id.to_string()),
+        target_state3
+            .iter()
+            .any(|d| d["id"] == deployment3_id.to_string()),
         "Agent should see pre-existing deployment via annotation targeting"
     );
     println!("    ✓ Agent sees pre-existing deployment via annotation targeting");
@@ -861,18 +967,29 @@ pub async fn test_audit_logs(client: &Client) -> Result<()> {
     let logs = result["logs"].as_array().expect("logs should be array");
     let total = result["total"].as_i64().unwrap_or(0);
 
-    println!("    Found {} audit log entries (showing {})", total, logs.len());
+    println!(
+        "    Found {} audit log entries (showing {})",
+        total,
+        logs.len()
+    );
 
     // Check log structure if we have entries
     if let Some(first_log) = logs.first() {
         assert!(first_log.get("id").is_some(), "Log should have id");
         assert!(first_log.get("action").is_some(), "Log should have action");
-        assert!(first_log.get("actor_type").is_some(), "Log should have actor_type");
-        assert!(first_log.get("created_at").is_some(), "Log should have timestamp");
+        assert!(
+            first_log.get("actor_type").is_some(),
+            "Log should have actor_type"
+        );
+        assert!(
+            first_log.get("created_at").is_some(),
+            "Log should have timestamp"
+        );
         println!("    Log structure verified");
 
         // Show sample actions
-        let actions: Vec<&str> = logs.iter()
+        let actions: Vec<&str> = logs
+            .iter()
             .filter_map(|l| l["action"].as_str())
             .take(5)
             .collect();
@@ -883,8 +1000,14 @@ pub async fn test_audit_logs(client: &Client) -> Result<()> {
     }
 
     // Verify API returns proper structure (this should always pass)
-    assert!(result.get("logs").is_some(), "Response should have logs field");
-    assert!(result.get("total").is_some(), "Response should have total field");
+    assert!(
+        result.get("logs").is_some(),
+        "Response should have logs field"
+    );
+    assert!(
+        result.get("total").is_some(),
+        "Response should have total field"
+    );
     println!("    Audit log API structure verified");
 
     Ok(())
@@ -942,11 +1065,7 @@ pub async fn test_metrics(client: &Client) -> Result<()> {
         "brokkr_deployment_objects_total",
     ];
     for metric in system_metrics {
-        assert!(
-            metrics.contains(metric),
-            "Should contain {} gauge",
-            metric
-        );
+        assert!(metrics.contains(metric), "Should contain {} gauge", metric);
     }
     println!("    System metrics present ✓");
 
@@ -963,7 +1082,11 @@ pub async fn test_metrics(client: &Client) -> Result<()> {
     // Print all brokkr metrics (not histogram buckets to keep it readable)
     println!("  → Brokkr metrics:");
     for line in metrics.lines() {
-        if line.starts_with("brokkr_") && !line.contains("_bucket{") && !line.contains("_sum{") && !line.contains("_count{") {
+        if line.starts_with("brokkr_")
+            && !line.contains("_bucket{")
+            && !line.contains("_sum{")
+            && !line.contains("_count{")
+        {
             println!("    {}", line);
         }
     }

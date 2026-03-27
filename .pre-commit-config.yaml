@@ -21,6 +21,7 @@ repos:
       - id: trailing-whitespace
       - id: end-of-file-fixer
       - id: check-yaml
+        args: [--allow-multiple-documents]
         exclude: ^charts/.*/templates/.*\.yaml$
       - id: check-added-large-files
         exclude: ^\.metis/metis\.db$
@@ -50,5 +51,5 @@ repos:
         name: Run codespell to check for common misspellings in files
         language: python
         types: [text]
-        exclude: ^docs/themes/.*$|\.js$|\.css|\.json$
+        exclude: ^docs/themes/.*$|\.js$|\.css|\.json$|^\.metis/code-index.*$|^Cargo\.lock$
         args: [--ignore-words=.spelling_wordlist.txt]

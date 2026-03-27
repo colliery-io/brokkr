@@ -1,24 +1,26 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
 
+use crate::api::v1::admin::{AuditLogListResponse, ConfigChangeInfo, ConfigReloadResponse};
 use crate::api::v1::diagnostics::{
     CreateDiagnosticRequest, DiagnosticResponse, SubmitDiagnosticResult,
 };
 use crate::api::v1::generators::CreateGeneratorResponse;
-use crate::api::v1::middleware::AuthResponse;
-use crate::api::v1::stacks::TemplateInstantiationRequest;
-use crate::api::v1::templates::{AddAnnotationRequest, CreateTemplateRequest, UpdateTemplateRequest};
 use crate::api::v1::health::{
     DeploymentHealthResponse, DeploymentObjectHealthSummary, DeploymentObjectHealthUpdate,
     HealthStatusUpdate, StackHealthResponse,
 };
+use crate::api::v1::middleware::AuthResponse;
+use crate::api::v1::stacks::TemplateInstantiationRequest;
+use crate::api::v1::templates::{
+    AddAnnotationRequest, CreateTemplateRequest, UpdateTemplateRequest,
+};
 use crate::api::v1::work_orders::{
     ClaimWorkOrderRequest, CompleteWorkOrderRequest, CreateWorkOrderRequest, WorkOrderTargeting,
 };
-use crate::api::v1::admin::{AuditLogListResponse, ConfigChangeInfo, ConfigReloadResponse};
 use crate::api::v1::{
     admin, agent_events, agents, auth, deployment_objects, diagnostics, generators, health, stacks,
     templates, work_orders,

@@ -5,7 +5,7 @@ title: "Work System with Shipwright Build Integration"
 short_code: "BROKKR-I-0001"
 created_at: 2025-10-08T14:59:07.902259+00:00
 updated_at: 2025-12-13T04:12:47.375922+00:00
-parent: 
+parent:
 blocked_by: []
 archived: true
 
@@ -24,7 +24,7 @@ initiative_id: work-system-with-shipwright-build
 
 ## Context **\[REQUIRED\]**
 
-Brokkr currently provides environment-aware control plane functionality for distributing Kubernetes objects across clusters via agent/broker architecture. We wish to extend our current capabilities with: 
+Brokkr currently provides environment-aware control plane functionality for distributing Kubernetes objects across clusters via agent/broker architecture. We wish to extend our current capabilities with:
 
 1. **Native container image building**: Users must rely on external CI/CD systems for image builds before deploying through Brokkr
 2. **Generic work management**: No system exists for one-time, non-persistent operations (builds, tests, backups, etc.)

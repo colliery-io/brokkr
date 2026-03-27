@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -10,12 +10,12 @@
 //! the broker, including admin key management and shutdown procedures.
 
 use brokkr_models::schema::admin_role;
-use tracing::{debug, error, info, warn};
 use chrono::Utc;
 use diesel::prelude::*;
 use std::fs;
 use std::path::Path;
 use tokio::sync::oneshot;
+use tracing::info;
 use uuid::Uuid;
 pub mod audit;
 pub mod background_tasks;

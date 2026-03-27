@@ -41,14 +41,14 @@ BEGIN
     UPDATE stacks
     SET deleted_at = NEW.deleted_at
     WHERE generator_id = NEW.id AND deleted_at IS NULL;
-    
+
     -- Cascade soft delete to deployment objects in those stacks
     UPDATE deployment_objects
     SET deleted_at = NEW.deleted_at
     WHERE stack_id IN (
         SELECT id FROM stacks WHERE generator_id = NEW.id
     ) AND deleted_at IS NULL;
-    
+
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;

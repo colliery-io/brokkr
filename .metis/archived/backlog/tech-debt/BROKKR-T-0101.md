@@ -5,7 +5,7 @@ title: "Review soft delete implementation and unique constraints"
 short_code: "BROKKR-T-0101"
 created_at: 2026-01-01T00:18:27.775499+00:00
 updated_at: 2026-01-02T20:06:05.362582+00:00
-parent: 
+parent:
 blocked_by: []
 archived: true
 
@@ -38,7 +38,7 @@ Audit and fix unique constraints across all tables that use soft deletes to ensu
 
 ### Type
 - [ ] Bug - Production issue that needs fixing
-- [ ] Feature - New functionality or enhancement  
+- [ ] Feature - New functionality or enhancement
 - [ ] Tech Debt - Code improvement or refactoring
 - [ ] Chore - Maintenance or setup work
 
@@ -50,7 +50,7 @@ Audit and fix unique constraints across all tables that use soft deletes to ensu
 
 ### Impact Assessment **[CONDITIONAL: Bug]**
 - **Affected Users**: {Number/percentage of users affected}
-- **Reproduction Steps**: 
+- **Reproduction Steps**:
   1. {Step 1}
   2. {Step 2}
   3. {Step 3}
@@ -104,7 +104,7 @@ CREATE UNIQUE INDEX unique_agent_cluster ON agents (name, cluster_name) WHERE de
 ### Test Case 1: {Test Case Name}
 - **Test ID**: TC-001
 - **Preconditions**: {What must be true before testing}
-- **Steps**: 
+- **Steps**:
   1. {Step 1}
   2. {Step 2}
   3. {Step 3}
@@ -115,7 +115,7 @@ CREATE UNIQUE INDEX unique_agent_cluster ON agents (name, cluster_name) WHERE de
 ### Test Case 2: {Test Case Name}
 - **Test ID**: TC-002
 - **Preconditions**: {What must be true before testing}
-- **Steps**: 
+- **Steps**:
   1. {Step 1}
   2. {Step 2}
 - **Expected Results**: {What should happen}

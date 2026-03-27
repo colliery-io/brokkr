@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -116,11 +116,7 @@ impl TemplateTargetsDAL<'_> {
     /// # Returns
     ///
     /// `true` if the association exists, `false` otherwise.
-    pub fn exists(
-        &self,
-        template_id: Uuid,
-        stack_id: Uuid,
-    ) -> Result<bool, diesel::result::Error> {
+    pub fn exists(&self, template_id: Uuid, stack_id: Uuid) -> Result<bool, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         let count: i64 = template_targets::table
             .filter(template_targets::template_id.eq(template_id))

@@ -56,30 +56,30 @@ impl AesGcmEncryption {
             cipher: Aes256Gcm::new_from_slice(key).expect("valid key size"),
         }
     }
-    
+
     pub fn encrypt(&self, plaintext: &[u8]) -> Result<Vec<u8>, EncryptionError> {
         let mut nonce_bytes = [0u8; NONCE_SIZE];
         OsRng.fill_bytes(&mut nonce_bytes);
         let nonce = Nonce::from_slice(&nonce_bytes);
-        
+
         let ciphertext = self.cipher
             .encrypt(nonce, plaintext)
             .map_err(|_| EncryptionError::EncryptionFailed)?;
-        
+
         // Return: nonce || ciphertext (includes auth tag)
         let mut result = nonce_bytes.to_vec();
         result.extend(ciphertext);
         Ok(result)
     }
-    
+
     pub fn decrypt(&self, data: &[u8]) -> Result<Vec<u8>, EncryptionError> {
         if data.len() < NONCE_SIZE {
             return Err(EncryptionError::InvalidData);
         }
-        
+
         let (nonce_bytes, ciphertext) = data.split_at(NONCE_SIZE);
         let nonce = Nonce::from_slice(nonce_bytes);
-        
+
         self.cipher
             .decrypt(nonce, ciphertext)
             .map_err(|_| EncryptionError::DecryptionFailed)
@@ -115,11 +115,11 @@ Keep the existing `EncryptionKey` struct interface but replace internals:
 ```rust
 impl EncryptionKey {
     // Keep existing: new(), generate(), from_hex(), fingerprint()
-    
+
     // Replace implementation:
     pub fn encrypt(&self, plaintext: &[u8]) -> Vec<u8> { /* AES-GCM */ }
     pub fn decrypt(&self, ciphertext: &[u8]) -> Result<Vec<u8>, String> { /* AES-GCM */ }
-    
+
     // Add for migration (temporary):
     pub fn decrypt_legacy_xor(&self, ciphertext: &[u8]) -> Result<Vec<u8>, String> { /* old XOR */ }
 }

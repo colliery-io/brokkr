@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -137,7 +137,7 @@ pub static DEPLOYMENT_OBJECTS_TOTAL: Lazy<IntGauge> = Lazy::new(|| {
 /// This ensures all metric definitions are registered with the registry
 /// before attempting to encode/export them. Should be called once at startup.
 pub fn init() {
-    // Force initialization of all lazy statics by accessing them
+    // Force initialization of all lazy static metrics by accessing them
     let _ = &*HTTP_REQUESTS_TOTAL;
     let _ = &*HTTP_REQUEST_DURATION_SECONDS;
     let _ = &*DATABASE_QUERIES_TOTAL;
@@ -198,11 +198,10 @@ fn normalize_endpoint(path: &str) -> String {
     let normalized: Vec<String> = parts
         .iter()
         .map(|part| {
-            // Check if it's a UUID (36 chars with hyphens)
-            if part.len() == 36 && part.chars().filter(|c| *c == '-').count() == 4 {
-                ":id".to_string()
-            // Check if it's purely numeric
-            } else if !part.is_empty() && part.chars().all(|c| c.is_ascii_digit()) {
+            // Check if it's a UUID (36 chars with hyphens) or purely numeric
+            if (part.len() == 36 && part.chars().filter(|c| *c == '-').count() == 4)
+                || (!part.is_empty() && part.chars().all(|c| c.is_ascii_digit()))
+            {
                 ":id".to_string()
             } else {
                 (*part).to_string()

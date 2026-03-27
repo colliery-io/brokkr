@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -14,11 +14,8 @@ fn test_upsert_deployment_health() {
 
     // Create an agent and deployment object
     let agent = fixture.create_test_agent("Health Agent".to_string(), "Health Cluster".to_string());
-    let stack = fixture.create_test_stack(
-        "Health Stack".to_string(),
-        None,
-        fixture.admin_generator.id,
-    );
+    let stack =
+        fixture.create_test_stack("Health Stack".to_string(), None, fixture.admin_generator.id);
     let deployment_object = fixture.create_test_deployment_object(
         stack.id,
         "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: test".to_string(),
@@ -51,7 +48,9 @@ fn test_upsert_deployment_health() {
         agent.id,
         deployment_object.id,
         "degraded".to_string(),
-        Some(r#"{"pods_ready": 2, "pods_total": 3, "conditions": ["ImagePullBackOff"]}"#.to_string()),
+        Some(
+            r#"{"pods_ready": 2, "pods_total": 3, "conditions": ["ImagePullBackOff"]}"#.to_string(),
+        ),
         Utc::now(),
     )
     .expect("Failed to create updated NewDeploymentHealth");
@@ -71,11 +70,8 @@ fn test_upsert_batch_deployment_health() {
     let fixture = TestFixture::new();
 
     let agent = fixture.create_test_agent("Batch Agent".to_string(), "Batch Cluster".to_string());
-    let stack = fixture.create_test_stack(
-        "Batch Stack".to_string(),
-        None,
-        fixture.admin_generator.id,
-    );
+    let stack =
+        fixture.create_test_stack("Batch Stack".to_string(), None, fixture.admin_generator.id);
     let deployment_object1 = fixture.create_test_deployment_object(
         stack.id,
         "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: test1".to_string(),
@@ -137,7 +133,8 @@ fn test_get_deployment_health_by_agent_and_deployment() {
     let fixture = TestFixture::new();
 
     let agent = fixture.create_test_agent("Get Agent".to_string(), "Get Cluster".to_string());
-    let stack = fixture.create_test_stack("Get Stack".to_string(), None, fixture.admin_generator.id);
+    let stack =
+        fixture.create_test_stack("Get Stack".to_string(), None, fixture.admin_generator.id);
     let deployment_object = fixture.create_test_deployment_object(
         stack.id,
         "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: test".to_string(),
@@ -184,7 +181,8 @@ fn test_list_deployment_health_by_agent() {
     let fixture = TestFixture::new();
 
     let agent = fixture.create_test_agent("List Agent".to_string(), "List Cluster".to_string());
-    let stack = fixture.create_test_stack("List Stack".to_string(), None, fixture.admin_generator.id);
+    let stack =
+        fixture.create_test_stack("List Stack".to_string(), None, fixture.admin_generator.id);
 
     let deployment_object1 = fixture.create_test_deployment_object(
         stack.id,
@@ -199,8 +197,22 @@ fn test_list_deployment_health_by_agent() {
 
     // Create health records
     let health_records = vec![
-        NewDeploymentHealth::new(agent.id, deployment_object1.id, "healthy".to_string(), None, Utc::now()).unwrap(),
-        NewDeploymentHealth::new(agent.id, deployment_object2.id, "failing".to_string(), None, Utc::now()).unwrap(),
+        NewDeploymentHealth::new(
+            agent.id,
+            deployment_object1.id,
+            "healthy".to_string(),
+            None,
+            Utc::now(),
+        )
+        .unwrap(),
+        NewDeploymentHealth::new(
+            agent.id,
+            deployment_object2.id,
+            "failing".to_string(),
+            None,
+            Utc::now(),
+        )
+        .unwrap(),
     ];
 
     fixture
@@ -223,11 +235,8 @@ fn test_list_deployment_health_by_stack() {
     let fixture = TestFixture::new();
 
     let agent = fixture.create_test_agent("Stack Agent".to_string(), "Stack Cluster".to_string());
-    let stack = fixture.create_test_stack(
-        "Health Stack".to_string(),
-        None,
-        fixture.admin_generator.id,
-    );
+    let stack =
+        fixture.create_test_stack("Health Stack".to_string(), None, fixture.admin_generator.id);
 
     let deployment_object = fixture.create_test_deployment_object(
         stack.id,
@@ -265,11 +274,8 @@ fn test_list_deployment_health_by_status() {
     let fixture = TestFixture::new();
 
     let agent = fixture.create_test_agent("Status Agent".to_string(), "Status Cluster".to_string());
-    let stack = fixture.create_test_stack(
-        "Status Stack".to_string(),
-        None,
-        fixture.admin_generator.id,
-    );
+    let stack =
+        fixture.create_test_stack("Status Stack".to_string(), None, fixture.admin_generator.id);
 
     let deployment_object1 = fixture.create_test_deployment_object(
         stack.id,
@@ -283,8 +289,22 @@ fn test_list_deployment_health_by_status() {
     );
 
     let health_records = vec![
-        NewDeploymentHealth::new(agent.id, deployment_object1.id, "degraded".to_string(), None, Utc::now()).unwrap(),
-        NewDeploymentHealth::new(agent.id, deployment_object2.id, "healthy".to_string(), None, Utc::now()).unwrap(),
+        NewDeploymentHealth::new(
+            agent.id,
+            deployment_object1.id,
+            "degraded".to_string(),
+            None,
+            Utc::now(),
+        )
+        .unwrap(),
+        NewDeploymentHealth::new(
+            agent.id,
+            deployment_object2.id,
+            "healthy".to_string(),
+            None,
+            Utc::now(),
+        )
+        .unwrap(),
     ];
 
     fixture
@@ -308,11 +328,8 @@ fn test_delete_deployment_health() {
     let fixture = TestFixture::new();
 
     let agent = fixture.create_test_agent("Delete Agent".to_string(), "Delete Cluster".to_string());
-    let stack = fixture.create_test_stack(
-        "Delete Stack".to_string(),
-        None,
-        fixture.admin_generator.id,
-    );
+    let stack =
+        fixture.create_test_stack("Delete Stack".to_string(), None, fixture.admin_generator.id);
     let deployment_object = fixture.create_test_deployment_object(
         stack.id,
         "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: test".to_string(),
@@ -356,7 +373,8 @@ fn test_delete_deployment_health() {
 fn test_delete_deployment_health_by_agent() {
     let fixture = TestFixture::new();
 
-    let agent = fixture.create_test_agent("Delete All Agent".to_string(), "Delete Cluster".to_string());
+    let agent =
+        fixture.create_test_agent("Delete All Agent".to_string(), "Delete Cluster".to_string());
     let stack = fixture.create_test_stack(
         "Delete All Stack".to_string(),
         None,
@@ -375,8 +393,22 @@ fn test_delete_deployment_health_by_agent() {
     );
 
     let health_records = vec![
-        NewDeploymentHealth::new(agent.id, deployment_object1.id, "healthy".to_string(), None, Utc::now()).unwrap(),
-        NewDeploymentHealth::new(agent.id, deployment_object2.id, "healthy".to_string(), None, Utc::now()).unwrap(),
+        NewDeploymentHealth::new(
+            agent.id,
+            deployment_object1.id,
+            "healthy".to_string(),
+            None,
+            Utc::now(),
+        )
+        .unwrap(),
+        NewDeploymentHealth::new(
+            agent.id,
+            deployment_object2.id,
+            "healthy".to_string(),
+            None,
+            Utc::now(),
+        )
+        .unwrap(),
     ];
 
     fixture

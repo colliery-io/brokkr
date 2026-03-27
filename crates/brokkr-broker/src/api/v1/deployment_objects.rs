@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -17,7 +17,7 @@ use axum::{
     Json, Router,
 };
 use brokkr_models::models::deployment_objects::DeploymentObject;
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 use uuid::Uuid;
 
 /// Creates and returns the router for deployment object endpoints.

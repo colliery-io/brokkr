@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -35,7 +35,7 @@
 //! The following environment variables can be used to configure Brokkr:
 //!
 //! - `BROKKR__DATABASE__URL`: Sets the database connection URL
-//!   Default: "postgres://brokkr:brokkr@localhost:5432/brokkr"
+//!   Default: "postgres://brokkr:brokkr@localhost:5433/brokkr"
 //!
 //! - `BROKKR__DATABASE__SCHEMA`: Sets the PostgreSQL schema for multi-tenant isolation
 //!   Default: None (uses public schema)
@@ -680,7 +680,10 @@ impl ReloadableConfig {
 
     /// Get CORS max age in seconds
     pub fn cors_max_age_seconds(&self) -> u64 {
-        self.dynamic.read().map(|d| d.cors_max_age_seconds).unwrap_or(3600)
+        self.dynamic
+            .read()
+            .map(|d| d.cors_max_age_seconds)
+            .unwrap_or(3600)
     }
 
     /// Get a snapshot of all dynamic config values
@@ -707,7 +710,7 @@ mod tests {
         // Assert that the default database URL is set to the expected value
         assert_eq!(
             settings.database.url,
-            "postgres://brokkr:brokkr@localhost:5432/brokkr"
+            "postgres://brokkr:brokkr@localhost:5433/brokkr"
         );
     }
 
@@ -775,10 +778,10 @@ mod tests {
             service_name: "base-service".to_string(),
             sampling_rate: 0.5,
             broker: TelemetryOverride {
-                enabled: None,                                      // Use base
-                otlp_endpoint: None,                                // Use base
-                service_name: Some("brokkr-broker".to_string()),    // Override
-                sampling_rate: Some(0.8),                           // Override
+                enabled: None,                                   // Use base
+                otlp_endpoint: None,                             // Use base
+                service_name: Some("brokkr-broker".to_string()), // Override
+                sampling_rate: Some(0.8),                        // Override
             },
             agent: TelemetryOverride::default(),
         };
@@ -786,10 +789,10 @@ mod tests {
         let resolved = telemetry.for_broker();
 
         // Mix of base and override values
-        assert!(resolved.enabled);                                       // From base
+        assert!(resolved.enabled); // From base
         assert_eq!(resolved.otlp_endpoint, "http://shared-collector:4317"); // From base
-        assert_eq!(resolved.service_name, "brokkr-broker");              // From override
-        assert!((resolved.sampling_rate - 0.8).abs() < f64::EPSILON);    // From override
+        assert_eq!(resolved.service_name, "brokkr-broker"); // From override
+        assert!((resolved.sampling_rate - 0.8).abs() < f64::EPSILON); // From override
     }
 
     #[test]
@@ -863,7 +866,10 @@ mod tests {
 
         // Broker values
         assert!(broker_resolved.enabled);
-        assert_eq!(broker_resolved.otlp_endpoint, "http://broker-collector:4317");
+        assert_eq!(
+            broker_resolved.otlp_endpoint,
+            "http://broker-collector:4317"
+        );
         assert_eq!(broker_resolved.service_name, "brokkr-broker");
         assert!((broker_resolved.sampling_rate - 0.5).abs() < f64::EPSILON);
 
@@ -877,12 +883,12 @@ mod tests {
     #[test]
     fn test_telemetry_override_enabled_false_overrides_base_true() {
         let telemetry = Telemetry {
-            enabled: true,  // Base is enabled
+            enabled: true, // Base is enabled
             otlp_endpoint: "http://collector:4317".to_string(),
             service_name: "brokkr".to_string(),
             sampling_rate: 0.1,
             broker: TelemetryOverride {
-                enabled: Some(false),  // But broker override disables it
+                enabled: Some(false), // But broker override disables it
                 otlp_endpoint: None,
                 service_name: None,
                 sampling_rate: None,
@@ -934,7 +940,7 @@ mod tests {
         // Verify static config is accessible
         assert_eq!(
             config.static_config().database.url,
-            "postgres://brokkr:brokkr@localhost:5432/brokkr"
+            "postgres://brokkr:brokkr@localhost:5433/brokkr"
         );
 
         // Verify dynamic config accessors work

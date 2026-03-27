@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -456,10 +456,7 @@ impl WebhookDeliveriesDAL<'_> {
     /// # Returns
     ///
     /// Returns counts of deliveries by status.
-    pub fn get_stats(
-        &self,
-        subscription_id: Uuid,
-    ) -> Result<DeliveryStats, diesel::result::Error> {
+    pub fn get_stats(&self, subscription_id: Uuid) -> Result<DeliveryStats, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
 
         let deliveries: Vec<WebhookDelivery> = webhook_deliveries::table

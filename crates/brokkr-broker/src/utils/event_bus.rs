@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -66,28 +66,26 @@ pub fn emit_event(dal: &DAL, event: &BrokkrEvent) -> usize {
         let target_labels = subscription.target_labels.clone();
 
         match NewWebhookDelivery::new(subscription.id, event, target_labels) {
-            Ok(new_delivery) => {
-                match dal.webhook_deliveries().create(&new_delivery) {
-                    Ok(delivery) => {
-                        let target = if delivery.target_labels.is_some() {
-                            "agent"
-                        } else {
-                            "broker"
-                        };
-                        debug!(
-                            "Created delivery {} for subscription {} (event: {}, target: {})",
-                            delivery.id, subscription.id, event.event_type, target
-                        );
-                        created_count += 1;
-                    }
-                    Err(e) => {
-                        error!(
-                            "Failed to create delivery for subscription {}: {:?}",
-                            subscription.id, e
-                        );
-                    }
+            Ok(new_delivery) => match dal.webhook_deliveries().create(&new_delivery) {
+                Ok(delivery) => {
+                    let target = if delivery.target_labels.is_some() {
+                        "agent"
+                    } else {
+                        "broker"
+                    };
+                    debug!(
+                        "Created delivery {} for subscription {} (event: {}, target: {})",
+                        delivery.id, subscription.id, event.event_type, target
+                    );
+                    created_count += 1;
                 }
-            }
+                Err(e) => {
+                    error!(
+                        "Failed to create delivery for subscription {}: {:?}",
+                        subscription.id, e
+                    );
+                }
+            },
             Err(e) => {
                 error!(
                     "Failed to create NewWebhookDelivery for subscription {}: {}",
@@ -103,8 +101,8 @@ pub fn emit_event(dal: &DAL, event: &BrokkrEvent) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
     use brokkr_models::models::webhooks::EVENT_AGENT_REGISTERED;
+    use serde_json::json;
 
     #[test]
     fn test_brokkr_event_creation() {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -34,12 +34,12 @@ use crate::dal::DAL;
 use axum::{
     extract::{Extension, Path, Query, State},
     http::StatusCode,
-    routing::{delete, get, post},
+    routing::{get, post},
     Json, Router,
 };
 use brokkr_models::models::work_orders::{NewWorkOrder, WorkOrder, WorkOrderLog};
-use tracing::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
+use tracing::{debug, error, info, warn};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
@@ -48,7 +48,10 @@ pub fn routes() -> Router<DAL> {
     info!("Setting up work order routes");
     Router::new()
         // Work order management
-        .route("/work-orders", get(list_work_orders).post(create_work_order))
+        .route(
+            "/work-orders",
+            get(list_work_orders).post(create_work_order),
+        )
         .route(
             "/work-orders/:id",
             get(get_work_order).delete(delete_work_order),
@@ -418,7 +421,10 @@ async fn get_work_order(
             };
             // For failed work orders, populate last_error from result_message
             let (last_error, last_error_at) = if !log_entry.success {
-                (log_entry.result_message.clone(), Some(log_entry.completed_at))
+                (
+                    log_entry.result_message.clone(),
+                    Some(log_entry.completed_at),
+                )
             } else {
                 (None, None)
             };
@@ -434,7 +440,7 @@ async fn get_work_order(
                 retry_count: log_entry.retries_attempted,
                 max_retries: 0, // Not available in log
                 next_retry_after: None,
-                backoff_seconds: 0,  // Not available in log
+                backoff_seconds: 0,       // Not available in log
                 claim_timeout_seconds: 0, // Not available in log
                 last_error,
                 last_error_at,
@@ -725,7 +731,9 @@ async fn complete_work_order(
             }
         }
     } else {
-        let error_message = request.message.unwrap_or_else(|| "Unknown error".to_string());
+        let error_message = request
+            .message
+            .unwrap_or_else(|| "Unknown error".to_string());
         match dal
             .work_orders()
             .complete_failure(id, error_message, request.retryable)
@@ -847,7 +855,10 @@ async fn get_work_order_log(
     Extension(auth_payload): Extension<AuthPayload>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<WorkOrderLog>, (StatusCode, Json<serde_json::Value>)> {
-    info!("Handling request to get work order log entry with ID: {}", id);
+    info!(
+        "Handling request to get work order log entry with ID: {}",
+        id
+    );
 
     if !auth_payload.admin {
         warn!("Unauthorized attempt to get work order log entry");
@@ -859,7 +870,10 @@ async fn get_work_order_log(
 
     match dal.work_orders().get_log(id) {
         Ok(Some(log_entry)) => {
-            info!("Successfully retrieved work order log entry with ID: {}", id);
+            info!(
+                "Successfully retrieved work order log entry with ID: {}",
+                id
+            );
             Ok(Json(log_entry))
         }
         Ok(None) => {

@@ -5,7 +5,7 @@ title: "Event Webhook System"
 short_code: "BROKKR-T-0046"
 created_at: 2025-12-20T02:19:55.756396+00:00
 updated_at: 2026-01-02T12:40:32.630099+00:00
-parent: 
+parent:
 blocked_by: []
 archived: false
 
@@ -31,7 +31,7 @@ Implement a flexible webhook delivery system that allows operators to subscribe 
 ## Backlog Item Details
 
 ### Type
-- [x] Feature - New functionality or enhancement  
+- [x] Feature - New functionality or enhancement
 
 ### Priority
 - [ ] P2 - Medium (nice to have)

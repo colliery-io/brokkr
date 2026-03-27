@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -29,16 +29,20 @@ use crate::dal::DAL;
 use axum::middleware::from_fn_with_state;
 use axum::Router;
 use brokkr_utils::config::{Cors, ReloadableConfig};
-use tracing::{debug, error, info, warn};
 use hyper::{header::HeaderName, Method};
 use std::time::Duration;
 use tower_http::cors::CorsLayer;
+use tracing::info;
 
 /// Constructs and returns the main router for API v1.
 ///
 /// This function combines all the route handlers from different modules
 /// and applies the authentication middleware.
-pub fn routes(dal: DAL, cors_config: &Cors, reloadable_config: Option<ReloadableConfig>) -> Router<DAL> {
+pub fn routes(
+    dal: DAL,
+    cors_config: &Cors,
+    reloadable_config: Option<ReloadableConfig>,
+) -> Router<DAL> {
     // Configure CORS from settings
     let cors = build_cors_layer(cors_config);
 

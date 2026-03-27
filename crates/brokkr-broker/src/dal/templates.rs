@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -417,9 +417,12 @@ impl TemplatesDAL<'_> {
                         .collect();
 
                     all_matching_templates = match all_matching_templates {
-                        Some(templates) => {
-                            Some(templates.intersection(&matching_templates).cloned().collect())
-                        }
+                        Some(templates) => Some(
+                            templates
+                                .intersection(&matching_templates)
+                                .cloned()
+                                .collect(),
+                        ),
                         None => Some(matching_templates),
                     };
 

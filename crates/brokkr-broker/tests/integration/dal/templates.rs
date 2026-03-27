@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -36,11 +36,8 @@ fn test_create_template() {
 fn test_create_template_with_generator() {
     let fixture = TestFixture::new();
 
-    let generator = fixture.create_test_generator(
-        "Test Generator".to_string(),
-        None,
-        "test_hash".to_string(),
-    );
+    let generator =
+        fixture.create_test_generator("Test Generator".to_string(), None, "test_hash".to_string());
 
     let template = fixture
         .dal
@@ -112,11 +109,8 @@ fn test_list_templates() {
 fn test_list_templates_by_generator() {
     let fixture = TestFixture::new();
 
-    let generator = fixture.create_test_generator(
-        "Test Generator".to_string(),
-        None,
-        "test_hash".to_string(),
-    );
+    let generator =
+        fixture.create_test_generator("Test Generator".to_string(), None, "test_hash".to_string());
 
     fixture.create_test_template(
         Some(generator.id),
@@ -440,7 +434,10 @@ fn test_recreate_template_after_soft_delete() {
         .templates()
         .get(original_template.id)
         .expect("Failed to check deleted template");
-    assert!(deleted.is_none(), "Template should not be visible after soft delete");
+    assert!(
+        deleted.is_none(),
+        "Template should not be visible after soft delete"
+    );
 
     // Create a new template with the SAME name (and same generator_id + version combo)
     // This should succeed because the partial unique index excludes soft-deleted records

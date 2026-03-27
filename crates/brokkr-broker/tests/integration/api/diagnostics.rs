@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -19,10 +19,8 @@ async fn test_create_diagnostic_request() {
     let app = fixture.create_test_router().with_state(fixture.dal.clone());
 
     // Create agent and deployment object
-    let (agent, agent_pak) = fixture.create_test_agent_with_pak(
-        "Diag Test Agent".to_string(),
-        "Test Cluster".to_string(),
-    );
+    let (agent, agent_pak) = fixture
+        .create_test_agent_with_pak("Diag Test Agent".to_string(), "Test Cluster".to_string());
     let stack = fixture.create_test_stack(
         "Diag Test Stack".to_string(),
         None,
@@ -75,15 +73,10 @@ async fn test_create_diagnostic_request_unauthorized() {
     let fixture = TestFixture::new();
     let app = fixture.create_test_router().with_state(fixture.dal.clone());
 
-    let (agent, agent_pak) = fixture.create_test_agent_with_pak(
-        "Unauth Agent".to_string(),
-        "Test Cluster".to_string(),
-    );
-    let stack = fixture.create_test_stack(
-        "Unauth Stack".to_string(),
-        None,
-        fixture.admin_generator.id,
-    );
+    let (agent, agent_pak) =
+        fixture.create_test_agent_with_pak("Unauth Agent".to_string(), "Test Cluster".to_string());
+    let stack =
+        fixture.create_test_stack("Unauth Stack".to_string(), None, fixture.admin_generator.id);
     let deployment_object = fixture.create_test_deployment_object(
         stack.id,
         "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: test".to_string(),
@@ -118,10 +111,8 @@ async fn test_create_diagnostic_request_unauthorized() {
 async fn test_get_pending_diagnostics() {
     let fixture = TestFixture::new();
 
-    let (agent, agent_pak) = fixture.create_test_agent_with_pak(
-        "Pending Diag Agent".to_string(),
-        "Test Cluster".to_string(),
-    );
+    let (agent, agent_pak) = fixture
+        .create_test_agent_with_pak("Pending Diag Agent".to_string(), "Test Cluster".to_string());
     let stack = fixture.create_test_stack(
         "Pending Diag Stack".to_string(),
         None,
@@ -135,8 +126,13 @@ async fn test_get_pending_diagnostics() {
 
     // Create a diagnostic request using admin
     use brokkr_models::models::diagnostic_requests::NewDiagnosticRequest;
-    let new_request = NewDiagnosticRequest::new(agent.id, deployment_object.id, None, Some(60)).unwrap();
-    fixture.dal.diagnostic_requests().create(&new_request).unwrap();
+    let new_request =
+        NewDiagnosticRequest::new(agent.id, deployment_object.id, None, Some(60)).unwrap();
+    fixture
+        .dal
+        .diagnostic_requests()
+        .create(&new_request)
+        .unwrap();
 
     let app = fixture.create_test_router().with_state(fixture.dal.clone());
 
@@ -166,14 +162,10 @@ async fn test_get_pending_diagnostics() {
 async fn test_get_pending_diagnostics_unauthorized() {
     let fixture = TestFixture::new();
 
-    let (agent1, _) = fixture.create_test_agent_with_pak(
-        "Agent 1".to_string(),
-        "Cluster 1".to_string(),
-    );
-    let (_, agent2_pak) = fixture.create_test_agent_with_pak(
-        "Agent 2".to_string(),
-        "Cluster 2".to_string(),
-    );
+    let (agent1, _) =
+        fixture.create_test_agent_with_pak("Agent 1".to_string(), "Cluster 1".to_string());
+    let (_, agent2_pak) =
+        fixture.create_test_agent_with_pak("Agent 2".to_string(), "Cluster 2".to_string());
 
     let app = fixture.create_test_router().with_state(fixture.dal.clone());
 
@@ -197,10 +189,8 @@ async fn test_get_pending_diagnostics_unauthorized() {
 async fn test_claim_diagnostic() {
     let fixture = TestFixture::new();
 
-    let (agent, agent_pak) = fixture.create_test_agent_with_pak(
-        "Claim Diag Agent".to_string(),
-        "Test Cluster".to_string(),
-    );
+    let (agent, agent_pak) = fixture
+        .create_test_agent_with_pak("Claim Diag Agent".to_string(), "Test Cluster".to_string());
     let stack = fixture.create_test_stack(
         "Claim Diag Stack".to_string(),
         None,
@@ -214,8 +204,13 @@ async fn test_claim_diagnostic() {
 
     // Create a diagnostic request
     use brokkr_models::models::diagnostic_requests::NewDiagnosticRequest;
-    let new_request = NewDiagnosticRequest::new(agent.id, deployment_object.id, None, Some(60)).unwrap();
-    let request = fixture.dal.diagnostic_requests().create(&new_request).unwrap();
+    let new_request =
+        NewDiagnosticRequest::new(agent.id, deployment_object.id, None, Some(60)).unwrap();
+    let request = fixture
+        .dal
+        .diagnostic_requests()
+        .create(&new_request)
+        .unwrap();
 
     let app = fixture.create_test_router().with_state(fixture.dal.clone());
 
@@ -262,8 +257,13 @@ async fn test_claim_already_claimed() {
 
     // Create and claim a diagnostic request
     use brokkr_models::models::diagnostic_requests::NewDiagnosticRequest;
-    let new_request = NewDiagnosticRequest::new(agent.id, deployment_object.id, None, Some(60)).unwrap();
-    let request = fixture.dal.diagnostic_requests().create(&new_request).unwrap();
+    let new_request =
+        NewDiagnosticRequest::new(agent.id, deployment_object.id, None, Some(60)).unwrap();
+    let request = fixture
+        .dal
+        .diagnostic_requests()
+        .create(&new_request)
+        .unwrap();
     fixture.dal.diagnostic_requests().claim(request.id).unwrap();
 
     let app = fixture.create_test_router().with_state(fixture.dal.clone());
@@ -305,8 +305,13 @@ async fn test_submit_diagnostic_result() {
 
     // Create and claim a diagnostic request
     use brokkr_models::models::diagnostic_requests::NewDiagnosticRequest;
-    let new_request = NewDiagnosticRequest::new(agent.id, deployment_object.id, None, Some(60)).unwrap();
-    let request = fixture.dal.diagnostic_requests().create(&new_request).unwrap();
+    let new_request =
+        NewDiagnosticRequest::new(agent.id, deployment_object.id, None, Some(60)).unwrap();
+    let request = fixture
+        .dal
+        .diagnostic_requests()
+        .create(&new_request)
+        .unwrap();
     fixture.dal.diagnostic_requests().claim(request.id).unwrap();
 
     let app = fixture.create_test_router().with_state(fixture.dal.clone());
@@ -354,10 +359,8 @@ async fn test_submit_diagnostic_result() {
 async fn test_submit_result_not_claimed() {
     let fixture = TestFixture::new();
 
-    let (agent, agent_pak) = fixture.create_test_agent_with_pak(
-        "Not Claimed Agent".to_string(),
-        "Test Cluster".to_string(),
-    );
+    let (agent, agent_pak) = fixture
+        .create_test_agent_with_pak("Not Claimed Agent".to_string(), "Test Cluster".to_string());
     let stack = fixture.create_test_stack(
         "Not Claimed Stack".to_string(),
         None,
@@ -371,8 +374,13 @@ async fn test_submit_result_not_claimed() {
 
     // Create request but don't claim it
     use brokkr_models::models::diagnostic_requests::NewDiagnosticRequest;
-    let new_request = NewDiagnosticRequest::new(agent.id, deployment_object.id, None, Some(60)).unwrap();
-    let request = fixture.dal.diagnostic_requests().create(&new_request).unwrap();
+    let new_request =
+        NewDiagnosticRequest::new(agent.id, deployment_object.id, None, Some(60)).unwrap();
+    let request = fixture
+        .dal
+        .diagnostic_requests()
+        .create(&new_request)
+        .unwrap();
 
     let app = fixture.create_test_router().with_state(fixture.dal.clone());
 
@@ -423,8 +431,13 @@ async fn test_get_diagnostic_with_result() {
     use brokkr_models::models::diagnostic_results::NewDiagnosticResult;
     use chrono::Utc;
 
-    let new_request = NewDiagnosticRequest::new(agent.id, deployment_object.id, None, Some(60)).unwrap();
-    let request = fixture.dal.diagnostic_requests().create(&new_request).unwrap();
+    let new_request =
+        NewDiagnosticRequest::new(agent.id, deployment_object.id, None, Some(60)).unwrap();
+    let request = fixture
+        .dal
+        .diagnostic_requests()
+        .create(&new_request)
+        .unwrap();
     fixture.dal.diagnostic_requests().claim(request.id).unwrap();
 
     let new_result = NewDiagnosticResult::new(
@@ -435,8 +448,16 @@ async fn test_get_diagnostic_with_result() {
         Utc::now(),
     )
     .unwrap();
-    fixture.dal.diagnostic_results().create(&new_result).unwrap();
-    fixture.dal.diagnostic_requests().complete(request.id).unwrap();
+    fixture
+        .dal
+        .diagnostic_results()
+        .create(&new_result)
+        .unwrap();
+    fixture
+        .dal
+        .diagnostic_requests()
+        .complete(request.id)
+        .unwrap();
 
     let app = fixture.create_test_router().with_state(fixture.dal.clone());
 

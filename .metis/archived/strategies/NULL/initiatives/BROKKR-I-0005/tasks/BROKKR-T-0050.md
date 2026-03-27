@@ -34,11 +34,11 @@ Create database indexes on the `pak_hash` columns to enable O(1) lookups instead
 Create migration `up.sql`:
 ```sql
 -- Index for agent PAK authentication
-CREATE INDEX idx_agents_pak_hash ON agents(pak_hash) 
+CREATE INDEX idx_agents_pak_hash ON agents(pak_hash)
     WHERE deleted_at IS NULL AND pak_hash IS NOT NULL;
 
 -- Index for generator PAK authentication
-CREATE INDEX idx_generators_pak_hash ON generators(pak_hash) 
+CREATE INDEX idx_generators_pak_hash ON generators(pak_hash)
     WHERE deleted_at IS NULL AND pak_hash IS NOT NULL;
 ```
 
@@ -65,8 +65,8 @@ DROP INDEX IF EXISTS idx_generators_pak_hash;
 
 After migration, verify index usage:
 ```sql
-EXPLAIN ANALYZE 
-SELECT * FROM agents 
+EXPLAIN ANALYZE
+SELECT * FROM agents
 WHERE pak_hash = 'some_hash_value' AND deleted_at IS NULL;
 
 -- Should show: Index Scan using idx_agents_pak_hash

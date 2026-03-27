@@ -229,7 +229,6 @@ def run_parallel_template_tests(tag, registry):
     Returns:
         list: List of (test_name, success) tuples
     """
-    import concurrent.futures
 
     print("\n" + "=" * 60)
     print("Phase 1: Helm Template Validation")
@@ -794,7 +793,7 @@ def create_agent_in_broker(broker_release_name, agent_name, cluster_name, namesp
     ], capture_output=True, text=True, cwd=cwd)
 
     if result.returncode != 0:
-        print(f"ERROR: Failed to create agent via API", flush=True)
+        print("ERROR: Failed to create agent via API", flush=True)
         print(f"  Return code: {result.returncode}", flush=True)
         print(f"  Stderr: {result.stderr}", flush=True)
         print(f"  Stdout: {result.stdout}", flush=True)
@@ -1140,7 +1139,7 @@ def get_agent_id_from_broker(broker_release_name, agent_name, admin_pak, namespa
     ], capture_output=True, text=True, cwd=cwd)
 
     if result.returncode != 0 or not result.stdout.strip():
-        print(f"Failed to get broker pod name", flush=True)
+        print("Failed to get broker pod name", flush=True)
         return None
 
     broker_pod = result.stdout.strip()
@@ -1202,7 +1201,7 @@ def activate_agent(broker_release_name, admin_pak, agent_id, namespace="default"
     ], capture_output=True, text=True, cwd=cwd)
 
     if result.returncode != 0 or not result.stdout.strip():
-        print(f"Failed to get broker pod name", flush=True)
+        print("Failed to get broker pod name", flush=True)
         return False
 
     broker_pod = result.stdout.strip()
@@ -1272,7 +1271,7 @@ def create_work_order(broker_release_name, admin_pak, agent_id, work_type, yaml_
     ], capture_output=True, text=True, cwd=cwd)
 
     if result.returncode != 0 or not result.stdout.strip():
-        print(f"Failed to get broker pod name", flush=True)
+        print("Failed to get broker pod name", flush=True)
         return None
 
     broker_pod = result.stdout.strip()
@@ -1340,7 +1339,7 @@ def wait_for_work_order_completion(broker_release_name, admin_pak, work_order_id
     ], capture_output=True, text=True, cwd=cwd)
 
     if result.returncode != 0 or not result.stdout.strip():
-        print(f"Failed to get broker pod name", flush=True)
+        print("Failed to get broker pod name", flush=True)
         return False, "Failed to get broker pod"
 
     broker_pod = result.stdout.strip()
@@ -1403,7 +1402,7 @@ def wait_for_work_order_completion(broker_release_name, admin_pak, work_order_id
 
         time.sleep(10)
 
-    print(f"Timeout waiting for work order to complete", flush=True)
+    print("Timeout waiting for work order to complete", flush=True)
     return False, "Timeout"
 
 
@@ -1488,18 +1487,18 @@ def test_shipwright_e2e(tag, registry, no_cleanup, broker_release_name=None):
         print("=" * 60)
 
         # Wait for Tekton pipelines controller
-        tekton_ready_cmd = f"""
+        tekton_ready_cmd = """
             kubectl wait --for=condition=available deployment/tekton-pipelines-controller \
                 -n tekton-pipelines --timeout=180s 2>/dev/null || echo "tekton-not-ready"
         """
-        tekton_result = run_in_k8s_container(tekton_ready_cmd, "Waiting for Tekton controller")
+        run_in_k8s_container(tekton_ready_cmd, "Waiting for Tekton controller")
 
         # Wait for Shipwright build controller
         shipwright_ready_cmd = f"""
             kubectl wait --for=condition=available deployment/shipwright-build-controller \
                 -n {shipwright_namespace} --timeout=180s 2>/dev/null || echo "shipwright-not-ready"
         """
-        shipwright_result = run_in_k8s_container(shipwright_ready_cmd, "Waiting for Shipwright controller")
+        run_in_k8s_container(shipwright_ready_cmd, "Waiting for Shipwright controller")
 
         # Wait for ClusterBuildStrategy to be created (install job might still be running)
         # Use 'kaniko' strategy as it works without registry credentials (pushes to ttl.sh)
@@ -1621,12 +1620,12 @@ spec:
 
         if success:
             print("\n[PASS] Shipwright E2E test passed!")
-            print(f"  - Agent successfully processed build work order")
+            print("  - Agent successfully processed build work order")
             print(f"  - Build result: {message[:100] if message else 'completed'}")
             return True
         else:
             print("\n[FAIL] Shipwright E2E test failed")
-            print(f"  - Work order did not complete successfully")
+            print("  - Work order did not complete successfully")
             print(f"  - Message: {message}")
 
             # Show agent logs for debugging
@@ -1641,7 +1640,7 @@ spec:
 
     finally:
         if not no_cleanup:
-            print(f"\nCleaning up Shipwright E2E test resources...")
+            print("\nCleaning up Shipwright E2E test resources...")
             helm_uninstall(agent_release_name)
 
             # Clean up Build/BuildRun resources
@@ -2035,7 +2034,7 @@ def test_helm_chart(tier, no_cleanup=False, tag="local"):
 
         project = get_project_name()
         if no_cleanup:
-            print(f"\nHelm releases left running (--no-cleanup)")
+            print("\nHelm releases left running (--no-cleanup)")
             print(f"Project: {project}")
             print("To inspect, run commands in a k8s container:")
             print(f"  docker run --rm -it --network {get_network_name()} \\")

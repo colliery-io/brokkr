@@ -24,7 +24,7 @@ The database configuration controls the connection to PostgreSQL.
 
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
-| `BROKKR__DATABASE__URL` | string | `postgres://brokkr:brokkr@localhost:5432/brokkr` | PostgreSQL connection URL |
+| `BROKKR__DATABASE__URL` | string | `postgres://brokkr:brokkr@localhost:5433/brokkr` | PostgreSQL connection URL |
 | `BROKKR__DATABASE__SCHEMA` | string | None | Schema name for multi-tenant isolation |
 
 The schema setting enables multi-tenant deployments where each tenant's data is isolated in a separate PostgreSQL schema. When configured, all queries automatically set `search_path` to the specified schema.

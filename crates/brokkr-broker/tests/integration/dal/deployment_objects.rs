@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -826,7 +826,8 @@ fn test_target_state_annotation_targeting_after_deployment_exists() {
     );
 
     // 1. Create stack with annotation FIRST
-    let stack = fixture.create_test_stack("Stack Annotation Target".to_string(), None, generator.id);
+    let stack =
+        fixture.create_test_stack("Stack Annotation Target".to_string(), None, generator.id);
     fixture.create_test_stack_annotation(stack.id, "region", "us-west");
 
     // 2. Create deployment object BEFORE agent targeting

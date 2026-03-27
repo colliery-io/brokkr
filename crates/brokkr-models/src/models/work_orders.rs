@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -303,7 +303,11 @@ pub struct NewWorkOrderLog {
 
 impl NewWorkOrderLog {
     /// Creates a new log entry from a completed work order.
-    pub fn from_work_order(work_order: &WorkOrder, success: bool, result_message: Option<String>) -> Self {
+    pub fn from_work_order(
+        work_order: &WorkOrder,
+        success: bool,
+        result_message: Option<String>,
+    ) -> Self {
         NewWorkOrderLog {
             id: work_order.id,
             work_type: work_order.work_type.clone(),
@@ -406,26 +410,15 @@ mod tests {
 
     #[test]
     fn test_new_work_order_empty_work_type() {
-        let result = NewWorkOrder::new(
-            "".to_string(),
-            "yaml content".to_string(),
-            None,
-            None,
-            None,
-        );
+        let result =
+            NewWorkOrder::new("".to_string(), "yaml content".to_string(), None, None, None);
         assert!(result.is_err());
         assert_eq!(result.unwrap_err(), "Work type cannot be empty");
     }
 
     #[test]
     fn test_new_work_order_empty_yaml() {
-        let result = NewWorkOrder::new(
-            "build".to_string(),
-            "".to_string(),
-            None,
-            None,
-            None,
-        );
+        let result = NewWorkOrder::new("build".to_string(), "".to_string(), None, None, None);
         assert!(result.is_err());
         assert_eq!(result.unwrap_err(), "YAML content cannot be empty");
     }

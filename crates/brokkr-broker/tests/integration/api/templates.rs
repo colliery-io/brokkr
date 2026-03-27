@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -35,7 +35,8 @@ async fn test_create_template() {
     let app = fixture.create_test_router().with_state(fixture.dal.clone());
     let admin_pak = fixture.admin_pak.clone();
 
-    let (_generator, _) = fixture.create_test_generator_with_pak("Test Generator".to_string(), None);
+    let (_generator, _) =
+        fixture.create_test_generator_with_pak("Test Generator".to_string(), None);
 
     let payload = json!({
         "name": "test-template",
@@ -392,7 +393,10 @@ async fn test_remove_template_label() {
         .oneshot(
             Request::builder()
                 .method("DELETE")
-                .uri(format!("/api/v1/templates/{}/labels/to-remove", template.id))
+                .uri(format!(
+                    "/api/v1/templates/{}/labels/to-remove",
+                    template.id
+                ))
                 .header("Authorization", &admin_pak)
                 .body(Body::empty())
                 .unwrap(),
@@ -618,7 +622,10 @@ async fn test_instantiate_template_invalid_parameters() {
     let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
 
-    assert!(json["error"].as_str().unwrap().contains("Invalid parameters"));
+    assert!(json["error"]
+        .as_str()
+        .unwrap()
+        .contains("Invalid parameters"));
 }
 
 #[tokio::test]
@@ -717,8 +724,7 @@ async fn test_generator_cannot_access_other_generator_template() {
     let fixture = TestFixture::new();
     let app = fixture.create_test_router().with_state(fixture.dal.clone());
 
-    let (generator1, _) =
-        fixture.create_test_generator_with_pak("Generator 1".to_string(), None);
+    let (generator1, _) = fixture.create_test_generator_with_pak("Generator 1".to_string(), None);
     let (_generator2, generator2_pak) =
         fixture.create_test_generator_with_pak("Generator 2".to_string(), None);
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -274,7 +274,10 @@ async fn list_audit_logs(
     };
 
     // Get the logs
-    let logs = match dal.audit_logs().list(Some(&filter), Some(limit), Some(offset)) {
+    let logs = match dal
+        .audit_logs()
+        .list(Some(&filter), Some(limit), Some(offset))
+    {
         Ok(logs) => logs,
         Err(e) => {
             error!("Failed to list audit logs: {:?}", e);

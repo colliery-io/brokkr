@@ -5,7 +5,7 @@ title: "Work order failure messages not stored during retry cycles"
 short_code: "BROKKR-T-0047"
 created_at: 2025-12-22T02:39:54.259681+00:00
 updated_at: 2025-12-29T01:17:22.533215+00:00
-parent: 
+parent:
 blocked_by: []
 archived: false
 
@@ -36,12 +36,12 @@ When a work order fails and enters `RETRY_PENDING` status, the error message fro
 
 ### Impact Assessment
 - **Affected Users**: All operators using work orders
-- **Reproduction Steps**: 
+- **Reproduction Steps**:
   1. Create a work order with invalid YAML or targeting a non-existent resource
   2. Agent claims and attempts to execute, fails
   3. Work order enters `RETRY_PENDING` status
   4. Check the work order via API or UI - no error information available
-- **Expected vs Actual**: 
+- **Expected vs Actual**:
   - **Expected**: Error message should be visible showing why the work order failed
   - **Actual**: No error information stored; only `retry_count` increments
 

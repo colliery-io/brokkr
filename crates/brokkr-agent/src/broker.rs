@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -211,8 +211,12 @@ pub async fn fetch_and_process_deployment_objects(
         .await
         .map_err(|e| {
             error!("Failed to send request to broker: {}", e);
-            metrics::poll_requests_total().with_label_values(&["error"]).inc();
-            metrics::poll_duration_seconds().with_label_values(&[]).observe(start.elapsed().as_secs_f64());
+            metrics::poll_requests_total()
+                .with_label_values(&["error"])
+                .inc();
+            metrics::poll_duration_seconds()
+                .with_label_values(&[])
+                .observe(start.elapsed().as_secs_f64());
             Box::new(e) as Box<dyn std::error::Error>
         })?;
 
@@ -230,13 +234,17 @@ pub async fn fetch_and_process_deployment_objects(
                 agent.name
             );
 
-            metrics::poll_requests_total().with_label_values(&["success"]).inc();
-            metrics::poll_duration_seconds().with_label_values(&[]).observe(duration);
+            metrics::poll_requests_total()
+                .with_label_values(&["success"])
+                .inc();
+            metrics::poll_duration_seconds()
+                .with_label_values(&[])
+                .observe(duration);
             metrics::last_successful_poll_timestamp().set(
                 std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap_or_default()
-                    .as_secs_f64()
+                    .as_secs_f64(),
             );
 
             Ok(deployment_objects)
@@ -247,8 +255,12 @@ pub async fn fetch_and_process_deployment_objects(
                 "Broker request failed with status {}: {}",
                 status, error_body
             );
-            metrics::poll_requests_total().with_label_values(&["error"]).inc();
-            metrics::poll_duration_seconds().with_label_values(&[]).observe(duration);
+            metrics::poll_requests_total()
+                .with_label_values(&["error"])
+                .inc();
+            metrics::poll_duration_seconds()
+                .with_label_values(&[])
+                .observe(duration);
             Err(format!(
                 "Broker request failed. Status: {}, Body: {}",
                 status, error_body
@@ -418,7 +430,7 @@ pub async fn send_heartbeat(
         config.agent.broker_url, agent.id
     );
 
-    let start = Instant::now();
+    let _start = Instant::now();
     let response = client
         .post(&url)
         .header("Authorization", format!("Bearer {}", config.agent.pak))
@@ -438,7 +450,7 @@ pub async fn send_heartbeat(
                 std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap_or_default()
-                    .as_secs_f64()
+                    .as_secs_f64(),
             );
             Ok(())
         }
@@ -499,7 +511,10 @@ pub async fn send_health_status(
         .send()
         .await
         .map_err(|e| {
-            error!("Failed to send health status for agent {}: {}", agent.name, e);
+            error!(
+                "Failed to send health status for agent {}: {}",
+                agent.name, e
+            );
             Box::new(e) as Box<dyn std::error::Error>
         })?;
 
@@ -635,8 +650,15 @@ pub async fn claim_diagnostic_request(
             Ok(request)
         }
         StatusCode::CONFLICT => {
-            warn!("Diagnostic request {} already claimed or completed", request_id);
-            Err(format!("Diagnostic request {} already claimed or completed", request_id).into())
+            warn!(
+                "Diagnostic request {} already claimed or completed",
+                request_id
+            );
+            Err(format!(
+                "Diagnostic request {} already claimed or completed",
+                request_id
+            )
+            .into())
         }
         status => {
             let error_body = response.text().await.unwrap_or_default();

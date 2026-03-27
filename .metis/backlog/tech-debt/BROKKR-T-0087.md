@@ -5,7 +5,7 @@ title: "Complete Prometheus metrics instrumentation"
 short_code: "BROKKR-T-0087"
 created_at: 2025-12-30T14:00:56.825238+00:00
 updated_at: 2025-12-30T14:15:57.988511+00:00
-parent: 
+parent:
 blocked_by: []
 archived: false
 
@@ -37,20 +37,20 @@ Related: ADR BROKKR-A-0003 (OpenTelemetry for Observability)
 - [x] P2 - Medium (nice to have)
 
 ### Technical Debt Impact
-- **Current Problems**: 
+- **Current Problems**:
   - `/metrics` endpoint exists but returns empty/zero metrics
   - No visibility into HTTP request rates, latencies, error rates
   - No visibility into database query performance
   - No visibility into agent polling or K8s operations
   - Operators deploying Brokkr expect working Prometheus metrics
-  
-- **Benefits of Fixing**: 
+
+- **Benefits of Fixing**:
   - Standard observability for Brokkr deployments
   - Grafana dashboards can show real data
   - Alerting on error rates, latency spikes
   - Capacity planning based on actual usage
-  
-- **Risk Assessment**: 
+
+- **Risk Assessment**:
   - Low risk of not fixing immediately (system works without it)
   - Reputational risk if users expect metrics and get zeros
 
@@ -65,7 +65,7 @@ Related: ADR BROKKR-A-0003 (OpenTelemetry for Observability)
 - [ ] Broker: HTTP request counter incremented on each request (endpoint, method, status)
 - [ ] Broker: HTTP request duration histogram records latency
 - [ ] Broker: Database query counter incremented per query type
-- [ ] Broker: Database query duration histogram records latency  
+- [ ] Broker: Database query duration histogram records latency
 - [ ] Broker: Active agents gauge reflects actual count
 - [ ] Broker: Agent heartbeat age gauge updated per agent
 - [ ] Agent: Poll request counter incremented (success/error)

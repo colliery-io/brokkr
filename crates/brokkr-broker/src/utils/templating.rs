@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -98,7 +98,10 @@ pub fn validate_tera_syntax(template_content: &str) -> Result<(), TemplateError>
 /// let result = render_template(template, &params).unwrap();
 /// assert!(result.contains("name: my-app"));
 /// ```
-pub fn render_template(template_content: &str, parameters: &Value) -> Result<String, TemplateError> {
+pub fn render_template(
+    template_content: &str,
+    parameters: &Value,
+) -> Result<String, TemplateError> {
     let mut tera = Tera::default();
 
     tera.add_raw_template("template", template_content)
@@ -116,10 +119,11 @@ pub fn render_template(template_content: &str, parameters: &Value) -> Result<Str
         }
     }
 
-    tera.render("template", &context).map_err(|e| TemplateError {
-        message: "Template rendering failed".to_string(),
-        details: Some(e.to_string()),
-    })
+    tera.render("template", &context)
+        .map_err(|e| TemplateError {
+            message: "Template rendering failed".to_string(),
+            details: Some(e.to_string()),
+        })
 }
 
 /// Validate that a string is a valid JSON Schema.
@@ -456,7 +460,8 @@ mod tests {
 
     #[test]
     fn test_validate_parameters_minimum() {
-        let schema = r#"{"type": "object", "properties": {"replicas": {"type": "integer", "minimum": 1}}}"#;
+        let schema =
+            r#"{"type": "object", "properties": {"replicas": {"type": "integer", "minimum": 1}}}"#;
 
         // Valid minimum
         let params = json!({"replicas": 1});

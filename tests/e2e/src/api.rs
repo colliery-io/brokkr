@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -36,7 +36,12 @@ impl Client {
     pub async fn wait_for_ready(&self, timeout_secs: u64) -> Result<()> {
         let start = std::time::Instant::now();
         loop {
-            match self.http.get(&format!("{}/healthz", self.base_url)).send().await {
+            match self
+                .http
+                .get(&format!("{}/healthz", self.base_url))
+                .send()
+                .await
+            {
                 Ok(resp) if resp.status().is_success() => return Ok(()),
                 _ => {
                     if start.elapsed() > Duration::from_secs(timeout_secs) {
@@ -55,7 +60,9 @@ impl Client {
         body: Option<Value>,
     ) -> Result<T> {
         let url = format!("{}{}", self.base_url, path);
-        let mut req = self.http.request(method, &url)
+        let mut req = self
+            .http
+            .request(method, &url)
             .header("Authorization", format!("Bearer {}", self.admin_pak))
             .header("Content-Type", "application/json");
 
@@ -93,7 +100,9 @@ impl Client {
 
     async fn delete(&self, path: &str) -> Result<()> {
         let url = format!("{}{}", self.base_url, path);
-        let resp = self.http.delete(&url)
+        let resp = self
+            .http
+            .delete(&url)
             .header("Authorization", format!("Bearer {}", self.admin_pak))
             .send()
             .await?;
@@ -114,10 +123,14 @@ impl Client {
     }
 
     pub async fn create_agent(&self, name: &str, cluster: &str) -> Result<Value> {
-        self.post("/api/v1/agents", json!({
-            "name": name,
-            "cluster_name": cluster
-        })).await
+        self.post(
+            "/api/v1/agents",
+            json!({
+                "name": name,
+                "cluster_name": cluster
+            }),
+        )
+        .await
     }
 
     pub async fn get_agent(&self, id: Uuid) -> Result<Value> {
@@ -129,10 +142,14 @@ impl Client {
     }
 
     pub async fn add_agent_label(&self, id: Uuid, label: &str) -> Result<Value> {
-        self.post(&format!("/api/v1/agents/{}/labels", id), json!({
-            "agent_id": id,
-            "label": label
-        })).await
+        self.post(
+            &format!("/api/v1/agents/{}/labels", id),
+            json!({
+                "agent_id": id,
+                "label": label
+            }),
+        )
+        .await
     }
 
     pub async fn get_agent_labels(&self, id: Uuid) -> Result<Vec<Value>> {
@@ -140,22 +157,31 @@ impl Client {
     }
 
     pub async fn add_agent_annotation(&self, id: Uuid, key: &str, value: &str) -> Result<Value> {
-        self.post(&format!("/api/v1/agents/{}/annotations", id), json!({
-            "agent_id": id,
-            "key": key,
-            "value": value
-        })).await
+        self.post(
+            &format!("/api/v1/agents/{}/annotations", id),
+            json!({
+                "agent_id": id,
+                "key": key,
+                "value": value
+            }),
+        )
+        .await
     }
 
     pub async fn get_agent_annotations(&self, id: Uuid) -> Result<Vec<Value>> {
-        self.get(&format!("/api/v1/agents/{}/annotations", id)).await
+        self.get(&format!("/api/v1/agents/{}/annotations", id))
+            .await
     }
 
     pub async fn add_agent_target(&self, agent_id: Uuid, stack_id: Uuid) -> Result<Value> {
-        self.post(&format!("/api/v1/agents/{}/targets", agent_id), json!({
-            "agent_id": agent_id,
-            "stack_id": stack_id
-        })).await
+        self.post(
+            &format!("/api/v1/agents/{}/targets", agent_id),
+            json!({
+                "agent_id": agent_id,
+                "stack_id": stack_id
+            }),
+        )
+        .await
     }
 
     pub async fn get_agent_targets(&self, id: Uuid) -> Result<Vec<Value>> {
@@ -179,10 +205,14 @@ impl Client {
     // =========================================================================
 
     pub async fn create_generator(&self, name: &str, description: Option<&str>) -> Result<Value> {
-        self.post("/api/v1/generators", json!({
-            "name": name,
-            "description": description
-        })).await
+        self.post(
+            "/api/v1/generators",
+            json!({
+                "name": name,
+                "description": description
+            }),
+        )
+        .await
     }
 
     pub async fn list_generators(&self) -> Result<Vec<Value>> {
@@ -193,12 +223,21 @@ impl Client {
     // Stacks
     // =========================================================================
 
-    pub async fn create_stack(&self, name: &str, description: Option<&str>, generator_id: Uuid) -> Result<Value> {
-        self.post("/api/v1/stacks", json!({
-            "name": name,
-            "description": description,
-            "generator_id": generator_id
-        })).await
+    pub async fn create_stack(
+        &self,
+        name: &str,
+        description: Option<&str>,
+        generator_id: Uuid,
+    ) -> Result<Value> {
+        self.post(
+            "/api/v1/stacks",
+            json!({
+                "name": name,
+                "description": description,
+                "generator_id": generator_id
+            }),
+        )
+        .await
     }
 
     pub async fn list_stacks(&self) -> Result<Vec<Value>> {
@@ -211,7 +250,8 @@ impl Client {
 
     pub async fn add_stack_label(&self, id: Uuid, label: &str) -> Result<Value> {
         // API expects just a plain string, not an object
-        self.post(&format!("/api/v1/stacks/{}/labels", id), json!(label)).await
+        self.post(&format!("/api/v1/stacks/{}/labels", id), json!(label))
+            .await
     }
 
     pub async fn get_stack_labels(&self, id: Uuid) -> Result<Vec<Value>> {
@@ -219,37 +259,53 @@ impl Client {
     }
 
     pub async fn add_stack_annotation(&self, id: Uuid, key: &str, value: &str) -> Result<Value> {
-        self.post(&format!("/api/v1/stacks/{}/annotations", id), json!({
-            "stack_id": id,
-            "key": key,
-            "value": value
-        })).await
+        self.post(
+            &format!("/api/v1/stacks/{}/annotations", id),
+            json!({
+                "stack_id": id,
+                "key": key,
+                "value": value
+            }),
+        )
+        .await
     }
 
     // =========================================================================
     // Deployment Objects
     // =========================================================================
 
-    pub async fn create_deployment(&self, stack_id: Uuid, yaml: &str, is_deletion: bool) -> Result<Value> {
+    pub async fn create_deployment(
+        &self,
+        stack_id: Uuid,
+        yaml: &str,
+        is_deletion: bool,
+    ) -> Result<Value> {
         let checksum = sha256_hex(yaml);
-        self.post(&format!("/api/v1/stacks/{}/deployment-objects", stack_id), json!({
-            "yaml_content": yaml,
-            "yaml_checksum": checksum,
-            "is_deletion_marker": is_deletion,
-            "sequence_id": null
-        })).await
+        self.post(
+            &format!("/api/v1/stacks/{}/deployment-objects", stack_id),
+            json!({
+                "yaml_content": yaml,
+                "yaml_checksum": checksum,
+                "is_deletion_marker": is_deletion,
+                "sequence_id": null
+            }),
+        )
+        .await
     }
 
     pub async fn list_deployments(&self, stack_id: Uuid) -> Result<Vec<Value>> {
-        self.get(&format!("/api/v1/stacks/{}/deployment-objects", stack_id)).await
+        self.get(&format!("/api/v1/stacks/{}/deployment-objects", stack_id))
+            .await
     }
 
     pub async fn get_deployment(&self, id: Uuid) -> Result<Value> {
-        self.get(&format!("/api/v1/deployment-objects/{}", id)).await
+        self.get(&format!("/api/v1/deployment-objects/{}", id))
+            .await
     }
 
     pub async fn get_deployment_health(&self, id: Uuid) -> Result<Value> {
-        self.get(&format!("/api/v1/deployment-objects/{}/health", id)).await
+        self.get(&format!("/api/v1/deployment-objects/{}/health", id))
+            .await
     }
 
     pub async fn get_stack_health(&self, id: Uuid) -> Result<Value> {
@@ -267,12 +323,16 @@ impl Client {
         content: &str,
         schema: &str,
     ) -> Result<Value> {
-        self.post("/api/v1/templates", json!({
-            "name": name,
-            "description": description,
-            "template_content": content,
-            "parameters_schema": schema
-        })).await
+        self.post(
+            "/api/v1/templates",
+            json!({
+                "name": name,
+                "description": description,
+                "template_content": content,
+                "parameters_schema": schema
+            }),
+        )
+        .await
     }
 
     pub async fn list_templates(&self) -> Result<Vec<Value>> {
@@ -286,12 +346,16 @@ impl Client {
         parameters: Value,
     ) -> Result<Value> {
         self.post(
-            &format!("/api/v1/stacks/{}/deployment-objects/from-template", stack_id),
+            &format!(
+                "/api/v1/stacks/{}/deployment-objects/from-template",
+                stack_id
+            ),
             json!({
                 "template_id": template_id,
                 "parameters": parameters
             }),
-        ).await
+        )
+        .await
     }
 
     pub async fn delete_template(&self, id: Uuid) -> Result<()> {
@@ -347,11 +411,7 @@ impl Client {
     // Diagnostics
     // =========================================================================
 
-    pub async fn create_diagnostic(
-        &self,
-        deployment_id: Uuid,
-        agent_id: Uuid,
-    ) -> Result<Value> {
+    pub async fn create_diagnostic(&self, deployment_id: Uuid, agent_id: Uuid) -> Result<Value> {
         self.post(
             &format!("/api/v1/deployment-objects/{}/diagnostics", deployment_id),
             json!({
@@ -359,7 +419,8 @@ impl Client {
                 "requested_by": "e2e-test",
                 "retention_minutes": 60
             }),
-        ).await
+        )
+        .await
     }
 
     pub async fn get_diagnostic(&self, id: Uuid) -> Result<Value> {
@@ -377,7 +438,8 @@ impl Client {
         event_types: Vec<&str>,
         auth_header: Option<&str>,
     ) -> Result<Value> {
-        self.create_webhook_with_options(name, url, event_types, auth_header, None, None).await
+        self.create_webhook_with_options(name, url, event_types, auth_header, None, None)
+            .await
     }
 
     pub async fn create_webhook_with_options(
@@ -423,11 +485,13 @@ impl Client {
     }
 
     pub async fn list_webhook_deliveries(&self, webhook_id: Uuid) -> Result<Vec<Value>> {
-        self.get(&format!("/api/v1/webhooks/{}/deliveries", webhook_id)).await
+        self.get(&format!("/api/v1/webhooks/{}/deliveries", webhook_id))
+            .await
     }
 
     pub async fn test_webhook(&self, id: Uuid) -> Result<Value> {
-        self.post(&format!("/api/v1/webhooks/{}/test", id), json!({})).await
+        self.post(&format!("/api/v1/webhooks/{}/test", id), json!({}))
+            .await
     }
 
     // =========================================================================
@@ -531,7 +595,8 @@ impl WebhookCatcher {
                 return Err(format!(
                     "Timeout waiting for {} messages, only got {}",
                     count, msg_count
-                ).into());
+                )
+                .into());
             }
 
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;

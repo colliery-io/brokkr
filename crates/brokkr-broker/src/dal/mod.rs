@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -79,15 +79,12 @@ impl From<diesel::result::Error> for DalError {
 impl IntoResponse for DalError {
     fn into_response(self) -> Response {
         let (status, message) = match self {
-            DalError::ConnectionPool(_) => {
-                (StatusCode::SERVICE_UNAVAILABLE, "Service temporarily unavailable")
-            }
-            DalError::Query(_) => {
-                (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error")
-            }
-            DalError::NotFound => {
-                (StatusCode::NOT_FOUND, "Resource not found")
-            }
+            DalError::ConnectionPool(_) => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Service temporarily unavailable",
+            ),
+            DalError::Query(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error"),
+            DalError::NotFound => (StatusCode::NOT_FOUND, "Resource not found"),
         };
         (status, Json(serde_json::json!({"error": message}))).into_response()
     }
@@ -183,7 +180,10 @@ impl DAL {
     ///
     /// A new DAL instance.
     pub fn new(pool: ConnectionPool) -> Self {
-        DAL { pool, auth_cache: None }
+        DAL {
+            pool,
+            auth_cache: None,
+        }
     }
 
     /// Creates a new DAL instance with an auth cache.
@@ -225,7 +225,7 @@ impl DAL {
     /// # Returns
     ///
     /// An instance of AgentsDAL.
-    pub fn agents(&self) -> AgentsDAL {
+    pub fn agents(&self) -> AgentsDAL<'_> {
         AgentsDAL { dal: self }
     }
 
@@ -234,7 +234,7 @@ impl DAL {
     /// # Returns
     ///
     /// An instance of AgentAnontationsDAL.
-    pub fn agent_annotations(&self) -> AgentAnnotationsDAL {
+    pub fn agent_annotations(&self) -> AgentAnnotationsDAL<'_> {
         AgentAnnotationsDAL { dal: self }
     }
 
@@ -243,7 +243,7 @@ impl DAL {
     /// # Returns
     ///
     /// An instance of AgentEventsDAL.
-    pub fn agent_events(&self) -> AgentEventsDAL {
+    pub fn agent_events(&self) -> AgentEventsDAL<'_> {
         AgentEventsDAL { dal: self }
     }
 
@@ -252,7 +252,7 @@ impl DAL {
     /// # Returns
     ///
     /// An instance of AgentLabelsDAL.
-    pub fn agent_labels(&self) -> AgentLabelsDAL {
+    pub fn agent_labels(&self) -> AgentLabelsDAL<'_> {
         AgentLabelsDAL { dal: self }
     }
 
@@ -261,7 +261,7 @@ impl DAL {
     /// # Returns
     ///
     /// An instance of AgentTargetssDAL.
-    pub fn agent_targets(&self) -> AgentTargetsDAL {
+    pub fn agent_targets(&self) -> AgentTargetsDAL<'_> {
         AgentTargetsDAL { dal: self }
     }
 
@@ -270,7 +270,7 @@ impl DAL {
     /// # Returns
     ///
     /// An instance of StackLabelsDAL.
-    pub fn stack_labels(&self) -> StackLabelsDAL {
+    pub fn stack_labels(&self) -> StackLabelsDAL<'_> {
         StackLabelsDAL { dal: self }
     }
 
@@ -279,7 +279,7 @@ impl DAL {
     /// # Returns
     ///
     /// An instance of StackAnontationsDAL.
-    pub fn stack_annotations(&self) -> StackAnnotationsDAL {
+    pub fn stack_annotations(&self) -> StackAnnotationsDAL<'_> {
         StackAnnotationsDAL { dal: self }
     }
 
@@ -288,7 +288,7 @@ impl DAL {
     /// # Returns
     ///
     /// An instance of StacksDAL.
-    pub fn stacks(&self) -> StacksDAL {
+    pub fn stacks(&self) -> StacksDAL<'_> {
         StacksDAL { dal: self }
     }
 
@@ -297,7 +297,7 @@ impl DAL {
     /// # Returns
     ///
     /// An instance of DeploymentHealthDAL.
-    pub fn deployment_health(&self) -> DeploymentHealthDAL {
+    pub fn deployment_health(&self) -> DeploymentHealthDAL<'_> {
         DeploymentHealthDAL { dal: self }
     }
 
@@ -306,7 +306,7 @@ impl DAL {
     /// # Returns
     ///
     /// An instance of DeploymentObjectsDAL.
-    pub fn deployment_objects(&self) -> DeploymentObjectsDAL {
+    pub fn deployment_objects(&self) -> DeploymentObjectsDAL<'_> {
         DeploymentObjectsDAL { dal: self }
     }
 
@@ -315,7 +315,7 @@ impl DAL {
     /// # Returns
     ///
     /// An instance of GeneratorsDal.
-    pub fn generators(&self) -> GeneratorsDAL {
+    pub fn generators(&self) -> GeneratorsDAL<'_> {
         GeneratorsDAL { dal: self }
     }
 
@@ -324,7 +324,7 @@ impl DAL {
     /// # Returns
     ///
     /// An instance of TemplatesDAL.
-    pub fn templates(&self) -> TemplatesDAL {
+    pub fn templates(&self) -> TemplatesDAL<'_> {
         TemplatesDAL { dal: self }
     }
 
@@ -333,7 +333,7 @@ impl DAL {
     /// # Returns
     ///
     /// An instance of TemplateLabelsDAL.
-    pub fn template_labels(&self) -> TemplateLabelsDAL {
+    pub fn template_labels(&self) -> TemplateLabelsDAL<'_> {
         TemplateLabelsDAL { dal: self }
     }
 
@@ -342,7 +342,7 @@ impl DAL {
     /// # Returns
     ///
     /// An instance of TemplateAnnotationsDAL.
-    pub fn template_annotations(&self) -> TemplateAnnotationsDAL {
+    pub fn template_annotations(&self) -> TemplateAnnotationsDAL<'_> {
         TemplateAnnotationsDAL { dal: self }
     }
 
@@ -351,7 +351,7 @@ impl DAL {
     /// # Returns
     ///
     /// An instance of TemplateTargetsDAL.
-    pub fn template_targets(&self) -> TemplateTargetsDAL {
+    pub fn template_targets(&self) -> TemplateTargetsDAL<'_> {
         TemplateTargetsDAL { dal: self }
     }
 
@@ -360,7 +360,7 @@ impl DAL {
     /// # Returns
     ///
     /// An instance of RenderedDeploymentObjectsDAL.
-    pub fn rendered_deployment_objects(&self) -> RenderedDeploymentObjectsDAL {
+    pub fn rendered_deployment_objects(&self) -> RenderedDeploymentObjectsDAL<'_> {
         RenderedDeploymentObjectsDAL { dal: self }
     }
 
@@ -369,7 +369,7 @@ impl DAL {
     /// # Returns
     ///
     /// An instance of WorkOrdersDAL.
-    pub fn work_orders(&self) -> WorkOrdersDAL {
+    pub fn work_orders(&self) -> WorkOrdersDAL<'_> {
         WorkOrdersDAL { dal: self }
     }
 
@@ -378,7 +378,7 @@ impl DAL {
     /// # Returns
     ///
     /// An instance of DiagnosticRequestsDAL.
-    pub fn diagnostic_requests(&self) -> DiagnosticRequestsDAL {
+    pub fn diagnostic_requests(&self) -> DiagnosticRequestsDAL<'_> {
         DiagnosticRequestsDAL { dal: self }
     }
 
@@ -387,7 +387,7 @@ impl DAL {
     /// # Returns
     ///
     /// An instance of DiagnosticResultsDAL.
-    pub fn diagnostic_results(&self) -> DiagnosticResultsDAL {
+    pub fn diagnostic_results(&self) -> DiagnosticResultsDAL<'_> {
         DiagnosticResultsDAL { dal: self }
     }
 
@@ -396,7 +396,7 @@ impl DAL {
     /// # Returns
     ///
     /// An instance of WebhookSubscriptionsDAL.
-    pub fn webhook_subscriptions(&self) -> WebhookSubscriptionsDAL {
+    pub fn webhook_subscriptions(&self) -> WebhookSubscriptionsDAL<'_> {
         WebhookSubscriptionsDAL { dal: self }
     }
 
@@ -405,7 +405,7 @@ impl DAL {
     /// # Returns
     ///
     /// An instance of WebhookDeliveriesDAL.
-    pub fn webhook_deliveries(&self) -> WebhookDeliveriesDAL {
+    pub fn webhook_deliveries(&self) -> WebhookDeliveriesDAL<'_> {
         WebhookDeliveriesDAL { dal: self }
     }
 
@@ -414,7 +414,7 @@ impl DAL {
     /// # Returns
     ///
     /// An instance of AuditLogsDAL.
-    pub fn audit_logs(&self) -> AuditLogsDAL {
+    pub fn audit_logs(&self) -> AuditLogsDAL<'_> {
         AuditLogsDAL { dal: self }
     }
 }

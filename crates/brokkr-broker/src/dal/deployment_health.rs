@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -164,7 +164,10 @@ impl DeploymentHealthDAL<'_> {
     /// # Returns
     ///
     /// Returns a list of health records.
-    pub fn list_by_agent(&self, agent_id: Uuid) -> Result<Vec<DeploymentHealth>, diesel::result::Error> {
+    pub fn list_by_agent(
+        &self,
+        agent_id: Uuid,
+    ) -> Result<Vec<DeploymentHealth>, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
 
         deployment_health::table
@@ -182,7 +185,10 @@ impl DeploymentHealthDAL<'_> {
     /// # Returns
     ///
     /// Returns a list of health records for all deployment objects in the stack.
-    pub fn list_by_stack(&self, stack_id: Uuid) -> Result<Vec<DeploymentHealth>, diesel::result::Error> {
+    pub fn list_by_stack(
+        &self,
+        stack_id: Uuid,
+    ) -> Result<Vec<DeploymentHealth>, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
 
         deployment_health::table
@@ -203,7 +209,10 @@ impl DeploymentHealthDAL<'_> {
     /// # Returns
     ///
     /// Returns a list of health records matching the status.
-    pub fn list_by_status(&self, status: &str) -> Result<Vec<DeploymentHealth>, diesel::result::Error> {
+    pub fn list_by_status(
+        &self,
+        status: &str,
+    ) -> Result<Vec<DeploymentHealth>, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
 
         deployment_health::table

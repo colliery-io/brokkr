@@ -59,7 +59,7 @@ pub struct MatchResult {
 }
 
 /// Check if template can be instantiated into stack
-/// 
+///
 /// Rules:
 /// - Template with NO labels = matches ANY stack (go anywhere)
 /// - Template WITH labels = ALL labels must exist on stack
@@ -74,21 +74,21 @@ pub fn template_matches_stack(
     if template_labels.is_empty() && template_annotations.is_empty() {
         return MatchResult { matches: true, ..Default::default() };
     }
-    
+
     // Check all template labels exist on stack
     let missing_labels: Vec<String> = template_labels
         .iter()
         .filter(|tl| !stack_labels.contains(tl))
         .cloned()
         .collect();
-    
+
     // Check all template annotations exist on stack
     let missing_annotations: Vec<(String, String)> = template_annotations
         .iter()
         .filter(|ta| !stack_annotations.contains(ta))
         .cloned()
         .collect();
-    
+
     MatchResult {
         matches: missing_labels.is_empty() && missing_annotations.is_empty(),
         missing_labels,

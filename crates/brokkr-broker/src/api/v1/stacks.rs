@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -10,8 +10,8 @@ use crate::utils::audit;
 use crate::utils::matching::template_matches_stack;
 use crate::utils::templating;
 use brokkr_models::models::audit_logs::{
-    ACTION_STACK_CREATED, ACTION_STACK_DELETED, ACTION_STACK_UPDATED,
-    ACTOR_TYPE_ADMIN, RESOURCE_TYPE_STACK,
+    ACTION_STACK_CREATED, ACTION_STACK_DELETED, ACTION_STACK_UPDATED, ACTOR_TYPE_ADMIN,
+    RESOURCE_TYPE_STACK,
 };
 
 use crate::api::v1::middleware::AuthPayload;
@@ -619,7 +619,10 @@ async fn remove_label(
     }
 
     // Delete the label directly using indexed query
-    match dal.stack_labels().delete_by_stack_and_label(stack_id, &label) {
+    match dal
+        .stack_labels()
+        .delete_by_stack_and_label(stack_id, &label)
+    {
         Ok(deleted_count) => {
             if deleted_count > 0 {
                 Ok(StatusCode::NO_CONTENT)
@@ -788,7 +791,10 @@ async fn remove_annotation(
     }
 
     // Delete the annotation directly using indexed query
-    match dal.stack_annotations().delete_by_stack_and_key(stack_id, &key) {
+    match dal
+        .stack_annotations()
+        .delete_by_stack_and_key(stack_id, &key)
+    {
         Ok(deleted_count) => {
             if deleted_count > 0 {
                 Ok(StatusCode::NO_CONTENT)
@@ -985,7 +991,9 @@ async fn instantiate_template(
     }
 
     // 7. Validate parameters against JSON Schema (400 on invalid)
-    if let Err(errors) = templating::validate_parameters(&template.parameters_schema, &request.parameters) {
+    if let Err(errors) =
+        templating::validate_parameters(&template.parameters_schema, &request.parameters)
+    {
         let error_messages: Vec<String> = errors.iter().map(|e| e.to_string()).collect();
         warn!("Parameter validation failed: {:?}", error_messages);
         return Err((
@@ -998,18 +1006,20 @@ async fn instantiate_template(
     }
 
     // 8. Render template with Tera (400 on render error)
-    let rendered_yaml = templating::render_template(&template.template_content, &request.parameters)
-        .map_err(|e| {
-            error!("Failed to render template: {:?}", e);
-            (
-                StatusCode::BAD_REQUEST,
-                Json(serde_json::json!({"error": e.to_string()})),
-            )
-        })?;
+    let rendered_yaml =
+        templating::render_template(&template.template_content, &request.parameters).map_err(
+            |e| {
+                error!("Failed to render template: {:?}", e);
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(serde_json::json!({"error": e.to_string()})),
+                )
+            },
+        )?;
 
     // 9. Create DeploymentObject
-    let new_deployment_object =
-        NewDeploymentObject::new(stack_id, rendered_yaml.clone(), false).map_err(|e| {
+    let new_deployment_object = NewDeploymentObject::new(stack_id, rendered_yaml.clone(), false)
+        .map_err(|e| {
             error!("Failed to create deployment object: {:?}", e);
             (
                 StatusCode::BAD_REQUEST,

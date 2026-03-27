@@ -1,6 +1,6 @@
 import angreal # type: ignore
 import subprocess
-from utils import docker_up,docker_down,cwd, docker_clean
+from utils import docker_up, docker_down, cwd, docker_clean
 import time
 test = angreal.command_group(name="tests", about="commands for test suites")
 
@@ -26,7 +26,12 @@ def run_unit_tests(crate_name: str = "", test_filter: str = ""):
     return result.returncode
 
 def run_integration_tests(crate_name: str = "", test_filter: str = ""):
-    """Run integration tests for a specific crate or all crates."""
+    """Run integration tests on the host, connecting to dockerized services."""
+    import os
+    env = os.environ.copy()
+    env["BROKKR__DATABASE__URL"] = "postgres://brokkr:brokkr@localhost:5433/brokkr"
+    env["KUBECONFIG"] = "/tmp/brokkr-keys/kubeconfig.local.yaml"
+
     cmd = ["cargo", "test", "--test", "integration"]
     if crate_name:
         cmd.extend(["-p", crate_name])
@@ -34,7 +39,7 @@ def run_integration_tests(crate_name: str = "", test_filter: str = ""):
         cmd.extend(["--", test_filter, "--test-threads=1", "--nocapture"])
     else:
         cmd.extend(["--", "--test-threads=1", "--nocapture"])
-    result = subprocess.run(cmd, cwd=cwd)
+    result = subprocess.run(cmd, cwd=cwd, env=env)
     return result.returncode
 
 def run_e2e_tests():

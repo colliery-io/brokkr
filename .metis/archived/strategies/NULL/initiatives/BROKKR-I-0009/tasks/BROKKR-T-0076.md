@@ -35,7 +35,7 @@ Document which configuration settings can be hot-reloaded vs which require a res
 
 ### Type
 - [ ] Bug - Production issue that needs fixing
-- [ ] Feature - New functionality or enhancement  
+- [ ] Feature - New functionality or enhancement
 - [ ] Tech Debt - Code improvement or refactoring
 - [ ] Chore - Maintenance or setup work
 
@@ -47,7 +47,7 @@ Document which configuration settings can be hot-reloaded vs which require a res
 
 ### Impact Assessment **[CONDITIONAL: Bug]**
 - **Affected Users**: {Number/percentage of users affected}
-- **Reproduction Steps**: 
+- **Reproduction Steps**:
   1. {Step 1}
   2. {Step 2}
   3. {Step 3}
@@ -92,7 +92,7 @@ log:
 webhook:
   # @hot-reload: true
   deliveryIntervalSeconds: 5
-  # @hot-reload: true  
+  # @hot-reload: true
   deliveryBatchSize: 50
 
 # Static settings (changes require pod restart)

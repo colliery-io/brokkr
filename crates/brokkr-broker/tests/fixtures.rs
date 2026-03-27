@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -12,7 +12,6 @@
 use axum::Router;
 use brokkr_broker::api;
 use brokkr_broker::dal::DAL;
-use brokkr_utils::config::{Cors, ReloadableConfig};
 use brokkr_broker::db::create_shared_connection_pool;
 use brokkr_broker::utils;
 use brokkr_broker::utils::pak;
@@ -34,6 +33,7 @@ use brokkr_models::models::{
     work_order_labels::{NewWorkOrderLabel, WorkOrderLabel},
     work_orders::{NewWorkOrder, NewWorkOrderTarget, WorkOrder, WorkOrderTarget, WORK_TYPE_BUILD},
 };
+use brokkr_utils::config::{Cors, ReloadableConfig};
 use brokkr_utils::Settings;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use dotenv::dotenv;
@@ -72,7 +72,12 @@ impl TestFixture {
     pub fn create_test_router(&self) -> Router<DAL> {
         let test_cors = Cors {
             allowed_origins: vec!["*".to_string()],
-            allowed_methods: vec!["GET".to_string(), "POST".to_string(), "PUT".to_string(), "DELETE".to_string()],
+            allowed_methods: vec![
+                "GET".to_string(),
+                "POST".to_string(),
+                "PUT".to_string(),
+                "DELETE".to_string(),
+            ],
             allowed_headers: vec!["Authorization".to_string(), "Content-Type".to_string()],
             max_age_seconds: 3600,
         };
@@ -445,7 +450,13 @@ impl TestFixture {
     ) -> StackTemplate {
         self.dal
             .templates()
-            .create_new_version(generator_id, name, description, template_content, parameters_schema)
+            .create_new_version(
+                generator_id,
+                name,
+                description,
+                template_content,
+                parameters_schema,
+            )
             .expect("Failed to create template")
     }
 
@@ -485,8 +496,9 @@ impl TestFixture {
         key: &str,
         value: &str,
     ) -> TemplateAnnotation {
-        let new_annotation = NewTemplateAnnotation::new(template_id, key.to_string(), value.to_string())
-            .expect("Failed to create NewTemplateAnnotation");
+        let new_annotation =
+            NewTemplateAnnotation::new(template_id, key.to_string(), value.to_string())
+                .expect("Failed to create NewTemplateAnnotation");
         self.dal
             .template_annotations()
             .create(&new_annotation)
@@ -551,11 +563,7 @@ impl TestFixture {
     /// # Returns
     ///
     /// Returns the created WorkOrderLabel on success, or panics on failure.
-    pub fn create_test_work_order_label(
-        &self,
-        work_order_id: Uuid,
-        label: &str,
-    ) -> WorkOrderLabel {
+    pub fn create_test_work_order_label(&self, work_order_id: Uuid, label: &str) -> WorkOrderLabel {
         let new_label = NewWorkOrderLabel::new(work_order_id, label.to_string())
             .expect("Failed to create NewWorkOrderLabel");
         self.dal
@@ -581,8 +589,9 @@ impl TestFixture {
         key: &str,
         value: &str,
     ) -> WorkOrderAnnotation {
-        let new_annotation = NewWorkOrderAnnotation::new(work_order_id, key.to_string(), value.to_string())
-            .expect("Failed to create NewWorkOrderAnnotation");
+        let new_annotation =
+            NewWorkOrderAnnotation::new(work_order_id, key.to_string(), value.to_string())
+                .expect("Failed to create NewWorkOrderAnnotation");
         self.dal
             .work_orders()
             .add_annotation(&new_annotation)

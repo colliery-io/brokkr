@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -197,8 +197,7 @@ fn matches_event_pattern(pattern: &str, event_type: &str) -> bool {
         return true;
     }
 
-    if pattern.ends_with(".*") {
-        let prefix = &pattern[..pattern.len() - 2];
+    if let Some(prefix) = pattern.strip_suffix(".*") {
         return event_type.starts_with(prefix) && event_type[prefix.len()..].starts_with('.');
     }
 

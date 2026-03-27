@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -230,7 +230,11 @@ async fn test_get_webhook_admin_success() {
         timeout_seconds: 30,
         created_by: Some("test".to_string()),
     };
-    let subscription = fixture.dal.webhook_subscriptions().create(&new_sub).unwrap();
+    let subscription = fixture
+        .dal
+        .webhook_subscriptions()
+        .create(&new_sub)
+        .unwrap();
 
     let app = fixture.create_test_router().with_state(fixture.dal.clone());
     let response = app
@@ -297,7 +301,11 @@ async fn test_update_webhook_admin_success() {
         timeout_seconds: 30,
         created_by: Some("test".to_string()),
     };
-    let subscription = fixture.dal.webhook_subscriptions().create(&new_sub).unwrap();
+    let subscription = fixture
+        .dal
+        .webhook_subscriptions()
+        .create(&new_sub)
+        .unwrap();
 
     let app = fixture.create_test_router().with_state(fixture.dal.clone());
 
@@ -349,7 +357,11 @@ async fn test_delete_webhook_admin_success() {
         timeout_seconds: 30,
         created_by: Some("test".to_string()),
     };
-    let subscription = fixture.dal.webhook_subscriptions().create(&new_sub).unwrap();
+    let subscription = fixture
+        .dal
+        .webhook_subscriptions()
+        .create(&new_sub)
+        .unwrap();
 
     let app = fixture.create_test_router().with_state(fixture.dal.clone());
 
@@ -368,7 +380,11 @@ async fn test_delete_webhook_admin_success() {
     assert_eq!(response.status(), StatusCode::NO_CONTENT);
 
     // Verify deleted
-    let deleted = fixture.dal.webhook_subscriptions().get(subscription.id).unwrap();
+    let deleted = fixture
+        .dal
+        .webhook_subscriptions()
+        .get(subscription.id)
+        .unwrap();
     assert!(deleted.is_none());
 }
 
@@ -450,7 +466,11 @@ async fn test_list_deliveries_admin_success() {
         timeout_seconds: 30,
         created_by: Some("test".to_string()),
     };
-    let subscription = fixture.dal.webhook_subscriptions().create(&new_sub).unwrap();
+    let subscription = fixture
+        .dal
+        .webhook_subscriptions()
+        .create(&new_sub)
+        .unwrap();
 
     let app = fixture.create_test_router().with_state(fixture.dal.clone());
 
@@ -477,7 +497,9 @@ async fn test_list_deliveries_with_status_filter() {
     let fixture = TestFixture::new();
     let admin_pak = fixture.admin_pak.clone();
 
-    use brokkr_models::models::webhooks::{BrokkrEvent, NewWebhookDelivery, NewWebhookSubscription};
+    use brokkr_models::models::webhooks::{
+        BrokkrEvent, NewWebhookDelivery, NewWebhookSubscription,
+    };
 
     // Create a subscription
     let new_sub = NewWebhookSubscription {
@@ -492,12 +514,20 @@ async fn test_list_deliveries_with_status_filter() {
         timeout_seconds: 30,
         created_by: Some("test".to_string()),
     };
-    let subscription = fixture.dal.webhook_subscriptions().create(&new_sub).unwrap();
+    let subscription = fixture
+        .dal
+        .webhook_subscriptions()
+        .create(&new_sub)
+        .unwrap();
 
     // Create a delivery
     let event = BrokkrEvent::new("deployment.applied", json!({"test": true}));
     let new_delivery = NewWebhookDelivery::new(subscription.id, &event, None).unwrap();
-    fixture.dal.webhook_deliveries().create(&new_delivery).unwrap();
+    fixture
+        .dal
+        .webhook_deliveries()
+        .create(&new_delivery)
+        .unwrap();
 
     let app = fixture.create_test_router().with_state(fixture.dal.clone());
 
@@ -505,7 +535,10 @@ async fn test_list_deliveries_with_status_filter() {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri(format!("/api/v1/webhooks/{}/deliveries?status=pending", subscription.id))
+                .uri(format!(
+                    "/api/v1/webhooks/{}/deliveries?status=pending",
+                    subscription.id
+                ))
                 .header("Authorization", format!("Bearer {}", admin_pak))
                 .body(Body::empty())
                 .unwrap(),

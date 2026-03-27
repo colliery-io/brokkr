@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -83,8 +83,8 @@ pub fn init(
     log_level: &str,
     log_format: &str,
 ) -> Result<(), TelemetryError> {
-    let env_filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new(log_level));
+    let env_filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(log_level));
 
     if !config.enabled {
         // Telemetry disabled - just set up basic tracing subscriber
@@ -175,9 +175,9 @@ pub fn shutdown() {
 
 /// Re-export tracing macros for convenience
 pub mod prelude {
+    pub use tracing::Instrument;
     pub use tracing::{debug, error, info, trace, warn};
     pub use tracing::{instrument, span, Level};
-    pub use tracing::Instrument;
 }
 
 #[cfg(test)]

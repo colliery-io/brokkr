@@ -91,7 +91,7 @@ impl NewStackTemplate {
 ```
 
 **2. template_labels.rs** - Follow `stack_labels.rs` pattern
-**3. template_annotations.rs** - Follow `stack_annotations.rs` pattern  
+**3. template_annotations.rs** - Follow `stack_annotations.rs` pattern
 **4. template_targets.rs** - Follow `agent_targets.rs` pattern
 **5. rendered_deployment_objects.rs** - Provenance tracking model
 

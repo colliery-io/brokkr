@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -13,7 +13,9 @@ use crate::dal::DAL;
 use crate::utils::event_bus;
 use brokkr_models::models::agent_targets::AgentTarget;
 use brokkr_models::models::deployment_objects::{DeploymentObject, NewDeploymentObject};
-use brokkr_models::models::webhooks::{BrokkrEvent, EVENT_DEPLOYMENT_CREATED, EVENT_DEPLOYMENT_DELETED};
+use brokkr_models::models::webhooks::{
+    BrokkrEvent, EVENT_DEPLOYMENT_CREATED, EVENT_DEPLOYMENT_DELETED,
+};
 use brokkr_models::schema::agent_targets;
 use brokkr_models::schema::deployment_objects;
 use chrono::Utc;
@@ -52,7 +54,10 @@ impl DeploymentObjectsDAL<'_> {
             "sequence_id": deployment_object.sequence_id,
             "created_at": deployment_object.created_at,
         });
-        event_bus::emit_event(self.dal, &BrokkrEvent::new(EVENT_DEPLOYMENT_CREATED, event_data));
+        event_bus::emit_event(
+            self.dal,
+            &BrokkrEvent::new(EVENT_DEPLOYMENT_CREATED, event_data),
+        );
 
         Ok(deployment_object)
     }
@@ -173,7 +178,10 @@ impl DeploymentObjectsDAL<'_> {
                 "stack_id": deployment_object.map(|d| d.stack_id),
                 "deleted_at": Utc::now(),
             });
-            event_bus::emit_event(self.dal, &BrokkrEvent::new(EVENT_DEPLOYMENT_DELETED, event_data));
+            event_bus::emit_event(
+                self.dal,
+                &BrokkrEvent::new(EVENT_DEPLOYMENT_DELETED, event_data),
+            );
         }
 
         Ok(rows)

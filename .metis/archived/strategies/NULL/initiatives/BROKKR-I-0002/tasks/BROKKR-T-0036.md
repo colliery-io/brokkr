@@ -74,14 +74,14 @@ pub fn render_template(
     parameters: &serde_json::Value,
 ) -> Result<String, String> {
     let mut context = Context::new();
-    
+
     // Flatten JSON parameters into Tera context
     if let serde_json::Value::Object(map) = parameters {
         for (key, value) in map {
             context.insert(key, value);
         }
     }
-    
+
     Tera::one_off(template_content, &context, false)
         .map_err(|e| format!("Template rendering failed: {}", e))
 }
@@ -91,10 +91,10 @@ pub fn render_template(
 pub fn validate_json_schema(schema_str: &str) -> Result<(), String> {
     let schema: serde_json::Value = serde_json::from_str(schema_str)
         .map_err(|e| format!("Invalid JSON: {}", e))?;
-    
+
     JSONSchema::compile(&schema)
         .map_err(|e| format!("Invalid JSON Schema: {}", e))?;
-    
+
     Ok(())
 }
 
@@ -106,10 +106,10 @@ pub fn validate_parameters(
 ) -> Result<(), Vec<String>> {
     let schema: serde_json::Value = serde_json::from_str(schema_str)
         .map_err(|e| vec![format!("Invalid schema JSON: {}", e)])?;
-    
+
     let compiled = JSONSchema::compile(&schema)
         .map_err(|e| vec![format!("Invalid schema: {}", e)])?;
-    
+
     let result = compiled.validate(parameters);
     if let Err(errors) = result {
         let error_msgs: Vec<String> = errors
@@ -117,7 +117,7 @@ pub fn validate_parameters(
             .collect();
         return Err(error_msgs);
     }
-    
+
     Ok(())
 }
 ```

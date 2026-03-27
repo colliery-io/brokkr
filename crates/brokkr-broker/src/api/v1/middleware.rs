@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -19,9 +19,9 @@ use axum::{
     response::Response,
 };
 use brokkr_models::schema::admin_role;
-use tracing::{debug, error, info, warn};
 use diesel::prelude::*;
 use serde::Serialize;
+use tracing::{debug, error, info, warn};
 use utoipa::ToSchema;
 use uuid::Uuid;
 

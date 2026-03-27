@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Dylan Storey
+ * Copyright (c) 2025-2026 Dylan Storey
  * Licensed under the Elastic License 2.0.
  * See LICENSE file in the project root for full license text.
  */
@@ -20,9 +20,9 @@ use axum::{
 use brokkr_models::models::deployment_health::{
     DeploymentHealth, HealthSummary, NewDeploymentHealth,
 };
-use tracing::{debug, error, info, warn};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use tracing::{error, info, warn};
 use uuid::Uuid;
 
 /// Creates and returns the router for health-related endpoints.
@@ -139,10 +139,7 @@ async fn update_health_status(
         .deployment_objects
         .into_iter()
         .filter_map(|update| {
-            let summary_json = update
-                .summary
-                .map(|s| serde_json::to_string(&s).ok())
-                .flatten();
+            let summary_json = update.summary.and_then(|s| serde_json::to_string(&s).ok());
 
             NewDeploymentHealth::new(
                 agent_id,

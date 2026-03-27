@@ -1,5 +1,5 @@
 [database]
-url = "postgres://brokkr:brokkr@localhost:5432/brokkr"
+url = "postgres://brokkr:brokkr@localhost:5433/brokkr"
 
 [log]
 level = "debug"

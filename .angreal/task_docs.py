@@ -172,7 +172,7 @@ def build():
             check=True,
         )
         if result.returncode == 0:
-            print(f"\n=== Build complete ===")
+            print("\n=== Build complete ===")
             print(f"Documentation site built in {DOCS_DIR / 'book'}")
         return result.returncode
     except FileNotFoundError:

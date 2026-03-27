@@ -90,7 +90,7 @@ impl AesEncryption {
         // Encrypt with AES-256-GCM
         // Return nonce || ciphertext || tag
     }
-    
+
     pub fn decrypt(&self, ciphertext: &[u8]) -> Result<Vec<u8>, EncryptionError> {
         // Extract nonce (first 12 bytes)
         // Decrypt and verify tag
@@ -186,13 +186,13 @@ BEGIN
     UPDATE stacks
     SET deleted_at = NEW.deleted_at
     WHERE generator_id = NEW.id AND deleted_at IS NULL;  -- Fixed: generator_id
-    
+
     UPDATE deployment_objects
     SET deleted_at = NEW.deleted_at
     WHERE stack_id IN (
         SELECT id FROM stacks WHERE generator_id = NEW.id
     ) AND deleted_at IS NULL;
-    
+
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
