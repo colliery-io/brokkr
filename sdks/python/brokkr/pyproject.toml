@@ -1,15 +1,14 @@
 [project]
-name = "brokkr"
+name = "brokkr-client"
 version = "0.0.0"
-description = "Ergonomic Python wrapper around the auto-generated brokkr-broker-client"
+description = "Ergonomic Python wrapper around the auto-generated brokkr-client-generated low-level client"
 authors = []
 requires-python = ">=3.10"
 readme = "README.md"
 dependencies = [
-    # The generated low-level client. Brought in as a local path dep; CI installs
-    # the workspace member, end users install both packages from the same wheel
-    # release.
-    "brokkr-broker-client",
+    # Low-level generated client. Local path dep in-tree; resolved from PyPI
+    # for installed releases.
+    "brokkr-client-generated",
     "httpx>=0.23.0,<0.29.0",
 ]
 
@@ -21,7 +20,7 @@ test = [
 ]
 
 [tool.uv.sources]
-brokkr-broker-client = { path = "../brokkr-client" }
+brokkr-client-generated = { path = "../brokkr-client" }
 
 [tool.uv.build-backend]
 module-name = "brokkr"

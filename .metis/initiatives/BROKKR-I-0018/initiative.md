@@ -4,14 +4,14 @@ level: initiative
 title: "SDK Publishing: Rust / Python / TypeScript"
 short_code: "BROKKR-I-0018"
 created_at: 2026-05-15T22:08:56.351163+00:00
-updated_at: 2026-05-15T22:38:40.069409+00:00
+updated_at: 2026-05-15T22:44:04.509411+00:00
 parent: BROKKR-V-0001
 blocked_by: []
 archived: false
 
 tags:
   - "#initiative"
-  - "#phase/decompose"
+  - "#phase/active"
 
 
 exit_criteria_met: false

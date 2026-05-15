@@ -1,17 +1,17 @@
 ---
-id: r2-a-vendor-spec-brokkr-client
+id: r2-a-vendor-openapi-spec-into
 level: task
 title: "R2-A: Vendor OpenAPI spec into brokkr-client crate"
 short_code: "BROKKR-T-0145"
-created_at: 2026-05-15T22:30:00.000000+00:00
-updated_at: 2026-05-15T22:30:00.000000+00:00
+created_at: 2026-05-15T22:30:00+00:00
+updated_at: 2026-05-15T23:18:10.987859+00:00
 parent: BROKKR-I-0018
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/todo"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -30,13 +30,17 @@ Make `brokkr-client` `cargo publish`-able by ending the macro's reliance on a pa
 
 ## Acceptance Criteria
 
-- [ ] `openapi/brokkr-v1.json` is mirrored into `crates/brokkr-client/spec/brokkr-v1.json` (committed; not gitignored).
-- [ ] `crates/brokkr-client/src/lib.rs` macro path is `spec = "spec/brokkr-v1.json"` (no `../../`).
-- [ ] `angreal openapi export` writes both copies and they stay byte-identical.
-- [ ] `angreal openapi check` fails loudly if the two copies drift.
-- [ ] `cargo package -p brokkr-client` produces a tarball that includes `spec/brokkr-v1.json` and compiles in isolation (verify with `cargo package --list` and a smoke-test against the unpacked tarball).
-- [ ] CI's existing `drift_and_lint` job covers the new parity check (or a sibling job does).
-- [ ] In-tree workspace build (`cargo build -p brokkr-client`) still works unchanged.
+## Acceptance Criteria
+
+## Acceptance Criteria
+
+- [x] `openapi/brokkr-v1.json` is mirrored into `crates/brokkr-client/spec/brokkr-v1.json` (committed; not gitignored).
+- [x] `crates/brokkr-client/src/lib.rs` macro path is `spec = "spec/brokkr-v1.json"` (no `../../`).
+- [x] `angreal openapi export` writes both copies and they stay byte-identical.
+- [x] `angreal openapi check` fails loudly if the two copies drift.
+- [x] `cargo package -p brokkr-client` produces a tarball that includes `spec/brokkr-v1.json` and compiles in isolation (`cargo package` runs the unpack-and-verify build; passed).
+- [x] CI's existing `drift_and_lint` job covers the new parity check (already invokes `angreal openapi check`).
+- [x] In-tree workspace build (`cargo build -p brokkr-client`) still works unchanged.
 
 ## Implementation Notes
 
@@ -59,4 +63,9 @@ Make `brokkr-client` `cargo publish`-able by ending the macro's reliance on a pa
 
 ## Status Updates
 
-*To be added during implementation*
+- 2026-05-15: Implemented.
+  - Mirrored `openapi/brokkr-v1.json` → `crates/brokkr-client/spec/brokkr-v1.json`.
+  - Updated `crates/brokkr-client/src/lib.rs` macro path from `../../openapi/brokkr-v1.json` to `spec/brokkr-v1.json`.
+  - Extended `.angreal/task_openapi.py`: `export` now mirrors to the crate-local copy via `_mirror_crate_spec()`; `check` asserts both copies exist and are byte-identical before running its temp-export drift comparison.
+  - Verified: `cargo build -p brokkr-client` clean; `angreal openapi check` passes; deliberate drift triggers the new FAIL path; `cargo package -p brokkr-client --list` includes `spec/brokkr-v1.json`; `cargo package`'s built-in verification compile of the unpacked tarball succeeds.
+  - No `include`/`exclude` rules in `crates/brokkr-client/Cargo.toml`; spec file is not gitignored. No CI workflow changes needed — existing `drift_and_lint` job runs `angreal openapi check`.

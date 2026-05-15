@@ -10,7 +10,7 @@ Brokkr ships generated client SDKs for **Rust**, **Python**, and **TypeScript**.
 ## Getting started
 
 - [Rust](./rust.md) — `brokkr-client` crate, includes a worked agent example.
-- [Python](./python.md) — `brokkr` package (wraps `brokkr-broker-client`).
+- [Python](./python.md) — `brokkr-client` package (wraps the low-level `brokkr-client-generated`).
 - TypeScript — see `sdks/typescript/brokkr-client/README.md`. Types are generated via `openapi-typescript`; the runtime is `openapi-fetch`.
 
 ## Authentication

@@ -1,6 +1,6 @@
 # Python SDK
 
-The `brokkr` package is an ergonomic wrapper around `brokkr-broker-client`, which is generated from `openapi/brokkr-v1.json` by `openapi-python-client`. The wrapper adds a single-credential constructor, a typed `BrokkrError`, and an opt-in retry helper.
+The `brokkr-client` package is an ergonomic wrapper around `brokkr-client-generated`, which is generated from `openapi/brokkr-v1.json` by `openapi-python-client`. The wrapper adds a single-credential constructor, a typed `BrokkrError`, and an opt-in retry helper.
 
 ## Install
 
@@ -10,7 +10,7 @@ Both packages live in this workspace; install from a local checkout via `uv`:
 uv pip install -e sdks/python/brokkr
 ```
 
-This pulls in `brokkr-broker-client` automatically (declared via `tool.uv.sources`). Neither package is published to PyPI yet.
+This pulls in `brokkr-client-generated` automatically (declared via `tool.uv.sources`). Neither package is published to PyPI yet.
 
 ## Construct a client
 

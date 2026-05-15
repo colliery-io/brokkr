@@ -1,4 +1,4 @@
-# brokkr-broker-client
+# brokkr-client-generated
 A client library for accessing brokkr-broker
 
 ## Usage
