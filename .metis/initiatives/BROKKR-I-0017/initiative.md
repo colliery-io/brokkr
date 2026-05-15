@@ -4,14 +4,14 @@ level: initiative
 title: "Generated Client SDKs for Brokkr API"
 short_code: "BROKKR-I-0017"
 created_at: 2026-05-14T17:28:25.843256+00:00
-updated_at: 2026-05-14T18:48:42.955300+00:00
+updated_at: 2026-05-15T18:51:35.940441+00:00
 parent: BROKKR-V-0001
 blocked_by: []
 archived: false
 
 tags:
   - "#initiative"
-  - "#phase/active"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
