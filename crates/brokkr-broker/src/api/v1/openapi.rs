@@ -8,6 +8,7 @@ use crate::api::v1::admin::{AuditLogListResponse, ConfigChangeInfo, ConfigReload
 use crate::api::v1::diagnostics::{
     CreateDiagnosticRequest, DiagnosticResponse, SubmitDiagnosticResult,
 };
+use crate::api::v1::error::ErrorResponse;
 use crate::api::v1::generators::CreateGeneratorResponse;
 use crate::api::v1::health::{
     DeploymentHealthResponse, DeploymentObjectHealthSummary, DeploymentObjectHealthUpdate,
@@ -18,18 +19,22 @@ use crate::api::v1::stacks::TemplateInstantiationRequest;
 use crate::api::v1::templates::{
     AddAnnotationRequest, CreateTemplateRequest, UpdateTemplateRequest,
 };
+use crate::api::v1::webhooks::{
+    CreateWebhookRequest, DeliveryResultRequest, ListDeliveriesQuery, PendingWebhookDelivery,
+    UpdateWebhookRequest, WebhookResponse,
+};
 use crate::api::v1::work_orders::{
     ClaimWorkOrderRequest, CompleteWorkOrderRequest, CreateWorkOrderRequest, WorkOrderTargeting,
 };
 use crate::api::v1::{
     admin, agent_events, agents, auth, deployment_objects, diagnostics, generators, health, stacks,
-    templates, work_orders,
+    templates, webhooks, work_orders,
 };
 use crate::dal::DAL;
 use axum::{response::Json, routing::get, Router};
 use brokkr_models::models::{
     agent_annotations::{AgentAnnotation, NewAgentAnnotation},
-    agent_events::AgentEvent,
+    agent_events::{AgentEvent, NewAgentEvent},
     agent_labels::{AgentLabel, NewAgentLabel},
     agent_targets::{AgentTarget, NewAgentTarget},
     agents::{Agent, NewAgent},
@@ -39,14 +44,20 @@ use brokkr_models::models::{
     diagnostic_requests::DiagnosticRequest,
     diagnostic_results::DiagnosticResult,
     generator::{Generator, NewGenerator},
+    stack_annotations::{NewStackAnnotation, StackAnnotation},
+    stack_labels::{NewStackLabel, StackLabel},
     stack_templates::{NewStackTemplate, StackTemplate},
     stacks::{NewStack, Stack},
     template_annotations::{NewTemplateAnnotation, TemplateAnnotation},
     template_labels::{NewTemplateLabel, TemplateLabel},
+    webhooks::{WebhookDelivery, WebhookFilters, WebhookSubscription},
     work_orders::{WorkOrder, WorkOrderLog},
 };
 use utoipa::{
-    openapi::security::{ApiKey, ApiKeyValue, SecurityScheme},
+    openapi::{
+        security::{ApiKey, ApiKeyValue, SecurityScheme},
+        Server,
+    },
     OpenApi,
 };
 use utoipa_swagger_ui::SwaggerUi;
@@ -61,6 +72,7 @@ use utoipa_swagger_ui::SwaggerUi;
         generators::get_generator,
         generators::update_generator,
         generators::delete_generator,
+        generators::rotate_generator_pak,
         agents::list_labels,
         agents::add_label,
         agents::remove_label,
@@ -77,6 +89,11 @@ use utoipa_swagger_ui::SwaggerUi;
         agents::delete_agent,
         agents::search_agent,
         agents::get_target_state,
+        agents::list_events,
+        agents::create_event,
+        agents::record_heartbeat,
+        agents::get_associated_stacks,
+        agents::rotate_agent_pak,
         deployment_objects::get_deployment_object,
         stacks::list_stacks,
         stacks::create_stack,
@@ -84,6 +101,14 @@ use utoipa_swagger_ui::SwaggerUi;
         stacks::update_stack,
         stacks::delete_stack,
         stacks::instantiate_template,
+        stacks::list_deployment_objects,
+        stacks::create_deployment_object,
+        stacks::list_labels,
+        stacks::add_label,
+        stacks::remove_label,
+        stacks::list_annotations,
+        stacks::add_annotation,
+        stacks::remove_annotation,
         templates::list_templates,
         templates::create_template,
         templates::get_template,
@@ -113,6 +138,16 @@ use utoipa_swagger_ui::SwaggerUi;
         diagnostics::get_pending_diagnostics,
         diagnostics::claim_diagnostic,
         diagnostics::submit_diagnostic_result,
+        webhooks::list_webhooks,
+        webhooks::list_event_types,
+        webhooks::create_webhook,
+        webhooks::get_webhook,
+        webhooks::update_webhook,
+        webhooks::delete_webhook,
+        webhooks::list_deliveries,
+        webhooks::test_webhook,
+        webhooks::get_pending_agent_webhooks,
+        webhooks::report_delivery_result,
         admin::reload_config,
         admin::list_audit_logs,
     ),
@@ -168,6 +203,21 @@ use utoipa_swagger_ui::SwaggerUi;
             ConfigChangeInfo,
             AuditLog,
             AuditLogListResponse,
+            ErrorResponse,
+            NewAgentEvent,
+            StackLabel,
+            NewStackLabel,
+            StackAnnotation,
+            NewStackAnnotation,
+            WebhookSubscription,
+            WebhookDelivery,
+            WebhookFilters,
+            CreateWebhookRequest,
+            UpdateWebhookRequest,
+            WebhookResponse,
+            ListDeliveriesQuery,
+            PendingWebhookDelivery,
+            DeliveryResultRequest,
         )
     ),
     tags(
@@ -185,9 +235,10 @@ use utoipa_swagger_ui::SwaggerUi;
         (name = "auth", description = "Authentication API"),
         (name = "health", description = "Deployment Health monitoring API"),
         (name = "diagnostics", description = "On-demand diagnostics API"),
+        (name = "webhooks", description = "Webhook subscription and delivery API"),
         (name = "Admin", description = "Administrative operations API")
     ),
-    modifiers(&SecurityAddon)
+    modifiers(&SecurityAddon, &ServersAddon)
 )]
 pub struct ApiDoc;
 
@@ -209,6 +260,17 @@ impl utoipa::Modify for SecurityAddon {
                 SecurityScheme::ApiKey(ApiKey::Header(ApiKeyValue::new("Authorization"))),
             );
         }
+    }
+}
+
+/// Declares the API base URL. Generated SDK clients prepend this prefix to
+/// every path. Annotations therefore document resource paths only
+/// (`/agents`, `/stacks/{id}`, etc.) and stay decoupled from the version prefix.
+struct ServersAddon;
+
+impl utoipa::Modify for ServersAddon {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        openapi.servers = Some(vec![Server::new("/api/v1")]);
     }
 }
 

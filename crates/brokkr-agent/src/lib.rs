@@ -13,6 +13,7 @@
 //! see the [Brokkr Documentation](https://brokkr.io/explanation/architecture).
 
 pub mod broker;
+pub mod broker_sdk;
 pub mod cli;
 pub mod deployment_health;
 pub mod diagnostics;

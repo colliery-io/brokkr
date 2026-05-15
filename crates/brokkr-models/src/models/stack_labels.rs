@@ -32,6 +32,7 @@
 
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 /// Represents a stack label in the database.
@@ -47,6 +48,7 @@ use uuid::Uuid;
     Eq,
     PartialEq,
     Hash,
+    ToSchema,
 )]
 #[diesel(table_name = crate::schema::stack_labels)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
@@ -60,7 +62,7 @@ pub struct StackLabel {
 }
 
 /// Represents a new stack label to be inserted into the database.
-#[derive(Insertable, Debug, Clone, Serialize, Deserialize)]
+#[derive(Insertable, Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[diesel(table_name = crate::schema::stack_labels)]
 pub struct NewStackLabel {
     /// ID of the stack this label is associated with.

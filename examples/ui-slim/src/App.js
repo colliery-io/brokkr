@@ -2366,7 +2366,7 @@ const DemoPanel = () => {
         summary: { ...prev.summary, webhooks: prev.summary.webhooks + 1 }
       }));
     } catch (e) {
-      if (e.message.includes('already exists')) {
+      if (e.code === 'unique_violation' || e.status === 409 || (e.message && e.message.includes('already exists'))) {
         addStep(3, { text: 'WorkOrder webhook exists (reusing)', status: 'info', icon: '○' });
       } else {
         addStep(3, { text: `Failed: ${e.message}`, status: 'error', icon: '✗' });
@@ -2391,7 +2391,7 @@ const DemoPanel = () => {
         summary: { ...prev.summary, webhooks: prev.summary.webhooks + 1 }
       }));
     } catch (e) {
-      if (e.message.includes('already exists')) {
+      if (e.code === 'unique_violation' || e.status === 409 || (e.message && e.message.includes('already exists'))) {
         addStep(3, { text: 'Deployment webhook exists (reusing)', status: 'info', icon: '○' });
       } else {
         addStep(3, { text: `Failed: ${e.message}`, status: 'error', icon: '✗' });
@@ -2416,7 +2416,7 @@ const DemoPanel = () => {
         summary: { ...prev.summary, webhooks: prev.summary.webhooks + 1 }
       }));
     } catch (e) {
-      if (e.message.includes('already exists')) {
+      if (e.code === 'unique_violation' || e.status === 409 || (e.message && e.message.includes('already exists'))) {
         addStep(3, { text: 'Stack webhook exists (reusing)', status: 'info', icon: '○' });
       } else {
         addStep(3, { text: `Failed: ${e.message}`, status: 'error', icon: '✗' });
@@ -2448,7 +2448,13 @@ const DemoPanel = () => {
       addStep(4, { text: 'Generator created', status: 'success', icon: '✓' });
       setDemoState(prev => ({ ...prev, summary: { ...prev.summary, generators: prev.summary.generators + 1 } }));
     } catch (e) {
-      if (e.message.includes('already exists') || e.message.includes('duplicate')) {
+      // Broker returns 409 + code "unique_violation" when the name is taken.
+      // Fall back to message-substring for older brokers and legacy errors.
+      const isDuplicate =
+        e.code === 'unique_violation' ||
+        e.status === 409 ||
+        (e.message && (e.message.includes('already exists') || e.message.includes('duplicate')));
+      if (isDuplicate) {
         const generators = await api.getGenerators();
         generator = generators.find(g => g.name === 'demo-generator');
         addStep(4, { text: 'Generator exists (reusing)', status: 'info', icon: '○' });
@@ -2471,7 +2477,7 @@ const DemoPanel = () => {
         summary: { ...prev.summary, stacks: prev.summary.stacks + 1 }
       }));
     } catch (e) {
-      if (e.message.includes('already exists')) {
+      if (e.code === 'unique_violation' || e.status === 409 || (e.message && e.message.includes('already exists'))) {
         addStep(4, { text: 'Stack exists (reusing)', status: 'info', icon: '○' });
         const stacks = await api.getStacks();
         stack = stacks.find(s => s.name === 'demo-namespace-stack');
@@ -2664,7 +2670,7 @@ data:
         summary: { ...prev.summary, templates: prev.summary.templates + 1 }
       }));
     } catch (e) {
-      if (e.message.includes('already exists')) {
+      if (e.code === 'unique_violation' || e.status === 409 || (e.message && e.message.includes('already exists'))) {
         addStep(6, { text: 'Template exists (reusing)', status: 'info', icon: '○' });
         const templates = await api.getTemplates();
         const existing = templates.find(t => t.name === 'demo-config-template');
@@ -2697,7 +2703,7 @@ data:
         summary: { ...prev.summary, stacks: prev.summary.stacks + 1 }
       }));
     } catch (e) {
-      if (e.message.includes('already exists')) {
+      if (e.code === 'unique_violation' || e.status === 409 || (e.message && e.message.includes('already exists'))) {
         addStep(6, { text: 'Stack exists (reusing)', status: 'info', icon: '○' });
         const stacks = await api.getStacks();
         stack = stacks.find(s => s.name === 'demo-template-stack');
