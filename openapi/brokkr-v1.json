@@ -4996,6 +4996,16 @@
             },
             "description": "Forbidden - Admin access required"
           },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Generator name already taken"
+          },
           "500": {
             "content": {
               "application/json": {
