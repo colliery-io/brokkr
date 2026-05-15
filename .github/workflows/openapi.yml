@@ -1,0 +1,95 @@
+---
+name: OpenAPI Spec
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - "crates/brokkr-broker/src/api/**"
+      - "crates/brokkr-broker/examples/openapi_export.rs"
+      - "crates/brokkr-broker/Cargo.toml"
+      - "crates/brokkr-models/src/models/**"
+      - "crates/brokkr-client/**"
+      - "sdks/python/brokkr-client/**"
+      - "sdks/typescript/brokkr-client/**"
+      - "openapi/**"
+      - ".angreal/task_openapi.py"
+      - ".github/workflows/openapi.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  drift_and_lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install angreal + uv
+        run: |
+          python -m pip install --upgrade pip
+          pip install angreal uv
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@1.90
+
+      - name: Cache build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-rust-build-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-rust-build-
+
+      # 1. Spec drift: the committed openapi/brokkr-v1.json must match what
+      #    the broker would emit today.
+      - name: Check OpenAPI spec drift
+        run: angreal openapi check
+
+      # 2. Spec lint: redocly catches structural regressions that the
+      #    Rust build can't (missing summaries, malformed examples, etc).
+      - name: Set up Node (for redocly lint)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Lint OpenAPI spec
+        run: npx --yes @redocly/cli@1.25.11 lint openapi/brokkr-v1.json
+
+      # 3. Rust SDK drift: progenitor regenerates the client inline on every
+      #    `cargo build` via a proc macro. There is no committed generated
+      #    source to diff — drift detection is "does the crate still build
+      #    against the committed spec." If the spec changed in a way that
+      #    breaks the generator, this step fails with a real error message.
+      - name: Verify Rust SDK regenerates from spec
+        run: cargo build -p brokkr-client --tests
+
+      # 4. Python SDK drift: the generated source is committed. Regenerate
+      #    into a temp dir and compare. Any file produced by the generator
+      #    must exist identically under sdks/python/brokkr-client/; extras
+      #    (hand-added tests, dev caches) are ignored.
+      - name: Check Python SDK drift
+        run: angreal openapi check-python
+
+      # 5. TypeScript SDK drift: the schema.d.ts is committed. Regenerate
+      #    into a temp file and byte-compare.
+      - name: Check TypeScript SDK drift
+        run: angreal openapi check-typescript
+
+      # 6. TypeScript SDK typechecks + surface tests must still pass.
+      - name: Verify TypeScript SDK builds + tests
+        working-directory: sdks/typescript/brokkr-client
+        run: |
+          npm ci
+          npm run typecheck
+          npm test

@@ -10,10 +10,10 @@
 //! including configuration hot-reload functionality.
 
 use super::middleware::AuthPayload;
+use crate::api::v1::error::{ApiError, ErrorResponse};
 use crate::dal::DAL;
 use axum::{
     extract::{Extension, Query, State},
-    http::StatusCode,
     response::IntoResponse,
     routing::{get, post},
     Json, Router,
@@ -136,69 +136,64 @@ pub fn routes() -> Router<DAL> {
 /// - `500 INTERNAL_SERVER_ERROR`: Failed to reload configuration.
 #[utoipa::path(
     post,
-    path = "/api/v1/admin/config/reload",
+    path = "/admin/config/reload",
     tag = "Admin",
     responses(
         (status = 200, description = "Configuration reloaded successfully", body = ConfigReloadResponse),
-        (status = 401, description = "Missing or invalid authentication"),
-        (status = 403, description = "Not authorized (admin only)"),
-        (status = 500, description = "Failed to reload configuration")
+        (status = 401, description = "Missing or invalid authentication", body = ErrorResponse),
+        (status = 403, description = "Not authorized (admin only)", body = ErrorResponse),
+        (status = 500, description = "Failed to reload configuration", body = ErrorResponse)
     ),
     security(
-        ("bearer_auth" = [])
+        ("admin_pak" = [])
     )
 )]
 async fn reload_config(
     Extension(auth): Extension<AuthPayload>,
     Extension(config): Extension<ReloadableConfig>,
-) -> Result<impl IntoResponse, StatusCode> {
-    // Verify admin authorization
+) -> Result<impl IntoResponse, ApiError> {
     if !auth.admin {
         warn!("Non-admin attempted to reload configuration");
-        return Err(StatusCode::FORBIDDEN);
+        return Err(ApiError::forbidden("admin_required", "admin access required"));
     }
 
     info!("Admin initiated configuration reload");
 
-    // Attempt to reload configuration
-    match config.reload() {
-        Ok(changes) => {
-            let change_count = changes.len();
-            let change_infos: Vec<ConfigChangeInfo> = changes
-                .into_iter()
-                .map(|c| ConfigChangeInfo {
-                    key: c.key,
-                    old_value: c.old_value,
-                    new_value: c.new_value,
-                })
-                .collect();
+    let changes = config.reload().map_err(|e| {
+        error!("Failed to reload configuration: {}", e);
+        ApiError::internal("failed to reload configuration")
+    })?;
 
-            if change_count > 0 {
-                info!(
-                    "Configuration reloaded with {} change(s): {:?}",
-                    change_count,
-                    change_infos.iter().map(|c| &c.key).collect::<Vec<_>>()
-                );
-            } else {
-                info!("Configuration reloaded with no changes detected");
-            }
+    let change_count = changes.len();
+    let change_infos: Vec<ConfigChangeInfo> = changes
+        .into_iter()
+        .map(|c| ConfigChangeInfo {
+            key: c.key,
+            old_value: c.old_value,
+            new_value: c.new_value,
+        })
+        .collect();
 
-            Ok(Json(ConfigReloadResponse {
-                reloaded_at: Utc::now(),
-                changes: change_infos,
-                success: true,
-                message: if change_count > 0 {
-                    Some(format!("{} setting(s) updated", change_count))
-                } else {
-                    Some("No changes detected".to_string())
-                },
-            }))
-        }
-        Err(e) => {
-            error!("Failed to reload configuration: {}", e);
-            Err(StatusCode::INTERNAL_SERVER_ERROR)
-        }
+    if change_count > 0 {
+        info!(
+            "Configuration reloaded with {} change(s): {:?}",
+            change_count,
+            change_infos.iter().map(|c| &c.key).collect::<Vec<_>>()
+        );
+    } else {
+        info!("Configuration reloaded with no changes detected");
     }
+
+    Ok(Json(ConfigReloadResponse {
+        reloaded_at: Utc::now(),
+        changes: change_infos,
+        success: true,
+        message: if change_count > 0 {
+            Some(format!("{} setting(s) updated", change_count))
+        } else {
+            Some("No changes detected".to_string())
+        },
+    }))
 }
 
 /// Lists audit logs with optional filtering and pagination.
@@ -230,63 +225,45 @@ async fn reload_config(
 /// - `500 INTERNAL_SERVER_ERROR`: Database error.
 #[utoipa::path(
     get,
-    path = "/api/v1/admin/audit-logs",
+    path = "/admin/audit-logs",
     tag = "Admin",
     params(AuditLogQueryParams),
     responses(
         (status = 200, description = "Audit logs retrieved successfully", body = AuditLogListResponse),
-        (status = 401, description = "Missing or invalid authentication"),
-        (status = 403, description = "Not authorized (admin only)"),
-        (status = 500, description = "Database error")
+        (status = 401, description = "Missing or invalid authentication", body = ErrorResponse),
+        (status = 403, description = "Not authorized (admin only)", body = ErrorResponse),
+        (status = 500, description = "Database error", body = ErrorResponse)
     ),
     security(
-        ("bearer_auth" = [])
+        ("admin_pak" = [])
     )
 )]
 async fn list_audit_logs(
     State(dal): State<DAL>,
     Extension(auth): Extension<AuthPayload>,
     Query(params): Query<AuditLogQueryParams>,
-) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    // Verify admin authorization
+) -> Result<impl IntoResponse, ApiError> {
     if !auth.admin {
         warn!("Non-admin attempted to access audit logs");
-        return Err((
-            StatusCode::FORBIDDEN,
-            Json(serde_json::json!({"error": "Admin access required"})),
-        ));
+        return Err(ApiError::forbidden("admin_required", "admin access required"));
     }
 
     let limit = params.limit.unwrap_or(100).min(1000);
     let offset = params.offset.unwrap_or(0);
     let filter: AuditLogFilter = params.into();
 
-    // Get total count for pagination
-    let total = match dal.audit_logs().count(Some(&filter)) {
-        Ok(count) => count,
-        Err(e) => {
-            error!("Failed to count audit logs: {:?}", e);
-            return Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": "Failed to query audit logs"})),
-            ));
-        }
-    };
+    let total = dal.audit_logs().count(Some(&filter)).map_err(|e| {
+        error!("Failed to count audit logs: {:?}", e);
+        ApiError::internal("failed to query audit logs")
+    })?;
 
-    // Get the logs
-    let logs = match dal
+    let logs = dal
         .audit_logs()
         .list(Some(&filter), Some(limit), Some(offset))
-    {
-        Ok(logs) => logs,
-        Err(e) => {
+        .map_err(|e| {
             error!("Failed to list audit logs: {:?}", e);
-            return Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": "Failed to query audit logs"})),
-            ));
-        }
-    };
+            ApiError::internal("failed to query audit logs")
+        })?;
 
     let count = logs.len();
 

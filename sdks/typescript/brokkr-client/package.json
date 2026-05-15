@@ -1,0 +1,33 @@
+{
+  "name": "@brokkr/client",
+  "version": "0.0.0",
+  "description": "Auto-generated TypeScript client for the Brokkr broker API",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "generate": "openapi-typescript ../../../openapi/brokkr-v1.json -o ./src/schema.d.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json && cp src/schema.d.ts dist/schema.d.ts",
+    "prepack": "npm run build",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "openapi-fetch": "0.17.0"
+  },
+  "devDependencies": {
+    "openapi-typescript": "7.13.0",
+    "typescript": "5.7.3",
+    "vitest": "3.0.4"
+  }
+}

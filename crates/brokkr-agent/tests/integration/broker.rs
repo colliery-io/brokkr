@@ -52,7 +52,7 @@ async fn test_fetch_agent_details() {
     fixture_guard.initialize().await;
 
     let result =
-        broker::fetch_agent_details(&fixture_guard.agent_settings, &fixture_guard.client).await;
+        broker::fetch_agent_details(&fixture_guard.agent_settings, &fixture_guard.sdk_client).await;
 
     match &result {
         Ok(agent) => println!("Successfully fetched agent: {:?}", agent),
@@ -85,7 +85,7 @@ async fn test_fetch_and_process_deployment_objects() {
 
     let result = broker::fetch_and_process_deployment_objects(
         &fixture_guard.agent_settings,
-        &fixture_guard.client,
+        &fixture_guard.sdk_client,
         &fixture_guard.agent.as_ref().unwrap(),
     )
     .await;
@@ -110,7 +110,7 @@ async fn test_successful_event_apply() {
 
     let result = broker::fetch_and_process_deployment_objects(
         &fixture_guard.agent_settings,
-        &fixture_guard.client,
+        &fixture_guard.sdk_client,
         &fixture_guard.agent.as_ref().unwrap(),
     )
     .await;
@@ -127,7 +127,7 @@ async fn test_successful_event_apply() {
 
     let result = broker::send_success_event(
         &fixture_guard.agent_settings,
-        &fixture_guard.client,
+        &fixture_guard.sdk_client,
         &fixture_guard.agent.as_ref().unwrap(),
         deployment_objects[0].id,
         None,
@@ -138,7 +138,7 @@ async fn test_successful_event_apply() {
 
     let result = broker::fetch_and_process_deployment_objects(
         &fixture_guard.agent_settings,
-        &fixture_guard.client,
+        &fixture_guard.sdk_client,
         &fixture_guard.agent.as_ref().unwrap(),
     )
     .await;
@@ -166,7 +166,7 @@ async fn test_failure_event_apply() {
 
     let result = broker::fetch_and_process_deployment_objects(
         &fixture_guard.agent_settings,
-        &fixture_guard.client,
+        &fixture_guard.sdk_client,
         &fixture_guard.agent.as_ref().unwrap(),
     )
     .await;
@@ -184,7 +184,7 @@ async fn test_failure_event_apply() {
 
     let result = broker::send_failure_event(
         &fixture_guard.agent_settings,
-        &fixture_guard.client,
+        &fixture_guard.sdk_client,
         &fixture_guard.agent.as_ref().unwrap(),
         deployment_objects[0].id,
         "Test failure".to_string(),
@@ -195,7 +195,7 @@ async fn test_failure_event_apply() {
 
     let result = broker::fetch_and_process_deployment_objects(
         &fixture_guard.agent_settings,
-        &fixture_guard.client,
+        &fixture_guard.sdk_client,
         &fixture_guard.agent.as_ref().unwrap(),
     )
     .await;
@@ -219,7 +219,7 @@ async fn test_send_heartbeat() {
 
     let result = broker::send_heartbeat(
         &fixture_guard.agent_settings,
-        &fixture_guard.client,
+        &fixture_guard.sdk_client,
         &fixture_guard.agent.as_ref().unwrap(),
     )
     .await;
@@ -231,7 +231,7 @@ async fn test_send_heartbeat() {
     assert!(result.is_ok(), "Failed to send heartbeat");
 
     let agent_details =
-        broker::fetch_agent_details(&fixture_guard.agent_settings, &fixture_guard.client).await;
+        broker::fetch_agent_details(&fixture_guard.agent_settings, &fixture_guard.sdk_client).await;
 
     match &agent_details {
         Ok(details) => println!("Successfully fetched agent details: {:?}", details),

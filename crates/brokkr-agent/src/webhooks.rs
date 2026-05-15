@@ -9,13 +9,30 @@
 //! This module provides functionality for agents to poll for pending webhooks
 //! assigned to them, deliver them via HTTP, and report results back to the broker.
 
+use brokkr_client::{BrokkrClient, BrokkrError};
 use brokkr_models::models::agents::Agent;
 use brokkr_utils::Settings;
-use reqwest::{Client, StatusCode};
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::time::{Duration, Instant};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
+
+fn status_u16(err: &BrokkrError) -> Option<u16> {
+    err.status().map(|s| s.as_u16())
+}
+
+fn convert<F: Serialize, T: DeserializeOwned>(value: F) -> Result<T, serde_json::Error> {
+    let v = serde_json::to_value(value)?;
+    serde_json::from_value(v)
+}
+
+fn boxed(prefix: &str, err: BrokkrError) -> Box<dyn std::error::Error> {
+    let msg = match status_u16(&err) {
+        Some(s) => format!("{prefix}. Status: {s}, Error: {err}"),
+        None => format!("{prefix}: {err}"),
+    };
+    msg.into()
+}
 
 // =============================================================================
 // Types matching broker API
@@ -88,34 +105,25 @@ pub struct DeliveryResult {
 /// # Returns
 /// Pending webhook deliveries or error
 pub async fn fetch_pending_webhooks(
-    config: &Settings,
-    client: &Client,
+    _config: &Settings,
+    client: &BrokkrClient,
     agent: &Agent,
 ) -> Result<Vec<PendingWebhookDelivery>, Box<dyn std::error::Error>> {
-    let url = format!(
-        "{}/api/v1/agents/{}/webhooks/pending",
-        config.agent.broker_url, agent.id
-    );
+    debug!("Fetching pending webhooks for agent {}", agent.name);
 
-    debug!("Fetching pending webhooks from {}", url);
-
-    let response = client
-        .get(&url)
-        .header("Authorization", format!("Bearer {}", config.agent.pak))
+    match client
+        .api()
+        .get_pending_agent_webhooks()
+        .agent_id(agent.id)
         .send()
         .await
-        .map_err(|e| {
-            error!("Failed to fetch pending webhooks: {}", e);
-            Box::new(e) as Box<dyn std::error::Error>
-        })?;
-
-    match response.status() {
-        StatusCode::OK => {
-            let deliveries: Vec<PendingWebhookDelivery> = response.json().await.map_err(|e| {
-                error!("Failed to deserialize pending webhooks: {}", e);
-                Box::new(e) as Box<dyn std::error::Error>
-            })?;
-
+    {
+        Ok(rv) => {
+            let deliveries: Vec<PendingWebhookDelivery> =
+                convert(rv.into_inner()).map_err(|e| {
+                    error!("Failed to convert pending webhooks: {}", e);
+                    Box::new(e) as Box<dyn std::error::Error>
+                })?;
             if !deliveries.is_empty() {
                 debug!(
                     "Fetched {} pending webhook deliveries for agent {}",
@@ -123,20 +131,12 @@ pub async fn fetch_pending_webhooks(
                     agent.name
                 );
             }
-
             Ok(deliveries)
         }
-        status => {
-            let error_body = response.text().await.unwrap_or_default();
-            error!(
-                "Failed to fetch pending webhooks. Status {}: {}",
-                status, error_body
-            );
-            Err(format!(
-                "Failed to fetch pending webhooks. Status: {}, Body: {}",
-                status, error_body
-            )
-            .into())
+        Err(raw) => {
+            let wrapped = BrokkrError::from(raw);
+            error!("Failed to fetch pending webhooks: {}", wrapped);
+            Err(boxed("Failed to fetch pending webhooks", wrapped))
         }
     }
 }
@@ -152,17 +152,12 @@ pub async fn fetch_pending_webhooks(
 /// # Returns
 /// Success or error
 pub async fn report_delivery_result(
-    config: &Settings,
-    client: &Client,
+    _config: &Settings,
+    client: &BrokkrClient,
     delivery_id: Uuid,
     result: &DeliveryResult,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let url = format!(
-        "{}/api/v1/webhook-deliveries/{}/result",
-        config.agent.broker_url, delivery_id
-    );
-
-    debug!("Reporting delivery result for {} to {}", delivery_id, url);
+    debug!("Reporting delivery result for {}", delivery_id);
 
     let request_body = DeliveryResultRequest {
         success: result.success,
@@ -170,34 +165,31 @@ pub async fn report_delivery_result(
         error: result.error.clone(),
         duration_ms: Some(result.duration_ms),
     };
-
-    let response = client
-        .post(&url)
-        .header("Authorization", format!("Bearer {}", config.agent.pak))
-        .json(&request_body)
-        .send()
-        .await
-        .map_err(|e| {
-            error!("Failed to report delivery result: {}", e);
+    let sdk_body: brokkr_client::types::DeliveryResultRequest =
+        convert(request_body).map_err(|e| {
+            error!("Failed to convert DeliveryResultRequest: {}", e);
             Box::new(e) as Box<dyn std::error::Error>
         })?;
 
-    match response.status() {
-        StatusCode::OK => {
+    match client
+        .api()
+        .report_delivery_result()
+        .id(delivery_id)
+        .body(sdk_body)
+        .send()
+        .await
+    {
+        Ok(_) => {
             debug!("Successfully reported delivery result for {}", delivery_id);
             Ok(())
         }
-        status => {
-            let error_body = response.text().await.unwrap_or_default();
+        Err(raw) => {
+            let wrapped = BrokkrError::from(raw);
             error!(
-                "Failed to report delivery result for {}. Status {}: {}",
-                delivery_id, status, error_body
+                "Failed to report delivery result for {}: {}",
+                delivery_id, wrapped
             );
-            Err(format!(
-                "Failed to report delivery result. Status: {}, Body: {}",
-                status, error_body
-            )
-            .into())
+            Err(boxed("Failed to report delivery result", wrapped))
         }
     }
 }
@@ -335,7 +327,7 @@ fn classify_error(error: &reqwest::Error) -> String {
 /// Number of webhooks processed or error
 pub async fn process_pending_webhooks(
     config: &Settings,
-    client: &Client,
+    client: &BrokkrClient,
     agent: &Agent,
 ) -> Result<usize, Box<dyn std::error::Error>> {
     // Fetch pending deliveries from broker

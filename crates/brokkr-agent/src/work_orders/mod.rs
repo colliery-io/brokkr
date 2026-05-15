@@ -30,7 +30,7 @@ use brokkr_models::models::agents::Agent;
 use brokkr_models::models::work_orders::WorkOrder;
 use brokkr_utils::config::Settings;
 use kube::Client as K8sClient;
-use reqwest::Client;
+use brokkr_client::BrokkrClient;
 use tracing::{debug, error, info, trace, warn};
 
 /// Determines if an error is retryable by inspecting the error message.
@@ -121,7 +121,7 @@ fn is_error_retryable(error: &dyn std::error::Error) -> bool {
 /// Number of work orders processed
 pub async fn process_pending_work_orders(
     config: &Settings,
-    http_client: &Client,
+    http_client: &BrokkrClient,
     k8s_client: &K8sClient,
     agent: &Agent,
 ) -> Result<usize, Box<dyn std::error::Error>> {
@@ -168,7 +168,7 @@ pub async fn process_pending_work_orders(
 /// Processes a single work order through its complete lifecycle.
 async fn process_single_work_order(
     config: &Settings,
-    http_client: &Client,
+    http_client: &BrokkrClient,
     k8s_client: &K8sClient,
     agent: &Agent,
     work_order: &WorkOrder,
@@ -229,7 +229,7 @@ async fn process_single_work_order(
 /// Executes a build work order using Shipwright.
 async fn execute_build_work_order(
     _config: &Settings,
-    _http_client: &Client,
+    _http_client: &BrokkrClient,
     k8s_client: &K8sClient,
     agent: &Agent,
     work_order: &WorkOrder,
