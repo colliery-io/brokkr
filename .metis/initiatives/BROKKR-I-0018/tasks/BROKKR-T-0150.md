@@ -1,17 +1,17 @@
 ---
-id: r2-f-sdk-docs-published
+id: r2-f-update-sdk-docs-for-published
 level: task
 title: "R2-F: Update SDK docs for published packages"
 short_code: "BROKKR-T-0150"
-created_at: 2026-05-15T22:30:00.000000+00:00
-updated_at: 2026-05-15T22:30:00.000000+00:00
+created_at: 2026-05-15T22:30:00+00:00
+updated_at: 2026-05-16T03:53:52.819731+00:00
 parent: BROKKR-I-0018
 blocked_by: [BROKKR-T-0149]
 archived: false
 
 tags:
   - "#task"
-  - "#phase/todo"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -30,12 +30,17 @@ Flip the SDK docs from "not yet published" placeholder language to real install 
 
 ## Acceptance Criteria
 
-- [ ] `docs/src/how-to/sdks/rust.md` "Install" section uses `cargo add brokkr-client` (not the local path dep) as the primary instruction. The path-dep variant stays as a "for in-tree workspace consumers" footnote.
-- [ ] `docs/src/how-to/sdks/python.md` "Install" section uses `pip install brokkr-client` (or `uv pip install brokkr-client`). Same footnote pattern for in-tree.
-- [ ] `docs/src/how-to/sdks/README.md` adds a short "Versioning & compatibility" section: SDK versions track broker versions in lockstep; an SDK at `0.3.x` is the canonical client for broker `0.3.x`; mixing major versions is unsupported.
-- [ ] TypeScript SDK install reference points to `@colliery-io/brokkr-client` (the README under `sdks/typescript/brokkr-client/` and any mention from the docs site).
-- [ ] All "this is not yet on $REGISTRY" hedge language removed.
-- [ ] `angreal docs build` still clean.
+## Acceptance Criteria
+
+## Acceptance Criteria
+
+- [x] `docs/src/how-to/sdks/rust.md` install: `cargo add brokkr-client` primary, in-tree path-dep as footnote.
+- [x] `docs/src/how-to/sdks/python.md` install: `pip install brokkr-client` / `uv pip install brokkr-client` primary, editable path-dep as footnote.
+- [x] `docs/src/how-to/sdks/README.md`: added a per-language install/import table at the top of "Getting started" and a "Versioning and compatibility" section explaining lockstep.
+- [x] TS install reference uses `@colliery-io/brokkr-client` (no in-tree TS SDK README exists; the docs-site table covers it).
+- [x] All "not yet published" hedge language removed from the docs.
+- [x] `sdks/python/brokkr/README.md` also updated with a `pip install brokkr-client` block + a one-liner pointing at lockstep versioning.
+- [x] `angreal docs build` clean (only pre-existing API-docs HTML-tag warnings unrelated to this change).
 
 ## Implementation Notes
 

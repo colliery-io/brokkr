@@ -4,15 +4,23 @@ The `brokkr-client` crate is generated from `openapi/brokkr-v1.json` by `progeni
 
 ## Install
 
-The crate lives in this workspace. Depend on it from a sibling crate:
+```bash
+cargo add brokkr-client tokio --features tokio/macros,tokio/rt-multi-thread
+```
+
+Or by hand in `Cargo.toml`:
 
 ```toml
 [dependencies]
-brokkr-client = { path = "../brokkr-client" }
+brokkr-client = "0.3"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 
-It is not yet published to crates.io.
+For in-tree workspace consumers, swap the dependency for a path dep:
+
+```toml
+brokkr-client = { path = "../brokkr-client" }
+```
 
 ## Construct a client
 

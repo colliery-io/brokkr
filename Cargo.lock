@@ -446,7 +446,7 @@ dependencies = [
 
 [[package]]
 name = "brokkr-client"
-version = "0.3.0"
+version = "0.0.0"
 dependencies = [
  "bytes",
  "chrono",

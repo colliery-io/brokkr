@@ -847,11 +847,9 @@ async fn test_create_work_order_no_targeting_fails() {
 
     assert_eq!(status, StatusCode::BAD_REQUEST);
 
+    // v1 ErrorResponse shape (T-A1): { "code": "...", "message": "...", ... }
     let json: Value = serde_json::from_slice(&body).unwrap();
-    assert!(json["error"]
-        .as_str()
-        .unwrap()
-        .contains("targeting method must be specified"));
+    assert_eq!(json["code"].as_str().unwrap(), "no_targeting_specified");
 }
 
 #[tokio::test]
@@ -878,11 +876,9 @@ async fn test_create_work_order_empty_targeting_fails() {
 
     assert_eq!(status, StatusCode::BAD_REQUEST);
 
+    // v1 ErrorResponse shape (T-A1): { "code": "...", "message": "...", ... }
     let json: Value = serde_json::from_slice(&body).unwrap();
-    assert!(json["error"]
-        .as_str()
-        .unwrap()
-        .contains("targeting method must be specified"));
+    assert_eq!(json["code"].as_str().unwrap(), "no_targeting_specified");
 }
 
 #[tokio::test]

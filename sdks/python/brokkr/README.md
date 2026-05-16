@@ -2,8 +2,15 @@
 
 Ergonomic Python client for the Brokkr broker API.
 
-The import name remains `brokkr` (`from brokkr import BrokkrClient`); the
+```bash
+pip install brokkr-client
+```
+
+The import name is `brokkr` (`from brokkr import BrokkrClient`); the
 PyPI distribution name is `brokkr-client`.
+
+Versions track the broker release in lockstep — `brokkr-client` `0.3.x`
+is the canonical client for broker `0.3.x`.
 
 This is a thin wrapper around the auto-generated `brokkr-client-generated`
 package (produced by `openapi-python-client` from the broker's OpenAPI
