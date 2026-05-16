@@ -7,8 +7,11 @@
 //! Auto-generated Rust client for the Brokkr broker API.
 //!
 //! Every type and method in this crate is generated at compile time by the
-//! `progenitor::generate_api!` macro from `openapi/brokkr-v1.json`. Do not
-//! edit the generated surface; regenerate the spec via
+//! `progenitor::generate_api!` macro from `spec/brokkr-v1.json`. That file
+//! is kept byte-identical to the workspace-canonical `openapi/brokkr-v1.json`
+//! by `angreal openapi export` and asserted by `angreal openapi check` —
+//! the in-crate copy exists so the spec ships with the published crate.
+//! Do not edit the generated surface; regenerate the spec via
 //! `angreal openapi export` after broker changes.
 //!
 //! This crate is intentionally a thin wire-level client. The ergonomic
@@ -16,7 +19,7 @@
 //! layer added by task BROKKR-T-0137 (C1).
 
 progenitor::generate_api!(
-    spec = "../../openapi/brokkr-v1.json",
+    spec = "spec/brokkr-v1.json",
     interface = Builder,
 );
 

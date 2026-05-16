@@ -5,15 +5,15 @@
 
 // Broker API surface for the ui-slim demo.
 //
-// Migrated in T-D3 to use `@brokkr/client` (the workspace's TypeScript SDK)
-// for every v1 broker call. The handful of non-v1 endpoints — the Prometheus
-// /metrics endpoint and the demo's webhook-catcher — continue to use raw
-// fetch because they're intentionally outside the SDK's surface.
+// Migrated in T-D3 to use `@colliery-io/brokkr-client` (the workspace's
+// TypeScript SDK) for every v1 broker call. The handful of non-v1 endpoints —
+// the Prometheus /metrics endpoint and the demo's webhook-catcher — continue
+// to use raw fetch because they're intentionally outside the SDK's surface.
 //
 // The exported function names and signatures match the pre-migration API.js
 // so the React components didn't need to change.
 
-import { BrokkrClient } from "@brokkr/client";
+import { BrokkrClient } from "@colliery-io/brokkr-client";
 
 const BROKER_URL =
   process.env.REACT_APP_BROKER_URL || "http://localhost:30300";

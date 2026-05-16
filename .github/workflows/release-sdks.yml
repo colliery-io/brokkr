@@ -1,0 +1,331 @@
+---
+name: Release SDKs
+
+# Tag-driven SDK publishing. Runs in parallel with the broker / helm release
+# workflow (release.yml); the two share the same v* tag but have independent
+# approval gates.
+#
+# Versioning is lockstep: the git tag drives the version stamped into all
+# four packages (Rust crate, two Python distributions, one npm package).
+# Source manifests stay at 0.0.0; stamping happens in this workflow only.
+#
+# Publish steps land in R2-D (BROKKR-T-0148). This skeleton builds and
+# uploads artifacts, and pauses at the publish-sdks environment gate.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: >-
+          Version to stamp (e.g. 0.3.0). For dry-run testing only;
+          a tag push is the real release trigger.
+        required: true
+        default: '0.0.0-test'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  resolve-version:
+    name: Resolve and validate version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      is_tag: ${{ steps.v.outputs.is_tag }}
+    steps:
+      - name: Determine version
+        id: v
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            VERSION="${{ inputs.version }}"
+            IS_TAG=false
+          else
+            # github.ref_name on tag push is e.g. "v0.3.0"; strip the leading v.
+            VERSION="${GITHUB_REF_NAME#v}"
+            IS_TAG=true
+          fi
+          # Stable releases only for v1 of this pipeline. Pre-release tags
+          # (rc/alpha/beta) are not in scope yet (see BROKKR-I-0018 non-goals).
+          if [[ "$IS_TAG" == "true" && ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Tag '${GITHUB_REF_NAME}' does not match v<major>.<minor>.<patch>. Pre-releases are not supported yet."
+            exit 1
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "is_tag=${IS_TAG}" >> "$GITHUB_OUTPUT"
+          echo "Resolved version: ${VERSION} (tag=${IS_TAG})"
+
+  drift-check:
+    name: Fail-fast spec drift check
+    runs-on: ubuntu-latest
+    needs: resolve-version
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install angreal
+        run: pipx install angreal
+
+      - name: openapi check (spec + crate mirror parity)
+        run: angreal openapi check
+
+      - name: openapi check-python
+        run: angreal openapi check-python
+
+      - name: openapi check-typescript
+        run: angreal openapi check-typescript
+
+  build:
+    name: Stamp version and build artifacts
+    runs-on: ubuntu-latest
+    needs: [resolve-version, drift-check]
+    env:
+      VERSION: ${{ needs.resolve-version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-edit (for cargo set-version)
+        run: cargo install cargo-edit --locked
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      # --- Stamp the resolved version into every manifest. Manifests stay
+      # 0.0.0 in source; stamping is workflow-local only. ---
+
+      - name: Stamp Rust crate version
+        run: cargo set-version -p brokkr-client "${VERSION}"
+
+      - name: Stamp Python wrapper version
+        working-directory: sdks/python/brokkr
+        run: |
+          python -c "
+          import re, pathlib
+          p = pathlib.Path('pyproject.toml')
+          s = p.read_text()
+          s = re.sub(r'^version = \".*\"', f'version = \"${VERSION}\"', s, count=1, flags=re.M)
+          p.write_text(s)
+          "
+          grep '^version' pyproject.toml
+
+      - name: Stamp Python generated version
+        working-directory: sdks/python/brokkr-client
+        run: |
+          python -c "
+          import re, pathlib
+          p = pathlib.Path('pyproject.toml')
+          s = p.read_text()
+          s = re.sub(r'^version = \".*\"', f'version = \"${VERSION}\"', s, count=1, flags=re.M)
+          p.write_text(s)
+          "
+          grep '^version' pyproject.toml
+
+      - name: Stamp TypeScript package version
+        working-directory: sdks/typescript/brokkr-client
+        run: npm version "${VERSION}" --no-git-tag-version --allow-same-version
+
+      # --- Build artifacts. Each step is independent so a failure in one
+      # surfaces clearly. The publish job picks artifacts up by name. ---
+
+      - name: Build Rust crate (cargo package)
+        run: cargo package -p brokkr-client --allow-dirty
+
+      - name: Build Python wrapper (uv build)
+        working-directory: sdks/python/brokkr
+        run: uv build
+
+      - name: Build Python generated (uv build)
+        working-directory: sdks/python/brokkr-client
+        run: uv build
+
+      - name: Build TypeScript package (npm pack)
+        working-directory: sdks/typescript/brokkr-client
+        run: |
+          npm install
+          npm pack
+
+      # --- Upload artifacts for downstream publish jobs. ---
+
+      - name: Upload Rust artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-crate
+          path: target/package/brokkr-client-*.crate
+          if-no-files-found: error
+
+      - name: Upload Python wrapper artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-wrapper
+          path: sdks/python/brokkr/dist/*
+          if-no-files-found: error
+
+      - name: Upload Python generated artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-generated
+          path: sdks/python/brokkr-client/dist/*
+          if-no-files-found: error
+
+      - name: Upload TypeScript artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: typescript-package
+          path: sdks/typescript/brokkr-client/colliery-io-brokkr-client-*.tgz
+          if-no-files-found: error
+
+  publish:
+    name: Publish (gated)
+    runs-on: ubuntu-latest
+    needs: [resolve-version, build]
+    # Manual approval gate. PyPI Trusted Publishing matches on this
+    # environment name (publish-sdks) + workflow filename (release-sdks.yml).
+    # Renaming either requires updating the PyPI pending publisher records.
+    environment: publish-sdks
+    permissions:
+      id-token: write   # Required for PyPI Trusted Publishing (OIDC).
+      contents: read
+    env:
+      VERSION: ${{ needs.resolve-version.outputs.version }}
+      IS_TAG: ${{ needs.resolve-version.outputs.is_tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Note dry-run / non-tag invocation
+        if: needs.resolve-version.outputs.is_tag != 'true'
+        run: |
+          echo "::notice::workflow_dispatch run — every publish step below will run with --dry-run only. No artifacts will be uploaded to public registries."
+
+      # ----- Download artifacts produced by the build job. -----
+
+      - name: Download Rust artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: rust-crate
+          path: dist/rust
+
+      - name: Download Python wrapper artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: python-wrapper
+          path: dist/python-wrapper
+
+      - name: Download Python generated artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: python-generated
+          path: dist/python-generated
+
+      - name: Download TypeScript artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: typescript-package
+          path: dist/typescript
+
+      # ----- Cargo: publish brokkr-client to crates.io. -----
+      #
+      # We can't publish from the artifact directly — `cargo publish` rebuilds
+      # from the source tree. Re-stamp the version, then publish. Dry-run runs
+      # in both real and dispatch invocations; the real publish only fires on
+      # a tag push.
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-edit
+        run: cargo install cargo-edit --locked
+
+      - name: Stamp Rust crate version for publish
+        run: cargo set-version -p brokkr-client "${VERSION}"
+
+      - name: Cargo publish dry-run
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish -p brokkr-client --dry-run --allow-dirty
+
+      - name: Cargo publish
+        if: needs.resolve-version.outputs.is_tag == 'true'
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish -p brokkr-client --allow-dirty
+
+      # ----- PyPI: publish both Python distributions via Trusted Publishing.
+      #
+      # Each call uses its own pending-publisher record on PyPI. No long-lived
+      # token; OIDC authenticates the job. The two packages publish independently
+      # so a failure in one doesn't poison the other's deployment record.
+
+      - name: PyPI publish — brokkr-client (wrapper)
+        if: needs.resolve-version.outputs.is_tag == 'true'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/python-wrapper
+          skip-existing: false
+          verbose: true
+
+      - name: PyPI publish — brokkr-client-generated (low-level)
+        if: needs.resolve-version.outputs.is_tag == 'true'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/python-generated
+          skip-existing: false
+          verbose: true
+
+      # ----- npm: publish @colliery-io/brokkr-client. -----
+      #
+      # Scoped public packages require `--access public` on first publish
+      # (npm's default for scoped packages is private, which requires a paid
+      # account). Dry-run validates that the version doesn't already exist
+      # before committing.
+
+      - name: Set up Node.js (with npm auth)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: npm publish dry-run
+        working-directory: dist/typescript
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          TARBALL=$(ls colliery-io-brokkr-client-*.tgz)
+          echo "Validating ${TARBALL}"
+          npm publish "${TARBALL}" --access public --dry-run
+
+      - name: npm publish
+        if: needs.resolve-version.outputs.is_tag == 'true'
+        working-directory: dist/typescript
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          TARBALL=$(ls colliery-io-brokkr-client-*.tgz)
+          npm publish "${TARBALL}" --access public

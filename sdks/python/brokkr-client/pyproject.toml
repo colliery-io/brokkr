@@ -1,5 +1,5 @@
 [project]
-name = "brokkr-broker-client"
+name = "brokkr-client-generated"
 version = "0.0.0"
 description = "A client library for accessing brokkr-broker"
 authors = []

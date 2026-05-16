@@ -23,6 +23,13 @@ import angreal
 
 PROJECT_ROOT = Path(angreal.get_root()).parent
 SPEC_PATH = PROJECT_ROOT / "openapi" / "brokkr-v1.json"
+# Mirror of the spec that ships inside the brokkr-client crate. The
+# `progenitor::generate_api!` macro reads from a path *inside* the crate
+# directory so the spec survives `cargo package`. `export` keeps the two
+# copies byte-identical; `check` asserts they haven't drifted.
+CRATE_SPEC_PATH = (
+    PROJECT_ROOT / "crates" / "brokkr-client" / "spec" / "brokkr-v1.json"
+)
 EXPORT_CMD = [
     "cargo",
     "run",
@@ -39,6 +46,9 @@ EXPORT_CMD = [
 OPENAPI_PYTHON_CLIENT_VERSION = "0.28.4"
 OPENAPI_TYPESCRIPT_VERSION = "7.13.0"
 PYTHON_SDK_DIR = PROJECT_ROOT / "sdks" / "python" / "brokkr-client"
+PYTHON_GEN_CONFIG = (
+    Path(angreal.get_root()) / "files" / "openapi-python-client-config.yaml"
+)
 TYPESCRIPT_SDK_DIR = PROJECT_ROOT / "sdks" / "typescript" / "brokkr-client"
 TYPESCRIPT_SCHEMA_REL = "src/schema.d.ts"
 
@@ -73,14 +83,32 @@ def _run_export(out_path: Path) -> int:
     return 0
 
 
+def _mirror_crate_spec() -> None:
+    """Copy SPEC_PATH to CRATE_SPEC_PATH so the brokkr-client crate ships
+    the same spec the workspace publishes from."""
+    CRATE_SPEC_PATH.parent.mkdir(parents=True, exist_ok=True)
+    CRATE_SPEC_PATH.write_bytes(SPEC_PATH.read_bytes())
+
+
 @openapi()
 @angreal.command(
     name="export",
     about="regenerate openapi/brokkr-v1.json from the broker schema",
 )
 def export():
-    """Regenerate `openapi/brokkr-v1.json` from the broker's utoipa schema."""
-    return _run_export(SPEC_PATH)
+    """Regenerate `openapi/brokkr-v1.json` from the broker's utoipa schema.
+
+    Also mirrors the spec to `crates/brokkr-client/spec/brokkr-v1.json` so
+    the in-crate `progenitor::generate_api!` macro reads from a path that
+    survives `cargo package`.
+    """
+    rc = _run_export(SPEC_PATH)
+    if rc == 0:
+        _mirror_crate_spec()
+        print(
+            f"Mirrored spec to {CRATE_SPEC_PATH.relative_to(PROJECT_ROOT)}"
+        )
+    return rc
 
 
 @openapi()
@@ -93,6 +121,23 @@ def check():
     if not SPEC_PATH.exists():
         print(
             f"committed spec not found at {SPEC_PATH} — run `angreal openapi export`",
+            file=sys.stderr,
+        )
+        return 1
+
+    # Crate-local mirror must exist and match the workspace copy.
+    if not CRATE_SPEC_PATH.exists():
+        print(
+            f"crate spec mirror not found at {CRATE_SPEC_PATH} — "
+            f"run `angreal openapi export`",
+            file=sys.stderr,
+        )
+        return 1
+    if not filecmp.cmp(SPEC_PATH, CRATE_SPEC_PATH, shallow=False):
+        print(
+            f"FAIL: {CRATE_SPEC_PATH.relative_to(PROJECT_ROOT)} drifted from "
+            f"{SPEC_PATH.relative_to(PROJECT_ROOT)}.\n"
+            f"Regenerate locally with: angreal openapi export",
             file=sys.stderr,
         )
         return 1
@@ -162,6 +207,8 @@ def _run_python_gen(target_dir: Path) -> int:
         "--output-path",
         name,
         "--overwrite",
+        "--config",
+        str(PYTHON_GEN_CONFIG),
     ]
     try:
         subprocess.run(cmd, cwd=str(wd), check=True)

@@ -1,8 +1,11 @@
-# brokkr
+# brokkr-client
 
 Ergonomic Python client for the Brokkr broker API.
 
-This is a thin wrapper around the auto-generated `brokkr-broker-client`
+The import name remains `brokkr` (`from brokkr import BrokkrClient`); the
+PyPI distribution name is `brokkr-client`.
+
+This is a thin wrapper around the auto-generated `brokkr-client-generated`
 package (produced by `openapi-python-client` from the broker's OpenAPI
 spec). The wrapper adds:
 
