@@ -1,17 +1,17 @@
 ---
-id: r2-c-release-sdks-workflow
+id: r2-c-release-sdks-yml-workflow
 level: task
 title: "R2-C: release-sdks.yml workflow skeleton with publish-sdks gate"
 short_code: "BROKKR-T-0147"
-created_at: 2026-05-15T22:30:00.000000+00:00
-updated_at: 2026-05-15T22:30:00.000000+00:00
+created_at: 2026-05-15T22:30:00+00:00
+updated_at: 2026-05-16T00:09:10.341921+00:00
 parent: BROKKR-I-0018
 blocked_by: [BROKKR-T-0145, BROKKR-T-0146]
 archived: false
 
 tags:
   - "#task"
-  - "#phase/todo"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -30,18 +30,18 @@ Stand up `.github/workflows/release-sdks.yml`. Tag-triggered, builds all four SD
 
 ## Acceptance Criteria
 
-- [ ] `.github/workflows/release-sdks.yml` exists; triggers on `push.tags: ['v*']`.
-- [ ] Workflow rejects tags that don't match `v\d+\.\d+\.\d+` (no pre-release tags in v1; reject with a clear error).
-- [ ] Fast-fails with `angreal openapi check` + `check-python` + `check-typescript` + the new spec parity check from R2-A before any build step runs.
-- [ ] One `version-stamp-and-build` job that:
-  - Derives version from `${{ github.ref_name }}` stripping the `v` prefix.
-  - Stamps the version into `crates/brokkr-client/Cargo.toml` (via `cargo set-version` or `sed`), the two `pyproject.toml`s, and `sdks/typescript/brokkr-client/package.json`.
-  - Builds: `cargo package -p brokkr-client`, `uv build` for both Python packages, `npm pack` for TS.
-  - Uploads all artifacts to the workflow run.
-- [ ] A `publish-sdks` GitHub environment exists (Settings → Environments) with the same required reviewers as the existing `release` environment; deployment branches restricted to tags matching `v*`.
-- [ ] A `publish` job depends on `version-stamp-and-build`, declares `environment: publish-sdks`, but does nothing yet (placeholder echo). This is what R2-D fills in.
-- [ ] A workflow_dispatch input is added so we can test the skeleton without pushing a tag (uses a synthetic version like `v0.0.0-test`).
-- [ ] Running it against a test tag produces uploaded artifacts and pauses at the approval gate.
+## Acceptance Criteria
+
+## Acceptance Criteria
+
+- [x] `.github/workflows/release-sdks.yml` exists; triggers on `push.tags: ['v*']`.
+- [x] Workflow rejects tags that don't match `v\d+\.\d+\.\d+` (the `resolve-version` job exits non-zero with a clear error message).
+- [x] Fast-fails with `angreal openapi check` (which now also asserts the R2-A crate-mirror parity) + `check-python` + `check-typescript` in a dedicated `drift-check` job before any build step runs.
+- [x] `build` job derives version from `${GITHUB_REF_NAME#v}` (or `inputs.version` for workflow_dispatch); stamps via `cargo set-version` + a regex on both `pyproject.toml`s + `npm version --no-git-tag-version`; builds `cargo package`, `uv build` for both Python packages, and `npm pack` for TS; uploads four named artifacts.
+- [ ] **(Manual)** `publish-sdks` GitHub environment must be created at `Settings → Environments` with the same required reviewers as the existing `release` environment and deployment branches restricted to tags matching `v*`. PyPI's pending publishers already reference this exact name.
+- [x] `publish` job depends on `build`, declares `environment: publish-sdks`, has placeholder echo step (R2-D fills in cargo/PyPI/npm publish).
+- [x] `workflow_dispatch` accepts a `version` input (default `0.0.0-test`) for testing without pushing a tag; non-tag runs are flagged via `is_tag=false` so R2-D's publish steps can no-op on dry runs.
+- [ ] **(Manual)** End-to-end smoke test via `workflow_dispatch` once the branch lands and the environment exists.
 
 ## Implementation Notes
 
@@ -65,4 +65,8 @@ Stand up `.github/workflows/release-sdks.yml`. Tag-triggered, builds all four SD
 
 ## Status Updates
 
-*To be added during implementation*
+- 2026-05-15: Workflow skeleton landed at `.github/workflows/release-sdks.yml`.
+  - Four jobs: `resolve-version` (validates and normalizes the version), `drift-check` (runs all three angreal openapi checks), `build` (stamps + builds all four artifacts and uploads), `publish` (gated by `publish-sdks` environment, placeholder for R2-D).
+  - Also renamed the TS package from `@brokkr/client` to `@colliery-io/brokkr-client` (consumer was a single import in `examples/ui-slim/src/api.js` + `package.json` lock files). Wasn't in R2-B's explicit scope but matches the same naming-alignment intent and was needed before the workflow could reference the npm package by its final name. Tests + clean install verified post-rename.
+  - `cargo set-version` smoke-tested locally; `actionlint` clean.
+  - Two manual follow-ups before R2-E: (1) create the `publish-sdks` GitHub environment with reviewers and `v*`-tag deployment restriction, (2) `workflow_dispatch` the skeleton from the merged branch to confirm artifacts upload and the gate pauses.

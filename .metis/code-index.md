@@ -1,6 +1,6 @@
 # Code Index
 
-> Generated: 2026-05-15T15:09:45Z | 346 files | JavaScript, Python, Rust, TypeScript
+> Generated: 2026-05-15T23:47:05Z | 346 files | JavaScript, Python, Rust, TypeScript
 
 ## Project Structure
 
@@ -2395,7 +2395,7 @@
 
 #### crates/brokkr-client/src/lib.rs
 
--  `wrapper` module L23 — `-` — layer added by task BROKKR-T-0137 (C1).
+-  `wrapper` module L26 — `-` — layer added by task BROKKR-T-0137 (C1).
 
 #### crates/brokkr-client/src/wrapper.rs
 
@@ -5870,13 +5870,13 @@
 
 #### sdks/python/brokkr-client/brokkr_broker_client/api/generators/create_generator.py
 
-- pub `sync_detailed` function L73-98 — `def sync_detailed( *, client: AuthenticatedClient, body: NewGenerator, ) -> Resp...` — Args:
-- pub `sync` function L101-121 — `def sync( *, client: AuthenticatedClient, body: NewGenerator, ) -> CreateGenerat...` — Args:
-- pub `asyncio_detailed` function L124-147 — `def asyncio_detailed( *, client: AuthenticatedClient, body: NewGenerator, ) -> R...` — Args:
-- pub `asyncio` function L150-172 — `def asyncio( *, client: AuthenticatedClient, body: NewGenerator, ) -> CreateGene...` — Args:
+- pub `sync_detailed` function L78-103 — `def sync_detailed( *, client: AuthenticatedClient, body: NewGenerator, ) -> Resp...` — Args:
+- pub `sync` function L106-126 — `def sync( *, client: AuthenticatedClient, body: NewGenerator, ) -> CreateGenerat...` — Args:
+- pub `asyncio_detailed` function L129-152 — `def asyncio_detailed( *, client: AuthenticatedClient, body: NewGenerator, ) -> R...` — Args:
+- pub `asyncio` function L155-177 — `def asyncio( *, client: AuthenticatedClient, body: NewGenerator, ) -> CreateGene...` — Args:
 -  `_get_kwargs` function L14-30 — `def _get_kwargs( *, body: NewGenerator, ) -> dict[str, Any]`
--  `_parse_response` function L33-59 — `def _parse_response( *, client: AuthenticatedClient | Client, response: httpx.Re...`
--  `_build_response` function L62-70 — `def _build_response( *, client: AuthenticatedClient | Client, response: httpx.Re...`
+-  `_parse_response` function L33-64 — `def _parse_response( *, client: AuthenticatedClient | Client, response: httpx.Re...`
+-  `_build_response` function L67-75 — `def _build_response( *, client: AuthenticatedClient | Client, response: httpx.Re...`
 
 #### sdks/python/brokkr-client/brokkr_broker_client/api/generators/delete_generator.py
 
@@ -7071,7 +7071,7 @@
 - pub `webhooks` type L1024 — `= Record<string, never>`
 - pub `components` interface L1025-2377 — `{ schemas: : { AddAnnotationRequest: { key: string; value: string; }; /** @descr...`
 - pub `$defs` type L2378 — `= Record<string, never>`
-- pub `operations` interface L2379-6584 — `{ list_audit_logs: : { parameters: { query?: { /** * @description Filter by acto...`
+- pub `operations` interface L2379-6593 — `{ list_audit_logs: : { parameters: { query?: { /** * @description Filter by acto...`
 
 #### sdks/typescript/brokkr-client/src/wrapper.test.ts
 
