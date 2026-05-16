@@ -129,6 +129,12 @@ impl TestFixture {
         self.agent_settings.agent.pak = agent_pak.to_string();
         self.agent_settings.agent.agent_name = "test_agent".to_string();
         self.agent_settings.agent.cluster_name = "test_cluster".to_string();
+        // Rebuild the SDK client so it carries the freshly issued agent PAK.
+        // `broker_sdk::build_client` bakes the PAK into the underlying reqwest
+        // client at construction time; the original client built in `new()`
+        // used the admin PAK and would 403 the agent-scoped endpoints.
+        self.sdk_client = broker_sdk::build_client(&self.agent_settings)
+            .expect("Failed to rebuild BrokkrClient with agent PAK");
         self.initialized = true;
         self.generator = None;
         self.generator_pak = None;
