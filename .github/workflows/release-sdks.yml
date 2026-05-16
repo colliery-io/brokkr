@@ -104,9 +104,6 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install cargo-edit (for cargo set-version)
-        run: cargo install cargo-edit --locked
-
       - name: Install uv
         uses: astral-sh/setup-uv@v3
 
@@ -117,13 +114,21 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
 
       # --- Stamp the resolved version into every manifest. Manifests stay
-      # 0.0.0 in source; stamping is workflow-local only. ---
+      # 0.0.0 in source; stamping is workflow-local only. We use a regex on
+      # each manifest rather than `cargo set-version` (which enforces semver
+      # ordering and rejects pre-release-suffixed dispatch versions). ---
 
       - name: Stamp Rust crate version
-        # --allow-downgrade so workflow_dispatch with a pre-release default
-        # (e.g. 0.0.0-test) doesn't fail the gate. Real tag releases always
-        # upgrade from 0.0.0 so this flag is a no-op for them.
-        run: cargo set-version -p brokkr-client "${VERSION}" --allow-downgrade
+        working-directory: crates/brokkr-client
+        run: |
+          python3 -c "
+          import re, pathlib
+          p = pathlib.Path('Cargo.toml')
+          s = p.read_text()
+          s = re.sub(r'^version = \".*\"', f'version = \"${VERSION}\"', s, count=1, flags=re.M)
+          p.write_text(s)
+          "
+          grep '^version' Cargo.toml
 
       - name: Stamp Python wrapper version
         working-directory: sdks/python/brokkr
@@ -261,11 +266,17 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install cargo-edit
-        run: cargo install cargo-edit --locked
-
       - name: Stamp Rust crate version for publish
-        run: cargo set-version -p brokkr-client "${VERSION}"
+        working-directory: crates/brokkr-client
+        run: |
+          python3 -c "
+          import re, pathlib
+          p = pathlib.Path('Cargo.toml')
+          s = p.read_text()
+          s = re.sub(r'^version = \".*\"', f'version = \"${VERSION}\"', s, count=1, flags=re.M)
+          p.write_text(s)
+          "
+          grep '^version' Cargo.toml
 
       - name: Cargo publish dry-run
         env:
