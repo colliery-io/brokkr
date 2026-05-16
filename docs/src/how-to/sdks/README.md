@@ -9,9 +9,23 @@ Brokkr ships generated client SDKs for **Rust**, **Python**, and **TypeScript**.
 
 ## Getting started
 
+| Language | Install | Import |
+|----------|---------|--------|
+| Rust | `cargo add brokkr-client` | `use brokkr_client::BrokkrClient;` |
+| Python | `pip install brokkr-client` | `from brokkr import BrokkrClient` |
+| TypeScript | `npm install @colliery-io/brokkr-client` | `import { BrokkrClient } from "@colliery-io/brokkr-client";` |
+
+Detailed walkthroughs:
+
 - [Rust](./rust.md) — `brokkr-client` crate, includes a worked agent example.
-- [Python](./python.md) — `brokkr-client` package (wraps the low-level `brokkr-client-generated`).
-- TypeScript — see `sdks/typescript/brokkr-client/README.md`. Types are generated via `openapi-typescript`; the runtime is `openapi-fetch`.
+- [Python](./python.md) — `brokkr-client` distribution (wraps the low-level `brokkr-client-generated`, pulled in transitively).
+- TypeScript — see `sdks/typescript/brokkr-client/README.md` in the repo. Types are generated via `openapi-typescript`; the runtime is `openapi-fetch`.
+
+## Versioning and compatibility
+
+SDK versions track the broker version in **lockstep**. The git tag `vX.Y.Z` drives the version stamped into the broker container images, helm charts, and all three SDKs in the same release. An SDK at `0.3.x` is the canonical client for broker `0.3.x`; mixing major versions is not supported.
+
+There is no separate SDK-only release cadence. If the broker API changes, the SDKs are regenerated and republished in the same tag.
 
 ## Authentication
 

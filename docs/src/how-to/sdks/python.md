@@ -4,13 +4,19 @@ The `brokkr-client` package is an ergonomic wrapper around `brokkr-client-genera
 
 ## Install
 
-Both packages live in this workspace; install from a local checkout via `uv`:
+```bash
+pip install brokkr-client
+# or
+uv pip install brokkr-client
+```
+
+This pulls in `brokkr-client-generated` automatically as a transitive dependency. End users don't need to install it separately.
+
+For in-tree workspace development, install editable from a local checkout:
 
 ```bash
 uv pip install -e sdks/python/brokkr
 ```
-
-This pulls in `brokkr-client-generated` automatically (declared via `tool.uv.sources`). Neither package is published to PyPI yet.
 
 ## Construct a client
 
