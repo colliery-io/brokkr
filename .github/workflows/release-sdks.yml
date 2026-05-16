@@ -21,9 +21,11 @@ on:
       version:
         description: >-
           Version to stamp (e.g. 0.3.0). For dry-run testing only;
-          a tag push is the real release trigger.
+          a tag push is the real release trigger. Default is an
+          obviously-fake high version that's valid under both semver
+          and PEP 440.
         required: true
-        default: '0.0.0-test'
+        default: '99.99.99'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
