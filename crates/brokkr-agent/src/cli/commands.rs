@@ -58,10 +58,9 @@
 //! - JSON output format
 //! - Contextual information
 
-use crate::{broker, deployment_health, diagnostics, health, k8s, webhooks, work_orders};
+use crate::{broker, broker_sdk, deployment_health, diagnostics, health, k8s, webhooks, work_orders};
 use brokkr_utils::config::Settings;
 use brokkr_utils::telemetry::prelude::*;
-use reqwest::Client;
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -89,11 +88,11 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
     broker::verify_agent_pak(&config).await?;
     info!("Agent PAK verified successfully");
 
-    let client = Client::new();
-    info!("HTTP client created");
+    let sdk_client = broker_sdk::build_client(&config)?;
+    info!("Broker SDK client created");
 
     info!("Fetching agent details");
-    let mut agent = broker::fetch_agent_details(&config, &client).await?;
+    let mut agent = broker::fetch_agent_details(&config, &sdk_client).await?;
     info!(
         "Agent details fetched successfully for agent: {}",
         agent.name
@@ -184,7 +183,7 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
     while running.load(Ordering::SeqCst) {
         select! {
             _ = heartbeat_interval.tick() => {
-                match broker::send_heartbeat(&config, &client, &agent).await {
+                match broker::send_heartbeat(&config, &sdk_client, &agent).await {
                     Ok(_) => {
                         debug!("Successfully sent heartbeat for agent '{}' (id: {})", agent.name, agent.id);
                         // Update broker status for health endpoints
@@ -194,7 +193,7 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
                             status.last_heartbeat = Some(chrono::Utc::now().to_rfc3339());
                         }
                         // Fetch updated agent details after heartbeat
-                        match broker::fetch_agent_details(&config, &client).await {
+                        match broker::fetch_agent_details(&config, &sdk_client).await {
                             Ok(updated_agent) => {
                                 debug!("Successfully fetched updated agent details. Status: {}", updated_agent.status);
                                 agent = updated_agent;
@@ -218,7 +217,7 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
                     continue;
                 }
 
-                match broker::fetch_and_process_deployment_objects(&config, &client, &agent).await {
+                match broker::fetch_and_process_deployment_objects(&config, &sdk_client, &agent).await {
                     Ok(objects) => {
                         for obj in objects {
                             let k8s_objects = k8s::objects::create_k8s_objects(obj.clone(),agent.id)?;
@@ -240,7 +239,7 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
 
                                     if let Err(e) = broker::send_success_event(
                                         &config,
-                                        &client,
+                                        &sdk_client,
                                         &agent,
                                         obj.id,
                                         None,
@@ -254,7 +253,7 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
                                         obj.id, agent.name, agent.id, e);
                                     if let Err(send_err) = broker::send_failure_event(
                                         &config,
-                                        &client,
+                                        &sdk_client,
                                         &agent,
                                         obj.id,
                                         e.to_string(),
@@ -279,7 +278,7 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
                 }
 
                 // Process pending work orders
-                match work_orders::process_pending_work_orders(&config, &client, &k8s_client, &agent).await {
+                match work_orders::process_pending_work_orders(&config, &sdk_client, &k8s_client, &agent).await {
                     Ok(count) => {
                         if count > 0 {
                             info!("Processed {} work orders for agent '{}' (id: {})",
@@ -323,7 +322,7 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
                     health_statuses.into_iter().map(|s| s.into()).collect();
 
                 // Send health status to broker
-                if let Err(e) = broker::send_health_status(&config, &client, &agent, health_updates).await {
+                if let Err(e) = broker::send_health_status(&config, &sdk_client, &agent, health_updates).await {
                     error!("Failed to send health status for agent '{}': {}", agent.name, e);
                 } else {
                     debug!("Successfully sent health status for {} deployment objects",
@@ -339,14 +338,14 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
                 }
 
                 // Fetch pending diagnostic requests
-                match broker::fetch_pending_diagnostics(&config, &client, &agent).await {
+                match broker::fetch_pending_diagnostics(&config, &sdk_client, &agent).await {
                     Ok(requests) => {
                         for request in requests {
                             info!("Processing diagnostic request {} for deployment object {}",
                                 request.id, request.deployment_object_id);
 
                             // Claim the request
-                            match broker::claim_diagnostic_request(&config, &client, request.id).await {
+                            match broker::claim_diagnostic_request(&config, &sdk_client, request.id).await {
                                 Ok(_claimed) => {
                                     // Collect diagnostics
                                     // For now, use a default namespace and label selector
@@ -359,7 +358,7 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
                                             // Submit the result
                                             if let Err(e) = broker::submit_diagnostic_result(
                                                 &config,
-                                                &client,
+                                                &sdk_client,
                                                 request.id,
                                                 result,
                                             ).await {
@@ -382,7 +381,7 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
                                             };
                                             let _ = broker::submit_diagnostic_result(
                                                 &config,
-                                                &client,
+                                                &sdk_client,
                                                 request.id,
                                                 error_result,
                                             ).await;
@@ -410,7 +409,7 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
                 }
 
                 // Process pending webhook deliveries
-                match webhooks::process_pending_webhooks(&config, &client, &agent).await {
+                match webhooks::process_pending_webhooks(&config, &sdk_client, &agent).await {
                     Ok(count) => {
                         if count > 0 {
                             info!("Processed {} webhook deliveries for agent '{}' (id: {})",

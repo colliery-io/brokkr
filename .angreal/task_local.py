@@ -58,10 +58,12 @@ def docs():
 @angreal.command(name="rebuild", about="rebuild a specific service")
 @angreal.argument(name="service", help="service to rebuild (broker, agent, ui)", required=True)
 def rebuild(service):
+    # Map friendly aliases to the docker-compose service names declared in
+    # .angreal/files/docker-compose.yaml.
     services = {
-        "broker": "brokkr-broker",
-        "agent": "brokkr-agent",
-        "ui": "brokkr-ui"
+        "broker": "broker",
+        "agent": "agent",
+        "ui": "brokkr-ui",
     }
 
     if service not in services:

@@ -1,0 +1,28 @@
+[package]
+name = "brokkr-client"
+version = "0.0.0"
+edition = "2021"
+license = "Elastic-2.0"
+description = "Auto-generated Rust client for the Brokkr broker API"
+
+# This crate's source is generated from openapi/brokkr-v1.json by the
+# `progenitor::generate_api!` macro in src/lib.rs. Regeneration happens
+# automatically on every `cargo build` whenever the spec changes; CI enforces
+# that the spec is in sync with the broker via `angreal openapi check`.
+
+[dependencies]
+progenitor = "0.14"
+progenitor-client = "0.14"
+
+bytes = "1"
+chrono = { version = "0.4", features = ["serde"] }
+futures = "0.3"
+reqwest = { version = "0.13", default-features = false, features = ["json", "stream"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["serde", "v4"] }
+
+tokio = { version = "1", default-features = false, features = ["time"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "test-util", "time"] }

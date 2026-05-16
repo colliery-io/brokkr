@@ -1,0 +1,24 @@
+# Redocly configuration for the Brokkr OpenAPI spec.
+#
+# Starts from the `minimal` ruleset (structural correctness only) and toggles
+# a few rules back on or off based on what's worth enforcing pre-SDK-generation.
+#
+# Rationale:
+# - Documentation-quality rules (operation-summary, tag descriptions) are
+#   intentionally relaxed. Adding human-readable summaries to every route is
+#   docs work, owned by the documentation task (T-D2). Generated SDKs ignore
+#   summaries entirely.
+# - `no-path-trailing-slash` is disabled because the broker exposes
+#   `/agents/` (search endpoint) as a real route. Renaming requires a
+#   coordinated server/client change; out of scope for spec hardening.
+# - Structural rules (no-unresolved-refs, no-invalid-schema-examples, etc.)
+#   stay at error level — those are real bugs.
+extends:
+  - minimal
+rules:
+  operation-summary: off
+  tag-description: off
+  no-path-trailing-slash: off
+  info-license: off
+  info-contact: off
+  no-unused-components: warn

@@ -9,6 +9,7 @@
 //! This module provides routes and handlers for managing deployment health status,
 //! including endpoints for agents to report health and for operators to query health.
 
+use crate::api::v1::error::{ApiError, ErrorResponse};
 use crate::api::v1::middleware::AuthPayload;
 use crate::dal::DAL;
 use axum::http::StatusCode;
@@ -105,8 +106,8 @@ pub struct DeploymentObjectHealthSummary {
     request_body = HealthStatusUpdate,
     responses(
         (status = 200, description = "Successfully updated health status"),
-        (status = 403, description = "Forbidden - PAK does not have required rights"),
-        (status = 500, description = "Internal server error"),
+        (status = 403, description = "Forbidden - PAK does not have required rights", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
     ),
     security(("agent_pak" = []))
 )]
@@ -115,26 +116,21 @@ async fn update_health_status(
     Extension(auth_payload): Extension<AuthPayload>,
     Path(agent_id): Path<Uuid>,
     Json(update): Json<HealthStatusUpdate>,
-) -> Result<StatusCode, (StatusCode, Json<serde_json::Value>)> {
+) -> Result<StatusCode, ApiError> {
     info!(
         "Handling health status update from agent {} for {} deployment objects",
         agent_id,
         update.deployment_objects.len()
     );
 
-    // Verify the agent is authorized to report for this agent ID
     if auth_payload.agent != Some(agent_id) && !auth_payload.admin {
         warn!(
             "Unauthorized attempt to update health status for agent {}",
             agent_id
         );
-        return Err((
-            StatusCode::FORBIDDEN,
-            Json(serde_json::json!({"error": "Unauthorized"})),
-        ));
+        return Err(ApiError::forbidden("agent_pak_mismatch", "agent PAK does not match the agent ID"));
     }
 
-    // Convert updates to NewDeploymentHealth records
     let health_records: Vec<NewDeploymentHealth> = update
         .deployment_objects
         .into_iter()
@@ -156,25 +152,22 @@ async fn update_health_status(
         return Ok(StatusCode::OK);
     }
 
-    match dal.deployment_health().upsert_batch(&health_records) {
-        Ok(count) => {
-            info!(
-                "Successfully updated {} health records for agent {}",
-                count, agent_id
-            );
-            Ok(StatusCode::OK)
-        }
-        Err(e) => {
+    let count = dal
+        .deployment_health()
+        .upsert_batch(&health_records)
+        .map_err(|e| {
             error!(
                 "Failed to update health status for agent {}: {:?}",
                 agent_id, e
             );
-            Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": "Failed to update health status"})),
-            ))
-        }
-    }
+            ApiError::internal("failed to update health status")
+        })?;
+
+    info!(
+        "Successfully updated {} health records for agent {}",
+        count, agent_id
+    );
+    Ok(StatusCode::OK)
 }
 
 /// Gets health status for a specific deployment object.
@@ -190,8 +183,8 @@ async fn update_health_status(
     ),
     responses(
         (status = 200, description = "Successfully retrieved health", body = DeploymentHealthResponse),
-        (status = 403, description = "Forbidden - PAK does not have required rights"),
-        (status = 500, description = "Internal server error"),
+        (status = 403, description = "Forbidden - PAK does not have required rights", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
     ),
     security(("admin_pak" = []))
 )]
@@ -199,7 +192,7 @@ async fn get_deployment_health(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
     Path(deployment_object_id): Path<Uuid>,
-) -> Result<Json<DeploymentHealthResponse>, (StatusCode, Json<serde_json::Value>)> {
+) -> Result<Json<DeploymentHealthResponse>, ApiError> {
     info!(
         "Handling request to get health for deployment object {}",
         deployment_object_id
@@ -207,36 +200,27 @@ async fn get_deployment_health(
 
     if !auth_payload.admin {
         warn!("Unauthorized attempt to get deployment health");
-        return Err((
-            StatusCode::FORBIDDEN,
-            Json(serde_json::json!({"error": "Unauthorized"})),
-        ));
+        return Err(ApiError::forbidden("admin_required", "admin access required"));
     }
 
-    match dal
+    let health_records = dal
         .deployment_health()
         .list_by_deployment_object(deployment_object_id)
-    {
-        Ok(health_records) => {
-            let overall_status = compute_overall_status(&health_records);
-
-            Ok(Json(DeploymentHealthResponse {
-                deployment_object_id,
-                health_records,
-                overall_status,
-            }))
-        }
-        Err(e) => {
+        .map_err(|e| {
             error!(
                 "Failed to get health for deployment object {}: {:?}",
                 deployment_object_id, e
             );
-            Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": "Failed to get deployment health"})),
-            ))
-        }
-    }
+            ApiError::internal("failed to get deployment health")
+        })?;
+
+    let overall_status = compute_overall_status(&health_records);
+
+    Ok(Json(DeploymentHealthResponse {
+        deployment_object_id,
+        health_records,
+        overall_status,
+    }))
 }
 
 /// Gets health status for all deployment objects in a stack.
@@ -252,8 +236,8 @@ async fn get_deployment_health(
     ),
     responses(
         (status = 200, description = "Successfully retrieved stack health", body = StackHealthResponse),
-        (status = 403, description = "Forbidden - PAK does not have required rights"),
-        (status = 500, description = "Internal server error"),
+        (status = 403, description = "Forbidden - PAK does not have required rights", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
     ),
     security(("admin_pak" = []))
 )]
@@ -261,83 +245,70 @@ async fn get_stack_health(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
     Path(stack_id): Path<Uuid>,
-) -> Result<Json<StackHealthResponse>, (StatusCode, Json<serde_json::Value>)> {
+) -> Result<Json<StackHealthResponse>, ApiError> {
     info!("Handling request to get health for stack {}", stack_id);
 
     if !auth_payload.admin {
         warn!("Unauthorized attempt to get stack health");
-        return Err((
-            StatusCode::FORBIDDEN,
-            Json(serde_json::json!({"error": "Unauthorized"})),
-        ));
+        return Err(ApiError::forbidden("admin_required", "admin access required"));
     }
 
-    match dal.deployment_health().list_by_stack(stack_id) {
-        Ok(health_records) => {
-            // Group health records by deployment object
-            let mut deployment_health_map: std::collections::HashMap<Uuid, Vec<&DeploymentHealth>> =
-                std::collections::HashMap::new();
+    let health_records = dal.deployment_health().list_by_stack(stack_id).map_err(|e| {
+        error!("Failed to get health for stack {}: {:?}", stack_id, e);
+        ApiError::internal("failed to get stack health")
+    })?;
 
-            for record in &health_records {
-                deployment_health_map
-                    .entry(record.deployment_object_id)
-                    .or_default()
-                    .push(record);
-            }
+    let mut deployment_health_map: std::collections::HashMap<Uuid, Vec<&DeploymentHealth>> =
+        std::collections::HashMap::new();
+    for record in &health_records {
+        deployment_health_map
+            .entry(record.deployment_object_id)
+            .or_default()
+            .push(record);
+    }
 
-            // Compute summary per deployment object
-            let deployment_objects: Vec<DeploymentObjectHealthSummary> = deployment_health_map
-                .into_iter()
-                .map(|(id, records)| {
-                    let healthy_agents = records.iter().filter(|r| r.status == "healthy").count();
-                    let degraded_agents = records.iter().filter(|r| r.status == "degraded").count();
-                    let failing_agents = records.iter().filter(|r| r.status == "failing").count();
+    let deployment_objects: Vec<DeploymentObjectHealthSummary> = deployment_health_map
+        .into_iter()
+        .map(|(id, records)| {
+            let healthy_agents = records.iter().filter(|r| r.status == "healthy").count();
+            let degraded_agents = records.iter().filter(|r| r.status == "degraded").count();
+            let failing_agents = records.iter().filter(|r| r.status == "failing").count();
 
-                    let status = if failing_agents > 0 {
-                        "failing".to_string()
-                    } else if degraded_agents > 0 {
-                        "degraded".to_string()
-                    } else if healthy_agents > 0 {
-                        "healthy".to_string()
-                    } else {
-                        "unknown".to_string()
-                    };
-
-                    DeploymentObjectHealthSummary {
-                        id,
-                        status,
-                        healthy_agents,
-                        degraded_agents,
-                        failing_agents,
-                    }
-                })
-                .collect();
-
-            // Compute overall stack status
-            let overall_status = if deployment_objects.iter().any(|d| d.status == "failing") {
+            let status = if failing_agents > 0 {
                 "failing".to_string()
-            } else if deployment_objects.iter().any(|d| d.status == "degraded") {
+            } else if degraded_agents > 0 {
                 "degraded".to_string()
-            } else if deployment_objects.iter().any(|d| d.status == "healthy") {
+            } else if healthy_agents > 0 {
                 "healthy".to_string()
             } else {
                 "unknown".to_string()
             };
 
-            Ok(Json(StackHealthResponse {
-                stack_id,
-                overall_status,
-                deployment_objects,
-            }))
-        }
-        Err(e) => {
-            error!("Failed to get health for stack {}: {:?}", stack_id, e);
-            Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": "Failed to get stack health"})),
-            ))
-        }
-    }
+            DeploymentObjectHealthSummary {
+                id,
+                status,
+                healthy_agents,
+                degraded_agents,
+                failing_agents,
+            }
+        })
+        .collect();
+
+    let overall_status = if deployment_objects.iter().any(|d| d.status == "failing") {
+        "failing".to_string()
+    } else if deployment_objects.iter().any(|d| d.status == "degraded") {
+        "degraded".to_string()
+    } else if deployment_objects.iter().any(|d| d.status == "healthy") {
+        "healthy".to_string()
+    } else {
+        "unknown".to_string()
+    };
+
+    Ok(Json(StackHealthResponse {
+        stack_id,
+        overall_status,
+        deployment_objects,
+    }))
 }
 
 /// Computes the overall status from a list of health records.

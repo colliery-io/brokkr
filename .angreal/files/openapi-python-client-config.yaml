@@ -1,0 +1,12 @@
+# Configuration for openapi-python-client when generating the low-level
+# Python client. The default project name is derived from the OpenAPI
+# `info.title` ("brokkr-broker") and would emit `brokkr-broker-client` —
+# we publish under `brokkr-client-generated` on PyPI to keep the SDK
+# package family consistent (wrapper: brokkr-client, low-level:
+# brokkr-client-generated).
+#
+# The Python package (import) name stays `brokkr_broker_client` —
+# changing it churns every import site in the wrapper, tests, and demos
+# for zero ergonomic gain.
+project_name_override: brokkr-client-generated
+package_name_override: brokkr_broker_client

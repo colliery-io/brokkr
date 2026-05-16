@@ -16,3 +16,31 @@ jobs:
   unit_tests:
     needs: setup
     uses: ./.github/workflows/unit_tests.yml
+
+  # Path-filter: only run the slower integration suite when source actually
+  # changed. Doc-only / workflow-only PRs skip it. Without this gate, every
+  # PR pays ~10 min for integration coverage. Without the suite, broken
+  # integration tests sit on develop until nightly or release-tag time.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            code:
+              - 'crates/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - 'openapi/**'
+              - '.angreal/**'
+              - '.github/workflows/main.yml'
+              - '.github/workflows/integration_tests.yml'
+
+  integration_tests:
+    needs: [setup, changes]
+    if: needs.changes.outputs.code == 'true'
+    uses: ./.github/workflows/integration_tests.yml

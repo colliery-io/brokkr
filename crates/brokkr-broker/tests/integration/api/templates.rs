@@ -622,10 +622,9 @@ async fn test_instantiate_template_invalid_parameters() {
     let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
 
-    assert!(json["error"]
-        .as_str()
-        .unwrap()
-        .contains("Invalid parameters"));
+    // Body conforms to the v1 ErrorResponse shape introduced in T-A1:
+    // { "code": "...", "message": "...", "details": {...} }.
+    assert_eq!(json["code"].as_str().unwrap(), "invalid_parameters");
 }
 
 #[tokio::test]

@@ -206,3 +206,16 @@ charts/*/charts/
 
 # Metis database (local state, not to be shared)
 .metis/metis.db
+
+# SDK artifacts (installed/built locally; sources are tracked).
+sdks/typescript/brokkr-client/node_modules/
+sdks/typescript/brokkr-client/dist/
+sdks/python/brokkr-client/.venv/
+sdks/python/brokkr-client/.mypy_cache/
+sdks/python/brokkr-client/.pytest_cache/
+sdks/python/brokkr/.venv/
+sdks/python/brokkr/.mypy_cache/
+sdks/python/brokkr/.pytest_cache/
+
+# UI demo node_modules (legacy `ui` already had a similar rule).
+examples/ui-slim/node_modules/

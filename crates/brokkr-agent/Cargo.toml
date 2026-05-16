@@ -14,6 +14,7 @@ path = "src/bin.rs"
 [dependencies]
 # Internal crates
 brokkr-broker = { path = "../brokkr-broker" }
+brokkr-client = { path = "../brokkr-client" }
 brokkr-models = { path = "../brokkr-models" }
 brokkr-utils = { path = "../brokkr-utils" }
 

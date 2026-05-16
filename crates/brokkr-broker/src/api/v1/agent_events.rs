@@ -9,6 +9,7 @@
 //! This module provides functionality to list and retrieve agent events
 //! through HTTP endpoints.
 
+use crate::api::v1::error::{ApiError, ErrorResponse};
 use crate::dal::DAL;
 use axum::{
     extract::{Extension, Path, State},
@@ -28,87 +29,66 @@ pub fn routes() -> Router<DAL> {
 
 #[utoipa::path(
     get,
-    path = "/api/v1/agent-events",
+    path = "/agent-events",
     responses(
         (status = 200, description = "List all agent events", body = Vec<AgentEvent>),
-        (status = 500, description = "Internal server error")
+        (status = 500, description = "Internal server error", body = ErrorResponse)
     ),
-    tag = "agent-events"
+    tag = "agent-events",
+    security(
+        ("admin_pak" = []),
+        ("agent_pak" = []),
+        ("generator_pak" = []),
+    )
 )]
-/// Retrieves a list of all agent events.
-///
-/// # Arguments
-/// * `State(dal)` - The data access layer state.
-/// * `Extension(_auth_payload)` - Authentication payload (unused but required).
-///
-/// # Returns
-/// A JSON response containing a vector of AgentEvents or an error.
 async fn list_agent_events(
     State(dal): State<DAL>,
     Extension(_auth_payload): Extension<crate::api::v1::middleware::AuthPayload>,
-) -> Result<Json<Vec<AgentEvent>>, (axum::http::StatusCode, Json<serde_json::Value>)> {
+) -> Result<Json<Vec<AgentEvent>>, ApiError> {
     info!("Handling request to list agent events");
-    match dal.agent_events().list() {
-        Ok(events) => {
-            info!("Successfully retrieved {} agent events", events.len());
-            Ok(Json(events))
-        }
-        Err(e) => {
-            error!("Failed to fetch agent events: {:?}", e);
-            Err((
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": "Failed to fetch agent events"})),
-            ))
-        }
-    }
+    let events = dal.agent_events().list().map_err(|e| {
+        error!("Failed to fetch agent events: {:?}", e);
+        ApiError::internal("failed to fetch agent events")
+    })?;
+    info!("Successfully retrieved {} agent events", events.len());
+    Ok(Json(events))
 }
 
 #[utoipa::path(
     get,
-    path = "/api/v1/agent-events/{id}",
+    path = "/agent-events/{id}",
     responses(
         (status = 200, description = "Get agent event by id", body = AgentEvent),
-        (status = 404, description = "Agent event not found"),
-        (status = 500, description = "Internal server error")
+        (status = 404, description = "Agent event not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
     ),
     params(
         ("id" = Uuid, Path, description = "Agent event id")
     ),
-    tag = "agent-events"
+    tag = "agent-events",
+    security(
+        ("admin_pak" = []),
+        ("agent_pak" = []),
+        ("generator_pak" = []),
+    )
 )]
-/// Retrieves a specific agent event by its ID.
-///
-/// # Arguments
-/// * `State(dal)` - The data access layer state.
-/// * `Extension(_auth_payload)` - Authentication payload (unused but required).
-/// * `Path(id)` - The UUID of the agent event to retrieve.
-///
-/// # Returns
-/// A JSON response containing the requested AgentEvent or an error.
 async fn get_agent_event(
     State(dal): State<DAL>,
     Extension(_auth_payload): Extension<crate::api::v1::middleware::AuthPayload>,
     Path(id): Path<Uuid>,
-) -> Result<Json<AgentEvent>, (axum::http::StatusCode, Json<serde_json::Value>)> {
+) -> Result<Json<AgentEvent>, ApiError> {
     info!("Handling request to get agent event with ID: {}", id);
-    match dal.agent_events().get(id) {
-        Ok(Some(event)) => {
-            info!("Successfully retrieved agent event with ID: {}", id);
-            Ok(Json(event))
-        }
-        Ok(None) => {
-            warn!("Agent event with ID {} not found", id);
-            Err((
-                axum::http::StatusCode::NOT_FOUND,
-                Json(serde_json::json!({"error": "Agent event not found"})),
-            ))
-        }
-        Err(e) => {
+    let event = dal
+        .agent_events()
+        .get(id)
+        .map_err(|e| {
             error!("Error fetching agent event with ID {}: {:?}", id, e);
-            Err((
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": "Failed to fetch agent event"})),
-            ))
-        }
-    }
+            ApiError::internal("failed to fetch agent event")
+        })?
+        .ok_or_else(|| {
+            warn!("Agent event with ID {} not found", id);
+            ApiError::not_found("agent_event_not_found", "agent event not found")
+        })?;
+    info!("Successfully retrieved agent event with ID: {}", id);
+    Ok(Json(event))
 }

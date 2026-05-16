@@ -25,14 +25,16 @@ pub fn routes() -> Router<DAL> {
 /// This function handles the authentication process for both admin and agent PAKs.
 #[utoipa::path(
     post,
-    path = "/api/v1/auth/pak",
+    path = "/auth/pak",
     tag = "auth",
     responses(
         (status = 200, description = "PAK verified successfully", body = AuthResponse),
-        (status = 401, description = "Invalid PAK"),
+        (status = 401, description = "Invalid PAK", body = crate::api::v1::error::ErrorResponse),
     ),
     security(
-        ("pak" = [])
+        ("admin_pak" = []),
+        ("agent_pak" = []),
+        ("generator_pak" = []),
     )
 )]
 async fn verify_pak(Extension(auth_payload): Extension<AuthPayload>) -> Json<AuthResponse> {

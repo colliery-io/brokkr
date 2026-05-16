@@ -1,12 +1,35 @@
 FROM node:18-alpine
 WORKDIR /app
-# Copy package files
+
+# The ui-slim demo depends on @brokkr/client via `file:../../sdks/typescript/brokkr-client`.
+# Pre-build that SDK so it exposes dist/ to consumers, then install the demo's deps.
+COPY sdks/typescript/brokkr-client /sdks/typescript/brokkr-client
+RUN cd /sdks/typescript/brokkr-client && npm install && npm run build
+
+# Make the SDK path the demo expects (`../../sdks/typescript/brokkr-client`) resolve.
+# Inside the container, `/app` is the demo; mirror the relative layout by placing
+# the SDK at `/sdks/...` and symlinking from `../../sdks/...` of `/app`.
+RUN mkdir -p / && ln -s /sdks /tmp/sdks-link \
+  && mkdir -p /sdks-parent \
+  && ln -s /sdks /sdks-parent/sdks
+
+# Copy demo package files first for cache friendliness
 COPY examples/ui-slim/package.json ./
-# Install dependencies
+# Demo's package.json has `"@brokkr/client": "file:../../sdks/typescript/brokkr-client"`,
+# which resolves relative to /app. Symlink the SDK into the expected location.
+RUN mkdir -p /sdks/typescript && \
+    ln -sfn /sdks/typescript /app/../sdks/typescript 2>/dev/null || true
+# Simpler approach: copy the prebuilt SDK to a sibling path the demo's package.json expects.
+RUN mkdir -p /opt/brokkr/sdks/typescript && \
+    cp -r /sdks/typescript/brokkr-client /opt/brokkr/sdks/typescript/brokkr-client
+
+# Move workdir under /opt/brokkr/examples/ui-slim so `../../sdks/...` resolves.
+WORKDIR /opt/brokkr/examples/ui-slim
+COPY examples/ui-slim/package.json ./
 RUN npm install
-# Copy source code
-COPY examples/ui-slim/ .
-# Expose port for development server
+
+# Copy demo source
+COPY examples/ui-slim/ ./
+
 EXPOSE 3001
-# Start development server
 CMD ["npm", "start"]
