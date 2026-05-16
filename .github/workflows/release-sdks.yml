@@ -120,7 +120,10 @@ jobs:
       # 0.0.0 in source; stamping is workflow-local only. ---
 
       - name: Stamp Rust crate version
-        run: cargo set-version -p brokkr-client "${VERSION}"
+        # --allow-downgrade so workflow_dispatch with a pre-release default
+        # (e.g. 0.0.0-test) doesn't fail the gate. Real tag releases always
+        # upgrade from 0.0.0 so this flag is a no-op for them.
+        run: cargo set-version -p brokkr-client "${VERSION}" --allow-downgrade
 
       - name: Stamp Python wrapper version
         working-directory: sdks/python/brokkr
