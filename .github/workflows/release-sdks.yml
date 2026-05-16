@@ -280,13 +280,25 @@ jobs:
           "
           grep '^version' Cargo.toml
 
+      # All publish steps below set `continue-on-error: true` so a failure in
+      # one registry doesn't cascade-skip the others. The final
+      # `Summarize publish results` step fails the job if any publish step
+      # failed, so partial failures stay visible.
+      #
+      # `skip-existing: true` on PyPI uploads makes retries idempotent if a
+      # version is already up (e.g. cutting v0.3.1 after a partial v0.3.0).
+
       - name: Cargo publish dry-run
+        id: cargo-dryrun
+        continue-on-error: true
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: cargo publish -p brokkr-client --dry-run --allow-dirty
 
       - name: Cargo publish
-        if: needs.resolve-version.outputs.is_tag == 'true'
+        id: cargo-publish
+        if: needs.resolve-version.outputs.is_tag == 'true' && steps.cargo-dryrun.outcome == 'success'
+        continue-on-error: true
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: cargo publish -p brokkr-client --allow-dirty
@@ -298,19 +310,23 @@ jobs:
       # so a failure in one doesn't poison the other's deployment record.
 
       - name: PyPI publish — brokkr-client (wrapper)
+        id: pypi-wrapper
         if: needs.resolve-version.outputs.is_tag == 'true'
+        continue-on-error: true
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist/python-wrapper
-          skip-existing: false
+          skip-existing: true
           verbose: true
 
       - name: PyPI publish — brokkr-client-generated (low-level)
+        id: pypi-generated
         if: needs.resolve-version.outputs.is_tag == 'true'
+        continue-on-error: true
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist/python-generated
-          skip-existing: false
+          skip-existing: true
           verbose: true
 
       # ----- npm: publish @colliery-io/brokkr-client. -----
@@ -327,6 +343,8 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
 
       - name: npm publish dry-run
+        id: npm-dryrun
+        continue-on-error: true
         working-directory: dist/typescript
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -337,7 +355,9 @@ jobs:
           npm publish "${TARBALL}" --access public --dry-run
 
       - name: npm publish
-        if: needs.resolve-version.outputs.is_tag == 'true'
+        id: npm-publish
+        if: needs.resolve-version.outputs.is_tag == 'true' && steps.npm-dryrun.outcome == 'success'
+        continue-on-error: true
         working-directory: dist/typescript
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -345,3 +365,36 @@ jobs:
           set -euo pipefail
           TARBALL=$(ls colliery-io-brokkr-client-*.tgz)
           npm publish "${TARBALL}" --access public
+
+      - name: Summarize publish results
+        if: always()
+        env:
+          CARGO_DRYRUN: ${{ steps.cargo-dryrun.outcome }}
+          CARGO_PUBLISH: ${{ steps.cargo-publish.outcome }}
+          PYPI_WRAPPER: ${{ steps.pypi-wrapper.outcome }}
+          PYPI_GENERATED: ${{ steps.pypi-generated.outcome }}
+          NPM_DRYRUN: ${{ steps.npm-dryrun.outcome }}
+          NPM_PUBLISH: ${{ steps.npm-publish.outcome }}
+          IS_TAG: ${{ needs.resolve-version.outputs.is_tag }}
+        run: |
+          set -eo pipefail
+          echo "## SDK publish summary" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "| Step | Outcome |"
+            echo "|------|---------|"
+            echo "| Cargo dry-run | ${CARGO_DRYRUN:-(unset)} |"
+            echo "| Cargo publish | ${CARGO_PUBLISH:-(unset)} |"
+            echo "| PyPI brokkr-client | ${PYPI_WRAPPER:-(unset)} |"
+            echo "| PyPI brokkr-client-generated | ${PYPI_GENERATED:-(unset)} |"
+            echo "| npm dry-run | ${NPM_DRYRUN:-(unset)} |"
+            echo "| npm publish | ${NPM_PUBLISH:-(unset)} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          fail=0
+          for outcome in "$CARGO_DRYRUN" "$CARGO_PUBLISH" "$PYPI_WRAPPER" "$PYPI_GENERATED" "$NPM_DRYRUN" "$NPM_PUBLISH"; do
+            if [[ "$outcome" == "failure" ]]; then fail=1; fi
+          done
+          if [[ "$fail" == "1" ]]; then
+            echo "::error::One or more publish steps failed. See the step outcomes above."
+            exit 1
+          fi
+          echo "All publish steps either succeeded or were intentionally skipped."
