@@ -10,6 +10,9 @@ concurrency:
   group: nightly-tests
   cancel-in-progress: true
 
+env:
+  REGISTRY: ghcr.io
+
 jobs:
   setup:
     uses: ./.github/workflows/setup.yml
@@ -22,3 +25,156 @@ jobs:
   e2e_tests:
     needs: integration_tests
     uses: ./.github/workflows/e2e_tests.yml
+
+  # ---------------------------------------------------------------------
+  # Nightly container images — push :nightly tag for broker and agent so
+  # downstream users tracking the bleeding edge of main get a fresh build
+  # every morning without waiting for a tagged release.
+  # ---------------------------------------------------------------------
+  nightly-images:
+    name: Nightly container images
+    needs: [unit_tests, integration_tests, e2e_tests]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        component: [broker, agent]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      - name: Compute image name
+        id: img
+        env:
+          REPO_OWNER: ${{ github.repository_owner }}
+        run: |
+          owner_lc=$(echo "${REPO_OWNER}" | tr '[:upper:]' '[:lower:]')
+          echo "image=${{ env.REGISTRY }}/${owner_lc}/brokkr-${{ matrix.component }}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push :nightly
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/Dockerfile.${{ matrix.component }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.img.outputs.image }}:nightly
+          provenance: false
+          cache-from: type=gha,scope=nightly-${{ matrix.component }}
+          cache-to: type=gha,mode=max,scope=nightly-${{ matrix.component }}
+          build-args: |
+            VERSION=nightly-${{ github.sha }}
+
+  # ---------------------------------------------------------------------
+  # Failure notification — auto-create / re-comment a GitHub issue so a
+  # broken nightly doesn't sit unnoticed until the next release attempt.
+  # ---------------------------------------------------------------------
+  notify-failure:
+    name: Notify on Failure
+    needs: [unit_tests, integration_tests, e2e_tests, nightly-images]
+    if: failure()
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Check for existing nightly-failure issue
+        id: check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: 'nightly-failure',
+              state: 'open',
+            });
+            core.setOutput('exists', issues.data.length > 0 ? 'true' : 'false');
+            if (issues.data.length > 0) {
+              core.setOutput('issue_number', issues.data[0].number);
+            }
+
+      - name: Create GitHub Issue on failure
+        if: steps.check.outputs.exists == 'false'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = `Nightly failure — ${new Date().toISOString().split('T')[0]}`;
+            const body = [
+              '## Nightly Test Failure',
+              '',
+              `**Run:** ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              `**Date:** ${new Date().toISOString()}`,
+              '',
+              'One or more nightly jobs failed on `main`. Check the run logs for details.',
+            ].join('\n');
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title,
+              body,
+              labels: ['nightly-failure'],
+            });
+
+      - name: Comment on existing issue
+        if: steps.check.outputs.exists == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: ${{ steps.check.outputs.issue_number }},
+              body: `Still failing — [run ${context.runId}](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})`,
+            });
+
+  # ---------------------------------------------------------------------
+  # Close resolved — auto-close any open nightly-failure issue once a
+  # nightly run succeeds end-to-end.
+  # ---------------------------------------------------------------------
+  close-resolved:
+    name: Close Resolved Issues
+    needs: [unit_tests, integration_tests, e2e_tests, nightly-images]
+    if: success()
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: 'nightly-failure',
+              state: 'open',
+            });
+
+            for (const issue of issues.data) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body: `Resolved — nightly passed in [run ${context.runId}](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})`,
+              });
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                state: 'closed',
+              });
+            }

@@ -2,9 +2,9 @@
 name: Fast Code Validation
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
   pull_request:
-    branches: [main, develop]
+    branches: [main]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -20,7 +20,7 @@ jobs:
   # Path-filter: only run the slower integration suite when source actually
   # changed. Doc-only / workflow-only PRs skip it. Without this gate, every
   # PR pays ~10 min for integration coverage. Without the suite, broken
-  # integration tests sit on develop until nightly or release-tag time.
+  # integration tests sit on main until nightly or release-tag time.
   changes:
     runs-on: ubuntu-latest
     outputs:

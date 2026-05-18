@@ -3,7 +3,7 @@ name: Build & Deployment Tests
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
     paths:
       - 'crates/**'
       - 'Cargo.toml'
@@ -14,7 +14,7 @@ on:
       - '.github/workflows/build-and-test.yml'
       - '.angreal/**'
   pull_request:
-    branches: [main, develop]
+    branches: [main]
     paths:
       - 'crates/**'
       - 'Cargo.toml'
