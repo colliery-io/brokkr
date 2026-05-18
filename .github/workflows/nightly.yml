@@ -236,6 +236,40 @@ jobs:
           echo "## Cache storage after prune: ${total_gb} GB" >> "$GITHUB_STEP_SUMMARY"
 
   # ---------------------------------------------------------------------
+  # Prune stale GHCR container versions for brokkr-broker / brokkr-agent.
+  #
+  # Each multi-arch push leaves per-platform digests in the package
+  # registry. When a tag (e.g. :nightly, or a release manifest) gets
+  # repointed, the old manifest and its platform digests become
+  # untagged but still occupy storage. Over a few weeks of nightlies
+  # this is the dominant source of package-storage quota pressure.
+  #
+  # Strategy: delete only untagged versions, keep the most recent N
+  # untagged versions so we never accidentally prune platform digests
+  # that an active multi-arch manifest still references.
+  # ---------------------------------------------------------------------
+  prune-ghcr-images:
+    name: Prune Stale GHCR Images
+    needs: [nightly-images]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [brokkr-broker, brokkr-agent]
+    steps:
+      - name: Delete untagged versions
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: ${{ matrix.package }}
+          package-type: container
+          owner: ${{ github.repository_owner }}
+          min-versions-to-keep: 20
+          delete-only-untagged-versions: true
+
+  # ---------------------------------------------------------------------
   # Close resolved — auto-close any open nightly-failure issue once a
   # nightly run succeeds end-to-end.
   # ---------------------------------------------------------------------
