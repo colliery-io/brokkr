@@ -143,6 +143,99 @@ jobs:
             });
 
   # ---------------------------------------------------------------------
+  # Prune stale caches & artifacts — keep storage from creeping up to
+  # the point where GitHub starts sending quota warnings.
+  #
+  # Strategy:
+  #   - On main: for each (key-prefix) group, keep only the newest cache
+  #     entry. Older entries are superseded by the run that just finished
+  #     and cost storage with no upside.
+  #   - On closed/deleted PR refs: drop every cache scoped to that ref.
+  #     GitHub eventually evicts these after 7 days idle; we accelerate
+  #     it so we don't sit near quota in the meantime.
+  #   - Never touches refs/tags/* — release.yml owns those.
+  #
+  # Runs with `if: always()` so cleanup happens even when tests are red.
+  # ---------------------------------------------------------------------
+  prune-caches:
+    name: Prune Stale Caches
+    needs: [unit_tests, integration_tests, e2e_tests, nightly-images]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Delete superseded caches on main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh api --paginate "repos/${REPO}/actions/caches?per_page=100&ref=refs/heads/main" \
+            --jq '.actions_caches[] | [.id, .created_at, .key] | @tsv' \
+              > caches.tsv || { echo "no caches"; exit 0; }
+          if [ ! -s caches.tsv ]; then
+            echo "no caches on main"
+            exit 0
+          fi
+          # Group by key prefix (strip trailing -<hash> component), keep
+          # newest id per prefix, mark the rest for deletion.
+          awk -F'\t' '{ n=split($3, a, "-"); prefix=""; for (i=1;i<n;i++) prefix = prefix (i>1 ? "-" : "") a[i]; print $1"\t"$2"\t"prefix }' caches.tsv \
+            | sort -t$'\t' -k3,3 -k2,2r \
+            | awk -F'\t' '!seen[$3]++ { next } { print $1 }' > to_delete.txt
+          if [ ! -s to_delete.txt ]; then
+            echo "nothing superseded on main"
+            exit 0
+          fi
+          echo "Deleting $(wc -l < to_delete.txt) superseded caches on main"
+          while read id; do
+            gh api -X DELETE "repos/${REPO}/actions/caches/${id}" || true
+          done < to_delete.txt
+
+      - name: Delete caches for closed PRs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # Collect open PR refs so we know which to preserve.
+          gh api --paginate "repos/${REPO}/pulls?state=open&per_page=100" \
+            --jq '.[].number' > open_prs.txt || true
+
+          # List every cache scoped to a refs/pull/N/merge ref.
+          gh api --paginate "repos/${REPO}/actions/caches?per_page=100" \
+            --jq '.actions_caches[] | select(.ref | startswith("refs/pull/")) | [.id, .ref] | @tsv' \
+              > pr_caches.tsv || true
+
+          if [ ! -s pr_caches.tsv ]; then
+            echo "no PR-scoped caches"
+            exit 0
+          fi
+
+          deleted=0
+          while IFS=$'\t' read -r id ref; do
+            # ref looks like refs/pull/123/merge — extract the number.
+            pr_num=$(echo "$ref" | awk -F'/' '{print $3}')
+            if grep -qx "$pr_num" open_prs.txt 2>/dev/null; then
+              continue
+            fi
+            gh api -X DELETE "repos/${REPO}/actions/caches/${id}" || true
+            deleted=$((deleted + 1))
+          done < pr_caches.tsv
+          echo "Deleted ${deleted} caches from closed PRs"
+
+      - name: Report cache storage usage
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          total_bytes=$(gh api "repos/${REPO}/actions/cache/usage" --jq '.active_caches_size_in_bytes' 2>/dev/null || echo "0")
+          total_gb=$(awk -v b="$total_bytes" 'BEGIN { printf "%.2f", b / 1024 / 1024 / 1024 }')
+          echo "## Cache storage after prune: ${total_gb} GB" >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------
   # Close resolved — auto-close any open nightly-failure issue once a
   # nightly run succeeds end-to-end.
   # ---------------------------------------------------------------------

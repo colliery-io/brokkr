@@ -188,6 +188,7 @@ jobs:
           name: rust-crate
           path: target/package/brokkr-client-*.crate
           if-no-files-found: error
+          retention-days: 7
 
       - name: Upload Python wrapper artifact
         uses: actions/upload-artifact@v4
@@ -195,6 +196,7 @@ jobs:
           name: python-wrapper
           path: sdks/python/brokkr/dist/*
           if-no-files-found: error
+          retention-days: 7
 
       - name: Upload Python generated artifact
         uses: actions/upload-artifact@v4
@@ -202,6 +204,7 @@ jobs:
           name: python-generated
           path: sdks/python/brokkr-client/dist/*
           if-no-files-found: error
+          retention-days: 7
 
       - name: Upload TypeScript artifact
         uses: actions/upload-artifact@v4
@@ -209,6 +212,7 @@ jobs:
           name: typescript-package
           path: sdks/typescript/brokkr-client/colliery-io-brokkr-client-*.tgz
           if-no-files-found: error
+          retention-days: 7
 
   publish:
     name: Publish (gated)
