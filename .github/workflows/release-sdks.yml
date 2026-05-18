@@ -69,7 +69,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: resolve-version
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -78,7 +78,7 @@ jobs:
         uses: astral-sh/setup-uv@v3
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
 
@@ -101,7 +101,7 @@ jobs:
     env:
       VERSION: ${{ needs.resolve-version.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -110,7 +110,7 @@ jobs:
         uses: astral-sh/setup-uv@v3
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
@@ -183,7 +183,7 @@ jobs:
       # --- Upload artifacts for downstream publish jobs. ---
 
       - name: Upload Rust artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: rust-crate
           path: target/package/brokkr-client-*.crate
@@ -191,7 +191,7 @@ jobs:
           retention-days: 7
 
       - name: Upload Python wrapper artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: python-wrapper
           path: sdks/python/brokkr/dist/*
@@ -199,7 +199,7 @@ jobs:
           retention-days: 7
 
       - name: Upload Python generated artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: python-generated
           path: sdks/python/brokkr-client/dist/*
@@ -207,7 +207,7 @@ jobs:
           retention-days: 7
 
       - name: Upload TypeScript artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: typescript-package
           path: sdks/typescript/brokkr-client/colliery-io-brokkr-client-*.tgz
@@ -229,7 +229,7 @@ jobs:
       VERSION: ${{ needs.resolve-version.outputs.version }}
       IS_TAG: ${{ needs.resolve-version.outputs.is_tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Note dry-run / non-tag invocation
         if: needs.resolve-version.outputs.is_tag != 'true'
@@ -239,25 +239,25 @@ jobs:
       # ----- Download artifacts produced by the build job. -----
 
       - name: Download Rust artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: rust-crate
           path: dist/rust
 
       - name: Download Python wrapper artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: python-wrapper
           path: dist/python-wrapper
 
       - name: Download Python generated artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: python-generated
           path: dist/python-generated
 
       - name: Download TypeScript artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: typescript-package
           path: dist/typescript
@@ -341,7 +341,7 @@ jobs:
       # before committing.
 
       - name: Set up Node.js (with npm auth)
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'

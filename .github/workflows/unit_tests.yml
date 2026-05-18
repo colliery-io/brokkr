@@ -10,12 +10,12 @@ jobs:
         crate: [brokkr-agent, brokkr-broker, brokkr-models, brokkr-utils]
       fail-fast: false
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.13'
       - name: Install angreal
@@ -25,7 +25,7 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@1.90
       - name: Cache build
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: target
           key: ${{ runner.os }}-rust-build-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}

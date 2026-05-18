@@ -48,7 +48,7 @@ jobs:
       packages: write
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up QEMU
         if: matrix.platform != 'linux/arm64'
@@ -107,7 +107,7 @@ jobs:
           touch "/tmp/digests/${{ matrix.component }}/${digest#sha256:}"
 
       - name: Upload digest
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: digests-${{ matrix.component }}-${{ steps.platform.outputs.arch }}
           path: /tmp/digests/${{ matrix.component }}/*
@@ -126,13 +126,13 @@ jobs:
         component: [broker, agent]
     steps:
       - name: Download amd64 digests
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: digests-${{ matrix.component }}-amd64
           path: /tmp/digests/${{ matrix.component }}
 
       - name: Download arm64 digests
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: digests-${{ matrix.component }}-arm64
           path: /tmp/digests/${{ matrix.component }}
@@ -180,7 +180,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: merge-manifests
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Helm
         uses: azure/setup-helm@v3
@@ -223,10 +223,10 @@ jobs:
     needs: helm-template-tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
@@ -265,7 +265,7 @@ jobs:
       matrix:
         component: [broker, agent]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Helm
         uses: azure/setup-helm@v3
@@ -315,7 +315,7 @@ jobs:
       matrix:
         component: [broker, agent]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Helm
         uses: azure/setup-helm@v3

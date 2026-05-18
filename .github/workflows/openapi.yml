@@ -25,13 +25,13 @@ jobs:
   drift_and_lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.13"
 
@@ -44,7 +44,7 @@ jobs:
         uses: dtolnay/rust-toolchain@1.90
 
       - name: Cache build
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: target
           key: ${{ runner.os }}-rust-build-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
@@ -59,7 +59,7 @@ jobs:
       # 2. Spec lint: redocly catches structural regressions that the
       #    Rust build can't (missing summaries, malformed examples, etc).
       - name: Set up Node (for redocly lint)
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "20"
 
