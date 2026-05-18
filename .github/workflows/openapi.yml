@@ -2,9 +2,9 @@
 name: OpenAPI Spec
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
   pull_request:
-    branches: [main, develop]
+    branches: [main]
     paths:
       - "crates/brokkr-broker/src/api/**"
       - "crates/brokkr-broker/examples/openapi_export.rs"

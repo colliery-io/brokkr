@@ -63,14 +63,14 @@ Every commit that triggers a build gets a SHA-based tag (e.g., `sha-abc1234`).
 - Provides audit trail for security and compliance
 - Immutable and unique across the repository's lifetime
 
-### Branch Tags
+### Nightly Tag
 
-Active branches get updated tags matching the branch name (e.g., `main`, `develop`).
+A scheduled nightly workflow on `main` publishes a `:nightly` image for the broker and agent.
 
 **Rationale**:
-- Development teams can track branch heads
-- Continuous integration environments can use consistent tag names
-- Useful for testing changes before they're released
+- Lets early adopters track the bleeding edge of `main` without waiting for a tagged release
+- Provides a continuously-validated build artifact that exercises the full test suite daily
+- Surfaces breakage on `main` quickly via auto-filed GitHub issues
 
 ### Pull Request Tags (Optional)
 
@@ -94,7 +94,7 @@ These tags never change once created:
 ### Mutable Tags
 
 These tags are updated with new pushes:
-- Branch names: `main`, `develop`, `feature-xyz`
+- Nightly: `nightly` (rebuilt daily from `main`)
 - Latest: `latest`
 - PR tags: `pr-123` (if the PR is updated)
 
@@ -180,9 +180,8 @@ Therefore, all security must be built into the application itself, not rely on i
 ### Automated Publishing (Preferred)
 
 GitHub Actions workflows handle publishing for:
-- Release tags → semantic version tags
-- Main branch pushes → `main` tag and SHA tags
-- Develop branch pushes → `develop` tag and SHA tags
+- Release tags (`v*`) → semantic version tags
+- Scheduled nightly run on `main` → `nightly` tag
 
 **Benefits**:
 - Consistent build environment
