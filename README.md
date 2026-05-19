@@ -1,3 +1,7 @@
+<div align="center">
+  <img src="docs/src/assets/logo-hero.png" alt="Brokkr" width="220">
+</div>
+
 # Brokkr
 
 Brokkr is an environment-aware control plane for dynamically distributing Kubernetes objects across multiple clusters. It provides a centralized way to manage deployments across heterogeneous Kubernetes environments while respecting the unique characteristics and constraints of each target cluster.
