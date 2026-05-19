@@ -252,6 +252,12 @@ jobs:
     name: Prune Stale GHCR Images
     needs: [nightly-images]
     if: always()
+    # Best-effort cleanup. actions/delete-package-versions has a known
+    # pagination bug that throws "Package not found" after deleting a
+    # page-worth (~99) of versions even when the deletes succeeded. The
+    # backlog still shrinks every run; we just don't want a partial-
+    # success to red-flag the overall nightly.
+    continue-on-error: true
     runs-on: ubuntu-latest
     permissions:
       packages: write
