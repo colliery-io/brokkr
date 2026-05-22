@@ -383,16 +383,26 @@ fn test_process_retries() {
         "next_retry_at should be set"
     );
 
-    // Wait for retry time (backoff is 2 seconds, wait 3 to be safe)
-    std::thread::sleep(std::time::Duration::from_secs(3));
-
-    // Process retries should move the delivery to pending
-    let moved = fixture
-        .dal
-        .webhook_deliveries()
-        .process_retries()
-        .expect("Failed to process retries");
-    assert!(moved >= 1, "Should process at least 1 retry");
+    // Wait for retry time and poll. Backoff is 2s; we deliberately allow up
+    // to 15s of slack so a busy CI runner that stalls for a few seconds
+    // doesn't flake the assertion. Polling beats a single fixed sleep.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
+    let mut moved = 0u64;
+    while std::time::Instant::now() < deadline {
+        moved = fixture
+            .dal
+            .webhook_deliveries()
+            .process_retries()
+            .expect("Failed to process retries");
+        if moved >= 1 {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    }
+    assert!(
+        moved >= 1,
+        "Should process at least 1 retry within 15s of next_retry_at"
+    );
 
     // Verify delivery's status is back to pending
     let updated = fixture

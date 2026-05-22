@@ -1,6 +1,6 @@
 {
   "name": "@colliery-io/brokkr-client",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Auto-generated TypeScript client for the Brokkr broker API",
   "type": "module",
   "main": "./dist/index.js",
