@@ -233,7 +233,17 @@ def run_sdk_contract_typescript():
     env = _sdk_contract_env()
     suite_dir = "tests/sdk-contract/typescript"
 
-    # Ensure the local TS SDK is built (the contract suite consumes `dist/`).
+    # The local TS SDK needs its own deps installed before `tsc` can resolve
+    # `openapi-fetch` etc. Locally a populated `node_modules/` masks this; in
+    # fresh CI clones it fails the build. Install, then build.
+    print("Installing TypeScript SDK dependencies...")
+    sdk_install = subprocess.run(
+        ["npm", "--prefix", "sdks/typescript/brokkr-client", "install"],
+        cwd=cwd,
+    )
+    if sdk_install.returncode != 0:
+        return sdk_install.returncode
+
     print("Building TypeScript SDK (dist/)...")
     sdk_build = subprocess.run(
         ["npm", "--prefix", "sdks/typescript/brokkr-client", "run", "build"],

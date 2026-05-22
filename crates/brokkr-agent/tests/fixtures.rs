@@ -110,7 +110,7 @@ impl TestFixture {
             .await
             .expect("Failed to send request");
 
-        assert_eq!(response.status(), reqwest::StatusCode::OK);
+        assert_eq!(response.status(), reqwest::StatusCode::CREATED);
         let response_body: Value = response
             .json()
             .await
@@ -179,7 +179,7 @@ impl TestFixture {
             .await
             .expect("Failed to send request");
 
-        assert_eq!(response.status(), reqwest::StatusCode::OK);
+        assert_eq!(response.status(), reqwest::StatusCode::CREATED);
 
         let result: Value = serde_json::from_slice(
             &response
@@ -235,7 +235,7 @@ impl TestFixture {
             .await
             .expect("Failed to send request");
 
-        assert_eq!(response.status(), reqwest::StatusCode::OK);
+        assert_eq!(response.status(), reqwest::StatusCode::CREATED);
 
         let result: Stack = serde_json::from_slice(
             &response
@@ -268,7 +268,7 @@ impl TestFixture {
             .send()
             .await
             .expect("Failed to send request");
-        assert_eq!(response.status(), reqwest::StatusCode::OK);
+        assert_eq!(response.status(), reqwest::StatusCode::CREATED);
     }
 
     /// Creates a new deployment from YAML content
@@ -309,7 +309,7 @@ impl TestFixture {
             .await
             .expect("Failed to send request");
 
-        assert_eq!(response.status(), reqwest::StatusCode::OK);
+        assert_eq!(response.status(), reqwest::StatusCode::CREATED);
         let result: DeploymentObject = serde_json::from_slice(
             &response
                 .bytes()
