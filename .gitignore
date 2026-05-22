@@ -219,3 +219,10 @@ sdks/python/brokkr/.pytest_cache/
 
 # UI demo node_modules (legacy `ui` already had a similar rule).
 examples/ui-slim/node_modules/
+
+# SDK contract test scaffolding (BROKKR-T-0154).
+tests/sdk-contract/rust/target/
+tests/sdk-contract/python/.venv/
+tests/sdk-contract/python/.pytest_cache/
+tests/sdk-contract/typescript/node_modules/
+tests/sdk-contract/typescript/package-lock.json

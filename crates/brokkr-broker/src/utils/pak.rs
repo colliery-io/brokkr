@@ -85,36 +85,38 @@ pub fn create_pak() -> Result<(String, String), Box<dyn std::error::Error>> {
         .map_err(|e| e.into())
 }
 
+/// Errors returned by the PAK verification helpers.
+///
+/// We expose a small enum (rather than panicking) so the auth middleware can
+/// translate parse failures into clean 401s instead of crashing the handler.
+#[derive(Debug)]
+pub enum PakError {
+    /// The supplied string was not a well-formed Prefixed API Key.
+    Parse,
+    /// Initializing the global PAK controller failed (configuration error).
+    Controller,
+}
+
 /// Verifies a Prefixed API Key against a stored hash.
 ///
-/// # Arguments
-///
-/// * `pak` - The Prefixed API Key to verify.
-/// * `stored_hash` - The previously stored hash to compare against.
-///
-/// # Returns
-///
-/// Returns true if the PAK is valid, false otherwise.
-pub fn verify_pak(pak: String, stored_hash: String) -> bool {
-    let pak = PrefixedApiKey::from_string(pak.as_str()).expect("Failed to parse PAK");
-    let controller = create_pak_controller(None).expect("Failed to create PAK controller");
+/// Returns `Ok(true)` if the PAK matches the stored hash, `Ok(false)` if it
+/// is well-formed but does not match, and `Err(PakError::Parse)` if the
+/// supplied string is not a valid PAK.
+pub fn verify_pak(pak: String, stored_hash: String) -> Result<bool, PakError> {
+    let pak = PrefixedApiKey::from_string(pak.as_str()).map_err(|_| PakError::Parse)?;
+    let controller = create_pak_controller(None).map_err(|_| PakError::Controller)?;
     let computed_hash = controller.long_token_hashed(&pak);
-    stored_hash == computed_hash
+    Ok(stored_hash == computed_hash)
 }
 
 /// Generates a hash for a given Prefixed API Key.
 ///
-/// # Arguments
-///
-/// * `pak` - The Prefixed API Key to hash.
-///
-/// # Returns
-///
-/// Returns the generated hash as a String.
-pub fn generate_pak_hash(pak: String) -> String {
-    let pak = PrefixedApiKey::from_string(pak.as_str()).expect("Failed to parse PAK");
-    let controller = create_pak_controller(None).expect("Failed to create PAK controller");
-    controller.long_token_hashed(&pak)
+/// Returns `Err(PakError::Parse)` when the string is not a valid PAK so the
+/// caller can respond with 401 instead of panicking.
+pub fn generate_pak_hash(pak: String) -> Result<String, PakError> {
+    let pak = PrefixedApiKey::from_string(pak.as_str()).map_err(|_| PakError::Parse)?;
+    let controller = create_pak_controller(None).map_err(|_| PakError::Controller)?;
+    Ok(controller.long_token_hashed(&pak))
 }
 
 #[cfg(test)]
@@ -186,7 +188,7 @@ mod tests {
 
         // Verify the PAK
         assert!(
-            verify_pak(pak.clone(), hash.clone()),
+            verify_pak(pak.clone(), hash.clone()).unwrap(),
             "PAK verification failed"
         );
 
@@ -195,8 +197,18 @@ mod tests {
             !verify_pak(
                 pak.clone(),
                 "0000000000000000000000000000000000000000000000000000000000000000".to_string()
-            ),
+            )
+            .unwrap(),
             "Invalid PAK should not verify"
+        );
+
+        // Malformed input → Parse error (no panic)
+        assert!(
+            matches!(
+                verify_pak("not a pak".to_string(), hash.clone()),
+                Err(PakError::Parse)
+            ),
+            "Malformed PAK should return PakError::Parse"
         );
 
         // Test thread safety
@@ -206,7 +218,7 @@ mod tests {
             .map(|_| {
                 let pak = pak_clone.clone();
                 let hash = hash_clone.clone();
-                std::thread::spawn(move || verify_pak(pak.clone(), hash.clone()))
+                std::thread::spawn(move || verify_pak(pak.clone(), hash.clone()).unwrap())
             })
             .collect();
 
@@ -217,7 +229,7 @@ mod tests {
         // Test consistency
         for _ in 0..100 {
             assert!(
-                verify_pak(pak.clone(), hash.clone()),
+                verify_pak(pak.clone(), hash.clone()).unwrap(),
                 "PAK verification inconsistent"
             );
         }
@@ -234,7 +246,7 @@ mod tests {
         let (pak, original_hash) = create_pak().unwrap();
 
         // Generate hash from the PAK
-        let generated_hash = generate_pak_hash(pak.clone());
+        let generated_hash = generate_pak_hash(pak.clone()).unwrap();
 
         // Verify that the generated hash matches the original hash
         assert_eq!(
@@ -246,17 +258,26 @@ mod tests {
         for _ in 0..100 {
             assert_eq!(
                 generated_hash,
-                generate_pak_hash(pak.clone()),
+                generate_pak_hash(pak.clone()).unwrap(),
                 "Hash generation should be consistent"
             );
         }
+
+        // Malformed input → Parse error (no panic)
+        assert!(
+            matches!(
+                generate_pak_hash("not a pak".to_string()),
+                Err(PakError::Parse)
+            ),
+            "Malformed PAK should return PakError::Parse"
+        );
 
         // Test thread safety
         let pak_clone = pak.clone();
         let handles: Vec<_> = (0..10)
             .map(|_| {
                 let pak = pak_clone.clone();
-                std::thread::spawn(move || generate_pak_hash(pak))
+                std::thread::spawn(move || generate_pak_hash(pak).unwrap())
             })
             .collect();
 
@@ -271,8 +292,8 @@ mod tests {
         // Test with different PAKs
         let (pak2, _hash2) = create_pak().unwrap();
         assert_ne!(
-            generate_pak_hash(pak),
-            generate_pak_hash(pak2),
+            generate_pak_hash(pak).unwrap(),
+            generate_pak_hash(pak2).unwrap(),
             "Hashes for different PAKs should be different"
         );
     }

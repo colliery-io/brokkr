@@ -7,6 +7,7 @@ import httpx
 
 from ... import errors
 from ...client import AuthenticatedClient, Client
+from ...models.create_deployment_object_request import CreateDeploymentObjectRequest
 from ...models.deployment_object import DeploymentObject
 from ...models.error_response import ErrorResponse
 from ...types import Response
@@ -15,7 +16,7 @@ from ...types import Response
 def _get_kwargs(
     id: UUID,
     *,
-    body: Any,
+    body: CreateDeploymentObjectRequest,
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
 
@@ -26,7 +27,7 @@ def _get_kwargs(
         ),
     }
 
-    _kwargs["json"] = body
+    _kwargs["json"] = body.to_dict()
 
     headers["Content-Type"] = "application/json"
 
@@ -37,10 +38,10 @@ def _get_kwargs(
 def _parse_response(
     *, client: AuthenticatedClient | Client, response: httpx.Response
 ) -> DeploymentObject | ErrorResponse | None:
-    if response.status_code == 200:
-        response_200 = DeploymentObject.from_dict(response.json())
+    if response.status_code == 201:
+        response_201 = DeploymentObject.from_dict(response.json())
 
-        return response_200
+        return response_201
 
     if response.status_code == 400:
         response_400 = ErrorResponse.from_dict(response.json())
@@ -83,12 +84,16 @@ def sync_detailed(
     id: UUID,
     *,
     client: AuthenticatedClient,
-    body: Any,
+    body: CreateDeploymentObjectRequest,
 ) -> Response[DeploymentObject | ErrorResponse]:
     """
     Args:
         id (UUID):
-        body (Any):
+        body (CreateDeploymentObjectRequest): Wire DTO for creating a deployment object via the
+            public API.
+
+            Distinct from [`brokkr_models::models::deployment_objects::NewDeploymentObject`],
+            which carries server-derived fields (e.g. `yaml_checksum`).
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -114,12 +119,16 @@ def sync(
     id: UUID,
     *,
     client: AuthenticatedClient,
-    body: Any,
+    body: CreateDeploymentObjectRequest,
 ) -> DeploymentObject | ErrorResponse | None:
     """
     Args:
         id (UUID):
-        body (Any):
+        body (CreateDeploymentObjectRequest): Wire DTO for creating a deployment object via the
+            public API.
+
+            Distinct from [`brokkr_models::models::deployment_objects::NewDeploymentObject`],
+            which carries server-derived fields (e.g. `yaml_checksum`).
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -140,12 +149,16 @@ async def asyncio_detailed(
     id: UUID,
     *,
     client: AuthenticatedClient,
-    body: Any,
+    body: CreateDeploymentObjectRequest,
 ) -> Response[DeploymentObject | ErrorResponse]:
     """
     Args:
         id (UUID):
-        body (Any):
+        body (CreateDeploymentObjectRequest): Wire DTO for creating a deployment object via the
+            public API.
+
+            Distinct from [`brokkr_models::models::deployment_objects::NewDeploymentObject`],
+            which carries server-derived fields (e.g. `yaml_checksum`).
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -169,12 +182,16 @@ async def asyncio(
     id: UUID,
     *,
     client: AuthenticatedClient,
-    body: Any,
+    body: CreateDeploymentObjectRequest,
 ) -> DeploymentObject | ErrorResponse | None:
     """
     Args:
         id (UUID):
-        body (Any):
+        body (CreateDeploymentObjectRequest): Wire DTO for creating a deployment object via the
+            public API.
+
+            Distinct from [`brokkr_models::models::deployment_objects::NewDeploymentObject`],
+            which carries server-derived fields (e.g. `yaml_checksum`).
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.

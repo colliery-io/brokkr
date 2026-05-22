@@ -15,7 +15,8 @@ use crate::api::v1::health::{
     HealthStatusUpdate, StackHealthResponse,
 };
 use crate::api::v1::middleware::AuthResponse;
-use crate::api::v1::stacks::TemplateInstantiationRequest;
+use crate::api::v1::agents::CreateAgentResponse;
+use crate::api::v1::stacks::{CreateDeploymentObjectRequest, TemplateInstantiationRequest};
 use crate::api::v1::templates::{
     AddAnnotationRequest, CreateTemplateRequest, UpdateTemplateRequest,
 };
@@ -165,8 +166,10 @@ use utoipa_swagger_ui::SwaggerUi;
             NewAgentTarget,
             Agent,
             NewAgent,
+            CreateAgentResponse,
             DeploymentObject,
             NewDeploymentObject,
+            CreateDeploymentObjectRequest,
             Stack,
             NewStack,
             AuthResponse,

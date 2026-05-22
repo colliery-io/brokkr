@@ -89,7 +89,7 @@ async fn create_generator(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
     Json(new_generator): Json<NewGenerator>,
-) -> Result<Json<CreateGeneratorResponse>, ApiError> {
+) -> Result<(StatusCode, Json<CreateGeneratorResponse>), ApiError> {
     info!("Handling request to create a new generator");
     if !auth_payload.admin {
         warn!("Unauthorized attempt to create a generator");
@@ -118,10 +118,13 @@ async fn create_generator(
         "Successfully created generator with ID: {}",
         updated_generator.id
     );
-    Ok(Json(CreateGeneratorResponse {
-        generator: updated_generator,
-        pak: pak_value,
-    }))
+    Ok((
+        StatusCode::CREATED,
+        Json(CreateGeneratorResponse {
+            generator: updated_generator,
+            pak: pak_value,
+        }),
+    ))
 }
 
 #[utoipa::path(
@@ -254,7 +257,7 @@ async fn delete_generator(
     post,
     path = "/generators/{id}/rotate-pak",
     responses(
-        (status = 200, description = "Generator PAK rotated successfully", body = CreateGeneratorResponse),
+        (status = 201, description = "Generator PAK rotated successfully", body = CreateGeneratorResponse),
         (status = 403, description = "Forbidden - Unauthorized access", body = ErrorResponse),
         (status = 404, description = "Generator not found", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse)
@@ -267,7 +270,7 @@ async fn rotate_generator_pak(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
     Path(id): Path<Uuid>,
-) -> Result<Json<CreateGeneratorResponse>, ApiError> {
+) -> Result<(StatusCode, Json<CreateGeneratorResponse>), ApiError> {
     info!("Handling request to rotate PAK for generator with ID: {}", id);
 
     if !auth_payload.admin && auth_payload.generator != Some(id) {
@@ -302,8 +305,11 @@ async fn rotate_generator_pak(
     if let Some(ref hash) = old_pak_hash {
         dal.invalidate_auth_cache(hash);
     }
-    Ok(Json(CreateGeneratorResponse {
-        generator: updated_generator,
-        pak: pak_value,
-    }))
+    Ok((
+        StatusCode::CREATED,
+        Json(CreateGeneratorResponse {
+            generator: updated_generator,
+            pak: pak_value,
+        }),
+    ))
 }

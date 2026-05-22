@@ -17,14 +17,16 @@ jobs:
     needs: setup
     uses: ./.github/workflows/unit_tests.yml
 
-  # Path-filter: only run the slower integration suite when source actually
-  # changed. Doc-only / workflow-only PRs skip it. Without this gate, every
-  # PR pays ~10 min for integration coverage. Without the suite, broken
-  # integration tests sit on main until nightly or release-tag time.
+  # Path-filter: only run the slower integration / SDK-contract suites when
+  # source actually changed. Doc-only / workflow-only PRs skip them. Without
+  # these gates, every PR pays ~10 min for integration + another ~5 min for
+  # the SDK contract matrix. Without the suites, broken tests sit on main
+  # until nightly or release-tag time.
   changes:
     runs-on: ubuntu-latest
     outputs:
       code: ${{ steps.filter.outputs.code }}
+      sdk_contract: ${{ steps.filter.outputs.sdk_contract }}
     steps:
       - uses: actions/checkout@v6
       - uses: dorny/paths-filter@v3
@@ -39,8 +41,23 @@ jobs:
               - '.angreal/**'
               - '.github/workflows/main.yml'
               - '.github/workflows/integration_tests.yml'
+            sdk_contract:
+              - 'crates/brokkr-broker/**'
+              - 'crates/brokkr-client/**'
+              - 'sdks/python/brokkr-client/**'
+              - 'sdks/typescript/brokkr-client/**'
+              - 'openapi/**'
+              - 'tests/sdk-contract/**'
+              - '.angreal/task_tests.py'
+              - '.github/workflows/main.yml'
+              - '.github/workflows/sdk_contract_tests.yml'
 
   integration_tests:
     needs: [setup, changes]
     if: needs.changes.outputs.code == 'true'
     uses: ./.github/workflows/integration_tests.yml
+
+  sdk_contract_tests:
+    needs: [setup, changes]
+    if: needs.changes.outputs.sdk_contract == 'true'
+    uses: ./.github/workflows/sdk_contract_tests.yml

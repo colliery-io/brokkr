@@ -51,7 +51,7 @@ async fn test_create_stack() {
         .await
         .unwrap();
 
-    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.status(), StatusCode::CREATED);
 
     let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
@@ -247,7 +247,7 @@ async fn test_add_stack_annotation() {
         .await
         .unwrap();
 
-    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.status(), StatusCode::CREATED);
 
     let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
@@ -354,7 +354,7 @@ async fn test_add_stack_label() {
 
     assert_eq!(
         status,
-        StatusCode::OK,
+        StatusCode::CREATED,
         "Unexpected status code. Body: {}",
         body_str
     );
@@ -458,7 +458,7 @@ async fn test_create_deployment_object() {
         .await
         .unwrap();
 
-    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.status(), StatusCode::CREATED);
 
     let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let created_object: DeploymentObject = serde_json::from_slice(&body).unwrap();
@@ -506,7 +506,7 @@ async fn test_create_stack_with_generator_pak() {
         .await
         .unwrap();
 
-    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.status(), StatusCode::CREATED);
 }
 
 #[tokio::test]

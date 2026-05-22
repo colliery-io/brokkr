@@ -1282,6 +1282,26 @@ export interface components {
             /** @description Indicates whether the reload was successful. */
             success: boolean;
         };
+        /**
+         * @description Response body for [`create_agent`]: the newly-created agent plus the
+         *     one-time initial PAK shown only at creation.
+         */
+        CreateAgentResponse: {
+            agent: components["schemas"]["Agent"];
+            initial_pak: string;
+        };
+        /**
+         * @description Wire DTO for creating a deployment object via the public API.
+         *
+         *     Distinct from [`brokkr_models::models::deployment_objects::NewDeploymentObject`],
+         *     which carries server-derived fields (e.g. `yaml_checksum`).
+         */
+        CreateDeploymentObjectRequest: {
+            /** @description Optional. Defaults to false. */
+            is_deletion_marker?: boolean;
+            /** @description YAML content of the deployment. */
+            yaml_content: string;
+        };
         /** @description Request body for creating a diagnostic request. */
         CreateDiagnosticRequest: {
             /**
@@ -2627,12 +2647,12 @@ export interface operations {
         };
         responses: {
             /** @description Successfully created agent */
-            200: {
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["CreateAgentResponse"];
                 };
             };
             /** @description Forbidden */
@@ -3011,7 +3031,7 @@ export interface operations {
         };
         responses: {
             /** @description Successfully added agent annotation */
-            200: {
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3188,7 +3208,7 @@ export interface operations {
         };
         responses: {
             /** @description Successfully created agent event */
-            200: {
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3356,7 +3376,7 @@ export interface operations {
         };
         responses: {
             /** @description Successfully added agent label */
-            200: {
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3627,7 +3647,7 @@ export interface operations {
         };
         responses: {
             /** @description Successfully added agent target */
-            200: {
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3637,6 +3657,15 @@ export interface operations {
             };
             /** @description Forbidden */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Stack not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4341,7 +4370,7 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Generator PAK rotated successfully */
-            200: {
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4686,7 +4715,7 @@ export interface operations {
         };
         responses: {
             /** @description Annotation added */
-            200: {
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4842,15 +4871,14 @@ export interface operations {
             };
             cookie?: never;
         };
-        /** @description Deployment object payload with yaml_content and optional is_deletion_marker */
         requestBody: {
             content: {
-                "application/json": unknown;
+                "application/json": components["schemas"]["CreateDeploymentObjectRequest"];
             };
         };
         responses: {
             /** @description Deployment object created */
-            200: {
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4997,14 +5025,15 @@ export interface operations {
             };
             cookie?: never;
         };
+        /** @description JSON-encoded label string, e.g. "mylabel" */
         requestBody: {
             content: {
-                "text/plain": string;
+                "application/json": string;
             };
         };
         responses: {
             /** @description Label added */
-            200: {
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5489,7 +5518,7 @@ export interface operations {
         };
         responses: {
             /** @description Annotation added */
-            200: {
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5645,14 +5674,15 @@ export interface operations {
             };
             cookie?: never;
         };
+        /** @description JSON-encoded label string, e.g. "mylabel" */
         requestBody: {
             content: {
-                "text/plain": string;
+                "application/json": string;
             };
         };
         responses: {
             /** @description Label added */
-            200: {
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };

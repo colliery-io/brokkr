@@ -31,8 +31,9 @@ use brokkr_models::models::stacks::Stack;
 use brokkr_models::models::webhooks::{
     BrokkrEvent, EVENT_DEPLOYMENT_APPLIED, EVENT_DEPLOYMENT_FAILED,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use utoipa::ToSchema;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
@@ -114,11 +115,19 @@ async fn list_agents(
     Ok(Json(agents))
 }
 
+/// Response body for [`create_agent`]: the newly-created agent plus the
+/// one-time initial PAK shown only at creation.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct CreateAgentResponse {
+    pub agent: Agent,
+    pub initial_pak: String,
+}
+
 #[utoipa::path(
     post, path = "/agents", tag = "agents",
     request_body = NewAgent,
     responses(
-        (status = 200, description = "Successfully created agent", body = serde_json::Value),
+        (status = 201, description = "Successfully created agent", body = CreateAgentResponse),
         (status = 403, description = "Forbidden", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse),
     ),
@@ -128,7 +137,7 @@ async fn create_agent(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
     Json(new_agent): Json<NewAgent>,
-) -> Result<Json<Value>, ApiError> {
+) -> Result<(StatusCode, Json<CreateAgentResponse>), ApiError> {
     info!("Handling request to create a new agent");
     require_admin(&auth_payload)?;
 
@@ -161,10 +170,13 @@ async fn create_agent(
         None,
         None,
     );
-    Ok(Json(serde_json::json!({
-        "agent": updated_agent,
-        "initial_pak": pak_value
-    })))
+    Ok((
+        StatusCode::CREATED,
+        Json(CreateAgentResponse {
+            agent: updated_agent,
+            initial_pak: pak_value,
+        }),
+    ))
 }
 
 #[derive(Deserialize)]
@@ -392,7 +404,7 @@ async fn list_events(
     params(("id" = Uuid, Path, description = "ID of the agent to create an event for")),
     request_body = NewAgentEvent,
     responses(
-        (status = 200, description = "Successfully created agent event", body = AgentEvent),
+        (status = 201, description = "Successfully created agent event", body = AgentEvent),
         (status = 403, description = "Forbidden", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse),
     ),
@@ -403,7 +415,7 @@ async fn create_event(
     Extension(auth_payload): Extension<AuthPayload>,
     Path(id): Path<Uuid>,
     Json(new_event): Json<NewAgentEvent>,
-) -> Result<Json<AgentEvent>, ApiError> {
+) -> Result<(StatusCode, Json<AgentEvent>), ApiError> {
     info!("Handling request to create event for agent with ID: {}", id);
     require_admin_or_agent(&auth_payload, id)?;
 
@@ -429,7 +441,7 @@ async fn create_event(
     });
     event_bus::emit_event(&dal, &BrokkrEvent::new(webhook_event_type, event_data));
 
-    Ok(Json(event))
+    Ok((StatusCode::CREATED, Json(event)))
 }
 
 #[utoipa::path(
@@ -464,7 +476,7 @@ async fn list_labels(
     params(("id" = Uuid, Path, description = "ID of the agent")),
     request_body = NewAgentLabel,
     responses(
-        (status = 200, description = "Successfully added agent label", body = AgentLabel),
+        (status = 201, description = "Successfully added agent label", body = AgentLabel),
         (status = 403, description = "Forbidden", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse),
     ),
@@ -477,7 +489,7 @@ async fn add_label(
     Extension(auth_payload): Extension<AuthPayload>,
     Path(id): Path<Uuid>,
     Json(new_label): Json<NewAgentLabel>,
-) -> Result<Json<AgentLabel>, ApiError> {
+) -> Result<(StatusCode, Json<AgentLabel>), ApiError> {
     info!("Handling request to add label for agent with ID: {}", id);
     require_admin(&auth_payload)?;
     let label = dal.agent_labels().create(&new_label).map_err(|e| {
@@ -485,7 +497,7 @@ async fn add_label(
         ApiError::internal("failed to add agent label")
     })?;
     info!("Successfully added label for agent with ID: {}", id);
-    Ok(Json(label))
+    Ok((StatusCode::CREATED, Json(label)))
 }
 
 #[utoipa::path(
@@ -556,7 +568,7 @@ async fn list_annotations(
     params(("id" = Uuid, Path, description = "ID of the agent")),
     request_body = NewAgentAnnotation,
     responses(
-        (status = 200, description = "Successfully added agent annotation", body = AgentAnnotation),
+        (status = 201, description = "Successfully added agent annotation", body = AgentAnnotation),
         (status = 403, description = "Forbidden", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse),
     ),
@@ -569,14 +581,14 @@ async fn add_annotation(
     Extension(auth_payload): Extension<AuthPayload>,
     Path(id): Path<Uuid>,
     Json(new_annotation): Json<NewAgentAnnotation>,
-) -> Result<Json<AgentAnnotation>, ApiError> {
+) -> Result<(StatusCode, Json<AgentAnnotation>), ApiError> {
     info!("Handling request to add annotation for agent with ID: {}", id);
     require_admin(&auth_payload)?;
     let annotation = dal.agent_annotations().create(&new_annotation).map_err(|e| {
         error!("Failed to add annotation for agent with ID {}: {:?}", id, e);
         ApiError::internal("failed to add agent annotation")
     })?;
-    Ok(Json(annotation))
+    Ok((StatusCode::CREATED, Json(annotation)))
 }
 
 #[utoipa::path(
@@ -645,25 +657,61 @@ async fn list_targets(
     params(("id" = Uuid, Path, description = "ID of the agent")),
     request_body = NewAgentTarget,
     responses(
-        (status = 200, description = "Successfully added agent target", body = AgentTarget),
+        (status = 201, description = "Successfully added agent target", body = AgentTarget),
         (status = 403, description = "Forbidden", body = ErrorResponse),
+        (status = 404, description = "Stack not found", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse),
     ),
-    security(("admin_pak" = []), ("agent_pak" = []))
+    security(("admin_pak" = []), ("generator_pak" = []))
 )]
 async fn add_target(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
     Path(id): Path<Uuid>,
     Json(new_target): Json<NewAgentTarget>,
-) -> Result<Json<AgentTarget>, ApiError> {
+) -> Result<(StatusCode, Json<AgentTarget>), ApiError> {
     info!("Handling request to add target for agent with ID: {}", id);
-    require_admin_or_agent(&auth_payload, id)?;
+    authorize_target_mutation(&dal, &auth_payload, new_target.stack_id)?;
     let target = dal.agent_targets().create(&new_target).map_err(|e| {
         error!("Failed to add target for agent with ID {}: {:?}", id, e);
         ApiError::internal("failed to add agent target")
     })?;
-    Ok(Json(target))
+    Ok((StatusCode::CREATED, Json(target)))
+}
+
+/// Authorize a target create/delete operation.
+///
+/// Allowed when:
+/// - caller is admin, OR
+/// - caller is a generator PAK and owns the stack being targeted.
+fn authorize_target_mutation(
+    dal: &DAL,
+    auth: &AuthPayload,
+    stack_id: Uuid,
+) -> Result<(), ApiError> {
+    if auth.admin {
+        return Ok(());
+    }
+    if let Some(generator_id) = auth.generator {
+        let mut stacks = dal.stacks().get(vec![stack_id]).map_err(|e| {
+            error!("Failed to fetch stack {} for target auth: {:?}", stack_id, e);
+            ApiError::internal("failed to fetch stack")
+        })?;
+        let stack = stacks
+            .pop()
+            .ok_or_else(|| ApiError::not_found("stack_not_found", "stack not found"))?;
+        if stack.generator_id == generator_id {
+            return Ok(());
+        }
+        return Err(ApiError::forbidden(
+            "target_generator_mismatch",
+            "generator can only target its own stacks",
+        ));
+    }
+    Err(ApiError::forbidden(
+        "target_create_denied",
+        "admin or owning generator required",
+    ))
 }
 
 #[utoipa::path(
@@ -678,7 +726,7 @@ async fn add_target(
         (status = 404, description = "Target not found", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse),
     ),
-    security(("admin_pak" = []), ("agent_pak" = []))
+    security(("admin_pak" = []), ("generator_pak" = []))
 )]
 async fn remove_target(
     State(dal): State<DAL>,
@@ -686,7 +734,7 @@ async fn remove_target(
     Path((id, stack_id)): Path<(Uuid, Uuid)>,
 ) -> Result<StatusCode, ApiError> {
     info!("Handling request to remove target for stack {} from agent with ID: {}", stack_id, id);
-    require_admin_or_agent(&auth_payload, id)?;
+    authorize_target_mutation(&dal, &auth_payload, stack_id)?;
     let deleted = dal
         .agent_targets()
         .delete_by_agent_and_stack(id, stack_id)
