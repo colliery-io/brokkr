@@ -387,7 +387,7 @@ fn test_process_retries() {
     // to 15s of slack so a busy CI runner that stalls for a few seconds
     // doesn't flake the assertion. Polling beats a single fixed sleep.
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
-    let mut moved = 0u64;
+    let mut moved: usize = 0;
     while std::time::Instant::now() < deadline {
         moved = fixture
             .dal

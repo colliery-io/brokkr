@@ -340,35 +340,43 @@ jobs:
       # account). Dry-run validates that the version doesn't already exist
       # before committing.
 
-      - name: Set up Node.js (with npm auth)
+      # npm Trusted Publishing (OIDC). Configured on npmjs.com for
+      # @colliery-io/brokkr-client against this repo + workflow file. No
+      # NPM_TOKEN secret — the npm CLI mints a short-lived OIDC token from
+      # the job's id-token at publish time. Requires npm CLI 11.5.1+, which
+      # is why we install npm@latest after setup-node (node 24 ships npm 11,
+      # but we pin to latest defensively for the version-bump cadence).
+      - name: Set up Node.js (OIDC trusted publisher)
         uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '24'
           registry-url: 'https://registry.npmjs.org'
+
+      - name: Ensure npm >= 11.5.1 (required for trusted publishing)
+        run: |
+          set -euo pipefail
+          npm install -g npm@latest
+          npm --version
 
       - name: npm publish dry-run
         id: npm-dryrun
         continue-on-error: true
         working-directory: dist/typescript
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           set -euo pipefail
           TARBALL=$(ls colliery-io-brokkr-client-*.tgz)
           echo "Validating ${TARBALL}"
-          npm publish "${TARBALL}" --access public --dry-run
+          npm publish "${TARBALL}" --access public --provenance --dry-run
 
       - name: npm publish
         id: npm-publish
         if: needs.resolve-version.outputs.is_tag == 'true' && steps.npm-dryrun.outcome == 'success'
         continue-on-error: true
         working-directory: dist/typescript
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           set -euo pipefail
           TARBALL=$(ls colliery-io-brokkr-client-*.tgz)
-          npm publish "${TARBALL}" --access public
+          npm publish "${TARBALL}" --access public --provenance
 
       - name: Summarize publish results
         if: always()
