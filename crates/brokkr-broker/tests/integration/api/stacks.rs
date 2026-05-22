@@ -130,6 +130,102 @@ async fn test_list_stacks() {
 }
 
 #[tokio::test]
+async fn test_list_stacks_with_generator_pak_filters_to_own() {
+    // BROKKR-T-0155: a generator PAK on GET /stacks must see ONLY its own
+    // stacks (not 403, not all stacks).
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+
+    // Generator A — has two stacks.
+    let gen_a = fixture.create_test_generator(
+        "Generator A".to_string(),
+        None,
+        "gen_a_initial_hash".to_string(),
+    );
+    let (gen_a_pak, gen_a_hash) = create_pak().unwrap();
+    fixture
+        .dal
+        .generators()
+        .update_pak_hash(gen_a.id, gen_a_hash)
+        .unwrap();
+    let a_stack_1 = fixture.create_test_stack("A Stack 1".to_string(), None, gen_a.id);
+    let a_stack_2 = fixture.create_test_stack("A Stack 2".to_string(), None, gen_a.id);
+
+    // Generator B — has one stack; must NOT appear in A's list.
+    let gen_b = fixture.create_test_generator(
+        "Generator B".to_string(),
+        None,
+        "gen_b_initial_hash".to_string(),
+    );
+    let _b_stack = fixture.create_test_stack("B Stack".to_string(), None, gen_b.id);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/stacks")
+                .header("Authorization", &gen_a_pak)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let stacks: Vec<serde_json::Value> = serde_json::from_slice(&body).unwrap();
+
+    let ids: Vec<&str> = stacks
+        .iter()
+        .map(|s| s["id"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        ids.len(),
+        2,
+        "Generator A should see exactly its 2 stacks, got {ids:?}"
+    );
+    assert!(ids.contains(&a_stack_1.id.to_string().as_str()));
+    assert!(ids.contains(&a_stack_2.id.to_string().as_str()));
+    for s in &stacks {
+        assert_eq!(
+            s["generator_id"].as_str().unwrap(),
+            gen_a.id.to_string(),
+            "stack {} leaked from another generator",
+            s["id"]
+        );
+    }
+}
+
+#[tokio::test]
+async fn test_list_stacks_without_pak_forbidden() {
+    // BROKKR-T-0155: callers without admin or generator scope still get 403.
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+
+    // An agent PAK has neither admin nor generator scope.
+    let (_agent, agent_pak) =
+        fixture.create_test_agent_with_pak("contract-agent".to_string(), "cluster".to_string());
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/stacks")
+                .header("Authorization", &agent_pak)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["code"], "stacks_list_denied");
+}
+
+#[tokio::test]
 async fn test_update_stack() {
     let fixture = TestFixture::new();
     let app = fixture.create_test_router().with_state(fixture.dal.clone());

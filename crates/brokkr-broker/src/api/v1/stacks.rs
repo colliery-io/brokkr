@@ -86,11 +86,11 @@ async fn fetch_owned_stack(
     path = "/stacks",
     tag = "stacks",
     responses(
-        (status = 200, description = "List of stacks", body = Vec<Stack>),
-        (status = 403, description = "Forbidden - requires admin PAK", body = ErrorResponse),
+        (status = 200, description = "List of stacks (admin: all; generator: own)", body = Vec<Stack>),
+        (status = 403, description = "Forbidden", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse),
     ),
-    security(("admin_pak" = []))
+    security(("admin_pak" = []), ("generator_pak" = []))
 )]
 #[instrument(skip(dal, auth_payload), fields(admin = auth_payload.admin))]
 async fn list_stacks(
@@ -98,16 +98,31 @@ async fn list_stacks(
     Extension(auth_payload): Extension<AuthPayload>,
 ) -> Result<Json<Vec<Stack>>, ApiError> {
     info!("Handling request to list stacks");
-    if !auth_payload.admin {
-        return Err(ApiError::forbidden("admin_required", "admin access required"));
-    }
 
-    let stacks = dal.stacks().list().map_err(|e| {
-        error!("Failed to fetch stacks: {:?}", e);
-        ApiError::internal("failed to fetch stacks")
-    })?;
+    let stacks = if auth_payload.admin {
+        dal.stacks().list().map_err(|e| {
+            error!("Failed to fetch stacks: {:?}", e);
+            ApiError::internal("failed to fetch stacks")
+        })?
+    } else if let Some(generator_id) = auth_payload.generator {
+        dal.stacks().list_for_generator(generator_id).map_err(|e| {
+            error!(
+                "Failed to fetch stacks for generator {}: {:?}",
+                generator_id, e
+            );
+            ApiError::internal("failed to fetch stacks")
+        })?
+    } else {
+        return Err(ApiError::forbidden(
+            "stacks_list_denied",
+            "admin or generator access required",
+        ));
+    };
+
     info!("Successfully retrieved {} stacks", stacks.len());
-    metrics::set_stacks_total(stacks.len() as i64);
+    if auth_payload.admin {
+        metrics::set_stacks_total(stacks.len() as i64);
+    }
     Ok(Json(stacks))
 }
 

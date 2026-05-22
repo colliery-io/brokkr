@@ -160,6 +160,17 @@ describe("brokkr SDK contract — TypeScript", () => {
       expect(targetRes.error, `add_target error: ${JSON.stringify(targetRes.error)}`).toBeUndefined();
       expect(targetRes.response.status).toBe(201);
 
+      // Step 7.5: list_stacks as the generator (BROKKR-T-0155 — filtered to own)
+      const listRes = await gen.GET("/stacks", {});
+      expect(listRes.error, `list_stacks error: ${JSON.stringify(listRes.error)}`).toBeUndefined();
+      expect(listRes.response.status).toBe(200);
+      expect(listRes.data).toBeDefined();
+      const stackIds = listRes.data!.map((s) => s.id);
+      expect(stackIds, `generator did not see own stack ${stackId}; got ${stackIds.join(", ")}`).toContain(stackId);
+      for (const s of listRes.data!) {
+        expect(s.generator_id, `list_stacks leaked stack ${s.id} from another generator`).toBe(generatorId);
+      }
+
       // Step 8: GET the stack and verify shape
       const getStack = await gen.GET("/stacks/{id}", {
         params: { path: { id: stackId } },

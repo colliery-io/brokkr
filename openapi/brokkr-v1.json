@@ -2466,7 +2466,7 @@
       "name": ""
     },
     "title": "brokkr-broker",
-    "version": "0.4.1"
+    "version": "0.4.2"
   },
   "openapi": "3.0.3",
   "paths": {
@@ -5366,7 +5366,7 @@
                 }
               }
             },
-            "description": "List of stacks"
+            "description": "List of stacks (admin: all; generator: own)"
           },
           "403": {
             "content": {
@@ -5376,7 +5376,7 @@
                 }
               }
             },
-            "description": "Forbidden - requires admin PAK"
+            "description": "Forbidden"
           },
           "500": {
             "content": {
@@ -5392,6 +5392,9 @@
         "security": [
           {
             "admin_pak": []
+          },
+          {
+            "generator_pak": []
           }
         ],
         "tags": [

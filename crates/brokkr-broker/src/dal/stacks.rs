@@ -106,6 +106,27 @@ impl StacksDAL<'_> {
             .load::<Stack>(conn)
     }
 
+    /// Lists all non-deleted stacks owned by a specific generator.
+    ///
+    /// # Arguments
+    ///
+    /// * `generator_id` - The UUID of the generator whose stacks to list.
+    ///
+    /// # Returns
+    ///
+    /// Returns a Result containing a Vec of non-deleted Stacks where `generator_id`
+    /// matches, or a diesel::result::Error on failure.
+    pub fn list_for_generator(
+        &self,
+        generator_id: Uuid,
+    ) -> Result<Vec<Stack>, diesel::result::Error> {
+        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        stacks::table
+            .filter(stacks::deleted_at.is_null())
+            .filter(stacks::generator_id.eq(generator_id))
+            .load::<Stack>(conn)
+    }
+
     /// Lists all stacks from the database, including deleted ones.
     ///
     /// # Returns
