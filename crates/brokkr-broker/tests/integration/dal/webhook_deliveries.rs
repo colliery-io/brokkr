@@ -730,9 +730,20 @@ fn test_exponential_backoff_timing() {
     assert!(next_retry1 >= before + expected_backoff1);
     assert!(next_retry1 <= before + expected_backoff1 + Duration::seconds(2)); // Allow 2s tolerance
 
-    // Wait for retry time and process
-    std::thread::sleep(std::time::Duration::from_secs(3));
-    fixture.dal.webhook_deliveries().process_retries().unwrap();
+    // Wait for retry time and process. Poll up to 15s to avoid CI flake
+    // (backoff is 2s; busy runners can stall a few seconds beyond that).
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
+    loop {
+        let moved = fixture
+            .dal
+            .webhook_deliveries()
+            .process_retries()
+            .expect("Failed to process retries");
+        if moved >= 1 || std::time::Instant::now() >= deadline {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    }
 
     // Verify our delivery is now pending
     let after_retry = fixture

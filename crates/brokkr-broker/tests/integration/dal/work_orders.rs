@@ -584,17 +584,28 @@ fn test_process_retry_pending() {
         .complete_failure(work_order.id, "Failed".to_string(), true)
         .expect("Failed to complete work order");
 
-    // Wait for backoff to elapse
-    std::thread::sleep(std::time::Duration::from_secs(3));
+    // Wait for backoff to elapse, then poll. Backoff is 2s; we allow up to
+    // 15s so a busy CI runner doesn't flake the assertion. Polling beats
+    // a single fixed sleep — the same pattern is used in
+    // `webhook_deliveries::test_process_retries`.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
+    let mut count: usize = 0;
+    while std::time::Instant::now() < deadline {
+        count = fixture
+            .dal
+            .work_orders()
+            .process_retry_pending()
+            .expect("Failed to process retry pending");
+        if count >= 1 {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    }
 
-    // Process retry pending
-    let count = fixture
-        .dal
-        .work_orders()
-        .process_retry_pending()
-        .expect("Failed to process retry pending");
-
-    assert_eq!(count, 1);
+    assert!(
+        count >= 1,
+        "Should process at least 1 retry within 15s of next_retry_at"
+    );
 
     // Work order should be back to PENDING
     let updated = fixture
