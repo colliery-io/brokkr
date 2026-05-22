@@ -4,6 +4,10 @@ version = "0.4.2"
 edition = "2021"
 license = "Elastic-2.0"
 description = "Auto-generated Rust client for the Brokkr broker API"
+repository = "https://github.com/colliery-io/brokkr"
+homepage = "https://github.com/colliery-io/brokkr"
+documentation = "https://docs.rs/brokkr-client"
+readme = "../../README.md"
 
 # This crate's source is generated from openapi/brokkr-v1.json by the
 # `progenitor::generate_api!` macro in src/lib.rs. Regeneration happens

@@ -2,6 +2,16 @@
   "name": "@colliery-io/brokkr-client",
   "version": "0.4.2",
   "description": "Auto-generated TypeScript client for the Brokkr broker API",
+  "license": "Elastic-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/colliery-io/brokkr.git",
+    "directory": "sdks/typescript/brokkr-client"
+  },
+  "homepage": "https://github.com/colliery-io/brokkr#readme",
+  "bugs": {
+    "url": "https://github.com/colliery-io/brokkr/issues"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

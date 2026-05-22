@@ -5,12 +5,18 @@ description = "Ergonomic Python wrapper around the auto-generated brokkr-client-
 authors = []
 requires-python = ">=3.10"
 readme = "README.md"
+license = "Elastic-2.0"
 dependencies = [
     # Low-level generated client. Local path dep in-tree; resolved from PyPI
     # for installed releases.
     "brokkr-client-generated",
     "httpx>=0.23.0,<0.29.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/colliery-io/brokkr"
+Repository = "https://github.com/colliery-io/brokkr"
+Issues = "https://github.com/colliery-io/brokkr/issues"
 
 [project.optional-dependencies]
 test = [
