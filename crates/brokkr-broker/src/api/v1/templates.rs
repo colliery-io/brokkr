@@ -362,9 +362,9 @@ async fn list_labels(
     path = "/templates/{id}/labels",
     tag = "templates",
     params(("id" = Uuid, Path, description = "Template ID")),
-    request_body = String,
+    request_body(content = String, content_type = "application/json", description = "JSON-encoded label string, e.g. \"mylabel\""),
     responses(
-        (status = 200, description = "Label added", body = TemplateLabel),
+        (status = 201, description = "Label added", body = TemplateLabel),
         (status = 400, description = "Invalid label", body = ErrorResponse),
         (status = 403, description = "Forbidden", body = ErrorResponse),
         (status = 404, description = "Template not found", body = ErrorResponse),
@@ -379,7 +379,7 @@ async fn add_label(
     Extension(auth_payload): Extension<AuthPayload>,
     Path(template_id): Path<Uuid>,
     Json(label): Json<String>,
-) -> Result<Json<TemplateLabel>, ApiError> {
+) -> Result<(StatusCode, Json<TemplateLabel>), ApiError> {
     let template = fetch_template_or_404(&dal, template_id)?;
     if !can_modify_template(&auth_payload, &template) {
         return Err(ApiError::forbidden(
@@ -393,7 +393,7 @@ async fn add_label(
         .template_labels()
         .create(&new_label)
         .map_err(|_| ApiError::internal("failed to add template label"))?;
-    Ok(Json(label))
+    Ok((StatusCode::CREATED, Json(label)))
 }
 
 #[utoipa::path(
@@ -476,7 +476,7 @@ async fn list_annotations(
     params(("id" = Uuid, Path, description = "Template ID")),
     request_body = AddAnnotationRequest,
     responses(
-        (status = 200, description = "Annotation added", body = TemplateAnnotation),
+        (status = 201, description = "Annotation added", body = TemplateAnnotation),
         (status = 400, description = "Invalid annotation", body = ErrorResponse),
         (status = 403, description = "Forbidden", body = ErrorResponse),
         (status = 404, description = "Template not found", body = ErrorResponse),
@@ -491,7 +491,7 @@ async fn add_annotation(
     Extension(auth_payload): Extension<AuthPayload>,
     Path(template_id): Path<Uuid>,
     Json(request): Json<AddAnnotationRequest>,
-) -> Result<Json<TemplateAnnotation>, ApiError> {
+) -> Result<(StatusCode, Json<TemplateAnnotation>), ApiError> {
     let template = fetch_template_or_404(&dal, template_id)?;
     if !can_modify_template(&auth_payload, &template) {
         return Err(ApiError::forbidden(
@@ -505,7 +505,7 @@ async fn add_annotation(
         .template_annotations()
         .create(&new_annotation)
         .map_err(|_| ApiError::internal("failed to add template annotation"))?;
-    Ok(Json(annotation))
+    Ok((StatusCode::CREATED, Json(annotation)))
 }
 
 #[utoipa::path(

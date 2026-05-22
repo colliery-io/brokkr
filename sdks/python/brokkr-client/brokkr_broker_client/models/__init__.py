@@ -13,6 +13,8 @@ from .claim_work_order_request import ClaimWorkOrderRequest
 from .complete_work_order_request import CompleteWorkOrderRequest
 from .config_change_info import ConfigChangeInfo
 from .config_reload_response import ConfigReloadResponse
+from .create_agent_response import CreateAgentResponse
+from .create_deployment_object_request import CreateDeploymentObjectRequest
 from .create_diagnostic_request import CreateDiagnosticRequest
 from .create_generator_response import CreateGeneratorResponse
 from .create_template_request import CreateTemplateRequest
@@ -83,6 +85,8 @@ __all__ = (
     "CompleteWorkOrderRequest",
     "ConfigChangeInfo",
     "ConfigReloadResponse",
+    "CreateAgentResponse",
+    "CreateDeploymentObjectRequest",
     "CreateDiagnosticRequest",
     "CreateGeneratorResponse",
     "CreateTemplateRequest",

@@ -1,0 +1,17 @@
+{
+  "name": "brokkr-sdk-contract-typescript",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Contract tests exercising the generated TypeScript SDK against a running broker",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@colliery-io/brokkr-client": "file:../../../sdks/typescript/brokkr-client"
+  },
+  "devDependencies": {
+    "typescript": "5.7.3",
+    "vitest": "3.0.4"
+  }
+}

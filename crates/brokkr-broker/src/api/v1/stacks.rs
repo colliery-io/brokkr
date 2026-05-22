@@ -127,7 +127,7 @@ async fn create_stack(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
     Json(new_stack): Json<NewStack>,
-) -> Result<Json<Stack>, ApiError> {
+) -> Result<(StatusCode, Json<Stack>), ApiError> {
     info!("Handling request to create a new stack");
     if !auth_payload.admin && auth_payload.generator.is_none() {
         return Err(ApiError::forbidden(
@@ -164,7 +164,7 @@ async fn create_stack(
         None,
     );
 
-    Ok(Json(stack))
+    Ok((StatusCode::CREATED, Json(stack)))
 }
 
 #[utoipa::path(
@@ -302,14 +302,27 @@ pub async fn list_deployment_objects(
     Ok(Json(objects))
 }
 
+/// Wire DTO for creating a deployment object via the public API.
+///
+/// Distinct from [`brokkr_models::models::deployment_objects::NewDeploymentObject`],
+/// which carries server-derived fields (e.g. `yaml_checksum`).
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct CreateDeploymentObjectRequest {
+    /// YAML content of the deployment.
+    pub yaml_content: String,
+    /// Optional. Defaults to false.
+    #[serde(default)]
+    pub is_deletion_marker: bool,
+}
+
 #[utoipa::path(
     post,
     path = "/stacks/{id}/deployment-objects",
     tag = "stacks",
     params(("id" = Uuid, Path, description = "Stack ID")),
-    request_body(content = serde_json::Value, description = "Deployment object payload with yaml_content and optional is_deletion_marker"),
+    request_body = CreateDeploymentObjectRequest,
     responses(
-        (status = 200, description = "Deployment object created", body = DeploymentObject),
+        (status = 201, description = "Deployment object created", body = DeploymentObject),
         (status = 400, description = "Invalid request", body = ErrorResponse),
         (status = 403, description = "Forbidden", body = ErrorResponse),
         (status = 404, description = "Stack not found", body = ErrorResponse),
@@ -321,22 +334,16 @@ pub async fn create_deployment_object(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
     Path(stack_id): Path<Uuid>,
-    Json(payload): Json<serde_json::Value>,
-) -> Result<Json<DeploymentObject>, ApiError> {
+    Json(req): Json<CreateDeploymentObjectRequest>,
+) -> Result<(StatusCode, Json<DeploymentObject>), ApiError> {
     fetch_owned_stack(&dal, &auth_payload, stack_id).await?;
-    let yaml_content = payload["yaml_content"]
-        .as_str()
-        .ok_or_else(|| ApiError::bad_request("yaml_content_required", "missing or invalid yaml_content"))?
-        .to_string();
-    let is_deletion_marker = payload["is_deletion_marker"].as_bool().unwrap_or(false);
-
-    let new_object = NewDeploymentObject::new(stack_id, yaml_content, is_deletion_marker)
+    let new_object = NewDeploymentObject::new(stack_id, req.yaml_content, req.is_deletion_marker)
         .map_err(|e| ApiError::bad_request("invalid_deployment_object", e))?;
     let object = dal
         .deployment_objects()
         .create(&new_object)
         .map_err(|_| ApiError::internal("failed to create deployment object"))?;
-    Ok(Json(object))
+    Ok((StatusCode::CREATED, Json(object)))
 }
 
 async fn is_authorized_for_stack(
@@ -408,9 +415,9 @@ pub async fn list_labels(
     tag = "stacks",
     operation_id = "stacks_add_label",
     params(("id" = Uuid, Path, description = "Stack ID")),
-    request_body = String,
+    request_body(content = String, content_type = "application/json", description = "JSON-encoded label string, e.g. \"mylabel\""),
     responses(
-        (status = 200, description = "Label added", body = StackLabel),
+        (status = 201, description = "Label added", body = StackLabel),
         (status = 400, description = "Invalid label", body = ErrorResponse),
         (status = 403, description = "Forbidden", body = ErrorResponse),
         (status = 404, description = "Stack not found", body = ErrorResponse),
@@ -423,7 +430,7 @@ pub async fn add_label(
     Extension(auth_payload): Extension<AuthPayload>,
     Path(stack_id): Path<Uuid>,
     Json(label): Json<String>,
-) -> Result<Json<StackLabel>, ApiError> {
+) -> Result<(StatusCode, Json<StackLabel>), ApiError> {
     fetch_owned_stack(&dal, &auth_payload, stack_id).await?;
     let new_label = NewStackLabel::new(stack_id, label)
         .map_err(|e| ApiError::bad_request("invalid_label", e))?;
@@ -431,7 +438,7 @@ pub async fn add_label(
         .stack_labels()
         .create(&new_label)
         .map_err(|_| ApiError::internal("failed to add stack label"))?;
-    Ok(Json(label))
+    Ok((StatusCode::CREATED, Json(label)))
 }
 
 #[utoipa::path(
@@ -508,7 +515,7 @@ pub async fn list_annotations(
     params(("id" = Uuid, Path, description = "Stack ID")),
     request_body = NewStackAnnotation,
     responses(
-        (status = 200, description = "Annotation added", body = StackAnnotation),
+        (status = 201, description = "Annotation added", body = StackAnnotation),
         (status = 400, description = "Invalid annotation", body = ErrorResponse),
         (status = 403, description = "Forbidden", body = ErrorResponse),
         (status = 404, description = "Stack not found", body = ErrorResponse),
@@ -521,7 +528,7 @@ pub async fn add_annotation(
     Extension(auth_payload): Extension<AuthPayload>,
     Path(stack_id): Path<Uuid>,
     Json(new_annotation): Json<NewStackAnnotation>,
-) -> Result<Json<StackAnnotation>, ApiError> {
+) -> Result<(StatusCode, Json<StackAnnotation>), ApiError> {
     fetch_owned_stack(&dal, &auth_payload, stack_id).await?;
     if new_annotation.stack_id != stack_id {
         return Err(ApiError::bad_request("stack_id_mismatch", "stack ID mismatch"));
@@ -530,7 +537,7 @@ pub async fn add_annotation(
         .stack_annotations()
         .create(&new_annotation)
         .map_err(|_| ApiError::internal("failed to add stack annotation"))?;
-    Ok(Json(annotation))
+    Ok((StatusCode::CREATED, Json(annotation)))
 }
 
 #[utoipa::path(

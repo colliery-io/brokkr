@@ -67,17 +67,25 @@ pub async fn auth_middleware<B>(
     next: Next,
 ) -> Result<Response, StatusCode> {
     info!("Processing authentication middleware");
-    let pak = match request
+    let raw = match request
         .headers()
         .get("Authorization")
         .and_then(|header| header.to_str().ok())
     {
-        Some(pak) => pak,
+        Some(value) => value,
         None => {
             warn!("Authorization header missing or invalid");
             return Err(StatusCode::UNAUTHORIZED);
         }
     };
+
+    // Accept either the raw PAK or the RFC 6750 `Bearer <pak>` form so that
+    // existing SDK consumers and HTTP-style callers both work.
+    let pak = raw
+        .strip_prefix("Bearer ")
+        .or_else(|| raw.strip_prefix("bearer "))
+        .unwrap_or(raw)
+        .trim();
 
     match verify_pak(&dal, pak).await {
         Ok(auth_payload) => {
@@ -108,8 +116,15 @@ pub async fn auth_middleware<B>(
 async fn verify_pak(dal: &DAL, pak: &str) -> Result<AuthPayload, StatusCode> {
     info!("Verifying PAK");
 
-    // Generate the PAK hash early so we can use it as cache key
-    let pak_hash = pak::generate_pak_hash(pak.to_string());
+    // Generate the PAK hash early so we can use it as cache key. A malformed
+    // header (wrong shape) becomes a clean 401 rather than a panic-induced 500.
+    let pak_hash = match pak::generate_pak_hash(pak.to_string()) {
+        Ok(hash) => hash,
+        Err(e) => {
+            warn!("Rejecting malformed PAK in Authorization header: {:?}", e);
+            return Err(StatusCode::UNAUTHORIZED);
+        }
+    };
 
     // Check the auth cache first
     if let Some(cache) = &dal.auth_cache {
@@ -136,7 +151,10 @@ async fn verify_pak(dal: &DAL, pak: &str) -> Result<AuthPayload, StatusCode> {
         })?;
 
     if let Some(admin_hash) = admin_key {
-        if pak::verify_pak(pak.to_string(), admin_hash) {
+        // Unreachable in practice: `pak_hash` was generated from the same
+        // string above, so parsing must succeed here. Treat any unexpected
+        // failure as 401 rather than panicking.
+        if pak::verify_pak(pak.to_string(), admin_hash).unwrap_or(false) {
             info!("Admin PAK verified");
             let payload = AuthPayload {
                 admin: true,

@@ -443,6 +443,39 @@
         ],
         "type": "object"
       },
+      "CreateAgentResponse": {
+        "description": "Response body for [`create_agent`]: the newly-created agent plus the\none-time initial PAK shown only at creation.",
+        "properties": {
+          "agent": {
+            "$ref": "#/components/schemas/Agent"
+          },
+          "initial_pak": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent",
+          "initial_pak"
+        ],
+        "type": "object"
+      },
+      "CreateDeploymentObjectRequest": {
+        "description": "Wire DTO for creating a deployment object via the public API.\n\nDistinct from [`brokkr_models::models::deployment_objects::NewDeploymentObject`],\nwhich carries server-derived fields (e.g. `yaml_checksum`).",
+        "properties": {
+          "is_deletion_marker": {
+            "description": "Optional. Defaults to false.",
+            "type": "boolean"
+          },
+          "yaml_content": {
+            "description": "YAML content of the deployment.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "yaml_content"
+        ],
+        "type": "object"
+      },
       "CreateDiagnosticRequest": {
         "description": "Request body for creating a diagnostic request.",
         "properties": {
@@ -2433,7 +2466,7 @@
       "name": ""
     },
     "title": "brokkr-broker",
-    "version": "0.0.0"
+    "version": "0.4.1"
   },
   "openapi": "3.0.3",
   "paths": {
@@ -2821,10 +2854,12 @@
           "required": true
         },
         "responses": {
-          "200": {
+          "201": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/CreateAgentResponse"
+                }
               }
             },
             "description": "Successfully created agent"
@@ -3371,7 +3406,7 @@
           "required": true
         },
         "responses": {
-          "200": {
+          "201": {
             "content": {
               "application/json": {
                 "schema": {
@@ -3628,7 +3663,7 @@
           "required": true
         },
         "responses": {
-          "200": {
+          "201": {
             "content": {
               "application/json": {
                 "schema": {
@@ -3871,7 +3906,7 @@
           "required": true
         },
         "responses": {
-          "200": {
+          "201": {
             "content": {
               "application/json": {
                 "schema": {
@@ -4271,7 +4306,7 @@
           "required": true
         },
         "responses": {
-          "200": {
+          "201": {
             "content": {
               "application/json": {
                 "schema": {
@@ -4291,6 +4326,16 @@
             },
             "description": "Forbidden"
           },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Stack not found"
+          },
           "500": {
             "content": {
               "application/json": {
@@ -4307,7 +4352,7 @@
             "admin_pak": []
           },
           {
-            "agent_pak": []
+            "generator_pak": []
           }
         ],
         "tags": [
@@ -4380,7 +4425,7 @@
             "admin_pak": []
           },
           {
-            "agent_pak": []
+            "generator_pak": []
           }
         ],
         "tags": [
@@ -5252,7 +5297,7 @@
           }
         ],
         "responses": {
-          "200": {
+          "201": {
             "content": {
               "application/json": {
                 "schema": {
@@ -5729,7 +5774,7 @@
           "required": true
         },
         "responses": {
-          "200": {
+          "201": {
             "content": {
               "application/json": {
                 "schema": {
@@ -5954,14 +5999,15 @@
         "requestBody": {
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "$ref": "#/components/schemas/CreateDeploymentObjectRequest"
+              }
             }
           },
-          "description": "Deployment object payload with yaml_content and optional is_deletion_marker",
           "required": true
         },
         "responses": {
-          "200": {
+          "201": {
             "content": {
               "application/json": {
                 "schema": {
@@ -6175,16 +6221,17 @@
         ],
         "requestBody": {
           "content": {
-            "text/plain": {
+            "application/json": {
               "schema": {
                 "type": "string"
               }
             }
           },
+          "description": "JSON-encoded label string, e.g. \"mylabel\"",
           "required": true
         },
         "responses": {
-          "200": {
+          "201": {
             "content": {
               "application/json": {
                 "schema": {
@@ -6853,7 +6900,7 @@
           "required": true
         },
         "responses": {
-          "200": {
+          "201": {
             "content": {
               "application/json": {
                 "schema": {
@@ -7077,16 +7124,17 @@
         ],
         "requestBody": {
           "content": {
-            "text/plain": {
+            "application/json": {
               "schema": {
                 "type": "string"
               }
             }
           },
+          "description": "JSON-encoded label string, e.g. \"mylabel\"",
           "required": true
         },
         "responses": {
-          "200": {
+          "201": {
             "content": {
               "application/json": {
                 "schema": {

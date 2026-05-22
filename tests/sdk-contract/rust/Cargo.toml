@@ -1,0 +1,27 @@
+[package]
+name = "brokkr-sdk-contract-rust"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+# Keep this crate independent from the main workspace, like tests/e2e.
+[workspace]
+
+[[bin]]
+name = "brokkr-sdk-contract-rust"
+path = "src/main.rs"
+
+[dependencies]
+brokkr-client = { path = "../../../crates/brokkr-client" }
+# progenitor_client re-export: we need direct access to `Error<E>` to convert
+# raw progenitor errors into the wrapper's `BrokkrError`.
+progenitor-client = "0.14"
+tokio = { version = "1", features = ["full"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+serde_json = "1"
+anyhow = "1"
+# `reqwest` is used only for the broker readiness probe (/healthz before the
+# suite starts) and to build the auth-header `reqwest::Client` we hand to the
+# raw progenitor `Client::new_with_client`. All scenario traffic goes through
+# the SDK.
+reqwest = { version = "0.13", default-features = false, features = ["json"] }
