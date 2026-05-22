@@ -291,6 +291,29 @@ async fn scenario_uat_walkthrough(base_url: &str, admin_pak: &str) -> Result<()>
         .into_inner();
     println!("    target_id={}", target.id);
 
+    // Step 7.5: list_stacks as the generator (BROKKR-T-0155 — must filter to own).
+    println!("  → [generator] list_stacks (expect filtered to own)");
+    let listed = gen
+        .api()
+        .list_stacks()
+        .send()
+        .await
+        .map_err(berr)
+        .context("list_stacks")?
+        .into_inner();
+    if !listed.iter().any(|s| s.id == stack_id) {
+        return Err(anyhow!(
+            "list_stacks (as generator) did not include this generator's stack {stack_id}; got {} stack(s)",
+            listed.len()
+        ));
+    }
+    if listed.iter().any(|s| s.generator_id != generator_id) {
+        return Err(anyhow!(
+            "list_stacks (as generator) leaked stacks from another generator"
+        ));
+    }
+    println!("    saw {} stack(s), all owned by this generator", listed.len());
+
     // Step 8: GET the stack and verify shape
     println!("  → [generator] get stack");
     let fetched = gen

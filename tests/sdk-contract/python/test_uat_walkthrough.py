@@ -18,6 +18,7 @@ from brokkr_broker_client.api.stacks import (
     create_stack,
     delete_stack,
     get_stack,
+    list_stacks,
     stacks_add_annotation,
     stacks_add_label,
 )
@@ -119,6 +120,18 @@ def test_uat_walkthrough(admin_client, base_url):
         )
         assert isinstance(tgt, AgentTarget), f"add_target returned {type(tgt).__name__}: {tgt!r}"
         print(f"    target_id={tgt.id}")
+
+        # ----- Step 7.5: list_stacks as the generator (BROKKR-T-0155). -----
+        listed = list_stacks.sync(client=gen_client)
+        assert isinstance(listed, list), (
+            f"list_stacks (as generator) returned {type(listed).__name__}: {listed!r}"
+        )
+        assert any(s.id == stack_id for s in listed), (
+            f"list_stacks (as generator) missing own stack {stack_id}; got {[s.id for s in listed]}"
+        )
+        assert all(s.generator_id == generator_id for s in listed), (
+            "list_stacks (as generator) leaked stacks from another generator"
+        )
 
         # ----- Step 8: GET the stack and verify shape -----
         fetched = get_stack.sync(stack_id, client=gen_client)

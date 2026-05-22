@@ -4416,7 +4416,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description List of stacks */
+            /** @description List of stacks (admin: all; generator: own) */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4425,7 +4425,7 @@ export interface operations {
                     "application/json": components["schemas"]["Stack"][];
                 };
             };
-            /** @description Forbidden - requires admin PAK */
+            /** @description Forbidden */
             403: {
                 headers: {
                     [name: string]: unknown;
