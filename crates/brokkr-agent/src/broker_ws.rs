@@ -429,4 +429,93 @@ mod tests {
             assert!(diff <= base.as_millis() as i64 / 5);
         }
     }
+
+    // --- WS-06: WsUplink decision-point behaviour ---------------------------
+    //
+    // The "kill WS, observe REST resumes" property collapses to: when the
+    // state watch is not `Up`, `try_send` returns the message back to the
+    // caller so it can fall back to REST. These tests cover every relevant
+    // path through that decision; the round-trip integration coverage that
+    // proves the broker accepts the WS path lives in `tests/integration/`.
+
+    fn uplink_with(state: WsState, capacity: usize) -> (WsUplink, watch::Sender<WsState>, mpsc::Receiver<WsMessage>) {
+        let (state_tx, state_rx) = watch::channel(state);
+        let (tx, rx) = mpsc::channel::<WsMessage>(capacity);
+        let uplink = WsUplink {
+            state: state_rx,
+            outbound: tx,
+        };
+        (uplink, state_tx, rx)
+    }
+
+    fn heartbeat_msg() -> WsMessage {
+        WsMessage::Heartbeat(brokkr_wire::Heartbeat {
+            agent_id: uuid::Uuid::nil(),
+            sent_at: chrono::Utc::now(),
+        })
+    }
+
+    #[test]
+    fn try_send_returns_message_when_down() {
+        let (uplink, _state, _rx) = uplink_with(WsState::Down, 8);
+        assert!(!uplink.is_up());
+        let msg = heartbeat_msg();
+        let returned = uplink.try_send(msg).unwrap_err();
+        assert!(matches!(returned, WsMessage::Heartbeat(_)));
+    }
+
+    #[test]
+    fn try_send_returns_message_when_force_rest_only() {
+        let (uplink, _state, _rx) = uplink_with(WsState::ForceRestOnly, 8);
+        assert!(!uplink.is_up());
+        assert!(uplink.try_send(heartbeat_msg()).is_err());
+    }
+
+    #[tokio::test]
+    async fn try_send_delivers_when_up() {
+        let (uplink, _state, mut rx) = uplink_with(WsState::Up, 8);
+        assert!(uplink.is_up());
+        uplink.try_send(heartbeat_msg()).unwrap();
+        let received = rx.recv().await.expect("frame delivered");
+        assert!(matches!(received, WsMessage::Heartbeat(_)));
+    }
+
+    #[test]
+    fn try_send_returns_message_when_lane_full() {
+        // Capacity 1, never drain. First send fills the lane; second
+        // returns Err with the unsent message so the caller can REST.
+        let (uplink, _state, _rx) = uplink_with(WsState::Up, 1);
+        uplink.try_send(heartbeat_msg()).unwrap();
+        let bounced = uplink.try_send(heartbeat_msg()).unwrap_err();
+        assert!(matches!(bounced, WsMessage::Heartbeat(_)));
+    }
+
+    #[test]
+    fn ws_is_on_by_default_per_adr_0008() {
+        // ADR-0008 declares "WS default, REST polling as fallback (opt-out)".
+        // The shipped `default.toml` therefore must have `ws_force_rest = false`.
+        // Loading without overrides reflects what real deployments inherit.
+        let settings = brokkr_utils::Settings::new(None).expect("default settings load");
+        assert!(
+            !settings.agent.ws_force_rest,
+            "agent.ws_force_rest must default to false (ADR-0008 opt-out)"
+        );
+    }
+
+    #[tokio::test]
+    async fn try_send_follows_state_flip_back_to_rest() {
+        // Simulate the ADR-load-bearing flow: WS up, then dropped, then
+        // up again. The same `WsUplink` instance must consult the live
+        // state on every call, not a stale snapshot from construction.
+        let (uplink, state_tx, mut rx) = uplink_with(WsState::Up, 8);
+        uplink.try_send(heartbeat_msg()).unwrap();
+        let _ = rx.recv().await.unwrap();
+
+        state_tx.send(WsState::Down).unwrap();
+        assert!(uplink.try_send(heartbeat_msg()).is_err(), "must REST after flip down");
+
+        state_tx.send(WsState::Up).unwrap();
+        uplink.try_send(heartbeat_msg()).unwrap();
+        assert!(matches!(rx.recv().await, Some(WsMessage::Heartbeat(_))));
+    }
 }
