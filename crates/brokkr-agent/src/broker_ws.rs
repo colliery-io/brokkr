@@ -94,10 +94,52 @@ impl WsClient {
         self.outbound_tx.clone()
     }
 
+    /// Cheap clonable handle bundling the outbound sender with a current
+    /// state view, intended for emitter call sites that want a single
+    /// "try WS, else REST" decision point (see [`WsUplink::try_send`]).
+    pub fn uplink(&self) -> WsUplink {
+        WsUplink {
+            state: self.state.clone(),
+            outbound: self.outbound_tx.clone(),
+        }
+    }
+
     /// Take ownership of the inbound receiver. Single consumer; subsequent
     /// calls return `None`.
     pub fn take_inbound(&mut self) -> Option<mpsc::Receiver<WsMessage>> {
         self.inbound_rx.take()
+    }
+}
+
+/// Send-side handle for agent components that want to prefer WS but fall
+/// back to REST when WS is down (per ADR-0008). Cheap to `Clone` —
+/// share one per emitter rather than locking the [`WsClient`].
+#[derive(Clone)]
+pub struct WsUplink {
+    state: watch::Receiver<WsState>,
+    outbound: mpsc::Sender<WsMessage>,
+}
+
+impl WsUplink {
+    /// True iff the WS state is currently `Up`. `ForceRestOnly` and `Down`
+    /// both return false, so call sites short-circuit cleanly when the
+    /// agent is configured for REST-only.
+    pub fn is_up(&self) -> bool {
+        matches!(*self.state.borrow(), WsState::Up)
+    }
+
+    /// Try to send a message over WS. Returns `Err(msg)` (giving the
+    /// caller their message back) if WS is down or the outbound lane is
+    /// full or closed — that signals the caller to take the REST path.
+    pub fn try_send(&self, msg: WsMessage) -> Result<(), WsMessage> {
+        if !self.is_up() {
+            return Err(msg);
+        }
+        match self.outbound.try_send(msg) {
+            Ok(()) => Ok(()),
+            Err(tokio::sync::mpsc::error::TrySendError::Full(m))
+            | Err(tokio::sync::mpsc::error::TrySendError::Closed(m)) => Err(m),
+        }
     }
 }
 

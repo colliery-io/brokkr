@@ -58,7 +58,7 @@
 //! - JSON output format
 //! - Contextual information
 
-use crate::{broker, broker_sdk, deployment_health, diagnostics, health, k8s, webhooks, work_orders};
+use crate::{broker, broker_sdk, broker_ws, deployment_health, diagnostics, health, k8s, webhooks, work_orders};
 use brokkr_utils::config::Settings;
 use brokkr_utils::telemetry::prelude::*;
 use std::collections::HashSet;
@@ -89,6 +89,14 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
     info!("Agent PAK verified successfully");
 
     let sdk_client = broker_sdk::build_client(&config)?;
+
+    // Open the internal WS channel to the broker. Per ADR-0008 it's
+    // opt-out: if the user set `agent.ws_force_rest = true`, this spawn
+    // pins the state at ForceRestOnly and no dial is ever attempted.
+    // Outbound emissions still call .uplink() — try_send short-circuits
+    // when the channel is not Up and the caller falls back to REST.
+    let ws_client = broker_ws::spawn(&config);
+    let ws_uplink = ws_client.uplink();
     info!("Broker SDK client created");
 
     info!("Fetching agent details");
@@ -183,7 +191,7 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
     while running.load(Ordering::SeqCst) {
         select! {
             _ = heartbeat_interval.tick() => {
-                match broker::send_heartbeat(&config, &sdk_client, &agent).await {
+                match broker::send_heartbeat(&config, &sdk_client, &agent, Some(&ws_uplink)).await {
                     Ok(_) => {
                         debug!("Successfully sent heartbeat for agent '{}' (id: {})", agent.name, agent.id);
                         // Update broker status for health endpoints
@@ -243,6 +251,7 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
                                         &agent,
                                         obj.id,
                                         None,
+                                        Some(&ws_uplink),
                                     ).await {
                                         error!("Failed to send success event for deployment {} in agent '{}' (id: {}): {}",
                                             obj.id, agent.name, agent.id, e);
@@ -257,6 +266,7 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
                                         &agent,
                                         obj.id,
                                         e.to_string(),
+                                        Some(&ws_uplink),
                                     ).await {
                                         error!("Failed to send failure event for deployment {} in agent '{}' (id: {}): {}",
                                             obj.id, agent.name, agent.id, send_err);
@@ -322,7 +332,7 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
                     health_statuses.into_iter().map(|s| s.into()).collect();
 
                 // Send health status to broker
-                if let Err(e) = broker::send_health_status(&config, &sdk_client, &agent, health_updates).await {
+                if let Err(e) = broker::send_health_status(&config, &sdk_client, &agent, health_updates, Some(&ws_uplink)).await {
                     error!("Failed to send health status for agent '{}': {}", agent.name, e);
                 } else {
                     debug!("Successfully sent health status for {} deployment objects",

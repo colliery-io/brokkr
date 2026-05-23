@@ -1,6 +1,6 @@
 # Code Index
 
-> Generated: 2026-05-23T03:26:40Z | 363 files | JavaScript, Python, Rust, TypeScript
+> Generated: 2026-05-23T03:50:56Z | 364 files | JavaScript, Python, Rust, TypeScript
 
 ## Project Structure
 
@@ -108,6 +108,7 @@
 │   │   │   └── ws/
 │   │   │       ├── handler.rs
 │   │   │       ├── mod.rs
+│   │   │       ├── push.rs
 │   │   │       └── registry.rs
 │   │   └── tests/
 │   │       ├── fixtures.rs
@@ -887,11 +888,11 @@
 #### crates/brokkr-broker/src/api/mod.rs
 
 - pub `v1` module L157 — `-` — # API Module
-- pub `configure_api_routes` function L191-235 — `( dal: DAL, cors_config: &Cors, reloadable_config: Option<ReloadableConfig>, ) -...` — Configures and returns the main application router with all API routes
--  `healthz` function L245-247 — `() -> impl IntoResponse` — Health check endpoint handler
--  `readyz` function L257-259 — `() -> impl IntoResponse` — Ready check endpoint handler
--  `metrics_handler` function L269-276 — `() -> impl IntoResponse` — Metrics endpoint handler
--  `metrics_middleware` function L281-297 — `(request: Request<Body>, next: Next) -> Response` — Middleware to record HTTP request metrics
+- pub `configure_api_routes` function L191-240 — `( dal: DAL, cors_config: &Cors, reloadable_config: Option<ReloadableConfig>, ) -...` — Configures and returns the main application router with all API routes
+-  `healthz` function L250-252 — `() -> impl IntoResponse` — Health check endpoint handler
+-  `readyz` function L262-264 — `() -> impl IntoResponse` — Ready check endpoint handler
+-  `metrics_handler` function L274-281 — `() -> impl IntoResponse` — Metrics endpoint handler
+-  `metrics_middleware` function L286-302 — `(request: Request<Body>, next: Next) -> Response` — Middleware to record HTTP request metrics
 
 ### crates/brokkr-broker/src/api/v1
 
@@ -920,34 +921,34 @@
 
 #### crates/brokkr-broker/src/api/v1/agents.rs
 
-- pub `routes` function L40-63 — `() -> Router<DAL>` — Agent management API endpoints.
-- pub `CreateAgentResponse` struct L121-124 — `{ agent: Agent, initial_pak: String }` — Response body for [`create_agent`]: the newly-created agent plus the
--  `require_admin` function L65-71 — `(auth: &AuthPayload) -> Result<(), ApiError>` — Agent management API endpoints.
--  `require_admin_or_agent` function L73-82 — `(auth: &AuthPayload, id: Uuid) -> Result<(), ApiError>` — Agent management API endpoints.
--  `list_agents` function L93-116 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, ) -> ...` — Agent management API endpoints.
--  `create_agent` function L136-180 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Json(...` — Agent management API endpoints.
--  `AgentQuery` struct L183-186 — `{ name: Option<String>, cluster_name: Option<String> }` — Agent management API endpoints.
--  `get_agent` function L199-216 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `search_agent` function L233-266 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Query...` — Agent management API endpoints.
--  `update_agent` function L280-330 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `delete_agent` function L342-370 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `list_events` function L382-400 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `create_event` function L413-445 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `list_labels` function L459-472 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `add_label` function L487-501 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `remove_label` function L519-538 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `list_annotations` function L552-564 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `add_annotation` function L579-592 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `remove_annotation` function L610-629 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `list_targets` function L641-653 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `add_target` function L667-680 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `authorize_target_mutation` function L687-715 — `( dal: &DAL, auth: &AuthPayload, stack_id: Uuid, ) -> Result<(), ApiError>` — Authorize a target create/delete operation.
--  `remove_target` function L731-750 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `record_heartbeat` function L762-782 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `TargetStateParams` struct L785-787 — `{ mode: Option<String> }` — Agent management API endpoints.
--  `get_target_state` function L802-825 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `get_associated_stacks` function L837-849 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `rotate_agent_pak` function L862-909 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+- pub `routes` function L42-65 — `() -> Router<DAL>` — Agent management API endpoints.
+- pub `CreateAgentResponse` struct L123-126 — `{ agent: Agent, initial_pak: String }` — Response body for [`create_agent`]: the newly-created agent plus the
+-  `require_admin` function L67-73 — `(auth: &AuthPayload) -> Result<(), ApiError>` — Agent management API endpoints.
+-  `require_admin_or_agent` function L75-84 — `(auth: &AuthPayload, id: Uuid) -> Result<(), ApiError>` — Agent management API endpoints.
+-  `list_agents` function L95-118 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, ) -> ...` — Agent management API endpoints.
+-  `create_agent` function L138-182 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Json(...` — Agent management API endpoints.
+-  `AgentQuery` struct L185-188 — `{ name: Option<String>, cluster_name: Option<String> }` — Agent management API endpoints.
+-  `get_agent` function L201-218 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `search_agent` function L235-268 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Query...` — Agent management API endpoints.
+-  `update_agent` function L282-332 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `delete_agent` function L344-372 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `list_events` function L384-402 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `create_event` function L415-447 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `list_labels` function L461-474 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `add_label` function L489-503 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `remove_label` function L521-540 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `list_annotations` function L554-566 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `add_annotation` function L581-594 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `remove_annotation` function L612-631 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `list_targets` function L643-655 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `add_target` function L669-687 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Exten...` — Agent management API endpoints.
+-  `authorize_target_mutation` function L694-722 — `( dal: &DAL, auth: &AuthPayload, stack_id: Uuid, ) -> Result<(), ApiError>` — Authorize a target create/delete operation.
+-  `remove_target` function L738-757 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `record_heartbeat` function L769-789 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `TargetStateParams` struct L792-794 — `{ mode: Option<String> }` — Agent management API endpoints.
+-  `get_target_state` function L809-832 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `get_associated_stacks` function L844-856 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `rotate_agent_pak` function L869-916 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
 
 #### crates/brokkr-broker/src/api/v1/auth.rs
 
@@ -1060,25 +1061,25 @@
 
 #### crates/brokkr-broker/src/api/v1/stacks.rs
 
-- pub `routes` function L34-57 — `() -> Router<DAL>`
-- pub `list_deployment_objects` function L306-318 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
-- pub `CreateDeploymentObjectRequest` struct L325-331 — `{ yaml_content: String, is_deletion_marker: bool }` — Wire DTO for creating a deployment object via the public API.
-- pub `create_deployment_object` function L348-362 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
-- pub `list_labels` function L409-425 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
-- pub `add_label` function L443-457 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
-- pub `remove_label` function L476-491 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
-- pub `list_annotations` function L507-523 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
-- pub `add_annotation` function L541-556 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
-- pub `remove_annotation` function L575-590 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
-- pub `TemplateInstantiationRequest` struct L593-596 — `{ template_id: Uuid, parameters: serde_json::Value }`
--  `fetch_owned_stack` function L60-82 — `( dal: &DAL, auth: &AuthPayload, stack_id: Uuid, ) -> Result<Stack, ApiError>` — Fetch a stack or return 404; also enforces admin-or-generator-owner access.
--  `list_stacks` function L96-127 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, ) -> ...`
--  `create_stack` function L141-183 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Json(...`
--  `get_stack` function L198-206 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
--  `update_stack` function L223-253 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
--  `delete_stack` function L268-291 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
--  `is_authorized_for_stack` function L364-393 — `( dal: &DAL, auth_payload: &AuthPayload, stack_id: Uuid, ) -> Result<bool, ApiEr...`
--  `instantiate_template` function L614-741 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
+- pub `routes` function L36-59 — `() -> Router<DAL>`
+- pub `list_deployment_objects` function L308-320 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
+- pub `CreateDeploymentObjectRequest` struct L327-333 — `{ yaml_content: String, is_deletion_marker: bool }` — Wire DTO for creating a deployment object via the public API.
+- pub `create_deployment_object` function L350-371 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Exten...`
+- pub `list_labels` function L418-434 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
+- pub `add_label` function L452-466 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
+- pub `remove_label` function L485-500 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
+- pub `list_annotations` function L516-532 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
+- pub `add_annotation` function L550-565 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
+- pub `remove_annotation` function L584-599 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
+- pub `TemplateInstantiationRequest` struct L602-605 — `{ template_id: Uuid, parameters: serde_json::Value }`
+-  `fetch_owned_stack` function L62-84 — `( dal: &DAL, auth: &AuthPayload, stack_id: Uuid, ) -> Result<Stack, ApiError>` — Fetch a stack or return 404; also enforces admin-or-generator-owner access.
+-  `list_stacks` function L98-129 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, ) -> ...`
+-  `create_stack` function L143-185 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Json(...`
+-  `get_stack` function L200-208 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
+-  `update_stack` function L225-255 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
+-  `delete_stack` function L270-293 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
+-  `is_authorized_for_stack` function L373-402 — `( dal: &DAL, auth_payload: &AuthPayload, stack_id: Uuid, ) -> Result<bool, ApiEr...`
+-  `instantiate_template` function L623-750 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
 
 #### crates/brokkr-broker/src/api/v1/templates.rs
 
@@ -1127,25 +1128,25 @@
 
 #### crates/brokkr-broker/src/api/v1/work_orders.rs
 
-- pub `routes` function L25-40 — `() -> Router<DAL>` — Handles API routes and logic for work orders.
-- pub `agent_routes` function L42-47 — `() -> Router<DAL>` — Handles API routes and logic for work orders.
-- pub `CreateWorkOrderRequest` struct L54-67 — `{ work_type: String, yaml_content: String, max_retries: Option<i32>, backoff_sec...` — Handles API routes and logic for work orders.
-- pub `WorkOrderTargeting` struct L70-77 — `{ agent_ids: Option<Vec<Uuid>>, labels: Option<Vec<String>>, annotations: Option...` — Handles API routes and logic for work orders.
-- pub `ClaimWorkOrderRequest` struct L80-82 — `{ agent_id: Uuid }` — Handles API routes and logic for work orders.
-- pub `CompleteWorkOrderRequest` struct L85-90 — `{ success: bool, message: Option<String>, retryable: bool }` — Handles API routes and logic for work orders.
-- pub `ListWorkOrdersQuery` struct L97-100 — `{ status: Option<String>, work_type: Option<String> }` — Handles API routes and logic for work orders.
-- pub `ListPendingQuery` struct L103-105 — `{ work_type: Option<String> }` — Handles API routes and logic for work orders.
-- pub `ListLogQuery` struct L108-113 — `{ work_type: Option<String>, success: Option<bool>, agent_id: Option<Uuid>, limi...` — Handles API routes and logic for work orders.
--  `default_retryable` function L92-94 — `() -> bool` — Handles API routes and logic for work orders.
--  `list_work_orders` function L134-154 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Query...` — Handles API routes and logic for work orders.
--  `create_work_order` function L169-242 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Json(...` — Handles API routes and logic for work orders.
--  `get_work_order` function L257-323 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Handles API routes and logic for work orders.
--  `delete_work_order` function L338-360 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Handles API routes and logic for work orders.
--  `list_pending_for_agent` function L381-417 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Handles API routes and logic for work orders.
--  `claim_work_order` function L433-475 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Handles API routes and logic for work orders.
--  `complete_work_order` function L497-570 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Handles API routes and logic for work orders.
--  `list_work_order_log` function L593-621 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Query...` — Handles API routes and logic for work orders.
--  `get_work_order_log` function L636-663 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Handles API routes and logic for work orders.
+- pub `routes` function L27-42 — `() -> Router<DAL>` — Handles API routes and logic for work orders.
+- pub `agent_routes` function L44-49 — `() -> Router<DAL>` — Handles API routes and logic for work orders.
+- pub `CreateWorkOrderRequest` struct L56-69 — `{ work_type: String, yaml_content: String, max_retries: Option<i32>, backoff_sec...` — Handles API routes and logic for work orders.
+- pub `WorkOrderTargeting` struct L72-79 — `{ agent_ids: Option<Vec<Uuid>>, labels: Option<Vec<String>>, annotations: Option...` — Handles API routes and logic for work orders.
+- pub `ClaimWorkOrderRequest` struct L82-84 — `{ agent_id: Uuid }` — Handles API routes and logic for work orders.
+- pub `CompleteWorkOrderRequest` struct L87-92 — `{ success: bool, message: Option<String>, retryable: bool }` — Handles API routes and logic for work orders.
+- pub `ListWorkOrdersQuery` struct L99-102 — `{ status: Option<String>, work_type: Option<String> }` — Handles API routes and logic for work orders.
+- pub `ListPendingQuery` struct L105-107 — `{ work_type: Option<String> }` — Handles API routes and logic for work orders.
+- pub `ListLogQuery` struct L110-115 — `{ work_type: Option<String>, success: Option<bool>, agent_id: Option<Uuid>, limi...` — Handles API routes and logic for work orders.
+-  `default_retryable` function L94-96 — `() -> bool` — Handles API routes and logic for work orders.
+-  `list_work_orders` function L136-156 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Query...` — Handles API routes and logic for work orders.
+-  `create_work_order` function L171-251 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Exten...` — Handles API routes and logic for work orders.
+-  `get_work_order` function L266-332 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Handles API routes and logic for work orders.
+-  `delete_work_order` function L347-369 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Handles API routes and logic for work orders.
+-  `list_pending_for_agent` function L390-426 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Handles API routes and logic for work orders.
+-  `claim_work_order` function L442-484 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Handles API routes and logic for work orders.
+-  `complete_work_order` function L506-579 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Handles API routes and logic for work orders.
+-  `list_work_order_log` function L602-630 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Query...` — Handles API routes and logic for work orders.
+-  `get_work_order_log` function L645-672 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Handles API routes and logic for work orders.
 
 ### crates/brokkr-broker/src
 
@@ -1853,7 +1854,15 @@
 #### crates/brokkr-broker/src/ws/mod.rs
 
 - pub `handler` module L18 — `-` — Internal broker↔agent WebSocket channel.
-- pub `registry` module L19 — `-` — [[BROKKR-I-0019]] in `.metis/`.
+- pub `push` module L19 — `-` — [[BROKKR-I-0019]] in `.metis/`.
+- pub `registry` module L20 — `-` — [[BROKKR-I-0019]] in `.metis/`.
+
+#### crates/brokkr-broker/src/ws/push.rs
+
+- pub `push_work_order` function L35-43 — `( registry: &Arc<ConnectionRegistry>, work_order: &WorkOrder, agent_ids: &[Uuid]...` — Push a freshly-created [`WorkOrder`] to each targeted agent.
+- pub `push_target_changed` function L50-57 — `(registry: &Arc<ConnectionRegistry>, target: &AgentTarget)` — Push a [`AgentTarget`] change to the affected agent.
+- pub `push_stack_changed_to_targets` function L67-91 — `( registry: &Arc<ConnectionRegistry>, dal: &DAL, stack: &Stack, )` — Push a [`Stack`] change to every agent currently targeting it.
+-  `deliver` function L93-108 — `( registry: &Arc<ConnectionRegistry>, agent_id: Uuid, msg: WsMessage, kind: &'st...` — invariant and the post-commit ordering requirement.
 
 #### crates/brokkr-broker/src/ws/registry.rs
 
@@ -2184,6 +2193,10 @@
 -  `ws_upgrade_with_agent_pak_round_trips_messages` function L164-237 — `()` — path; this is why we bind a TCP listener for the upgrade tests.
 -  `wait_for_connection` function L239-246 — `(registry: &Arc<ConnectionRegistry>, agent_id: Uuid) -> bool` — path; this is why we bind a TCP listener for the upgrade tests.
 -  `wait_for_disconnection` function L248-255 — `(registry: &Arc<ConnectionRegistry>, agent_id: Uuid) -> bool` — path; this is why we bind a TCP listener for the upgrade tests.
+-  `spawn_full_broker` function L269-303 — `(fixture: &TestFixture) -> (std::net::SocketAddr, Arc<ConnectionRegistry>)` — path; this is why we bind a TCP listener for the upgrade tests.
+-  `await_message` function L308-332 — `( socket: &mut tokio_tungstenite::WebSocketStream< tokio_tungstenite::MaybeTlsSt...` — Read frames from `socket` until one of the requested `WsMessage` shapes
+-  `rest_mutations_push_messages_over_ws` function L335-419 — `()` — path; this is why we bind a TCP listener for the upgrade tests.
+-  `push_to_disconnected_agent_is_a_clean_noop` function L422-448 — `()` — path; this is why we bind a TCP listener for the upgrade tests.
 
 ### crates/brokkr-broker/tests/integration/dal
 

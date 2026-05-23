@@ -29,18 +29,19 @@ use std::sync::Arc;
 use axum::{
     body::Body,
     extract::ws::{Message, WebSocket, WebSocketUpgrade},
-    extract::Extension,
+    extract::{Extension, State},
     http::{Request, StatusCode},
     middleware::from_fn_with_state,
     routing::get,
     Router,
 };
+use brokkr_models::models::agent_events::NewAgentEvent;
+use brokkr_models::models::deployment_health::NewDeploymentHealth;
+use brokkr_wire::WsMessage;
 use chrono::Utc;
 use futures::{SinkExt, StreamExt};
 use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
-
-use brokkr_wire::WsMessage;
 
 use crate::api::v1::middleware::{self as v1_middleware, AuthPayload};
 use crate::dal::DAL;
@@ -80,6 +81,7 @@ pub fn internal_routes(dal: DAL, registry: Arc<ConnectionRegistry>) -> Router<DA
 
 async fn ws_upgrade(
     upgrade: WebSocketUpgrade,
+    State(dal): State<DAL>,
     Extension(registry): Extension<Arc<ConnectionRegistry>>,
     request: Request<Body>,
 ) -> Result<axum::response::Response, StatusCode> {
@@ -103,13 +105,14 @@ async fn ws_upgrade(
     };
 
     info!(%agent_id, "agent WS upgrade accepted");
-    Ok(upgrade.on_upgrade(move |socket| run_connection(socket, agent_id, registry)))
+    Ok(upgrade.on_upgrade(move |socket| run_connection(socket, agent_id, registry, dal)))
 }
 
 async fn run_connection(
     socket: WebSocket,
     agent_id: uuid::Uuid,
     registry: Arc<ConnectionRegistry>,
+    dal: DAL,
 ) {
     let connected_since = Utc::now();
     let messages_in = Arc::new(std::sync::atomic::AtomicU64::new(0));
@@ -131,7 +134,7 @@ async fn run_connection(
 
     let writer_messages_out = messages_out.clone();
     let writer = tokio::spawn(writer_task(sender, control_rx, telemetry_rx, writer_messages_out));
-    let reader = tokio::spawn(reader_task(receiver, agent_id, messages_in));
+    let reader = tokio::spawn(reader_task(receiver, agent_id, messages_in, dal));
 
     // First task to finish wins; the other is aborted so we don't leak a
     // socket-half task after the peer is gone.
@@ -148,16 +151,14 @@ async fn reader_task(
     mut receiver: futures::stream::SplitStream<WebSocket>,
     agent_id: uuid::Uuid,
     messages_in: Arc<std::sync::atomic::AtomicU64>,
+    dal: DAL,
 ) {
     while let Some(frame) = receiver.next().await {
         match frame {
             Ok(Message::Text(text)) => match serde_json::from_str::<WsMessage>(&text) {
-                Ok(_msg) => {
+                Ok(msg) => {
                     messages_in.fetch_add(1, Ordering::Relaxed);
-                    // Dispatch for uplink (heartbeat / events / health / kube
-                    // events / log lines) lands in WS-05 / WS-09; for WS-02
-                    // we only need to count and validate that the frame
-                    // round-trips through `brokkr-wire`.
+                    dispatch_uplink(msg, agent_id, &dal);
                 }
                 Err(e) => {
                     warn!(%agent_id, error = %e, "dropping undecodable WS frame");
@@ -174,6 +175,71 @@ async fn reader_task(
                 debug!(%agent_id, error = %e, "WS read error; closing connection");
                 break;
             }
+        }
+    }
+}
+
+/// Dispatch an inbound WS message into the same DAL operations the REST
+/// handlers would perform. Frames the agent has no legitimate reason to
+/// send upstream (broker→agent control plane, future fan-out telemetry)
+/// are dropped with a warning. The connection's authenticated `agent_id`
+/// is used; any mismatched value in the message body is ignored.
+fn dispatch_uplink(msg: WsMessage, agent_id: uuid::Uuid, dal: &DAL) {
+    match msg {
+        WsMessage::Heartbeat(_) => {
+            if let Err(e) = dal.agents().record_heartbeat(agent_id) {
+                warn!(%agent_id, error = %e, "failed to record WS heartbeat");
+            }
+        }
+        WsMessage::AgentEvent(ev) => {
+            if ev.agent_id != agent_id {
+                warn!(
+                    %agent_id, body_agent = %ev.agent_id,
+                    "dropping WS AgentEvent whose body agent_id does not match the connection"
+                );
+                return;
+            }
+            let new_event = NewAgentEvent {
+                agent_id,
+                deployment_object_id: ev.deployment_object_id,
+                event_type: ev.event_type,
+                status: ev.status,
+                message: ev.message,
+            };
+            if let Err(e) = dal.agent_events().create(&new_event) {
+                warn!(%agent_id, error = %e, "failed to persist WS AgentEvent");
+            }
+        }
+        WsMessage::AgentHealth(h) => {
+            if h.agent_id != agent_id {
+                warn!(
+                    %agent_id, body_agent = %h.agent_id,
+                    "dropping WS AgentHealth whose body agent_id does not match the connection"
+                );
+                return;
+            }
+            let new_health = NewDeploymentHealth {
+                agent_id,
+                deployment_object_id: h.deployment_object_id,
+                status: h.status,
+                summary: h.summary,
+                checked_at: h.checked_at,
+            };
+            if let Err(e) = dal.deployment_health().upsert(&new_health) {
+                warn!(%agent_id, error = %e, "failed to upsert WS DeploymentHealth");
+            }
+        }
+        // Telemetry types land in WS-09 (persistence + 6h eviction); for
+        // now they're accepted on the wire but not stored.
+        WsMessage::K8sEvent(_) | WsMessage::PodLogLine(_) | WsMessage::LogGap(_) => {
+            debug!(%agent_id, "telemetry frame received; ingestion lands in WS-09");
+        }
+        // Anything else is broker → agent shape; agent should never send.
+        WsMessage::WorkOrder(_) | WsMessage::TargetChanged(_) | WsMessage::StackChanged(_) => {
+            warn!(
+                %agent_id,
+                "dropping broker→agent message variant received on agent uplink"
+            );
         }
     }
 }

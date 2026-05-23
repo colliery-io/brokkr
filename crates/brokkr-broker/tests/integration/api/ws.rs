@@ -446,3 +446,159 @@ async fn push_to_disconnected_agent_is_a_clean_noop() {
         .unwrap();
     assert_eq!(resp.status(), 201, "REST POST must succeed even with no WS subscriber");
 }
+
+// =============================================================================
+// WS-05: agent uplink dispatched into the DAL by the broker reader task
+// =============================================================================
+
+#[tokio::test]
+async fn ws_uplink_persists_heartbeat_event_and_health() {
+    use brokkr_models::models::deployment_objects::NewDeploymentObject;
+    use brokkr_wire::{AgentEvent, DeploymentHealth, Heartbeat};
+
+    let fixture = TestFixture::new();
+    let (addr, registry) = spawn_full_broker(&fixture).await;
+
+    // Provision agent + PAK and connect over WS.
+    let agent = fixture.create_test_agent("WS-05 agent".into(), "cluster".into());
+    let (agent_pak, agent_hash) = pak::create_pak().unwrap();
+    fixture
+        .dal
+        .agents()
+        .update_pak_hash(agent.id, agent_hash)
+        .unwrap();
+
+    let request = ws_request_with_pak(&ws_url(addr), &agent_pak);
+    let (mut socket, _resp) = tokio_tungstenite::connect_async(request).await.unwrap();
+    tokio::time::timeout(
+        std::time::Duration::from_secs(2),
+        wait_for_connection(&registry, agent.id),
+    )
+    .await
+    .expect("registry registers agent within 2s");
+
+    // We need a deployment object to anchor agent_event / agent_health to.
+    let stack = fixture.create_test_stack(
+        "ws05 stack".into(),
+        None,
+        fixture.admin_generator.id,
+    );
+    let new_obj = NewDeploymentObject::new(
+        stack.id,
+        "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: ws05\n".to_string(),
+        false,
+    )
+    .unwrap();
+    let object = fixture.dal.deployment_objects().create(&new_obj).unwrap();
+
+    let now = chrono::Utc::now();
+
+    // 1. Heartbeat over WS → broker writes via record_heartbeat. Read it
+    //    back via the DAL after a brief settle.
+    socket
+        .send(Message::Text(
+            serde_json::to_string(&WsMessage::Heartbeat(Heartbeat {
+                agent_id: agent.id,
+                sent_at: now,
+            }))
+            .unwrap(),
+        ))
+        .await
+        .unwrap();
+
+    let persisted = wait_until(std::time::Duration::from_secs(2), || async {
+        fixture
+            .dal
+            .agents()
+            .get(agent.id)
+            .ok()
+            .flatten()
+            .and_then(|a| a.last_heartbeat)
+            .is_some()
+    })
+    .await;
+    assert!(persisted, "heartbeat over WS should land in agents.last_heartbeat");
+
+    // 2. AgentEvent over WS → broker inserts an agent_events row.
+    let event = AgentEvent {
+        id: uuid::Uuid::nil(),
+        created_at: now,
+        updated_at: now,
+        deleted_at: None,
+        agent_id: agent.id,
+        deployment_object_id: object.id,
+        event_type: "DEPLOY".to_string(),
+        status: "SUCCESS".to_string(),
+        message: Some("ws05 over WS".to_string()),
+    };
+    socket
+        .send(Message::Text(
+            serde_json::to_string(&WsMessage::AgentEvent(event)).unwrap(),
+        ))
+        .await
+        .unwrap();
+
+    let event_seen = wait_until(std::time::Duration::from_secs(2), || async {
+        let rows = fixture.dal.agent_events().list().unwrap_or_default();
+        rows.iter().any(|e| {
+            e.agent_id == agent.id
+                && e.deployment_object_id == object.id
+                && e.event_type == "DEPLOY"
+                && e.status == "SUCCESS"
+        })
+    })
+    .await;
+    assert!(event_seen, "AgentEvent over WS should appear in agent_events");
+
+    // 3. AgentHealth over WS → broker upserts deployment_health.
+    let health = DeploymentHealth {
+        id: uuid::Uuid::nil(),
+        agent_id: agent.id,
+        deployment_object_id: object.id,
+        status: "healthy".to_string(),
+        summary: None,
+        checked_at: now,
+        created_at: now,
+        updated_at: now,
+    };
+    socket
+        .send(Message::Text(
+            serde_json::to_string(&WsMessage::AgentHealth(health)).unwrap(),
+        ))
+        .await
+        .unwrap();
+
+    let health_seen = wait_until(std::time::Duration::from_secs(2), || async {
+        fixture
+            .dal
+            .deployment_health()
+            .get_by_agent_and_deployment(agent.id, object.id)
+            .ok()
+            .flatten()
+            .map(|h| h.status == "healthy")
+            .unwrap_or(false)
+    })
+    .await;
+    assert!(
+        health_seen,
+        "AgentHealth over WS should appear in deployment_health"
+    );
+}
+
+/// Repeatedly poll `predicate` until it returns true or `timeout` elapses.
+async fn wait_until<F, Fut>(timeout: std::time::Duration, mut predicate: F) -> bool
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = bool>,
+{
+    let deadline = tokio::time::Instant::now() + timeout;
+    loop {
+        if predicate().await {
+            return true;
+        }
+        if tokio::time::Instant::now() >= deadline {
+            return false;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+}
