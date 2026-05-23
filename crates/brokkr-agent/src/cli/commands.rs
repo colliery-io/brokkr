@@ -58,7 +58,7 @@
 //! - JSON output format
 //! - Contextual information
 
-use crate::{broker, broker_sdk, broker_ws, deployment_health, diagnostics, health, k8s, webhooks, work_orders};
+use crate::{broker, broker_sdk, broker_ws, deployment_health, diagnostics, health, k8s, kube_events, webhooks, work_orders};
 use brokkr_utils::config::Settings;
 use brokkr_utils::telemetry::prelude::*;
 use std::collections::HashSet;
@@ -97,6 +97,11 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
     // when the channel is not Up and the caller falls back to REST.
     let ws_client = broker_ws::spawn(&config);
     let ws_uplink = ws_client.uplink();
+
+    // Spawn telemetry tailers. They run for the lifetime of the agent
+    // and use ws_uplink for emission. K8s client is created below and
+    // shared with the tailers via spawn(). See WS-07.
+    // (Spawn happens after `k8s_client` is created — see the call below.)
     info!("Broker SDK client created");
 
     info!("Fetching agent details");
@@ -111,6 +116,11 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
     let k8s_client = k8s::api::create_k8s_client(config.agent.kubeconfig_path.as_deref())
         .await
         .expect("Failed to create Kubernetes client");
+
+    // WS-07: tail kube Events for objects this agent manages and stream
+    // them upstream via the WS uplink. Always-on (no per-stack opt-in;
+    // Events are cheap signal). See crates/brokkr-agent/src/kube_events.rs.
+    let _kube_events_handle = kube_events::spawn(k8s_client.clone(), ws_uplink.clone(), agent.id);
 
     // Initialize health state for health endpoints
     let broker_status = Arc::new(RwLock::new(health::BrokerStatus {

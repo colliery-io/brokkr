@@ -20,6 +20,7 @@ pub mod deployment_health;
 pub mod diagnostics;
 pub mod health;
 pub mod k8s;
+pub mod kube_events;
 pub mod metrics;
 pub mod utils;
 pub mod webhooks;

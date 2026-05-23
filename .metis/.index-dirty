@@ -18,3 +18,5 @@
 /Users/dstorey/Desktop/brokkr/crates/brokkr-broker/src/api/v1/openapi.rs
 /Users/dstorey/Desktop/brokkr/crates/brokkr-broker/src/ws/broadcaster.rs
 /Users/dstorey/Desktop/brokkr/crates/brokkr-broker/src/ws/subscribe.rs
+/Users/dstorey/Desktop/brokkr/crates/brokkr-agent/src/kube_events.rs
+/Users/dstorey/Desktop/brokkr/crates/brokkr-agent/src/lib.rs
