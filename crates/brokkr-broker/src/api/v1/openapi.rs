@@ -16,7 +16,10 @@ use crate::api::v1::health::{
 };
 use crate::api::v1::middleware::AuthResponse;
 use crate::api::v1::agents::CreateAgentResponse;
-use crate::api::v1::stacks::{CreateDeploymentObjectRequest, TemplateInstantiationRequest};
+use crate::api::v1::stacks::{
+    CreateDeploymentObjectRequest, K8sEventHistoryResponse, PodLogHistoryResponse, RetentionInfo,
+    TemplateInstantiationRequest,
+};
 use crate::api::v1::templates::{
     AddAnnotationRequest, CreateTemplateRequest, UpdateTemplateRequest,
 };
@@ -36,6 +39,8 @@ use axum::{response::Json, routing::get, Router};
 use brokkr_models::models::{
     agent_annotations::{AgentAnnotation, NewAgentAnnotation},
     agent_events::{AgentEvent, NewAgentEvent},
+    agent_k8s_events::AgentK8sEvent,
+    agent_pod_logs::AgentPodLog,
     agent_labels::{AgentLabel, NewAgentLabel},
     agent_targets::{AgentTarget, NewAgentTarget},
     agents::{Agent, NewAgent},
@@ -110,6 +115,8 @@ use utoipa_swagger_ui::SwaggerUi;
         stacks::list_annotations,
         stacks::add_annotation,
         stacks::remove_annotation,
+        stacks::list_telemetry_events,
+        stacks::list_telemetry_logs,
         templates::list_templates,
         templates::create_template,
         templates::get_template,
@@ -207,6 +214,11 @@ use utoipa_swagger_ui::SwaggerUi;
             AuditLog,
             AuditLogListResponse,
             ErrorResponse,
+            AgentK8sEvent,
+            AgentPodLog,
+            K8sEventHistoryResponse,
+            PodLogHistoryResponse,
+            RetentionInfo,
             NewAgentEvent,
             StackLabel,
             NewStackLabel,

@@ -13,9 +13,10 @@
 use chrono::{DateTime, Utc};
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 use uuid::Uuid;
 
-#[derive(Queryable, Selectable, Identifiable, Debug, Clone, Serialize, Deserialize)]
+#[derive(Queryable, Selectable, Identifiable, Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[diesel(table_name = crate::schema::agent_k8s_events)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct AgentK8sEvent {

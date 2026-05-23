@@ -14,3 +14,5 @@
 /Users/dstorey/Desktop/brokkr/crates/brokkr-broker/src/ws/eviction.rs
 /Users/dstorey/Desktop/brokkr/crates/brokkr-broker/src/ws/mod.rs
 /Users/dstorey/Desktop/brokkr/crates/brokkr-broker/src/api/mod.rs
+/Users/dstorey/Desktop/brokkr/crates/brokkr-broker/src/api/v1/stacks.rs
+/Users/dstorey/Desktop/brokkr/crates/brokkr-broker/src/api/v1/openapi.rs

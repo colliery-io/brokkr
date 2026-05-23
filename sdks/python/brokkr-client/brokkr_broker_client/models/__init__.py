@@ -4,7 +4,9 @@ from .add_annotation_request import AddAnnotationRequest
 from .agent import Agent
 from .agent_annotation import AgentAnnotation
 from .agent_event import AgentEvent
+from .agent_k8s_event import AgentK8SEvent
 from .agent_label import AgentLabel
+from .agent_pod_log import AgentPodLog
 from .agent_target import AgentTarget
 from .audit_log import AuditLog
 from .audit_log_list_response import AuditLogListResponse
@@ -34,6 +36,7 @@ from .error_response_details_type_0 import ErrorResponseDetailsType0
 from .generator import Generator
 from .health_status_update import HealthStatusUpdate
 from .health_summary import HealthSummary
+from .k8s_event_history_response import K8SEventHistoryResponse
 from .list_deliveries_query import ListDeliveriesQuery
 from .new_agent import NewAgent
 from .new_agent_annotation import NewAgentAnnotation
@@ -49,7 +52,9 @@ from .new_stack_template import NewStackTemplate
 from .new_template_annotation import NewTemplateAnnotation
 from .new_template_label import NewTemplateLabel
 from .pending_webhook_delivery import PendingWebhookDelivery
+from .pod_log_history_response import PodLogHistoryResponse
 from .resource_health import ResourceHealth
+from .retention_info import RetentionInfo
 from .stack import Stack
 from .stack_annotation import StackAnnotation
 from .stack_health_response import StackHealthResponse
@@ -76,7 +81,9 @@ __all__ = (
     "Agent",
     "AgentAnnotation",
     "AgentEvent",
+    "AgentK8SEvent",
     "AgentLabel",
+    "AgentPodLog",
     "AgentTarget",
     "AuditLog",
     "AuditLogListResponse",
@@ -106,6 +113,7 @@ __all__ = (
     "Generator",
     "HealthStatusUpdate",
     "HealthSummary",
+    "K8SEventHistoryResponse",
     "ListDeliveriesQuery",
     "NewAgent",
     "NewAgentAnnotation",
@@ -121,7 +129,9 @@ __all__ = (
     "NewTemplateAnnotation",
     "NewTemplateLabel",
     "PendingWebhookDelivery",
+    "PodLogHistoryResponse",
     "ResourceHealth",
+    "RetentionInfo",
     "Stack",
     "StackAnnotation",
     "StackHealthResponse",

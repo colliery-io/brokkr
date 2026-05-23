@@ -586,6 +586,135 @@ async fn ws_uplink_persists_heartbeat_event_and_health() {
 }
 
 // =============================================================================
+// WS-10: REST history endpoints for events / logs
+// =============================================================================
+
+#[tokio::test]
+async fn rest_history_endpoints_return_retained_telemetry_with_retention_metadata() {
+    use brokkr_models::models::agent_k8s_events::NewAgentK8sEvent;
+    use brokkr_models::models::agent_pod_logs::NewAgentPodLog;
+    use brokkr_models::models::deployment_objects::NewDeploymentObject;
+    use reqwest::Client;
+
+    let fixture = TestFixture::new();
+    let (addr, _registry) = spawn_full_broker(&fixture).await;
+    let http = Client::new();
+    let base = format!("http://{}", addr);
+
+    // Provision agent + stack + deployment object so FKs are satisfied.
+    let agent = fixture.create_test_agent("ws10".into(), "cluster".into());
+    let stack = fixture.create_test_stack("ws10 stack".into(), None, fixture.admin_generator.id);
+    let new_obj = NewDeploymentObject::new(
+        stack.id,
+        "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: ws10\n".into(),
+        false,
+    )
+    .unwrap();
+    let _obj = fixture.dal.deployment_objects().create(&new_obj).unwrap();
+
+    // Seed one of each kind directly via DAL (the WS ingestion path is
+    // already covered in WS-09; here we want to validate the REST shape).
+    let now = chrono::Utc::now();
+    fixture
+        .dal
+        .agent_k8s_events()
+        .create(&NewAgentK8sEvent {
+            agent_id: agent.id,
+            stack_id: stack.id,
+            observed_at: now,
+            reason: "Pulled".into(),
+            message: "ws10 image pulled".into(),
+            event_type: "Normal".into(),
+            source: Some("kubelet".into()),
+            involved_object: serde_json::json!({"kind": "Pod", "name": "ws10-x"}),
+        })
+        .unwrap();
+    fixture
+        .dal
+        .agent_pod_logs()
+        .create(&NewAgentPodLog {
+            agent_id: agent.id,
+            stack_id: stack.id,
+            namespace: "ws10".into(),
+            pod: "ws10-x".into(),
+            container: "app".into(),
+            ts: now,
+            line: "ws10 starting".into(),
+        })
+        .unwrap();
+
+    // GET /events
+    let resp: serde_json::Value = http
+        .get(format!("{base}/api/v1/stacks/{}/events", stack.id))
+        .header("Authorization", format!("Bearer {}", fixture.admin_pak))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(resp["retention"]["retention_ceiling_seconds"], 21600);
+    assert_eq!(resp["retention"]["effective_retention_seconds"], 21600);
+    assert!(resp["retention"]["long_term_sink_hint"]
+        .as_str()
+        .unwrap()
+        .contains("Datadog"));
+    let events = resp["events"].as_array().unwrap();
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0]["reason"], "Pulled");
+
+    // GET /logs
+    let resp: serde_json::Value = http
+        .get(format!("{base}/api/v1/stacks/{}/logs", stack.id))
+        .header("Authorization", format!("Bearer {}", fixture.admin_pak))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let lines = resp["lines"].as_array().unwrap();
+    assert_eq!(lines.len(), 1);
+    assert_eq!(lines[0]["line"], "ws10 starting");
+}
+
+#[tokio::test]
+async fn rest_history_endpoints_403_for_unauthorized_callers() {
+    use reqwest::Client;
+    let fixture = TestFixture::new();
+    let (addr, _registry) = spawn_full_broker(&fixture).await;
+    let http = Client::new();
+    let base = format!("http://{}", addr);
+
+    // Stack owned by the admin's generator. A *different* generator's PAK
+    // must get 403 — same scoping logic as the existing stack reads
+    // (fetch_owned_stack).
+    let stack = fixture.create_test_stack("ws10 scope".into(), None, fixture.admin_generator.id);
+
+    // Create a foreign generator + PAK
+    use brokkr_models::models::generator::NewGenerator;
+    let other = fixture
+        .dal
+        .generators()
+        .create(&NewGenerator::new("intruder".into(), None).unwrap())
+        .unwrap();
+    let (other_pak, other_hash) = pak::create_pak().unwrap();
+    fixture
+        .dal
+        .generators()
+        .update_pak_hash(other.id, other_hash)
+        .unwrap();
+
+    let resp = http
+        .get(format!("{base}/api/v1/stacks/{}/events", stack.id))
+        .header("Authorization", format!("Bearer {}", other_pak))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 403);
+}
+
+// =============================================================================
 // WS-09: telemetry ingestion + 6h eviction
 // =============================================================================
 
