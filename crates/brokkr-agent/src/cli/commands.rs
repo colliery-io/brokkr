@@ -58,7 +58,7 @@
 //! - JSON output format
 //! - Contextual information
 
-use crate::{broker, broker_sdk, broker_ws, deployment_health, diagnostics, health, k8s, kube_events, webhooks, work_orders};
+use crate::{broker, broker_sdk, broker_ws, deployment_health, diagnostics, health, k8s, kube_events, pod_logs, webhooks, work_orders};
 use brokkr_utils::config::Settings;
 use brokkr_utils::telemetry::prelude::*;
 use std::collections::HashSet;
@@ -121,6 +121,12 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
     // them upstream via the WS uplink. Always-on (no per-stack opt-in;
     // Events are cheap signal). See crates/brokkr-agent/src/kube_events.rs.
     let _kube_events_handle = kube_events::spawn(k8s_client.clone(), ws_uplink.clone(), agent.id);
+
+    // WS-08: tail pod logs for stacks that opt in via the
+    // `brokkr.io/stream-logs: "true"` annotation on the pod template.
+    // Rate-limited per container; over-rate lines surface as LogGap
+    // markers so the UI renders visible gaps rather than swallowing data.
+    let _pod_logs_handle = pod_logs::spawn(k8s_client.clone(), ws_uplink.clone(), agent.id);
 
     // Initialize health state for health endpoints
     let broker_status = Arc::new(RwLock::new(health::BrokerStatus {

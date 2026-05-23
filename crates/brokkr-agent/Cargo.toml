@@ -34,6 +34,7 @@ serde_json = { workspace = true }
 serde_yaml = { workspace = true }
 tokio = { workspace = true }
 tokio-tungstenite = "0.24"
+tokio-util = { version = "0.7", features = ["compat"] }
 futures = "0.3"
 rand = { workspace = true }
 uuid = { workspace = true }

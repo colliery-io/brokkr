@@ -20,3 +20,4 @@
 /Users/dstorey/Desktop/brokkr/crates/brokkr-broker/src/ws/subscribe.rs
 /Users/dstorey/Desktop/brokkr/crates/brokkr-agent/src/kube_events.rs
 /Users/dstorey/Desktop/brokkr/crates/brokkr-agent/src/lib.rs
+/Users/dstorey/Desktop/brokkr/crates/brokkr-agent/src/pod_logs.rs

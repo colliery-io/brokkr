@@ -21,6 +21,7 @@ pub mod diagnostics;
 pub mod health;
 pub mod k8s;
 pub mod kube_events;
+pub mod pod_logs;
 pub mod metrics;
 pub mod utils;
 pub mod webhooks;

@@ -401,6 +401,7 @@ dependencies = [
  "serial_test",
  "tokio",
  "tokio-tungstenite",
+ "tokio-util",
  "tower 0.5.2",
  "tracing",
  "uuid",
@@ -4092,6 +4093,7 @@ checksum = "61e7c3654c13bcd040d4a03abee2c75b1d14a37b423cf5a813ceae1cc903ec6a"
 dependencies = [
  "bytes",
  "futures-core",
+ "futures-io",
  "futures-sink",
  "pin-project-lite",
  "slab",
