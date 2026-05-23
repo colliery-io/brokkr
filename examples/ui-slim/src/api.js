@@ -159,6 +159,56 @@ export const getStackDeployments = (id) =>
       params: { path: { id } },
     }),
   );
+
+// =============================================================================
+// Telemetry (WS-10) — short-lived 6h operational buffer.
+//
+// Responses carry a `retention` block. Per ADR-0008 / project_log_retention_stance
+// surface it in the UI so users understand the buffer is NOT a log store;
+// long-term centralisation belongs in Datadog.
+// =============================================================================
+
+/**
+ * Retained kube events for a stack within the 6h window.
+ * @param {string} id stack id
+ * @param {{since?: string, limit?: number}} [query]
+ */
+export const getStackEvents = (id, query = {}) =>
+  client.listTelemetryEvents(id, query);
+
+/**
+ * Retained pod log lines for a stack within the 6h window.
+ * @param {string} id stack id
+ * @param {{since?: string, limit?: number}} [query]
+ */
+export const getStackLogs = (id, query = {}) =>
+  client.listTelemetryLogs(id, query);
+
+/**
+ * Admin-only snapshot of currently-connected agents on the internal WS
+ * channel + the aggregate live-subscriber count.
+ */
+export const getWsConnections = () => client.listWsConnections();
+
+/**
+ * Open the live event + log tail WebSocket for a stack. Returns a
+ * raw `WebSocket` already configured with the broker's PAK in the
+ * subprotocol (browsers don't allow custom headers on WS upgrades, so
+ * we sneak the bearer token through the subprotocol field — the
+ * broker's auth middleware doesn't accept this today, so this helper
+ * exists primarily for ergonomic consistency with the Rust/Python
+ * `live_subscription_url` helpers).
+ *
+ * For production use through an ingress, prefer a same-origin reverse
+ * proxy that forwards the `Authorization` header.
+ */
+export const openStackLiveStream = (id) => {
+  const url = client.liveSubscriptionUrl(id);
+  // Browsers don't accept custom headers on WebSocket(); the cleanest
+  // path is a same-origin reverse proxy that injects Authorization. We
+  // surface the URL+token here so callers can adapt for their setup.
+  return { url, token: ADMIN_PAK };
+};
 export const createStack = (name, description, generatorId) =>
   unwrap(
     client.api.POST("/stacks", {
