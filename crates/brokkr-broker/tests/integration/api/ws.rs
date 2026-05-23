@@ -33,7 +33,7 @@ use tower::ServiceExt;
 use uuid::Uuid;
 
 use brokkr_broker::utils::pak;
-use brokkr_broker::ws::{ConnectionRegistry, INTERNAL_WS_PATH};
+use brokkr_broker::ws::{ConnectionRegistry, LiveBroadcaster, INTERNAL_WS_PATH};
 use brokkr_wire::{Heartbeat, WsMessage};
 
 use crate::fixtures::TestFixture;
@@ -56,8 +56,13 @@ async fn spawn_broker(
 
     // Mount only the internal WS router for these tests — we don't need the
     // full v1 surface, and skipping it keeps the harness lean.
+    let broadcaster = LiveBroadcaster::new();
     let app = axum::Router::new()
-        .merge(internal_routes(fixture.dal.clone(), registry.clone()))
+        .merge(internal_routes(
+            fixture.dal.clone(),
+            registry.clone(),
+            broadcaster,
+        ))
         .layer(axum::extract::Extension(cors))
         .with_state(fixture.dal.clone());
 
@@ -268,10 +273,11 @@ async fn wait_for_disconnection(registry: &Arc<ConnectionRegistry>, agent_id: Uu
 
 async fn spawn_full_broker(fixture: &TestFixture) -> (std::net::SocketAddr, Arc<ConnectionRegistry>) {
     use brokkr_broker::api;
-    use brokkr_broker::ws::internal_routes;
+    use brokkr_broker::ws::{internal_routes, subscribe_routes};
     use brokkr_utils::config::Cors;
 
     let registry = ConnectionRegistry::new();
+    let broadcaster = LiveBroadcaster::new();
     let cors = Cors {
         allowed_origins: vec!["*".to_string()],
         allowed_methods: vec![
@@ -289,8 +295,14 @@ async fn spawn_full_broker(fixture: &TestFixture) -> (std::net::SocketAddr, Arc<
     // reach it.
     let app = axum::Router::new()
         .merge(api::v1::routes(fixture.dal.clone(), &cors, None))
-        .merge(internal_routes(fixture.dal.clone(), registry.clone()))
+        .merge(internal_routes(
+            fixture.dal.clone(),
+            registry.clone(),
+            broadcaster.clone(),
+        ))
+        .merge(subscribe_routes(fixture.dal.clone(), broadcaster.clone()))
         .layer(axum::extract::Extension(registry.clone()))
+        .layer(axum::extract::Extension(broadcaster))
         .with_state(fixture.dal.clone());
 
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -583,6 +595,138 @@ async fn ws_uplink_persists_heartbeat_event_and_health() {
         health_seen,
         "AgentHealth over WS should appear in deployment_health"
     );
+}
+
+// =============================================================================
+// WS-11: live fan-out subscription
+// =============================================================================
+
+#[tokio::test]
+async fn live_subscription_forwards_agent_telemetry_to_subscribers() {
+    use brokkr_models::models::deployment_objects::NewDeploymentObject;
+    use brokkr_wire::{K8sEvent, ObjectRef, PodLogLine};
+
+    let fixture = TestFixture::new();
+    let (addr, registry) = spawn_full_broker(&fixture).await;
+
+    // Agent setup
+    let agent = fixture.create_test_agent("ws11 agent".into(), "cluster".into());
+    let (agent_pak, agent_hash) = pak::create_pak().unwrap();
+    fixture
+        .dal
+        .agents()
+        .update_pak_hash(agent.id, agent_hash)
+        .unwrap();
+    let stack = fixture.create_test_stack("ws11 stack".into(), None, fixture.admin_generator.id);
+    let new_obj = NewDeploymentObject::new(
+        stack.id,
+        "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: ws11\n".into(),
+        false,
+    )
+    .unwrap();
+    let _obj = fixture.dal.deployment_objects().create(&new_obj).unwrap();
+
+    // Subscribe FIRST so the broadcaster has a receiver before the agent
+    // pushes anything. URL is the admin-PAK-scoped live endpoint.
+    let sub_url = format!("ws://{}/api/v1/stacks/{}/live", addr, stack.id);
+    let sub_req = ws_request_with_pak(&sub_url, &fixture.admin_pak);
+    let (mut subscriber, sub_resp) = tokio_tungstenite::connect_async(sub_req).await.unwrap();
+    assert_eq!(sub_resp.status(), StatusCode::SWITCHING_PROTOCOLS);
+
+    // Agent connects to internal WS
+    let agent_req = ws_request_with_pak(&ws_url(addr), &agent_pak);
+    let (mut agent_socket, _resp) = tokio_tungstenite::connect_async(agent_req).await.unwrap();
+    tokio::time::timeout(
+        std::time::Duration::from_secs(2),
+        wait_for_connection(&registry, agent.id),
+    )
+    .await
+    .unwrap();
+
+    let now = chrono::Utc::now();
+
+    // Push a K8sEvent and a PodLogLine via the agent uplink. Each should
+    // appear at the subscriber within ingest latency.
+    agent_socket
+        .send(Message::Text(
+            serde_json::to_string(&WsMessage::K8sEvent(K8sEvent {
+                agent_id: agent.id,
+                stack_id: stack.id,
+                observed_at: now,
+                reason: "ws11".into(),
+                message: "live".into(),
+                event_type: "Normal".into(),
+                source: None,
+                involved_object: ObjectRef {
+                    api_version: "v1".into(),
+                    kind: "Pod".into(),
+                    namespace: None,
+                    name: "ws11".into(),
+                    uid: None,
+                },
+            }))
+            .unwrap(),
+        ))
+        .await
+        .unwrap();
+    agent_socket
+        .send(Message::Text(
+            serde_json::to_string(&WsMessage::PodLogLine(PodLogLine {
+                agent_id: agent.id,
+                stack_id: stack.id,
+                namespace: "ws11".into(),
+                pod: "ws11-x".into(),
+                container: "app".into(),
+                ts: now,
+                line: "ws11 live line".into(),
+            }))
+            .unwrap(),
+        ))
+        .await
+        .unwrap();
+
+    let got_event = await_message(&mut subscriber, |m| matches!(m, WsMessage::K8sEvent(_))).await;
+    if let WsMessage::K8sEvent(e) = got_event {
+        assert_eq!(e.stack_id, stack.id);
+        assert_eq!(e.reason, "ws11");
+    }
+    let got_line = await_message(&mut subscriber, |m| matches!(m, WsMessage::PodLogLine(_))).await;
+    if let WsMessage::PodLogLine(l) = got_line {
+        assert_eq!(l.line, "ws11 live line");
+    }
+}
+
+#[tokio::test]
+async fn live_subscription_rejects_unauthorised_caller() {
+    let fixture = TestFixture::new();
+    let (addr, _registry) = spawn_full_broker(&fixture).await;
+
+    let stack = fixture.create_test_stack("ws11 scope".into(), None, fixture.admin_generator.id);
+
+    use brokkr_models::models::generator::NewGenerator;
+    let other = fixture
+        .dal
+        .generators()
+        .create(&NewGenerator::new("ws11 intruder".into(), None).unwrap())
+        .unwrap();
+    let (other_pak, other_hash) = pak::create_pak().unwrap();
+    fixture
+        .dal
+        .generators()
+        .update_pak_hash(other.id, other_hash)
+        .unwrap();
+
+    let sub_url = format!("ws://{}/api/v1/stacks/{}/live", addr, stack.id);
+    let sub_req = ws_request_with_pak(&sub_url, &other_pak);
+    let err = tokio_tungstenite::connect_async(sub_req)
+        .await
+        .expect_err("foreign generator must not be allowed to subscribe");
+    match err {
+        tokio_tungstenite::tungstenite::Error::Http(resp) => {
+            assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+        }
+        other => panic!("expected HTTP rejection, got {other:?}"),
+    }
 }
 
 // =============================================================================

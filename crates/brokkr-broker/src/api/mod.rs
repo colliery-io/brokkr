@@ -157,7 +157,10 @@
 pub mod v1;
 use crate::dal::DAL;
 use crate::metrics;
-use crate::ws::{internal_routes, spawn_eviction, ConnectionRegistry, RetentionConfig};
+use crate::ws::{
+    internal_routes, spawn_eviction, subscribe_routes, ConnectionRegistry, LiveBroadcaster,
+    RetentionConfig,
+};
 use axum::{
     body::Body,
     extract::Request,
@@ -200,6 +203,7 @@ pub fn configure_api_routes(
         .allow_headers(Any);
 
     let ws_registry: Arc<ConnectionRegistry> = ConnectionRegistry::new();
+    let live_broadcaster: Arc<LiveBroadcaster> = LiveBroadcaster::new();
 
     // Continuous eviction for the agent telemetry buffers. Hard 6h cap
     // per project_log_retention_stance; the worker is intentionally
@@ -209,12 +213,16 @@ pub fn configure_api_routes(
 
     Router::new()
         .merge(v1::routes(dal.clone(), cors_config, reloadable_config))
-        .merge(internal_routes(dal.clone(), ws_registry.clone()))
-        // Make the registry available to v1 handlers (for the post-commit
-        // push helpers in `ws::push`). Layers added here wrap every route
-        // already merged into the router, so v1 handlers get it as
-        // `Extension<Arc<ConnectionRegistry>>` automatically.
+        .merge(internal_routes(
+            dal.clone(),
+            ws_registry.clone(),
+            live_broadcaster.clone(),
+        ))
+        .merge(subscribe_routes(dal.clone(), live_broadcaster.clone()))
+        // Make the registry + broadcaster available to v1 handlers
+        // (post-commit push helpers in `ws::push`; future WS-13 metrics).
         .layer(axum::Extension(ws_registry))
+        .layer(axum::Extension(live_broadcaster))
         .route("/healthz", get(healthz))
         .route("/readyz", get(readyz))
         .route("/metrics", get(metrics_handler))

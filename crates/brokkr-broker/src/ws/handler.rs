@@ -48,6 +48,7 @@ use tracing::{debug, info, warn};
 use crate::api::v1::middleware::{self as v1_middleware, AuthPayload};
 use crate::dal::DAL;
 
+use super::broadcaster::LiveBroadcaster;
 use super::registry::{ConnectionHandle, ConnectionRegistry};
 
 /// Public path of the internal WS endpoint. Exposed as a constant so tests
@@ -71,10 +72,15 @@ const TELEMETRY_LANE_CAPACITY: usize = 1024;
 /// but still behind the same PAK auth middleware as the rest of the
 /// authenticated surface. The registry is injected via [`Extension`] so
 /// future push code can grab it from the same handle.
-pub fn internal_routes(dal: DAL, registry: Arc<ConnectionRegistry>) -> Router<DAL> {
+pub fn internal_routes(
+    dal: DAL,
+    registry: Arc<ConnectionRegistry>,
+    broadcaster: Arc<LiveBroadcaster>,
+) -> Router<DAL> {
     Router::new()
         .route(INTERNAL_WS_PATH, get(ws_upgrade))
         .layer(Extension(registry))
+        .layer(Extension(broadcaster))
         .layer(from_fn_with_state(
             dal,
             v1_middleware::auth_middleware::<Body>,
@@ -85,6 +91,7 @@ async fn ws_upgrade(
     upgrade: WebSocketUpgrade,
     State(dal): State<DAL>,
     Extension(registry): Extension<Arc<ConnectionRegistry>>,
+    Extension(broadcaster): Extension<Arc<LiveBroadcaster>>,
     request: Request<Body>,
 ) -> Result<axum::response::Response, StatusCode> {
     // The auth middleware ran upstream and inserted an AuthPayload. The WS
@@ -107,13 +114,16 @@ async fn ws_upgrade(
     };
 
     info!(%agent_id, "agent WS upgrade accepted");
-    Ok(upgrade.on_upgrade(move |socket| run_connection(socket, agent_id, registry, dal)))
+    Ok(upgrade.on_upgrade(move |socket| {
+        run_connection(socket, agent_id, registry, broadcaster, dal)
+    }))
 }
 
 async fn run_connection(
     socket: WebSocket,
     agent_id: uuid::Uuid,
     registry: Arc<ConnectionRegistry>,
+    broadcaster: Arc<LiveBroadcaster>,
     dal: DAL,
 ) {
     let connected_since = Utc::now();
@@ -136,7 +146,7 @@ async fn run_connection(
 
     let writer_messages_out = messages_out.clone();
     let writer = tokio::spawn(writer_task(sender, control_rx, telemetry_rx, writer_messages_out));
-    let reader = tokio::spawn(reader_task(receiver, agent_id, messages_in, dal));
+    let reader = tokio::spawn(reader_task(receiver, agent_id, messages_in, dal, broadcaster));
 
     // First task to finish wins; the other is aborted so we don't leak a
     // socket-half task after the peer is gone.
@@ -154,13 +164,14 @@ async fn reader_task(
     agent_id: uuid::Uuid,
     messages_in: Arc<std::sync::atomic::AtomicU64>,
     dal: DAL,
+    broadcaster: Arc<LiveBroadcaster>,
 ) {
     while let Some(frame) = receiver.next().await {
         match frame {
             Ok(Message::Text(text)) => match serde_json::from_str::<WsMessage>(&text) {
                 Ok(msg) => {
                     messages_in.fetch_add(1, Ordering::Relaxed);
-                    dispatch_uplink(msg, agent_id, &dal);
+                    dispatch_uplink(msg, agent_id, &dal, &broadcaster);
                 }
                 Err(e) => {
                     warn!(%agent_id, error = %e, "dropping undecodable WS frame");
@@ -186,7 +197,12 @@ async fn reader_task(
 /// send upstream (broker→agent control plane, future fan-out telemetry)
 /// are dropped with a warning. The connection's authenticated `agent_id`
 /// is used; any mismatched value in the message body is ignored.
-fn dispatch_uplink(msg: WsMessage, agent_id: uuid::Uuid, dal: &DAL) {
+fn dispatch_uplink(
+    msg: WsMessage,
+    agent_id: uuid::Uuid,
+    dal: &DAL,
+    broadcaster: &LiveBroadcaster,
+) {
     match msg {
         WsMessage::Heartbeat(_) => {
             if let Err(e) = dal.agents().record_heartbeat(agent_id) {
@@ -236,6 +252,11 @@ fn dispatch_uplink(msg: WsMessage, agent_id: uuid::Uuid, dal: &DAL) {
                 warn!(%agent_id, body_agent = %ev.agent_id, "dropping K8sEvent with mismatched agent_id");
                 return;
             }
+            let stack_id = ev.stack_id;
+            // Live fan-out *before* persistence so subscribers see the
+            // frame at ingest latency; persist also so the REST history
+            // endpoint (WS-10) returns it later.
+            broadcaster.broadcast(stack_id, WsMessage::K8sEvent(ev.clone()));
             let involved = match serde_json::to_value(&ev.involved_object) {
                 Ok(v) => v,
                 Err(e) => {
@@ -245,7 +266,7 @@ fn dispatch_uplink(msg: WsMessage, agent_id: uuid::Uuid, dal: &DAL) {
             };
             let new = NewAgentK8sEvent {
                 agent_id,
-                stack_id: ev.stack_id,
+                stack_id,
                 observed_at: ev.observed_at,
                 reason: ev.reason,
                 message: ev.message,
@@ -262,9 +283,11 @@ fn dispatch_uplink(msg: WsMessage, agent_id: uuid::Uuid, dal: &DAL) {
                 warn!(%agent_id, body_agent = %line.agent_id, "dropping PodLogLine with mismatched agent_id");
                 return;
             }
+            let stack_id = line.stack_id;
+            broadcaster.broadcast(stack_id, WsMessage::PodLogLine(line.clone()));
             let new = NewAgentPodLog {
                 agent_id,
-                stack_id: line.stack_id,
+                stack_id,
                 namespace: line.namespace,
                 pod: line.pod,
                 container: line.container,
@@ -276,15 +299,9 @@ fn dispatch_uplink(msg: WsMessage, agent_id: uuid::Uuid, dal: &DAL) {
             }
         }
         WsMessage::LogGap(gap) => {
-            // Gap markers are pure metadata — we don't persist them in v1.
-            // Subscribers (WS-11) will eventually see gap markers via the
-            // live fan-out hub instead.
-            debug!(
-                %agent_id,
-                stack_id = %gap.stack_id,
-                dropped = gap.dropped_count,
-                "LogGap received (not persisted in v1)"
-            );
+            // Gap markers are pure metadata — broadcast for live
+            // subscribers but don't persist (per WS-09 decision).
+            broadcaster.broadcast(gap.stack_id, WsMessage::LogGap(gap));
         }
         // Anything else is broker → agent shape; agent should never send.
         WsMessage::WorkOrder(_) | WsMessage::TargetChanged(_) | WsMessage::StackChanged(_) => {
