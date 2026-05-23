@@ -9,6 +9,7 @@
 use crate::api::v1::error::{ApiError, ErrorResponse};
 use crate::api::v1::middleware::AuthPayload;
 use crate::dal::DAL;
+use crate::ws::{push_work_order, ConnectionRegistry};
 use axum::{
     extract::{Extension, Path, Query, State},
     http::StatusCode,
@@ -17,6 +18,7 @@ use axum::{
     Json, Router,
 };
 use brokkr_models::models::work_orders::{NewWorkOrder, WorkOrder, WorkOrderLog};
+use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error, info, warn};
 use utoipa::ToSchema;
@@ -169,6 +171,7 @@ async fn list_work_orders(
 async fn create_work_order(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
+    Extension(ws_registry): Extension<Arc<ConnectionRegistry>>,
     Json(request): Json<CreateWorkOrderRequest>,
 ) -> Result<(StatusCode, Json<WorkOrder>), ApiError> {
     info!("Handling request to create a new work order");
@@ -236,6 +239,12 @@ async fn create_work_order(
         let _ = dal.work_orders().delete(work_order.id);
         return Err(err);
     }
+
+    // Post-commit: push to explicitly-targeted agents via WS. Label /
+    // annotation targeting still relies on the agent's REST polling to
+    // resolve which work orders apply — broadening this push to those
+    // selectors is part of [[BROKKR-I-0019]] WS-04 follow-ups.
+    push_work_order(&ws_registry, &work_order, &agent_ids);
 
     info!("Successfully created work order with ID: {}", work_order.id);
     Ok((StatusCode::CREATED, Json(work_order)))

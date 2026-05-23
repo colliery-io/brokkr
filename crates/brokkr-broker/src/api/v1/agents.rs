@@ -11,12 +11,14 @@ use crate::api::v1::middleware::AuthPayload;
 use crate::dal::DAL;
 use crate::metrics;
 use crate::utils::{audit, event_bus, pak};
+use crate::ws::{push_target_changed, ConnectionRegistry};
 use axum::http::StatusCode;
 use axum::{
     extract::{Extension, Path, Query, State},
     routing::{delete, get, post},
     Json, Router,
 };
+use std::sync::Arc;
 use brokkr_models::models::agent_annotations::{AgentAnnotation, NewAgentAnnotation};
 use brokkr_models::models::agent_events::{AgentEvent, NewAgentEvent};
 use brokkr_models::models::agent_labels::{AgentLabel, NewAgentLabel};
@@ -667,6 +669,7 @@ async fn list_targets(
 async fn add_target(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
+    Extension(ws_registry): Extension<Arc<ConnectionRegistry>>,
     Path(id): Path<Uuid>,
     Json(new_target): Json<NewAgentTarget>,
 ) -> Result<(StatusCode, Json<AgentTarget>), ApiError> {
@@ -676,6 +679,10 @@ async fn add_target(
         error!("Failed to add target for agent with ID {}: {:?}", id, e);
         ApiError::internal("failed to add agent target")
     })?;
+    // Post-commit: tell the affected agent its targets changed so it can
+    // start reconciling the new stack immediately. Remove is intentionally
+    // not pushed in v1 — REST polling surfaces deletions on the next tick.
+    push_target_changed(&ws_registry, &target);
     Ok((StatusCode::CREATED, Json(target)))
 }
 

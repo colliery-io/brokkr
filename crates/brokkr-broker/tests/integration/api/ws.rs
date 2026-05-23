@@ -253,3 +253,196 @@ async fn wait_for_disconnection(registry: &Arc<ConnectionRegistry>, agent_id: Uu
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
     }
 }
+
+// =============================================================================
+// WS-04: broker → agent push from REST mutation handlers
+// =============================================================================
+//
+// These tests stand up the FULL broker router (v1 + internal_routes +
+// shared ConnectionRegistry as an Extension) and exercise the three
+// post-commit push paths end to end via real REST calls:
+//
+//   POST /api/v1/agents/{id}/targets             → WsMessage::TargetChanged
+//   POST /api/v1/stacks/{id}/deployment-objects  → WsMessage::StackChanged
+//   POST /api/v1/work-orders                     → WsMessage::WorkOrder
+
+async fn spawn_full_broker(fixture: &TestFixture) -> (std::net::SocketAddr, Arc<ConnectionRegistry>) {
+    use brokkr_broker::api;
+    use brokkr_broker::ws::internal_routes;
+    use brokkr_utils::config::Cors;
+
+    let registry = ConnectionRegistry::new();
+    let cors = Cors {
+        allowed_origins: vec!["*".to_string()],
+        allowed_methods: vec![
+            "GET".to_string(),
+            "POST".to_string(),
+            "PUT".to_string(),
+            "DELETE".to_string(),
+        ],
+        allowed_headers: vec!["*".to_string()],
+        max_age_seconds: 60,
+    };
+
+    // Mirror `api::configure_api_routes`: the v1 routes need the registry
+    // as an Extension so the post-commit push helpers (`ws::push`) can
+    // reach it.
+    let app = axum::Router::new()
+        .merge(api::v1::routes(fixture.dal.clone(), &cors, None))
+        .merge(internal_routes(fixture.dal.clone(), registry.clone()))
+        .layer(axum::extract::Extension(registry.clone()))
+        .with_state(fixture.dal.clone());
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    (addr, registry)
+}
+
+/// Read frames from `socket` until one of the requested `WsMessage` shapes
+/// arrives, or 3s elapses. Non-matching frames (heartbeats etc.) are
+/// silently skipped so tests don't fail on incidental traffic.
+async fn await_message<F>(
+    socket: &mut tokio_tungstenite::WebSocketStream<
+        tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+    >,
+    mut matcher: F,
+) -> WsMessage
+where
+    F: FnMut(&WsMessage) -> bool,
+{
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(3);
+    loop {
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        let frame = tokio::time::timeout(remaining, socket.next())
+            .await
+            .expect("timed out waiting for matching WS frame")
+            .expect("socket closed unexpectedly")
+            .expect("read error");
+        if let Message::Text(t) = frame {
+            let msg: WsMessage = serde_json::from_str(&t).expect("decode WsMessage");
+            if matcher(&msg) {
+                return msg;
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn rest_mutations_push_messages_over_ws() {
+    use reqwest::Client;
+    use serde_json::json;
+
+    let fixture = TestFixture::new();
+    let (addr, registry) = spawn_full_broker(&fixture).await;
+    let http = Client::new();
+    let base = format!("http://{}", addr);
+
+    // 1. Provision agent + PAK and open the WS connection.
+    let agent = fixture.create_test_agent("WS-04 agent".into(), "cluster".into());
+    let (agent_pak, agent_hash) = pak::create_pak().unwrap();
+    fixture.dal.agents().update_pak_hash(agent.id, agent_hash).unwrap();
+
+    let ws_req = ws_request_with_pak(&ws_url(addr), &agent_pak);
+    let (mut socket, _resp) = tokio_tungstenite::connect_async(ws_req).await.unwrap();
+    tokio::time::timeout(
+        std::time::Duration::from_secs(2),
+        wait_for_connection(&registry, agent.id),
+    )
+    .await
+    .expect("registry registers agent within 2s");
+
+    // 2. Create a stack (admin-owned via fixture's admin_generator) and
+    //    POST a target — the agent should receive TargetChanged.
+    let stack = fixture.create_test_stack(
+        "ws04 stack".into(),
+        Some("ws04 test".into()),
+        fixture.admin_generator.id,
+    );
+
+    let resp = http
+        .post(format!("{base}/api/v1/agents/{}/targets", agent.id))
+        .header("Authorization", format!("Bearer {}", fixture.admin_pak))
+        .json(&json!({ "agent_id": agent.id, "stack_id": stack.id }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 201);
+
+    let msg = await_message(&mut socket, |m| matches!(m, WsMessage::TargetChanged(_))).await;
+    if let WsMessage::TargetChanged(t) = msg {
+        assert_eq!(t.agent_id, agent.id);
+        assert_eq!(t.stack_id, stack.id);
+    }
+
+    // 3. POST a deployment object on that stack — the agent should
+    //    receive StackChanged (it now targets the stack from step 2).
+    let resp = http
+        .post(format!("{base}/api/v1/stacks/{}/deployment-objects", stack.id))
+        .header("Authorization", format!("Bearer {}", fixture.admin_pak))
+        .json(&json!({
+            "yaml_content": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: ws04\n",
+            "is_deletion_marker": false,
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 201);
+
+    let msg = await_message(&mut socket, |m| matches!(m, WsMessage::StackChanged(_))).await;
+    if let WsMessage::StackChanged(s) = msg {
+        assert_eq!(s.id, stack.id);
+    }
+
+    // 4. POST a work order targeted at the agent — the agent should
+    //    receive WorkOrder.
+    let resp = http
+        .post(format!("{base}/api/v1/work-orders"))
+        .header("Authorization", format!("Bearer {}", fixture.admin_pak))
+        .json(&json!({
+            "work_type": "build",
+            "yaml_content": "kind: Build\nmetadata: { name: ws04 }\n",
+            "targeting": { "agent_ids": [agent.id] }
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 201);
+
+    let msg = await_message(&mut socket, |m| matches!(m, WsMessage::WorkOrder(_))).await;
+    if let WsMessage::WorkOrder(wo) = msg {
+        assert_eq!(wo.work_type, "build");
+    }
+}
+
+#[tokio::test]
+async fn push_to_disconnected_agent_is_a_clean_noop() {
+    use reqwest::Client;
+    use serde_json::json;
+
+    let fixture = TestFixture::new();
+    let (addr, _registry) = spawn_full_broker(&fixture).await;
+    let http = Client::new();
+    let base = format!("http://{}", addr);
+
+    // Agent exists in DB but is NOT WS-connected. The REST mutation must
+    // still succeed — push is fire-and-forget.
+    let agent = fixture.create_test_agent("ws04 offline".into(), "cluster".into());
+    let stack = fixture.create_test_stack(
+        "ws04 offline stack".into(),
+        None,
+        fixture.admin_generator.id,
+    );
+
+    let resp = http
+        .post(format!("{base}/api/v1/agents/{}/targets", agent.id))
+        .header("Authorization", format!("Bearer {}", fixture.admin_pak))
+        .json(&json!({ "agent_id": agent.id, "stack_id": stack.id }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 201, "REST POST must succeed even with no WS subscriber");
+}

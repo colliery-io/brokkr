@@ -11,12 +11,14 @@ use crate::metrics;
 use crate::utils::audit;
 use crate::utils::matching::template_matches_stack;
 use crate::utils::templating;
+use crate::ws::{push_stack_changed_to_targets, ConnectionRegistry};
 use axum::{
     extract::{Extension, Path, State},
     http::StatusCode,
     routing::{delete, get, post},
     Json, Router,
 };
+use std::sync::Arc;
 use brokkr_models::models::audit_logs::{
     ACTION_STACK_CREATED, ACTION_STACK_DELETED, ACTION_STACK_UPDATED, ACTOR_TYPE_ADMIN,
     RESOURCE_TYPE_STACK,
@@ -348,16 +350,23 @@ pub struct CreateDeploymentObjectRequest {
 pub async fn create_deployment_object(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
+    Extension(ws_registry): Extension<Arc<ConnectionRegistry>>,
     Path(stack_id): Path<Uuid>,
     Json(req): Json<CreateDeploymentObjectRequest>,
 ) -> Result<(StatusCode, Json<DeploymentObject>), ApiError> {
-    fetch_owned_stack(&dal, &auth_payload, stack_id).await?;
+    let stack = fetch_owned_stack(&dal, &auth_payload, stack_id).await?;
     let new_object = NewDeploymentObject::new(stack_id, req.yaml_content, req.is_deletion_marker)
         .map_err(|e| ApiError::bad_request("invalid_deployment_object", e))?;
     let object = dal
         .deployment_objects()
         .create(&new_object)
         .map_err(|_| ApiError::internal("failed to create deployment object"))?;
+
+    // Post-commit: notify every connected agent that targets this stack so
+    // they can reconcile the new deployment object immediately rather than
+    // waiting for the next REST polling tick.
+    push_stack_changed_to_targets(&ws_registry, &dal, &stack);
+
     Ok((StatusCode::CREATED, Json(object)))
 }
 

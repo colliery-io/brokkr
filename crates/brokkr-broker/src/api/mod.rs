@@ -203,7 +203,12 @@ pub fn configure_api_routes(
 
     Router::new()
         .merge(v1::routes(dal.clone(), cors_config, reloadable_config))
-        .merge(internal_routes(dal.clone(), ws_registry))
+        .merge(internal_routes(dal.clone(), ws_registry.clone()))
+        // Make the registry available to v1 handlers (for the post-commit
+        // push helpers in `ws::push`). Layers added here wrap every route
+        // already merged into the router, so v1 handlers get it as
+        // `Extension<Arc<ConnectionRegistry>>` automatically.
+        .layer(axum::Extension(ws_registry))
         .route("/healthz", get(healthz))
         .route("/readyz", get(readyz))
         .route("/metrics", get(metrics_handler))

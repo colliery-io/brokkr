@@ -1,6 +1,6 @@
 # Code Index
 
-> Generated: 2026-05-23T02:30:22Z | 357 files | JavaScript, Python, Rust, TypeScript
+> Generated: 2026-05-23T03:26:40Z | 363 files | JavaScript, Python, Rust, TypeScript
 
 ## Project Structure
 
@@ -11,6 +11,7 @@
 │   │   │   ├── bin.rs
 │   │   │   ├── broker.rs
 │   │   │   ├── broker_sdk.rs
+│   │   │   ├── broker_ws.rs
 │   │   │   ├── cli/
 │   │   │   │   ├── commands.rs
 │   │   │   │   └── mod.rs
@@ -33,6 +34,7 @@
 │   │       ├── fixtures.rs
 │   │       └── integration/
 │   │           ├── broker.rs
+│   │           ├── broker_ws.rs
 │   │           ├── health.rs
 │   │           ├── k8s/
 │   │           │   ├── api.rs
@@ -93,16 +95,20 @@
 │   │   │   ├── db.rs
 │   │   │   ├── lib.rs
 │   │   │   ├── metrics.rs
-│   │   │   └── utils/
-│   │   │       ├── audit.rs
-│   │   │       ├── background_tasks.rs
-│   │   │       ├── config_watcher.rs
-│   │   │       ├── encryption.rs
-│   │   │       ├── event_bus.rs
-│   │   │       ├── matching.rs
+│   │   │   ├── utils/
+│   │   │   │   ├── audit.rs
+│   │   │   │   ├── background_tasks.rs
+│   │   │   │   ├── config_watcher.rs
+│   │   │   │   ├── encryption.rs
+│   │   │   │   ├── event_bus.rs
+│   │   │   │   ├── matching.rs
+│   │   │   │   ├── mod.rs
+│   │   │   │   ├── pak.rs
+│   │   │   │   └── templating.rs
+│   │   │   └── ws/
+│   │   │       ├── handler.rs
 │   │   │       ├── mod.rs
-│   │   │       ├── pak.rs
-│   │   │       └── templating.rs
+│   │   │       └── registry.rs
 │   │   └── tests/
 │   │       ├── fixtures.rs
 │   │       └── integration/
@@ -120,7 +126,8 @@
 │   │           │   ├── stacks.rs
 │   │           │   ├── templates.rs
 │   │           │   ├── webhooks.rs
-│   │           │   └── work_orders.rs
+│   │           │   ├── work_orders.rs
+│   │           │   └── ws.rs
 │   │           ├── dal/
 │   │           │   ├── agent_annotations.rs
 │   │           │   ├── agent_events.rs
@@ -474,6 +481,37 @@
 - pub `build_client` function L35-43 — `(config: &Settings) -> Result<BrokkrClient, BrokkrError>` — Build a `BrokkrClient` from agent `Settings`.
 -  `bearer_token` function L24-26 — `(pak: &str) -> String` — Bearer-token form expected by the broker's auth middleware.
 
+#### crates/brokkr-agent/src/broker_ws.rs
+
+- pub `WsState` enum L40-49 — `Down | Up | ForceRestOnly` — Current state of the WS channel from the agent's point of view.
+- pub `is_up` function L52-54 — `(self) -> bool` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+- pub `WsClient` struct L74-82 — `{ state: watch::Receiver<WsState>, outbound_tx: mpsc::Sender<WsMessage>, inbound...` — Public handle to the WS client.
+- pub `state` function L86-88 — `(&self) -> watch::Receiver<WsState>` — Watch the connection state.
+- pub `outbound` function L93-95 — `(&self) -> mpsc::Sender<WsMessage>` — Sender for outbound messages (heartbeat, agent events, health,
+- pub `take_inbound` function L99-101 — `(&mut self) -> Option<mpsc::Receiver<WsMessage>>` — Take ownership of the inbound receiver.
+- pub `spawn` function L110-155 — `(settings: &Settings) -> WsClient` — Spawn the WS connection task and return a client handle.
+- pub `ws_url_from_broker_url` function L161-173 — `(broker_url: &str) -> String` — Convert `http(s)://broker/api/v1`-style URLs into the
+-  `WsState` type L51-55 — `= WsState` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `OUTBOUND_CAPACITY` variable L61 — `: usize` — Capacity of the outbound queue from the agent's emitters to the WS task.
+-  `INBOUND_CAPACITY` variable L65 — `: usize` — Capacity of the inbound queue from the WS task to in-agent consumers.
+-  `BACKOFF_INITIAL` variable L68 — `: Duration` — Bounds on the reconnect backoff schedule.
+-  `BACKOFF_MAX` variable L69 — `: Duration` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `WsClient` type L84-102 — `= WsClient` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `reconnect_loop` function L175-202 — `( url: String, pak: String, state_tx: watch::Sender<WsState>, inbound_tx: mpsc::...` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `dial` function L204-223 — `( url: &str, pak: &str, ) -> Result< tokio_tungstenite::WebSocketStream<tokio_tu...` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `run_socket` function L225-290 — `( socket: tokio_tungstenite::WebSocketStream< tokio_tungstenite::MaybeTlsStream<...` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `BackoffSchedule` struct L295-297 — `{ current: Duration }` — Exponential backoff with capped maximum and ±20% jitter.
+-  `BackoffSchedule` type L299-317 — `= BackoffSchedule` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `new` function L300-304 — `() -> Self` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `reset` function L306-308 — `(&mut self)` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `next` function L310-316 — `(&mut self) -> Duration` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `with_jitter` function L319-328 — `(d: Duration) -> Duration` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `tests` module L331-390 — `-` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `ws_url_translates_scheme_and_appends_path` function L335-348 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `backoff_grows_exponentially_then_caps` function L351-368 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `backoff_reset_restores_initial` function L371-379 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `jitter_stays_within_twenty_percent` function L382-389 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+
 #### crates/brokkr-agent/src/deployment_health.rs
 
 - pub `DeploymentHealthStatus` struct L42-51 — `{ id: Uuid, status: String, summary: HealthSummary, checked_at: DateTime<Utc> }` — Health status for a deployment object
@@ -539,15 +577,16 @@
 
 - pub `broker` module L15 — `-` — # Brokkr Agent
 - pub `broker_sdk` module L16 — `-` — see the [Brokkr Documentation](https://brokkr.io/explanation/architecture).
-- pub `cli` module L17 — `-` — see the [Brokkr Documentation](https://brokkr.io/explanation/architecture).
-- pub `deployment_health` module L18 — `-` — see the [Brokkr Documentation](https://brokkr.io/explanation/architecture).
-- pub `diagnostics` module L19 — `-` — see the [Brokkr Documentation](https://brokkr.io/explanation/architecture).
-- pub `health` module L20 — `-` — see the [Brokkr Documentation](https://brokkr.io/explanation/architecture).
-- pub `k8s` module L21 — `-` — see the [Brokkr Documentation](https://brokkr.io/explanation/architecture).
-- pub `metrics` module L22 — `-` — see the [Brokkr Documentation](https://brokkr.io/explanation/architecture).
-- pub `utils` module L23 — `-` — see the [Brokkr Documentation](https://brokkr.io/explanation/architecture).
-- pub `webhooks` module L24 — `-` — see the [Brokkr Documentation](https://brokkr.io/explanation/architecture).
-- pub `work_orders` module L25 — `-` — see the [Brokkr Documentation](https://brokkr.io/explanation/architecture).
+- pub `broker_ws` module L17 — `-` — see the [Brokkr Documentation](https://brokkr.io/explanation/architecture).
+- pub `cli` module L18 — `-` — see the [Brokkr Documentation](https://brokkr.io/explanation/architecture).
+- pub `deployment_health` module L19 — `-` — see the [Brokkr Documentation](https://brokkr.io/explanation/architecture).
+- pub `diagnostics` module L20 — `-` — see the [Brokkr Documentation](https://brokkr.io/explanation/architecture).
+- pub `health` module L21 — `-` — see the [Brokkr Documentation](https://brokkr.io/explanation/architecture).
+- pub `k8s` module L22 — `-` — see the [Brokkr Documentation](https://brokkr.io/explanation/architecture).
+- pub `metrics` module L23 — `-` — see the [Brokkr Documentation](https://brokkr.io/explanation/architecture).
+- pub `utils` module L24 — `-` — see the [Brokkr Documentation](https://brokkr.io/explanation/architecture).
+- pub `webhooks` module L25 — `-` — see the [Brokkr Documentation](https://brokkr.io/explanation/architecture).
+- pub `work_orders` module L26 — `-` — see the [Brokkr Documentation](https://brokkr.io/explanation/architecture).
 
 #### crates/brokkr-agent/src/metrics.rs
 
@@ -755,6 +794,19 @@
 -  `test_failure_event_apply` function L158-212 — `()`
 -  `test_send_heartbeat` function L215-251 — `()`
 
+#### crates/brokkr-agent/tests/integration/broker_ws.rs
+
+-  `SHORT_TIMEOUT` variable L34 — `: Duration` — the state at `ForceRestOnly`.
+-  `ShutdownNotify` type L40 — `= Arc<Notify>` — Per-connection cancellation: shared with all in-flight WS handlers so a
+-  `ws_accept_with_cancel` function L42-60 — `( upgrade: WebSocketUpgrade, cancel: ShutdownNotify, ) -> impl IntoResponse` — the state at `ForceRestOnly`.
+-  `spawn_test_broker_on` function L66-81 — `(addr: SocketAddr) -> ShutdownNotify` — Spawn a test broker bound to a specific address.
+-  `spawn_test_broker` function L83-89 — `() -> (SocketAddr, ShutdownNotify)` — the state at `ForceRestOnly`.
+-  `settings_for_broker` function L91-97 — `(addr: SocketAddr, force_rest: bool) -> Settings` — the state at `ForceRestOnly`.
+-  `wait_for_state` function L99-115 — `( mut watch: tokio::sync::watch::Receiver<WsState>, want: WsState, ) -> WsState` — the state at `ForceRestOnly`.
+-  `client_connects_and_reaches_up_state` function L118-127 — `()` — the state at `ForceRestOnly`.
+-  `client_reconnects_after_broker_restart` function L130-144 — `()` — the state at `ForceRestOnly`.
+-  `force_rest_pins_state_and_skips_dial` function L147-163 — `()` — the state at `ForceRestOnly`.
+
 #### crates/brokkr-agent/tests/integration/health.rs
 
 -  `create_test_health_state` function L18-34 — `() -> HealthState`
@@ -766,9 +818,10 @@
 #### crates/brokkr-agent/tests/integration/main.rs
 
 -  `broker` module L7 — `-`
--  `fixtures` module L9 — `-`
--  `health` module L10 — `-`
--  `k8s` module L11 — `-`
+-  `broker_ws` module L8 — `-`
+-  `fixtures` module L10 — `-`
+-  `health` module L11 — `-`
+-  `k8s` module L12 — `-`
 
 ### crates/brokkr-agent/tests/integration/k8s
 
@@ -834,11 +887,11 @@
 #### crates/brokkr-broker/src/api/mod.rs
 
 - pub `v1` module L157 — `-` — # API Module
-- pub `configure_api_routes` function L189-230 — `( dal: DAL, cors_config: &Cors, reloadable_config: Option<ReloadableConfig>, ) -...` — Configures and returns the main application router with all API routes
--  `healthz` function L240-242 — `() -> impl IntoResponse` — Health check endpoint handler
--  `readyz` function L252-254 — `() -> impl IntoResponse` — Ready check endpoint handler
--  `metrics_handler` function L264-271 — `() -> impl IntoResponse` — Metrics endpoint handler
--  `metrics_middleware` function L276-292 — `(request: Request<Body>, next: Next) -> Response` — Middleware to record HTTP request metrics
+- pub `configure_api_routes` function L191-235 — `( dal: DAL, cors_config: &Cors, reloadable_config: Option<ReloadableConfig>, ) -...` — Configures and returns the main application router with all API routes
+-  `healthz` function L245-247 — `() -> impl IntoResponse` — Health check endpoint handler
+-  `readyz` function L257-259 — `() -> impl IntoResponse` — Ready check endpoint handler
+-  `metrics_handler` function L269-276 — `() -> impl IntoResponse` — Metrics endpoint handler
+-  `metrics_middleware` function L281-297 — `(request: Request<Body>, next: Next) -> Response` — Middleware to record HTTP request metrics
 
 ### crates/brokkr-broker/src/api/v1
 
@@ -1119,6 +1172,7 @@
 - pub `db` module L18 — `-` — see the [Brokkr Documentation](https://brokkr.io/explanation/architecture).
 - pub `metrics` module L19 — `-` — see the [Brokkr Documentation](https://brokkr.io/explanation/architecture).
 - pub `utils` module L20 — `-` — see the [Brokkr Documentation](https://brokkr.io/explanation/architecture).
+- pub `ws` module L21 — `-` — see the [Brokkr Documentation](https://brokkr.io/explanation/architecture).
 
 #### crates/brokkr-broker/src/metrics.rs
 
@@ -1781,6 +1835,53 @@
 -  `test_validate_parameters_empty_schema` function L476-481 — `()` — - Validating parameters against JSON Schema at instantiation time
 -  `test_validate_parameters_complex_schema` function L484-509 — `()` — - Validating parameters against JSON Schema at instantiation time
 
+### crates/brokkr-broker/src/ws
+
+> *Semantic summary to be generated by AI agent.*
+
+#### crates/brokkr-broker/src/ws/handler.rs
+
+- pub `INTERNAL_WS_PATH` variable L52 — `: &str` — Public path of the internal WS endpoint.
+- pub `internal_routes` function L71-79 — `(dal: DAL, registry: Arc<ConnectionRegistry>) -> Router<DAL>` — Build the standalone router that mounts the internal WS endpoint.
+-  `CONTROL_LANE_CAPACITY` variable L58 — `: usize` — Capacity of the per-connection control lane.
+-  `TELEMETRY_LANE_CAPACITY` variable L63 — `: usize` — Capacity of the per-connection telemetry lane.
+-  `ws_upgrade` function L81-107 — `( upgrade: WebSocketUpgrade, Extension(registry): Extension<Arc<ConnectionRegist...` — entry is removed from the registry cleanly.
+-  `run_connection` function L109-145 — `( socket: WebSocket, agent_id: uuid::Uuid, registry: Arc<ConnectionRegistry>, )` — entry is removed from the registry cleanly.
+-  `reader_task` function L147-179 — `( mut receiver: futures::stream::SplitStream<WebSocket>, agent_id: uuid::Uuid, m...` — entry is removed from the registry cleanly.
+-  `writer_task` function L181-218 — `( mut sender: futures::stream::SplitSink<WebSocket, Message>, mut control_rx: mp...` — entry is removed from the registry cleanly.
+
+#### crates/brokkr-broker/src/ws/mod.rs
+
+- pub `handler` module L18 — `-` — Internal broker↔agent WebSocket channel.
+- pub `registry` module L19 — `-` — [[BROKKR-I-0019]] in `.metis/`.
+
+#### crates/brokkr-broker/src/ws/registry.rs
+
+- pub `SendError` enum L32-40 — `NotConnected | LaneUnavailable` — Errors returned when trying to push a message to a registered agent.
+- pub `ConnectionHandle` struct L59-66 — `{ agent_id: Uuid, connected_since: DateTime<Utc>, messages_in: Arc<AtomicU64>, m...` — Sender-side handle for a single registered connection.
+- pub `ConnectionInfo` struct L70-75 — `{ agent_id: Uuid, connected_since: DateTime<Utc>, messages_in: u64, messages_out...` — Snapshot view of one connection for diagnostics endpoints (WS-13).
+- pub `ConnectionRegistry` struct L83-85 — `{ inner: RwLock<HashMap<Uuid, ConnectionHandle>> }` — Per-broker-process registry of live agent connections.
+- pub `new` function L88-90 — `() -> Arc<Self>` — down cleanly.
+- pub `register` function L93-97 — `(&self, handle: ConnectionHandle)` — Insert a new handle, evicting any prior connection for the same agent.
+- pub `unregister_if_matches` function L102-109 — `(&self, agent_id: Uuid, connected_since: DateTime<Utc>)` — Remove the handle iff it still matches the writer's `connected_since`
+- pub `is_connected` function L112-117 — `(&self, agent_id: Uuid) -> bool` — True if any handle is registered for this agent.
+- pub `send_control` function L123-135 — `(&self, agent_id: Uuid, msg: WsMessage) -> Result<(), SendError>` — Send a control-plane message to a specific agent.
+- pub `send_telemetry` function L141-153 — `(&self, agent_id: Uuid, msg: WsMessage) -> Result<(), SendError>` — Send a telemetry/log message to a specific agent on the low-priority
+- pub `snapshot` function L157-169 — `(&self) -> Vec<ConnectionInfo>` — Snapshot every connection for diagnostics.
+- pub `connected_count` function L172-174 — `(&self) -> usize` — Number of connected agents (cheap; no clone).
+-  `SendError` type L42-49 — `= SendError` — down cleanly.
+-  `fmt` function L43-48 — `(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result` — down cleanly.
+-  `SendError` type L51 — `= SendError` — down cleanly.
+-  `ConnectionRegistry` type L87-175 — `= ConnectionRegistry` — down cleanly.
+-  `tests` module L178-279 — `-` — down cleanly.
+-  `handle_for` function L182-194 — `(agent_id: Uuid) -> (ConnectionHandle, mpsc::Receiver<WsMessage>, mpsc::Receiver...` — down cleanly.
+-  `sample_heartbeat` function L196-201 — `(agent_id: Uuid) -> WsMessage` — down cleanly.
+-  `send_to_unknown_agent_errors` function L204-209 — `()` — down cleanly.
+-  `register_then_send_lands_on_correct_lane` function L212-225 — `()` — down cleanly.
+-  `second_register_evicts_first` function L228-247 — `()` — down cleanly.
+-  `unregister_if_matches_removes_only_matching_generation` function L250-258 — `()` — down cleanly.
+-  `lane_full_returns_lane_unavailable` function L261-278 — `()` — down cleanly.
+
 ### crates/brokkr-broker/tests
 
 > *Semantic summary to be generated by AI agent.*
@@ -1969,6 +2070,7 @@
 -  `templates` module L17 — `-`
 -  `webhooks` module L18 — `-`
 -  `work_orders` module L19 — `-`
+-  `ws` module L20 — `-`
 
 #### crates/brokkr-broker/tests/integration/api/stacks.rs
 
@@ -2070,6 +2172,18 @@
 -  `test_claim_with_label_targeting` function L975-1007 — `()`
 -  `test_claim_with_annotation_targeting` function L1010-1042 — `()`
 -  `test_claim_with_no_matching_targeting` function L1045-1074 — `()`
+
+#### crates/brokkr-broker/tests/integration/api/ws.rs
+
+-  `spawn_broker` function L43-71 — `( fixture: &TestFixture, ) -> (std::net::SocketAddr, Arc<ConnectionRegistry>)` — Bind the broker on a random local port and return the bound address plus
+-  `ws_url` function L73-75 — `(addr: std::net::SocketAddr) -> String` — path; this is why we bind a TCP listener for the upgrade tests.
+-  `ws_upgrade_rejects_unauthenticated` function L78-102 — `()` — path; this is why we bind a TCP listener for the upgrade tests.
+-  `ws_endpoint_is_not_in_openapi_spec` function L105-131 — `()` — path; this is why we bind a TCP listener for the upgrade tests.
+-  `ws_request_with_pak` function L136-143 — `(url: &str, pak_value: &str) -> tokio_tungstenite::tungstenite::handshake::clien...` — Build a tokio-tungstenite client request with `Authorization: Bearer <pak>`.
+-  `ws_upgrade_rejects_admin_pak` function L146-161 — `()` — path; this is why we bind a TCP listener for the upgrade tests.
+-  `ws_upgrade_with_agent_pak_round_trips_messages` function L164-237 — `()` — path; this is why we bind a TCP listener for the upgrade tests.
+-  `wait_for_connection` function L239-246 — `(registry: &Arc<ConnectionRegistry>, agent_id: Uuid) -> bool` — path; this is why we bind a TCP listener for the upgrade tests.
+-  `wait_for_disconnection` function L248-255 — `(registry: &Arc<ConnectionRegistry>, agent_id: Uuid) -> bool` — path; this is why we bind a TCP listener for the upgrade tests.
 
 ### crates/brokkr-broker/tests/integration/dal
 
@@ -2932,35 +3046,35 @@
 - pub `Settings` struct L121-136 — `{ database: Database, log: Log, pak: PAK, agent: Agent, broker: Broker, cors: Co...` — Represents the main settings structure for the application
 - pub `Cors` struct L140-156 — `{ allowed_origins: Vec<String>, allowed_methods: Vec<String>, allowed_headers: V...` — Represents the CORS configuration
 - pub `Broker` struct L159-179 — `{ pak_hash: Option<String>, diagnostic_cleanup_interval_seconds: Option<u64>, di...` — Default: 60 (set to 0 to disable caching)
-- pub `Agent` struct L184-209 — `{ broker_url: String, polling_interval: u64, kubeconfig_path: Option<String>, ma...` — Represents the agent configuration
-- pub `Database` struct L214-219 — `{ url: String, schema: Option<String> }` — Represents the database configuration
-- pub `Log` struct L223-229 — `{ level: String, format: String }` — Represents the logging configuration
-- pub `Telemetry` struct L237-256 — `{ enabled: bool, otlp_endpoint: String, service_name: String, sampling_rate: f64...` — Represents the telemetry (OpenTelemetry) configuration with hierarchical overrides
-- pub `TelemetryOverride` struct L260-269 — `{ enabled: Option<bool>, otlp_endpoint: Option<String>, service_name: Option<Str...` — Component-specific telemetry overrides (all fields optional)
-- pub `ResolvedTelemetry` struct L273-278 — `{ enabled: bool, otlp_endpoint: String, service_name: String, sampling_rate: f64...` — Resolved telemetry configuration after merging base with overrides
-- pub `for_broker` function L282-297 — `(&self) -> ResolvedTelemetry` — Get resolved telemetry config for broker (base merged with broker overrides)
-- pub `for_agent` function L300-315 — `(&self) -> ResolvedTelemetry` — Get resolved telemetry config for agent (base merged with agent overrides)
-- pub `PAK` struct L332-349 — `{ prefix: Option<String>, digest: Option<String>, rng: Option<String>, short_tok...` — Represents the PAK configuration
-- pub `short_length_as_str` function L353-355 — `(&mut self)` — Convert short token length to string
-- pub `long_length_as_str` function L358-360 — `(&mut self)` — Convert long token length to string
-- pub `new` function L373-392 — `(file: Option<String>) -> Result<Self, ConfigError>` — Creates a new `Settings` instance
-- pub `DynamicConfig` struct L400-417 — `{ log_level: String, diagnostic_cleanup_interval_seconds: u64, diagnostic_max_ag...` — Dynamic configuration values that can be hot-reloaded at runtime.
-- pub `from_settings` function L421-441 — `(settings: &Settings) -> Self` — Create DynamicConfig from Settings
-- pub `ConfigChange` struct L446-453 — `{ key: String, old_value: String, new_value: String }` — Represents a configuration change detected during reload
-- pub `ReloadableConfig` struct L479-486 — `{ static_config: Settings, dynamic: Arc<RwLock<DynamicConfig>>, config_file: Opt...` — Configuration wrapper that separates static (restart-required) settings
-- pub `new` function L498-507 — `(file: Option<String>) -> Result<Self, ConfigError>` — Creates a new ReloadableConfig instance
-- pub `from_settings` function L519-527 — `(settings: Settings, config_file: Option<String>) -> Self` — Creates a ReloadableConfig from an existing Settings instance
-- pub `static_config` function L532-534 — `(&self) -> &Settings` — Get a reference to the static (immutable) settings
-- pub `reload` function L540-619 — `(&self) -> Result<Vec<ConfigChange>, ConfigError>` — Reload dynamic configuration from sources (file + environment)
-- pub `log_level` function L626-631 — `(&self) -> String` — Get current log level
-- pub `diagnostic_cleanup_interval_seconds` function L634-639 — `(&self) -> u64` — Get diagnostic cleanup interval in seconds
-- pub `diagnostic_max_age_hours` function L642-647 — `(&self) -> i64` — Get diagnostic max age in hours
-- pub `webhook_delivery_interval_seconds` function L650-655 — `(&self) -> u64` — Get webhook delivery interval in seconds
-- pub `webhook_delivery_batch_size` function L658-663 — `(&self) -> i64` — Get webhook delivery batch size
-- pub `webhook_cleanup_retention_days` function L666-671 — `(&self) -> i64` — Get webhook cleanup retention in days
-- pub `cors_allowed_origins` function L674-679 — `(&self) -> Vec<String>` — Get CORS allowed origins
-- pub `cors_max_age_seconds` function L682-687 — `(&self) -> u64` — Get CORS max age in seconds
-- pub `dynamic_snapshot` function L690-692 — `(&self) -> Option<DynamicConfig>` — Get a snapshot of all dynamic config values
+- pub `Agent` struct L184-215 — `{ broker_url: String, polling_interval: u64, kubeconfig_path: Option<String>, ma...` — Represents the agent configuration
+- pub `Database` struct L220-225 — `{ url: String, schema: Option<String> }` — Represents the database configuration
+- pub `Log` struct L229-235 — `{ level: String, format: String }` — Represents the logging configuration
+- pub `Telemetry` struct L243-262 — `{ enabled: bool, otlp_endpoint: String, service_name: String, sampling_rate: f64...` — Represents the telemetry (OpenTelemetry) configuration with hierarchical overrides
+- pub `TelemetryOverride` struct L266-275 — `{ enabled: Option<bool>, otlp_endpoint: Option<String>, service_name: Option<Str...` — Component-specific telemetry overrides (all fields optional)
+- pub `ResolvedTelemetry` struct L279-284 — `{ enabled: bool, otlp_endpoint: String, service_name: String, sampling_rate: f64...` — Resolved telemetry configuration after merging base with overrides
+- pub `for_broker` function L288-303 — `(&self) -> ResolvedTelemetry` — Get resolved telemetry config for broker (base merged with broker overrides)
+- pub `for_agent` function L306-321 — `(&self) -> ResolvedTelemetry` — Get resolved telemetry config for agent (base merged with agent overrides)
+- pub `PAK` struct L338-355 — `{ prefix: Option<String>, digest: Option<String>, rng: Option<String>, short_tok...` — Represents the PAK configuration
+- pub `short_length_as_str` function L359-361 — `(&mut self)` — Convert short token length to string
+- pub `long_length_as_str` function L364-366 — `(&mut self)` — Convert long token length to string
+- pub `new` function L379-398 — `(file: Option<String>) -> Result<Self, ConfigError>` — Creates a new `Settings` instance
+- pub `DynamicConfig` struct L406-423 — `{ log_level: String, diagnostic_cleanup_interval_seconds: u64, diagnostic_max_ag...` — Dynamic configuration values that can be hot-reloaded at runtime.
+- pub `from_settings` function L427-447 — `(settings: &Settings) -> Self` — Create DynamicConfig from Settings
+- pub `ConfigChange` struct L452-459 — `{ key: String, old_value: String, new_value: String }` — Represents a configuration change detected during reload
+- pub `ReloadableConfig` struct L485-492 — `{ static_config: Settings, dynamic: Arc<RwLock<DynamicConfig>>, config_file: Opt...` — Configuration wrapper that separates static (restart-required) settings
+- pub `new` function L504-513 — `(file: Option<String>) -> Result<Self, ConfigError>` — Creates a new ReloadableConfig instance
+- pub `from_settings` function L525-533 — `(settings: Settings, config_file: Option<String>) -> Self` — Creates a ReloadableConfig from an existing Settings instance
+- pub `static_config` function L538-540 — `(&self) -> &Settings` — Get a reference to the static (immutable) settings
+- pub `reload` function L546-625 — `(&self) -> Result<Vec<ConfigChange>, ConfigError>` — Reload dynamic configuration from sources (file + environment)
+- pub `log_level` function L632-637 — `(&self) -> String` — Get current log level
+- pub `diagnostic_cleanup_interval_seconds` function L640-645 — `(&self) -> u64` — Get diagnostic cleanup interval in seconds
+- pub `diagnostic_max_age_hours` function L648-653 — `(&self) -> i64` — Get diagnostic max age in hours
+- pub `webhook_delivery_interval_seconds` function L656-661 — `(&self) -> u64` — Get webhook delivery interval in seconds
+- pub `webhook_delivery_batch_size` function L664-669 — `(&self) -> i64` — Get webhook delivery batch size
+- pub `webhook_cleanup_retention_days` function L672-677 — `(&self) -> i64` — Get webhook cleanup retention in days
+- pub `cors_allowed_origins` function L680-685 — `(&self) -> Vec<String>` — Get CORS allowed origins
+- pub `cors_max_age_seconds` function L688-693 — `(&self) -> u64` — Get CORS max age in seconds
+- pub `dynamic_snapshot` function L696-698 — `(&self) -> Option<DynamicConfig>` — Get a snapshot of all dynamic config values
 -  `deserialize_string_or_vec` function L76-113 — `(deserializer: D) -> Result<Vec<String>, D::Error>` — Deserializes a comma-separated string or array into Vec<String>
 -  `StringOrVec` struct L83 — `-` — Default: 60 (set to 0 to disable caching)
 -  `StringOrVec` type L85-110 — `= StringOrVec` — Default: 60 (set to 0 to disable caching)
@@ -2969,33 +3083,33 @@
 -  `visit_str` function L92-98 — `(self, value: &str) -> Result<Self::Value, E>` — Default: 60 (set to 0 to disable caching)
 -  `visit_seq` function L100-109 — `(self, mut seq: A) -> Result<Self::Value, A::Error>` — Default: 60 (set to 0 to disable caching)
 -  `DEFAULT_SETTINGS` variable L116 — `: &str` — Default: 60 (set to 0 to disable caching)
--  `default_log_format` function L231-233 — `() -> String` — Default: 60 (set to 0 to disable caching)
--  `Telemetry` type L280-316 — `= Telemetry` — Default: 60 (set to 0 to disable caching)
--  `default_otlp_endpoint` function L318-320 — `() -> String` — Default: 60 (set to 0 to disable caching)
--  `default_service_name` function L322-324 — `() -> String` — Default: 60 (set to 0 to disable caching)
--  `default_sampling_rate` function L326-328 — `() -> f64` — Default: 60 (set to 0 to disable caching)
--  `PAK` type L351-361 — `= PAK` — Default: 60 (set to 0 to disable caching)
--  `Settings` type L363-393 — `= Settings` — Default: 60 (set to 0 to disable caching)
--  `DynamicConfig` type L419-442 — `= DynamicConfig` — Default: 60 (set to 0 to disable caching)
--  `ReloadableConfig` type L488-693 — `= ReloadableConfig` — Default: 60 (set to 0 to disable caching)
--  `tests` module L696-1041 — `-` — Default: 60 (set to 0 to disable caching)
--  `test_settings_default_values` function L706-715 — `()` — Test the creation of Settings with default values
--  `test_telemetry_default_values` function L718-726 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_telemetry_for_broker_no_overrides` function L729-746 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_telemetry_for_broker_full_overrides` function L749-771 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_telemetry_for_broker_partial_overrides` function L774-796 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_telemetry_for_agent_no_overrides` function L799-816 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_telemetry_for_agent_full_overrides` function L819-841 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_telemetry_broker_and_agent_independent` function L844-881 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_telemetry_override_enabled_false_overrides_base_true` function L884-905 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_telemetry_sampling_rate_extremes` function L908-930 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_reloadable_config_creation` function L937-950 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_dynamic_config_from_settings` function L953-964 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_reloadable_config_accessors_with_defaults` function L967-977 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_reloadable_config_dynamic_snapshot` function L980-992 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_reloadable_config_reload_no_changes` function L995-1005 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_reloadable_config_is_clone` function L1008-1014 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_reloadable_config_thread_safety` function L1017-1040 — `()` — Default: 60 (set to 0 to disable caching)
+-  `default_log_format` function L237-239 — `() -> String` — Default: 60 (set to 0 to disable caching)
+-  `Telemetry` type L286-322 — `= Telemetry` — Default: 60 (set to 0 to disable caching)
+-  `default_otlp_endpoint` function L324-326 — `() -> String` — Default: 60 (set to 0 to disable caching)
+-  `default_service_name` function L328-330 — `() -> String` — Default: 60 (set to 0 to disable caching)
+-  `default_sampling_rate` function L332-334 — `() -> f64` — Default: 60 (set to 0 to disable caching)
+-  `PAK` type L357-367 — `= PAK` — Default: 60 (set to 0 to disable caching)
+-  `Settings` type L369-399 — `= Settings` — Default: 60 (set to 0 to disable caching)
+-  `DynamicConfig` type L425-448 — `= DynamicConfig` — Default: 60 (set to 0 to disable caching)
+-  `ReloadableConfig` type L494-699 — `= ReloadableConfig` — Default: 60 (set to 0 to disable caching)
+-  `tests` module L702-1047 — `-` — Default: 60 (set to 0 to disable caching)
+-  `test_settings_default_values` function L712-721 — `()` — Test the creation of Settings with default values
+-  `test_telemetry_default_values` function L724-732 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_telemetry_for_broker_no_overrides` function L735-752 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_telemetry_for_broker_full_overrides` function L755-777 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_telemetry_for_broker_partial_overrides` function L780-802 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_telemetry_for_agent_no_overrides` function L805-822 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_telemetry_for_agent_full_overrides` function L825-847 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_telemetry_broker_and_agent_independent` function L850-887 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_telemetry_override_enabled_false_overrides_base_true` function L890-911 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_telemetry_sampling_rate_extremes` function L914-936 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_reloadable_config_creation` function L943-956 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_dynamic_config_from_settings` function L959-970 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_reloadable_config_accessors_with_defaults` function L973-983 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_reloadable_config_dynamic_snapshot` function L986-998 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_reloadable_config_reload_no_changes` function L1001-1011 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_reloadable_config_is_clone` function L1014-1020 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_reloadable_config_thread_safety` function L1023-1046 — `()` — Default: 60 (set to 0 to disable caching)
 
 #### crates/brokkr-utils/src/lib.rs
 
