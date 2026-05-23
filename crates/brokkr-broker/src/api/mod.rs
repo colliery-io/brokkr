@@ -157,6 +157,7 @@
 pub mod v1;
 use crate::dal::DAL;
 use crate::metrics;
+use crate::ws::{internal_routes, ConnectionRegistry};
 use axum::{
     body::Body,
     extract::Request,
@@ -167,6 +168,7 @@ use axum::{
 };
 use brokkr_utils::config::{Cors, ReloadableConfig};
 use hyper::StatusCode;
+use std::sync::Arc;
 use std::time::Instant;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
@@ -197,8 +199,11 @@ pub fn configure_api_routes(
         .allow_methods(Any)
         .allow_headers(Any);
 
+    let ws_registry: Arc<ConnectionRegistry> = ConnectionRegistry::new();
+
     Router::new()
         .merge(v1::routes(dal.clone(), cors_config, reloadable_config))
+        .merge(internal_routes(dal.clone(), ws_registry))
         .route("/healthz", get(healthz))
         .route("/readyz", get(readyz))
         .route("/metrics", get(metrics_handler))

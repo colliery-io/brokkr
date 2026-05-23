@@ -15,13 +15,14 @@ path = "src/bin.rs"
 # Internal crates
 brokkr-models = { path = "../brokkr-models" }
 brokkr-utils = { path = "../brokkr-utils" }
+brokkr-wire = { path = "../brokkr-wire" }
 
 # OpenAPI dependencies
 utoipa = { workspace = true, features = ["axum_extras", "uuid", "chrono"] }
 utoipa-swagger-ui = { workspace = true, features = ["axum"] }
 
 # External dependencies
-axum = { workspace = true }
+axum = { workspace = true, features = ["ws"] }
 hex = { workspace = true }
 reqwest = { workspace = true }
 chrono = { workspace = true }
@@ -66,3 +67,8 @@ futures = "0.3"
 
 # File watching for config hot-reload
 notify = "7"
+
+[dev-dependencies]
+# Real-TCP WebSocket client for /internal/ws/agent integration tests (WS-02).
+tokio-tungstenite = "0.24"
+brokkr-wire = { path = "../brokkr-wire" }
