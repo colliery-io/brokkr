@@ -37,6 +37,16 @@ export type StackTemplate = components["schemas"]["StackTemplate"];
 export type AuthResponse = components["schemas"]["AuthResponse"];
 export type WebhookResponse = components["schemas"]["WebhookResponse"];
 export type PendingWebhookDelivery = components["schemas"]["PendingWebhookDelivery"];
+// WS-10 / WS-13 — internal broker↔agent channel surface (BROKKR-I-0019).
+// These are the response shapes the ergonomic wrapper methods return.
+export type K8sEventHistoryResponse =
+  components["schemas"]["K8sEventHistoryResponse"];
+export type PodLogHistoryResponse =
+  components["schemas"]["PodLogHistoryResponse"];
+export type RetentionInfo = components["schemas"]["RetentionInfo"];
+export type WsConnectionsResponse =
+  components["schemas"]["WsConnectionsResponse"];
+export type WsConnectionInfo = components["schemas"]["WsConnectionInfo"];
 
 /**
  * Construct a typed openapi-fetch client for the Brokkr broker API.

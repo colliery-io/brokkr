@@ -35,8 +35,12 @@ use std::time::Duration;
 use progenitor_client::Error as RawError;
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 
-use crate::types::ErrorResponse;
+use crate::types::{
+    ErrorResponse, K8sEventHistoryResponse, PodLogHistoryResponse, WsConnectionsResponse,
+};
 use crate::Client;
+use chrono::{DateTime, Utc};
+use uuid::Uuid;
 
 /// Top-level error returned by every wrapper method. Mirrors
 /// [`progenitor_client::Error`] but specialises `E` to [`ErrorResponse`] so
@@ -248,6 +252,65 @@ impl BrokkrClient {
         &self.inner
     }
 
+    // -------------------------------------------------------------------
+    // Ergonomic methods for the internal-WS-channel surface
+    // (BROKKR-I-0019). These wrap the generated builders so callers can
+    // skip the `.api().<op>().<param>().<param>().send().await` chain
+    // for the most common cases. The retention metadata is part of the
+    // typed response — callers should surface it (or at least not hide
+    // it) per ADR-0008 / project_log_retention_stance.
+    // -------------------------------------------------------------------
+
+    /// Paginated kube-event history for a stack, scoped to the 6h
+    /// retention window. The response carries the `retention` block —
+    /// surface it in any UI built on this SDK so users aren't surprised
+    /// by missing rows.
+    pub async fn list_telemetry_events(
+        &self,
+        stack_id: Uuid,
+        since: Option<DateTime<Utc>>,
+        limit: Option<i64>,
+    ) -> Result<K8sEventHistoryResponse, BrokkrError> {
+        let mut req = self.inner.list_telemetry_events().id(stack_id);
+        if let Some(since) = since {
+            req = req.since(since);
+        }
+        if let Some(limit) = limit {
+            req = req.limit(limit);
+        }
+        let resp = req.send().await?;
+        Ok(resp.into_inner())
+    }
+
+    /// Paginated pod-log history for a stack within the 6h retention
+    /// window. See [`Self::list_telemetry_events`] for retention
+    /// semantics — same response shape modulo the row type.
+    pub async fn list_telemetry_logs(
+        &self,
+        stack_id: Uuid,
+        since: Option<DateTime<Utc>>,
+        limit: Option<i64>,
+    ) -> Result<PodLogHistoryResponse, BrokkrError> {
+        let mut req = self.inner.list_telemetry_logs().id(stack_id);
+        if let Some(since) = since {
+            req = req.since(since);
+        }
+        if let Some(limit) = limit {
+            req = req.limit(limit);
+        }
+        let resp = req.send().await?;
+        Ok(resp.into_inner())
+    }
+
+    /// Snapshot of currently-connected agents on the internal WS
+    /// channel (admin-only). Useful for fleet diagnostics — for
+    /// continuous monitoring prefer scraping the
+    /// `brokkr_ws_connected_agents` Prometheus gauge.
+    pub async fn list_ws_connections(&self) -> Result<WsConnectionsResponse, BrokkrError> {
+        let resp = self.inner.list_ws_connections().send().await?;
+        Ok(resp.into_inner())
+    }
+
     /// Run `op` with exponential backoff on retryable errors.
     ///
     /// The closure is invoked at most `max_retries + 1` times (configured via
@@ -387,6 +450,32 @@ mod tests {
         assert!(result.is_err());
         // Initial attempt + 2 retries = 3 calls total.
         assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 3);
+    }
+
+    // -----------------------------------------------------------------
+    // WS-10 / WS-13 ergonomic-method surface (BROKKR-I-0019).
+    //
+    // We don't run a real broker here; the contract under test is that
+    // the method exists with the right signature and returns the
+    // declared response type. End-to-end coverage is in
+    // `crates/brokkr-broker/tests/integration/api/ws.rs`.
+    // -----------------------------------------------------------------
+    #[test]
+    fn ws_wrapper_methods_compile_with_expected_signatures() {
+        fn _assert_signatures() {
+            async fn _types_check() {
+                let c = BrokkrClient::builder("http://localhost:3000/api/v1")
+                    .build()
+                    .unwrap();
+                let id = uuid::Uuid::nil();
+                let _ev: K8sEventHistoryResponse =
+                    c.list_telemetry_events(id, None, None).await.unwrap();
+                let _lo: PodLogHistoryResponse =
+                    c.list_telemetry_logs(id, None, Some(100)).await.unwrap();
+                let _co: WsConnectionsResponse = c.list_ws_connections().await.unwrap();
+            }
+            let _ = _types_check;
+        }
     }
 
     #[tokio::test(start_paused = true)]

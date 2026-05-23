@@ -209,3 +209,107 @@ describe("BrokkrClient.retry", () => {
     );
   });
 });
+
+// =============================================================================
+// WS-10 / WS-13 ergonomic wrappers
+// =============================================================================
+
+describe("BrokkrClient.listTelemetryEvents", () => {
+  it("calls the spec path with the right id and returns the parsed body", async () => {
+    const body = {
+      retention: {
+        retention_ceiling_seconds: 21600,
+        effective_retention_seconds: 21600,
+        long_term_sink_hint: "ship to Datadog",
+      },
+      events: [],
+    };
+    const { fetch: scripted, calls } = scriptedFetch([{ status: 200, body }]);
+    vi.stubGlobal("fetch", scripted);
+    const c = new BrokkrClient({ baseUrl });
+    const stack = "11111111-1111-1111-1111-111111111111";
+    const out = await c.listTelemetryEvents(stack);
+    expect(out.retention.retention_ceiling_seconds).toBe(21600);
+    expect(calls[0]!.url).toContain(`/stacks/${stack}/events`);
+  });
+
+  it("threads `since` and `limit` into the query string", async () => {
+    const body = {
+      retention: {
+        retention_ceiling_seconds: 21600,
+        effective_retention_seconds: 21600,
+        long_term_sink_hint: "ship to Datadog",
+      },
+      events: [],
+    };
+    const { fetch: scripted, calls } = scriptedFetch([{ status: 200, body }]);
+    vi.stubGlobal("fetch", scripted);
+    const c = new BrokkrClient({ baseUrl });
+    await c.listTelemetryEvents("22222222-2222-2222-2222-222222222222", {
+      since: "2026-05-23T00:00:00Z",
+      limit: 42,
+    });
+    const url = new URL(calls[0]!.url);
+    expect(url.searchParams.get("since")).toBe("2026-05-23T00:00:00Z");
+    expect(url.searchParams.get("limit")).toBe("42");
+  });
+});
+
+describe("BrokkrClient.listTelemetryLogs", () => {
+  it("calls /stacks/{id}/logs and returns the parsed body", async () => {
+    const body = {
+      retention: {
+        retention_ceiling_seconds: 21600,
+        effective_retention_seconds: 21600,
+        long_term_sink_hint: "ship to Datadog",
+      },
+      lines: [],
+    };
+    const { fetch: scripted, calls } = scriptedFetch([{ status: 200, body }]);
+    vi.stubGlobal("fetch", scripted);
+    const c = new BrokkrClient({ baseUrl });
+    const stack = "33333333-3333-3333-3333-333333333333";
+    const out = await c.listTelemetryLogs(stack);
+    expect(out.lines).toEqual([]);
+    expect(calls[0]!.url).toContain(`/stacks/${stack}/logs`);
+  });
+});
+
+describe("BrokkrClient.listWsConnections", () => {
+  it("calls /admin/ws/connections and returns the parsed body", async () => {
+    const body = {
+      connected_agents: 0,
+      connections: [],
+      live_subscribers: 0,
+    };
+    const { fetch: scripted, calls } = scriptedFetch([{ status: 200, body }]);
+    vi.stubGlobal("fetch", scripted);
+    const c = new BrokkrClient({ baseUrl });
+    const out = await c.listWsConnections();
+    expect(out.connected_agents).toBe(0);
+    expect(calls[0]!.url).toContain("/admin/ws/connections");
+  });
+});
+
+describe("BrokkrClient.liveSubscriptionUrl", () => {
+  it("swaps http://→ws:// and appends the full /api/v1/.../live path", () => {
+    const c = new BrokkrClient({ baseUrl: "http://broker.test:3000" });
+    expect(c.liveSubscriptionUrl("abc-123")).toBe(
+      "ws://broker.test:3000/api/v1/stacks/abc-123/live",
+    );
+  });
+
+  it("swaps https://→wss://", () => {
+    const c = new BrokkrClient({ baseUrl: "https://broker.example.com" });
+    expect(c.liveSubscriptionUrl("xyz")).toBe(
+      "wss://broker.example.com/api/v1/stacks/xyz/live",
+    );
+  });
+
+  it("tolerates a trailing slash on the base URL", () => {
+    const c = new BrokkrClient({ baseUrl: "http://broker.test:3000/" });
+    expect(c.liveSubscriptionUrl("abc")).toBe(
+      "ws://broker.test:3000/api/v1/stacks/abc/live",
+    );
+  });
+});
