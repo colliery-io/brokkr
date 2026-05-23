@@ -11,8 +11,8 @@
 
 use once_cell::sync::Lazy;
 use prometheus::{
-    CounterVec, Encoder, GaugeVec, HistogramOpts, HistogramVec, IntGauge, Opts, Registry,
-    TextEncoder,
+    CounterVec, Encoder, GaugeVec, HistogramOpts, HistogramVec, IntCounter, IntCounterVec, IntGauge,
+    Opts, Registry, TextEncoder,
 };
 
 /// Global Prometheus registry for all broker metrics
@@ -132,6 +132,95 @@ pub static DEPLOYMENT_OBJECTS_TOTAL: Lazy<IntGauge> = Lazy::new(|| {
     gauge
 });
 
+// =============================================================================
+// WS-13: internal WS channel + telemetry metrics (BROKKR-I-0019).
+//
+// Cardinality discipline: per-agent / per-stack labels are kept off the
+// hot-path counters (messages, dropped log lines aggregate to a single
+// stream — labels would explode at fleet scale). Per-agent visibility
+// lives in the diagnostics endpoint, not in Prometheus.
+// =============================================================================
+
+/// Currently-connected agents on the internal WS channel.
+pub static WS_CONNECTED_AGENTS: Lazy<IntGauge> = Lazy::new(|| {
+    let opts = Opts::new(
+        "brokkr_ws_connected_agents",
+        "Currently-connected agents on the internal WS channel",
+    );
+    let g = IntGauge::with_opts(opts).expect("ws connected gauge");
+    REGISTRY.register(Box::new(g.clone())).expect("register ws_connected_agents");
+    g
+});
+
+/// WS frames flowing in/out of the broker, labelled by direction and type.
+/// direction ∈ {in,out}; type ∈ wire enum variant snake_case.
+pub static WS_MESSAGES_TOTAL: Lazy<IntCounterVec> = Lazy::new(|| {
+    let opts = Opts::new(
+        "brokkr_ws_messages_total",
+        "WS messages by direction (in/out) and wire-enum variant type",
+    );
+    let c = IntCounterVec::new(opts, &["direction", "type"]).expect("ws messages counter");
+    REGISTRY.register(Box::new(c.clone())).expect("register ws_messages_total");
+    c
+});
+
+/// Subscribers on the live fan-out hub (WS-11), aggregated across stacks.
+pub static WS_LIVE_SUBSCRIBERS: Lazy<IntGauge> = Lazy::new(|| {
+    let opts = Opts::new(
+        "brokkr_ws_live_subscribers",
+        "Total subscribers on the live fan-out hub across all stacks",
+    );
+    let g = IntGauge::with_opts(opts).expect("ws subs gauge");
+    REGISTRY.register(Box::new(g.clone())).expect("register ws_live_subscribers");
+    g
+});
+
+/// Eviction passes executed by the retention worker (WS-09).
+pub static WS_LOG_EVICTION_RUNS_TOTAL: Lazy<IntCounter> = Lazy::new(|| {
+    let opts = Opts::new(
+        "brokkr_ws_log_eviction_runs_total",
+        "Eviction passes executed by the 6h retention worker",
+    );
+    let c = IntCounter::with_opts(opts).expect("eviction counter");
+    REGISTRY.register(Box::new(c.clone())).expect("register ws_log_eviction_runs_total");
+    c
+});
+
+/// Total telemetry rows evicted (events + logs). Per-table breakdown via
+/// `table` label.
+pub static WS_TELEMETRY_EVICTED_TOTAL: Lazy<IntCounterVec> = Lazy::new(|| {
+    let opts = Opts::new(
+        "brokkr_ws_telemetry_evicted_total",
+        "Telemetry rows evicted by the retention worker, by table",
+    );
+    let c = IntCounterVec::new(opts, &["table"]).expect("evicted counter");
+    REGISTRY.register(Box::new(c.clone())).expect("register ws_telemetry_evicted_total");
+    c
+});
+
+/// Convenience accessors keep call sites short and avoid the static names
+/// leaking into call-site readability.
+
+pub fn ws_connected_agents() -> &'static IntGauge {
+    &WS_CONNECTED_AGENTS
+}
+
+pub fn ws_messages_total(direction: &str, variant: &str) -> prometheus::IntCounter {
+    WS_MESSAGES_TOTAL.with_label_values(&[direction, variant])
+}
+
+pub fn ws_live_subscribers() -> &'static IntGauge {
+    &WS_LIVE_SUBSCRIBERS
+}
+
+pub fn ws_log_eviction_runs_total() -> &'static IntCounter {
+    &WS_LOG_EVICTION_RUNS_TOTAL
+}
+
+pub fn ws_telemetry_evicted_total(table: &str) -> prometheus::IntCounter {
+    WS_TELEMETRY_EVICTED_TOTAL.with_label_values(&[table])
+}
+
 /// Initializes all metrics by forcing lazy static evaluation
 ///
 /// This ensures all metric definitions are registered with the registry
@@ -142,6 +231,11 @@ pub fn init() {
     let _ = &*HTTP_REQUEST_DURATION_SECONDS;
     let _ = &*DATABASE_QUERIES_TOTAL;
     let _ = &*DATABASE_QUERY_DURATION_SECONDS;
+    let _ = &*WS_CONNECTED_AGENTS;
+    let _ = &*WS_MESSAGES_TOTAL;
+    let _ = &*WS_LIVE_SUBSCRIBERS;
+    let _ = &*WS_LOG_EVICTION_RUNS_TOTAL;
+    let _ = &*WS_TELEMETRY_EVICTED_TOTAL;
     let _ = &*ACTIVE_AGENTS;
     let _ = &*AGENT_HEARTBEAT_AGE_SECONDS;
     let _ = &*STACKS_TOTAL;

@@ -81,6 +81,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/ws/connections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_ws_connections"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/agent-events": {
         parameters: {
             query?: never;
@@ -2484,6 +2500,22 @@ export interface components {
             } | null;
             labels?: string[] | null;
         };
+        WsConnectionInfo: {
+            /** Format: uuid */
+            agent_id: string;
+            /** Format: date-time */
+            connected_since: string;
+            /** Format: int64 */
+            messages_in: number;
+            /** Format: int64 */
+            messages_out: number;
+        };
+        WsConnectionsResponse: {
+            connected_agents: number;
+            connections: components["schemas"]["WsConnectionInfo"][];
+            /** @description Aggregated live-subscriber count across all stacks (WS-11). */
+            live_subscribers: number;
+        };
     };
     responses: never;
     parameters: never;
@@ -2612,6 +2644,35 @@ export interface operations {
             };
             /** @description Failed to reload configuration */
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_ws_connections: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current WS connections snapshot */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WsConnectionsResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

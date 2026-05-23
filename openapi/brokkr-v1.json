@@ -2606,6 +2606,60 @@
           }
         },
         "type": "object"
+      },
+      "WsConnectionInfo": {
+        "properties": {
+          "agent_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "connected_since": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "messages_in": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "messages_out": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "agent_id",
+          "connected_since",
+          "messages_in",
+          "messages_out"
+        ],
+        "type": "object"
+      },
+      "WsConnectionsResponse": {
+        "properties": {
+          "connected_agents": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "connections": {
+            "items": {
+              "$ref": "#/components/schemas/WsConnectionInfo"
+            },
+            "type": "array"
+          },
+          "live_subscribers": {
+            "description": "Aggregated live-subscriber count across all stacks (WS-11).",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "connected_agents",
+          "connections",
+          "live_subscribers"
+        ],
+        "type": "object"
       }
     },
     "securitySchemes": {
@@ -2850,6 +2904,41 @@
         "summary": "Reloads the broker configuration from disk.",
         "tags": [
           "Admin"
+        ]
+      }
+    },
+    "/admin/ws/connections": {
+      "get": {
+        "operationId": "list_ws_connections",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WsConnectionsResponse"
+                }
+              }
+            },
+            "description": "Current WS connections snapshot"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          {
+            "admin_pak": []
+          }
+        ],
+        "tags": [
+          "admin"
         ]
       }
     },

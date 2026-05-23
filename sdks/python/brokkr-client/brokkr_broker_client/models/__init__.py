@@ -75,6 +75,8 @@ from .work_order import WorkOrder
 from .work_order_log import WorkOrderLog
 from .work_order_targeting import WorkOrderTargeting
 from .work_order_targeting_annotations_type_0 import WorkOrderTargetingAnnotationsType0
+from .ws_connection_info import WsConnectionInfo
+from .ws_connections_response import WsConnectionsResponse
 
 __all__ = (
     "AddAnnotationRequest",
@@ -152,4 +154,6 @@ __all__ = (
     "WorkOrderLog",
     "WorkOrderTargeting",
     "WorkOrderTargetingAnnotationsType0",
+    "WsConnectionInfo",
+    "WsConnectionsResponse",
 )

@@ -21,3 +21,5 @@
 /Users/dstorey/Desktop/brokkr/crates/brokkr-agent/src/kube_events.rs
 /Users/dstorey/Desktop/brokkr/crates/brokkr-agent/src/lib.rs
 /Users/dstorey/Desktop/brokkr/crates/brokkr-agent/src/pod_logs.rs
+/Users/dstorey/Desktop/brokkr/crates/brokkr-broker/src/metrics.rs
+/Users/dstorey/Desktop/brokkr/crates/brokkr-broker/src/api/v1/admin.rs

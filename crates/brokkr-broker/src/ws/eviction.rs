@@ -27,6 +27,7 @@ use tokio::task::JoinHandle;
 use tracing::{debug, warn};
 
 use crate::dal::DAL;
+use crate::metrics;
 
 /// Hard cap on retained telemetry — never configurable upward.
 pub const HARD_RETENTION_CEILING: Duration = Duration::from_secs(6 * 60 * 60);
@@ -89,15 +90,24 @@ pub fn spawn(dal: DAL, config: RetentionConfig) -> JoinHandle<()> {
 /// Synchronous single eviction pass — exposed for tests so they can call
 /// it deterministically without waiting for the interval to fire.
 pub fn run_once(dal: &DAL, config: RetentionConfig) {
+    metrics::ws_log_eviction_runs_total().inc();
     let cutoff = Utc::now() - chrono::Duration::from_std(config.retention).unwrap_or_default();
     match dal.agent_k8s_events().evict_older_than(cutoff) {
-        Ok(n) if n > 0 => debug!(rows = n, "evicted agent_k8s_events older than retention"),
-        Ok(_) => {}
+        Ok(n) => {
+            if n > 0 {
+                debug!(rows = n, "evicted agent_k8s_events older than retention");
+                metrics::ws_telemetry_evicted_total("agent_k8s_events").inc_by(n as u64);
+            }
+        }
         Err(e) => warn!(error = %e, "agent_k8s_events eviction failed"),
     }
     match dal.agent_pod_logs().evict_older_than(cutoff) {
-        Ok(n) if n > 0 => debug!(rows = n, "evicted agent_pod_logs older than retention"),
-        Ok(_) => {}
+        Ok(n) => {
+            if n > 0 {
+                debug!(rows = n, "evicted agent_pod_logs older than retention");
+                metrics::ws_telemetry_evicted_total("agent_pod_logs").inc_by(n as u64);
+            }
+        }
         Err(e) => warn!(error = %e, "agent_pod_logs eviction failed"),
     }
 }

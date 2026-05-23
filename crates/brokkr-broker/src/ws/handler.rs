@@ -47,6 +47,7 @@ use tracing::{debug, info, warn};
 
 use crate::api::v1::middleware::{self as v1_middleware, AuthPayload};
 use crate::dal::DAL;
+use crate::metrics;
 
 use super::broadcaster::LiveBroadcaster;
 use super::registry::{ConnectionHandle, ConnectionRegistry};
@@ -141,6 +142,7 @@ async fn run_connection(
         control_tx,
         telemetry_tx,
     });
+    metrics::ws_connected_agents().inc();
 
     let (sender, receiver) = socket.split();
 
@@ -156,6 +158,7 @@ async fn run_connection(
     }
 
     registry.unregister_if_matches(agent_id, connected_since);
+    metrics::ws_connected_agents().dec();
     info!(%agent_id, "agent WS connection closed");
 }
 
@@ -203,6 +206,7 @@ fn dispatch_uplink(
     dal: &DAL,
     broadcaster: &LiveBroadcaster,
 ) {
+    metrics::ws_messages_total("in", ws_variant_name(&msg)).inc();
     match msg {
         WsMessage::Heartbeat(_) => {
             if let Err(e) = dal.agents().record_heartbeat(agent_id) {
@@ -313,6 +317,23 @@ fn dispatch_uplink(
     }
 }
 
+/// Snake_case tag matching the wire enum's serde rename. Kept in sync
+/// by hand — same source-of-truth as the golden fixture in
+/// `brokkr-wire`.
+fn ws_variant_name(msg: &WsMessage) -> &'static str {
+    match msg {
+        WsMessage::WorkOrder(_) => "work_order",
+        WsMessage::TargetChanged(_) => "target_changed",
+        WsMessage::StackChanged(_) => "stack_changed",
+        WsMessage::Heartbeat(_) => "heartbeat",
+        WsMessage::AgentEvent(_) => "agent_event",
+        WsMessage::AgentHealth(_) => "agent_health",
+        WsMessage::K8sEvent(_) => "k8s_event",
+        WsMessage::PodLogLine(_) => "pod_log_line",
+        WsMessage::LogGap(_) => "log_gap",
+    }
+}
+
 async fn writer_task(
     mut sender: futures::stream::SplitSink<WebSocket, Message>,
     mut control_rx: mpsc::Receiver<WsMessage>,
@@ -344,10 +365,12 @@ async fn writer_task(
             }
         };
 
+        let variant = ws_variant_name(&msg);
         if let Err(e) = sender.send(Message::Text(text)).await {
             debug!(error = %e, "WS send failed; closing connection");
             return;
         }
         messages_out.fetch_add(1, Ordering::Relaxed);
+        metrics::ws_messages_total("out", variant).inc();
     }
 }

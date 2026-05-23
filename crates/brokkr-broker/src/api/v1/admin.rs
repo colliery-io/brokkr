@@ -116,6 +116,68 @@ pub fn routes() -> Router<DAL> {
     Router::new()
         .route("/admin/config/reload", post(reload_config))
         .route("/admin/audit-logs", get(list_audit_logs))
+        // WS-13: live snapshot of agents currently on the internal
+        // WS channel. Admin-only.
+        .route("/admin/ws/connections", get(list_ws_connections))
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct WsConnectionInfo {
+    pub agent_id: Uuid,
+    pub connected_since: DateTime<Utc>,
+    pub messages_in: u64,
+    pub messages_out: u64,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct WsConnectionsResponse {
+    pub connected_agents: usize,
+    pub connections: Vec<WsConnectionInfo>,
+    /// Aggregated live-subscriber count across all stacks (WS-11).
+    pub live_subscribers: usize,
+}
+
+#[utoipa::path(
+    get,
+    path = "/admin/ws/connections",
+    tag = "admin",
+    responses(
+        (status = 200, description = "Current WS connections snapshot", body = WsConnectionsResponse),
+        (status = 403, description = "Forbidden", body = ErrorResponse),
+    ),
+    security(("admin_pak" = []))
+)]
+pub async fn list_ws_connections(
+    Extension(auth): Extension<AuthPayload>,
+    Extension(registry): Extension<std::sync::Arc<crate::ws::ConnectionRegistry>>,
+    Extension(broadcaster): Extension<std::sync::Arc<crate::ws::LiveBroadcaster>>,
+) -> Result<Json<WsConnectionsResponse>, ApiError> {
+    if !auth.admin {
+        return Err(ApiError::forbidden(
+            "admin_required",
+            "admin access required",
+        ));
+    }
+    let snapshot = registry.snapshot();
+    let connections = snapshot
+        .into_iter()
+        .map(|c| WsConnectionInfo {
+            agent_id: c.agent_id,
+            connected_since: c.connected_since,
+            messages_in: c.messages_in,
+            messages_out: c.messages_out,
+        })
+        .collect::<Vec<_>>();
+    let body = WsConnectionsResponse {
+        connected_agents: connections.len(),
+        connections,
+        live_subscribers: broadcaster.subscriber_count(),
+    };
+    // Side-effect: keep the live-subscribers gauge fresh on each poll.
+    // It's also updated lazily on the next message; this just makes it
+    // observable without traffic.
+    crate::metrics::ws_live_subscribers().set(body.live_subscribers as i64);
+    Ok(Json(body))
 }
 
 /// Reloads the broker configuration from disk.

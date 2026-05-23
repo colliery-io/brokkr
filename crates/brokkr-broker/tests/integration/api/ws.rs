@@ -598,6 +598,88 @@ async fn ws_uplink_persists_heartbeat_event_and_health() {
 }
 
 // =============================================================================
+// WS-13: diagnostics endpoint
+// =============================================================================
+
+#[tokio::test]
+async fn admin_ws_connections_endpoint_reports_live_state() {
+    use reqwest::Client;
+
+    let fixture = TestFixture::new();
+    let (addr, registry) = spawn_full_broker(&fixture).await;
+    let http = Client::new();
+    let base = format!("http://{}", addr);
+
+    // Baseline: no connections, no subscribers.
+    let resp: serde_json::Value = http
+        .get(format!("{base}/api/v1/admin/ws/connections"))
+        .header("Authorization", format!("Bearer {}", fixture.admin_pak))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(resp["connected_agents"], 0);
+    assert_eq!(resp["live_subscribers"], 0);
+
+    // Connect an agent; counter should reflect it.
+    let agent = fixture.create_test_agent("ws13".into(), "cluster".into());
+    let (agent_pak, agent_hash) = pak::create_pak().unwrap();
+    fixture
+        .dal
+        .agents()
+        .update_pak_hash(agent.id, agent_hash)
+        .unwrap();
+    let req = ws_request_with_pak(&ws_url(addr), &agent_pak);
+    let (_socket, _resp) = tokio_tungstenite::connect_async(req).await.unwrap();
+    tokio::time::timeout(
+        std::time::Duration::from_secs(2),
+        wait_for_connection(&registry, agent.id),
+    )
+    .await
+    .unwrap();
+
+    let resp: serde_json::Value = http
+        .get(format!("{base}/api/v1/admin/ws/connections"))
+        .header("Authorization", format!("Bearer {}", fixture.admin_pak))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(resp["connected_agents"], 1);
+    let conns = resp["connections"].as_array().unwrap();
+    assert_eq!(conns[0]["agent_id"], agent.id.to_string());
+}
+
+#[tokio::test]
+async fn admin_ws_connections_endpoint_rejects_non_admin() {
+    use reqwest::Client;
+    let fixture = TestFixture::new();
+    let (addr, _registry) = spawn_full_broker(&fixture).await;
+    let http = Client::new();
+    let base = format!("http://{}", addr);
+
+    let agent = fixture.create_test_agent("ws13 noadmin".into(), "cluster".into());
+    let (agent_pak, agent_hash) = pak::create_pak().unwrap();
+    fixture
+        .dal
+        .agents()
+        .update_pak_hash(agent.id, agent_hash)
+        .unwrap();
+
+    let resp = http
+        .get(format!("{base}/api/v1/admin/ws/connections"))
+        .header("Authorization", format!("Bearer {}", agent_pak))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 403);
+}
+
+// =============================================================================
 // WS-11: live fan-out subscription
 // =============================================================================
 

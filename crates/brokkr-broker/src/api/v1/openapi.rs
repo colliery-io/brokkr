@@ -4,7 +4,10 @@
  * See LICENSE file in the project root for full license text.
  */
 
-use crate::api::v1::admin::{AuditLogListResponse, ConfigChangeInfo, ConfigReloadResponse};
+use crate::api::v1::admin::{
+    AuditLogListResponse, ConfigChangeInfo, ConfigReloadResponse, WsConnectionInfo,
+    WsConnectionsResponse,
+};
 use crate::api::v1::diagnostics::{
     CreateDiagnosticRequest, DiagnosticResponse, SubmitDiagnosticResult,
 };
@@ -158,6 +161,7 @@ use utoipa_swagger_ui::SwaggerUi;
         webhooks::report_delivery_result,
         admin::reload_config,
         admin::list_audit_logs,
+        admin::list_ws_connections,
     ),
     components(
         schemas(
@@ -219,6 +223,8 @@ use utoipa_swagger_ui::SwaggerUi;
             K8sEventHistoryResponse,
             PodLogHistoryResponse,
             RetentionInfo,
+            WsConnectionInfo,
+            WsConnectionsResponse,
             NewAgentEvent,
             StackLabel,
             NewStackLabel,
