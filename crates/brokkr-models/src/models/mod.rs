@@ -6,7 +6,9 @@
 
 pub mod agent_annotations;
 pub mod agent_events;
+pub mod agent_k8s_events;
 pub mod agent_labels;
+pub mod agent_pod_logs;
 pub mod agent_targets;
 pub mod agents;
 pub mod audit_logs;

@@ -157,7 +157,7 @@
 pub mod v1;
 use crate::dal::DAL;
 use crate::metrics;
-use crate::ws::{internal_routes, ConnectionRegistry};
+use crate::ws::{internal_routes, spawn_eviction, ConnectionRegistry, RetentionConfig};
 use axum::{
     body::Body,
     extract::Request,
@@ -200,6 +200,12 @@ pub fn configure_api_routes(
         .allow_headers(Any);
 
     let ws_registry: Arc<ConnectionRegistry> = ConnectionRegistry::new();
+
+    // Continuous eviction for the agent telemetry buffers. Hard 6h cap
+    // per project_log_retention_stance; the worker is intentionally
+    // fire-and-forget — production drops the JoinHandle and it runs for
+    // the process lifetime.
+    let _eviction_handle = spawn_eviction(dal.clone(), RetentionConfig::default_policy());
 
     Router::new()
         .merge(v1::routes(dal.clone(), cors_config, reloadable_config))

@@ -4,3 +4,13 @@
 /Users/dstorey/Desktop/brokkr/crates/brokkr-agent/src/cli/commands.rs
 /Users/dstorey/Desktop/brokkr/crates/brokkr-agent/tests/integration/broker.rs
 /Users/dstorey/Desktop/brokkr/crates/brokkr-broker/tests/integration/api/ws.rs
+/Users/dstorey/Desktop/brokkr/crates/brokkr-models/src/schema.rs
+/Users/dstorey/Desktop/brokkr/crates/brokkr-models/src/models/agent_k8s_events.rs
+/Users/dstorey/Desktop/brokkr/crates/brokkr-models/src/models/agent_pod_logs.rs
+/Users/dstorey/Desktop/brokkr/crates/brokkr-models/src/models/mod.rs
+/Users/dstorey/Desktop/brokkr/crates/brokkr-broker/src/dal/mod.rs
+/Users/dstorey/Desktop/brokkr/crates/brokkr-broker/src/dal/agent_k8s_events.rs
+/Users/dstorey/Desktop/brokkr/crates/brokkr-broker/src/dal/agent_pod_logs.rs
+/Users/dstorey/Desktop/brokkr/crates/brokkr-broker/src/ws/eviction.rs
+/Users/dstorey/Desktop/brokkr/crates/brokkr-broker/src/ws/mod.rs
+/Users/dstorey/Desktop/brokkr/crates/brokkr-broker/src/api/mod.rs

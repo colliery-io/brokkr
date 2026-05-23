@@ -102,6 +102,12 @@ use audit_logs::AuditLogsDAL;
 pub mod agent_events;
 use agent_events::AgentEventsDAL;
 
+pub mod agent_k8s_events;
+use agent_k8s_events::AgentK8sEventsDAL;
+
+pub mod agent_pod_logs;
+use agent_pod_logs::AgentPodLogsDAL;
+
 pub mod agent_labels;
 use agent_labels::AgentLabelsDAL;
 
@@ -245,6 +251,20 @@ impl DAL {
     /// An instance of AgentEventsDAL.
     pub fn agent_events(&self) -> AgentEventsDAL<'_> {
         AgentEventsDAL { dal: self }
+    }
+
+    /// Provides access to the agent kube-Events telemetry buffer
+    /// (`agent_k8s_events`). Bounded by the 6h retention ceiling enforced
+    /// in `ws::eviction`.
+    pub fn agent_k8s_events(&self) -> AgentK8sEventsDAL<'_> {
+        AgentK8sEventsDAL { dal: self }
+    }
+
+    /// Provides access to the agent pod-logs telemetry buffer
+    /// (`agent_pod_logs`). Bounded by the 6h retention ceiling enforced
+    /// in `ws::eviction`.
+    pub fn agent_pod_logs(&self) -> AgentPodLogsDAL<'_> {
+        AgentPodLogsDAL { dal: self }
     }
 
     /// Provides access to the Agent Labels Data Access Layer.

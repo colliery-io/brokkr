@@ -27,6 +27,35 @@ diesel::table! {
 }
 
 diesel::table! {
+    agent_k8s_events (id) {
+        id -> Uuid,
+        agent_id -> Uuid,
+        stack_id -> Uuid,
+        observed_at -> Timestamptz,
+        reason -> Text,
+        message -> Text,
+        event_type -> Text,
+        source -> Nullable<Text>,
+        involved_object -> Jsonb,
+        created_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    agent_pod_logs (id) {
+        id -> Uuid,
+        agent_id -> Uuid,
+        stack_id -> Uuid,
+        namespace -> Text,
+        pod -> Text,
+        container -> Text,
+        ts -> Timestamptz,
+        line -> Text,
+        created_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
     agent_events (id) {
         id -> Uuid,
         created_at -> Timestamptz,
@@ -412,7 +441,9 @@ diesel::allow_tables_to_appear_in_same_query!(
     admin_role,
     agent_annotations,
     agent_events,
+    agent_k8s_events,
     agent_labels,
+    agent_pod_logs,
     agent_targets,
     agents,
     app_initialization,

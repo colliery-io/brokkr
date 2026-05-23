@@ -15,10 +15,12 @@
 //! spec and is not exposed via the generated SDKs. See [[BROKKR-A-0008]] and
 //! [[BROKKR-I-0019]] in `.metis/`.
 
+pub mod eviction;
 pub mod handler;
 pub mod push;
 pub mod registry;
 
+pub use eviction::{spawn as spawn_eviction, RetentionConfig, HARD_RETENTION_CEILING};
 pub use handler::{internal_routes, INTERNAL_WS_PATH};
 pub use push::{push_stack_changed_to_targets, push_target_changed, push_work_order};
 pub use registry::{ConnectionHandle, ConnectionInfo, ConnectionRegistry, SendError};

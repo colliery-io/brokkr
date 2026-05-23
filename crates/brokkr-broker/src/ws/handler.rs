@@ -36,6 +36,8 @@ use axum::{
     Router,
 };
 use brokkr_models::models::agent_events::NewAgentEvent;
+use brokkr_models::models::agent_k8s_events::NewAgentK8sEvent;
+use brokkr_models::models::agent_pod_logs::NewAgentPodLog;
 use brokkr_models::models::deployment_health::NewDeploymentHealth;
 use brokkr_wire::WsMessage;
 use chrono::Utc;
@@ -229,10 +231,60 @@ fn dispatch_uplink(msg: WsMessage, agent_id: uuid::Uuid, dal: &DAL) {
                 warn!(%agent_id, error = %e, "failed to upsert WS DeploymentHealth");
             }
         }
-        // Telemetry types land in WS-09 (persistence + 6h eviction); for
-        // now they're accepted on the wire but not stored.
-        WsMessage::K8sEvent(_) | WsMessage::PodLogLine(_) | WsMessage::LogGap(_) => {
-            debug!(%agent_id, "telemetry frame received; ingestion lands in WS-09");
+        WsMessage::K8sEvent(ev) => {
+            if ev.agent_id != agent_id {
+                warn!(%agent_id, body_agent = %ev.agent_id, "dropping K8sEvent with mismatched agent_id");
+                return;
+            }
+            let involved = match serde_json::to_value(&ev.involved_object) {
+                Ok(v) => v,
+                Err(e) => {
+                    warn!(%agent_id, error = %e, "failed to encode K8sEvent involved_object");
+                    return;
+                }
+            };
+            let new = NewAgentK8sEvent {
+                agent_id,
+                stack_id: ev.stack_id,
+                observed_at: ev.observed_at,
+                reason: ev.reason,
+                message: ev.message,
+                event_type: ev.event_type,
+                source: ev.source,
+                involved_object: involved,
+            };
+            if let Err(e) = dal.agent_k8s_events().create(&new) {
+                warn!(%agent_id, error = %e, "failed to persist K8sEvent");
+            }
+        }
+        WsMessage::PodLogLine(line) => {
+            if line.agent_id != agent_id {
+                warn!(%agent_id, body_agent = %line.agent_id, "dropping PodLogLine with mismatched agent_id");
+                return;
+            }
+            let new = NewAgentPodLog {
+                agent_id,
+                stack_id: line.stack_id,
+                namespace: line.namespace,
+                pod: line.pod,
+                container: line.container,
+                ts: line.ts,
+                line: line.line,
+            };
+            if let Err(e) = dal.agent_pod_logs().create(&new) {
+                warn!(%agent_id, error = %e, "failed to persist PodLogLine");
+            }
+        }
+        WsMessage::LogGap(gap) => {
+            // Gap markers are pure metadata — we don't persist them in v1.
+            // Subscribers (WS-11) will eventually see gap markers via the
+            // live fan-out hub instead.
+            debug!(
+                %agent_id,
+                stack_id = %gap.stack_id,
+                dropped = gap.dropped_count,
+                "LogGap received (not persisted in v1)"
+            );
         }
         // Anything else is broker → agent shape; agent should never send.
         WsMessage::WorkOrder(_) | WsMessage::TargetChanged(_) | WsMessage::StackChanged(_) => {

@@ -585,6 +585,183 @@ async fn ws_uplink_persists_heartbeat_event_and_health() {
     );
 }
 
+// =============================================================================
+// WS-09: telemetry ingestion + 6h eviction
+// =============================================================================
+
+#[tokio::test]
+async fn ws_telemetry_ingestion_lands_in_agent_telemetry_tables() {
+    use brokkr_models::models::deployment_objects::NewDeploymentObject;
+    use brokkr_wire::{K8sEvent, ObjectRef, PodLogLine};
+
+    let fixture = TestFixture::new();
+    let (addr, registry) = spawn_full_broker(&fixture).await;
+
+    let agent = fixture.create_test_agent("WS-09 agent".into(), "cluster".into());
+    let (agent_pak, agent_hash) = pak::create_pak().unwrap();
+    fixture
+        .dal
+        .agents()
+        .update_pak_hash(agent.id, agent_hash)
+        .unwrap();
+
+    let stack = fixture.create_test_stack("ws09 stack".into(), None, fixture.admin_generator.id);
+    let new_obj = NewDeploymentObject::new(
+        stack.id,
+        "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: ws09\n".into(),
+        false,
+    )
+    .unwrap();
+    let _obj = fixture.dal.deployment_objects().create(&new_obj).unwrap();
+
+    let request = ws_request_with_pak(&ws_url(addr), &agent_pak);
+    let (mut socket, _resp) = tokio_tungstenite::connect_async(request).await.unwrap();
+    tokio::time::timeout(
+        std::time::Duration::from_secs(2),
+        wait_for_connection(&registry, agent.id),
+    )
+    .await
+    .unwrap();
+
+    let now = chrono::Utc::now();
+
+    // K8sEvent
+    socket
+        .send(Message::Text(
+            serde_json::to_string(&WsMessage::K8sEvent(K8sEvent {
+                agent_id: agent.id,
+                stack_id: stack.id,
+                observed_at: now,
+                reason: "Pulled".into(),
+                message: "Pulled image ws09".into(),
+                event_type: "Normal".into(),
+                source: Some("kubelet".into()),
+                involved_object: ObjectRef {
+                    api_version: "v1".into(),
+                    kind: "Pod".into(),
+                    namespace: Some("ws09".into()),
+                    name: "ws09-abc".into(),
+                    uid: None,
+                },
+            }))
+            .unwrap(),
+        ))
+        .await
+        .unwrap();
+
+    // PodLogLine
+    socket
+        .send(Message::Text(
+            serde_json::to_string(&WsMessage::PodLogLine(PodLogLine {
+                agent_id: agent.id,
+                stack_id: stack.id,
+                namespace: "ws09".into(),
+                pod: "ws09-abc".into(),
+                container: "app".into(),
+                ts: now,
+                line: "starting".into(),
+            }))
+            .unwrap(),
+        ))
+        .await
+        .unwrap();
+
+    let k8s_seen = wait_until(std::time::Duration::from_secs(2), || async {
+        fixture
+            .dal
+            .agent_k8s_events()
+            .list_for_stack(stack.id, now - chrono::Duration::seconds(60), 10)
+            .map(|rows| !rows.is_empty())
+            .unwrap_or(false)
+    })
+    .await;
+    assert!(k8s_seen, "K8sEvent over WS should land in agent_k8s_events");
+
+    let log_seen = wait_until(std::time::Duration::from_secs(2), || async {
+        fixture
+            .dal
+            .agent_pod_logs()
+            .list_for_stack(stack.id, now - chrono::Duration::seconds(60), 10)
+            .map(|rows| rows.iter().any(|r| r.line == "starting"))
+            .unwrap_or(false)
+    })
+    .await;
+    assert!(log_seen, "PodLogLine over WS should land in agent_pod_logs");
+}
+
+#[tokio::test]
+async fn eviction_worker_drops_rows_past_retention() {
+    use brokkr_broker::ws::eviction::{run_once, RetentionConfig};
+    use brokkr_models::models::agent_k8s_events::NewAgentK8sEvent;
+    use brokkr_models::models::agent_pod_logs::NewAgentPodLog;
+    use brokkr_models::models::deployment_objects::NewDeploymentObject;
+
+    let fixture = TestFixture::new();
+    let agent = fixture.create_test_agent("ws09 evict".into(), "cluster".into());
+    let stack = fixture.create_test_stack("ws09 evict stack".into(), None, fixture.admin_generator.id);
+    let new_obj = NewDeploymentObject::new(
+        stack.id,
+        "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: evict\n".into(),
+        false,
+    )
+    .unwrap();
+    let _obj = fixture.dal.deployment_objects().create(&new_obj).unwrap();
+
+    let now = chrono::Utc::now();
+    fixture
+        .dal
+        .agent_k8s_events()
+        .create(&NewAgentK8sEvent {
+            agent_id: agent.id,
+            stack_id: stack.id,
+            observed_at: now,
+            reason: "evict-me".into(),
+            message: "old".into(),
+            event_type: "Normal".into(),
+            source: None,
+            involved_object: serde_json::json!({}),
+        })
+        .unwrap();
+    fixture
+        .dal
+        .agent_pod_logs()
+        .create(&NewAgentPodLog {
+            agent_id: agent.id,
+            stack_id: stack.id,
+            namespace: "ns".into(),
+            pod: "p".into(),
+            container: "c".into(),
+            ts: now,
+            line: "evict-me".into(),
+        })
+        .unwrap();
+
+    // Manually backdate the created_at columns so the eviction worker
+    // (which keys on created_at) treats them as old.
+    use brokkr_models::schema::{agent_k8s_events, agent_pod_logs};
+    use diesel::prelude::*;
+    let conn = &mut fixture.dal.pool.get().unwrap();
+    let past = now - chrono::Duration::hours(7);
+    diesel::update(agent_k8s_events::table)
+        .set(agent_k8s_events::created_at.eq(past))
+        .execute(conn)
+        .unwrap();
+    diesel::update(agent_pod_logs::table)
+        .set(agent_pod_logs::created_at.eq(past))
+        .execute(conn)
+        .unwrap();
+
+    // Sanity: rows exist before eviction.
+    assert!(fixture.dal.agent_k8s_events().count().unwrap() >= 1);
+    assert!(fixture.dal.agent_pod_logs().count().unwrap() >= 1);
+
+    // Single eviction pass with the default (6h) retention should clear them.
+    run_once(&fixture.dal, RetentionConfig::default_policy());
+
+    assert_eq!(fixture.dal.agent_k8s_events().count().unwrap(), 0);
+    assert_eq!(fixture.dal.agent_pod_logs().count().unwrap(), 0);
+}
+
 /// Repeatedly poll `predicate` until it returns true or `timeout` elapses.
 async fn wait_until<F, Fut>(timeout: std::time::Duration, mut predicate: F) -> bool
 where
