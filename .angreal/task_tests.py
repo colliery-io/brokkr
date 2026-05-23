@@ -11,7 +11,7 @@ def get_crates():
     """Get all crates in the workspace."""
     return {
         "integration_tests": ["brokkr-agent", "brokkr-broker"],
-        "unit_tests": ["brokkr-agent", "brokkr-broker", "brokkr-models", "brokkr-utils"]
+        "unit_tests": ["brokkr-agent", "brokkr-broker", "brokkr-models", "brokkr-utils", "brokkr-wire"]
     }
 
 def run_unit_tests(crate_name: str = "", test_filter: str = ""):

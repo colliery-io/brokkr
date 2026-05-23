@@ -1,6 +1,6 @@
 # Code Index
 
-> Generated: 2026-05-22T00:48:47Z | 355 files | JavaScript, Python, Rust, TypeScript
+> Generated: 2026-05-23T02:30:22Z | 357 files | JavaScript, Python, Rust, TypeScript
 
 ## Project Structure
 
@@ -180,14 +180,19 @@
 │   │       │   ├── work_order_labels.rs
 │   │       │   └── work_orders.rs
 │   │       └── schema.rs
-│   └── brokkr-utils/
+│   ├── brokkr-utils/
+│   │   ├── src/
+│   │   │   ├── config.rs
+│   │   │   ├── lib.rs
+│   │   │   ├── logging.rs
+│   │   │   └── telemetry.rs
+│   │   └── tests/
+│   │       └── integration.rs
+│   └── brokkr-wire/
 │       ├── src/
-│       │   ├── config.rs
-│       │   ├── lib.rs
-│       │   ├── logging.rs
-│       │   └── telemetry.rs
+│       │   └── lib.rs
 │       └── tests/
-│           └── integration.rs
+│           └── golden.rs
 ├── docs/
 │   ├── mermaid-init.js
 │   └── mermaid.min.js
@@ -1003,24 +1008,24 @@
 #### crates/brokkr-broker/src/api/v1/stacks.rs
 
 - pub `routes` function L34-57 — `() -> Router<DAL>`
-- pub `list_deployment_objects` function L291-303 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
-- pub `CreateDeploymentObjectRequest` struct L310-316 — `{ yaml_content: String, is_deletion_marker: bool }` — Wire DTO for creating a deployment object via the public API.
-- pub `create_deployment_object` function L333-347 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
-- pub `list_labels` function L394-410 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
-- pub `add_label` function L428-442 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
-- pub `remove_label` function L461-476 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
-- pub `list_annotations` function L492-508 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
-- pub `add_annotation` function L526-541 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
-- pub `remove_annotation` function L560-575 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
-- pub `TemplateInstantiationRequest` struct L578-581 — `{ template_id: Uuid, parameters: serde_json::Value }`
+- pub `list_deployment_objects` function L306-318 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
+- pub `CreateDeploymentObjectRequest` struct L325-331 — `{ yaml_content: String, is_deletion_marker: bool }` — Wire DTO for creating a deployment object via the public API.
+- pub `create_deployment_object` function L348-362 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
+- pub `list_labels` function L409-425 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
+- pub `add_label` function L443-457 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
+- pub `remove_label` function L476-491 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
+- pub `list_annotations` function L507-523 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
+- pub `add_annotation` function L541-556 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
+- pub `remove_annotation` function L575-590 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
+- pub `TemplateInstantiationRequest` struct L593-596 — `{ template_id: Uuid, parameters: serde_json::Value }`
 -  `fetch_owned_stack` function L60-82 — `( dal: &DAL, auth: &AuthPayload, stack_id: Uuid, ) -> Result<Stack, ApiError>` — Fetch a stack or return 404; also enforces admin-or-generator-owner access.
--  `list_stacks` function L96-112 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, ) -> ...`
--  `create_stack` function L126-168 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Json(...`
--  `get_stack` function L183-191 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
--  `update_stack` function L208-238 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
--  `delete_stack` function L253-276 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
--  `is_authorized_for_stack` function L349-378 — `( dal: &DAL, auth_payload: &AuthPayload, stack_id: Uuid, ) -> Result<bool, ApiEr...`
--  `instantiate_template` function L599-726 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
+-  `list_stacks` function L96-127 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, ) -> ...`
+-  `create_stack` function L141-183 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Json(...`
+-  `get_stack` function L198-206 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
+-  `update_stack` function L223-253 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
+-  `delete_stack` function L268-291 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
+-  `is_authorized_for_stack` function L364-393 — `( dal: &DAL, auth_payload: &AuthPayload, stack_id: Uuid, ) -> Result<bool, ApiEr...`
+-  `instantiate_template` function L614-741 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
 
 #### crates/brokkr-broker/src/api/v1/templates.rs
 
@@ -1429,13 +1434,14 @@
 - pub `get` function L69-75 — `(&self, stack_uuids: Vec<Uuid>) -> Result<Vec<Stack>, diesel::result::Error>` — Retrieves non-deleted stacks by their UUIDs.
 - pub `get_including_deleted` function L86-95 — `( &self, stack_uuid: Uuid, ) -> Result<Option<Stack>, diesel::result::Error>` — Retrieves a stack by its UUID, including deleted stacks.
 - pub `list` function L102-107 — `(&self) -> Result<Vec<Stack>, diesel::result::Error>` — Lists all non-deleted stacks from the database.
-- pub `list_all` function L114-117 — `(&self) -> Result<Vec<Stack>, diesel::result::Error>` — Lists all stacks from the database, including deleted ones.
-- pub `update` function L129-138 — `( &self, stack_uuid: Uuid, updated_stack: &Stack, ) -> Result<Stack, diesel::res...` — Updates an existing stack in the database.
-- pub `soft_delete` function L149-165 — `(&self, stack_uuid: Uuid) -> Result<usize, diesel::result::Error>` — Soft deletes a stack by setting its deleted_at timestamp to the current time.
-- pub `hard_delete` function L176-179 — `(&self, stack_uuid: Uuid) -> Result<usize, diesel::result::Error>` — Hard deletes a stack from the database.
-- pub `filter_by_labels` function L191-224 — `( &self, labels: Vec<String>, filter_type: FilterType, ) -> Result<Vec<Stack>, d...` — Filters stacks by labels.
-- pub `filter_by_annotations` function L236-285 — `( &self, annotations: Vec<(String, String)>, filter_type: FilterType, ) -> Resul...` — Filters stacks by annotations.
-- pub `get_associated_stacks` function L299-354 — `( &self, agent_id: Uuid, ) -> Result<Vec<Stack>, diesel::result::Error>` — Retrieves all stacks associated with a specific agent based on its labels, annotations, and targets.
+- pub `list_for_generator` function L119-128 — `( &self, generator_id: Uuid, ) -> Result<Vec<Stack>, diesel::result::Error>` — Lists all non-deleted stacks owned by a specific generator.
+- pub `list_all` function L135-138 — `(&self) -> Result<Vec<Stack>, diesel::result::Error>` — Lists all stacks from the database, including deleted ones.
+- pub `update` function L150-159 — `( &self, stack_uuid: Uuid, updated_stack: &Stack, ) -> Result<Stack, diesel::res...` — Updates an existing stack in the database.
+- pub `soft_delete` function L170-186 — `(&self, stack_uuid: Uuid) -> Result<usize, diesel::result::Error>` — Soft deletes a stack by setting its deleted_at timestamp to the current time.
+- pub `hard_delete` function L197-200 — `(&self, stack_uuid: Uuid) -> Result<usize, diesel::result::Error>` — Hard deletes a stack from the database.
+- pub `filter_by_labels` function L212-245 — `( &self, labels: Vec<String>, filter_type: FilterType, ) -> Result<Vec<Stack>, d...` — Filters stacks by labels.
+- pub `filter_by_annotations` function L257-306 — `( &self, annotations: Vec<(String, String)>, filter_type: FilterType, ) -> Resul...` — Filters stacks by annotations.
+- pub `get_associated_stacks` function L320-375 — `( &self, agent_id: Uuid, ) -> Result<Vec<Stack>, diesel::result::Error>` — Retrieves all stacks associated with a specific agent based on its labels, annotations, and targets.
 
 #### crates/brokkr-broker/src/dal/template_annotations.rs
 
@@ -1969,20 +1975,22 @@
 -  `test_create_stack` function L23-62 — `()`
 -  `test_get_stack` function L65-96 — `()`
 -  `test_list_stacks` function L99-130 — `()`
--  `test_update_stack` function L133-171 — `()`
--  `test_soft_delete_stack` function L174-216 — `()`
--  `test_add_stack_annotation` function L219-257 — `()`
--  `test_remove_stack_annotation` function L260-286 — `()`
--  `test_list_stack_annotations` function L289-321 — `()`
--  `test_add_stack_label` function L324-364 — `()`
--  `test_remove_stack_label` function L367-393 — `()`
--  `test_list_stack_labels` function L396-428 — `()`
--  `test_create_deployment_object` function L431-469 — `()`
--  `test_create_stack_with_generator_pak` function L472-510 — `()`
--  `test_create_stack_with_wrong_generator_pak` function L513-556 — `()`
--  `test_update_stack_with_wrong_generator_pak` function L559-603 — `()`
--  `test_delete_stack_with_wrong_generator_pak` function L606-643 — `()`
--  `test_add_stack_annotation_with_wrong_generator_pak` function L646-690 — `()`
+-  `test_list_stacks_with_generator_pak_filters_to_own` function L133-198 — `()`
+-  `test_list_stacks_without_pak_forbidden` function L201-226 — `()`
+-  `test_update_stack` function L229-267 — `()`
+-  `test_soft_delete_stack` function L270-312 — `()`
+-  `test_add_stack_annotation` function L315-353 — `()`
+-  `test_remove_stack_annotation` function L356-382 — `()`
+-  `test_list_stack_annotations` function L385-417 — `()`
+-  `test_add_stack_label` function L420-460 — `()`
+-  `test_remove_stack_label` function L463-489 — `()`
+-  `test_list_stack_labels` function L492-524 — `()`
+-  `test_create_deployment_object` function L527-565 — `()`
+-  `test_create_stack_with_generator_pak` function L568-606 — `()`
+-  `test_create_stack_with_wrong_generator_pak` function L609-652 — `()`
+-  `test_update_stack_with_wrong_generator_pak` function L655-699 — `()`
+-  `test_delete_stack_with_wrong_generator_pak` function L702-739 — `()`
+-  `test_add_stack_annotation_with_wrong_generator_pak` function L742-786 — `()`
 
 #### crates/brokkr-broker/tests/integration/api/templates.rs
 
@@ -2301,18 +2309,18 @@
 -  `test_release_expired` function L236-293 — `()`
 -  `test_mark_success` function L296-320 — `()`
 -  `test_mark_failed_with_retry` function L323-348 — `()`
--  `test_process_retries` function L351-408 — `()`
--  `test_mark_failed_max_retries_exceeded` function L411-435 — `()`
--  `test_list_for_subscription` function L438-492 — `()`
--  `test_cleanup_old_deliveries` function L495-551 — `()`
--  `test_claim_pagination` function L554-588 — `()`
--  `test_retry_failed_delivery` function L591-622 — `()`
--  `test_get_stats` function L625-673 — `()`
--  `test_exponential_backoff_timing` function L680-763 — `()`
--  `test_claim_requires_all_labels` function L770-828 — `()`
--  `test_empty_target_labels_matches_broker` function L831-870 — `()`
--  `test_valid_acquired_until_stays_acquired` function L877-914 — `()`
--  `test_released_delivery_claimable_by_different_agent` function L917-967 — `()`
+-  `test_process_retries` function L351-418 — `()`
+-  `test_mark_failed_max_retries_exceeded` function L421-445 — `()`
+-  `test_list_for_subscription` function L448-502 — `()`
+-  `test_cleanup_old_deliveries` function L505-561 — `()`
+-  `test_claim_pagination` function L564-598 — `()`
+-  `test_retry_failed_delivery` function L601-632 — `()`
+-  `test_get_stats` function L635-683 — `()`
+-  `test_exponential_backoff_timing` function L690-784 — `()`
+-  `test_claim_requires_all_labels` function L791-849 — `()`
+-  `test_empty_target_labels_matches_broker` function L852-891 — `()`
+-  `test_valid_acquired_until_stays_acquired` function L898-935 — `()`
+-  `test_released_delivery_claimable_by_different_agent` function L938-988 — `()`
 
 #### crates/brokkr-broker/tests/integration/dal/webhook_subscriptions.rs
 
@@ -2351,31 +2359,31 @@
 -  `test_complete_failure_with_retries` function L376-426 — `()`
 -  `test_complete_failure_max_retries_exceeded` function L429-480 — `()`
 -  `test_complete_failure_non_retryable` function L483-544 — `()`
--  `test_process_retry_pending` function L551-608 — `()`
--  `test_add_target` function L615-625 — `()`
--  `test_add_targets_batch` function L628-651 — `()`
--  `test_list_targets` function L654-671 — `()`
--  `test_remove_target` function L674-697 — `()`
--  `test_get_log` function L704-732 — `()`
--  `test_list_log` function L735-774 — `()`
--  `test_list_log_filtered` function L777-841 — `()`
--  `test_list_log_with_limit` function L844-872 — `()`
--  `test_add_label` function L879-887 — `()`
--  `test_add_multiple_labels` function L890-915 — `()`
--  `test_remove_label` function L918-939 — `()`
--  `test_add_annotation` function L942-951 — `()`
--  `test_add_multiple_annotations` function L954-977 — `()`
--  `test_remove_annotation` function L980-1001 — `()`
--  `test_list_pending_for_agent_with_label_match` function L1004-1024 — `()`
--  `test_list_pending_for_agent_with_annotation_match` function L1027-1047 — `()`
--  `test_list_pending_for_agent_no_match` function L1050-1069 — `()`
--  `test_list_pending_for_agent_or_logic` function L1072-1092 — `()`
--  `test_list_pending_for_agent_combined_targeting` function L1095-1131 — `()`
--  `test_claim_with_label_match` function L1134-1154 — `()`
--  `test_claim_with_annotation_match` function L1157-1177 — `()`
--  `test_claim_without_authorization` function L1180-1199 — `()`
--  `test_annotation_key_value_must_both_match` function L1202-1221 — `()`
--  `test_labels_deleted_on_work_order_delete` function L1224-1262 — `()`
+-  `test_process_retry_pending` function L551-619 — `()`
+-  `test_add_target` function L626-636 — `()`
+-  `test_add_targets_batch` function L639-662 — `()`
+-  `test_list_targets` function L665-682 — `()`
+-  `test_remove_target` function L685-708 — `()`
+-  `test_get_log` function L715-743 — `()`
+-  `test_list_log` function L746-785 — `()`
+-  `test_list_log_filtered` function L788-852 — `()`
+-  `test_list_log_with_limit` function L855-883 — `()`
+-  `test_add_label` function L890-898 — `()`
+-  `test_add_multiple_labels` function L901-926 — `()`
+-  `test_remove_label` function L929-950 — `()`
+-  `test_add_annotation` function L953-962 — `()`
+-  `test_add_multiple_annotations` function L965-988 — `()`
+-  `test_remove_annotation` function L991-1012 — `()`
+-  `test_list_pending_for_agent_with_label_match` function L1015-1035 — `()`
+-  `test_list_pending_for_agent_with_annotation_match` function L1038-1058 — `()`
+-  `test_list_pending_for_agent_no_match` function L1061-1080 — `()`
+-  `test_list_pending_for_agent_or_logic` function L1083-1103 — `()`
+-  `test_list_pending_for_agent_combined_targeting` function L1106-1142 — `()`
+-  `test_claim_with_label_match` function L1145-1165 — `()`
+-  `test_claim_with_annotation_match` function L1168-1188 — `()`
+-  `test_claim_without_authorization` function L1191-1210 — `()`
+-  `test_annotation_key_value_must_both_match` function L1213-1232 — `()`
+-  `test_labels_deleted_on_work_order_delete` function L1235-1273 — `()`
 
 ### crates/brokkr-broker/tests/integration/db
 
@@ -3040,6 +3048,33 @@
 
 -  `test_settings_from_file_and_env` function L22-59 — `()` — Tests the loading of settings from both a file and environment variables.
 -  `test_settings_default` function L71-84 — `()` — Tests the loading of default settings when no configuration file is provided.
+
+### crates/brokkr-wire/src
+
+> *Semantic summary to be generated by AI agent.*
+
+#### crates/brokkr-wire/src/lib.rs
+
+- pub `Heartbeat` struct L39-42 — `{ agent_id: Uuid, sent_at: DateTime<Utc> }` — Heartbeat from agent to broker.
+- pub `ObjectRef` struct L48-54 — `{ api_version: String, kind: String, namespace: Option<String>, name: String, ui...` — Kubernetes object reference for events and log lines.
+- pub `K8sEvent` struct L60-71 — `{ agent_id: Uuid, stack_id: Uuid, observed_at: DateTime<Utc>, reason: String, me...` — A Kubernetes `Event` for an object the agent manages, forwarded upstream
+- pub `PodLogLine` struct L76-84 — `{ agent_id: Uuid, stack_id: Uuid, namespace: String, pod: String, container: Str...` — A single line of pod log output forwarded upstream.
+- pub `GapReason` enum L89-93 — `RateLimit | BufferFull | Disconnected` — Reason a sequence of log lines was dropped before reaching the broker.
+- pub `LogGap` struct L98-104 — `{ agent_id: Uuid, stack_id: Uuid, since_ts: DateTime<Utc>, dropped_count: u64, r...` — Marker emitted when log lines were dropped so consumers can render a
+- pub `WsMessage` enum L110-125 — `WorkOrder | TargetChanged | StackChanged | Heartbeat | AgentEvent | AgentHealth ...` — The canonical message envelope on the broker↔agent WebSocket.
+- pub `WIRE_VERSION` variable L129 — `: &str` — Wire-protocol version.
+
+### crates/brokkr-wire/tests
+
+> *Semantic summary to be generated by AI agent.*
+
+#### crates/brokkr-wire/tests/golden.rs
+
+-  `sample_messages` function L21-122 — `() -> Vec<WsMessage>` — Build a deterministic sample of every `WsMessage` variant.
+-  `every_variant_roundtrips` function L125-136 — `()` — or a tag rename) will fail this test.
+-  `variant_tags_are_snake_case` function L139-166 — `()` — or a tag rename) will fail this test.
+-  `golden_fixture_matches_current_serialization` function L169-184 — `()` — or a tag rename) will fail this test.
+-  `wire_version_is_pinned` function L187-192 — `()` — or a tag rename) will fail this test.
 
 ### docs
 
@@ -7210,8 +7245,9 @@
 
 -  `api` module L18 — `-` — Brokkr End-to-End Test Suite
 -  `scenarios` module L19 — `-` — Run with: angreal tests e2e
--  `main` function L25-118 — `() -> ExitCode` — Run with: angreal tests e2e
--  `run_scenario` macro L53-70 — `-` — Run with: angreal tests e2e
+-  `main` function L25-158 — `() -> ExitCode` — Run with: angreal tests e2e
+-  `run_scenario` macro L54-71 — `-` — Run with: angreal tests e2e
+-  `run_scenario_allow_fail` macro L78-98 — `-` — Run with: angreal tests e2e
 
 #### tests/e2e/src/scenarios.rs
 
@@ -7243,8 +7279,8 @@
 
 #### tests/sdk-contract/python/test_uat_walkthrough.py
 
-- pub `test_uat_walkthrough` function L44-146 — `def test_uat_walkthrough(admin_client, base_url)` — Full UAT walkthrough: admin bootstrap + generator-driven flow.
-- pub `test_target_generator_mismatch_returns_typed_403` function L149-205 — `def test_target_generator_mismatch_returns_typed_403(admin_client, base_url)` — Generator A cannot target a stack owned by generator B → typed 403.
+- pub `test_uat_walkthrough` function L45-159 — `def test_uat_walkthrough(admin_client, base_url)` — Full UAT walkthrough: admin bootstrap + generator-driven flow.
+- pub `test_target_generator_mismatch_returns_typed_403` function L162-218 — `def test_target_generator_mismatch_returns_typed_403(admin_client, base_url)` — Generator A cannot target a stack owned by generator B → typed 403.
 
 ### tests/sdk-contract/rust/src
 
@@ -7259,10 +7295,10 @@
 -  `wait_for_ready` function L121-139 — `(broker_url: &str, timeout_secs: u64) -> Result<()>` — Run with: `angreal tests sdk-contract rust`
 -  `client` function L142-147 — `(base_url: &str, pak: &str) -> Result<BrokkrClient>` — Build a [`BrokkrClient`] for a given PAK.
 -  `unique` function L150-153 — `(prefix: &str) -> String` — Suffix used to keep names unique across reruns.
--  `scenario_uat_walkthrough` function L156-330 — `(base_url: &str, admin_pak: &str) -> Result<()>` — Full UAT walkthrough using a generator PAK after admin bootstrap.
--  `scenario_target_mismatch` function L334-437 — `(base_url: &str, admin_pak: &str) -> Result<()>` — A generator must not be able to target a stack it does not own — the
--  `scenario_raw_progenitor_surface` function L442-473 — `(base_url: &str, admin_pak: &str) -> Result<()>` — Smoke-check the raw progenitor [`brokkr_client::Client`] surface.
--  `last4` function L475-482 — `(s: &str) -> String` — Run with: `angreal tests sdk-contract rust`
+-  `scenario_uat_walkthrough` function L156-353 — `(base_url: &str, admin_pak: &str) -> Result<()>` — Full UAT walkthrough using a generator PAK after admin bootstrap.
+-  `scenario_target_mismatch` function L357-460 — `(base_url: &str, admin_pak: &str) -> Result<()>` — A generator must not be able to target a stack it does not own — the
+-  `scenario_raw_progenitor_surface` function L465-496 — `(base_url: &str, admin_pak: &str) -> Result<()>` — Smoke-check the raw progenitor [`brokkr_client::Client`] surface.
+-  `last4` function L498-505 — `(s: &str) -> String` — Run with: `angreal tests sdk-contract rust`
 
 ### tests/sdk-contract/typescript/src
 

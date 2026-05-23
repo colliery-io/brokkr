@@ -1,0 +1,19 @@
+[package]
+name = "brokkr-wire"
+version = "0.4.2"
+edition = "2021"
+license = "Elastic-2.0"
+description = "Internal wire protocol for the broker↔agent WebSocket channel. Not a public API."
+repository = "https://github.com/colliery-io/brokkr"
+publish = false
+
+[dependencies]
+brokkr-models = { path = "../brokkr-models" }
+
+chrono = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
