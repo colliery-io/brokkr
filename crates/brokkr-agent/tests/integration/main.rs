@@ -5,6 +5,7 @@
  */
 
 mod broker;
+mod broker_ws;
 #[path = "../fixtures.rs"]
 mod fixtures;
 mod health;

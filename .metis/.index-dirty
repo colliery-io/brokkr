@@ -5,3 +5,8 @@
 /Users/dstorey/Desktop/brokkr/crates/brokkr-broker/src/api/mod.rs
 /Users/dstorey/Desktop/brokkr/crates/brokkr-broker/tests/integration/api/mod.rs
 /Users/dstorey/Desktop/brokkr/crates/brokkr-broker/tests/integration/api/ws.rs
+/Users/dstorey/Desktop/brokkr/crates/brokkr-utils/src/config.rs
+/Users/dstorey/Desktop/brokkr/crates/brokkr-agent/src/broker_ws.rs
+/Users/dstorey/Desktop/brokkr/crates/brokkr-agent/src/lib.rs
+/Users/dstorey/Desktop/brokkr/crates/brokkr-agent/tests/integration/broker_ws.rs
+/Users/dstorey/Desktop/brokkr/crates/brokkr-agent/tests/integration/main.rs

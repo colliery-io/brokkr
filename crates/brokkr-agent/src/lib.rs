@@ -14,6 +14,7 @@
 
 pub mod broker;
 pub mod broker_sdk;
+pub mod broker_ws;
 pub mod cli;
 pub mod deployment_health;
 pub mod diagnostics;

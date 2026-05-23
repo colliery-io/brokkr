@@ -206,6 +206,12 @@ pub struct Agent {
     pub deployment_health_enabled: Option<bool>,
     /// Interval for deployment health checks in seconds
     pub deployment_health_interval: Option<u64>,
+    /// Force the agent to use REST polling only, never opening the internal
+    /// WebSocket channel. Defaults to `false`: WS is opt-out per ADR-0008.
+    /// Set this for restricted environments (no WS through ingress) or for
+    /// debugging the REST fallback path in isolation.
+    #[serde(default)]
+    pub ws_force_rest: bool,
 }
 
 /// Represents the database configuration

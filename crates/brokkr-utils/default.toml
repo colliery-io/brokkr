@@ -49,6 +49,9 @@ health_port = 8080
 # Deployment health checking configuration
 deployment_health_enabled = true
 deployment_health_interval = 60
+# Force REST-only operation, disabling the internal WebSocket channel.
+# Default false: WS is on by default with REST polling as automatic fallback.
+ws_force_rest = false
 
 [telemetry]
 # Enable OpenTelemetry tracing (base setting, can be overridden per component)
