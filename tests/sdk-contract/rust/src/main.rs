@@ -106,6 +106,10 @@ async fn main() -> ExitCode {
         "Raw progenitor Client surface compiles & accepts builders",
         scenario_raw_progenitor_surface(&base_url, &admin_pak)
     );
+    run!(
+        "WS-10/13: telemetry history + ws connections via wrapper",
+        scenario_telemetry_and_ws_diagnostics(&base_url, &admin_pak)
+    );
 
     println!("══════════════════════════════════════════════════════════════════");
     println!("📊 Results: {} passed, {} failed", passed, failed);
@@ -491,6 +495,98 @@ async fn scenario_raw_progenitor_surface(base_url: &str, admin_pak: &str) -> Res
         .map_err(berr)?
         .into_inner();
     println!("    generators count = {}", generators.len());
+
+    Ok(())
+}
+
+/// WS-10 + WS-13 surface: ergonomic-wrapper methods for the telemetry
+/// history endpoints and the admin ws/connections snapshot. We don't
+/// generate telemetry rows here — that needs a running agent + kube
+/// cluster — so we assert the response *shape* (retention metadata
+/// present and within spec, empty `events`/`lines` arrays accepted).
+async fn scenario_telemetry_and_ws_diagnostics(base_url: &str, admin_pak: &str) -> Result<()> {
+    let admin = client(base_url, admin_pak)?;
+
+    // Need a stack id for the history endpoints. Create one through
+    // the existing UAT-style bootstrap path (admin → generator → stack).
+    let gen_name = unique("sdk-contract-rust-tel-gen");
+    let gen_resp = admin
+        .api()
+        .create_generator()
+        .body(NewGenerator::builder().name(gen_name).description(None))
+        .send()
+        .await
+        .map_err(berr)
+        .context("create_generator")?
+        .into_inner();
+    let generator_id = gen_resp.generator.id;
+    let generator_pak = gen_resp.pak.clone();
+
+    let stack_name = unique("sdk-contract-rust-tel-stack");
+    let gen_client = client(base_url, &generator_pak)?;
+    let stack = gen_client
+        .api()
+        .create_stack()
+        .body(
+            NewStack::builder()
+                .name(stack_name)
+                .generator_id(generator_id)
+                .description(None),
+        )
+        .send()
+        .await
+        .map_err(berr)
+        .context("create_stack")?
+        .into_inner();
+    println!("  → seeded stack {} for telemetry queries", stack.id);
+
+    // 1. list_telemetry_events
+    println!("  → list_telemetry_events(stack_id=..., since=None, limit=Some(10))");
+    let events = admin
+        .list_telemetry_events(stack.id, None, Some(10))
+        .await
+        .context("list_telemetry_events via wrapper")?;
+    if events.retention.retention_ceiling_seconds != 21600 {
+        return Err(anyhow!(
+            "expected retention_ceiling_seconds=21600 (6h), got {}",
+            events.retention.retention_ceiling_seconds
+        ));
+    }
+    if !events.retention.long_term_sink_hint.contains("Datadog") {
+        return Err(anyhow!(
+            "expected long_term_sink_hint to mention Datadog, got {:?}",
+            events.retention.long_term_sink_hint
+        ));
+    }
+    println!("    retention_ceiling_seconds=21600 ✓ ; long_term_sink_hint mentions Datadog ✓");
+
+    // 2. list_telemetry_logs
+    println!("  → list_telemetry_logs(stack_id=..., since=None, limit=None)");
+    let logs = admin
+        .list_telemetry_logs(stack.id, None, None)
+        .await
+        .context("list_telemetry_logs via wrapper")?;
+    if logs.retention.retention_ceiling_seconds != 21600 {
+        return Err(anyhow!(
+            "expected retention_ceiling_seconds=21600 on /logs, got {}",
+            logs.retention.retention_ceiling_seconds
+        ));
+    }
+    println!("    /logs retention_ceiling_seconds=21600 ✓");
+
+    // 3. list_ws_connections (admin-only)
+    println!("  → list_ws_connections()");
+    let snapshot = admin
+        .list_ws_connections()
+        .await
+        .context("list_ws_connections via wrapper")?;
+    // The contract harness doesn't bring up an agent; expect 0 connected
+    // agents and 0 live subscribers, but the response *shape* is the
+    // proof under test.
+    println!(
+        "    connected_agents={} live_subscribers={}",
+        snapshot.connected_agents, snapshot.live_subscribers
+    );
 
     Ok(())
 }
