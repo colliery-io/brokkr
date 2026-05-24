@@ -154,10 +154,15 @@ export class BrokkrClient {
    * `log_gap` frame so the UI can render a visible gap.
    */
   liveSubscriptionUrl(stackId: string): string {
-    // The schema strips the /api/v1 prefix; the broker mounts the live
-    // subscription at the full /api/v1/stacks/{id}/live path. Reconstruct
-    // it from the configured base URL.
-    const root = this.baseUrl.replace(/\/+$/, "");
+    // The broker mounts the live subscription at /api/v1/stacks/{id}/live,
+    // even though the OpenAPI schema strips that prefix from operation
+    // paths. baseUrl conventionally includes /api/v1 (matching how
+    // BrokkrClient is constructed everywhere else), so strip it once
+    // before re-appending the canonical full path.
+    const trimmed = this.baseUrl.replace(/\/+$/, "");
+    const root = trimmed.endsWith("/api/v1")
+      ? trimmed.slice(0, -"/api/v1".length)
+      : trimmed;
     const wsRoot = root.replace(/^http:/, "ws:").replace(/^https:/, "wss:");
     return `${wsRoot}/api/v1/stacks/${stackId}/live`;
   }

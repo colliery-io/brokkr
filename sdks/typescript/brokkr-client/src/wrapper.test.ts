@@ -292,7 +292,14 @@ describe("BrokkrClient.listWsConnections", () => {
 });
 
 describe("BrokkrClient.liveSubscriptionUrl", () => {
-  it("swaps http://→ws:// and appends the full /api/v1/.../live path", () => {
+  it("strips /api/v1 from baseUrl then re-appends the full subscription path", () => {
+    const c = new BrokkrClient({ baseUrl: "http://broker.test:3000/api/v1" });
+    expect(c.liveSubscriptionUrl("abc-123")).toBe(
+      "ws://broker.test:3000/api/v1/stacks/abc-123/live",
+    );
+  });
+
+  it("handles baseUrl that's already the broker root (no /api/v1 suffix)", () => {
     const c = new BrokkrClient({ baseUrl: "http://broker.test:3000" });
     expect(c.liveSubscriptionUrl("abc-123")).toBe(
       "ws://broker.test:3000/api/v1/stacks/abc-123/live",
@@ -300,14 +307,14 @@ describe("BrokkrClient.liveSubscriptionUrl", () => {
   });
 
   it("swaps https://→wss://", () => {
-    const c = new BrokkrClient({ baseUrl: "https://broker.example.com" });
+    const c = new BrokkrClient({ baseUrl: "https://broker.example.com/api/v1" });
     expect(c.liveSubscriptionUrl("xyz")).toBe(
       "wss://broker.example.com/api/v1/stacks/xyz/live",
     );
   });
 
   it("tolerates a trailing slash on the base URL", () => {
-    const c = new BrokkrClient({ baseUrl: "http://broker.test:3000/" });
+    const c = new BrokkrClient({ baseUrl: "http://broker.test:3000/api/v1/" });
     expect(c.liveSubscriptionUrl("abc")).toBe(
       "ws://broker.test:3000/api/v1/stacks/abc/live",
     );
