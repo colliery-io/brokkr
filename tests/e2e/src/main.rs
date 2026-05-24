@@ -110,6 +110,12 @@ async fn main() -> ExitCode {
                     scenarios::test_ws_smoke(&client)
                 );
             }
+            "ws-chaos" => {
+                run_scenario!(
+                    "BROKKR-T-0171 (A2): WS channel chaos test",
+                    scenarios::test_ws_chaos(&client)
+                );
+            }
             other => {
                 eprintln!("❌ Unknown E2E_SCENARIO: {}", other);
                 return ExitCode::FAILURE;

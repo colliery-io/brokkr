@@ -212,6 +212,20 @@ pub struct Agent {
     /// debugging the REST fallback path in isolation.
     #[serde(default)]
     pub ws_force_rest: bool,
+    /// Optional override for the internal WS upgrade URL.
+    ///
+    /// When unset (default), the agent derives the WS URL from `broker_url`
+    /// via `ws_url_from_broker_url` — http→ws, https→wss, append
+    /// `/internal/ws/agent`. This is the right behavior for nearly every
+    /// deployment.
+    ///
+    /// Set this when WS traffic flows through a different ingress / proxy
+    /// than REST: e.g. a sticky-session-capable WS-aware load balancer in
+    /// front of the broker, while REST goes direct, or — in tests — a
+    /// toxiproxy sidecar that can sever WS in isolation. Must be a full
+    /// `ws://host:port/path` or `wss://...` URL.
+    #[serde(default)]
+    pub ws_url: Option<String>,
 }
 
 /// Represents the database configuration

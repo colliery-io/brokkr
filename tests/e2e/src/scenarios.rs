@@ -1262,3 +1262,109 @@ pub async fn test_ws_smoke(client: &Client) -> Result<()> {
     Ok(())
 }
 
+// =============================================================================
+// BROKKR-T-0171 (A2): WS-channel chaos test
+// =============================================================================
+
+/// Toggle a toxiproxy proxy's `enabled` flag via the admin API. Setting
+/// `false` closes the listening socket and tears down any active connections
+/// through it — which is exactly the "WS severed, REST untouched" primitive
+/// the A2 chaos scenario needs (REST goes direct to broker:3000, not through
+/// toxiproxy).
+async fn toxiproxy_set_enabled(
+    toxiproxy_url: &str,
+    proxy_name: &str,
+    enabled: bool,
+) -> Result<()> {
+    let url = format!("{}/proxies/{}", toxiproxy_url, proxy_name);
+    let resp = reqwest::Client::new()
+        .post(&url)
+        .json(&serde_json::json!({ "enabled": enabled }))
+        .send()
+        .await?;
+    let status = resp.status();
+    if !status.is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!(
+            "toxiproxy {} {} -> HTTP {}: {}",
+            if enabled { "enable" } else { "disable" },
+            proxy_name,
+            status,
+            body
+        )
+        .into());
+    }
+    Ok(())
+}
+
+/// I-0019 / I-0020 A2 chaos test — Pass 1 (infrastructure validation).
+///
+/// Proves the WS-severance primitive works in isolation:
+///
+/// 1. Agent connects via WS at startup (gauge >= 1)
+/// 2. Toxiproxy disables the `ws-channel` proxy → agent's WS socket closes →
+///    broker observes the disconnect → `brokkr_ws_connected_agents` drops to 0
+/// 3. Toxiproxy re-enables the proxy → agent reconnects → gauge back to >= 1
+///
+/// REST is never disrupted in this scenario because it goes direct to the
+/// broker, bypassing toxiproxy entirely. That gap — "WS down, REST up" — is
+/// the realistic production failure mode the I-0019 fallback is supposed to
+/// catch, and Pass 2 of this task will extend the scenario to seed work
+/// orders during the severance window and assert REST-fallback drains them.
+pub async fn test_ws_chaos(client: &Client) -> Result<()> {
+    let toxiproxy_url = std::env::var("TOXIPROXY_URL")
+        .unwrap_or_else(|_| "http://localhost:8474".to_string());
+
+    println!("  → Toxiproxy admin URL: {}", toxiproxy_url);
+
+    // Step 1: assert WS connected on initial boot.
+    println!("  → Waiting for agent WS connection (gauge >= 1, 30s timeout)...");
+    let initial = client
+        .wait_for_metric("brokkr_ws_connected_agents", &[], 30, |v| v >= 1.0)
+        .await?;
+    println!("    brokkr_ws_connected_agents = {} ✓", initial);
+
+    // Step 2: sever WS via toxiproxy. Disabling the proxy closes the listener
+    // and tears down established connections — both the agent's WS write and
+    // the broker's read side will fail, and the broker's per-connection cleanup
+    // will decrement the gauge.
+    println!("  → Disabling toxiproxy ws-channel (sever WS)...");
+    toxiproxy_set_enabled(&toxiproxy_url, "ws-channel", false).await?;
+    println!("    severed ✓");
+
+    println!("  → Waiting for gauge to drop to 0 (30s timeout)...");
+    let dropped = client
+        .wait_for_metric("brokkr_ws_connected_agents", &[], 30, |v| v < 1.0)
+        .await?;
+    println!(
+        "    brokkr_ws_connected_agents = {} after sever ✓",
+        dropped
+    );
+
+    // While WS is down, REST is still reachable — sanity check.
+    println!("  → Confirming REST stays reachable during WS sever...");
+    let _ = client.get_healthz().await?;
+    let _ = client.list_agents().await?;
+    println!("    REST OK ✓");
+
+    // Step 3: restore WS.
+    println!("  → Re-enabling toxiproxy ws-channel (restore WS)...");
+    toxiproxy_set_enabled(&toxiproxy_url, "ws-channel", true).await?;
+    println!("    restored ✓");
+
+    println!("  → Waiting for agent WS reconnect (gauge >= 1, 60s timeout)...");
+    let recovered = client
+        .wait_for_metric("brokkr_ws_connected_agents", &[], 60, |v| v >= 1.0)
+        .await?;
+    println!(
+        "    brokkr_ws_connected_agents = {} after restore ✓",
+        recovered
+    );
+
+    println!("  → WS chaos scenario (Pass 1) passed");
+    println!("  → NOTE: Pass 2 will extend this with N work orders seeded during");
+    println!("    the sever window + assertions that all reach completed via REST poll");
+    Ok(())
+}
+
+

@@ -178,7 +178,14 @@ pub fn spawn(settings: &Settings) -> WsClient {
     let (outbound_tx, outbound_rx) = mpsc::channel::<WsMessage>(OUTBOUND_CAPACITY);
     let (inbound_tx, inbound_rx) = mpsc::channel::<WsMessage>(INBOUND_CAPACITY);
 
-    let url = ws_url_from_broker_url(&settings.agent.broker_url);
+    // Honor ws_url override when set (e.g. WS through a separate ingress, or
+    // through the I-0020 A2 chaos toxiproxy). Default: derive from broker_url.
+    let url = settings
+        .agent
+        .ws_url
+        .as_deref()
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| ws_url_from_broker_url(&settings.agent.broker_url));
     let pak = settings.agent.pak.clone();
     let task = tokio::spawn(reconnect_loop(
         url,
