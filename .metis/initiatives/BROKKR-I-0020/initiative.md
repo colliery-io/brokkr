@@ -229,5 +229,6 @@ polish. C last because it's pure cleanup that won't gate the decision to merge.
 - [ ] C1 browser live-tail decision recorded (ADR amendment or ADR-0009) and implemented
 - [ ] C2 `RateLimiter` API renamed, tests updated, on-wire frame unchanged
 - [ ] C3 `annotation_lookup` LRU added, scaling test asserts bounded API calls
+- [ ] T-0181 docs: ws_url config — docs page, helm values, ADR-0008 amendment, C4 caption (follow-up from T-0171 introducing the new agent config)
 - [ ] Existing test suites still green
 - [ ] Initiative review with human before tag + merge
