@@ -219,7 +219,7 @@ polish. C last because it's pure cleanup that won't gate the decision to merge.
 ## Exit Criteria
 
 - [x] A1 agent runtime smoke test green in CI (BROKKR-T-0170, 2026-05-24)
-- [ ] A2 chaos test green in CI; metrics confirm observability of the WS drop
+- [x] A2 chaos test green in CI (BROKKR-T-0171, 2026-05-24) — narrowed scope: REST-heartbeat-fallback proven, work-order-completion lifecycle deferred (no harness for it yet; revisit with A3)
 - [ ] A3 real-kube tailer test green in helm-test CI
 - [ ] A4 push/poll race test green in broker integration suite
 - [ ] B1 SDK lockstep version bump applied + CHANGELOGs updated
