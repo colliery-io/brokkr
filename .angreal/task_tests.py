@@ -42,8 +42,13 @@ def run_integration_tests(crate_name: str = "", test_filter: str = ""):
     result = subprocess.run(cmd, cwd=cwd, env=env)
     return result.returncode
 
-def run_e2e_tests():
-    """Run the holistic E2E test suite."""
+def run_e2e_tests(scenario: str = ""):
+    """Run the holistic E2E test suite, optionally filtered to a single scenario.
+
+    When ``scenario`` is empty, runs the full demo-walkthrough suite (default).
+    When ``scenario`` is set (e.g. ``ws-smoke``), only that scenario runs — the
+    Rust binary branches on the ``E2E_SCENARIO`` env var.
+    """
     import os
 
     # Build the E2E test binary
@@ -56,10 +61,18 @@ def run_e2e_tests():
         return build_result.returncode
 
     # Run the E2E binary
-    print("Running E2E tests...")
+    if scenario:
+        print(f"Running E2E scenario: {scenario}")
+    else:
+        print("Running E2E tests...")
     env = os.environ.copy()
     env["BROKER_URL"] = "http://localhost:3000"
     env["ADMIN_PAK"] = "brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8"
+    if scenario:
+        env["E2E_SCENARIO"] = scenario
+        # Scenarios like ws-smoke shell out to docker; tell them which compose
+        # file the angreal task brought up so they can stop/start services.
+        env["E2E_COMPOSE_FILE"] = os.path.join(cwd, ".angreal", "files", "docker-compose.yaml")
 
     result = subprocess.run(
         ["./tests/e2e/target/release/brokkr-e2e"],
@@ -341,11 +354,16 @@ def sdk_contract_tests(language: str, skip_docker: bool = False):
 @test()
 @angreal.command(name="e2e", about="run holistic E2E tests (mirrors UI demo walkthrough)")
 @angreal.argument(name="skip_docker", long="skip-docker", required=False, help="Skip docker compose up", takes_value=False, is_flag=True)
-def e2e_tests(skip_docker: bool = False):
+@angreal.argument(name="scenario", long="scenario", required=False, help="Run only a single scenario (e.g. 'ws-smoke'). Omit for full suite.")
+def e2e_tests(skip_docker: bool = False, scenario: str = ""):
     """Run holistic E2E tests that exercise the entire Brokkr system.
 
     These tests mirror the UI demo walkthrough and test the complete
     system from end to end: broker, agent, database, and kubernetes.
+
+    Pass ``--scenario <name>`` to run only a single targeted scenario (e.g.
+    ``ws-smoke``, which exercises the I-0019 WS channel against a real
+    broker/agent docker-compose stack with a stop/start cycle).
     """
     if not skip_docker:
         docker_clean()
@@ -356,7 +374,7 @@ def e2e_tests(skip_docker: bool = False):
 
     rc = None
     try:
-        rc = run_e2e_tests()
+        rc = run_e2e_tests(scenario=scenario)
         if not skip_docker:
             input("Press Enter to shutdown containers and clean up...")
     finally:

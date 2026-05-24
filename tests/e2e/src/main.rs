@@ -46,6 +46,10 @@ async fn main() -> ExitCode {
     }
     println!("✅ Broker is ready\n");
 
+    // Optional single-scenario dispatch. When E2E_SCENARIO is set, only that
+    // scenario runs. The angreal `tests e2e --scenario <name>` arg sets this.
+    let scenario_filter = env::var("E2E_SCENARIO").unwrap_or_default();
+
     let mut passed = 0;
     let mut failed = 0;
     let mut allowed_failures = 0;
@@ -95,6 +99,30 @@ async fn main() -> ExitCode {
                 }
             }
         }};
+    }
+
+    // Single-scenario dispatch path — bypass the full demo walkthrough.
+    if !scenario_filter.is_empty() {
+        match scenario_filter.as_str() {
+            "ws-smoke" => {
+                run_scenario!(
+                    "BROKKR-T-0170 (A1): WS channel smoke test",
+                    scenarios::test_ws_smoke(&client)
+                );
+            }
+            other => {
+                eprintln!("❌ Unknown E2E_SCENARIO: {}", other);
+                return ExitCode::FAILURE;
+            }
+        }
+        println!("══════════════════════════════════════════════════════════════════");
+        println!("📊 Results: {} passed, {} failed", passed, failed);
+        println!("══════════════════════════════════════════════════════════════════");
+        return if failed > 0 {
+            ExitCode::FAILURE
+        } else {
+            ExitCode::SUCCESS
+        };
     }
 
     run_scenario!(

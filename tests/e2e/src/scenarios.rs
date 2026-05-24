@@ -1094,3 +1094,171 @@ pub async fn test_metrics(client: &Client) -> Result<()> {
     println!("  → Metrics observability verified");
     Ok(())
 }
+
+// =============================================================================
+// BROKKR-T-0170 (A1): WS-channel smoke test
+// =============================================================================
+
+/// I-0019 / I-0020 A1 smoke test.
+///
+/// Proves the load-bearing lifecycle of the WebSocket channel end-to-end
+/// against the real broker + agent docker-compose stack:
+///
+/// 1. Agent connects via WS at startup (gauge >= 1)
+/// 2. Broker container is stopped, then restarted
+/// 3. Agent reconnects via WS after broker comes back (gauge >= 1 again)
+/// 4. A fresh downlink push (`target_changed`, triggered by adding a stack
+///    target to the agent) reaches the agent (out-direction counter increments)
+///
+/// What this does NOT cover: REST-fallback during a WS-only outage. That's
+/// [[BROKKR-T-0171]] A2, which needs a network proxy that severs WS but keeps
+/// REST reachable.
+pub async fn test_ws_smoke(client: &Client) -> Result<()> {
+    use std::time::Duration;
+    use tokio::process::Command as TokioCommand;
+
+    let compose_file = std::env::var("E2E_COMPOSE_FILE").map_err(|_| {
+        "E2E_COMPOSE_FILE env var not set — the angreal e2e task is supposed to set this"
+    })?;
+
+    println!("  → Compose file: {}", compose_file);
+
+    // -------------------------------------------------------------------
+    // Step 1: Assert agent WS-connected on initial boot
+    // -------------------------------------------------------------------
+    println!("  → Waiting for agent WS connection (gauge >= 1, 30s timeout)...");
+    let initial_connected = client
+        .wait_for_metric("brokkr_ws_connected_agents", &[], 30, |v| v >= 1.0)
+        .await?;
+    println!(
+        "    brokkr_ws_connected_agents = {} ✓",
+        initial_connected
+    );
+
+    // -------------------------------------------------------------------
+    // Step 2: Stop the broker container
+    // -------------------------------------------------------------------
+    println!("  → Stopping broker container (docker compose stop broker)...");
+    let stop = TokioCommand::new("docker")
+        .args(["compose", "-f", &compose_file, "stop", "broker"])
+        .output()
+        .await?;
+    if !stop.status.success() {
+        return Err(format!(
+            "docker compose stop broker failed: {}\n{}",
+            String::from_utf8_lossy(&stop.stdout),
+            String::from_utf8_lossy(&stop.stderr)
+        )
+        .into());
+    }
+    println!("    broker stopped ✓");
+
+    // Give the agent a moment to notice the WS disconnect. We don't assert
+    // on the agent's state directly here (no agent metrics endpoint yet —
+    // see [[BROKKR-T-0177]] / I-0020 deferred work); the proof is the
+    // reconnect on the broker side after restart.
+    println!("  → Sleeping 10s to let agent observe disconnect...");
+    tokio::time::sleep(Duration::from_secs(10)).await;
+
+    // -------------------------------------------------------------------
+    // Step 3: Restart the broker container
+    // -------------------------------------------------------------------
+    println!("  → Starting broker container (docker compose start broker)...");
+    let start = TokioCommand::new("docker")
+        .args(["compose", "-f", &compose_file, "start", "broker"])
+        .output()
+        .await?;
+    if !start.status.success() {
+        return Err(format!(
+            "docker compose start broker failed: {}\n{}",
+            String::from_utf8_lossy(&start.stdout),
+            String::from_utf8_lossy(&start.stderr)
+        )
+        .into());
+    }
+    println!("    broker started ✓");
+
+    println!("  → Waiting for broker /healthz (30s timeout)...");
+    client.wait_for_ready(30).await?;
+    println!("    broker healthy ✓");
+
+    // -------------------------------------------------------------------
+    // Step 4: Assert WS reconnects
+    // -------------------------------------------------------------------
+    println!("  → Waiting for agent WS reconnect (gauge >= 1, 60s timeout)...");
+    let reconnected = client
+        .wait_for_metric("brokkr_ws_connected_agents", &[], 60, |v| v >= 1.0)
+        .await?;
+    println!(
+        "    brokkr_ws_connected_agents = {} after restart ✓",
+        reconnected
+    );
+
+    // -------------------------------------------------------------------
+    // Step 5: Trigger a downlink push and assert the counter increments
+    // -------------------------------------------------------------------
+    println!("  → Triggering a target_changed push (add stack target to agent)...");
+
+    // Find the agent that connected from docker-compose. The init-agent
+    // service creates exactly one named `brokkr-integration-test-agent`.
+    let agents = client.list_agents().await?;
+    let agent = agents
+        .iter()
+        .find(|a| {
+            a.get("name").and_then(|n| n.as_str()) == Some("brokkr-integration-test-agent")
+        })
+        .ok_or("expected brokkr-integration-test-agent in agent list")?;
+    let agent_id: Uuid = agent
+        .get("id")
+        .and_then(|v| v.as_str())
+        .and_then(|s| Uuid::parse_str(s).ok())
+        .ok_or("agent missing id")?;
+
+    // Create a throwaway generator + stack so the target push has something
+    // real to point at — the existing test_targeting scenario does the same.
+    let gen = client
+        .create_generator(&format!("ws-smoke-gen-{}", Uuid::new_v4()), None)
+        .await?;
+    let gen_id: Uuid = Uuid::parse_str(gen["generator"]["id"].as_str().unwrap())?;
+    let stack = client
+        .create_stack(
+            &format!("ws-smoke-stack-{}", Uuid::new_v4()),
+            None,
+            gen_id,
+        )
+        .await?;
+    let stack_id: Uuid = Uuid::parse_str(stack["id"].as_str().unwrap())?;
+
+    // Record baseline before the push.
+    let baseline = client
+        .metric_value(
+            "brokkr_ws_messages_total",
+            &[("direction", "out"), ("type", "target_changed")],
+        )
+        .await?;
+    println!(
+        "    baseline brokkr_ws_messages_total{{direction=out,type=target_changed}} = {}",
+        baseline
+    );
+
+    // Add the target — this triggers push_target_changed on the broker.
+    client.add_agent_target(agent_id, stack_id).await?;
+    println!("    target added; waiting for counter to increment...");
+
+    let new_value = client
+        .wait_for_metric(
+            "brokkr_ws_messages_total",
+            &[("direction", "out"), ("type", "target_changed")],
+            15,
+            |v| v > baseline,
+        )
+        .await?;
+    println!(
+        "    brokkr_ws_messages_total{{direction=out,type=target_changed}} = {} (was {}) ✓",
+        new_value, baseline
+    );
+
+    println!("  → WS smoke scenario passed");
+    Ok(())
+}
+
