@@ -23,8 +23,10 @@ use axum::{
     body::Body,
     extract::ws::{Message, WebSocket, WebSocketUpgrade},
     extract::{Extension, Path, State},
-    http::{Request, StatusCode},
-    middleware::from_fn_with_state,
+    http::header::{AUTHORIZATION, SEC_WEBSOCKET_PROTOCOL},
+    http::{HeaderValue, Request, StatusCode},
+    middleware::{from_fn, from_fn_with_state, Next},
+    response::Response,
     routing::get,
     Router,
 };
@@ -44,6 +46,16 @@ use super::broadcaster::LiveBroadcaster;
 /// `/api/v1/stacks/{id}/live` after the parent router mounts this branch.
 pub const LIVE_SUBSCRIPTION_PATH_TEMPLATE: &str = "/api/v1/stacks/:id/live";
 
+/// Subprotocol that carries the PAK for browser clients that cannot set an
+/// `Authorization` header on `new WebSocket()` (ADR-0008 amendment, C1). The
+/// browser offers `brokkr.pak.<PAK>`; the broker lifts the PAK out of it.
+const PAK_SUBPROTOCOL_PREFIX: &str = "brokkr.pak.";
+
+/// Non-secret marker subprotocol the browser also offers and the broker
+/// echoes back in the handshake response. We echo this (never the
+/// PAK-bearing one) so the selected subprotocol doesn't leak the credential.
+const WS_MARKER_SUBPROTOCOL: &str = "brokkr.v1";
+
 /// Build the live-subscription router. Mounted under `/api/v1` by the
 /// parent so the standard PAK middleware applies; this fn adds its own
 /// auth-middleware layer too in case the router is mounted elsewhere.
@@ -55,6 +67,35 @@ pub fn subscribe_routes(dal: DAL, broadcaster: Arc<LiveBroadcaster>) -> Router<D
             dal,
             v1_middleware::auth_middleware::<Body>,
         ))
+        // Outermost: runs before auth_middleware so it can supply the
+        // Authorization header from the WS subprotocol for browser clients.
+        .layer(from_fn(ws_subprotocol_auth))
+}
+
+/// Browser WebSocket clients can't set request headers, so they pass the PAK
+/// in `Sec-WebSocket-Protocol` as `brokkr.pak.<PAK>` (the k8s API-server
+/// pattern). This middleware lifts it into an `Authorization: Bearer` header
+/// **only when one isn't already present**, so header-based callers (agents,
+/// SDKs, the Node `ws` contract test) are entirely unaffected — both auth
+/// paths reach the same `auth_middleware`.
+async fn ws_subprotocol_auth(mut request: Request<Body>, next: Next) -> Response {
+    if request.headers().get(AUTHORIZATION).is_none() {
+        if let Some(pak) = request
+            .headers()
+            .get(SEC_WEBSOCKET_PROTOCOL)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|list| {
+                list.split(',')
+                    .map(str::trim)
+                    .find_map(|p| p.strip_prefix(PAK_SUBPROTOCOL_PREFIX))
+            })
+        {
+            if let Ok(value) = HeaderValue::from_str(&format!("Bearer {pak}")) {
+                request.headers_mut().insert(AUTHORIZATION, value);
+            }
+        }
+    }
+    next.run(request).await
 }
 
 async fn live_upgrade(
@@ -77,7 +118,13 @@ async fn live_upgrade(
         return Err(StatusCode::FORBIDDEN);
     }
 
-    Ok(upgrade.on_upgrade(move |socket| run_subscriber(socket, stack_id, broadcaster)))
+    // Echo the non-secret marker subprotocol when the client offered it
+    // (browsers do). Axum only selects a protocol the client also offered, so
+    // header-based callers that send no subprotocol are unaffected. We never
+    // echo the PAK-bearing subprotocol.
+    Ok(upgrade
+        .protocols([WS_MARKER_SUBPROTOCOL])
+        .on_upgrade(move |socket| run_subscriber(socket, stack_id, broadcaster)))
 }
 
 fn authorise(dal: &DAL, auth: &AuthPayload, stack_id: Uuid) -> bool {

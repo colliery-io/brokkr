@@ -1,6 +1,6 @@
 # Code Index
 
-> Generated: 2026-05-26T17:48:37Z | 389 files | JavaScript, Python, Rust, TypeScript
+> Generated: 2026-05-26T19:43:37Z | 389 files | JavaScript, Python, Rust, TypeScript
 
 ## Project Structure
 
@@ -619,23 +619,29 @@
 
 #### crates/brokkr-agent/src/kube_events.rs
 
-- pub `spawn` function L100-127 — `(client: Client, uplink: WsUplink, agent_id: Uuid) -> tokio::task::JoinHandle<()...` — Spawn the kube-events tailer.
--  `LOOKUP_TTL` variable L53 — `: Duration` — How long to cache a UID→stack lookup before re-querying.
--  `OUTBOUND_CAPACITY` variable L59 — `: usize` — Capacity of the bounded outbound queue we drain into the WS uplink.
--  `CacheEntry` enum L62-65 — `Owned | NotOurs` — (WS-09) under the hard 6h retention ceiling.
--  `CachedLookup` struct L67-70 — `{ value: CacheEntry, fetched_at: Instant }` — (WS-09) under the hard 6h retention ceiling.
--  `UidCache` struct L73-75 — `{ by_uid: HashMap<String, CachedLookup> }` — (WS-09) under the hard 6h retention ceiling.
--  `UidCache` type L77-96 — `= UidCache` — (WS-09) under the hard 6h retention ceiling.
--  `get` function L78-85 — `(&self, uid: &str) -> Option<CacheEntry>` — (WS-09) under the hard 6h retention ceiling.
--  `put` function L87-95 — `(&mut self, uid: String, value: CacheEntry)` — (WS-09) under the hard 6h retention ceiling.
--  `watch_loop` function L129-145 — `( client: Client, agent_id: Uuid, tx: mpsc::Sender<WsMessage>, cache: Arc<RwLock...` — (WS-09) under the hard 6h retention ceiling.
--  `handle_event` function L147-191 — `( client: &Client, agent_id: Uuid, ev: &K8sEventResource, tx: &mpsc::Sender<WsMe...` — (WS-09) under the hard 6h retention ceiling.
--  `resolve_stack` function L193-217 — `( client: &Client, ev: &K8sEventResource, uid: &str, cache: &Arc<RwLock<UidCache...` — (WS-09) under the hard 6h retention ceiling.
--  `annotation_lookup` function L219-249 — `( client: &Client, involved: &k8s_openapi::api::core::v1::ObjectReference, ) -> ...` — (WS-09) under the hard 6h retention ceiling.
--  `tests` module L252-284 — `-` — (WS-09) under the hard 6h retention ceiling.
--  `cache_returns_owned_within_ttl` function L257-265 — `()` — (WS-09) under the hard 6h retention ceiling.
--  `cache_treats_not_ours_as_a_real_entry` function L268-272 — `()` — (WS-09) under the hard 6h retention ceiling.
--  `cache_expires_after_ttl` function L275-283 — `()` — (WS-09) under the hard 6h retention ceiling.
+- pub `DEFAULT_UID_CACHE_CAP` variable L79 — `: usize` — Default entry cap.
+- pub `spawn` function L126-158 — `( client: Client, uplink: WsUplink, agent_id: Uuid, uid_cache_cap: usize, ) -> t...` — Spawn the kube-events tailer.
+-  `LOOKUP_TTL` variable L55 — `: Duration` — How long to cache a UID→stack lookup before re-querying.
+-  `OUTBOUND_CAPACITY` variable L61 — `: usize` — Capacity of the bounded outbound queue we drain into the WS uplink.
+-  `CacheEntry` enum L64-67 — `Owned | NotOurs` — (WS-09) under the hard 6h retention ceiling.
+-  `CachedLookup` struct L69-72 — `{ value: CacheEntry, fetched_at: Instant }` — (WS-09) under the hard 6h retention ceiling.
+-  `UidCache` struct L84-86 — `{ by_uid: LruCache<String, CachedLookup> }` — Bounded LRU of UID → ownership lookups, with a per-entry TTL.
+-  `UidCache` type L88-122 — `= UidCache` — (WS-09) under the hard 6h retention ceiling.
+-  `new` function L89-94 — `(cap: usize) -> Self` — (WS-09) under the hard 6h retention ceiling.
+-  `get` function L96-106 — `(&mut self, uid: &str) -> Option<CacheEntry>` — (WS-09) under the hard 6h retention ceiling.
+-  `put` function L108-116 — `(&mut self, uid: String, value: CacheEntry)` — (WS-09) under the hard 6h retention ceiling.
+-  `len` function L119-121 — `(&self) -> usize` — (WS-09) under the hard 6h retention ceiling.
+-  `watch_loop` function L160-176 — `( client: Client, agent_id: Uuid, tx: mpsc::Sender<WsMessage>, cache: Arc<RwLock...` — (WS-09) under the hard 6h retention ceiling.
+-  `handle_event` function L178-222 — `( client: &Client, agent_id: Uuid, ev: &K8sEventResource, tx: &mpsc::Sender<WsMe...` — (WS-09) under the hard 6h retention ceiling.
+-  `resolve_stack` function L224-250 — `( client: &Client, ev: &K8sEventResource, uid: &str, cache: &Arc<RwLock<UidCache...` — (WS-09) under the hard 6h retention ceiling.
+-  `annotation_lookup` function L252-282 — `( client: &Client, involved: &k8s_openapi::api::core::v1::ObjectReference, ) -> ...` — (WS-09) under the hard 6h retention ceiling.
+-  `tests` module L285-366 — `-` — (WS-09) under the hard 6h retention ceiling.
+-  `lookup_or_miss` function L291-299 — `(cache: &mut UidCache, uid: &str, api_calls: &mut usize) -> CacheEntry` — Mirror `resolve_stack`'s cache interaction without the real API:
+-  `cache_returns_owned_within_ttl` function L302-310 — `()` — (WS-09) under the hard 6h retention ceiling.
+-  `cache_treats_not_ours_as_a_real_entry` function L313-317 — `()` — (WS-09) under the hard 6h retention ceiling.
+-  `cache_expires_after_ttl` function L320-328 — `()` — (WS-09) under the hard 6h retention ceiling.
+-  `cache_stays_bounded_under_high_unique_churn` function L331-346 — `()` — (WS-09) under the hard 6h retention ceiling.
+-  `cache_serves_hot_set_without_re_hitting_the_api` function L349-365 — `()` — (WS-09) under the hard 6h retention ceiling.
 
 #### crates/brokkr-agent/src/lib.rs
 
@@ -727,7 +733,7 @@
 
 #### crates/brokkr-agent/src/cli/commands.rs
 
-- pub `start` function L74-466 — `() -> Result<(), Box<dyn std::error::Error>>` — - Contextual information
+- pub `start` function L74-474 — `() -> Result<(), Box<dyn std::error::Error>>` — - Contextual information
 
 #### crates/brokkr-agent/src/cli/mod.rs
 
@@ -2066,12 +2072,15 @@
 
 #### crates/brokkr-broker/src/ws/subscribe.rs
 
-- pub `LIVE_SUBSCRIPTION_PATH_TEMPLATE` variable L45 — `: &str` — Documented path template (Axum colon-style).
-- pub `subscribe_routes` function L50-58 — `(dal: DAL, broadcaster: Arc<LiveBroadcaster>) -> Router<DAL>` — Build the live-subscription router.
--  `live_upgrade` function L60-81 — `( upgrade: WebSocketUpgrade, State(dal): State<DAL>, Extension(broadcaster): Ext...` — (per ADR-0008's "a slow subscriber must not slow ingestion").
--  `authorise` function L83-97 — `(dal: &DAL, auth: &AuthPayload, stack_id: Uuid) -> bool` — (per ADR-0008's "a slow subscriber must not slow ingestion").
--  `run_subscriber` function L99-146 — `( socket: WebSocket, stack_id: Uuid, broadcaster: Arc<LiveBroadcaster>, )` — (per ADR-0008's "a slow subscriber must not slow ingestion").
--  `forward` function L148-165 — `( sink: &mut futures::stream::SplitSink<WebSocket, Message>, msg: &WsMessage, ) ...` — (per ADR-0008's "a slow subscriber must not slow ingestion").
+- pub `LIVE_SUBSCRIPTION_PATH_TEMPLATE` variable L47 — `: &str` — Documented path template (Axum colon-style).
+- pub `subscribe_routes` function L62-73 — `(dal: DAL, broadcaster: Arc<LiveBroadcaster>) -> Router<DAL>` — Build the live-subscription router.
+-  `PAK_SUBPROTOCOL_PREFIX` variable L52 — `: &str` — Subprotocol that carries the PAK for browser clients that cannot set an
+-  `WS_MARKER_SUBPROTOCOL` variable L57 — `: &str` — Non-secret marker subprotocol the browser also offers and the broker
+-  `ws_subprotocol_auth` function L81-99 — `(mut request: Request<Body>, next: Next) -> Response` — Browser WebSocket clients can't set request headers, so they pass the PAK
+-  `live_upgrade` function L101-128 — `( upgrade: WebSocketUpgrade, State(dal): State<DAL>, Extension(broadcaster): Ext...` — (per ADR-0008's "a slow subscriber must not slow ingestion").
+-  `authorise` function L130-144 — `(dal: &DAL, auth: &AuthPayload, stack_id: Uuid) -> bool` — (per ADR-0008's "a slow subscriber must not slow ingestion").
+-  `run_subscriber` function L146-193 — `( socket: WebSocket, stack_id: Uuid, broadcaster: Arc<LiveBroadcaster>, )` — (per ADR-0008's "a slow subscriber must not slow ingestion").
+-  `forward` function L195-212 — `( sink: &mut futures::stream::SplitSink<WebSocket, Message>, msg: &WsMessage, ) ...` — (per ADR-0008's "a slow subscriber must not slow ingestion").
 
 ### crates/brokkr-broker/tests
 
@@ -2383,17 +2392,19 @@
 -  `admin_ws_connections_endpoint_reports_live_state` function L605-655 — `()` — path; this is why we bind a TCP listener for the upgrade tests.
 -  `admin_ws_connections_endpoint_rejects_non_admin` function L658-680 — `()` — path; this is why we bind a TCP listener for the upgrade tests.
 -  `live_subscription_forwards_agent_telemetry_to_subscribers` function L687-779 — `()` — path; this is why we bind a TCP listener for the upgrade tests.
--  `live_subscription_rejects_unauthorised_caller` function L782-812 — `()` — path; this is why we bind a TCP listener for the upgrade tests.
--  `rest_history_endpoints_return_retained_telemetry_with_retention_metadata` function L819-905 — `()` — path; this is why we bind a TCP listener for the upgrade tests.
--  `rest_history_endpoints_403_for_unauthorized_callers` function L908-941 — `()` — path; this is why we bind a TCP listener for the upgrade tests.
--  `ws_telemetry_ingestion_lands_in_agent_telemetry_tables` function L948-1045 — `()` — path; this is why we bind a TCP listener for the upgrade tests.
--  `eviction_worker_drops_rows_past_retention` function L1048-1118 — `()` — path; this is why we bind a TCP listener for the upgrade tests.
--  `concurrent_target_post_and_get_delivers_every_push_without_dupes` function L1142-1275 — `()` — path; this is why we bind a TCP listener for the upgrade tests.
--  `N` variable L1147 — `: usize` — path; this is why we bind a TCP listener for the upgrade tests.
--  `await_socket_close` function L1289-1306 — `( socket: &mut tokio_tungstenite::WebSocketStream< tokio_tungstenite::MaybeTlsSt...` — Drive a frame-drain until the socket closes (None / Close / Err), or the
--  `rotating_agent_pak_closes_its_open_ws` function L1309-1358 — `()` — path; this is why we bind a TCP listener for the upgrade tests.
--  `deleting_agent_closes_its_open_ws` function L1361-1405 — `()` — path; this is why we bind a TCP listener for the upgrade tests.
--  `wait_until` function L1408-1423 — `(timeout: std::time::Duration, mut predicate: F) -> bool` — Repeatedly poll `predicate` until it returns true or `timeout` elapses.
+-  `live_subscription_authenticates_via_subprotocol` function L782-858 — `()` — path; this is why we bind a TCP listener for the upgrade tests.
+-  `live_subscription_subprotocol_with_bad_pak_is_rejected` function L861-883 — `()` — path; this is why we bind a TCP listener for the upgrade tests.
+-  `live_subscription_rejects_unauthorised_caller` function L886-916 — `()` — path; this is why we bind a TCP listener for the upgrade tests.
+-  `rest_history_endpoints_return_retained_telemetry_with_retention_metadata` function L923-1009 — `()` — path; this is why we bind a TCP listener for the upgrade tests.
+-  `rest_history_endpoints_403_for_unauthorized_callers` function L1012-1045 — `()` — path; this is why we bind a TCP listener for the upgrade tests.
+-  `ws_telemetry_ingestion_lands_in_agent_telemetry_tables` function L1052-1149 — `()` — path; this is why we bind a TCP listener for the upgrade tests.
+-  `eviction_worker_drops_rows_past_retention` function L1152-1222 — `()` — path; this is why we bind a TCP listener for the upgrade tests.
+-  `concurrent_target_post_and_get_delivers_every_push_without_dupes` function L1246-1379 — `()` — path; this is why we bind a TCP listener for the upgrade tests.
+-  `N` variable L1251 — `: usize` — path; this is why we bind a TCP listener for the upgrade tests.
+-  `await_socket_close` function L1393-1410 — `( socket: &mut tokio_tungstenite::WebSocketStream< tokio_tungstenite::MaybeTlsSt...` — Drive a frame-drain until the socket closes (None / Close / Err), or the
+-  `rotating_agent_pak_closes_its_open_ws` function L1413-1462 — `()` — path; this is why we bind a TCP listener for the upgrade tests.
+-  `deleting_agent_closes_its_open_ws` function L1465-1509 — `()` — path; this is why we bind a TCP listener for the upgrade tests.
+-  `wait_until` function L1512-1527 — `(timeout: std::time::Duration, mut predicate: F) -> bool` — Repeatedly poll `predicate` until it returns true or `timeout` elapses.
 
 ### crates/brokkr-broker/tests/integration/dal
 
@@ -3274,35 +3285,35 @@
 - pub `Settings` struct L121-136 — `{ database: Database, log: Log, pak: PAK, agent: Agent, broker: Broker, cors: Co...` — Represents the main settings structure for the application
 - pub `Cors` struct L140-156 — `{ allowed_origins: Vec<String>, allowed_methods: Vec<String>, allowed_headers: V...` — Represents the CORS configuration
 - pub `Broker` struct L159-179 — `{ pak_hash: Option<String>, diagnostic_cleanup_interval_seconds: Option<u64>, di...` — Default: 60 (set to 0 to disable caching)
-- pub `Agent` struct L184-229 — `{ broker_url: String, polling_interval: u64, kubeconfig_path: Option<String>, ma...` — Represents the agent configuration
-- pub `Database` struct L234-239 — `{ url: String, schema: Option<String> }` — Represents the database configuration
-- pub `Log` struct L243-249 — `{ level: String, format: String }` — Represents the logging configuration
-- pub `Telemetry` struct L257-276 — `{ enabled: bool, otlp_endpoint: String, service_name: String, sampling_rate: f64...` — Represents the telemetry (OpenTelemetry) configuration with hierarchical overrides
-- pub `TelemetryOverride` struct L280-289 — `{ enabled: Option<bool>, otlp_endpoint: Option<String>, service_name: Option<Str...` — Component-specific telemetry overrides (all fields optional)
-- pub `ResolvedTelemetry` struct L293-298 — `{ enabled: bool, otlp_endpoint: String, service_name: String, sampling_rate: f64...` — Resolved telemetry configuration after merging base with overrides
-- pub `for_broker` function L302-317 — `(&self) -> ResolvedTelemetry` — Get resolved telemetry config for broker (base merged with broker overrides)
-- pub `for_agent` function L320-335 — `(&self) -> ResolvedTelemetry` — Get resolved telemetry config for agent (base merged with agent overrides)
-- pub `PAK` struct L352-369 — `{ prefix: Option<String>, digest: Option<String>, rng: Option<String>, short_tok...` — Represents the PAK configuration
-- pub `short_length_as_str` function L373-375 — `(&mut self)` — Convert short token length to string
-- pub `long_length_as_str` function L378-380 — `(&mut self)` — Convert long token length to string
-- pub `new` function L393-412 — `(file: Option<String>) -> Result<Self, ConfigError>` — Creates a new `Settings` instance
-- pub `DynamicConfig` struct L420-437 — `{ log_level: String, diagnostic_cleanup_interval_seconds: u64, diagnostic_max_ag...` — Dynamic configuration values that can be hot-reloaded at runtime.
-- pub `from_settings` function L441-461 — `(settings: &Settings) -> Self` — Create DynamicConfig from Settings
-- pub `ConfigChange` struct L466-473 — `{ key: String, old_value: String, new_value: String }` — Represents a configuration change detected during reload
-- pub `ReloadableConfig` struct L499-506 — `{ static_config: Settings, dynamic: Arc<RwLock<DynamicConfig>>, config_file: Opt...` — Configuration wrapper that separates static (restart-required) settings
-- pub `new` function L518-527 — `(file: Option<String>) -> Result<Self, ConfigError>` — Creates a new ReloadableConfig instance
-- pub `from_settings` function L539-547 — `(settings: Settings, config_file: Option<String>) -> Self` — Creates a ReloadableConfig from an existing Settings instance
-- pub `static_config` function L552-554 — `(&self) -> &Settings` — Get a reference to the static (immutable) settings
-- pub `reload` function L560-639 — `(&self) -> Result<Vec<ConfigChange>, ConfigError>` — Reload dynamic configuration from sources (file + environment)
-- pub `log_level` function L646-651 — `(&self) -> String` — Get current log level
-- pub `diagnostic_cleanup_interval_seconds` function L654-659 — `(&self) -> u64` — Get diagnostic cleanup interval in seconds
-- pub `diagnostic_max_age_hours` function L662-667 — `(&self) -> i64` — Get diagnostic max age in hours
-- pub `webhook_delivery_interval_seconds` function L670-675 — `(&self) -> u64` — Get webhook delivery interval in seconds
-- pub `webhook_delivery_batch_size` function L678-683 — `(&self) -> i64` — Get webhook delivery batch size
-- pub `webhook_cleanup_retention_days` function L686-691 — `(&self) -> i64` — Get webhook cleanup retention in days
-- pub `cors_allowed_origins` function L694-699 — `(&self) -> Vec<String>` — Get CORS allowed origins
-- pub `cors_max_age_seconds` function L702-707 — `(&self) -> u64` — Get CORS max age in seconds
-- pub `dynamic_snapshot` function L710-712 — `(&self) -> Option<DynamicConfig>` — Get a snapshot of all dynamic config values
+- pub `Agent` struct L184-237 — `{ broker_url: String, polling_interval: u64, kubeconfig_path: Option<String>, ma...` — Represents the agent configuration
+- pub `Database` struct L242-247 — `{ url: String, schema: Option<String> }` — Represents the database configuration
+- pub `Log` struct L251-257 — `{ level: String, format: String }` — Represents the logging configuration
+- pub `Telemetry` struct L265-284 — `{ enabled: bool, otlp_endpoint: String, service_name: String, sampling_rate: f64...` — Represents the telemetry (OpenTelemetry) configuration with hierarchical overrides
+- pub `TelemetryOverride` struct L288-297 — `{ enabled: Option<bool>, otlp_endpoint: Option<String>, service_name: Option<Str...` — Component-specific telemetry overrides (all fields optional)
+- pub `ResolvedTelemetry` struct L301-306 — `{ enabled: bool, otlp_endpoint: String, service_name: String, sampling_rate: f64...` — Resolved telemetry configuration after merging base with overrides
+- pub `for_broker` function L310-325 — `(&self) -> ResolvedTelemetry` — Get resolved telemetry config for broker (base merged with broker overrides)
+- pub `for_agent` function L328-343 — `(&self) -> ResolvedTelemetry` — Get resolved telemetry config for agent (base merged with agent overrides)
+- pub `PAK` struct L360-377 — `{ prefix: Option<String>, digest: Option<String>, rng: Option<String>, short_tok...` — Represents the PAK configuration
+- pub `short_length_as_str` function L381-383 — `(&mut self)` — Convert short token length to string
+- pub `long_length_as_str` function L386-388 — `(&mut self)` — Convert long token length to string
+- pub `new` function L401-420 — `(file: Option<String>) -> Result<Self, ConfigError>` — Creates a new `Settings` instance
+- pub `DynamicConfig` struct L428-445 — `{ log_level: String, diagnostic_cleanup_interval_seconds: u64, diagnostic_max_ag...` — Dynamic configuration values that can be hot-reloaded at runtime.
+- pub `from_settings` function L449-469 — `(settings: &Settings) -> Self` — Create DynamicConfig from Settings
+- pub `ConfigChange` struct L474-481 — `{ key: String, old_value: String, new_value: String }` — Represents a configuration change detected during reload
+- pub `ReloadableConfig` struct L507-514 — `{ static_config: Settings, dynamic: Arc<RwLock<DynamicConfig>>, config_file: Opt...` — Configuration wrapper that separates static (restart-required) settings
+- pub `new` function L526-535 — `(file: Option<String>) -> Result<Self, ConfigError>` — Creates a new ReloadableConfig instance
+- pub `from_settings` function L547-555 — `(settings: Settings, config_file: Option<String>) -> Self` — Creates a ReloadableConfig from an existing Settings instance
+- pub `static_config` function L560-562 — `(&self) -> &Settings` — Get a reference to the static (immutable) settings
+- pub `reload` function L568-647 — `(&self) -> Result<Vec<ConfigChange>, ConfigError>` — Reload dynamic configuration from sources (file + environment)
+- pub `log_level` function L654-659 — `(&self) -> String` — Get current log level
+- pub `diagnostic_cleanup_interval_seconds` function L662-667 — `(&self) -> u64` — Get diagnostic cleanup interval in seconds
+- pub `diagnostic_max_age_hours` function L670-675 — `(&self) -> i64` — Get diagnostic max age in hours
+- pub `webhook_delivery_interval_seconds` function L678-683 — `(&self) -> u64` — Get webhook delivery interval in seconds
+- pub `webhook_delivery_batch_size` function L686-691 — `(&self) -> i64` — Get webhook delivery batch size
+- pub `webhook_cleanup_retention_days` function L694-699 — `(&self) -> i64` — Get webhook cleanup retention in days
+- pub `cors_allowed_origins` function L702-707 — `(&self) -> Vec<String>` — Get CORS allowed origins
+- pub `cors_max_age_seconds` function L710-715 — `(&self) -> u64` — Get CORS max age in seconds
+- pub `dynamic_snapshot` function L718-720 — `(&self) -> Option<DynamicConfig>` — Get a snapshot of all dynamic config values
 -  `deserialize_string_or_vec` function L76-113 — `(deserializer: D) -> Result<Vec<String>, D::Error>` — Deserializes a comma-separated string or array into Vec<String>
 -  `StringOrVec` struct L83 — `-` — Default: 60 (set to 0 to disable caching)
 -  `StringOrVec` type L85-110 — `= StringOrVec` — Default: 60 (set to 0 to disable caching)
@@ -3311,33 +3322,33 @@
 -  `visit_str` function L92-98 — `(self, value: &str) -> Result<Self::Value, E>` — Default: 60 (set to 0 to disable caching)
 -  `visit_seq` function L100-109 — `(self, mut seq: A) -> Result<Self::Value, A::Error>` — Default: 60 (set to 0 to disable caching)
 -  `DEFAULT_SETTINGS` variable L116 — `: &str` — Default: 60 (set to 0 to disable caching)
--  `default_log_format` function L251-253 — `() -> String` — Default: 60 (set to 0 to disable caching)
--  `Telemetry` type L300-336 — `= Telemetry` — Default: 60 (set to 0 to disable caching)
--  `default_otlp_endpoint` function L338-340 — `() -> String` — Default: 60 (set to 0 to disable caching)
--  `default_service_name` function L342-344 — `() -> String` — Default: 60 (set to 0 to disable caching)
--  `default_sampling_rate` function L346-348 — `() -> f64` — Default: 60 (set to 0 to disable caching)
--  `PAK` type L371-381 — `= PAK` — Default: 60 (set to 0 to disable caching)
--  `Settings` type L383-413 — `= Settings` — Default: 60 (set to 0 to disable caching)
--  `DynamicConfig` type L439-462 — `= DynamicConfig` — Default: 60 (set to 0 to disable caching)
--  `ReloadableConfig` type L508-713 — `= ReloadableConfig` — Default: 60 (set to 0 to disable caching)
--  `tests` module L716-1061 — `-` — Default: 60 (set to 0 to disable caching)
--  `test_settings_default_values` function L726-735 — `()` — Test the creation of Settings with default values
--  `test_telemetry_default_values` function L738-746 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_telemetry_for_broker_no_overrides` function L749-766 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_telemetry_for_broker_full_overrides` function L769-791 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_telemetry_for_broker_partial_overrides` function L794-816 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_telemetry_for_agent_no_overrides` function L819-836 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_telemetry_for_agent_full_overrides` function L839-861 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_telemetry_broker_and_agent_independent` function L864-901 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_telemetry_override_enabled_false_overrides_base_true` function L904-925 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_telemetry_sampling_rate_extremes` function L928-950 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_reloadable_config_creation` function L957-970 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_dynamic_config_from_settings` function L973-984 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_reloadable_config_accessors_with_defaults` function L987-997 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_reloadable_config_dynamic_snapshot` function L1000-1012 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_reloadable_config_reload_no_changes` function L1015-1025 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_reloadable_config_is_clone` function L1028-1034 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_reloadable_config_thread_safety` function L1037-1060 — `()` — Default: 60 (set to 0 to disable caching)
+-  `default_log_format` function L259-261 — `() -> String` — Default: 60 (set to 0 to disable caching)
+-  `Telemetry` type L308-344 — `= Telemetry` — Default: 60 (set to 0 to disable caching)
+-  `default_otlp_endpoint` function L346-348 — `() -> String` — Default: 60 (set to 0 to disable caching)
+-  `default_service_name` function L350-352 — `() -> String` — Default: 60 (set to 0 to disable caching)
+-  `default_sampling_rate` function L354-356 — `() -> f64` — Default: 60 (set to 0 to disable caching)
+-  `PAK` type L379-389 — `= PAK` — Default: 60 (set to 0 to disable caching)
+-  `Settings` type L391-421 — `= Settings` — Default: 60 (set to 0 to disable caching)
+-  `DynamicConfig` type L447-470 — `= DynamicConfig` — Default: 60 (set to 0 to disable caching)
+-  `ReloadableConfig` type L516-721 — `= ReloadableConfig` — Default: 60 (set to 0 to disable caching)
+-  `tests` module L724-1069 — `-` — Default: 60 (set to 0 to disable caching)
+-  `test_settings_default_values` function L734-743 — `()` — Test the creation of Settings with default values
+-  `test_telemetry_default_values` function L746-754 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_telemetry_for_broker_no_overrides` function L757-774 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_telemetry_for_broker_full_overrides` function L777-799 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_telemetry_for_broker_partial_overrides` function L802-824 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_telemetry_for_agent_no_overrides` function L827-844 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_telemetry_for_agent_full_overrides` function L847-869 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_telemetry_broker_and_agent_independent` function L872-909 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_telemetry_override_enabled_false_overrides_base_true` function L912-933 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_telemetry_sampling_rate_extremes` function L936-958 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_reloadable_config_creation` function L965-978 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_dynamic_config_from_settings` function L981-992 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_reloadable_config_accessors_with_defaults` function L995-1005 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_reloadable_config_dynamic_snapshot` function L1008-1020 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_reloadable_config_reload_no_changes` function L1023-1033 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_reloadable_config_is_clone` function L1036-1042 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_reloadable_config_thread_safety` function L1045-1068 — `()` — Default: 60 (set to 0 to disable caching)
 
 #### crates/brokkr-utils/src/lib.rs
 
@@ -5640,81 +5651,82 @@
 
 #### examples/ui-slim/src/App.js
 
-- pub `App` function L3313-3319 — `function App()`
--  `StackTelemetrySection` function L27-118 — `const StackTelemetrySection = ({ stackId })`
--  `AgentsPanel` function L121-415 — `const AgentsPanel = ({ stacks, onRefresh })`
--  `tick` function L167-176 — `const tick = ()`
--  `selectAgent` function L182-191 — `const selectAgent = (agent)`
--  `addLabel` function L193-202 — `const addLabel = (label)`
--  `removeLabel` function L204-212 — `const removeLabel = (label)`
--  `addAnnotation` function L214-223 — `const addAnnotation = (key, value)`
--  `removeAnnotation` function L225-233 — `const removeAnnotation = (key)`
--  `addTarget` function L235-244 — `const addTarget = (stackId)`
--  `removeTarget` function L246-254 — `const removeTarget = (stackId)`
--  `toggleStatus` function L256-267 — `const toggleStatus = ()`
--  `StacksPanel` function L418-782 — `const StacksPanel = ({ generators, agents, onRefresh })`
--  `selectStack` function L455-468 — `const selectStack = (stack)`
--  `create` function L470-481 — `const create = (e)`
--  `deploy` function L483-496 — `const deploy = (e)`
--  `addLabel` function L498-507 — `const addLabel = (label)`
--  `removeLabel` function L509-517 — `const removeLabel = (label)`
--  `addAnnotation` function L519-528 — `const addAnnotation = (key, value)`
--  `removeAnnotation` function L530-538 — `const removeAnnotation = (key)`
--  `copyDeployment` function L540-549 — `const copyDeployment = (depId)`
--  `requestDiagnostic` function L551-576 — `const requestDiagnostic = (depId, agentId)`
--  `pollResult` function L557-571 — `const pollResult = ()`
--  `TemplatesPanel` function L785-1023 — `const TemplatesPanel = ({ stacks })`
--  `create` function L824-835 — `const create = (e)`
--  `instantiate` function L837-848 — `const instantiate = (e)`
--  `remove` function L850-861 — `const remove = (id)`
--  `addLabel` function L863-872 — `const addLabel = (label)`
--  `removeLabel` function L874-882 — `const removeLabel = (label)`
--  `JobsPanel` function L1026-1396 — `const JobsPanel = ({ agents })`
--  `create` function L1062-1080 — `const create = (e)`
--  `cancel` function L1082-1092 — `const cancel = (id)`
--  `runBuildDemo` function L1095-1168 — `const runBuildDemo = ()`
--  `prefillBuildDemo` function L1171-1178 — `const prefillBuildDemo = ()`
--  `AdminPanel` function L1399-1546 — `const AdminPanel = ({ onGeneratorsChange, onAgentsChange })`
--  `create` function L1425-1442 — `const create = (e)`
--  `rotate` function L1444-1454 — `const rotate = (type, id)`
--  `copy` function L1456-1459 — `const copy = ()`
--  `closeCreate` function L1461-1467 — `const closeCreate = ()`
--  `WebhooksPanel` function L1549-1879 — `const WebhooksPanel = ()`
--  `selectWebhook` function L1582-1591 — `const selectWebhook = (webhook)`
--  `create` function L1593-1610 — `const create = (e)`
--  `toggleEnabled` function L1612-1623 — `const toggleEnabled = (webhook)`
--  `remove` function L1625-1636 — `const remove = (id)`
--  `toggleEventType` function L1638-1644 — `const toggleEventType = (type)`
--  `MetricsPanel` function L1882-2046 — `const MetricsPanel = ()`
--  `getMetricValue` function L1909-1915 — `const getMetricValue = (name, labels = {})`
--  `getMetricValues` function L1918 — `const getMetricValues = (name)`
--  `sumMetric` function L1921-1924 — `const sumMetric = (name)`
--  `DemoPanel` function L2049-3262 — `const DemoPanel = ()`
--  `startEventPolling` function L2077-2096 — `const startEventPolling = ()`
--  `poll` function L2080-2093 — `const poll = ()`
--  `stopEventPolling` function L2099-2105 — `const stopEventPolling = ()`
--  `clearWebhookEvents` function L2108-2115 — `const clearWebhookEvents = ()`
--  `getEventTypeClass` function L2127-2134 — `const getEventTypeClass = (eventType)`
--  `getEventStatusClass` function L2137-2149 — `const getEventStatusClass = (event)`
--  `formatEventPayload` function L2152-2160 — `const formatEventPayload = (event)`
--  `EventLogPanel` function L2163-2214 — `const EventLogPanel = ()`
--  `updatePhase` function L2217-2225 — `const updatePhase = (phaseNum, updates)`
--  `addStep` function L2228-2239 — `const addStep = (phaseNum, step)`
--  `formatDuration` function L2242-2248 — `const formatDuration = (ms)`
--  `resetDemo` function L2251-2281 — `const resetDemo = ()`
--  `canStartPhase` function L2286-2313 — `const canStartPhase = (phaseNum)`
--  `runPhase` function L2316-2347 — `const runPhase = (phaseNum)`
--  `runPhase1` function L2350-2424 — `const runPhase1 = ()`
--  `runPhase2` function L2427-2480 — `const runPhase2 = ()`
--  `runPhase3` function L2483-2564 — `const runPhase3 = ()`
--  `runPhase4` function L2567-2665 — `const runPhase4 = ()`
--  `runPhase5` function L2668-2760 — `const runPhase5 = ()`
--  `runPhase6` function L2763-2892 — `const runPhase6 = ()`
--  `runPhase7` function L2895-2972 — `const runPhase7 = ()`
--  `runPhase8` function L2975-3019 — `const runPhase8 = ()`
--  `runCleanup` function L3022-3110 — `const runCleanup = ()`
--  `PhaseCard` function L3116-3190 — `const PhaseCard = ({ num, phase })`
--  `AppContent` function L3266-3310 — `const AppContent = ()`
+- pub `App` function L3384-3390 — `function App()`
+-  `StackTelemetrySection` function L32-189 — `const StackTelemetrySection = ({ stackId })`
+-  `toggleLive` function L112 — `const toggleLive = ()`
+-  `AgentsPanel` function L192-486 — `const AgentsPanel = ({ stacks, onRefresh })`
+-  `tick` function L238-247 — `const tick = ()`
+-  `selectAgent` function L253-262 — `const selectAgent = (agent)`
+-  `addLabel` function L264-273 — `const addLabel = (label)`
+-  `removeLabel` function L275-283 — `const removeLabel = (label)`
+-  `addAnnotation` function L285-294 — `const addAnnotation = (key, value)`
+-  `removeAnnotation` function L296-304 — `const removeAnnotation = (key)`
+-  `addTarget` function L306-315 — `const addTarget = (stackId)`
+-  `removeTarget` function L317-325 — `const removeTarget = (stackId)`
+-  `toggleStatus` function L327-338 — `const toggleStatus = ()`
+-  `StacksPanel` function L489-853 — `const StacksPanel = ({ generators, agents, onRefresh })`
+-  `selectStack` function L526-539 — `const selectStack = (stack)`
+-  `create` function L541-552 — `const create = (e)`
+-  `deploy` function L554-567 — `const deploy = (e)`
+-  `addLabel` function L569-578 — `const addLabel = (label)`
+-  `removeLabel` function L580-588 — `const removeLabel = (label)`
+-  `addAnnotation` function L590-599 — `const addAnnotation = (key, value)`
+-  `removeAnnotation` function L601-609 — `const removeAnnotation = (key)`
+-  `copyDeployment` function L611-620 — `const copyDeployment = (depId)`
+-  `requestDiagnostic` function L622-647 — `const requestDiagnostic = (depId, agentId)`
+-  `pollResult` function L628-642 — `const pollResult = ()`
+-  `TemplatesPanel` function L856-1094 — `const TemplatesPanel = ({ stacks })`
+-  `create` function L895-906 — `const create = (e)`
+-  `instantiate` function L908-919 — `const instantiate = (e)`
+-  `remove` function L921-932 — `const remove = (id)`
+-  `addLabel` function L934-943 — `const addLabel = (label)`
+-  `removeLabel` function L945-953 — `const removeLabel = (label)`
+-  `JobsPanel` function L1097-1467 — `const JobsPanel = ({ agents })`
+-  `create` function L1133-1151 — `const create = (e)`
+-  `cancel` function L1153-1163 — `const cancel = (id)`
+-  `runBuildDemo` function L1166-1239 — `const runBuildDemo = ()`
+-  `prefillBuildDemo` function L1242-1249 — `const prefillBuildDemo = ()`
+-  `AdminPanel` function L1470-1617 — `const AdminPanel = ({ onGeneratorsChange, onAgentsChange })`
+-  `create` function L1496-1513 — `const create = (e)`
+-  `rotate` function L1515-1525 — `const rotate = (type, id)`
+-  `copy` function L1527-1530 — `const copy = ()`
+-  `closeCreate` function L1532-1538 — `const closeCreate = ()`
+-  `WebhooksPanel` function L1620-1950 — `const WebhooksPanel = ()`
+-  `selectWebhook` function L1653-1662 — `const selectWebhook = (webhook)`
+-  `create` function L1664-1681 — `const create = (e)`
+-  `toggleEnabled` function L1683-1694 — `const toggleEnabled = (webhook)`
+-  `remove` function L1696-1707 — `const remove = (id)`
+-  `toggleEventType` function L1709-1715 — `const toggleEventType = (type)`
+-  `MetricsPanel` function L1953-2117 — `const MetricsPanel = ()`
+-  `getMetricValue` function L1980-1986 — `const getMetricValue = (name, labels = {})`
+-  `getMetricValues` function L1989 — `const getMetricValues = (name)`
+-  `sumMetric` function L1992-1995 — `const sumMetric = (name)`
+-  `DemoPanel` function L2120-3333 — `const DemoPanel = ()`
+-  `startEventPolling` function L2148-2167 — `const startEventPolling = ()`
+-  `poll` function L2151-2164 — `const poll = ()`
+-  `stopEventPolling` function L2170-2176 — `const stopEventPolling = ()`
+-  `clearWebhookEvents` function L2179-2186 — `const clearWebhookEvents = ()`
+-  `getEventTypeClass` function L2198-2205 — `const getEventTypeClass = (eventType)`
+-  `getEventStatusClass` function L2208-2220 — `const getEventStatusClass = (event)`
+-  `formatEventPayload` function L2223-2231 — `const formatEventPayload = (event)`
+-  `EventLogPanel` function L2234-2285 — `const EventLogPanel = ()`
+-  `updatePhase` function L2288-2296 — `const updatePhase = (phaseNum, updates)`
+-  `addStep` function L2299-2310 — `const addStep = (phaseNum, step)`
+-  `formatDuration` function L2313-2319 — `const formatDuration = (ms)`
+-  `resetDemo` function L2322-2352 — `const resetDemo = ()`
+-  `canStartPhase` function L2357-2384 — `const canStartPhase = (phaseNum)`
+-  `runPhase` function L2387-2418 — `const runPhase = (phaseNum)`
+-  `runPhase1` function L2421-2495 — `const runPhase1 = ()`
+-  `runPhase2` function L2498-2551 — `const runPhase2 = ()`
+-  `runPhase3` function L2554-2635 — `const runPhase3 = ()`
+-  `runPhase4` function L2638-2736 — `const runPhase4 = ()`
+-  `runPhase5` function L2739-2831 — `const runPhase5 = ()`
+-  `runPhase6` function L2834-2963 — `const runPhase6 = ()`
+-  `runPhase7` function L2966-3043 — `const runPhase7 = ()`
+-  `runPhase8` function L3046-3090 — `const runPhase8 = ()`
+-  `runCleanup` function L3093-3181 — `const runCleanup = ()`
+-  `PhaseCard` function L3187-3261 — `const PhaseCard = ({ num, phase })`
+-  `AppContent` function L3337-3381 — `const AppContent = ()`
 
 #### examples/ui-slim/src/api.js
 
@@ -5742,61 +5754,61 @@
 - pub `getStackEvents` function L176-177 — `const getStackEvents = (id, query = {})`
 - pub `getStackLogs` function L184-185 — `const getStackLogs = (id, query = {})`
 - pub `getWsConnections` function L191 — `const getWsConnections = ()`
-- pub `openStackLiveStream` function L205-211 — `const openStackLiveStream = (id)`
-- pub `createStack` function L212-217 — `const createStack = (name, description, generatorId)`
-- pub `addStackLabel` function L218-224 — `const addStackLabel = (id, label)`
-- pub `removeStackLabel` function L225-230 — `const removeStackLabel = (id, label)`
-- pub `addStackAnnotation` function L231-237 — `const addStackAnnotation = (id, key, value)`
-- pub `removeStackAnnotation` function L238-243 — `const removeStackAnnotation = (id, key)`
-- pub `createDeployment` function L244-257 — `const createDeployment = (stackId, yaml, isDeletion = false)`
-- pub `getDeployment` function L258-261 — `const getDeployment = (id)`
-- pub `getTemplates` function L267 — `const getTemplates = ()`
-- pub `getTemplateLabels` function L268-271 — `const getTemplateLabels = (id)`
-- pub `getTemplateAnnotations` function L272-275 — `const getTemplateAnnotations = (id)`
-- pub `createTemplate` function L276-286 — `const createTemplate = (name, description, content, schema)`
-- pub `updateTemplate` function L287-297 — `const updateTemplate = (id, description, content, schema)`
-- pub `deleteTemplate` function L298-299 — `const deleteTemplate = (id)`
-- pub `addTemplateLabel` function L300-306 — `const addTemplateLabel = (id, label)`
-- pub `removeTemplateLabel` function L307-312 — `const removeTemplateLabel = (id, label)`
-- pub `instantiateTemplate` function L313-319 — `const instantiateTemplate = (stackId, templateId, params)`
-- pub `getGenerators` function L325 — `const getGenerators = ()`
-- pub `createGenerator` function L326-331 — `const createGenerator = (name, description)`
-- pub `rotateGeneratorPak` function L332-337 — `const rotateGeneratorPak = (id)`
-- pub `getWorkOrders` function L343-348 — `const getWorkOrders = (status, workType)`
-- pub `getWorkOrder` function L349-352 — `const getWorkOrder = (id)`
-- pub `createWorkOrder` function L353-365 — `const createWorkOrder = (workType, yamlContent, targeting, options = {})`
-- pub `deleteWorkOrder` function L366-367 — `const deleteWorkOrder = (id)`
-- pub `getWorkOrderLog` function L368-375 — `const getWorkOrderLog = (workType, success, agentId, limit)`
-- pub `createDiagnostic` function L381-396 — `const createDiagnostic = ( deploymentObjectId, agentId, requestedBy, retentionMi...`
-- pub `getDiagnostic` function L397-398 — `const getDiagnostic = (id)`
-- pub `getDeploymentHealth` function L404-409 — `const getDeploymentHealth = (id)`
-- pub `getStackHealth` function L410-411 — `const getStackHealth = (id)`
-- pub `getWebhooks` function L417 — `const getWebhooks = ()`
-- pub `getWebhook` function L418-419 — `const getWebhook = (id)`
-- pub `createWebhook` function L420-433 — `const createWebhook = (name, url, eventTypes, authHeader, options = {})`
-- pub `updateWebhook` function L434-440 — `const updateWebhook = (id, updates)`
-- pub `deleteWebhook` function L441-442 — `const deleteWebhook = (id)`
-- pub `getWebhookEventTypes` function L443-444 — `const getWebhookEventTypes = ()`
-- pub `getWebhookDeliveries` function L445-454 — `const getWebhookDeliveries = (id, status, limit)`
-- pub `getMetrics` function L461-465 — `const getMetrics = ()`
-- pub `getWebhookCatcherStats` function L471-475 — `const getWebhookCatcherStats = ()`
-- pub `clearWebhookCatcher` function L477-483 — `const clearWebhookCatcher = ()`
-- pub `getDemoBuildYaml` function L496-514 — `const getDemoBuildYaml = ()`
-- pub `deleteStack` function L520-521 — `const deleteStack = (id)`
-- pub `deleteAgent` function L522-523 — `const deleteAgent = (id)`
-- pub `deleteGenerator` function L524-525 — `const deleteGenerator = (id)`
-- pub `createBuildWorkOrder` function L531-541 — `const createBuildWorkOrder = ( imageTag = "latest", agentId = null, )`
-- pub `getWebhookCatcherDeploymentYaml` function L543-591 — `const getWebhookCatcherDeploymentYaml = (imageTag = "latest")`
-- pub `parseMetrics` function L594-616 — `const parseMetrics = (metricsText)`
-- pub `checkEnvironment` function L620-650 — `const checkEnvironment = ()`
-- pub `getWebhookCatcherEvents` function L652-660 — `const getWebhookCatcherEvents = ()`
-- pub `pollForCondition` function L662-674 — `const pollForCondition = ( checkFn, intervalMs = 2000, timeoutMs = 60000, )`
-- pub `pollAgentStatus` function L676-698 — `const pollAgentStatus = (agentId, timeoutMs = 120000)`
-- pub `pollWorkOrderStatus` function L700-717 — `const pollWorkOrderStatus = (workOrderId, timeoutMs = 300000)`
-- pub `cleanupDemo` function L720-805 — `const cleanupDemo = (resources, onProgress)`
+- pub `openStackLiveStream` function L203-206 — `const openStackLiveStream = (id)`
+- pub `createStack` function L207-212 — `const createStack = (name, description, generatorId)`
+- pub `addStackLabel` function L213-219 — `const addStackLabel = (id, label)`
+- pub `removeStackLabel` function L220-225 — `const removeStackLabel = (id, label)`
+- pub `addStackAnnotation` function L226-232 — `const addStackAnnotation = (id, key, value)`
+- pub `removeStackAnnotation` function L233-238 — `const removeStackAnnotation = (id, key)`
+- pub `createDeployment` function L239-252 — `const createDeployment = (stackId, yaml, isDeletion = false)`
+- pub `getDeployment` function L253-256 — `const getDeployment = (id)`
+- pub `getTemplates` function L262 — `const getTemplates = ()`
+- pub `getTemplateLabels` function L263-266 — `const getTemplateLabels = (id)`
+- pub `getTemplateAnnotations` function L267-270 — `const getTemplateAnnotations = (id)`
+- pub `createTemplate` function L271-281 — `const createTemplate = (name, description, content, schema)`
+- pub `updateTemplate` function L282-292 — `const updateTemplate = (id, description, content, schema)`
+- pub `deleteTemplate` function L293-294 — `const deleteTemplate = (id)`
+- pub `addTemplateLabel` function L295-301 — `const addTemplateLabel = (id, label)`
+- pub `removeTemplateLabel` function L302-307 — `const removeTemplateLabel = (id, label)`
+- pub `instantiateTemplate` function L308-314 — `const instantiateTemplate = (stackId, templateId, params)`
+- pub `getGenerators` function L320 — `const getGenerators = ()`
+- pub `createGenerator` function L321-326 — `const createGenerator = (name, description)`
+- pub `rotateGeneratorPak` function L327-332 — `const rotateGeneratorPak = (id)`
+- pub `getWorkOrders` function L338-343 — `const getWorkOrders = (status, workType)`
+- pub `getWorkOrder` function L344-347 — `const getWorkOrder = (id)`
+- pub `createWorkOrder` function L348-360 — `const createWorkOrder = (workType, yamlContent, targeting, options = {})`
+- pub `deleteWorkOrder` function L361-362 — `const deleteWorkOrder = (id)`
+- pub `getWorkOrderLog` function L363-370 — `const getWorkOrderLog = (workType, success, agentId, limit)`
+- pub `createDiagnostic` function L376-391 — `const createDiagnostic = ( deploymentObjectId, agentId, requestedBy, retentionMi...`
+- pub `getDiagnostic` function L392-393 — `const getDiagnostic = (id)`
+- pub `getDeploymentHealth` function L399-404 — `const getDeploymentHealth = (id)`
+- pub `getStackHealth` function L405-406 — `const getStackHealth = (id)`
+- pub `getWebhooks` function L412 — `const getWebhooks = ()`
+- pub `getWebhook` function L413-414 — `const getWebhook = (id)`
+- pub `createWebhook` function L415-428 — `const createWebhook = (name, url, eventTypes, authHeader, options = {})`
+- pub `updateWebhook` function L429-435 — `const updateWebhook = (id, updates)`
+- pub `deleteWebhook` function L436-437 — `const deleteWebhook = (id)`
+- pub `getWebhookEventTypes` function L438-439 — `const getWebhookEventTypes = ()`
+- pub `getWebhookDeliveries` function L440-449 — `const getWebhookDeliveries = (id, status, limit)`
+- pub `getMetrics` function L456-460 — `const getMetrics = ()`
+- pub `getWebhookCatcherStats` function L466-470 — `const getWebhookCatcherStats = ()`
+- pub `clearWebhookCatcher` function L472-478 — `const clearWebhookCatcher = ()`
+- pub `getDemoBuildYaml` function L491-509 — `const getDemoBuildYaml = ()`
+- pub `deleteStack` function L515-516 — `const deleteStack = (id)`
+- pub `deleteAgent` function L517-518 — `const deleteAgent = (id)`
+- pub `deleteGenerator` function L519-520 — `const deleteGenerator = (id)`
+- pub `createBuildWorkOrder` function L526-536 — `const createBuildWorkOrder = ( imageTag = "latest", agentId = null, )`
+- pub `getWebhookCatcherDeploymentYaml` function L538-586 — `const getWebhookCatcherDeploymentYaml = (imageTag = "latest")`
+- pub `parseMetrics` function L589-611 — `const parseMetrics = (metricsText)`
+- pub `checkEnvironment` function L615-645 — `const checkEnvironment = ()`
+- pub `getWebhookCatcherEvents` function L647-655 — `const getWebhookCatcherEvents = ()`
+- pub `pollForCondition` function L657-669 — `const pollForCondition = ( checkFn, intervalMs = 2000, timeoutMs = 60000, )`
+- pub `pollAgentStatus` function L671-693 — `const pollAgentStatus = (agentId, timeoutMs = 120000)`
+- pub `pollWorkOrderStatus` function L695-712 — `const pollWorkOrderStatus = (workOrderId, timeoutMs = 300000)`
+- pub `cleanupDemo` function L715-800 — `const cleanupDemo = (resources, onProgress)`
 -  `sha256` function L30-36 — `const sha256 = (str)`
 -  `unwrap` function L54-76 — `const unwrap = (callPromise)`
--  `log` function L721 — `const log = (step, status)`
+-  `log` function L716 — `const log = (step, status)`
 
 #### examples/ui-slim/src/components.js
 

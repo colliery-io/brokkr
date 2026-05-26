@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import * as api from './api';
 import './styles.css';
 
@@ -24,6 +24,11 @@ import {
 // rather than discovering it via missing rows. See ADR-0008 and the
 // project_log_retention_stance memory.
 const TELEMETRY_LIMIT = 50;
+// Caps for the live tail so a chatty stack can't grow the in-memory buffers
+// without bound (the broker already enforces the 6h retention ceiling).
+const LIVE_EVENTS_CAP = 200;
+const LIVE_LOGS_CAP = 500;
+
 const StackTelemetrySection = ({ stackId }) => {
   const [tab, setTab] = useState('events');
   const [events, setEvents] = useState([]);
@@ -31,6 +36,10 @@ const StackTelemetrySection = ({ stackId }) => {
   const [retention, setRetention] = useState(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(null);
+  // Live tail (C1): 'off' | 'connecting' | 'live' | 'closed'.
+  const [liveState, setLiveState] = useState('off');
+  const socketRef = useRef(null);
+  const keyRef = useRef(0); // client-side keys for frames (wire frames have no id)
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -54,7 +63,56 @@ const StackTelemetrySection = ({ stackId }) => {
 
   useEffect(() => { load(); }, [load]);
 
+  const stopLive = useCallback(() => {
+    if (socketRef.current) {
+      socketRef.current.onclose = null; // avoid the handler flipping state post-close
+      socketRef.current.close();
+      socketRef.current = null;
+    }
+    setLiveState('off');
+  }, []);
+
+  const startLive = useCallback(() => {
+    setErr(null);
+    let ws;
+    try {
+      ws = api.openStackLiveStream(stackId);
+    } catch (e) {
+      setErr('Could not open live stream: ' + getErrorMessage(e));
+      return;
+    }
+    socketRef.current = ws;
+    setLiveState('connecting');
+    ws.onopen = () => setLiveState('live');
+    ws.onerror = () => setErr('Live stream error — see console; falling back to Refresh.');
+    ws.onclose = () => setLiveState('closed');
+    ws.onmessage = (evt) => {
+      let msg;
+      try { msg = JSON.parse(evt.data); } catch { return; }
+      const body = msg.body || {};
+      if (msg.type === 'k8s_event') {
+        setEvents((prev) => [{ ...body, id: `live-${keyRef.current++}` }, ...prev].slice(0, LIVE_EVENTS_CAP));
+      } else if (msg.type === 'pod_log_line') {
+        setLogs((prev) => [...prev, { ...body, _key: keyRef.current++ }].slice(-LIVE_LOGS_CAP));
+      } else if (msg.type === 'log_gap') {
+        // Render a visible gap marker rather than silently swallowing the drop.
+        setLogs((prev) => [...prev, {
+          ts: body.since_ts || new Date().toISOString(),
+          namespace: '—', pod: '—', container: '—',
+          line: `— gap: ${body.dropped_count} line(s) dropped (${body.reason}) —`,
+          _gap: true, _key: keyRef.current++,
+        }].slice(-LIVE_LOGS_CAP));
+      }
+    };
+  }, [stackId]);
+
+  // Tear the socket down on unmount or when the selected stack changes.
+  useEffect(() => stopLive, [stopLive, stackId]);
+
+  const toggleLive = () => (liveState === 'live' || liveState === 'connecting') ? stopLive() : startLive();
+
   const ceiling = retention ? Math.round(retention.retention_ceiling_seconds / 3600) : 6;
+  const liveOn = liveState === 'live' || liveState === 'connecting';
 
   return (
     <div className="detail-section">
@@ -64,9 +122,20 @@ const StackTelemetrySection = ({ stackId }) => {
           <span className="dim" style={{ fontSize: '0.85em' }}>
             {ceiling}h buffer — for long-term retention, ship to Datadog
           </span>
-          <button onClick={load} className="btn-small" disabled={loading}>Refresh</button>
+          <button
+            onClick={toggleLive}
+            className={`btn-small ${liveOn ? '' : 'btn-secondary'}`}
+            title="Live tail over the broker WebSocket"
+          >
+            {liveState === 'live' ? '● Live' : liveState === 'connecting' ? '… Connecting' : 'Go Live'}
+          </button>
+          <button onClick={load} className="btn-small" disabled={loading || liveOn}>Refresh</button>
         </div>
       </div>
+
+      {liveState === 'closed' && (
+        <div className="empty-small">Live stream closed. Press “Go Live” to reconnect or “Refresh” for history.</div>
+      )}
 
       <div className="tab-row" style={{ marginBottom: 8 }}>
         <button
@@ -83,7 +152,7 @@ const StackTelemetrySection = ({ stackId }) => {
 
       {tab === 'events' ? (
         events.length === 0 ? (
-          <div className="empty-small">{loading ? 'Loading…' : 'No retained events in the 6h window'}</div>
+          <div className="empty-small">{loading ? 'Loading…' : liveOn ? 'Waiting for live events…' : 'No retained events in the 6h window'}</div>
         ) : (
           <div className="deployments-list">
             {events.map((e) => (
@@ -103,7 +172,9 @@ const StackTelemetrySection = ({ stackId }) => {
           <div className="empty-small">
             {loading
               ? 'Loading…'
-              : 'No pod logs in the 6h window — set brokkr.io/stream-logs: "true" on the pod template to opt in'}
+              : liveOn
+                ? 'Waiting for live log lines…'
+                : 'No pod logs in the 6h window — set brokkr.io/stream-logs: "true" on the pod template to opt in'}
           </div>
         ) : (
           <pre className="code-block" style={{ maxHeight: 240, overflow: 'auto' }}>

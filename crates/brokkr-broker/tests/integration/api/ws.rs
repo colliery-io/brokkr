@@ -779,6 +779,110 @@ async fn live_subscription_forwards_agent_telemetry_to_subscribers() {
 }
 
 #[tokio::test]
+async fn live_subscription_authenticates_via_subprotocol() {
+    // C1 / ADR-0008 amendment: browsers can't set Authorization on
+    // `new WebSocket()`, so the PAK rides in Sec-WebSocket-Protocol as
+    // `brokkr.pak.<PAK>`. This test connects that way (NO Authorization
+    // header), asserts the upgrade succeeds, the broker echoes only the
+    // non-secret marker subprotocol, and telemetry flows through.
+    use brokkr_wire::{K8sEvent, ObjectRef};
+
+    let fixture = TestFixture::new();
+    let (addr, registry) = spawn_full_broker(&fixture).await;
+
+    let agent = fixture.create_test_agent("c1 agent".into(), "cluster".into());
+    let (agent_pak, agent_hash) = pak::create_pak().unwrap();
+    fixture
+        .dal
+        .agents()
+        .update_pak_hash(agent.id, agent_hash)
+        .unwrap();
+    let stack = fixture.create_test_stack("c1 stack".into(), None, fixture.admin_generator.id);
+
+    // Subscribe with subprotocol auth (admin PAK), deliberately NO Authorization.
+    let sub_url = format!("ws://{}/api/v1/stacks/{}/live", addr, stack.id);
+    let mut sub_req = sub_url.into_client_request().unwrap();
+    sub_req.headers_mut().insert(
+        header::SEC_WEBSOCKET_PROTOCOL,
+        HeaderValue::from_str(&format!("brokkr.v1, brokkr.pak.{}", fixture.admin_pak)).unwrap(),
+    );
+    let (mut subscriber, resp) = tokio_tungstenite::connect_async(sub_req)
+        .await
+        .expect("subprotocol-authed subscribe should upgrade");
+    assert_eq!(resp.status(), StatusCode::SWITCHING_PROTOCOLS);
+    // Broker must echo the marker — never the PAK-bearing subprotocol.
+    let echoed = resp
+        .headers()
+        .get(header::SEC_WEBSOCKET_PROTOCOL)
+        .and_then(|v| v.to_str().ok());
+    assert_eq!(echoed, Some("brokkr.v1"), "broker should echo only the marker subprotocol");
+
+    // Agent connects (header auth) and pushes a K8sEvent → subscriber sees it.
+    let agent_req = ws_request_with_pak(&ws_url(addr), &agent_pak);
+    let (mut agent_socket, _r) = tokio_tungstenite::connect_async(agent_req).await.unwrap();
+    tokio::time::timeout(
+        std::time::Duration::from_secs(2),
+        wait_for_connection(&registry, agent.id),
+    )
+    .await
+    .unwrap();
+
+    agent_socket
+        .send(Message::Text(
+            serde_json::to_string(&WsMessage::K8sEvent(K8sEvent {
+                agent_id: agent.id,
+                stack_id: stack.id,
+                observed_at: chrono::Utc::now(),
+                reason: "c1".into(),
+                message: "subprotocol auth".into(),
+                event_type: "Normal".into(),
+                source: None,
+                involved_object: ObjectRef {
+                    api_version: "v1".into(),
+                    kind: "Pod".into(),
+                    namespace: None,
+                    name: "c1".into(),
+                    uid: None,
+                },
+            }))
+            .unwrap(),
+        ))
+        .await
+        .unwrap();
+
+    let got = await_message(&mut subscriber, |m| matches!(m, WsMessage::K8sEvent(_))).await;
+    if let WsMessage::K8sEvent(e) = got {
+        assert_eq!(e.stack_id, stack.id);
+        assert_eq!(e.reason, "c1");
+    }
+}
+
+#[tokio::test]
+async fn live_subscription_subprotocol_with_bad_pak_is_rejected() {
+    // A garbage PAK in the subprotocol must still be rejected (the injected
+    // Authorization just fails the normal auth_middleware → 401).
+    let fixture = TestFixture::new();
+    let (addr, _registry) = spawn_full_broker(&fixture).await;
+    let stack = fixture.create_test_stack("c1 bad".into(), None, fixture.admin_generator.id);
+
+    let sub_url = format!("ws://{}/api/v1/stacks/{}/live", addr, stack.id);
+    let mut sub_req = sub_url.into_client_request().unwrap();
+    sub_req.headers_mut().insert(
+        header::SEC_WEBSOCKET_PROTOCOL,
+        HeaderValue::from_str("brokkr.v1, brokkr.pak.not-a-real-pak").unwrap(),
+    );
+    let err = tokio_tungstenite::connect_async(sub_req)
+        .await
+        .expect_err("a bogus subprotocol PAK must not upgrade");
+    match err {
+        tokio_tungstenite::tungstenite::Error::Http(resp) => {
+            assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+        }
+        other => panic!("expected HTTP 401, got {other:?}"),
+    }
+}
+
+#[tokio::test]
 async fn live_subscription_rejects_unauthorised_caller() {
     let fixture = TestFixture::new();
     let (addr, _registry) = spawn_full_broker(&fixture).await;

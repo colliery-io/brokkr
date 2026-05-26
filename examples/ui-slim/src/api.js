@@ -191,23 +191,18 @@ export const getStackLogs = (id, query = {}) =>
 export const getWsConnections = () => client.listWsConnections();
 
 /**
- * Open the live event + log tail WebSocket for a stack. Returns a
- * raw `WebSocket` already configured with the broker's PAK in the
- * subprotocol (browsers don't allow custom headers on WS upgrades, so
- * we sneak the bearer token through the subprotocol field — the
- * broker's auth middleware doesn't accept this today, so this helper
- * exists primarily for ergonomic consistency with the Rust/Python
- * `live_subscription_url` helpers).
+ * Open the live event + log tail WebSocket for a stack and return the raw
+ * `WebSocket`. Frames are `WsMessage` JSON (`{type, body}`): `k8s_event`,
+ * `pod_log_line`, `log_gap`.
  *
- * For production use through an ingress, prefer a same-origin reverse
- * proxy that forwards the `Authorization` header.
+ * Browsers can't set an `Authorization` header on `new WebSocket()`, so the
+ * PAK rides in `Sec-WebSocket-Protocol` (ADR-0008 amendment / C1): we offer a
+ * non-secret marker subprotocol plus `brokkr.pak.<PAK>`, and the broker echoes
+ * only the marker. This is the same pattern the Kubernetes API server uses.
  */
 export const openStackLiveStream = (id) => {
   const url = client.liveSubscriptionUrl(id);
-  // Browsers don't accept custom headers on WebSocket(); the cleanest
-  // path is a same-origin reverse proxy that injects Authorization. We
-  // surface the URL+token here so callers can adapt for their setup.
-  return { url, token: ADMIN_PAK };
+  return new WebSocket(url, ['brokkr.v1', `brokkr.pak.${ADMIN_PAK}`]);
 };
 export const createStack = (name, description, generatorId) =>
   unwrap(

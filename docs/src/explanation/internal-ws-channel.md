@@ -262,6 +262,25 @@ is the intended end state for an incident-response "rotate the agent
 credential" workflow. There is no data loss: REST polling remains the source
 of truth and covers any window during which WS is down.
 
+### Browser live tail (subprotocol auth)
+
+The live-tail subscription (`/api/v1/stacks/{id}/live`) is consumable
+directly from a browser. Because the browser `WebSocket` API can't set an
+`Authorization` header, the PAK rides in `Sec-WebSocket-Protocol`:
+
+```js
+new WebSocket(liveUrl, ["brokkr.v1", `brokkr.pak.${pak}`]);
+```
+
+The broker lifts the PAK out of the `brokkr.pak.` subprotocol into the
+normal auth path and echoes back only the non-secret `brokkr.v1` marker.
+This is additive: clients that can set headers (agents, SDKs, the Node
+`ws` package) keep using `Authorization: Bearer` unchanged — the
+subprotocol PAK is consulted only when no auth header is present. See the
+[ADR-0008 amendment](#) "Browser WS auth". `ui-slim`'s Telemetry panel uses
+this for its **Go Live** toggle, streaming `k8s_event` / `pod_log_line`
+frames (and rendering `log_gap` markers) into the same events/logs tabs.
+
 ### When NOT to use the live tail
 
 The live subscription is meant for short-duration operational

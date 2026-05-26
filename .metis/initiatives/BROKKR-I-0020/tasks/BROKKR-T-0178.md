@@ -11,10 +11,10 @@ archived: false
 
 tags:
   - "#task"
-  - "#phase/todo"
+  - "#phase/completed"
 
 
-exit_criteria_met: false
+exit_criteria_met: true
 initiative_id: BROKKR-I-0020
 ---
 
@@ -76,4 +76,32 @@ None.
 
 ## Status Updates
 
-*To be added during implementation*
+### 2026-05-26 — Done (approach a: Sec-WebSocket-Protocol)
+
+Human-approved approach **(a)** — broker accepts the PAK via
+`Sec-WebSocket-Protocol`. Decision recorded as an ADR-0008 amendment
+("Browser WS auth via Sec-WebSocket-Protocol"); the rejected SSE-proxy
+alternative is documented there.
+
+- **Broker** (`ws/subscribe.rs`): `ws_subprotocol_auth` middleware (outermost
+  on the subscribe route) lifts `brokkr.pak.<PAK>` from
+  `Sec-WebSocket-Protocol` into an `Authorization: Bearer` header **only when
+  none is present**, so header-based callers are untouched. `live_upgrade`
+  echoes back only the non-secret `brokkr.v1` marker (never the PAK).
+- **ui-slim**: `openStackLiveStream` now returns a real `WebSocket` with the
+  subprotocol auth; the Telemetry panel gained a **Go Live** toggle that
+  streams `k8s_event` / `pod_log_line` frames into the existing events/logs
+  tabs and renders `log_gap` markers, with capped in-memory buffers.
+- **Docs**: "Browser live tail (subprotocol auth)" operating note added.
+
+**Tests (green):** broker integration `live_subscription_authenticates_via_subprotocol`
+(subprotocol auth end-to-end + marker echoed, no Authorization header) and
+`live_subscription_subprotocol_with_bad_pak_is_rejected` (401). The existing
+header-based `live_subscription_forwards_agent_telemetry_to_subscribers` still
+passes — **no regression on the Node `ws` contract path**. Full
+`api::ws::live_subscription` module: 4 passed.
+
+**Note:** `npm run build`/lint of ui-slim wasn't run this session (per
+direction); the broker integration tests prove the wire/auth path end-to-end
+and the React changes are standard hooks — a build/lint is the trivial
+pre-ship confirmation.
