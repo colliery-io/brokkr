@@ -33,7 +33,7 @@ use tokio_tungstenite::tungstenite::{
     http::{header, HeaderValue},
     Message,
 };
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
 /// Current state of the WS channel from the agent's point of view.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -46,6 +46,13 @@ pub enum WsState {
     /// Distinct from `Down` so callers can short-circuit "wait for WS"
     /// logic and avoid logging spurious "WS still down" warnings.
     ForceRestOnly,
+    /// The broker rejected the agent's PAK on the WS upgrade repeatedly
+    /// (HTTP 401/403). Terminal: the reconnect loop has given up because the
+    /// credential is almost certainly revoked (a rotation/delete — see
+    /// [[BROKKR-T-0176]]). Recovery requires a new PAK + agent restart, so we
+    /// stop hammering a handshake that will never succeed. Distinct from
+    /// `Down` so callers can surface "credential dead" rather than "WS flapping".
+    AuthRejected,
 }
 
 impl WsState {
@@ -67,6 +74,12 @@ const INBOUND_CAPACITY: usize = 256;
 /// Bounds on the reconnect backoff schedule.
 const BACKOFF_INITIAL: Duration = Duration::from_secs(1);
 const BACKOFF_MAX: Duration = Duration::from_secs(60);
+
+/// Consecutive WS-upgrade auth rejections (HTTP 401/403) after which the
+/// agent gives up reconnecting — the PAK is almost certainly revoked. Small
+/// enough to stop promptly, large enough that a one-off (e.g. a broker
+/// restart racing a config reload) doesn't trip it.
+const MAX_CONSECUTIVE_AUTH_REJECTIONS: u32 = 5;
 
 /// Public handle to the WS client. Constructed by [`spawn`]; the connection
 /// task runs in the background until the returned [`JoinHandle`] is dropped
@@ -229,18 +242,42 @@ async fn reconnect_loop(
     mut outbound_rx: mpsc::Receiver<WsMessage>,
 ) {
     let mut backoff = BackoffSchedule::new();
+    let mut consecutive_auth_rejections: u32 = 0;
     loop {
         match dial(&url, &pak).await {
             Ok(socket) => {
                 info!(%url, "broker WS connected");
                 backoff.reset();
+                consecutive_auth_rejections = 0;
                 let _ = state_tx.send(WsState::Up);
                 run_socket(socket, &inbound_tx, &mut outbound_rx).await;
                 let _ = state_tx.send(WsState::Down);
                 info!("broker WS disconnected; will reconnect with backoff");
             }
             Err(e) => {
-                warn!(%url, error = %e, "broker WS dial failed");
+                if is_auth_rejection(&e) {
+                    consecutive_auth_rejections += 1;
+                    warn!(
+                        %url, error = %e, attempt = consecutive_auth_rejections,
+                        "broker rejected the agent PAK on WS upgrade"
+                    );
+                    if consecutive_auth_rejections >= MAX_CONSECUTIVE_AUTH_REJECTIONS {
+                        error!(
+                            %url,
+                            rejections = consecutive_auth_rejections,
+                            "broker rejected the agent PAK {MAX_CONSECUTIVE_AUTH_REJECTIONS} times \
+                             in a row — the credential is almost certainly revoked. Stopping WS \
+                             reconnect. Provision a fresh PAK and restart the agent."
+                        );
+                        let _ = state_tx.send(WsState::AuthRejected);
+                        return;
+                    }
+                } else {
+                    // Transient failure (timeout, connection refused, broker
+                    // restart). A blip must never trip the permanent-stop path.
+                    consecutive_auth_rejections = 0;
+                    warn!(%url, error = %e, "broker WS dial failed");
+                }
             }
         }
 
@@ -248,6 +285,18 @@ async fn reconnect_loop(
         debug!(?delay, "sleeping before next WS reconnect attempt");
         tokio::time::sleep(delay).await;
     }
+}
+
+/// True when a WS-upgrade error is a credential rejection (HTTP 401/403),
+/// as opposed to a transient transport failure. A revoked PAK surfaces here.
+fn is_auth_rejection(err: &tokio_tungstenite::tungstenite::Error) -> bool {
+    use tokio_tungstenite::tungstenite::http::StatusCode;
+    matches!(
+        err,
+        tokio_tungstenite::tungstenite::Error::Http(resp)
+            if resp.status() == StatusCode::UNAUTHORIZED
+                || resp.status() == StatusCode::FORBIDDEN
+    )
 }
 
 async fn dial(
@@ -394,6 +443,25 @@ mod tests {
             ws_url_from_broker_url("http://broker:3000/"),
             "ws://broker:3000/internal/ws/agent"
         );
+    }
+
+    #[test]
+    fn auth_rejection_detects_401_and_403_only() {
+        use tokio_tungstenite::tungstenite::http::{Response, StatusCode};
+        use tokio_tungstenite::tungstenite::Error;
+
+        let http_err = |status: StatusCode| {
+            Error::Http(Response::builder().status(status).body(None).unwrap())
+        };
+
+        assert!(is_auth_rejection(&http_err(StatusCode::UNAUTHORIZED)));
+        assert!(is_auth_rejection(&http_err(StatusCode::FORBIDDEN)));
+        // Non-auth HTTP statuses and transport errors are transient, not
+        // credential rejections.
+        assert!(!is_auth_rejection(&http_err(StatusCode::INTERNAL_SERVER_ERROR)));
+        assert!(!is_auth_rejection(&http_err(StatusCode::SERVICE_UNAVAILABLE)));
+        assert!(!is_auth_rejection(&Error::ConnectionClosed));
+        assert!(!is_auth_rejection(&Error::AlreadyClosed));
     }
 
     #[test]
