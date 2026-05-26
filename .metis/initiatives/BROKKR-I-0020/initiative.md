@@ -221,7 +221,7 @@ polish. C last because it's pure cleanup that won't gate the decision to merge.
 - [x] A1 agent runtime smoke test green in CI (BROKKR-T-0170, 2026-05-24)
 - [x] A2 chaos test green in CI (BROKKR-T-0171, 2026-05-24) — narrowed scope: REST-heartbeat-fallback proven, work-order-completion lifecycle deferred (no harness for it yet; revisit with A3)
 - [x] A3 real-kube tailer test green in CI (BROKKR-T-0172, 2026-05-26) — `angreal tests e2e --scenario ws-telemetry`; events + pod-logs both proven through real k3s. **Found & fixed a real agent bug**: pod-logs tailer lost the container-startup race and never streamed a freshly-created pod's logs (pod_logs.rs reopen loop). LogGap-rate-limit + opt-out negative tests deferred
-- [ ] A4 push/poll race test green in broker integration suite
+- [x] A4 push/poll race test green in broker integration suite (BROKKR-T-0173, 2026-05-26) — 50 concurrent POST/GET iterations; every `target_changed` push delivered, no duplicate target rows, racing GETs see committed data. **No race bug**: control lane (cap 64) absorbs the burst cleanly; ADR-0008's flagged race doesn't manifest. Delivery asserted via received WS frames (process-global metric counter isn't deterministic across concurrent tests)
 - [ ] B1 SDK lockstep version bump applied + CHANGELOGs updated
 - [ ] B2 Grafana dashboard JSON checked in + eviction-worker dead-alert rule
 - [ ] B3 PAK revocation closes WS socket; integration test green

@@ -1,6 +1,6 @@
 # Code Index
 
-> Generated: 2026-05-26T01:26:12Z | 388 files | JavaScript, Python, Rust, TypeScript
+> Generated: 2026-05-26T12:25:51Z | 388 files | JavaScript, Python, Rust, TypeScript
 
 ## Project Structure
 
@@ -680,15 +680,17 @@
 -  `pod_stack_id` function L130-134 — `(pod: &Pod) -> Option<Uuid>` — bucket the right answer is "ship to Datadog", not "raise the limit".
 -  `ensure_tails` function L139-176 — `( client: &Client, uplink: &WsUplink, agent_id: Uuid, stack_id: Uuid, pod: &Pod,...` — For a given opted-in pod, ensure one tail task per container.
 -  `teardown_for` function L178-188 — `( uid: &str, active: &Arc<RwLock<HashMap<String, Vec<JoinHandle<()>>>>>, )` — bucket the right answer is "ship to Datadog", not "raise the limit".
--  `tail_container` function L190-248 — `( pods: Api<Pod>, uplink: WsUplink, agent_id: Uuid, stack_id: Uuid, namespace: S...` — bucket the right answer is "ship to Datadog", not "raise the limit".
--  `RateLimiter` struct L252-257 — `{ lines_per_sec: u64, window_start: Instant, count_in_window: u64, dropped_in_wi...` — Minimal token-bucket: at most `lines_per_sec` lines per RATE_WINDOW.
--  `Allowance` enum L259-264 — `Pass | DropAndGap` — bucket the right answer is "ship to Datadog", not "raise the limit".
--  `RateLimiter` type L266-298 — `= RateLimiter` — bucket the right answer is "ship to Datadog", not "raise the limit".
--  `new` function L267-274 — `(lines_per_sec: u64) -> Self` — bucket the right answer is "ship to Datadog", not "raise the limit".
--  `consume` function L276-297 — `(&mut self) -> Allowance` — bucket the right answer is "ship to Datadog", not "raise the limit".
--  `tests` module L305-331 — `-` — bucket the right answer is "ship to Datadog", not "raise the limit".
--  `rate_limiter_passes_under_ceiling` function L309-314 — `()` — bucket the right answer is "ship to Datadog", not "raise the limit".
--  `rate_limiter_drops_above_ceiling_with_first_gap` function L317-330 — `()` — bucket the right answer is "ship to Datadog", not "raise the limit".
+-  `tail_container` function L190-278 — `( pods: Api<Pod>, uplink: WsUplink, agent_id: Uuid, stack_id: Uuid, namespace: S...` — bucket the right answer is "ship to Datadog", not "raise the limit".
+-  `MAX_OPEN_ATTEMPTS` variable L216 — `: u32` — bucket the right answer is "ship to Datadog", not "raise the limit".
+-  `OPEN_RETRY` variable L217 — `: Duration` — bucket the right answer is "ship to Datadog", not "raise the limit".
+-  `RateLimiter` struct L282-287 — `{ lines_per_sec: u64, window_start: Instant, count_in_window: u64, dropped_in_wi...` — Minimal token-bucket: at most `lines_per_sec` lines per RATE_WINDOW.
+-  `Allowance` enum L289-294 — `Pass | DropAndGap` — bucket the right answer is "ship to Datadog", not "raise the limit".
+-  `RateLimiter` type L296-328 — `= RateLimiter` — bucket the right answer is "ship to Datadog", not "raise the limit".
+-  `new` function L297-304 — `(lines_per_sec: u64) -> Self` — bucket the right answer is "ship to Datadog", not "raise the limit".
+-  `consume` function L306-327 — `(&mut self) -> Allowance` — bucket the right answer is "ship to Datadog", not "raise the limit".
+-  `tests` module L335-361 — `-` — bucket the right answer is "ship to Datadog", not "raise the limit".
+-  `rate_limiter_passes_under_ceiling` function L339-344 — `()` — bucket the right answer is "ship to Datadog", not "raise the limit".
+-  `rate_limiter_drops_above_ceiling_with_first_gap` function L347-360 — `()` — bucket the right answer is "ship to Datadog", not "raise the limit".
 
 #### crates/brokkr-agent/src/utils.rs
 
@@ -2381,7 +2383,9 @@
 -  `rest_history_endpoints_403_for_unauthorized_callers` function L908-941 — `()` — path; this is why we bind a TCP listener for the upgrade tests.
 -  `ws_telemetry_ingestion_lands_in_agent_telemetry_tables` function L948-1045 — `()` — path; this is why we bind a TCP listener for the upgrade tests.
 -  `eviction_worker_drops_rows_past_retention` function L1048-1118 — `()` — path; this is why we bind a TCP listener for the upgrade tests.
--  `wait_until` function L1121-1136 — `(timeout: std::time::Duration, mut predicate: F) -> bool` — Repeatedly poll `predicate` until it returns true or `timeout` elapses.
+-  `concurrent_target_post_and_get_delivers_every_push_without_dupes` function L1142-1275 — `()` — path; this is why we bind a TCP listener for the upgrade tests.
+-  `N` variable L1147 — `: usize` — path; this is why we bind a TCP listener for the upgrade tests.
+-  `wait_until` function L1278-1293 — `(timeout: std::time::Duration, mut predicate: F) -> bool` — Repeatedly poll `predicate` until it returns true or `timeout` elapses.
 
 ### crates/brokkr-broker/tests/integration/dal
 

@@ -1117,6 +1117,163 @@ async fn eviction_worker_drops_rows_past_retention() {
     assert_eq!(fixture.dal.agent_pod_logs().count().unwrap(), 0);
 }
 
+// =============================================================================
+// A4 (BROKKR-T-0173): push/poll race for target_changed
+// =============================================================================
+//
+// ADR-0008 flagged a post-commit push race: a REST GET of an agent's targets
+// landing concurrently with a WS `target_changed` push for the same agent.
+// This test hammers that path with N concurrent iterations — each POSTs a
+// target (firing the push) while racing a GET of the same agent's targets —
+// and asserts:
+//   - every push is delivered (no silent drops under concurrency),
+//   - no duplicate target row results, and
+//   - the final target list exactly matches every pushed stack.
+//
+// Delivery is asserted by counting the distinct `target_changed` frames that
+// actually arrive on the agent socket, rather than reading the process-global
+// `brokkr_ws_messages_total` counter the criteria suggested: that metric is a
+// global recorder shared by every `#[tokio::test]` running concurrently in
+// this binary, so "increments by exactly N" can't be asserted deterministically.
+// Counting received frames is both flake-free and a stronger end-to-end proof
+// that the push reached the wire.
+
+#[tokio::test]
+async fn concurrent_target_post_and_get_delivers_every_push_without_dupes() {
+    use reqwest::Client;
+    use serde_json::json;
+    use std::collections::HashSet;
+
+    const N: usize = 50;
+
+    let fixture = TestFixture::new();
+    let (addr, registry) = spawn_full_broker(&fixture).await;
+    let http = Client::new();
+    let base = format!("http://{}", addr);
+
+    // Provision the agent + PAK and open its WS connection so pushes land.
+    let agent = fixture.create_test_agent("a4 agent".into(), "cluster".into());
+    let (agent_pak, agent_hash) = pak::create_pak().unwrap();
+    fixture
+        .dal
+        .agents()
+        .update_pak_hash(agent.id, agent_hash)
+        .unwrap();
+
+    let ws_req = ws_request_with_pak(&ws_url(addr), &agent_pak);
+    let (mut socket, _resp) = tokio_tungstenite::connect_async(ws_req).await.unwrap();
+    tokio::time::timeout(
+        std::time::Duration::from_secs(2),
+        wait_for_connection(&registry, agent.id),
+    )
+    .await
+    .expect("registry registers agent within 2s");
+
+    // Pre-create N distinct stacks; each iteration targets exactly one, so a
+    // duplicate row or a dropped push shows up as a set mismatch.
+    let mut stacks = Vec::with_capacity(N);
+    for i in 0..N {
+        stacks.push(fixture.create_test_stack(
+            format!("a4 stack {i}"),
+            None,
+            fixture.admin_generator.id,
+        ));
+    }
+    let expected: HashSet<Uuid> = stacks.iter().map(|s| s.id).collect();
+
+    // Fire N iterations concurrently. Each POSTs a target (which triggers the
+    // post-commit push) and races a GET of the same agent's targets;
+    // alternating the order means half the GETs land before the commit and
+    // half after, exercising the race window in both directions.
+    let mut handles = Vec::with_capacity(N);
+    for (i, stack) in stacks.iter().enumerate() {
+        let http = http.clone();
+        let base = base.clone();
+        let admin_pak = fixture.admin_pak.clone();
+        let agent_id = agent.id;
+        let stack_id = stack.id;
+        let get_first = i % 2 == 0;
+        handles.push(tokio::spawn(async move {
+            let targets_url = format!("{base}/api/v1/agents/{}/targets", agent_id);
+            let auth = format!("Bearer {}", admin_pak);
+            if get_first {
+                let _ = http.get(&targets_url).header("Authorization", &auth).send().await;
+            }
+            let status = http
+                .post(&targets_url)
+                .header("Authorization", &auth)
+                .json(&json!({ "agent_id": agent_id, "stack_id": stack_id }))
+                .send()
+                .await
+                .unwrap()
+                .status()
+                .as_u16();
+            if !get_first {
+                let _ = http.get(&targets_url).header("Authorization", &auth).send().await;
+            }
+            status
+        }));
+    }
+
+    // Drain `target_changed` frames as the POSTs land so the control lane
+    // (capacity 64) never backs up. Collect distinct stack_ids delivered.
+    let mut delivered: HashSet<Uuid> = HashSet::new();
+    let drain_deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(10);
+    while delivered.len() < N {
+        let remaining = drain_deadline.saturating_duration_since(tokio::time::Instant::now());
+        if remaining.is_zero() {
+            break;
+        }
+        match tokio::time::timeout(remaining, socket.next()).await {
+            Ok(Some(Ok(Message::Text(t)))) => {
+                if let Ok(WsMessage::TargetChanged(target)) =
+                    serde_json::from_str::<WsMessage>(&t)
+                {
+                    delivered.insert(target.stack_id);
+                }
+            }
+            Ok(Some(Ok(_))) => {} // non-text frame; ignore
+            _ => break,           // closed or timed out
+        }
+    }
+
+    // Every POST succeeded.
+    for h in handles {
+        let status = h.await.unwrap();
+        assert_eq!(status, 201, "every target POST must return 201");
+    }
+
+    // Set equality proves every push was delivered exactly to the right
+    // agent — no drops, no stray stack_ids.
+    assert_eq!(
+        delivered, expected,
+        "every target_changed push must be delivered ({} of {} arrived)",
+        delivered.len(),
+        N
+    );
+
+    // Final GET: exactly N rows, no duplicates, matching every pushed stack.
+    let resp: serde_json::Value = http
+        .get(format!("{base}/api/v1/agents/{}/targets", agent.id))
+        .header("Authorization", format!("Bearer {}", fixture.admin_pak))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let targets = resp.as_array().expect("targets list is an array");
+    let final_ids: HashSet<Uuid> = targets
+        .iter()
+        .map(|t| Uuid::parse_str(t["stack_id"].as_str().unwrap()).unwrap())
+        .collect();
+    assert_eq!(targets.len(), N, "no duplicate target rows should be created");
+    assert_eq!(
+        final_ids, expected,
+        "final target list must match every pushed stack"
+    );
+}
+
 /// Repeatedly poll `predicate` until it returns true or `timeout` elapses.
 async fn wait_until<F, Fut>(timeout: std::time::Duration, mut predicate: F) -> bool
 where

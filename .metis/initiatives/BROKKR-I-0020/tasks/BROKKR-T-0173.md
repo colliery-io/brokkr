@@ -11,10 +11,10 @@ archived: false
 
 tags:
   - "#task"
-  - "#phase/todo"
+  - "#phase/completed"
 
 
-exit_criteria_met: false
+exit_criteria_met: true
 initiative_id: BROKKR-I-0020
 ---
 
@@ -75,4 +75,42 @@ None.
 
 ## Status Updates
 
-*To be added during implementation*
+### 2026-05-26 — Green; delivery asserted via received frames, not the metric
+
+Implemented as `concurrent_target_post_and_get_delivers_every_push_without_dupes`
+in `crates/brokkr-broker/tests/integration/api/ws.rs`, building on the existing
+`spawn_full_broker` harness (real Postgres, real axum, real WS upgrade).
+
+N = 50 concurrent iterations. Each iteration targets a distinct pre-created
+stack and, racing the POST, issues a GET of the same agent's targets;
+`i % 2` alternates GET-first vs POST-first so the race window is hit from
+both sides. While the POSTs are in flight the test drains `target_changed`
+frames off the agent socket into a `HashSet<stack_id>`.
+
+Assertions:
+- every POST returns 201
+- the set of delivered `target_changed` stack_ids **equals** the set of 50
+  pushed stacks → every push delivered, none dropped, no stray ids
+- the final `GET /agents/{id}/targets` returns exactly 50 rows with no
+  duplicates, matching the pushed set
+
+```
+test api::ws::concurrent_target_post_and_get_delivers_every_push_without_dupes ... ok
+test result: ok. 1 passed; 0 failed; ... finished in 1.22s
+```
+
+**Deviation from the written criteria** (delivery proof): the criteria
+suggested asserting `brokkr_ws_messages_total{direction="downlink",
+type="target_changed"}` increments by N. That metric is a process-global
+recorder shared by every `#[tokio::test]` running concurrently in the same
+binary, so "increments by exactly N" is not deterministically assertable.
+Counting the `target_changed` frames that actually arrive on the agent
+socket is both flake-free and a strictly stronger end-to-end proof (it shows
+the push reached the wire, not just that a counter moved). Same
+narrow-but-honest-scope approach used in A2/A3.
+
+**Finding:** no race bug. The control lane (capacity 64) comfortably absorbs
+a 50-push burst with the writer draining concurrently; committed targets are
+immediately visible to a racing GET. ADR-0008's flagged push/poll race does
+not manifest under this load. (Unlike A3, which surfaced a real bug, A4
+confirms the existing design holds.)
