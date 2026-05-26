@@ -1,6 +1,6 @@
 # Code Index
 
-> Generated: 2026-05-26T17:02:05Z | 389 files | JavaScript, Python, Rust, TypeScript
+> Generated: 2026-05-26T17:48:37Z | 389 files | JavaScript, Python, Rust, TypeScript
 
 ## Project Structure
 
@@ -683,17 +683,17 @@
 -  `pod_stack_id` function L130-134 — `(pod: &Pod) -> Option<Uuid>` — bucket the right answer is "ship to Datadog", not "raise the limit".
 -  `ensure_tails` function L139-176 — `( client: &Client, uplink: &WsUplink, agent_id: Uuid, stack_id: Uuid, pod: &Pod,...` — For a given opted-in pod, ensure one tail task per container.
 -  `teardown_for` function L178-188 — `( uid: &str, active: &Arc<RwLock<HashMap<String, Vec<JoinHandle<()>>>>>, )` — bucket the right answer is "ship to Datadog", not "raise the limit".
--  `tail_container` function L190-278 — `( pods: Api<Pod>, uplink: WsUplink, agent_id: Uuid, stack_id: Uuid, namespace: S...` — bucket the right answer is "ship to Datadog", not "raise the limit".
+-  `tail_container` function L190-281 — `( pods: Api<Pod>, uplink: WsUplink, agent_id: Uuid, stack_id: Uuid, namespace: S...` — bucket the right answer is "ship to Datadog", not "raise the limit".
 -  `MAX_OPEN_ATTEMPTS` variable L216 — `: u32` — bucket the right answer is "ship to Datadog", not "raise the limit".
 -  `OPEN_RETRY` variable L217 — `: Duration` — bucket the right answer is "ship to Datadog", not "raise the limit".
--  `RateLimiter` struct L282-287 — `{ lines_per_sec: u64, window_start: Instant, count_in_window: u64, dropped_in_wi...` — Minimal token-bucket: at most `lines_per_sec` lines per RATE_WINDOW.
--  `Allowance` enum L289-294 — `Pass | DropAndGap` — bucket the right answer is "ship to Datadog", not "raise the limit".
--  `RateLimiter` type L296-328 — `= RateLimiter` — bucket the right answer is "ship to Datadog", not "raise the limit".
--  `new` function L297-304 — `(lines_per_sec: u64) -> Self` — bucket the right answer is "ship to Datadog", not "raise the limit".
--  `consume` function L306-327 — `(&mut self) -> Allowance` — bucket the right answer is "ship to Datadog", not "raise the limit".
--  `tests` module L335-361 — `-` — bucket the right answer is "ship to Datadog", not "raise the limit".
--  `rate_limiter_passes_under_ceiling` function L339-344 — `()` — bucket the right answer is "ship to Datadog", not "raise the limit".
--  `rate_limiter_drops_above_ceiling_with_first_gap` function L347-360 — `()` — bucket the right answer is "ship to Datadog", not "raise the limit".
+-  `RateLimiter` struct L285-290 — `{ lines_per_sec: u64, window_start: Instant, count_in_window: u64, dropped_in_wi...` — Minimal token-bucket: at most `lines_per_sec` lines per RATE_WINDOW.
+-  `Allowance` enum L292-301 — `Allow | Drop | DropAndGap` — bucket the right answer is "ship to Datadog", not "raise the limit".
+-  `RateLimiter` type L303-334 — `= RateLimiter` — bucket the right answer is "ship to Datadog", not "raise the limit".
+-  `new` function L304-311 — `(lines_per_sec: u64) -> Self` — bucket the right answer is "ship to Datadog", not "raise the limit".
+-  `consume` function L313-333 — `(&mut self) -> Allowance` — bucket the right answer is "ship to Datadog", not "raise the limit".
+-  `tests` module L341-362 — `-` — bucket the right answer is "ship to Datadog", not "raise the limit".
+-  `rate_limiter_allows_under_ceiling` function L345-350 — `()` — bucket the right answer is "ship to Datadog", not "raise the limit".
+-  `rate_limiter_drops_above_ceiling_with_first_gap` function L353-361 — `()` — bucket the right answer is "ship to Datadog", not "raise the limit".
 
 #### crates/brokkr-agent/src/utils.rs
 
@@ -1022,24 +1022,24 @@
 -  `get_agent` function L201-218 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
 -  `search_agent` function L235-268 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Query...` — Agent management API endpoints.
 -  `update_agent` function L282-332 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `delete_agent` function L344-372 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `list_events` function L384-402 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `create_event` function L415-447 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `list_labels` function L461-474 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `add_label` function L489-503 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `remove_label` function L521-540 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `list_annotations` function L554-566 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `add_annotation` function L581-594 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `remove_annotation` function L612-631 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `list_targets` function L643-655 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `add_target` function L669-687 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Exten...` — Agent management API endpoints.
--  `authorize_target_mutation` function L694-722 — `( dal: &DAL, auth: &AuthPayload, stack_id: Uuid, ) -> Result<(), ApiError>` — Authorize a target create/delete operation.
--  `remove_target` function L738-757 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `record_heartbeat` function L769-789 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `TargetStateParams` struct L792-794 — `{ mode: Option<String> }` — Agent management API endpoints.
--  `get_target_state` function L809-832 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `get_associated_stacks` function L844-856 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `rotate_agent_pak` function L869-916 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `delete_agent` function L344-378 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Exten...` — Agent management API endpoints.
+-  `list_events` function L390-408 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `create_event` function L421-453 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `list_labels` function L467-480 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `add_label` function L495-509 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `remove_label` function L527-546 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `list_annotations` function L560-572 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `add_annotation` function L587-600 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `remove_annotation` function L618-637 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `list_targets` function L649-661 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `add_target` function L675-693 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Exten...` — Agent management API endpoints.
+-  `authorize_target_mutation` function L700-728 — `( dal: &DAL, auth: &AuthPayload, stack_id: Uuid, ) -> Result<(), ApiError>` — Authorize a target create/delete operation.
+-  `remove_target` function L744-763 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `record_heartbeat` function L775-795 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `TargetStateParams` struct L798-800 — `{ mode: Option<String> }` — Agent management API endpoints.
+-  `get_target_state` function L815-838 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `get_associated_stacks` function L850-862 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `rotate_agent_pak` function L875-931 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Exten...` — Agent management API endpoints.
 
 #### crates/brokkr-broker/src/api/v1/auth.rs
 
@@ -2049,18 +2049,20 @@
 - pub `send_telemetry` function L141-153 — `(&self, agent_id: Uuid, msg: WsMessage) -> Result<(), SendError>` — Send a telemetry/log message to a specific agent on the low-priority
 - pub `snapshot` function L157-169 — `(&self) -> Vec<ConnectionInfo>` — Snapshot every connection for diagnostics.
 - pub `connected_count` function L172-174 — `(&self) -> usize` — Number of connected agents (cheap; no clone).
+- pub `close_for_agent` function L187-194 — `(&self, agent_id: Uuid) -> usize` — Forcibly close any live connection for `agent_id`, returning how many
 -  `SendError` type L42-49 — `= SendError` — down cleanly.
 -  `fmt` function L43-48 — `(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result` — down cleanly.
 -  `SendError` type L51 — `= SendError` — down cleanly.
--  `ConnectionRegistry` type L87-175 — `= ConnectionRegistry` — down cleanly.
--  `tests` module L178-279 — `-` — down cleanly.
--  `handle_for` function L182-194 — `(agent_id: Uuid) -> (ConnectionHandle, mpsc::Receiver<WsMessage>, mpsc::Receiver...` — down cleanly.
--  `sample_heartbeat` function L196-201 — `(agent_id: Uuid) -> WsMessage` — down cleanly.
--  `send_to_unknown_agent_errors` function L204-209 — `()` — down cleanly.
--  `register_then_send_lands_on_correct_lane` function L212-225 — `()` — down cleanly.
--  `second_register_evicts_first` function L228-247 — `()` — down cleanly.
--  `unregister_if_matches_removes_only_matching_generation` function L250-258 — `()` — down cleanly.
--  `lane_full_returns_lane_unavailable` function L261-278 — `()` — down cleanly.
+-  `ConnectionRegistry` type L87-195 — `= ConnectionRegistry` — down cleanly.
+-  `tests` module L198-321 — `-` — down cleanly.
+-  `handle_for` function L202-214 — `(agent_id: Uuid) -> (ConnectionHandle, mpsc::Receiver<WsMessage>, mpsc::Receiver...` — down cleanly.
+-  `sample_heartbeat` function L216-221 — `(agent_id: Uuid) -> WsMessage` — down cleanly.
+-  `send_to_unknown_agent_errors` function L224-229 — `()` — down cleanly.
+-  `register_then_send_lands_on_correct_lane` function L232-245 — `()` — down cleanly.
+-  `second_register_evicts_first` function L248-267 — `()` — down cleanly.
+-  `unregister_if_matches_removes_only_matching_generation` function L270-278 — `()` — down cleanly.
+-  `close_for_agent_removes_handle_and_drops_senders` function L281-300 — `()` — down cleanly.
+-  `lane_full_returns_lane_unavailable` function L303-320 — `()` — down cleanly.
 
 #### crates/brokkr-broker/src/ws/subscribe.rs
 
@@ -2388,7 +2390,10 @@
 -  `eviction_worker_drops_rows_past_retention` function L1048-1118 — `()` — path; this is why we bind a TCP listener for the upgrade tests.
 -  `concurrent_target_post_and_get_delivers_every_push_without_dupes` function L1142-1275 — `()` — path; this is why we bind a TCP listener for the upgrade tests.
 -  `N` variable L1147 — `: usize` — path; this is why we bind a TCP listener for the upgrade tests.
--  `wait_until` function L1278-1293 — `(timeout: std::time::Duration, mut predicate: F) -> bool` — Repeatedly poll `predicate` until it returns true or `timeout` elapses.
+-  `await_socket_close` function L1289-1306 — `( socket: &mut tokio_tungstenite::WebSocketStream< tokio_tungstenite::MaybeTlsSt...` — Drive a frame-drain until the socket closes (None / Close / Err), or the
+-  `rotating_agent_pak_closes_its_open_ws` function L1309-1358 — `()` — path; this is why we bind a TCP listener for the upgrade tests.
+-  `deleting_agent_closes_its_open_ws` function L1361-1405 — `()` — path; this is why we bind a TCP listener for the upgrade tests.
+-  `wait_until` function L1408-1423 — `(timeout: std::time::Duration, mut predicate: F) -> bool` — Repeatedly poll `predicate` until it returns true or `timeout` elapses.
 
 ### crates/brokkr-broker/tests/integration/dal
 

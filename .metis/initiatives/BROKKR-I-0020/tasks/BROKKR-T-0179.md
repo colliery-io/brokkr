@@ -11,10 +11,10 @@ archived: false
 
 tags:
   - "#task"
-  - "#phase/todo"
+  - "#phase/completed"
 
 
-exit_criteria_met: false
+exit_criteria_met: true
 initiative_id: BROKKR-I-0020
 ---
 
@@ -68,4 +68,30 @@ None.
 
 ## Status Updates
 
-*To be added during implementation*
+### 2026-05-26 — Rename done; the rename surfaced (and fixed) a real bug
+
+Split `Allowance` into honest variants: `Allow` (ship), `Drop` (over budget,
+silent), `DropAndGap(n)` (over budget + first drop of window → emit one
+`LogGap{RateLimit}`). Callers and the two RateLimiter unit tests updated; the
+awkward "Pass-but-still-drop" comment is gone.
+
+**Finding (real bug, not just cosmetics):** the old code returned
+`Allowance::Pass` for *both* under-budget lines and over-budget
+subsequent-drops, and `tail_container`'s `Pass` arm **ships the line**. So
+before this change, only the *first* over-budget line per 1s window was
+actually dropped (turned into a gap) — every further over-budget line was
+**shipped**, defeating the 100 lines/sec ceiling the module documents. The
+module doc says "over-rate lines are dropped"; the code didn't. Splitting
+`Pass`→`Allow`/`Drop` makes the `Drop` arm a no-op (no `try_send`), so the
+ceiling is now actually enforced. This is the kind of latent bug the I-0020
+cleanup pass is meant to catch.
+
+**Wire contract preserved:** `LogGap{RateLimit}` frames emit at the exact same
+boundary (first drop of a window) with the same payload (`dropped_count: 1`,
+`reason: RateLimit`) — `DropAndGap` is unchanged. The fix only stops shipping
+the *extra* `PodLogLine` frames that should never have gone out. No brokkr-wire
+change (the enum is private to the agent).
+
+**Tests:** agent unit green (62) incl. the updated RateLimiter tests. E2e
+`ws-telemetry` green (Allow path end-to-end — chatty pod logs still reach the
+broker; events too): `1 passed, 0 failed`.

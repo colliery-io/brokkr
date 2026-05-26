@@ -235,7 +235,7 @@ async fn tail_container(
                 Ok(Some(line)) => {
                     seen_any = true;
                     match limiter.consume() {
-                        Allowance::Pass => {
+                        Allowance::Allow => {
                             let msg = WsMessage::PodLogLine(PodLogLine {
                                 agent_id,
                                 stack_id,
@@ -247,6 +247,9 @@ async fn tail_container(
                             });
                             let _ = uplink.try_send(msg);
                         }
+                        // Over budget after this window already emitted its
+                        // gap marker — drop silently, no second gap.
+                        Allowance::Drop => {}
                         Allowance::DropAndGap(n_since) => {
                             let gap = WsMessage::LogGap(LogGap {
                                 agent_id,
@@ -287,9 +290,13 @@ struct RateLimiter {
 }
 
 enum Allowance {
-    Pass,
-    /// Drop this line; if it's the first drop of the window, surface a
-    /// `LogGap` with the running drop count to the caller.
+    /// Within budget — ship the line.
+    Allow,
+    /// Over budget — silently drop this line. A `LogGap` was already
+    /// emitted earlier this window, so no second marker.
+    Drop,
+    /// Over budget AND the first drop of this window — drop the line and
+    /// surface one `LogGap` carrying the running drop count.
     DropAndGap(u64),
 }
 
@@ -311,17 +318,16 @@ impl RateLimiter {
         }
         if self.count_in_window < self.lines_per_sec {
             self.count_in_window += 1;
-            Allowance::Pass
+            Allowance::Allow
         } else {
             self.dropped_in_window += 1;
-            // Emit one gap-marker per window (when transitioning from
-            // 0 drops to 1+). Subsequent drops within the same window
-            // silently accumulate into the same counter and surface in
-            // the next window's first drop.
+            // Emit one gap-marker per window, on the transition from 0 drops
+            // to 1+. Subsequent over-budget lines this window are dropped
+            // (`Drop`) without a second marker.
             if self.dropped_in_window == 1 {
                 Allowance::DropAndGap(1)
             } else {
-                Allowance::Pass // false; we still drop, but no second gap
+                Allowance::Drop
             }
         }
     }
@@ -336,26 +342,21 @@ mod tests {
     use super::*;
 
     #[test]
-    fn rate_limiter_passes_under_ceiling() {
+    fn rate_limiter_allows_under_ceiling() {
         let mut r = RateLimiter::new(10);
         for _ in 0..10 {
-            assert!(matches!(r.consume(), Allowance::Pass));
+            assert!(matches!(r.consume(), Allowance::Allow));
         }
     }
 
     #[test]
     fn rate_limiter_drops_above_ceiling_with_first_gap() {
         let mut r = RateLimiter::new(2);
-        assert!(matches!(r.consume(), Allowance::Pass));
-        assert!(matches!(r.consume(), Allowance::Pass));
-        // 3rd in this window: drop + first gap
-        match r.consume() {
-            Allowance::DropAndGap(1) => {}
-            other => panic!("expected DropAndGap(1), got something else: {}", matches!(other, Allowance::Pass)),
-        }
-        // 4th in this window: still dropping, but no new gap
-        assert!(matches!(r.consume(), Allowance::Pass));
-        // (Allowance::Pass here is the "we dropped silently" path —
-        // see the comment in RateLimiter::consume.)
+        assert!(matches!(r.consume(), Allowance::Allow));
+        assert!(matches!(r.consume(), Allowance::Allow));
+        // 3rd in this window: dropped, and it's the first drop → emit a gap.
+        assert!(matches!(r.consume(), Allowance::DropAndGap(1)));
+        // 4th in this window: still over budget → dropped silently, no gap.
+        assert!(matches!(r.consume(), Allowance::Drop));
     }
 }

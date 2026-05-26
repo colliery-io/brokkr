@@ -227,7 +227,7 @@ polish. C last because it's pure cleanup that won't gate the decision to merge.
 - [x] B3 PAK revocation closes WS socket (BROKKR-T-0176, 2026-05-26) — `ConnectionRegistry::close_for_agent` wired into `rotate_agent_pak` + `delete_agent` after commit; dropping the handle's lane senders is the close signal (no new cancel token). Unit + 2 integration tests green (registry clears + socket closes <1s); docs note added. Reconnect-after-revoke backs off via existing jittered backoff (no tight-loop)
 - [x] B4 load test executed, v0.5.0 baseline recorded (BROKKR-T-0177, 2026-05-26) — `tools/ws-loadtest/`. **500 agents × 10 msg/s × 5 min = 5002 msg/s sustained, 0 errors.** Broker CPU ~1 core saturated (avg 87%, peak 130%), RSS flat ~85 MiB (no leak), Postgres ~2378 rows/s/table keeping up, 50 subscribers fanned out 1.47M frames. **What pegs: broker CPU** (single-process ceiling, expected). No bottleneck follow-up needed at current targets
 - [ ] C1 browser live-tail decision recorded (ADR amendment or ADR-0009) and implemented
-- [ ] C2 `RateLimiter` API renamed, tests updated, on-wire frame unchanged
+- [x] C2 `RateLimiter` API renamed (BROKKR-T-0179, 2026-05-26) — `Pass`→`Allow`/`Drop`/`DropAndGap`. **The rename surfaced a real bug:** old `Pass` arm shipped over-budget lines after the first drop, so the 100/s ceiling wasn't enforced; `Drop` now actually drops. LogGap wire frame unchanged; agent unit + e2e ws-telemetry green
 - [ ] C3 `annotation_lookup` LRU added, scaling test asserts bounded API calls
 - [ ] T-0181 docs: ws_url config — docs page, helm values, ADR-0008 amendment, C4 caption (follow-up from T-0171 introducing the new agent config)
 - [ ] Existing test suites still green
