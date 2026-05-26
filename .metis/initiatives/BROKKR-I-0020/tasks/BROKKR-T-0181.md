@@ -11,7 +11,7 @@ archived: false
 
 tags:
   - "#task"
-  - "#phase/todo"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -45,22 +45,21 @@ the source. Production patterns where this matters:
 
 ## Acceptance Criteria
 
-- [ ] `docs/src/explanation/internal-ws-channel.md` — add a "When to use ws_url"
-      subsection covering: default behavior, when to override, the production
-      patterns above, and the required URL format
-      (`ws://host:port/internal/ws/agent` or `wss://`)
-- [ ] Helm chart `values.yaml` — expose `agent.wsUrl` as an optional value,
-      mapped to `BROKKR__AGENT__WS_URL` env in the agent Deployment template.
-      Default null (don't set the env, preserving current behavior)
-- [ ] ADR-0008 — one-paragraph amendment noting "WS endpoint MAY be on a
-      different ingress than REST; agent gates on `ws_url` config when set,
-      otherwise derives from `broker_url`". Keep the amendment scoped — don't
-      reopen the broader decisions
-- [ ] C4 deployment diagram (last touched by BROKKR-T-0169 / I-0019 WS-14)
-      caption updated to note the split-ingress variant. Diagram itself
-      doesn't need redrawing unless someone wants to add the variant explicitly
-- [ ] Cross-reference from the docs page back to the ADR amendment
-- [ ] `angreal docs build` still green
+- [x] `docs/src/explanation/internal-ws-channel.md` — added "When to use
+      ws_url" subsection (default behavior, when to override, the production
+      patterns, URL format `ws://host:port/internal/ws/agent` / `wss://`)
+- [x] Helm chart `values.yaml` — `agent.wsUrl` (default null), mapped to a
+      conditional `BROKKR__AGENT__WS_URL` in the agent ConfigMap template.
+      Verified via `helm template`: emitted only when set, absent by default
+- [x] ADR-0008 — "Amendments" subsection added (2026-05-26), scoped to the
+      split-ingress relaxation, referencing [[BROKKR-T-0171]]; broader
+      decisions untouched
+- [x] C4 container-diagram caption updated with a blockquote noting the
+      default single-ingress topology vs. the `ws_url` split-ingress variant
+      (diagram not redrawn, per the task's guidance)
+- [x] Cross-references: docs page → ADR-0008; C4 caption → Configuration
+      subsection; ADR amendment → docs page
+- [x] `angreal docs build` green (exit 0)
 
 ## Implementation Notes
 
@@ -93,4 +92,23 @@ None — the config option is already shipped on the branch
 
 ## Status Updates
 
-*To be added during implementation*
+### 2026-05-26 — Done (docs + helm + ADR + C4 caption)
+
+All acceptance criteria met. Pure docs/helm/ADR work, no code change (the
+`ws_url` config option already shipped on the branch with [[BROKKR-T-0171]]).
+
+- Docs: "When to use ws_url (split WS / REST ingress)" subsection in
+  `internal-ws-channel.md` — default derive-from-`broker_url`, the three
+  production split-ingress patterns, URL format, and the gating behavior,
+  cross-linked to ADR-0008.
+- Helm: `agent.wsUrl` (default `null`) in `values.yaml`; conditional
+  `BROKKR__AGENT__WS_URL` in `configmap.yaml`. `helm template` confirms it's
+  emitted only when set and omitted by default (preserving current behavior).
+- ADR-0008: new "Amendments" subsection (2026-05-26) scoped strictly to the
+  split-ingress relaxation; the original 9-point decision is untouched.
+- C4: container-diagram caption gained a blockquote distinguishing the default
+  single-ingress topology from the `ws_url` split-ingress variant — diagram
+  not redrawn (per the risk note about scope creep).
+- `angreal docs build` exits 0. (One pre-existing plissken WARN about a
+  `<string>` tag in the generated `brokkr-utils/config.md` rustdoc is
+  unrelated to these edits.)

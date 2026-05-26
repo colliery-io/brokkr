@@ -229,6 +229,6 @@ polish. C last because it's pure cleanup that won't gate the decision to merge.
 - [ ] C1 browser live-tail decision recorded (ADR amendment or ADR-0009) and implemented
 - [x] C2 `RateLimiter` API renamed (BROKKR-T-0179, 2026-05-26) — `Pass`→`Allow`/`Drop`/`DropAndGap`. **The rename surfaced a real bug:** old `Pass` arm shipped over-budget lines after the first drop, so the 100/s ceiling wasn't enforced; `Drop` now actually drops. LogGap wire frame unchanged; agent unit + e2e ws-telemetry green
 - [x] C3 UID-cache bounded LRU (BROKKR-T-0180, 2026-05-26) — unbounded HashMap → `lru::LruCache`, cap configurable (`agent.kube_event_uid_cache_cap`, default 10k), 5min TTL preserved. Scaling test: 50k unique UIDs stay pinned at the 10k cap; hot-set served with one API call per UID. Docs note + default.toml entry added
-- [ ] T-0181 docs: ws_url config — docs page, helm values, ADR-0008 amendment, C4 caption (follow-up from T-0171 introducing the new agent config)
+- [x] T-0181 docs: ws_url config (2026-05-26) — docs "When to use ws_url" subsection, helm `agent.wsUrl` (conditional env, verified via `helm template`), ADR-0008 amendment, C4 caption note; `angreal docs build` green
 - [ ] Existing test suites still green
 - [ ] Initiative review with human before tag + merge

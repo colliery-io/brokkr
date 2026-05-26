@@ -103,3 +103,9 @@ Concretely:
 ## Status
 
 **Draft** — pending approval. Once accepted, this ADR's decisions are inputs to the BROKKR-I-0019 design doc and the task decomposition that follows.
+
+## Amendments
+
+### 2026-05-26 — WS endpoint may live on a separate ingress (BROKKR-T-0171 / I-0020)
+
+The original decision implicitly assumed WS and REST share one ingress (the agent derived its WS URL from `broker_url`). The I-0020 chaos-test work ([[BROKKR-T-0171]]) added an optional `ws_url` agent setting: when set, the agent uses it for the WebSocket endpoint only; when unset, behavior is unchanged (derive from `broker_url`). This relaxes one implicit assumption — **the WS endpoint MAY terminate on a different ingress / load balancer than REST** — without reopening any decision above. The "WS is a hint, REST is the source of truth" invariant is untouched: REST still follows `broker_url`, and the REST fallback remains load-bearing. See `docs/explanation/internal-ws-channel` ("When to use ws_url") for operator guidance.

@@ -36,6 +36,13 @@ Rel(agent, broker, "REST polling fallback\n/api/v1/...", "HTTPS")
 Rel(operator, datadog, "Long-term log centralisation\n(NOT via Brokkr)", "vendor-specific")
 ```
 
+> *The diagram shows the default **single-ingress** topology: the agent's WS
+> and REST traffic both reach the broker over one path. Setting the agent's
+> `ws_url` (see [Configuration](#when-to-use-ws_url-split-ws--rest-ingress))
+> enables a **split-ingress** variant where the `Internal WS` edge terminates
+> on a different ingress / load balancer than `REST polling fallback`; the two
+> broker-facing edges above would then enter via separate ingresses.*
+
 The agent always opens **one** WebSocket connection to the broker. While
 that connection is up, the following traffic moves over it:
 
@@ -74,6 +81,39 @@ There is no broker-side opt-out: the broker always serves
 `/internal/ws/agent`. Operators that want to keep agents off WS for
 infrastructure reasons (e.g. an ingress that doesn't proxy upgrades)
 should set `ws_force_rest = true` on each agent.
+
+### When to use `ws_url` (split WS / REST ingress)
+
+By default the agent derives its WebSocket endpoint from `broker_url`
+(`http`→`ws`, `https`→`wss`, with `/internal/ws/agent` appended). WS and
+REST therefore share one ingress, which is correct for almost every
+deployment. The optional `ws_url` agent setting overrides **only** the WS
+endpoint:
+
+```toml
+[agent]
+# Leave unset to derive from broker_url. Set only for a split ingress.
+ws_url = "wss://ws.brokkr.example.com/internal/ws/agent"
+```
+
+(Helm: `agent.wsUrl`, which maps to `BROKKR__AGENT__WS_URL`. REST still
+follows `broker.url`.)
+
+Reach for it only when WS traffic must traverse a **different ingress /
+load balancer than REST**. Real cases:
+
+- A WS-aware LB with sticky sessions in front of WS, while REST goes
+  through a plain ALB — AWS ALBs support WebSockets but their idle
+  timeouts are aggressive, so a dedicated NLB / longer-timeout path for WS
+  is sometimes preferable.
+- Different SSL-termination policy for the long-lived WS connection.
+- A separate ingress controller for streaming traffic so a noisy REST
+  burst can't starve WS upgrades.
+
+The URL must be a full `ws://host:port/internal/ws/agent` (or `wss://`).
+The agent gates on `ws_url` when set and falls back to deriving from
+`broker_url` otherwise — see [ADR-0008](#) (the WS-channel decision record)
+for the invariant.
 
 ### Tuning the kube-events UID cache (large clusters)
 
