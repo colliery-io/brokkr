@@ -27,6 +27,7 @@ chrono = { workspace = true }
 clap = { workspace = true }
 k8s-openapi = { version = "0.23.0", features = ["latest"] }
 kube = { version = "0.95.0", features = ["client"] }
+lru = "0.12"
 prometheus = { workspace = true }
 reqwest = { version = "0.11", features = ["json"] }
 serde = { workspace = true }

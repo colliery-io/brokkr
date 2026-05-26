@@ -75,6 +75,26 @@ There is no broker-side opt-out: the broker always serves
 infrastructure reasons (e.g. an ingress that doesn't proxy upgrades)
 should set `ws_force_rest = true` on each agent.
 
+### Tuning the kube-events UID cache (large clusters)
+
+The agent's kube-events tailer (WS-07) does one dynamic-API lookup per
+*new* object UID to decide whether an Event belongs to a Brokkr-managed
+object, then caches the answer. The cache is a bounded LRU (default
+**10 000** entries, 5-minute TTL) so a cluster with high churn of
+unmanaged objects can't grow it without limit:
+
+```toml
+[agent]
+# default 10000 — sized for ~10k managed pods
+kube_event_uid_cache_cap = 10000
+```
+
+The default suits clusters up to ~10k managed pods. Bump it for larger
+fleets; the trade-off is agent memory versus how often an evicted entry
+forces a fresh API lookup the next time that object emits an Event. The
+cap bounds memory, not correctness — an evicted entry just costs one more
+lookup.
+
 ## Telemetry track — short-lived buffer, not a log store
 
 Brokkr streams Kubernetes Events and pod logs for objects an agent

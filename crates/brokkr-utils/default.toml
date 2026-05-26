@@ -57,6 +57,10 @@ ws_force_rest = false
 # traffic flows through a different ingress / proxy than REST — including the
 # I-0020 A2 chaos harness that points WS through a severable toxiproxy.
 # ws_url = "ws://toxiproxy:8666/internal/ws/agent"
+# Max entries in the kube-events UID→ownership LRU cache (WS-07). Defaults to
+# 10000 (sized for ~10k managed pods). Bump for larger clusters; trade-off is
+# memory vs. how often an evicted entry forces a fresh dynamic-API lookup.
+# kube_event_uid_cache_cap = 10000
 
 [telemetry]
 # Enable OpenTelemetry tracing (base setting, can be overridden per component)

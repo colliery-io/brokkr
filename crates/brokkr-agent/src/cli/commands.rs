@@ -120,7 +120,15 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
     // WS-07: tail kube Events for objects this agent manages and stream
     // them upstream via the WS uplink. Always-on (no per-stack opt-in;
     // Events are cheap signal). See crates/brokkr-agent/src/kube_events.rs.
-    let _kube_events_handle = kube_events::spawn(k8s_client.clone(), ws_uplink.clone(), agent.id);
+    let _kube_events_handle = kube_events::spawn(
+        k8s_client.clone(),
+        ws_uplink.clone(),
+        agent.id,
+        config
+            .agent
+            .kube_event_uid_cache_cap
+            .unwrap_or(kube_events::DEFAULT_UID_CACHE_CAP),
+    );
 
     // WS-08: tail pod logs for stacks that opt in via the
     // `brokkr.io/stream-logs: "true"` annotation on the pod template.

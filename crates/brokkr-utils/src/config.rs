@@ -226,6 +226,14 @@ pub struct Agent {
     /// `ws://host:port/path` or `wss://...` URL.
     #[serde(default)]
     pub ws_url: Option<String>,
+    /// Max entries in the kube-events UID→ownership LRU cache (WS-07). The
+    /// cache turns the per-Event annotation lookup into an O(1) hit for
+    /// already-seen objects; the bound stops unmanaged-object churn from
+    /// growing it without limit. When unset, defaults to 10_000 (sized for
+    /// ~10k managed pods). Bump for larger clusters; the trade-off is memory
+    /// vs. how often an evicted entry forces a fresh dynamic-API lookup.
+    #[serde(default)]
+    pub kube_event_uid_cache_cap: Option<usize>,
 }
 
 /// Represents the database configuration

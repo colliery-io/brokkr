@@ -28,9 +28,11 @@
 //! introduced in WS-05; the broker persists them into `agent_k8s_events`
 //! (WS-09) under the hard 6h retention ceiling.
 
-use std::collections::HashMap;
+use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+
+use lru::LruCache;
 
 use brokkr_wire::{K8sEvent as WireK8sEvent, ObjectRef, WsMessage};
 use chrono::Utc;
@@ -69,23 +71,42 @@ struct CachedLookup {
     fetched_at: Instant,
 }
 
-#[derive(Default)]
+/// Default entry cap. Sized for a cluster with up to ~10k managed pods; bump
+/// `agent.kube_event_uid_cache_cap` for larger fleets. The cache exists to
+/// turn the per-Event annotation lookup into an O(1) hit for already-seen
+/// UIDs; bounding it stops unmanaged-object churn from growing it without
+/// limit (the previous `HashMap` was unbounded).
+pub const DEFAULT_UID_CACHE_CAP: usize = 10_000;
+
+/// Bounded LRU of UID → ownership lookups, with a per-entry TTL. `get`
+/// promotes recency (so it takes `&mut self`); an entry past [`LOOKUP_TTL`]
+/// is treated as a miss and evicted so size accounting stays honest.
 struct UidCache {
-    by_uid: HashMap<String, CachedLookup>,
+    by_uid: LruCache<String, CachedLookup>,
 }
 
 impl UidCache {
-    fn get(&self, uid: &str) -> Option<CacheEntry> {
-        let entry = self.by_uid.get(uid)?;
-        if entry.fetched_at.elapsed() < LOOKUP_TTL {
-            Some(entry.value)
-        } else {
-            None
+    fn new(cap: usize) -> Self {
+        let cap = NonZeroUsize::new(cap).unwrap_or(NonZeroUsize::MIN);
+        Self {
+            by_uid: LruCache::new(cap),
+        }
+    }
+
+    fn get(&mut self, uid: &str) -> Option<CacheEntry> {
+        match self.by_uid.get(uid) {
+            Some(entry) if entry.fetched_at.elapsed() < LOOKUP_TTL => Some(entry.value),
+            Some(_) => {
+                // Expired: drop it so a stale entry doesn't occupy a slot.
+                self.by_uid.pop(uid);
+                None
+            }
+            None => None,
         }
     }
 
     fn put(&mut self, uid: String, value: CacheEntry) {
-        self.by_uid.insert(
+        self.by_uid.put(
             uid,
             CachedLookup {
                 value,
@@ -93,13 +114,23 @@ impl UidCache {
             },
         );
     }
+
+    #[cfg(test)]
+    fn len(&self) -> usize {
+        self.by_uid.len()
+    }
 }
 
 /// Spawn the kube-events tailer. Returns a `JoinHandle`; production drops
 /// it and the task runs for the lifetime of the agent process.
-pub fn spawn(client: Client, uplink: WsUplink, agent_id: Uuid) -> tokio::task::JoinHandle<()> {
+pub fn spawn(
+    client: Client,
+    uplink: WsUplink,
+    agent_id: Uuid,
+    uid_cache_cap: usize,
+) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
-        let cache: Arc<RwLock<UidCache>> = Arc::new(RwLock::new(UidCache::default()));
+        let cache: Arc<RwLock<UidCache>> = Arc::new(RwLock::new(UidCache::new(uid_cache_cap)));
         let (tx, mut rx) = mpsc::channel::<WsMessage>(OUTBOUND_CAPACITY);
 
         // Forwarder task: drains the channel into the WS uplink, falling
@@ -196,7 +227,9 @@ async fn resolve_stack(
     uid: &str,
     cache: &Arc<RwLock<UidCache>>,
 ) -> Option<Uuid> {
-    if let Some(entry) = cache.read().await.get(uid) {
+    // Write lock: LRU `get` promotes recency, so it mutates. Lookups are
+    // cheap relative to the API call on a miss, so the contention is fine.
+    if let Some(entry) = cache.write().await.get(uid) {
         return match entry {
             CacheEntry::Owned(id) => Some(id),
             CacheEntry::NotOurs => None,
@@ -253,9 +286,21 @@ mod tests {
     use super::*;
     use std::thread::sleep;
 
+    /// Mirror `resolve_stack`'s cache interaction without the real API:
+    /// on a miss, count a "lookup" and cache a `NotOurs` result.
+    fn lookup_or_miss(cache: &mut UidCache, uid: &str, api_calls: &mut usize) -> CacheEntry {
+        if let Some(e) = cache.get(uid) {
+            return e;
+        }
+        *api_calls += 1;
+        let e = CacheEntry::NotOurs;
+        cache.put(uid.to_string(), e);
+        e
+    }
+
     #[test]
     fn cache_returns_owned_within_ttl() {
-        let mut c = UidCache::default();
+        let mut c = UidCache::new(DEFAULT_UID_CACHE_CAP);
         let id = Uuid::new_v4();
         c.put("u".into(), CacheEntry::Owned(id));
         match c.get("u") {
@@ -266,7 +311,7 @@ mod tests {
 
     #[test]
     fn cache_treats_not_ours_as_a_real_entry() {
-        let mut c = UidCache::default();
+        let mut c = UidCache::new(DEFAULT_UID_CACHE_CAP);
         c.put("u".into(), CacheEntry::NotOurs);
         assert!(matches!(c.get("u"), Some(CacheEntry::NotOurs)));
     }
@@ -277,8 +322,45 @@ mod tests {
         // None — TTL-after-elapsed is exercised by the time-based check
         // in CachedLookup itself, which we don't need to assert
         // wall-clock here.
-        let c = UidCache::default();
+        let mut c = UidCache::new(DEFAULT_UID_CACHE_CAP);
         assert!(c.get("missing").is_none());
         let _ = sleep; // keep the import for future expansion
+    }
+
+    #[test]
+    fn cache_stays_bounded_under_high_unique_churn() {
+        // 50k unique unmanaged UIDs against a 10k cap: the old unbounded
+        // HashMap would grow to 50k; the LRU must cap at 10k. Every lookup
+        // is a unique miss (no repeats to benefit from), so the API-call
+        // count equals the number of unique UIDs — the point of the test is
+        // that *memory* stays bounded, not that calls drop for unique churn.
+        let cap = 10_000;
+        let mut c = UidCache::new(cap);
+        let mut api_calls = 0usize;
+        for i in 0..50_000 {
+            lookup_or_miss(&mut c, &format!("uid-{i}"), &mut api_calls);
+            assert!(c.len() <= cap, "cache exceeded cap of {cap}");
+        }
+        assert_eq!(api_calls, 50_000, "every unique UID should miss exactly once");
+        assert_eq!(c.len(), cap, "cache must be pinned at the cap, not grow");
+    }
+
+    #[test]
+    fn cache_serves_hot_set_without_re_hitting_the_api() {
+        // A hot set that fits within the cap should cost exactly one API
+        // call per unique UID, no matter how many times it's looked up.
+        let cap = 10_000;
+        let mut c = UidCache::new(cap);
+        let mut api_calls = 0usize;
+        for pass in 0..3 {
+            for i in 0..cap {
+                lookup_or_miss(&mut c, &format!("hot-{i}"), &mut api_calls);
+            }
+            let _ = pass;
+        }
+        assert_eq!(
+            api_calls, cap,
+            "hot set within cap should hit the API once per UID, not per access"
+        );
     }
 }

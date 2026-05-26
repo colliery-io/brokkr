@@ -11,10 +11,10 @@ archived: false
 
 tags:
   - "#task"
-  - "#phase/todo"
+  - "#phase/completed"
 
 
-exit_criteria_met: false
+exit_criteria_met: true
 initiative_id: BROKKR-I-0020
 ---
 
@@ -75,4 +75,29 @@ None.
 
 ## Status Updates
 
-*To be added during implementation*
+### 2026-05-26 — Done
+
+Replaced the unbounded `HashMap`-backed `UidCache` with a bounded
+`lru::LruCache` (added `lru = "0.12"` to brokkr-agent). TTL behavior preserved
+(5min); an entry read past TTL is treated as a miss AND evicted so the size
+accounting stays honest. `get` now takes `&mut self` (LRU promotes recency),
+so `resolve_stack` takes the write lock for the lookup — cheap relative to the
+API call a miss triggers.
+
+- Cap is configurable: `agent.kube_event_uid_cache_cap` (`brokkr-utils`
+  config, `Option<usize>`), default `DEFAULT_UID_CACHE_CAP = 10_000`. Threaded
+  through `kube_events::spawn`. Commented entry added to `default.toml`.
+- Docs: "Tuning the kube-events UID cache" subsection added to
+  `internal-ws-channel.md` (the bound, the default, the memory-vs-API
+  trade-off).
+
+**Tests** (in `kube_events.rs`, all green; agent unit 64 total):
+- `cache_stays_bounded_under_high_unique_churn` — 50_000 unique UIDs against a
+  10_000 cap: asserts `len() <= cap` on every insert, ends pinned at exactly
+  10_000 (the old HashMap would have grown to 50_000), and the API-call count
+  equals 50_000 (unique churn can't be helped — the win is bounded memory).
+- `cache_serves_hot_set_without_re_hitting_the_api` — a hot set within cap,
+  looked up 3× over, costs exactly one API call per UID.
+- Existing 3 cache tests preserved (no regression).
+
+Full workspace unit suite green (64 agent / 97 broker / 128 models / 24 utils).
