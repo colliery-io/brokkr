@@ -201,49 +201,79 @@ async fn tail_container(
         follow: true,
         ..LogParams::default()
     };
-    let reader = match pods.log_stream(&pod, &params).await {
-        Ok(s) => tokio::io::BufReader::new(s.compat()),
-        Err(e) => {
-            debug!(%pod, %container, error = %e, "pod log_stream open failed");
-            return;
-        }
-    };
-    let mut lines = reader.lines();
     let mut limiter = RateLimiter::new(DEFAULT_LINES_PER_SEC);
+
+    // The pod watcher can hand us a pod that's still `ContainerCreating`:
+    // opening a follow log stream against it succeeds but EOFs immediately
+    // (or errors), and `ensure_tails` has already marked the uid active so
+    // a later Apply won't re-attach. Reopen with backoff until the
+    // container produces output (or we exhaust the start-up budget). Once
+    // we've forwarded a line we never reopen — a follow stream replays
+    // from the start, so reopening after success would duplicate lines.
+    let mut seen_any = false;
+    let mut open_attempts = 0u32;
+    // ~MAX_OPEN_ATTEMPTS * OPEN_RETRY interval of pod-start slack.
+    const MAX_OPEN_ATTEMPTS: u32 = 30;
+    const OPEN_RETRY: Duration = Duration::from_secs(2);
+
     loop {
-        match lines.next_line().await {
-            Ok(Some(line)) => {
-                match limiter.consume() {
-                    Allowance::Pass => {
-                        let msg = WsMessage::PodLogLine(PodLogLine {
-                            agent_id,
-                            stack_id,
-                            namespace: namespace.clone(),
-                            pod: pod.clone(),
-                            container: container.clone(),
-                            ts: Utc::now(),
-                            line,
-                        });
-                        let _ = uplink.try_send(msg);
-                    }
-                    Allowance::DropAndGap(n_since) => {
-                        let gap = WsMessage::LogGap(LogGap {
-                            agent_id,
-                            stack_id,
-                            since_ts: Utc::now(),
-                            dropped_count: n_since,
-                            reason: GapReason::RateLimit,
-                        });
-                        let _ = uplink.try_send(gap);
+        let reader = match pods.log_stream(&pod, &params).await {
+            Ok(s) => tokio::io::BufReader::new(s.compat()),
+            Err(e) => {
+                debug!(%pod, %container, error = %e, "pod log_stream open failed");
+                if seen_any || open_attempts >= MAX_OPEN_ATTEMPTS {
+                    return;
+                }
+                open_attempts += 1;
+                tokio::time::sleep(OPEN_RETRY).await;
+                continue;
+            }
+        };
+        let mut lines = reader.lines();
+        loop {
+            match lines.next_line().await {
+                Ok(Some(line)) => {
+                    seen_any = true;
+                    match limiter.consume() {
+                        Allowance::Pass => {
+                            let msg = WsMessage::PodLogLine(PodLogLine {
+                                agent_id,
+                                stack_id,
+                                namespace: namespace.clone(),
+                                pod: pod.clone(),
+                                container: container.clone(),
+                                ts: Utc::now(),
+                                line,
+                            });
+                            let _ = uplink.try_send(msg);
+                        }
+                        Allowance::DropAndGap(n_since) => {
+                            let gap = WsMessage::LogGap(LogGap {
+                                agent_id,
+                                stack_id,
+                                since_ts: Utc::now(),
+                                dropped_count: n_since,
+                                reason: GapReason::RateLimit,
+                            });
+                            let _ = uplink.try_send(gap);
+                        }
                     }
                 }
-            }
-            Ok(None) => break,
-            Err(e) => {
-                debug!(%pod, %container, error = %e, "log stream read error; ending tail");
-                break;
+                Ok(None) => break,
+                Err(e) => {
+                    debug!(%pod, %container, error = %e, "log stream read error; ending tail");
+                    break;
+                }
             }
         }
+        // Stream ended. If we forwarded at least one line, the container has
+        // run and EOF means it exited — we're done. Otherwise it likely
+        // wasn't running yet; reopen until the start-up budget runs out.
+        if seen_any || open_attempts >= MAX_OPEN_ATTEMPTS {
+            return;
+        }
+        open_attempts += 1;
+        tokio::time::sleep(OPEN_RETRY).await;
     }
 }
 

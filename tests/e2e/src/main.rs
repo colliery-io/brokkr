@@ -116,6 +116,12 @@ async fn main() -> ExitCode {
                     scenarios::test_ws_chaos(&client)
                 );
             }
+            "ws-telemetry" => {
+                run_scenario!(
+                    "BROKKR-T-0172 (A3): WS telemetry tailer (real k3s)",
+                    scenarios::test_ws_telemetry(&client)
+                );
+            }
             other => {
                 eprintln!("❌ Unknown E2E_SCENARIO: {}", other);
                 return ExitCode::FAILURE;

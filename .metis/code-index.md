@@ -1,6 +1,6 @@
 # Code Index
 
-> Generated: 2026-05-23T12:42:08Z | 384 files | JavaScript, Python, Rust, TypeScript
+> Generated: 2026-05-26T01:26:12Z | 388 files | JavaScript, Python, Rust, TypeScript
 
 ## Project Structure
 
@@ -358,6 +358,7 @@
 │   │       │   │       └── list_work_orders.py
 │   │       │   ├── client.py
 │   │       │   ├── errors.py
+│   │       │   ├── helpers.py
 │   │       │   ├── models/
 │   │       │   │   ├── __init__.py
 │   │       │   │   ├── add_annotation_request.py
@@ -439,6 +440,7 @@
 │   │       │   │   └── ws_connections_response.py
 │   │       │   └── types.py
 │   │       └── tests/
+│   │           ├── test_helpers.py
 │   │           └── test_surface.py
 │   └── typescript/
 │       └── brokkr-client/
@@ -458,12 +460,14 @@
 │   └── sdk-contract/
 │       ├── python/
 │       │   ├── conftest.py
+│       │   ├── test_telemetry_and_ws.py
 │       │   └── test_uat_walkthrough.py
 │       ├── rust/
 │       │   └── src/
 │       │       └── main.rs
 │       └── typescript/
 │           ├── src/
+│           │   ├── telemetry-and-ws.test.ts
 │           │   └── uat-walkthrough.test.ts
 │           └── vitest.config.ts
 └── tools/
@@ -517,8 +521,8 @@
 - pub `WsUplink` struct L118-121 — `{ state: watch::Receiver<WsState>, outbound: mpsc::Sender<WsMessage> }` — Send-side handle for agent components that want to prefer WS but fall
 - pub `is_up` function L127-129 — `(&self) -> bool` — True iff the WS state is currently `Up`.
 - pub `try_send` function L134-143 — `(&self, msg: WsMessage) -> Result<(), WsMessage>` — Try to send a message over WS.
-- pub `spawn` function L152-197 — `(settings: &Settings) -> WsClient` — Spawn the WS connection task and return a client handle.
-- pub `ws_url_from_broker_url` function L203-215 — `(broker_url: &str) -> String` — Convert `http(s)://broker/api/v1`-style URLs into the
+- pub `spawn` function L152-204 — `(settings: &Settings) -> WsClient` — Spawn the WS connection task and return a client handle.
+- pub `ws_url_from_broker_url` function L210-222 — `(broker_url: &str) -> String` — Convert `http(s)://broker/api/v1`-style URLs into the
 -  `WsState` type L51-55 — `= WsState` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
 -  `OUTBOUND_CAPACITY` variable L61 — `: usize` — Capacity of the outbound queue from the agent's emitters to the WS task.
 -  `INBOUND_CAPACITY` variable L65 — `: usize` — Capacity of the inbound queue from the WS task to in-agent consumers.
@@ -526,28 +530,28 @@
 -  `BACKOFF_MAX` variable L69 — `: Duration` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
 -  `WsClient` type L84-112 — `= WsClient` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
 -  `WsUplink` type L123-144 — `= WsUplink` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `reconnect_loop` function L217-244 — `( url: String, pak: String, state_tx: watch::Sender<WsState>, inbound_tx: mpsc::...` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `dial` function L246-265 — `( url: &str, pak: &str, ) -> Result< tokio_tungstenite::WebSocketStream<tokio_tu...` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `run_socket` function L267-332 — `( socket: tokio_tungstenite::WebSocketStream< tokio_tungstenite::MaybeTlsStream<...` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `BackoffSchedule` struct L337-339 — `{ current: Duration }` — Exponential backoff with capped maximum and ±20% jitter.
--  `BackoffSchedule` type L341-359 — `= BackoffSchedule` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `new` function L342-346 — `() -> Self` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `reset` function L348-350 — `(&mut self)` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `next` function L352-358 — `(&mut self) -> Duration` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `with_jitter` function L361-370 — `(d: Duration) -> Duration` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `tests` module L373-521 — `-` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `ws_url_translates_scheme_and_appends_path` function L377-390 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `backoff_grows_exponentially_then_caps` function L393-410 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `backoff_reset_restores_initial` function L413-421 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `jitter_stays_within_twenty_percent` function L424-431 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `uplink_with` function L441-449 — `(state: WsState, capacity: usize) -> (WsUplink, watch::Sender<WsState>, mpsc::Re...` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `heartbeat_msg` function L451-456 — `() -> WsMessage` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `try_send_returns_message_when_down` function L459-465 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `try_send_returns_message_when_force_rest_only` function L468-472 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `try_send_delivers_when_up` function L475-481 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `try_send_returns_message_when_lane_full` function L484-491 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `ws_is_on_by_default_per_adr_0008` function L494-503 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `try_send_follows_state_flip_back_to_rest` function L506-520 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `reconnect_loop` function L224-251 — `( url: String, pak: String, state_tx: watch::Sender<WsState>, inbound_tx: mpsc::...` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `dial` function L253-272 — `( url: &str, pak: &str, ) -> Result< tokio_tungstenite::WebSocketStream<tokio_tu...` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `run_socket` function L274-339 — `( socket: tokio_tungstenite::WebSocketStream< tokio_tungstenite::MaybeTlsStream<...` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `BackoffSchedule` struct L344-346 — `{ current: Duration }` — Exponential backoff with capped maximum and ±20% jitter.
+-  `BackoffSchedule` type L348-366 — `= BackoffSchedule` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `new` function L349-353 — `() -> Self` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `reset` function L355-357 — `(&mut self)` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `next` function L359-365 — `(&mut self) -> Duration` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `with_jitter` function L368-377 — `(d: Duration) -> Duration` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `tests` module L380-528 — `-` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `ws_url_translates_scheme_and_appends_path` function L384-397 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `backoff_grows_exponentially_then_caps` function L400-417 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `backoff_reset_restores_initial` function L420-428 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `jitter_stays_within_twenty_percent` function L431-438 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `uplink_with` function L448-456 — `(state: WsState, capacity: usize) -> (WsUplink, watch::Sender<WsState>, mpsc::Re...` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `heartbeat_msg` function L458-463 — `() -> WsMessage` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `try_send_returns_message_when_down` function L466-472 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `try_send_returns_message_when_force_rest_only` function L475-479 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `try_send_delivers_when_up` function L482-488 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `try_send_returns_message_when_lane_full` function L491-498 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `ws_is_on_by_default_per_adr_0008` function L501-510 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `try_send_follows_state_flip_back_to_rest` function L513-527 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
 
 #### crates/brokkr-agent/src/deployment_health.rs
 
@@ -2734,39 +2738,45 @@
 
 #### crates/brokkr-client/src/wrapper.rs
 
-- pub `BrokkrError` enum L45-59 — `Api | Transport | UnexpectedResponse | InvalidRequest` — Top-level error returned by every wrapper method.
-- pub `status` function L63-70 — `(&self) -> Option<reqwest::StatusCode>` — HTTP status, when known.
-- pub `code` function L74-79 — `(&self) -> Option<&str>` — Stable, machine-readable error code from the wire response, if any.
-- pub `is_retryable` function L84-94 — `(&self) -> bool` — Whether this error is appropriate to retry.
-- pub `BrokkrClientBuilder` struct L145-152 — `{ base_url: String, token: Option<String>, request_timeout: Duration, connect_ti...` — Builder for [`BrokkrClient`].
-- pub `token` function L169-172 — `(mut self, token: impl Into<String>) -> Self` — PAK credential (admin, agent, or generator).
-- pub `request_timeout` function L175-178 — `(mut self, timeout: Duration) -> Self` — Total per-request timeout.
-- pub `connect_timeout` function L181-184 — `(mut self, timeout: Duration) -> Self` — TCP connect timeout.
-- pub `max_retries` function L188-191 — `(mut self, max: u32) -> Self` — Maximum retry attempts for [`BrokkrClient::retry`].
-- pub `initial_backoff` function L195-198 — `(mut self, initial: Duration) -> Self` — Initial backoff between retry attempts.
-- pub `build` function L200-222 — `(self) -> Result<BrokkrClient, BrokkrError>` — wrapper.
-- pub `BrokkrClient` struct L231-235 — `{ inner: Client, max_retries: u32, initial_backoff: Duration }` — Ergonomic client for the Brokkr broker API.
-- pub `builder` function L240-242 — `(base_url: impl Into<String>) -> BrokkrClientBuilder` — Start building a client.
-- pub `api` function L247-249 — `(&self) -> &Client` — Access the underlying generated client.
-- pub `retry` function L260-282 — `(&self, mut op: F) -> Result<T, BrokkrError>` — Run `op` with exponential backoff on retryable errors.
--  `BrokkrError` type L61-95 — `= BrokkrError` — wrapper.
--  `BrokkrError` type L97-111 — `= BrokkrError` — wrapper.
--  `fmt` function L98-110 — `(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result` — wrapper.
--  `BrokkrError` type L113 — `= BrokkrError` — wrapper.
--  `BrokkrError` type L115-137 — `= BrokkrError` — wrapper.
--  `from` function L116-136 — `(err: RawError<ErrorResponse>) -> Self` — wrapper.
--  `is_retryable_status` function L139-141 — `(status: reqwest::StatusCode) -> bool` — wrapper.
--  `BrokkrClientBuilder` type L154-223 — `= BrokkrClientBuilder` — wrapper.
--  `new` function L155-164 — `(base_url: impl Into<String>) -> Self` — wrapper.
--  `BrokkrClient` type L237-283 — `= BrokkrClient` — wrapper.
--  `tests` module L286-419 — `-` — wrapper.
--  `builder_constructs_without_token` function L290-296 — `()` — wrapper.
--  `builder_accepts_token_and_timeouts` function L299-310 — `()` — wrapper.
--  `invalid_token_header_is_rejected` function L313-318 — `()` — wrapper.
--  `error_code_extracted_from_api_response` function L321-333 — `()` — wrapper.
--  `retryable_classification` function L336-359 — `()` — wrapper.
--  `retry_stops_after_max_attempts` function L362-390 — `()` — wrapper.
--  `retry_returns_immediately_on_non_retryable` function L393-418 — `()` — wrapper.
+- pub `BrokkrError` enum L49-63 — `Api | Transport | UnexpectedResponse | InvalidRequest` — Top-level error returned by every wrapper method.
+- pub `status` function L67-74 — `(&self) -> Option<reqwest::StatusCode>` — HTTP status, when known.
+- pub `code` function L78-83 — `(&self) -> Option<&str>` — Stable, machine-readable error code from the wire response, if any.
+- pub `is_retryable` function L88-98 — `(&self) -> bool` — Whether this error is appropriate to retry.
+- pub `BrokkrClientBuilder` struct L149-156 — `{ base_url: String, token: Option<String>, request_timeout: Duration, connect_ti...` — Builder for [`BrokkrClient`].
+- pub `token` function L173-176 — `(mut self, token: impl Into<String>) -> Self` — PAK credential (admin, agent, or generator).
+- pub `request_timeout` function L179-182 — `(mut self, timeout: Duration) -> Self` — Total per-request timeout.
+- pub `connect_timeout` function L185-188 — `(mut self, timeout: Duration) -> Self` — TCP connect timeout.
+- pub `max_retries` function L192-195 — `(mut self, max: u32) -> Self` — Maximum retry attempts for [`BrokkrClient::retry`].
+- pub `initial_backoff` function L199-202 — `(mut self, initial: Duration) -> Self` — Initial backoff between retry attempts.
+- pub `build` function L204-226 — `(self) -> Result<BrokkrClient, BrokkrError>` — wrapper.
+- pub `BrokkrClient` struct L235-239 — `{ inner: Client, max_retries: u32, initial_backoff: Duration }` — Ergonomic client for the Brokkr broker API.
+- pub `builder` function L244-246 — `(base_url: impl Into<String>) -> BrokkrClientBuilder` — Start building a client.
+- pub `api` function L251-253 — `(&self) -> &Client` — Access the underlying generated client.
+- pub `list_telemetry_events` function L268-283 — `( &self, stack_id: Uuid, since: Option<DateTime<Utc>>, limit: Option<i64>, ) -> ...` — Paginated kube-event history for a stack, scoped to the 6h
+- pub `list_telemetry_logs` function L288-303 — `( &self, stack_id: Uuid, since: Option<DateTime<Utc>>, limit: Option<i64>, ) -> ...` — Paginated pod-log history for a stack within the 6h retention
+- pub `list_ws_connections` function L309-312 — `(&self) -> Result<WsConnectionsResponse, BrokkrError>` — Snapshot of currently-connected agents on the internal WS
+- pub `retry` function L323-345 — `(&self, mut op: F) -> Result<T, BrokkrError>` — Run `op` with exponential backoff on retryable errors.
+-  `BrokkrError` type L65-99 — `= BrokkrError` — wrapper.
+-  `BrokkrError` type L101-115 — `= BrokkrError` — wrapper.
+-  `fmt` function L102-114 — `(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result` — wrapper.
+-  `BrokkrError` type L117 — `= BrokkrError` — wrapper.
+-  `BrokkrError` type L119-141 — `= BrokkrError` — wrapper.
+-  `from` function L120-140 — `(err: RawError<ErrorResponse>) -> Self` — wrapper.
+-  `is_retryable_status` function L143-145 — `(status: reqwest::StatusCode) -> bool` — wrapper.
+-  `BrokkrClientBuilder` type L158-227 — `= BrokkrClientBuilder` — wrapper.
+-  `new` function L159-168 — `(base_url: impl Into<String>) -> Self` — wrapper.
+-  `BrokkrClient` type L241-346 — `= BrokkrClient` — wrapper.
+-  `tests` module L349-508 — `-` — wrapper.
+-  `builder_constructs_without_token` function L353-359 — `()` — wrapper.
+-  `builder_accepts_token_and_timeouts` function L362-373 — `()` — wrapper.
+-  `invalid_token_header_is_rejected` function L376-381 — `()` — wrapper.
+-  `error_code_extracted_from_api_response` function L384-396 — `()` — wrapper.
+-  `retryable_classification` function L399-422 — `()` — wrapper.
+-  `retry_stops_after_max_attempts` function L425-453 — `()` — wrapper.
+-  `ws_wrapper_methods_compile_with_expected_signatures` function L464-479 — `()` — wrapper.
+-  `_assert_signatures` function L465-478 — `()` — wrapper.
+-  `_types_check` function L466-476 — `()` — wrapper.
+-  `retry_returns_immediately_on_non_retryable` function L482-507 — `()` — wrapper.
 
 ### crates/brokkr-client/tests
 
@@ -3252,35 +3262,35 @@
 - pub `Settings` struct L121-136 — `{ database: Database, log: Log, pak: PAK, agent: Agent, broker: Broker, cors: Co...` — Represents the main settings structure for the application
 - pub `Cors` struct L140-156 — `{ allowed_origins: Vec<String>, allowed_methods: Vec<String>, allowed_headers: V...` — Represents the CORS configuration
 - pub `Broker` struct L159-179 — `{ pak_hash: Option<String>, diagnostic_cleanup_interval_seconds: Option<u64>, di...` — Default: 60 (set to 0 to disable caching)
-- pub `Agent` struct L184-215 — `{ broker_url: String, polling_interval: u64, kubeconfig_path: Option<String>, ma...` — Represents the agent configuration
-- pub `Database` struct L220-225 — `{ url: String, schema: Option<String> }` — Represents the database configuration
-- pub `Log` struct L229-235 — `{ level: String, format: String }` — Represents the logging configuration
-- pub `Telemetry` struct L243-262 — `{ enabled: bool, otlp_endpoint: String, service_name: String, sampling_rate: f64...` — Represents the telemetry (OpenTelemetry) configuration with hierarchical overrides
-- pub `TelemetryOverride` struct L266-275 — `{ enabled: Option<bool>, otlp_endpoint: Option<String>, service_name: Option<Str...` — Component-specific telemetry overrides (all fields optional)
-- pub `ResolvedTelemetry` struct L279-284 — `{ enabled: bool, otlp_endpoint: String, service_name: String, sampling_rate: f64...` — Resolved telemetry configuration after merging base with overrides
-- pub `for_broker` function L288-303 — `(&self) -> ResolvedTelemetry` — Get resolved telemetry config for broker (base merged with broker overrides)
-- pub `for_agent` function L306-321 — `(&self) -> ResolvedTelemetry` — Get resolved telemetry config for agent (base merged with agent overrides)
-- pub `PAK` struct L338-355 — `{ prefix: Option<String>, digest: Option<String>, rng: Option<String>, short_tok...` — Represents the PAK configuration
-- pub `short_length_as_str` function L359-361 — `(&mut self)` — Convert short token length to string
-- pub `long_length_as_str` function L364-366 — `(&mut self)` — Convert long token length to string
-- pub `new` function L379-398 — `(file: Option<String>) -> Result<Self, ConfigError>` — Creates a new `Settings` instance
-- pub `DynamicConfig` struct L406-423 — `{ log_level: String, diagnostic_cleanup_interval_seconds: u64, diagnostic_max_ag...` — Dynamic configuration values that can be hot-reloaded at runtime.
-- pub `from_settings` function L427-447 — `(settings: &Settings) -> Self` — Create DynamicConfig from Settings
-- pub `ConfigChange` struct L452-459 — `{ key: String, old_value: String, new_value: String }` — Represents a configuration change detected during reload
-- pub `ReloadableConfig` struct L485-492 — `{ static_config: Settings, dynamic: Arc<RwLock<DynamicConfig>>, config_file: Opt...` — Configuration wrapper that separates static (restart-required) settings
-- pub `new` function L504-513 — `(file: Option<String>) -> Result<Self, ConfigError>` — Creates a new ReloadableConfig instance
-- pub `from_settings` function L525-533 — `(settings: Settings, config_file: Option<String>) -> Self` — Creates a ReloadableConfig from an existing Settings instance
-- pub `static_config` function L538-540 — `(&self) -> &Settings` — Get a reference to the static (immutable) settings
-- pub `reload` function L546-625 — `(&self) -> Result<Vec<ConfigChange>, ConfigError>` — Reload dynamic configuration from sources (file + environment)
-- pub `log_level` function L632-637 — `(&self) -> String` — Get current log level
-- pub `diagnostic_cleanup_interval_seconds` function L640-645 — `(&self) -> u64` — Get diagnostic cleanup interval in seconds
-- pub `diagnostic_max_age_hours` function L648-653 — `(&self) -> i64` — Get diagnostic max age in hours
-- pub `webhook_delivery_interval_seconds` function L656-661 — `(&self) -> u64` — Get webhook delivery interval in seconds
-- pub `webhook_delivery_batch_size` function L664-669 — `(&self) -> i64` — Get webhook delivery batch size
-- pub `webhook_cleanup_retention_days` function L672-677 — `(&self) -> i64` — Get webhook cleanup retention in days
-- pub `cors_allowed_origins` function L680-685 — `(&self) -> Vec<String>` — Get CORS allowed origins
-- pub `cors_max_age_seconds` function L688-693 — `(&self) -> u64` — Get CORS max age in seconds
-- pub `dynamic_snapshot` function L696-698 — `(&self) -> Option<DynamicConfig>` — Get a snapshot of all dynamic config values
+- pub `Agent` struct L184-229 — `{ broker_url: String, polling_interval: u64, kubeconfig_path: Option<String>, ma...` — Represents the agent configuration
+- pub `Database` struct L234-239 — `{ url: String, schema: Option<String> }` — Represents the database configuration
+- pub `Log` struct L243-249 — `{ level: String, format: String }` — Represents the logging configuration
+- pub `Telemetry` struct L257-276 — `{ enabled: bool, otlp_endpoint: String, service_name: String, sampling_rate: f64...` — Represents the telemetry (OpenTelemetry) configuration with hierarchical overrides
+- pub `TelemetryOverride` struct L280-289 — `{ enabled: Option<bool>, otlp_endpoint: Option<String>, service_name: Option<Str...` — Component-specific telemetry overrides (all fields optional)
+- pub `ResolvedTelemetry` struct L293-298 — `{ enabled: bool, otlp_endpoint: String, service_name: String, sampling_rate: f64...` — Resolved telemetry configuration after merging base with overrides
+- pub `for_broker` function L302-317 — `(&self) -> ResolvedTelemetry` — Get resolved telemetry config for broker (base merged with broker overrides)
+- pub `for_agent` function L320-335 — `(&self) -> ResolvedTelemetry` — Get resolved telemetry config for agent (base merged with agent overrides)
+- pub `PAK` struct L352-369 — `{ prefix: Option<String>, digest: Option<String>, rng: Option<String>, short_tok...` — Represents the PAK configuration
+- pub `short_length_as_str` function L373-375 — `(&mut self)` — Convert short token length to string
+- pub `long_length_as_str` function L378-380 — `(&mut self)` — Convert long token length to string
+- pub `new` function L393-412 — `(file: Option<String>) -> Result<Self, ConfigError>` — Creates a new `Settings` instance
+- pub `DynamicConfig` struct L420-437 — `{ log_level: String, diagnostic_cleanup_interval_seconds: u64, diagnostic_max_ag...` — Dynamic configuration values that can be hot-reloaded at runtime.
+- pub `from_settings` function L441-461 — `(settings: &Settings) -> Self` — Create DynamicConfig from Settings
+- pub `ConfigChange` struct L466-473 — `{ key: String, old_value: String, new_value: String }` — Represents a configuration change detected during reload
+- pub `ReloadableConfig` struct L499-506 — `{ static_config: Settings, dynamic: Arc<RwLock<DynamicConfig>>, config_file: Opt...` — Configuration wrapper that separates static (restart-required) settings
+- pub `new` function L518-527 — `(file: Option<String>) -> Result<Self, ConfigError>` — Creates a new ReloadableConfig instance
+- pub `from_settings` function L539-547 — `(settings: Settings, config_file: Option<String>) -> Self` — Creates a ReloadableConfig from an existing Settings instance
+- pub `static_config` function L552-554 — `(&self) -> &Settings` — Get a reference to the static (immutable) settings
+- pub `reload` function L560-639 — `(&self) -> Result<Vec<ConfigChange>, ConfigError>` — Reload dynamic configuration from sources (file + environment)
+- pub `log_level` function L646-651 — `(&self) -> String` — Get current log level
+- pub `diagnostic_cleanup_interval_seconds` function L654-659 — `(&self) -> u64` — Get diagnostic cleanup interval in seconds
+- pub `diagnostic_max_age_hours` function L662-667 — `(&self) -> i64` — Get diagnostic max age in hours
+- pub `webhook_delivery_interval_seconds` function L670-675 — `(&self) -> u64` — Get webhook delivery interval in seconds
+- pub `webhook_delivery_batch_size` function L678-683 — `(&self) -> i64` — Get webhook delivery batch size
+- pub `webhook_cleanup_retention_days` function L686-691 — `(&self) -> i64` — Get webhook cleanup retention in days
+- pub `cors_allowed_origins` function L694-699 — `(&self) -> Vec<String>` — Get CORS allowed origins
+- pub `cors_max_age_seconds` function L702-707 — `(&self) -> u64` — Get CORS max age in seconds
+- pub `dynamic_snapshot` function L710-712 — `(&self) -> Option<DynamicConfig>` — Get a snapshot of all dynamic config values
 -  `deserialize_string_or_vec` function L76-113 — `(deserializer: D) -> Result<Vec<String>, D::Error>` — Deserializes a comma-separated string or array into Vec<String>
 -  `StringOrVec` struct L83 — `-` — Default: 60 (set to 0 to disable caching)
 -  `StringOrVec` type L85-110 — `= StringOrVec` — Default: 60 (set to 0 to disable caching)
@@ -3289,33 +3299,33 @@
 -  `visit_str` function L92-98 — `(self, value: &str) -> Result<Self::Value, E>` — Default: 60 (set to 0 to disable caching)
 -  `visit_seq` function L100-109 — `(self, mut seq: A) -> Result<Self::Value, A::Error>` — Default: 60 (set to 0 to disable caching)
 -  `DEFAULT_SETTINGS` variable L116 — `: &str` — Default: 60 (set to 0 to disable caching)
--  `default_log_format` function L237-239 — `() -> String` — Default: 60 (set to 0 to disable caching)
--  `Telemetry` type L286-322 — `= Telemetry` — Default: 60 (set to 0 to disable caching)
--  `default_otlp_endpoint` function L324-326 — `() -> String` — Default: 60 (set to 0 to disable caching)
--  `default_service_name` function L328-330 — `() -> String` — Default: 60 (set to 0 to disable caching)
--  `default_sampling_rate` function L332-334 — `() -> f64` — Default: 60 (set to 0 to disable caching)
--  `PAK` type L357-367 — `= PAK` — Default: 60 (set to 0 to disable caching)
--  `Settings` type L369-399 — `= Settings` — Default: 60 (set to 0 to disable caching)
--  `DynamicConfig` type L425-448 — `= DynamicConfig` — Default: 60 (set to 0 to disable caching)
--  `ReloadableConfig` type L494-699 — `= ReloadableConfig` — Default: 60 (set to 0 to disable caching)
--  `tests` module L702-1047 — `-` — Default: 60 (set to 0 to disable caching)
--  `test_settings_default_values` function L712-721 — `()` — Test the creation of Settings with default values
--  `test_telemetry_default_values` function L724-732 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_telemetry_for_broker_no_overrides` function L735-752 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_telemetry_for_broker_full_overrides` function L755-777 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_telemetry_for_broker_partial_overrides` function L780-802 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_telemetry_for_agent_no_overrides` function L805-822 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_telemetry_for_agent_full_overrides` function L825-847 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_telemetry_broker_and_agent_independent` function L850-887 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_telemetry_override_enabled_false_overrides_base_true` function L890-911 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_telemetry_sampling_rate_extremes` function L914-936 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_reloadable_config_creation` function L943-956 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_dynamic_config_from_settings` function L959-970 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_reloadable_config_accessors_with_defaults` function L973-983 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_reloadable_config_dynamic_snapshot` function L986-998 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_reloadable_config_reload_no_changes` function L1001-1011 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_reloadable_config_is_clone` function L1014-1020 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_reloadable_config_thread_safety` function L1023-1046 — `()` — Default: 60 (set to 0 to disable caching)
+-  `default_log_format` function L251-253 — `() -> String` — Default: 60 (set to 0 to disable caching)
+-  `Telemetry` type L300-336 — `= Telemetry` — Default: 60 (set to 0 to disable caching)
+-  `default_otlp_endpoint` function L338-340 — `() -> String` — Default: 60 (set to 0 to disable caching)
+-  `default_service_name` function L342-344 — `() -> String` — Default: 60 (set to 0 to disable caching)
+-  `default_sampling_rate` function L346-348 — `() -> f64` — Default: 60 (set to 0 to disable caching)
+-  `PAK` type L371-381 — `= PAK` — Default: 60 (set to 0 to disable caching)
+-  `Settings` type L383-413 — `= Settings` — Default: 60 (set to 0 to disable caching)
+-  `DynamicConfig` type L439-462 — `= DynamicConfig` — Default: 60 (set to 0 to disable caching)
+-  `ReloadableConfig` type L508-713 — `= ReloadableConfig` — Default: 60 (set to 0 to disable caching)
+-  `tests` module L716-1061 — `-` — Default: 60 (set to 0 to disable caching)
+-  `test_settings_default_values` function L726-735 — `()` — Test the creation of Settings with default values
+-  `test_telemetry_default_values` function L738-746 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_telemetry_for_broker_no_overrides` function L749-766 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_telemetry_for_broker_full_overrides` function L769-791 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_telemetry_for_broker_partial_overrides` function L794-816 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_telemetry_for_agent_no_overrides` function L819-836 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_telemetry_for_agent_full_overrides` function L839-861 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_telemetry_broker_and_agent_independent` function L864-901 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_telemetry_override_enabled_false_overrides_base_true` function L904-925 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_telemetry_sampling_rate_extremes` function L928-950 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_reloadable_config_creation` function L957-970 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_dynamic_config_from_settings` function L973-984 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_reloadable_config_accessors_with_defaults` function L987-997 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_reloadable_config_dynamic_snapshot` function L1000-1012 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_reloadable_config_reload_no_changes` function L1015-1025 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_reloadable_config_is_clone` function L1028-1034 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_reloadable_config_thread_safety` function L1037-1060 — `()` — Default: 60 (set to 0 to disable caching)
 
 #### crates/brokkr-utils/src/lib.rs
 
@@ -5618,79 +5628,81 @@
 
 #### examples/ui-slim/src/App.js
 
-- pub `App` function L3178-3184 — `function App()`
--  `AgentsPanel` function L21-282 — `const AgentsPanel = ({ stacks, onRefresh })`
--  `selectAgent` function L58-67 — `const selectAgent = (agent)`
--  `addLabel` function L69-78 — `const addLabel = (label)`
--  `removeLabel` function L80-88 — `const removeLabel = (label)`
--  `addAnnotation` function L90-99 — `const addAnnotation = (key, value)`
--  `removeAnnotation` function L101-109 — `const removeAnnotation = (key)`
--  `addTarget` function L111-120 — `const addTarget = (stackId)`
--  `removeTarget` function L122-130 — `const removeTarget = (stackId)`
--  `toggleStatus` function L132-143 — `const toggleStatus = ()`
--  `StacksPanel` function L285-647 — `const StacksPanel = ({ generators, agents, onRefresh })`
--  `selectStack` function L322-335 — `const selectStack = (stack)`
--  `create` function L337-348 — `const create = (e)`
--  `deploy` function L350-363 — `const deploy = (e)`
--  `addLabel` function L365-374 — `const addLabel = (label)`
--  `removeLabel` function L376-384 — `const removeLabel = (label)`
--  `addAnnotation` function L386-395 — `const addAnnotation = (key, value)`
--  `removeAnnotation` function L397-405 — `const removeAnnotation = (key)`
--  `copyDeployment` function L407-416 — `const copyDeployment = (depId)`
--  `requestDiagnostic` function L418-443 — `const requestDiagnostic = (depId, agentId)`
--  `pollResult` function L424-438 — `const pollResult = ()`
--  `TemplatesPanel` function L650-888 — `const TemplatesPanel = ({ stacks })`
--  `create` function L689-700 — `const create = (e)`
--  `instantiate` function L702-713 — `const instantiate = (e)`
--  `remove` function L715-726 — `const remove = (id)`
--  `addLabel` function L728-737 — `const addLabel = (label)`
--  `removeLabel` function L739-747 — `const removeLabel = (label)`
--  `JobsPanel` function L891-1261 — `const JobsPanel = ({ agents })`
--  `create` function L927-945 — `const create = (e)`
--  `cancel` function L947-957 — `const cancel = (id)`
--  `runBuildDemo` function L960-1033 — `const runBuildDemo = ()`
--  `prefillBuildDemo` function L1036-1043 — `const prefillBuildDemo = ()`
--  `AdminPanel` function L1264-1411 — `const AdminPanel = ({ onGeneratorsChange, onAgentsChange })`
--  `create` function L1290-1307 — `const create = (e)`
--  `rotate` function L1309-1319 — `const rotate = (type, id)`
--  `copy` function L1321-1324 — `const copy = ()`
--  `closeCreate` function L1326-1332 — `const closeCreate = ()`
--  `WebhooksPanel` function L1414-1744 — `const WebhooksPanel = ()`
--  `selectWebhook` function L1447-1456 — `const selectWebhook = (webhook)`
--  `create` function L1458-1475 — `const create = (e)`
--  `toggleEnabled` function L1477-1488 — `const toggleEnabled = (webhook)`
--  `remove` function L1490-1501 — `const remove = (id)`
--  `toggleEventType` function L1503-1509 — `const toggleEventType = (type)`
--  `MetricsPanel` function L1747-1911 — `const MetricsPanel = ()`
--  `getMetricValue` function L1774-1780 — `const getMetricValue = (name, labels = {})`
--  `getMetricValues` function L1783 — `const getMetricValues = (name)`
--  `sumMetric` function L1786-1789 — `const sumMetric = (name)`
--  `DemoPanel` function L1914-3127 — `const DemoPanel = ()`
--  `startEventPolling` function L1942-1961 — `const startEventPolling = ()`
--  `poll` function L1945-1958 — `const poll = ()`
--  `stopEventPolling` function L1964-1970 — `const stopEventPolling = ()`
--  `clearWebhookEvents` function L1973-1980 — `const clearWebhookEvents = ()`
--  `getEventTypeClass` function L1992-1999 — `const getEventTypeClass = (eventType)`
--  `getEventStatusClass` function L2002-2014 — `const getEventStatusClass = (event)`
--  `formatEventPayload` function L2017-2025 — `const formatEventPayload = (event)`
--  `EventLogPanel` function L2028-2079 — `const EventLogPanel = ()`
--  `updatePhase` function L2082-2090 — `const updatePhase = (phaseNum, updates)`
--  `addStep` function L2093-2104 — `const addStep = (phaseNum, step)`
--  `formatDuration` function L2107-2113 — `const formatDuration = (ms)`
--  `resetDemo` function L2116-2146 — `const resetDemo = ()`
--  `canStartPhase` function L2151-2178 — `const canStartPhase = (phaseNum)`
--  `runPhase` function L2181-2212 — `const runPhase = (phaseNum)`
--  `runPhase1` function L2215-2289 — `const runPhase1 = ()`
--  `runPhase2` function L2292-2345 — `const runPhase2 = ()`
--  `runPhase3` function L2348-2429 — `const runPhase3 = ()`
--  `runPhase4` function L2432-2530 — `const runPhase4 = ()`
--  `runPhase5` function L2533-2625 — `const runPhase5 = ()`
--  `runPhase6` function L2628-2757 — `const runPhase6 = ()`
--  `runPhase7` function L2760-2837 — `const runPhase7 = ()`
--  `runPhase8` function L2840-2884 — `const runPhase8 = ()`
--  `runCleanup` function L2887-2975 — `const runCleanup = ()`
--  `PhaseCard` function L2981-3055 — `const PhaseCard = ({ num, phase })`
--  `AppContent` function L3131-3175 — `const AppContent = ()`
+- pub `App` function L3313-3319 — `function App()`
+-  `StackTelemetrySection` function L27-118 — `const StackTelemetrySection = ({ stackId })`
+-  `AgentsPanel` function L121-415 — `const AgentsPanel = ({ stacks, onRefresh })`
+-  `tick` function L167-176 — `const tick = ()`
+-  `selectAgent` function L182-191 — `const selectAgent = (agent)`
+-  `addLabel` function L193-202 — `const addLabel = (label)`
+-  `removeLabel` function L204-212 — `const removeLabel = (label)`
+-  `addAnnotation` function L214-223 — `const addAnnotation = (key, value)`
+-  `removeAnnotation` function L225-233 — `const removeAnnotation = (key)`
+-  `addTarget` function L235-244 — `const addTarget = (stackId)`
+-  `removeTarget` function L246-254 — `const removeTarget = (stackId)`
+-  `toggleStatus` function L256-267 — `const toggleStatus = ()`
+-  `StacksPanel` function L418-782 — `const StacksPanel = ({ generators, agents, onRefresh })`
+-  `selectStack` function L455-468 — `const selectStack = (stack)`
+-  `create` function L470-481 — `const create = (e)`
+-  `deploy` function L483-496 — `const deploy = (e)`
+-  `addLabel` function L498-507 — `const addLabel = (label)`
+-  `removeLabel` function L509-517 — `const removeLabel = (label)`
+-  `addAnnotation` function L519-528 — `const addAnnotation = (key, value)`
+-  `removeAnnotation` function L530-538 — `const removeAnnotation = (key)`
+-  `copyDeployment` function L540-549 — `const copyDeployment = (depId)`
+-  `requestDiagnostic` function L551-576 — `const requestDiagnostic = (depId, agentId)`
+-  `pollResult` function L557-571 — `const pollResult = ()`
+-  `TemplatesPanel` function L785-1023 — `const TemplatesPanel = ({ stacks })`
+-  `create` function L824-835 — `const create = (e)`
+-  `instantiate` function L837-848 — `const instantiate = (e)`
+-  `remove` function L850-861 — `const remove = (id)`
+-  `addLabel` function L863-872 — `const addLabel = (label)`
+-  `removeLabel` function L874-882 — `const removeLabel = (label)`
+-  `JobsPanel` function L1026-1396 — `const JobsPanel = ({ agents })`
+-  `create` function L1062-1080 — `const create = (e)`
+-  `cancel` function L1082-1092 — `const cancel = (id)`
+-  `runBuildDemo` function L1095-1168 — `const runBuildDemo = ()`
+-  `prefillBuildDemo` function L1171-1178 — `const prefillBuildDemo = ()`
+-  `AdminPanel` function L1399-1546 — `const AdminPanel = ({ onGeneratorsChange, onAgentsChange })`
+-  `create` function L1425-1442 — `const create = (e)`
+-  `rotate` function L1444-1454 — `const rotate = (type, id)`
+-  `copy` function L1456-1459 — `const copy = ()`
+-  `closeCreate` function L1461-1467 — `const closeCreate = ()`
+-  `WebhooksPanel` function L1549-1879 — `const WebhooksPanel = ()`
+-  `selectWebhook` function L1582-1591 — `const selectWebhook = (webhook)`
+-  `create` function L1593-1610 — `const create = (e)`
+-  `toggleEnabled` function L1612-1623 — `const toggleEnabled = (webhook)`
+-  `remove` function L1625-1636 — `const remove = (id)`
+-  `toggleEventType` function L1638-1644 — `const toggleEventType = (type)`
+-  `MetricsPanel` function L1882-2046 — `const MetricsPanel = ()`
+-  `getMetricValue` function L1909-1915 — `const getMetricValue = (name, labels = {})`
+-  `getMetricValues` function L1918 — `const getMetricValues = (name)`
+-  `sumMetric` function L1921-1924 — `const sumMetric = (name)`
+-  `DemoPanel` function L2049-3262 — `const DemoPanel = ()`
+-  `startEventPolling` function L2077-2096 — `const startEventPolling = ()`
+-  `poll` function L2080-2093 — `const poll = ()`
+-  `stopEventPolling` function L2099-2105 — `const stopEventPolling = ()`
+-  `clearWebhookEvents` function L2108-2115 — `const clearWebhookEvents = ()`
+-  `getEventTypeClass` function L2127-2134 — `const getEventTypeClass = (eventType)`
+-  `getEventStatusClass` function L2137-2149 — `const getEventStatusClass = (event)`
+-  `formatEventPayload` function L2152-2160 — `const formatEventPayload = (event)`
+-  `EventLogPanel` function L2163-2214 — `const EventLogPanel = ()`
+-  `updatePhase` function L2217-2225 — `const updatePhase = (phaseNum, updates)`
+-  `addStep` function L2228-2239 — `const addStep = (phaseNum, step)`
+-  `formatDuration` function L2242-2248 — `const formatDuration = (ms)`
+-  `resetDemo` function L2251-2281 — `const resetDemo = ()`
+-  `canStartPhase` function L2286-2313 — `const canStartPhase = (phaseNum)`
+-  `runPhase` function L2316-2347 — `const runPhase = (phaseNum)`
+-  `runPhase1` function L2350-2424 — `const runPhase1 = ()`
+-  `runPhase2` function L2427-2480 — `const runPhase2 = ()`
+-  `runPhase3` function L2483-2564 — `const runPhase3 = ()`
+-  `runPhase4` function L2567-2665 — `const runPhase4 = ()`
+-  `runPhase5` function L2668-2760 — `const runPhase5 = ()`
+-  `runPhase6` function L2763-2892 — `const runPhase6 = ()`
+-  `runPhase7` function L2895-2972 — `const runPhase7 = ()`
+-  `runPhase8` function L2975-3019 — `const runPhase8 = ()`
+-  `runCleanup` function L3022-3110 — `const runCleanup = ()`
+-  `PhaseCard` function L3116-3190 — `const PhaseCard = ({ num, phase })`
+-  `AppContent` function L3266-3310 — `const AppContent = ()`
 
 #### examples/ui-slim/src/api.js
 
@@ -5715,60 +5727,64 @@
 - pub `getStackLabels` function L150-151 — `const getStackLabels = (id)`
 - pub `getStackAnnotations` function L152-155 — `const getStackAnnotations = (id)`
 - pub `getStackDeployments` function L156-161 — `const getStackDeployments = (id)`
-- pub `createStack` function L162-167 — `const createStack = (name, description, generatorId)`
-- pub `addStackLabel` function L168-174 — `const addStackLabel = (id, label)`
-- pub `removeStackLabel` function L175-180 — `const removeStackLabel = (id, label)`
-- pub `addStackAnnotation` function L181-187 — `const addStackAnnotation = (id, key, value)`
-- pub `removeStackAnnotation` function L188-193 — `const removeStackAnnotation = (id, key)`
-- pub `createDeployment` function L194-207 — `const createDeployment = (stackId, yaml, isDeletion = false)`
-- pub `getDeployment` function L208-211 — `const getDeployment = (id)`
-- pub `getTemplates` function L217 — `const getTemplates = ()`
-- pub `getTemplateLabels` function L218-221 — `const getTemplateLabels = (id)`
-- pub `getTemplateAnnotations` function L222-225 — `const getTemplateAnnotations = (id)`
-- pub `createTemplate` function L226-236 — `const createTemplate = (name, description, content, schema)`
-- pub `updateTemplate` function L237-247 — `const updateTemplate = (id, description, content, schema)`
-- pub `deleteTemplate` function L248-249 — `const deleteTemplate = (id)`
-- pub `addTemplateLabel` function L250-256 — `const addTemplateLabel = (id, label)`
-- pub `removeTemplateLabel` function L257-262 — `const removeTemplateLabel = (id, label)`
-- pub `instantiateTemplate` function L263-269 — `const instantiateTemplate = (stackId, templateId, params)`
-- pub `getGenerators` function L275 — `const getGenerators = ()`
-- pub `createGenerator` function L276-281 — `const createGenerator = (name, description)`
-- pub `rotateGeneratorPak` function L282-287 — `const rotateGeneratorPak = (id)`
-- pub `getWorkOrders` function L293-298 — `const getWorkOrders = (status, workType)`
-- pub `getWorkOrder` function L299-302 — `const getWorkOrder = (id)`
-- pub `createWorkOrder` function L303-315 — `const createWorkOrder = (workType, yamlContent, targeting, options = {})`
-- pub `deleteWorkOrder` function L316-317 — `const deleteWorkOrder = (id)`
-- pub `getWorkOrderLog` function L318-325 — `const getWorkOrderLog = (workType, success, agentId, limit)`
-- pub `createDiagnostic` function L331-346 — `const createDiagnostic = ( deploymentObjectId, agentId, requestedBy, retentionMi...`
-- pub `getDiagnostic` function L347-348 — `const getDiagnostic = (id)`
-- pub `getDeploymentHealth` function L354-359 — `const getDeploymentHealth = (id)`
-- pub `getStackHealth` function L360-361 — `const getStackHealth = (id)`
-- pub `getWebhooks` function L367 — `const getWebhooks = ()`
-- pub `getWebhook` function L368-369 — `const getWebhook = (id)`
-- pub `createWebhook` function L370-383 — `const createWebhook = (name, url, eventTypes, authHeader, options = {})`
-- pub `updateWebhook` function L384-390 — `const updateWebhook = (id, updates)`
-- pub `deleteWebhook` function L391-392 — `const deleteWebhook = (id)`
-- pub `getWebhookEventTypes` function L393-394 — `const getWebhookEventTypes = ()`
-- pub `getWebhookDeliveries` function L395-404 — `const getWebhookDeliveries = (id, status, limit)`
-- pub `getMetrics` function L411-415 — `const getMetrics = ()`
-- pub `getWebhookCatcherStats` function L421-425 — `const getWebhookCatcherStats = ()`
-- pub `clearWebhookCatcher` function L427-433 — `const clearWebhookCatcher = ()`
-- pub `getDemoBuildYaml` function L446-464 — `const getDemoBuildYaml = ()`
-- pub `deleteStack` function L470-471 — `const deleteStack = (id)`
-- pub `deleteAgent` function L472-473 — `const deleteAgent = (id)`
-- pub `deleteGenerator` function L474-475 — `const deleteGenerator = (id)`
-- pub `createBuildWorkOrder` function L481-491 — `const createBuildWorkOrder = ( imageTag = "latest", agentId = null, )`
-- pub `getWebhookCatcherDeploymentYaml` function L493-541 — `const getWebhookCatcherDeploymentYaml = (imageTag = "latest")`
-- pub `parseMetrics` function L544-566 — `const parseMetrics = (metricsText)`
-- pub `checkEnvironment` function L570-600 — `const checkEnvironment = ()`
-- pub `getWebhookCatcherEvents` function L602-610 — `const getWebhookCatcherEvents = ()`
-- pub `pollForCondition` function L612-624 — `const pollForCondition = ( checkFn, intervalMs = 2000, timeoutMs = 60000, )`
-- pub `pollAgentStatus` function L626-648 — `const pollAgentStatus = (agentId, timeoutMs = 120000)`
-- pub `pollWorkOrderStatus` function L650-667 — `const pollWorkOrderStatus = (workOrderId, timeoutMs = 300000)`
-- pub `cleanupDemo` function L670-755 — `const cleanupDemo = (resources, onProgress)`
+- pub `getStackEvents` function L176-177 — `const getStackEvents = (id, query = {})`
+- pub `getStackLogs` function L184-185 — `const getStackLogs = (id, query = {})`
+- pub `getWsConnections` function L191 — `const getWsConnections = ()`
+- pub `openStackLiveStream` function L205-211 — `const openStackLiveStream = (id)`
+- pub `createStack` function L212-217 — `const createStack = (name, description, generatorId)`
+- pub `addStackLabel` function L218-224 — `const addStackLabel = (id, label)`
+- pub `removeStackLabel` function L225-230 — `const removeStackLabel = (id, label)`
+- pub `addStackAnnotation` function L231-237 — `const addStackAnnotation = (id, key, value)`
+- pub `removeStackAnnotation` function L238-243 — `const removeStackAnnotation = (id, key)`
+- pub `createDeployment` function L244-257 — `const createDeployment = (stackId, yaml, isDeletion = false)`
+- pub `getDeployment` function L258-261 — `const getDeployment = (id)`
+- pub `getTemplates` function L267 — `const getTemplates = ()`
+- pub `getTemplateLabels` function L268-271 — `const getTemplateLabels = (id)`
+- pub `getTemplateAnnotations` function L272-275 — `const getTemplateAnnotations = (id)`
+- pub `createTemplate` function L276-286 — `const createTemplate = (name, description, content, schema)`
+- pub `updateTemplate` function L287-297 — `const updateTemplate = (id, description, content, schema)`
+- pub `deleteTemplate` function L298-299 — `const deleteTemplate = (id)`
+- pub `addTemplateLabel` function L300-306 — `const addTemplateLabel = (id, label)`
+- pub `removeTemplateLabel` function L307-312 — `const removeTemplateLabel = (id, label)`
+- pub `instantiateTemplate` function L313-319 — `const instantiateTemplate = (stackId, templateId, params)`
+- pub `getGenerators` function L325 — `const getGenerators = ()`
+- pub `createGenerator` function L326-331 — `const createGenerator = (name, description)`
+- pub `rotateGeneratorPak` function L332-337 — `const rotateGeneratorPak = (id)`
+- pub `getWorkOrders` function L343-348 — `const getWorkOrders = (status, workType)`
+- pub `getWorkOrder` function L349-352 — `const getWorkOrder = (id)`
+- pub `createWorkOrder` function L353-365 — `const createWorkOrder = (workType, yamlContent, targeting, options = {})`
+- pub `deleteWorkOrder` function L366-367 — `const deleteWorkOrder = (id)`
+- pub `getWorkOrderLog` function L368-375 — `const getWorkOrderLog = (workType, success, agentId, limit)`
+- pub `createDiagnostic` function L381-396 — `const createDiagnostic = ( deploymentObjectId, agentId, requestedBy, retentionMi...`
+- pub `getDiagnostic` function L397-398 — `const getDiagnostic = (id)`
+- pub `getDeploymentHealth` function L404-409 — `const getDeploymentHealth = (id)`
+- pub `getStackHealth` function L410-411 — `const getStackHealth = (id)`
+- pub `getWebhooks` function L417 — `const getWebhooks = ()`
+- pub `getWebhook` function L418-419 — `const getWebhook = (id)`
+- pub `createWebhook` function L420-433 — `const createWebhook = (name, url, eventTypes, authHeader, options = {})`
+- pub `updateWebhook` function L434-440 — `const updateWebhook = (id, updates)`
+- pub `deleteWebhook` function L441-442 — `const deleteWebhook = (id)`
+- pub `getWebhookEventTypes` function L443-444 — `const getWebhookEventTypes = ()`
+- pub `getWebhookDeliveries` function L445-454 — `const getWebhookDeliveries = (id, status, limit)`
+- pub `getMetrics` function L461-465 — `const getMetrics = ()`
+- pub `getWebhookCatcherStats` function L471-475 — `const getWebhookCatcherStats = ()`
+- pub `clearWebhookCatcher` function L477-483 — `const clearWebhookCatcher = ()`
+- pub `getDemoBuildYaml` function L496-514 — `const getDemoBuildYaml = ()`
+- pub `deleteStack` function L520-521 — `const deleteStack = (id)`
+- pub `deleteAgent` function L522-523 — `const deleteAgent = (id)`
+- pub `deleteGenerator` function L524-525 — `const deleteGenerator = (id)`
+- pub `createBuildWorkOrder` function L531-541 — `const createBuildWorkOrder = ( imageTag = "latest", agentId = null, )`
+- pub `getWebhookCatcherDeploymentYaml` function L543-591 — `const getWebhookCatcherDeploymentYaml = (imageTag = "latest")`
+- pub `parseMetrics` function L594-616 — `const parseMetrics = (metricsText)`
+- pub `checkEnvironment` function L620-650 — `const checkEnvironment = ()`
+- pub `getWebhookCatcherEvents` function L652-660 — `const getWebhookCatcherEvents = ()`
+- pub `pollForCondition` function L662-674 — `const pollForCondition = ( checkFn, intervalMs = 2000, timeoutMs = 60000, )`
+- pub `pollAgentStatus` function L676-698 — `const pollAgentStatus = (agentId, timeoutMs = 120000)`
+- pub `pollWorkOrderStatus` function L700-717 — `const pollWorkOrderStatus = (workOrderId, timeoutMs = 300000)`
+- pub `cleanupDemo` function L720-805 — `const cleanupDemo = (resources, onProgress)`
 -  `sha256` function L30-36 — `const sha256 = (str)`
 -  `unwrap` function L54-76 — `const unwrap = (callPromise)`
--  `log` function L671 — `const log = (step, status)`
+-  `log` function L721 — `const log = (step, status)`
 
 #### examples/ui-slim/src/components.js
 
@@ -5873,6 +5889,16 @@
 
 - pub `UnexpectedStatus` class L4-13 — `(Exception) { __init__ }` — Raised by api functions when the response status an undocumented status and Client.raise_on_unexpected_status is True
 - pub `__init__` method L7-13 — `def __init__(self, status_code: int, content: bytes)`
+
+#### sdks/python/brokkr-client/brokkr_broker_client/helpers.py
+
+- pub `list_telemetry_events` function L35-56 — `def list_telemetry_events( client: "AuthenticatedClient", stack_id: UUID, *, sin...` — Paginated kube-event history for a stack within the 6h retention window.
+- pub `list_telemetry_events_async` function L59-80 — `def list_telemetry_events_async( client: "AuthenticatedClient", stack_id: UUID, ...` — Async variant of :func:`list_telemetry_events`.
+- pub `list_telemetry_logs` function L83-102 — `def list_telemetry_logs( client: "AuthenticatedClient", stack_id: UUID, *, since...` — Paginated pod-log history for a stack within the 6h retention window.
+- pub `list_telemetry_logs_async` function L105-124 — `def list_telemetry_logs_async( client: "AuthenticatedClient", stack_id: UUID, *,...` — Async variant of :func:`list_telemetry_logs`.
+- pub `list_ws_connections` function L127-141 — `def list_ws_connections(client: "AuthenticatedClient") -> "WsConnectionsResponse...` — Admin-only snapshot of currently-connected agents on the internal WS channel.
+- pub `list_ws_connections_async` function L144-155 — `def list_ws_connections_async( client: "AuthenticatedClient", ) -> "WsConnection...` — Async variant of :func:`list_ws_connections`.
+- pub `live_subscription_url` function L158-175 — `def live_subscription_url(base_url: str, stack_id: UUID) -> str` — Compute the WebSocket URL for a stack's live event + log tail.
 
 #### sdks/python/brokkr-client/brokkr_broker_client/types.py
 
@@ -7527,6 +7553,15 @@
 
 > *Semantic summary to be generated by AI agent.*
 
+#### sdks/python/brokkr-client/tests/test_helpers.py
+
+- pub `test_helpers_module_exposes_expected_surface` function L19-31 — `def test_helpers_module_exposes_expected_surface() -> None`
+- pub `test_live_subscription_url_http_to_ws` function L34-39 — `def test_live_subscription_url_http_to_ws() -> None`
+- pub `test_live_subscription_url_https_to_wss` function L42-47 — `def test_live_subscription_url_https_to_wss() -> None`
+- pub `test_live_subscription_url_strips_trailing_slash` function L50-55 — `def test_live_subscription_url_strips_trailing_slash() -> None`
+- pub `test_history_helper_signatures_include_keyword_filters` function L58-65 — `def test_history_helper_signatures_include_keyword_filters() -> None`
+- pub `test_list_ws_connections_takes_only_a_client` function L68-70 — `def test_list_ws_connections_takes_only_a_client() -> None`
+
 #### sdks/python/brokkr-client/tests/test_surface.py
 
 - pub `test_clients_construct` function L38-40 — `def test_clients_construct() -> None`
@@ -7540,15 +7575,20 @@
 
 #### sdks/typescript/brokkr-client/src/client.ts
 
-- pub `BrokkrClientOptions` interface L23-33 — `{ baseUrl: : string, token: : string, requestTimeoutMs: : number, maxRetries: : ...`
-- pub `BrokkrClient` class L49-134 — `-`
-- pub `constructor` method L54-89 — `constructor(options: BrokkrClientOptions)`
-- pub `retry` method L103-133 — `retry(op: (api: BrokkrApi) => Promise<FetchResult<T>>): Promise<T>`
--  `FetchResult` type L43-47 — `= { data?: T; error?: unknown; response: Response; }`
--  `customFetch` function L71-80 — `const customFetch = (input, init)`
--  `classify` function L136-164 — `function classify( result: FetchResult<T> | undefined, transportErr: unknown, ):...`
--  `sleep` function L166-168 — `function sleep(ms: number): Promise<void>`
--  `mergeSignals` function L171-183 — `function mergeSignals(signals: AbortSignal[]): AbortSignal`
+- pub `TelemetryHistoryQuery` interface L26-32 — `{ since: : string, limit: : number }`
+- pub `BrokkrClientOptions` interface L34-44 — `{ baseUrl: : string, token: : string, requestTimeoutMs: : number, maxRetries: : ...`
+- pub `BrokkrClient` class L60-213 — `-`
+- pub `constructor` method L66-102 — `constructor(options: BrokkrClientOptions)`
+- pub `listTelemetryEvents` method L113-122 — `listTelemetryEvents( stackId: string, query: TelemetryHistoryQuery = {}, ): Prom...`
+- pub `listTelemetryLogs` method L125-134 — `listTelemetryLogs( stackId: string, query: TelemetryHistoryQuery = {}, ): Promis...`
+- pub `listWsConnections` method L139-143 — `listWsConnections(): Promise<WsConnectionsResponse>`
+- pub `liveSubscriptionUrl` method L156-168 — `liveSubscriptionUrl(stackId: string): string`
+- pub `retry` method L182-212 — `retry(op: (api: BrokkrApi) => Promise<FetchResult<T>>): Promise<T>`
+-  `FetchResult` type L54-58 — `= { data?: T; error?: unknown; response: Response; }`
+-  `customFetch` function L84-93 — `const customFetch = (input, init)`
+-  `classify` function L215-243 — `function classify( result: FetchResult<T> | undefined, transportErr: unknown, ):...`
+-  `sleep` function L245-247 — `function sleep(ms: number): Promise<void>`
+-  `mergeSignals` function L250-262 — `function mergeSignals(signals: AbortSignal[]): AbortSignal`
 
 #### sdks/typescript/brokkr-client/src/error.ts
 
@@ -7571,8 +7611,13 @@
 - pub `AuthResponse` type L37 — `= components["schemas"]["AuthResponse"]`
 - pub `WebhookResponse` type L38 — `= components["schemas"]["WebhookResponse"]`
 - pub `PendingWebhookDelivery` type L39 — `= components["schemas"]["PendingWebhookDelivery"]`
-- pub `createBrokkrClient` function L48-50 — `function createBrokkrClient(options: ClientOptions = {})`
-- pub `BrokkrApi` type L53 — `= ReturnType<typeof createBrokkrClient>`
+- pub `K8sEventHistoryResponse` type L42-43 — `= components["schemas"]["K8sEventHistoryResponse"]`
+- pub `PodLogHistoryResponse` type L44-45 — `= components["schemas"]["PodLogHistoryResponse"]`
+- pub `RetentionInfo` type L46 — `= components["schemas"]["RetentionInfo"]`
+- pub `WsConnectionsResponse` type L47-48 — `= components["schemas"]["WsConnectionsResponse"]`
+- pub `WsConnectionInfo` type L49 — `= components["schemas"]["WsConnectionInfo"]`
+- pub `createBrokkrClient` function L58-60 — `function createBrokkrClient(options: ClientOptions = {})`
+- pub `BrokkrApi` type L63 — `= ReturnType<typeof createBrokkrClient>`
 
 #### sdks/typescript/brokkr-client/src/schema.d.ts
 
@@ -7597,74 +7642,77 @@
 - pub `Client` struct L20-24 — `{ http: reqwest::Client, base_url: String, admin_pak: String }` — API client for the Brokkr broker
 - pub `new` function L27-33 — `(base_url: &str, admin_pak: &str) -> Self` — HTTP API client for the Brokkr broker.
 - pub `wait_for_ready` function L36-54 — `(&self, timeout_secs: u64) -> Result<()>` — Wait for the broker to be ready
-- pub `list_agents` function L121-123 — `(&self) -> Result<Vec<Value>>` — HTTP API client for the Brokkr broker.
-- pub `create_agent` function L125-134 — `(&self, name: &str, cluster: &str) -> Result<Value>` — HTTP API client for the Brokkr broker.
-- pub `get_agent` function L136-138 — `(&self, id: Uuid) -> Result<Value>` — HTTP API client for the Brokkr broker.
-- pub `update_agent` function L140-142 — `(&self, id: Uuid, updates: Value) -> Result<Value>` — HTTP API client for the Brokkr broker.
-- pub `add_agent_label` function L144-153 — `(&self, id: Uuid, label: &str) -> Result<Value>` — HTTP API client for the Brokkr broker.
-- pub `get_agent_labels` function L155-157 — `(&self, id: Uuid) -> Result<Vec<Value>>` — HTTP API client for the Brokkr broker.
-- pub `add_agent_annotation` function L159-169 — `(&self, id: Uuid, key: &str, value: &str) -> Result<Value>` — HTTP API client for the Brokkr broker.
-- pub `get_agent_annotations` function L171-174 — `(&self, id: Uuid) -> Result<Vec<Value>>` — HTTP API client for the Brokkr broker.
-- pub `add_agent_target` function L176-185 — `(&self, agent_id: Uuid, stack_id: Uuid) -> Result<Value>` — HTTP API client for the Brokkr broker.
-- pub `get_agent_targets` function L187-189 — `(&self, id: Uuid) -> Result<Vec<Value>>` — HTTP API client for the Brokkr broker.
-- pub `get_agent_stacks` function L191-193 — `(&self, id: Uuid) -> Result<Vec<Value>>` — HTTP API client for the Brokkr broker.
-- pub `get_agent_target_state` function L195-201 — `(&self, id: Uuid, mode: Option<&str>) -> Result<Vec<Value>>` — HTTP API client for the Brokkr broker.
-- pub `create_generator` function L207-216 — `(&self, name: &str, description: Option<&str>) -> Result<Value>` — HTTP API client for the Brokkr broker.
-- pub `list_generators` function L218-220 — `(&self) -> Result<Vec<Value>>` — HTTP API client for the Brokkr broker.
-- pub `create_stack` function L226-241 — `( &self, name: &str, description: Option<&str>, generator_id: Uuid, ) -> Result<...` — HTTP API client for the Brokkr broker.
-- pub `list_stacks` function L243-245 — `(&self) -> Result<Vec<Value>>` — HTTP API client for the Brokkr broker.
-- pub `get_stack` function L247-249 — `(&self, id: Uuid) -> Result<Value>` — HTTP API client for the Brokkr broker.
-- pub `add_stack_label` function L251-255 — `(&self, id: Uuid, label: &str) -> Result<Value>` — HTTP API client for the Brokkr broker.
-- pub `get_stack_labels` function L257-259 — `(&self, id: Uuid) -> Result<Vec<Value>>` — HTTP API client for the Brokkr broker.
-- pub `add_stack_annotation` function L261-271 — `(&self, id: Uuid, key: &str, value: &str) -> Result<Value>` — HTTP API client for the Brokkr broker.
-- pub `create_deployment` function L277-294 — `( &self, stack_id: Uuid, yaml: &str, is_deletion: bool, ) -> Result<Value>` — HTTP API client for the Brokkr broker.
-- pub `list_deployments` function L296-299 — `(&self, stack_id: Uuid) -> Result<Vec<Value>>` — HTTP API client for the Brokkr broker.
-- pub `get_deployment` function L301-304 — `(&self, id: Uuid) -> Result<Value>` — HTTP API client for the Brokkr broker.
-- pub `get_deployment_health` function L306-309 — `(&self, id: Uuid) -> Result<Value>` — HTTP API client for the Brokkr broker.
-- pub `get_stack_health` function L311-313 — `(&self, id: Uuid) -> Result<Value>` — HTTP API client for the Brokkr broker.
-- pub `create_template` function L319-336 — `( &self, name: &str, description: Option<&str>, content: &str, schema: &str, ) -...` — HTTP API client for the Brokkr broker.
-- pub `list_templates` function L338-340 — `(&self) -> Result<Vec<Value>>` — HTTP API client for the Brokkr broker.
-- pub `instantiate_template` function L342-359 — `( &self, stack_id: Uuid, template_id: Uuid, parameters: Value, ) -> Result<Value...` — HTTP API client for the Brokkr broker.
-- pub `delete_template` function L361-363 — `(&self, id: Uuid) -> Result<()>` — HTTP API client for the Brokkr broker.
-- pub `create_work_order` function L369-392 — `( &self, work_type: &str, yaml: &str, target_agent_ids: Option<Vec<Uuid>>, targe...` — HTTP API client for the Brokkr broker.
-- pub `list_work_orders` function L394-396 — `(&self) -> Result<Vec<Value>>` — HTTP API client for the Brokkr broker.
-- pub `get_work_order` function L398-400 — `(&self, id: Uuid) -> Result<Value>` — HTTP API client for the Brokkr broker.
-- pub `get_work_order_log` function L402-404 — `(&self, id: Uuid) -> Result<Value>` — HTTP API client for the Brokkr broker.
-- pub `delete_work_order` function L406-408 — `(&self, id: Uuid) -> Result<()>` — HTTP API client for the Brokkr broker.
-- pub `create_diagnostic` function L414-424 — `(&self, deployment_id: Uuid, agent_id: Uuid) -> Result<Value>` — HTTP API client for the Brokkr broker.
-- pub `get_diagnostic` function L426-428 — `(&self, id: Uuid) -> Result<Value>` — HTTP API client for the Brokkr broker.
-- pub `create_webhook` function L434-443 — `( &self, name: &str, url: &str, event_types: Vec<&str>, auth_header: Option<&str...` — HTTP API client for the Brokkr broker.
-- pub `create_webhook_with_options` function L445-469 — `( &self, name: &str, url: &str, event_types: Vec<&str>, auth_header: Option<&str...` — HTTP API client for the Brokkr broker.
-- pub `list_webhooks` function L471-473 — `(&self) -> Result<Vec<Value>>` — HTTP API client for the Brokkr broker.
-- pub `get_webhook` function L475-477 — `(&self, id: Uuid) -> Result<Value>` — HTTP API client for the Brokkr broker.
-- pub `update_webhook` function L479-481 — `(&self, id: Uuid, updates: Value) -> Result<Value>` — HTTP API client for the Brokkr broker.
-- pub `delete_webhook` function L483-485 — `(&self, id: Uuid) -> Result<()>` — HTTP API client for the Brokkr broker.
-- pub `list_webhook_deliveries` function L487-490 — `(&self, webhook_id: Uuid) -> Result<Vec<Value>>` — HTTP API client for the Brokkr broker.
-- pub `test_webhook` function L492-495 — `(&self, id: Uuid) -> Result<Value>` — HTTP API client for the Brokkr broker.
-- pub `list_audit_logs` function L501-507 — `(&self, limit: Option<i32>) -> Result<Value>` — HTTP API client for the Brokkr broker.
-- pub `get_metrics` function L514-525 — `(&self) -> Result<String>` — Fetch Prometheus metrics from the broker
-- pub `get_healthz` function L528-539 — `(&self) -> Result<String>` — Fetch health check endpoint
-- pub `WebhookCatcher` struct L543-546 — `{ http: reqwest::Client, base_url: String }` — Client for webhook-catcher test service
-- pub `new` function L549-554 — `(base_url: &str) -> Self` — HTTP API client for the Brokkr broker.
-- pub `get_messages` function L557-568 — `(&self) -> Result<Value>` — Get all messages received by webhook-catcher
-- pub `clear_messages` function L571-581 — `(&self) -> Result<()>` — Clear all messages from webhook-catcher
-- pub `wait_for_messages` function L584-604 — `(&self, count: usize, timeout_secs: u64) -> Result<Value>` — Wait for at least N messages to arrive, with timeout
--  `Client` type L26-540 — `= Client` — HTTP API client for the Brokkr broker.
+- pub `get_json` function L96-98 — `(&self, path: &str) -> Result<Value>` — Public GET that returns a raw `serde_json::Value`.
+- pub `list_agents` function L128-130 — `(&self) -> Result<Vec<Value>>` — HTTP API client for the Brokkr broker.
+- pub `create_agent` function L132-141 — `(&self, name: &str, cluster: &str) -> Result<Value>` — HTTP API client for the Brokkr broker.
+- pub `get_agent` function L143-145 — `(&self, id: Uuid) -> Result<Value>` — HTTP API client for the Brokkr broker.
+- pub `update_agent` function L147-149 — `(&self, id: Uuid, updates: Value) -> Result<Value>` — HTTP API client for the Brokkr broker.
+- pub `add_agent_label` function L151-160 — `(&self, id: Uuid, label: &str) -> Result<Value>` — HTTP API client for the Brokkr broker.
+- pub `get_agent_labels` function L162-164 — `(&self, id: Uuid) -> Result<Vec<Value>>` — HTTP API client for the Brokkr broker.
+- pub `add_agent_annotation` function L166-176 — `(&self, id: Uuid, key: &str, value: &str) -> Result<Value>` — HTTP API client for the Brokkr broker.
+- pub `get_agent_annotations` function L178-181 — `(&self, id: Uuid) -> Result<Vec<Value>>` — HTTP API client for the Brokkr broker.
+- pub `add_agent_target` function L183-192 — `(&self, agent_id: Uuid, stack_id: Uuid) -> Result<Value>` — HTTP API client for the Brokkr broker.
+- pub `get_agent_targets` function L194-196 — `(&self, id: Uuid) -> Result<Vec<Value>>` — HTTP API client for the Brokkr broker.
+- pub `get_agent_stacks` function L198-200 — `(&self, id: Uuid) -> Result<Vec<Value>>` — HTTP API client for the Brokkr broker.
+- pub `get_agent_target_state` function L202-208 — `(&self, id: Uuid, mode: Option<&str>) -> Result<Vec<Value>>` — HTTP API client for the Brokkr broker.
+- pub `create_generator` function L214-223 — `(&self, name: &str, description: Option<&str>) -> Result<Value>` — HTTP API client for the Brokkr broker.
+- pub `list_generators` function L225-227 — `(&self) -> Result<Vec<Value>>` — HTTP API client for the Brokkr broker.
+- pub `create_stack` function L233-248 — `( &self, name: &str, description: Option<&str>, generator_id: Uuid, ) -> Result<...` — HTTP API client for the Brokkr broker.
+- pub `list_stacks` function L250-252 — `(&self) -> Result<Vec<Value>>` — HTTP API client for the Brokkr broker.
+- pub `get_stack` function L254-256 — `(&self, id: Uuid) -> Result<Value>` — HTTP API client for the Brokkr broker.
+- pub `add_stack_label` function L258-262 — `(&self, id: Uuid, label: &str) -> Result<Value>` — HTTP API client for the Brokkr broker.
+- pub `get_stack_labels` function L264-266 — `(&self, id: Uuid) -> Result<Vec<Value>>` — HTTP API client for the Brokkr broker.
+- pub `add_stack_annotation` function L268-278 — `(&self, id: Uuid, key: &str, value: &str) -> Result<Value>` — HTTP API client for the Brokkr broker.
+- pub `create_deployment` function L284-301 — `( &self, stack_id: Uuid, yaml: &str, is_deletion: bool, ) -> Result<Value>` — HTTP API client for the Brokkr broker.
+- pub `list_deployments` function L303-306 — `(&self, stack_id: Uuid) -> Result<Vec<Value>>` — HTTP API client for the Brokkr broker.
+- pub `get_deployment` function L308-311 — `(&self, id: Uuid) -> Result<Value>` — HTTP API client for the Brokkr broker.
+- pub `get_deployment_health` function L313-316 — `(&self, id: Uuid) -> Result<Value>` — HTTP API client for the Brokkr broker.
+- pub `get_stack_health` function L318-320 — `(&self, id: Uuid) -> Result<Value>` — HTTP API client for the Brokkr broker.
+- pub `create_template` function L326-343 — `( &self, name: &str, description: Option<&str>, content: &str, schema: &str, ) -...` — HTTP API client for the Brokkr broker.
+- pub `list_templates` function L345-347 — `(&self) -> Result<Vec<Value>>` — HTTP API client for the Brokkr broker.
+- pub `instantiate_template` function L349-366 — `( &self, stack_id: Uuid, template_id: Uuid, parameters: Value, ) -> Result<Value...` — HTTP API client for the Brokkr broker.
+- pub `delete_template` function L368-370 — `(&self, id: Uuid) -> Result<()>` — HTTP API client for the Brokkr broker.
+- pub `create_work_order` function L376-399 — `( &self, work_type: &str, yaml: &str, target_agent_ids: Option<Vec<Uuid>>, targe...` — HTTP API client for the Brokkr broker.
+- pub `list_work_orders` function L401-403 — `(&self) -> Result<Vec<Value>>` — HTTP API client for the Brokkr broker.
+- pub `get_work_order` function L405-407 — `(&self, id: Uuid) -> Result<Value>` — HTTP API client for the Brokkr broker.
+- pub `get_work_order_log` function L409-411 — `(&self, id: Uuid) -> Result<Value>` — HTTP API client for the Brokkr broker.
+- pub `delete_work_order` function L413-415 — `(&self, id: Uuid) -> Result<()>` — HTTP API client for the Brokkr broker.
+- pub `create_diagnostic` function L421-431 — `(&self, deployment_id: Uuid, agent_id: Uuid) -> Result<Value>` — HTTP API client for the Brokkr broker.
+- pub `get_diagnostic` function L433-435 — `(&self, id: Uuid) -> Result<Value>` — HTTP API client for the Brokkr broker.
+- pub `create_webhook` function L441-450 — `( &self, name: &str, url: &str, event_types: Vec<&str>, auth_header: Option<&str...` — HTTP API client for the Brokkr broker.
+- pub `create_webhook_with_options` function L452-476 — `( &self, name: &str, url: &str, event_types: Vec<&str>, auth_header: Option<&str...` — HTTP API client for the Brokkr broker.
+- pub `list_webhooks` function L478-480 — `(&self) -> Result<Vec<Value>>` — HTTP API client for the Brokkr broker.
+- pub `get_webhook` function L482-484 — `(&self, id: Uuid) -> Result<Value>` — HTTP API client for the Brokkr broker.
+- pub `update_webhook` function L486-488 — `(&self, id: Uuid, updates: Value) -> Result<Value>` — HTTP API client for the Brokkr broker.
+- pub `delete_webhook` function L490-492 — `(&self, id: Uuid) -> Result<()>` — HTTP API client for the Brokkr broker.
+- pub `list_webhook_deliveries` function L494-497 — `(&self, webhook_id: Uuid) -> Result<Vec<Value>>` — HTTP API client for the Brokkr broker.
+- pub `test_webhook` function L499-502 — `(&self, id: Uuid) -> Result<Value>` — HTTP API client for the Brokkr broker.
+- pub `list_audit_logs` function L508-514 — `(&self, limit: Option<i32>) -> Result<Value>` — HTTP API client for the Brokkr broker.
+- pub `get_metrics` function L521-532 — `(&self) -> Result<String>` — Fetch Prometheus metrics from the broker
+- pub `metric_value` function L543-568 — `(&self, name: &str, labels: &[(&str, &str)]) -> Result<f64>` — Parse a single Prometheus metric value from the broker's `/metrics`
+- pub `wait_for_metric` function L573-603 — `( &self, name: &str, labels: &[(&str, &str)], timeout_secs: u64, predicate: F, )...` — Poll `metric_value` until `predicate` is true or `timeout_secs` elapses.
+- pub `get_healthz` function L606-617 — `(&self) -> Result<String>` — Fetch health check endpoint
+- pub `WebhookCatcher` struct L621-624 — `{ http: reqwest::Client, base_url: String }` — Client for webhook-catcher test service
+- pub `new` function L627-632 — `(base_url: &str) -> Self` — HTTP API client for the Brokkr broker.
+- pub `get_messages` function L635-646 — `(&self) -> Result<Value>` — Get all messages received by webhook-catcher
+- pub `clear_messages` function L649-659 — `(&self) -> Result<()>` — Clear all messages from webhook-catcher
+- pub `wait_for_messages` function L662-682 — `(&self, count: usize, timeout_secs: u64) -> Result<Value>` — Wait for at least N messages to arrive, with timeout
+-  `Client` type L26-618 — `= Client` — HTTP API client for the Brokkr broker.
 -  `request` function L56-87 — `( &self, method: reqwest::Method, path: &str, body: Option<Value>, ) -> Result<T...` — HTTP API client for the Brokkr broker.
 -  `get` function L89-91 — `(&self, path: &str) -> Result<T>` — HTTP API client for the Brokkr broker.
--  `post` function L93-95 — `(&self, path: &str, body: Value) -> Result<T>` — HTTP API client for the Brokkr broker.
--  `put` function L97-99 — `(&self, path: &str, body: Value) -> Result<T>` — HTTP API client for the Brokkr broker.
--  `delete` function L101-115 — `(&self, path: &str) -> Result<()>` — HTTP API client for the Brokkr broker.
--  `WebhookCatcher` type L548-605 — `= WebhookCatcher` — HTTP API client for the Brokkr broker.
--  `sha256_hex` function L607-611 — `(data: &str) -> String` — HTTP API client for the Brokkr broker.
+-  `post` function L100-102 — `(&self, path: &str, body: Value) -> Result<T>` — HTTP API client for the Brokkr broker.
+-  `put` function L104-106 — `(&self, path: &str, body: Value) -> Result<T>` — HTTP API client for the Brokkr broker.
+-  `delete` function L108-122 — `(&self, path: &str) -> Result<()>` — HTTP API client for the Brokkr broker.
+-  `WebhookCatcher` type L626-683 — `= WebhookCatcher` — HTTP API client for the Brokkr broker.
+-  `sha256_hex` function L685-689 — `(data: &str) -> String` — HTTP API client for the Brokkr broker.
 
 #### tests/e2e/src/main.rs
 
 -  `api` module L18 — `-` — Brokkr End-to-End Test Suite
 -  `scenarios` module L19 — `-` — Run with: angreal tests e2e
--  `main` function L25-158 — `() -> ExitCode` — Run with: angreal tests e2e
--  `run_scenario` macro L54-71 — `-` — Run with: angreal tests e2e
--  `run_scenario_allow_fail` macro L78-98 — `-` — Run with: angreal tests e2e
+-  `main` function L25-198 — `() -> ExitCode` — Run with: angreal tests e2e
+-  `run_scenario` macro L58-75 — `-` — Run with: angreal tests e2e
+-  `run_scenario_allow_fail` macro L82-102 — `-` — Run with: angreal tests e2e
 
 #### tests/e2e/src/scenarios.rs
 
@@ -7679,11 +7727,18 @@
 - pub `test_agent_reconciliation_existing_deployments` function L812-956 — `(client: &Client) -> Result<()>` — Test that agents can reconcile pre-existing deployments when targeted to a stack.
 - pub `test_audit_logs` function L962-1014 — `(client: &Client) -> Result<()>` — Each scenario tests a complete user workflow through the system.
 - pub `test_metrics` function L1020-1096 — `(client: &Client) -> Result<()>` — Each scenario tests a complete user workflow through the system.
+- pub `test_ws_smoke` function L1116-1263 — `(client: &Client) -> Result<()>` — I-0019 / I-0020 A1 smoke test.
+- pub `test_ws_chaos` function L1314-1473 — `(client: &Client) -> Result<()>` — I-0019 / I-0020 A2 chaos test — Pass 1 (infrastructure validation).
+- pub `test_ws_telemetry` function L1638-1889 — `(client: &Client) -> Result<()>` — I-0019 / I-0020 A3 telemetry-tailer test against real k3s.
 -  `DEMO_DEPLOYMENT_YAML` variable L16-53 — `: &str` — Sample deployment YAML for testing
 -  `MICROSERVICE_TEMPLATE` variable L56-76 — `: &str` — Microservice template for testing
 -  `MICROSERVICE_SCHEMA` variable L78-88 — `: &str` — Each scenario tests a complete user workflow through the system.
 -  `JOB_YAML` variable L91-105 — `: &str` — Job YAML for work order testing
 -  `BUILD_YAML` variable L110-127 — `: &str` — Shipwright Build YAML for build work order testing
+-  `toxiproxy_set_enabled` function L1274-1298 — `( toxiproxy_url: &str, proxy_name: &str, enabled: bool, ) -> Result<()>` — Toggle a toxiproxy proxy's `enabled` flag via the admin API.
+-  `k3s_apply` function L1483-1520 — `(compose_file: &str, manifest: &str) -> Result<()>` — Apply a Kubernetes manifest by piping it through `docker compose exec k3s
+-  `dump_diagnostics` function L1524-1591 — `(compose_file: &str, pod_name: &str)` — On A3 Pass 2 failure, dump pod status + agent logs so the next iteration
+-  `k3s_delete_best_effort` function L1595-1617 — `(compose_file: &str, args: &[&str])` — Run `kubectl delete` against the k3s cluster.
 
 ### tests/sdk-contract/python
 
@@ -7693,6 +7748,14 @@
 
 - pub `make_client` function L63-65 — `def make_client(base_url: str, pak: str) -> AuthenticatedClient` — Build an AuthenticatedClient that sends `Authorization: <pak>` (no prefix).
 - pub `unique` function L68-69 — `def unique(prefix: str) -> str`
+
+#### tests/sdk-contract/python/test_telemetry_and_ws.py
+
+- pub `test_list_telemetry_events_returns_retention_metadata` function L39-49 — `def test_list_telemetry_events_returns_retention_metadata( admin_client: Authent...`
+- pub `test_list_telemetry_logs_returns_retention_metadata` function L52-59 — `def test_list_telemetry_logs_returns_retention_metadata( admin_client: Authentic...`
+- pub `test_list_ws_connections_returns_snapshot` function L62-70 — `def test_list_ws_connections_returns_snapshot( admin_client: AuthenticatedClient...`
+- pub `test_live_subscription_url_helper_round_trips_through_format` function L73-83 — `def test_live_subscription_url_helper_round_trips_through_format( broker_url: st...`
+-  `_seed_stack` function L23-36 — `def _seed_stack(admin_client: AuthenticatedClient, base_url: str)`
 
 #### tests/sdk-contract/python/test_uat_walkthrough.py
 
@@ -7707,19 +7770,25 @@
 
 -  `berr` function L34-36 — `(e: progenitor_client::Error<ErrorResponse>) -> BrokkrError` — Convert a progenitor `Error<ErrorResponse>` into our typed [`BrokkrError`].
 -  `DEMO_YAML` variable L38-52 — `: &str` — Run with: `angreal tests sdk-contract rust`
--  `main` function L55-119 — `() -> ExitCode` — Run with: `angreal tests sdk-contract rust`
+-  `main` function L55-123 — `() -> ExitCode` — Run with: `angreal tests sdk-contract rust`
 -  `run` macro L79-95 — `-` — Run with: `angreal tests sdk-contract rust`
--  `wait_for_ready` function L121-139 — `(broker_url: &str, timeout_secs: u64) -> Result<()>` — Run with: `angreal tests sdk-contract rust`
--  `client` function L142-147 — `(base_url: &str, pak: &str) -> Result<BrokkrClient>` — Build a [`BrokkrClient`] for a given PAK.
--  `unique` function L150-153 — `(prefix: &str) -> String` — Suffix used to keep names unique across reruns.
--  `scenario_uat_walkthrough` function L156-353 — `(base_url: &str, admin_pak: &str) -> Result<()>` — Full UAT walkthrough using a generator PAK after admin bootstrap.
--  `scenario_target_mismatch` function L357-460 — `(base_url: &str, admin_pak: &str) -> Result<()>` — A generator must not be able to target a stack it does not own — the
--  `scenario_raw_progenitor_surface` function L465-496 — `(base_url: &str, admin_pak: &str) -> Result<()>` — Smoke-check the raw progenitor [`brokkr_client::Client`] surface.
--  `last4` function L498-505 — `(s: &str) -> String` — Run with: `angreal tests sdk-contract rust`
+-  `wait_for_ready` function L125-143 — `(broker_url: &str, timeout_secs: u64) -> Result<()>` — Run with: `angreal tests sdk-contract rust`
+-  `client` function L146-151 — `(base_url: &str, pak: &str) -> Result<BrokkrClient>` — Build a [`BrokkrClient`] for a given PAK.
+-  `unique` function L154-157 — `(prefix: &str) -> String` — Suffix used to keep names unique across reruns.
+-  `scenario_uat_walkthrough` function L160-357 — `(base_url: &str, admin_pak: &str) -> Result<()>` — Full UAT walkthrough using a generator PAK after admin bootstrap.
+-  `scenario_target_mismatch` function L361-464 — `(base_url: &str, admin_pak: &str) -> Result<()>` — A generator must not be able to target a stack it does not own — the
+-  `scenario_raw_progenitor_surface` function L469-500 — `(base_url: &str, admin_pak: &str) -> Result<()>` — Smoke-check the raw progenitor [`brokkr_client::Client`] surface.
+-  `scenario_telemetry_and_ws_diagnostics` function L507-592 — `(base_url: &str, admin_pak: &str) -> Result<()>` — WS-10 + WS-13 surface: ergonomic-wrapper methods for the telemetry
+-  `last4` function L594-601 — `(s: &str) -> String` — Run with: `angreal tests sdk-contract rust`
 
 ### tests/sdk-contract/typescript/src
 
 > *Semantic summary to be generated by AI agent.*
+
+#### tests/sdk-contract/typescript/src/telemetry-and-ws.test.ts
+
+-  `waitForReady` function L35-47 — `function waitForReady(): Promise<void>`
+-  `seedStack` function L53-77 — `function seedStack(): Promise<string>`
 
 #### tests/sdk-contract/typescript/src/uat-walkthrough.test.ts
 

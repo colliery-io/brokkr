@@ -1472,4 +1472,420 @@ pub async fn test_ws_chaos(client: &Client) -> Result<()> {
     Ok(())
 }
 
+// =============================================================================
+// BROKKR-T-0172 (A3): Real-k3s telemetry tailer test
+// =============================================================================
+
+/// Apply a Kubernetes manifest by piping it through `docker compose exec k3s
+/// kubectl apply -f -`. Uses the project-aware compose path so we don't have
+/// to hardcode the container name (which is `brokkr-dev-k3s-1` today but
+/// could change with the compose file's `name:` field).
+async fn k3s_apply(compose_file: &str, manifest: &str) -> Result<()> {
+    use std::process::Stdio;
+    use tokio::io::AsyncWriteExt;
+    use tokio::process::Command as TokioCommand;
+
+    let mut child = TokioCommand::new("docker")
+        .args([
+            "compose",
+            "-f",
+            compose_file,
+            "exec",
+            "-T", // no TTY, accept stdin
+            "k3s",
+            "kubectl",
+            "apply",
+            "-f",
+            "-",
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin.write_all(manifest.as_bytes()).await?;
+        stdin.shutdown().await?;
+    }
+    let out = child.wait_with_output().await?;
+    if !out.status.success() {
+        return Err(format!(
+            "kubectl apply failed: stdout={} stderr={}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        )
+        .into());
+    }
+    Ok(())
+}
+
+/// On A3 Pass 2 failure, dump pod status + agent logs so the next iteration
+/// can diagnose. Best-effort; output goes to stderr/stdout.
+async fn dump_diagnostics(compose_file: &str, pod_name: &str) {
+    use tokio::process::Command as TokioCommand;
+
+    eprintln!("\n========== DIAGNOSTICS: pod status ==========");
+    let _ = TokioCommand::new("docker")
+        .args([
+            "compose",
+            "-f",
+            compose_file,
+            "exec",
+            "-T",
+            "k3s",
+            "kubectl",
+            "get",
+            "pod",
+            pod_name,
+            "-o",
+            "wide",
+        ])
+        .status()
+        .await;
+    eprintln!("\n========== DIAGNOSTICS: pod describe ==========");
+    let _ = TokioCommand::new("docker")
+        .args([
+            "compose",
+            "-f",
+            compose_file,
+            "exec",
+            "-T",
+            "k3s",
+            "kubectl",
+            "describe",
+            "pod",
+            pod_name,
+        ])
+        .status()
+        .await;
+    eprintln!("\n========== DIAGNOSTICS: pod logs from k3s ==========");
+    let _ = TokioCommand::new("docker")
+        .args([
+            "compose",
+            "-f",
+            compose_file,
+            "exec",
+            "-T",
+            "k3s",
+            "kubectl",
+            "logs",
+            pod_name,
+            "--all-containers=true",
+        ])
+        .status()
+        .await;
+    eprintln!("\n========== DIAGNOSTICS: agent logs (last 200 lines) ==========");
+    let _ = TokioCommand::new("docker")
+        .args([
+            "compose",
+            "-f",
+            compose_file,
+            "logs",
+            "agent",
+            "--tail",
+            "200",
+        ])
+        .status()
+        .await;
+    eprintln!("==============================================");
+}
+
+/// Run `kubectl delete` against the k3s cluster. Used for test cleanup. Errors
+/// are ignored — best-effort, the next test run starts a fresh stack anyway.
+async fn k3s_delete_best_effort(compose_file: &str, args: &[&str]) {
+    use tokio::process::Command as TokioCommand;
+
+    let mut argv = vec![
+        "compose",
+        "-f",
+        compose_file,
+        "exec",
+        "-T",
+        "k3s",
+        "kubectl",
+        "delete",
+        "--ignore-not-found",
+    ];
+    argv.extend_from_slice(args);
+
+    let _ = TokioCommand::new("docker")
+        .args(argv)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .await;
+}
+
+/// I-0019 / I-0020 A3 telemetry-tailer test against real k3s.
+///
+/// Proves the kube-events tailer (WS-07) actually emits when real Kubernetes
+/// emits — closing the WS-07 honest-review gap that the existing unit tests
+/// only covered cache/rate-limit logic in isolation, never the round-trip
+/// through k8s → agent → broker → persistence.
+///
+/// Pass 1 (this implementation):
+/// 1. Create a stack via broker
+/// 2. Apply a Pod annotated `k8s.brokkr.io/stack=<id>` with an image that
+///    can never pull
+/// 3. Poll `GET /api/v1/stacks/{id}/events` until ≥1 event row exists with
+///    a reason matching the expected failure modes
+/// 4. Cleanup
+///
+/// Out of scope for Pass 1 (worth a Pass 2 if time): pod-logs tailer +
+/// `LogGap{RateLimit}` assertion (requires a noisy-logger pod and rate-limit
+/// math), opt-in/opt-out annotation enforcement (requires deploying multiple
+/// stacks with different annotation configs).
+pub async fn test_ws_telemetry(client: &Client) -> Result<()> {
+    use std::time::Duration;
+
+    let compose_file = std::env::var("E2E_COMPOSE_FILE").map_err(|_| {
+        "E2E_COMPOSE_FILE env var not set — the angreal e2e task is supposed to set this"
+    })?;
+
+    println!("  → Compose file: {}", compose_file);
+
+    // -------------------------------------------------------------------
+    // Step 1: confirm agent is connected so we know the tailer is running
+    // -------------------------------------------------------------------
+    println!("  → Waiting for agent WS connection (gauge >= 1, 30s timeout)...");
+    client
+        .wait_for_metric("brokkr_ws_connected_agents", &[], 30, |v| v >= 1.0)
+        .await?;
+    println!("    agent connected ✓");
+
+    // -------------------------------------------------------------------
+    // Step 2: create a stack via the broker so we have a stack_id to
+    // annotate test pods with
+    // -------------------------------------------------------------------
+    let gen = client
+        .create_generator(&format!("a3-tel-gen-{}", Uuid::new_v4()), None)
+        .await?;
+    let gen_id: Uuid = Uuid::parse_str(gen["generator"]["id"].as_str().unwrap())?;
+    let stack = client
+        .create_stack(
+            &format!("a3-tel-stack-{}", Uuid::new_v4()),
+            None,
+            gen_id,
+        )
+        .await?;
+    let stack_id: Uuid = Uuid::parse_str(stack["id"].as_str().unwrap())?;
+    println!("    stack {} created", stack_id);
+
+    // -------------------------------------------------------------------
+    // Step 3: apply a Pod into k3s that's guaranteed to fail image pull
+    // -------------------------------------------------------------------
+    let pod_name = format!("brokkr-a3-failpod-{}", &stack_id.to_string()[..8]);
+    let manifest = format!(
+        r#"apiVersion: v1
+kind: Pod
+metadata:
+  name: {pod_name}
+  namespace: default
+  annotations:
+    k8s.brokkr.io/stack: "{stack_id}"
+  labels:
+    brokkr.io/test: a3
+spec:
+  restartPolicy: Never
+  containers:
+  - name: c
+    image: definitely-does-not-exist.invalid/never-pulls:nope
+    command: ["true"]
+"#
+    );
+
+    println!("  → kubectl apply failing pod ({pod_name}) into k3s...");
+    k3s_apply(&compose_file, &manifest).await?;
+    println!("    pod applied ✓");
+
+    // -------------------------------------------------------------------
+    // Step 4: poll the broker's history endpoint for events on this stack
+    // -------------------------------------------------------------------
+    println!("  → Polling /stacks/{stack_id}/events for events (90s timeout)...");
+    let path = format!("/api/v1/stacks/{}/events", stack_id);
+    let deadline = std::time::Instant::now() + Duration::from_secs(90);
+    let mut last_count = 0usize;
+    let cleanup = |compose_file: String, pod_name: String| async move {
+        k3s_delete_best_effort(&compose_file, &["pod", &pod_name]).await;
+    };
+
+    loop {
+        // Use the generic get helper so we don't have to add a typed wrapper
+        // for this one-off shape.
+        let resp: serde_json::Value = match client.get_json(&path).await {
+            Ok(v) => v,
+            Err(e) => {
+                if std::time::Instant::now() > deadline {
+                    cleanup(compose_file.clone(), pod_name.clone()).await;
+                    return Err(format!(
+                        "history endpoint never returned a parseable body: {}",
+                        e
+                    )
+                    .into());
+                }
+                tokio::time::sleep(Duration::from_secs(2)).await;
+                continue;
+            }
+        };
+
+        let events = resp
+            .get("events")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default();
+        if events.len() != last_count {
+            println!("    events so far: {}", events.len());
+            last_count = events.len();
+        }
+
+        // We want at least one event referencing our pod with a failure-ish
+        // reason. K3s emits a variety: ErrImagePull, ImagePullBackOff, Failed,
+        // Pulling (which itself isn't a failure but shows the loop is active).
+        let matched = events.iter().any(|ev| {
+            let reason = ev.get("reason").and_then(|v| v.as_str()).unwrap_or("");
+            let involved_name = ev
+                .get("involved_object")
+                .and_then(|o| o.get("name"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            involved_name == pod_name
+                && (reason.contains("Pull")
+                    || reason.contains("Failed")
+                    || reason.contains("BackOff"))
+        });
+
+        if matched {
+            println!(
+                "    ✓ found event referencing {pod_name} with a Pull/Failed/BackOff reason"
+            );
+            break;
+        }
+
+        if std::time::Instant::now() > deadline {
+            cleanup(compose_file.clone(), pod_name.clone()).await;
+            return Err(format!(
+                "no matching event after 90s. Events seen: {} (full body: {})",
+                events.len(),
+                serde_json::to_string(&resp).unwrap_or_default()
+            )
+            .into());
+        }
+        tokio::time::sleep(Duration::from_secs(2)).await;
+    }
+
+    // -------------------------------------------------------------------
+    // Step 5: cleanup the events fail-pod (best effort) before Pass 2
+    // -------------------------------------------------------------------
+    println!("  → Cleaning up events test pod...");
+    cleanup(compose_file.clone(), pod_name.clone()).await;
+
+    // -------------------------------------------------------------------
+    // Pass 2: pod-logs tailer (WS-08). Apply a chatty pod opted-in via
+    // `brokkr.io/stream-logs: "true"` and assert log lines for it arrive
+    // at the broker's `/stacks/{id}/logs` REST endpoint.
+    //
+    // Note: we explicitly do NOT assert on `LogGap{RateLimit}` rows here.
+    // Per handler.rs:307, gap frames are broadcast-only (for live WS
+    // subscribers), NEVER persisted — so they can't show up in the REST
+    // history. A real LogGap assertion would require subscribing to the
+    // live WS endpoint; that's recorded as deferred follow-up below.
+    // -------------------------------------------------------------------
+    let chatty_name = format!("brokkr-a3-chatty-{}", &stack_id.to_string()[..8]);
+    let chatty_manifest = format!(
+        r#"apiVersion: v1
+kind: Pod
+metadata:
+  name: {chatty_name}
+  namespace: default
+  annotations:
+    k8s.brokkr.io/stack: "{stack_id}"
+    brokkr.io/stream-logs: "true"
+  labels:
+    brokkr.io/test: a3
+spec:
+  restartPolicy: Never
+  containers:
+  - name: c
+    image: busybox:1.36
+    command: ["sh", "-c"]
+    args:
+    # Log slowly so the agent's pod_logs tailer has time to attach the
+    # log stream before lines are flushed. Without the sleep, busybox
+    # would emit all 200 lines in milliseconds and exit before the
+    # watcher's `Api<Pod>::log_stream` future is even resolved.
+    - 'for i in $(seq 1 60); do echo "chatty pod line $i at $(date)"; sleep 1; done'
+"#
+    );
+
+    println!("  → kubectl apply chatty pod ({chatty_name}) into k3s...");
+    k3s_apply(&compose_file, &chatty_manifest).await?;
+    println!("    chatty pod applied ✓");
+
+    let logs_path = format!("/api/v1/stacks/{}/logs", stack_id);
+    println!("  → Polling /stacks/{stack_id}/logs for chatty pod lines (90s timeout)...");
+    let deadline = std::time::Instant::now() + Duration::from_secs(90);
+    let mut last_log_count = 0usize;
+    let cleanup_chatty = |compose_file: String, name: String| async move {
+        k3s_delete_best_effort(&compose_file, &["pod", &name]).await;
+    };
+
+    loop {
+        let resp: serde_json::Value = match client.get_json(&logs_path).await {
+            Ok(v) => v,
+            Err(e) => {
+                if std::time::Instant::now() > deadline {
+                    cleanup_chatty(compose_file.clone(), chatty_name.clone()).await;
+                    return Err(format!("/stacks/{}/logs never returned: {}", stack_id, e).into());
+                }
+                tokio::time::sleep(Duration::from_secs(2)).await;
+                continue;
+            }
+        };
+
+        let lines = resp
+            .get("lines")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default();
+        if lines.len() != last_log_count {
+            println!("    lines so far: {}", lines.len());
+            last_log_count = lines.len();
+        }
+
+        let matched = lines.iter().any(|line| {
+            line.get("pod").and_then(|v| v.as_str()) == Some(chatty_name.as_str())
+        });
+        if matched {
+            println!("    ✓ found ≥1 log line from chatty pod in history");
+            break;
+        }
+
+        if std::time::Instant::now() > deadline {
+            // Diagnostic: dump pod status and agent logs so the next failure
+            // tells us why no log lines arrived (image pull failure vs.
+            // tailer-not-attaching vs. RBAC, etc.).
+            dump_diagnostics(&compose_file, &chatty_name).await;
+            cleanup_chatty(compose_file.clone(), chatty_name.clone()).await;
+            return Err(format!(
+                "no log lines from chatty pod after 90s. Lines seen: {}",
+                lines.len()
+            )
+            .into());
+        }
+        tokio::time::sleep(Duration::from_secs(2)).await;
+    }
+
+    println!("  → Cleaning up chatty pod...");
+    cleanup_chatty(compose_file.clone(), chatty_name.clone()).await;
+
+    println!("  → WS telemetry scenario passed (Pass 1 events + Pass 2 logs)");
+    println!(
+        "  → Deferred follow-ups: (a) LogGap{{RateLimit}} assertion via live WS \
+         subscription (gap frames aren't persisted, can't be checked via REST), \
+         (b) negative tests for opt-out (pod without stream-logs annotation should \
+         produce zero log rows)"
+    );
+    Ok(())
+}
+
 

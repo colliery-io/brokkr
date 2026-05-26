@@ -90,6 +90,13 @@ impl Client {
         self.request(reqwest::Method::GET, path, None).await
     }
 
+    /// Public GET that returns a raw `serde_json::Value`. Used by scenarios
+    /// (e.g. A3 telemetry) that poll an endpoint whose typed wrapper would
+    /// add a one-off `pub async fn` for a single caller.
+    pub async fn get_json(&self, path: &str) -> Result<Value> {
+        self.request(reqwest::Method::GET, path, None).await
+    }
+
     async fn post<T: DeserializeOwned>(&self, path: &str, body: Value) -> Result<T> {
         self.request(reqwest::Method::POST, path, Some(body)).await
     }
