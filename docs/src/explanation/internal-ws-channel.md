@@ -142,8 +142,9 @@ cardinality bounded. Per-agent visibility lives in
 ### Ingress / proxy timeouts
 
 The internal WS connection and the live-tail subscription are
-**long-lived** — they only close on agent crash, broker restart, or
-explicit client close. Ingress controllers / reverse proxies in front
+**long-lived** — they only close on agent crash, broker restart,
+explicit client close, or credential revocation (see below). Ingress
+controllers / reverse proxies in front
 of the broker should be configured to allow idle WebSocket connections
 for at least 5 minutes (anything longer is fine; the broker has no idle
 timeout of its own).
@@ -167,6 +168,23 @@ Specific guidance:
   per-stack buffer (1024 frames), the broker delivers a
   `log_gap{reason: BufferFull, dropped_count}` so the UI renders a
   visible gap rather than silently dropping data.
+
+### Credential revocation closes the socket
+
+PAK authentication is checked once, at WS upgrade. To prevent a revoked
+credential from continuing to stream on an already-open socket, the broker
+**force-closes an agent's WS connection the moment its PAK is invalidated**:
+
+- **Rotating an agent's PAK** (`POST /api/v1/agents/{id}/rotate-pak`) closes
+  the old connection immediately after the new PAK is committed.
+- **Deleting an agent** (`DELETE /api/v1/agents/{id}`) closes its connection.
+
+The teardown happens after the database commit, so it never races the
+write. The agent will attempt to reconnect under its normal backoff; that
+reconnect re-checks the (now-invalid) PAK and is rejected with `401`, which
+is the intended end state for an incident-response "rotate the agent
+credential" workflow. There is no data loss: REST polling remains the source
+of truth and covers any window during which WS is down.
 
 ### When NOT to use the live tail
 

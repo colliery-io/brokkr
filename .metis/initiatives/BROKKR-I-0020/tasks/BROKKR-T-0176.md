@@ -11,10 +11,10 @@ archived: false
 
 tags:
   - "#task"
-  - "#phase/todo"
+  - "#phase/completed"
 
 
-exit_criteria_met: false
+exit_criteria_met: true
 initiative_id: BROKKR-I-0020
 ---
 
@@ -75,4 +75,40 @@ None.
 
 ## Status Updates
 
-*To be added during implementation*
+### 2026-05-26 — Implemented + green
+
+**Mechanism:** no new cancel-token needed — the per-connection writer task
+already exits when both its lane receivers close (`handler.rs` writer_task:
+`let Some(msg) = next else { close socket; return }`). The lane *senders* live
+only in the registry's `ConnectionHandle`. So dropping the handle from the
+registry map IS the close signal: writer sees both lanes closed → closes the
+socket → `run_connection`'s `select!` completes → connected-gauge decrements.
+
+**Changes:**
+- `ConnectionRegistry::close_for_agent(agent_id) -> usize` — removes the
+  handle (drops its senders), returns 0/1. Map is one-connection-per-agent
+  (`register` evicts a prior handle), so the count is 0 or 1 today; signature
+  returns a count for forward-compat + logging.
+- `rotate_agent_pak` and `delete_agent` handlers now take the
+  `ConnectionRegistry` extension and call `close_for_agent(id)` **after** the
+  DB commit + `invalidate_auth_cache` (never holding DB locks across socket
+  teardown, per the risk note).
+- Operator note added to `docs/src/explanation/internal-ws-channel.md`
+  ("Credential revocation closes the socket") + tweaked the long-lived-
+  connection caveat to mention revocation.
+
+**Tests (all green):**
+- Unit: `registry::tests::close_for_agent_removes_handle_and_drops_senders`.
+- Integration: `rotating_agent_pak_closes_its_open_ws` and
+  `deleting_agent_closes_its_open_ws` — connect agent WS, admin
+  rotates/deletes, assert the registry clears AND the client socket observes
+  the close within 1s.
+- No regression: full `api::ws` module 18 passed (was 16 + these 2).
+
+**Reconnect-after-401 risk (from the task):** the agent's reconnect uses
+exponential backoff 1s→60s with jitter (documented in the WS channel doc's
+Recovery semantics), so a permanent 401 after revocation backs off rather than
+tight-looping. No code change needed; behavior confirmed against the existing
+backoff. The deeper "agent should give up / surface a fatal auth error after N
+401s" is a possible agent-side polish but out of scope here (the broker-side
+security gap — the whole point of B3 — is closed).

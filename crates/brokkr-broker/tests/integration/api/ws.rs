@@ -1274,6 +1274,136 @@ async fn concurrent_target_post_and_get_delivers_every_push_without_dupes() {
     );
 }
 
+// =============================================================================
+// B3 (BROKKR-T-0176): PAK revocation closes the open WS
+// =============================================================================
+//
+// PAK auth is checked once at upgrade. If an admin invalidates that PAK after
+// the socket is up (rotate-pak, or deleting the agent), the connection must be
+// torn down promptly rather than lingering until TCP notices — otherwise a
+// revoked credential keeps streaming. These tests assert the registry clears
+// and the client socket observes the close within 1s.
+
+/// Drive a frame-drain until the socket closes (None / Close / Err), or the
+/// timeout fires. Returns true iff it closed.
+async fn await_socket_close(
+    socket: &mut tokio_tungstenite::WebSocketStream<
+        tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+    >,
+) -> bool {
+    tokio::time::timeout(std::time::Duration::from_secs(1), async {
+        loop {
+            match socket.next().await {
+                None => return true,
+                Some(Ok(Message::Close(_))) => return true,
+                Some(Err(_)) => return true,
+                Some(Ok(_)) => continue, // ignore any buffered frame
+            }
+        }
+    })
+    .await
+    .unwrap_or(false)
+}
+
+#[tokio::test]
+async fn rotating_agent_pak_closes_its_open_ws() {
+    use reqwest::Client;
+
+    let fixture = TestFixture::new();
+    let (addr, registry) = spawn_full_broker(&fixture).await;
+    let http = Client::new();
+    let base = format!("http://{}", addr);
+
+    let agent = fixture.create_test_agent("revoke-rotate agent".into(), "cluster".into());
+    let (agent_pak, agent_hash) = pak::create_pak().unwrap();
+    fixture
+        .dal
+        .agents()
+        .update_pak_hash(agent.id, agent_hash)
+        .unwrap();
+
+    let req = ws_request_with_pak(&ws_url(addr), &agent_pak);
+    let (mut socket, _resp) = tokio_tungstenite::connect_async(req).await.unwrap();
+    tokio::time::timeout(
+        std::time::Duration::from_secs(2),
+        wait_for_connection(&registry, agent.id),
+    )
+    .await
+    .expect("registry registers agent within 2s");
+    assert!(registry.is_connected(agent.id));
+
+    // Admin rotates the agent's PAK → old credential now invalid.
+    let resp = http
+        .post(format!("{base}/api/v1/agents/{}/rotate-pak", agent.id))
+        .header("Authorization", format!("Bearer {}", fixture.admin_pak))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+
+    // Registry entry clears within 1s...
+    let cleared = tokio::time::timeout(
+        std::time::Duration::from_secs(1),
+        wait_for_disconnection(&registry, agent.id),
+    )
+    .await
+    .expect("agent should leave the registry within 1s of PAK rotation");
+    assert!(cleared);
+
+    // ...and the client socket observes the close.
+    assert!(
+        await_socket_close(&mut socket).await,
+        "socket should close within 1s of PAK rotation"
+    );
+}
+
+#[tokio::test]
+async fn deleting_agent_closes_its_open_ws() {
+    use reqwest::Client;
+
+    let fixture = TestFixture::new();
+    let (addr, registry) = spawn_full_broker(&fixture).await;
+    let http = Client::new();
+    let base = format!("http://{}", addr);
+
+    let agent = fixture.create_test_agent("revoke-delete agent".into(), "cluster".into());
+    let (agent_pak, agent_hash) = pak::create_pak().unwrap();
+    fixture
+        .dal
+        .agents()
+        .update_pak_hash(agent.id, agent_hash)
+        .unwrap();
+
+    let req = ws_request_with_pak(&ws_url(addr), &agent_pak);
+    let (mut socket, _resp) = tokio_tungstenite::connect_async(req).await.unwrap();
+    tokio::time::timeout(
+        std::time::Duration::from_secs(2),
+        wait_for_connection(&registry, agent.id),
+    )
+    .await
+    .expect("registry registers agent within 2s");
+
+    let resp = http
+        .delete(format!("{base}/api/v1/agents/{}", agent.id))
+        .header("Authorization", format!("Bearer {}", fixture.admin_pak))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 204);
+
+    let cleared = tokio::time::timeout(
+        std::time::Duration::from_secs(1),
+        wait_for_disconnection(&registry, agent.id),
+    )
+    .await
+    .expect("agent should leave the registry within 1s of deletion");
+    assert!(cleared);
+    assert!(
+        await_socket_close(&mut socket).await,
+        "socket should close within 1s of agent deletion"
+    );
+}
+
 /// Repeatedly poll `predicate` until it returns true or `timeout` elapses.
 async fn wait_until<F, Fut>(timeout: std::time::Duration, mut predicate: F) -> bool
 where

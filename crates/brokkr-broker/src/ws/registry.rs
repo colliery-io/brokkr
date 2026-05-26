@@ -172,6 +172,26 @@ impl ConnectionRegistry {
     pub fn connected_count(&self) -> usize {
         self.inner.read().expect("registry poisoned").len()
     }
+
+    /// Forcibly close any live connection for `agent_id`, returning how many
+    /// were closed (0 or 1 today — the map is one-connection-per-agent, since
+    /// [`register`] evicts a prior handle for the same id).
+    ///
+    /// Removing the handle drops its lane senders; the per-connection writer
+    /// task then observes both lanes closed, closes the socket, and the
+    /// connection's `run_connection` loop unwinds (decrementing the connected
+    /// gauge). This is the teardown path used by PAK revocation
+    /// ([[BROKKR-T-0176]]): once an agent's PAK is invalidated we must not
+    /// leave its already-upgraded socket open until its TCP layer happens to
+    /// notice. The agent's reconnect will re-hit auth and be rejected.
+    pub fn close_for_agent(&self, agent_id: Uuid) -> usize {
+        let mut map = self.inner.write().expect("registry poisoned");
+        if map.remove(&agent_id).is_some() {
+            1
+        } else {
+            0
+        }
+    }
 }
 
 #[cfg(test)]
@@ -255,6 +275,28 @@ mod tests {
         reg.register(handle);
         reg.unregister_if_matches(id, ts);
         assert!(!reg.is_connected(id));
+    }
+
+    #[test]
+    fn close_for_agent_removes_handle_and_drops_senders() {
+        let reg = ConnectionRegistry::default();
+        let id = Uuid::new_v4();
+        let (handle, mut control_rx, _telemetry_rx) = handle_for(id);
+        reg.register(handle);
+        assert!(reg.is_connected(id));
+
+        // Closing returns 1 and removes the entry.
+        assert_eq!(reg.close_for_agent(id), 1);
+        assert!(!reg.is_connected(id));
+
+        // The writer-side receiver observes the dropped sender (channel
+        // closed) — this is what unblocks the per-connection writer task to
+        // close the socket.
+        assert!(control_rx.try_recv().is_err());
+
+        // Closing an unknown / already-closed agent is a no-op returning 0.
+        assert_eq!(reg.close_for_agent(id), 0);
+        assert_eq!(reg.close_for_agent(Uuid::new_v4()), 0);
     }
 
     #[test]
