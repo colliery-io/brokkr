@@ -3,8 +3,8 @@ apiVersion: v2
 name: brokkr-broker
 description: Brokkr control plane broker
 type: application
-version: 0.4.2
-appVersion: "0.4.2"
+version: 0.5.0
+appVersion: "0.5.0"
 
 dependencies:
   - name: postgresql

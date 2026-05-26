@@ -1,6 +1,6 @@
 [project]
 name = "brokkr-client"
-version = "0.4.2"
+version = "0.5.0"
 description = "Ergonomic Python wrapper around the auto-generated brokkr-client-generated low-level client"
 authors = []
 requires-python = ">=3.10"

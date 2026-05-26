@@ -15,10 +15,10 @@ archived: false
 
 tags:
   - "#task"
-  - "#phase/todo"
+  - "#phase/completed"
 
 
-exit_criteria_met: false
+exit_criteria_met: true
 initiative_id: BROKKR-I-0020
 ---
 
@@ -78,4 +78,62 @@ the same release
 
 ## Status Updates
 
-*To be added during implementation*
+### 2026-05-26 — Finding: releases are fully git-tag-driven; bump is cosmetic
+
+Before bumping, discovered the release pipeline does not read the committed
+version strings — the **git tag drives everything**:
+
+- Containers (`release.yml`): image tags via `type=semver,pattern={{version}}`
+  from the tag.
+- Helm (`release.yml`): `helm package --version ${VERSION} --app-version
+  ${VERSION}`, VERSION parsed from the tag — committed `Chart.yaml` is overwritten.
+- SDKs (`release-sdks.yml`): each manifest regex-stamped from the tag at build.
+  Its header even states *"Source manifests stay at 0.0.0; stamping happens in
+  this workflow only"* — though they were actually committed at 0.4.2 (drift).
+
+So the real "bump" is tagging `v0.5.0`. Editing manifests is cosmetic for the
+release. Surfaced this to the human with options.
+
+**Decisions (human-in-the-loop):**
+1. *Bump everything to 0.5.0* — set all manifests + helm charts to 0.5.0 in
+   source so the tree reads coherently, accepting that the tag overrides at
+   publish. (Chose this over resetting SDK manifests to the 0.0.0 sentinel.)
+2. *Skip CHANGELOGs* — no CHANGELOG convention exists in the repo; a
+   version-bump task shouldn't invent one. The 0.5.0 release notes (WS channel
+   I-0019, 6h telemetry retention, history endpoints, I-0020 hardening incl.
+   the A3 pod-logs fix) go in the **git tag / GitHub release body** at tag time.
+
+### 2026-05-26 — Bump applied
+
+Bumped to 0.5.0:
+- 6 workspace crates: brokkr-{broker,agent,utils,models,wire,client}
+- 2 Python manifests: sdks/python/brokkr (wrapper) + sdks/python/brokkr-client
+  (generated)
+- TS: sdks/typescript/brokkr-client (via `npm version`, package-lock synced)
+- Helm: charts/brokkr-{broker,agent} version + appVersion
+- `Cargo.lock` regenerated (all six brokkr crates → 0.5.0)
+
+`tests/e2e` and `tests/sdk-contract/rust` left at 0.0.0 (internal test
+harnesses, never published). Helm `values.yaml` image tags untouched
+(`latest` / unrelated subchart pins). Inter-crate deps are path-only (no
+version pins) so nothing cascaded.
+
+### 2026-05-26 — Test results
+
+- `angreal tests unit all` → green (62/96/128/24/0 across crates)
+- `angreal tests sdk-contract all` → green (Rust UAT passed; Python 6 passed;
+  TypeScript 6 passed) — confirms the bump doesn't break the contract suites
+  that look up the installed dist
+- `angreal tests integration all` → green (38 + 437 = 475 passed, 0 failed)
+  on a clean solo run.
+
+**Process note:** a first integration run failed spuriously because I ran it
+*concurrently* with `sdk-contract all` — both use docker-compose with the same
+project name (`brokkr-dev`), so sdk-contract's teardown killed the Postgres the
+integration run was mid-using ("connection refused" on :5433). Re-running
+integration solo was fully green. Lesson: never run two docker-compose-based
+angreal suites in parallel; they share the `brokkr-dev` project.
+
+All B1 acceptance criteria met (version bump + lockfiles + all suites green;
+CHANGELOG criterion intentionally dropped per the decision above; publish left
+to the tag-driven `release-sdks.yml` / `release.yml`).

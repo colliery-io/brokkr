@@ -1,6 +1,6 @@
 [package]
 name = "brokkr-wire"
-version = "0.4.2"
+version = "0.5.0"
 edition = "2021"
 license = "Elastic-2.0"
 description = "Internal wire protocol for the broker↔agent WebSocket channel. Not a public API."
