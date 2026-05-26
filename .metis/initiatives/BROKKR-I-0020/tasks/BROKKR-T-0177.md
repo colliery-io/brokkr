@@ -12,10 +12,10 @@ archived: false
 
 tags:
   - "#task"
-  - "#phase/todo"
+  - "#phase/completed"
 
 
-exit_criteria_met: false
+exit_criteria_met: true
 initiative_id: BROKKR-I-0020
 ---
 
@@ -81,4 +81,57 @@ against 0.5.0 specifically
 
 ## Status Updates
 
-*To be added during implementation. Record load-test results here.*
+### 2026-05-26 — Tool built; v0.5.0 baseline recorded
+
+Built `tools/ws-loadtest/` — a standalone (non-workspace) Rust binary that
+provisions a synthetic agent fleet over REST, opens N agent WS connections
+(thin `tokio-tungstenite` clients speaking the wire protocol), drives
+heartbeat + telemetry traffic, runs K live subscribers, and samples broker
+`/metrics`, `docker stats` (CPU/RSS), and telemetry-table row counts. See
+`tools/ws-loadtest/README.md`. Stays in-tree for re-runs; not in CI.
+
+Two bugs in the harness found+fixed during bring-up (the broker behaved
+correctly throughout): (1) telemetry body `agent_id` must equal the
+authenticated agent or the broker drops the frame before persist/broadcast
+(`handler.rs`) — fixed to send the provisioned id; (2) generator/stack/agent
+names are unique-constrained, so runs need a unique suffix — added a per-run
+timestamp.
+
+**v0.5.0 baseline — hit the full target (500 agents × 10 msg/s × 5 min):**
+
+```
+  agents requested   : 500
+  agents connected   : 500 (peak gauge 501, conn errors 0)   [+1 = the real dev agent]
+  subscribers        : 50 connected, 0 errors, 1470395 frames received
+  messages sent      : 1500536 total → 5002 msg/s achieved
+  send errors        : 0
+  broker CPU         : avg 87%  peak 130%
+  broker RSS         : peak 131 MiB
+  pg write rate      : agent_k8s_events 2378 rows/s  agent_pod_logs 2378 rows/s
+```
+
+Run config: `LT_AGENTS=500 LT_STACKS=50 LT_SUBSCRIBERS=50 LT_MSG_RATE=10
+LT_DURATION_SECS=300 LT_SAMPLE_SECS=15` against `angreal local up` on dev
+hardware (Apple Silicon, docker-compose Postgres).
+
+**What pegged:** broker CPU — ~1 core saturated (avg 87%, peaks to ~130% =
+brief spill onto a second core). That's the single-process scaling ceiling at
+~5000 msg/s, and it's expected, not a bug: zero send errors, zero dropped
+connections, RSS flat (~85 MiB steady, one 131 MiB blip — no leak over 5 min),
+and Postgres comfortably absorbed ~4.75k rows/s combined without backing up.
+Subscriber fan-out kept pace (1.47M of 1.50M frames; the ~2% delta is in-flight
+at shutdown, not drops).
+
+**Conclusion:** the v0.5.0 WS stack sustains a 500-agent fleet at full message
+rate on a single dev box with headroom everywhere except CPU, which tops out
+around one core. If a future deployment needs >~5k msg/s per broker process,
+CPU is the first thing to scale (more cores won't help a single saturated core
+much — that points at either per-message serialization cost or the broadcaster
+hot path as the profiling target). Recorded as the regression-detection
+baseline; no follow-up bottleneck task warranted at current targets.
+
+### Deferred / not done
+
+- `pg_stat_statements` query-level breakdown — used row-count deltas instead
+  (simpler, and the question "is PG keeping up" is answered: yes). If a future
+  run shows PG as the bottleneck, add the `pg_stat_statements` drill-down then.

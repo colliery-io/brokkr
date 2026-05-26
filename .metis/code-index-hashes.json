@@ -387,6 +387,7 @@
     "tests/sdk-contract/typescript/src/telemetry-and-ws.test.ts": "6d6355e3a1dc6e69c0deca0467415b83610b925a6eae9479344fdc7c37d35268",
     "tests/sdk-contract/typescript/src/uat-walkthrough.test.ts": "77b0fa07992aaac96790c0205bc49efc64782180b839cf7ac8892eb5bc869366",
     "tests/sdk-contract/typescript/vitest.config.ts": "cda8caba465610443a4693679838c57d676e5f0ca5670a0b6c60c5bf7093a51b",
-    "tools/webhook-catcher/app.py": "35ba92a5c7fd4c4a9e3b45933dacd0c92dcc5540df8b10d18b13c66ebb1f07a0"
+    "tools/webhook-catcher/app.py": "35ba92a5c7fd4c4a9e3b45933dacd0c92dcc5540df8b10d18b13c66ebb1f07a0",
+    "tools/ws-loadtest/src/main.rs": "39cd79556e31dc5492dd9be17366cb890069ee27c0378687c6212c193c337e70"
   }
 }

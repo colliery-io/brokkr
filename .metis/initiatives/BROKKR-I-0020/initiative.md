@@ -225,7 +225,7 @@ polish. C last because it's pure cleanup that won't gate the decision to merge.
 - [x] B1 lockstep version bump to 0.5.0 applied (BROKKR-T-0174, 2026-05-26) — all crates/SDKs/helm charts + lockfiles at 0.5.0; unit + sdk-contract + integration all green. **Finding: releases are fully git-tag-driven** (manifests stamped from tag at publish), so the bump is cosmetic and the real release is tagging `v0.5.0`. CHANGELOGs intentionally dropped (no repo convention; release notes go in the tag/GitHub release body)
 - [ ] B2 Grafana dashboard JSON checked in + eviction-worker dead-alert rule
 - [ ] B3 PAK revocation closes WS socket; integration test green
-- [ ] B4 load test executed, results recorded in this initiative as v0.5.0 baseline
+- [x] B4 load test executed, v0.5.0 baseline recorded (BROKKR-T-0177, 2026-05-26) — `tools/ws-loadtest/`. **500 agents × 10 msg/s × 5 min = 5002 msg/s sustained, 0 errors.** Broker CPU ~1 core saturated (avg 87%, peak 130%), RSS flat ~85 MiB (no leak), Postgres ~2378 rows/s/table keeping up, 50 subscribers fanned out 1.47M frames. **What pegs: broker CPU** (single-process ceiling, expected). No bottleneck follow-up needed at current targets
 - [ ] C1 browser live-tail decision recorded (ADR amendment or ADR-0009) and implemented
 - [ ] C2 `RateLimiter` API renamed, tests updated, on-wire frame unchanged
 - [ ] C3 `annotation_lookup` LRU added, scaling test asserts bounded API calls
