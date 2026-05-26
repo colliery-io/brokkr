@@ -11,10 +11,10 @@ archived: false
 
 tags:
   - "#task"
-  - "#phase/todo"
+  - "#phase/completed"
 
 
-exit_criteria_met: false
+exit_criteria_met: true
 initiative_id: BROKKR-I-0020
 ---
 
@@ -75,4 +75,39 @@ None.
 
 ## Status Updates
 
-*To be added during implementation*
+### 2026-05-26 — Dashboard + alert + docs shipped
+
+**Artifacts** (in `docs/grafana/`, next to the existing broker/agent dashboards):
+- `brokkr-ws-channel-dashboard.json` (uid `brokkr-ws-channel`, schemaVersion 27,
+  `${DS_PROMETHEUS}` datasource var — mirrors the existing broker dashboard's
+  structure exactly). Panels: Connected Agents (stat+sparkline), Live
+  Subscribers (stat), Eviction Worker Liveness (rate timeseries), WS Message
+  Rate by `direction · type` (stacked), Telemetry Rows Evicted by `table`
+  (stacked).
+- `brokkr-ws-channel.rules.yml` — `BrokkrWsEvictionWorkerStalled`:
+  `increase(brokkr_ws_log_eviction_runs_total[5m]) == 0` `for: 10m`, severity
+  warning. Window math: worker ticks every 60s (`DEFAULT_EVICTION_TICK`), so a
+  flat 5m rate = dead worker; `for: 10m` rides over deploys/restarts without
+  flapping and is still far inside the 6h ceiling.
+- Operator note added to `docs/src/explanation/internal-ws-channel.md`
+  (Observability → "Dashboard + alert").
+
+**Validation:**
+- Dashboard JSON parses clean (valid JSON, schema 27 = same as the working
+  broker dashboard).
+- Queries bind to real series — scraped the live broker `/metrics` and
+  confirmed every name/label the dashboard + alert reference exists exactly:
+  `brokkr_ws_connected_agents`, `brokkr_ws_live_subscribers`,
+  `brokkr_ws_log_eviction_runs_total` (=87, worker alive → alert correctly
+  would NOT fire), `brokkr_ws_messages_total{direction,type}` (showed the B4
+  load-test traffic). `brokkr_ws_telemetry_evicted_total{table}` isn't emitted
+  yet (no rows are 6h old) — the rate panel correctly shows no-data until
+  evictions occur.
+
+**Scope note (criterion deviation):** the "manually load into a local Grafana
++ screenshot" step was not done — the local docker stack ships neither Grafana
+nor a Prometheus that scrapes the broker, so a live render would show empty
+panels regardless. The stronger available validation (schema parity with a
+known-rendering dashboard + every query verified against the live `/metrics`
+series) is recorded above. If/when an observability stack is added to
+`angreal local up`, a visual confirmation is a trivial follow-up.

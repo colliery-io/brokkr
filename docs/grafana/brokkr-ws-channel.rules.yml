@@ -1,0 +1,33 @@
+# Prometheus alerting rules for the Brokkr internal WS channel (I-0020 B2).
+#
+# Load alongside your existing Brokkr rules (e.g. mount into the Prometheus
+# rule_files glob). The one rule here catches the most dangerous *silent*
+# failure mode of the telemetry track: the 6h-retention eviction worker
+# dying. If it stops running, telemetry rows accumulate past the hard 6h
+# ceiling with no other visible symptom until Postgres bloats.
+groups:
+  - name: brokkr-ws-channel
+    rules:
+      - alert: BrokkrWsEvictionWorkerStalled
+        # The worker ticks every 60s by default (DEFAULT_EVICTION_TICK) and
+        # increments brokkr_ws_log_eviction_runs_total on every pass. If the
+        # rate over 5m is flat at zero, the worker is not running. `for: 10m`
+        # rides over broker restarts / deploys (which briefly pause the
+        # counter) so we don't flap — 10m is well inside the 6h ceiling, so
+        # detection is still far faster than any actual retention violation.
+        expr: increase(brokkr_ws_log_eviction_runs_total[5m]) == 0
+        for: 10m
+        labels:
+          severity: warning
+          component: brokkr-broker
+          subsystem: ws-telemetry
+        annotations:
+          summary: "Brokkr WS telemetry eviction worker has stalled"
+          description: >
+            brokkr_ws_log_eviction_runs_total has not incremented for >10m on
+            {{ $labels.instance }}. The 6h telemetry retention worker is not
+            running, so agent_k8s_events / agent_pod_logs rows will accumulate
+            past the hard 6h ceiling. Check the broker logs for the eviction
+            task and restart the broker if needed. Retention is an operational
+            buffer, not a log store — see docs/explanation/internal-ws-channel.
+          runbook: "docs/src/explanation/internal-ws-channel.md#telemetry-track--short-lived-buffer-not-a-log-store"

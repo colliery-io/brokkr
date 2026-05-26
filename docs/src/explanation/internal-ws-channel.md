@@ -137,6 +137,22 @@ Counters intentionally avoid per-agent / per-stack labels to keep
 cardinality bounded. Per-agent visibility lives in
 `GET /api/v1/admin/ws/connections`.
 
+### Dashboard + alert
+
+A ready-to-import Grafana dashboard and a Prometheus alert rule ship with
+the repo:
+
+- **Dashboard**: `docs/grafana/brokkr-ws-channel-dashboard.json` (uid
+  `brokkr-ws-channel`). Panels: connected agents, live subscribers, WS
+  message rate by `direction · type`, eviction-worker liveness, and rows
+  evicted by table. Import it and pick your Prometheus datasource for the
+  `DS_PROMETHEUS` variable.
+- **Alert**: `docs/grafana/brokkr-ws-channel.rules.yml` —
+  `BrokkrWsEvictionWorkerStalled` fires (severity `warning`) when
+  `brokkr_ws_log_eviction_runs_total` stops incrementing for >10m, i.e. the
+  6h retention worker has died and the telemetry tables are about to grow
+  unbounded. This is the one WS failure mode that is otherwise silent.
+
 ## Operating notes
 
 ### Ingress / proxy timeouts
