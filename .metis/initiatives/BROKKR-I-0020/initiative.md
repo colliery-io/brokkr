@@ -11,10 +11,10 @@ archived: false
 
 tags:
   - "#initiative"
-  - "#phase/active"
+  - "#phase/completed"
 
 
-exit_criteria_met: false
+exit_criteria_met: true
 estimated_complexity: L
 initiative_id: ws-channel-operational-hardening
 ---
@@ -233,4 +233,4 @@ polish. C last because it's pure cleanup that won't gate the decision to merge.
 - [x] T-0182 (B3 follow-up) agent stops reconnecting WS after 5 consecutive PAK rejections (2026-05-26) — terminal `WsState::AuthRejected`, fatal log; transient/success resets the counter. Closes the "agent hammers a revoked credential forever" gap. Agent unit green
 - [x] T-0183 (A2 follow-up) work-order completion under WS sever (2026-05-26) — `angreal tests e2e --scenario ws-workorders`: 8 `custom` work orders all claimed+applied+completed over REST with WS severed, queue drained clean. **Delivers the A2 "every work order reaches completed" criterion that T-0171 deferred**, deterministically (custom WOs, no Shipwright)
 - [x] Existing test suites still green (2026-05-26, full pre-merge run) — unit (5 suites, 0 failed), integration (441, 0 failed), sdk-contract (4, 0 failed), e2e (11, 0 failed). All serially, all exit 0
-- [ ] Initiative review with human before tag + merge
+- [x] Initiative review with human before tag + merge (2026-05-27) — reviewed and merged as PR #39 (squash 6eda2f6); v0.5.0 tagged → containers, helm charts, and all three SDKs published. Post-merge follow-up: flaky `test_release_expired` fixed via PR #40 (BROKKR-T-0184)
