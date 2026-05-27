@@ -58,7 +58,7 @@
 //! - JSON output format
 //! - Contextual information
 
-use crate::{broker, broker_sdk, deployment_health, diagnostics, health, k8s, webhooks, work_orders};
+use crate::{broker, broker_sdk, broker_ws, deployment_health, diagnostics, health, k8s, kube_events, pod_logs, webhooks, work_orders};
 use brokkr_utils::config::Settings;
 use brokkr_utils::telemetry::prelude::*;
 use std::collections::HashSet;
@@ -89,6 +89,19 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
     info!("Agent PAK verified successfully");
 
     let sdk_client = broker_sdk::build_client(&config)?;
+
+    // Open the internal WS channel to the broker. Per ADR-0008 it's
+    // opt-out: if the user set `agent.ws_force_rest = true`, this spawn
+    // pins the state at ForceRestOnly and no dial is ever attempted.
+    // Outbound emissions still call .uplink() — try_send short-circuits
+    // when the channel is not Up and the caller falls back to REST.
+    let ws_client = broker_ws::spawn(&config);
+    let ws_uplink = ws_client.uplink();
+
+    // Spawn telemetry tailers. They run for the lifetime of the agent
+    // and use ws_uplink for emission. K8s client is created below and
+    // shared with the tailers via spawn(). See WS-07.
+    // (Spawn happens after `k8s_client` is created — see the call below.)
     info!("Broker SDK client created");
 
     info!("Fetching agent details");
@@ -103,6 +116,25 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
     let k8s_client = k8s::api::create_k8s_client(config.agent.kubeconfig_path.as_deref())
         .await
         .expect("Failed to create Kubernetes client");
+
+    // WS-07: tail kube Events for objects this agent manages and stream
+    // them upstream via the WS uplink. Always-on (no per-stack opt-in;
+    // Events are cheap signal). See crates/brokkr-agent/src/kube_events.rs.
+    let _kube_events_handle = kube_events::spawn(
+        k8s_client.clone(),
+        ws_uplink.clone(),
+        agent.id,
+        config
+            .agent
+            .kube_event_uid_cache_cap
+            .unwrap_or(kube_events::DEFAULT_UID_CACHE_CAP),
+    );
+
+    // WS-08: tail pod logs for stacks that opt in via the
+    // `brokkr.io/stream-logs: "true"` annotation on the pod template.
+    // Rate-limited per container; over-rate lines surface as LogGap
+    // markers so the UI renders visible gaps rather than swallowing data.
+    let _pod_logs_handle = pod_logs::spawn(k8s_client.clone(), ws_uplink.clone(), agent.id);
 
     // Initialize health state for health endpoints
     let broker_status = Arc::new(RwLock::new(health::BrokerStatus {
@@ -183,7 +215,7 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
     while running.load(Ordering::SeqCst) {
         select! {
             _ = heartbeat_interval.tick() => {
-                match broker::send_heartbeat(&config, &sdk_client, &agent).await {
+                match broker::send_heartbeat(&config, &sdk_client, &agent, Some(&ws_uplink)).await {
                     Ok(_) => {
                         debug!("Successfully sent heartbeat for agent '{}' (id: {})", agent.name, agent.id);
                         // Update broker status for health endpoints
@@ -243,6 +275,7 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
                                         &agent,
                                         obj.id,
                                         None,
+                                        Some(&ws_uplink),
                                     ).await {
                                         error!("Failed to send success event for deployment {} in agent '{}' (id: {}): {}",
                                             obj.id, agent.name, agent.id, e);
@@ -257,6 +290,7 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
                                         &agent,
                                         obj.id,
                                         e.to_string(),
+                                        Some(&ws_uplink),
                                     ).await {
                                         error!("Failed to send failure event for deployment {} in agent '{}' (id: {}): {}",
                                             obj.id, agent.name, agent.id, send_err);
@@ -322,7 +356,7 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
                     health_statuses.into_iter().map(|s| s.into()).collect();
 
                 // Send health status to broker
-                if let Err(e) = broker::send_health_status(&config, &sdk_client, &agent, health_updates).await {
+                if let Err(e) = broker::send_health_status(&config, &sdk_client, &agent, health_updates, Some(&ws_uplink)).await {
                     error!("Failed to send health status for agent '{}': {}", agent.name, e);
                 } else {
                     debug!("Successfully sent health status for {} deployment objects",

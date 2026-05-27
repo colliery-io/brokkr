@@ -11,12 +11,14 @@ use crate::api::v1::middleware::AuthPayload;
 use crate::dal::DAL;
 use crate::metrics;
 use crate::utils::{audit, event_bus, pak};
+use crate::ws::{push_target_changed, ConnectionRegistry};
 use axum::http::StatusCode;
 use axum::{
     extract::{Extension, Path, Query, State},
     routing::{delete, get, post},
     Json, Router,
 };
+use std::sync::Arc;
 use brokkr_models::models::agent_annotations::{AgentAnnotation, NewAgentAnnotation};
 use brokkr_models::models::agent_events::{AgentEvent, NewAgentEvent};
 use brokkr_models::models::agent_labels::{AgentLabel, NewAgentLabel};
@@ -342,6 +344,7 @@ async fn update_agent(
 async fn delete_agent(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
+    Extension(ws_registry): Extension<Arc<ConnectionRegistry>>,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, ApiError> {
     info!("Handling request to delete agent with ID: {}", id);
@@ -355,6 +358,11 @@ async fn delete_agent(
     info!("Successfully deleted agent with ID: {}", id);
     if let Some(ref hash) = old_pak_hash {
         dal.invalidate_auth_cache(hash);
+    }
+    // Agent is gone and its PAK invalidated; close any open WS (BROKKR-T-0176).
+    let closed = ws_registry.close_for_agent(id);
+    if closed > 0 {
+        info!(%id, closed, "closed open WS connection(s) after agent deletion");
     }
     audit::log_action(
         ACTOR_TYPE_ADMIN,
@@ -667,6 +675,7 @@ async fn list_targets(
 async fn add_target(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
+    Extension(ws_registry): Extension<Arc<ConnectionRegistry>>,
     Path(id): Path<Uuid>,
     Json(new_target): Json<NewAgentTarget>,
 ) -> Result<(StatusCode, Json<AgentTarget>), ApiError> {
@@ -676,6 +685,10 @@ async fn add_target(
         error!("Failed to add target for agent with ID {}: {:?}", id, e);
         ApiError::internal("failed to add agent target")
     })?;
+    // Post-commit: tell the affected agent its targets changed so it can
+    // start reconciling the new stack immediately. Remove is intentionally
+    // not pushed in v1 — REST polling surfaces deletions on the next tick.
+    push_target_changed(&ws_registry, &target);
     Ok((StatusCode::CREATED, Json(target)))
 }
 
@@ -862,6 +875,7 @@ async fn get_associated_stacks(
 async fn rotate_agent_pak(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
+    Extension(ws_registry): Extension<Arc<ConnectionRegistry>>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     info!("Handling request to rotate PAK for agent with ID: {}", id);
@@ -888,6 +902,14 @@ async fn rotate_agent_pak(
     })?;
     info!("Successfully rotated PAK for agent with ID: {}", id);
     dal.invalidate_auth_cache(&old_pak_hash);
+    // The old PAK is now invalid; tear down any open WS so it can't keep
+    // streaming on already-upgraded credentials (BROKKR-T-0176). Done after
+    // the DB commit + cache invalidation so we never hold those while doing
+    // socket teardown.
+    let closed = ws_registry.close_for_agent(id);
+    if closed > 0 {
+        info!(%id, closed, "closed open WS connection(s) after PAK rotation");
+    }
 
     audit::log_action(
         ACTOR_TYPE_ADMIN,

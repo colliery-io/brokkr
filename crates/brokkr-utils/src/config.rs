@@ -206,6 +206,34 @@ pub struct Agent {
     pub deployment_health_enabled: Option<bool>,
     /// Interval for deployment health checks in seconds
     pub deployment_health_interval: Option<u64>,
+    /// Force the agent to use REST polling only, never opening the internal
+    /// WebSocket channel. Defaults to `false`: WS is opt-out per ADR-0008.
+    /// Set this for restricted environments (no WS through ingress) or for
+    /// debugging the REST fallback path in isolation.
+    #[serde(default)]
+    pub ws_force_rest: bool,
+    /// Optional override for the internal WS upgrade URL.
+    ///
+    /// When unset (default), the agent derives the WS URL from `broker_url`
+    /// via `ws_url_from_broker_url` — http→ws, https→wss, append
+    /// `/internal/ws/agent`. This is the right behavior for nearly every
+    /// deployment.
+    ///
+    /// Set this when WS traffic flows through a different ingress / proxy
+    /// than REST: e.g. a sticky-session-capable WS-aware load balancer in
+    /// front of the broker, while REST goes direct, or — in tests — a
+    /// toxiproxy sidecar that can sever WS in isolation. Must be a full
+    /// `ws://host:port/path` or `wss://...` URL.
+    #[serde(default)]
+    pub ws_url: Option<String>,
+    /// Max entries in the kube-events UID→ownership LRU cache (WS-07). The
+    /// cache turns the per-Event annotation lookup into an O(1) hit for
+    /// already-seen objects; the bound stops unmanaged-object churn from
+    /// growing it without limit. When unset, defaults to 10_000 (sized for
+    /// ~10k managed pods). Bump for larger clusters; the trade-off is memory
+    /// vs. how often an evicted entry forces a fresh dynamic-API lookup.
+    #[serde(default)]
+    pub kube_event_uid_cache_cap: Option<usize>,
 }
 
 /// Represents the database configuration

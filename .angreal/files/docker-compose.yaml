@@ -54,6 +54,22 @@ services:
       timeout: 3s
       retries: 10
 
+  # I-0020 A2 chaos primitive: TCP proxy in front of the broker's WS port.
+  # The agent's WS_URL points here (REST stays direct to broker:3000), so the
+  # A2 chaos scenario can sever WS in isolation without affecting REST. In the
+  # default state (toxiproxy enabled, no toxics) it's a transparent passthrough
+  # — the A1 smoke test and the rest of the e2e suite are unaffected.
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy:2.9.0
+    command: ["-host", "0.0.0.0", "-config", "/etc/toxiproxy/config.json"]
+    ports:
+      - "8474:8474"  # admin API (host-reachable for chaos scenarios)
+    volumes:
+      - ./toxiproxy.json:/etc/toxiproxy/config.json:ro
+    depends_on:
+      broker:
+        condition: service_healthy
+
   # Initialize: create agent via broker CLI and extract PAK
   init-agent:
     image: curlimages/curl:latest
@@ -233,10 +249,15 @@ services:
         condition: service_completed_successfully
       install-shipwright:
         condition: service_completed_successfully
+      toxiproxy:
+        condition: service_started
     volumes:
       - brokkr-keys:/tmp/brokkr-keys:ro
     environment:
       - BROKKR__AGENT__BROKER_URL=http://broker:3000
+      # WS routed through the toxiproxy sidecar so the I-0020 A2 chaos
+      # scenario can sever WS in isolation. REST stays direct to broker:3000.
+      - BROKKR__AGENT__WS_URL=ws://toxiproxy:8666/internal/ws/agent
       - BROKKR__AGENT__AGENT_NAME=brokkr-integration-test-agent
       - BROKKR__AGENT__CLUSTER_NAME=brokkr-dev-integration-cluster
       - BROKKR__AGENT__KUBECONFIG_PATH=/tmp/brokkr-keys/kubeconfig.docker.yaml

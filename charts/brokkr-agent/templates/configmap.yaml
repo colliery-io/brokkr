@@ -9,6 +9,11 @@ data:
   BROKKR__AGENT__AGENT_NAME: {{ .Values.broker.agentName | quote }}
   BROKKR__AGENT__CLUSTER_NAME: {{ .Values.broker.clusterName | quote }}
   BROKKR__AGENT__POLLING_INTERVAL: {{ .Values.agent.pollingInterval | quote }}
+  {{- if .Values.agent.wsUrl }}
+  # Only set when WS must traverse a different ingress than REST; otherwise the
+  # agent derives the WS URL from BROKKR__AGENT__BROKER_URL. See ADR-0008.
+  BROKKR__AGENT__WS_URL: {{ .Values.agent.wsUrl | quote }}
+  {{- end }}
   BROKKR__AGENT__PAK: {{ .Values.broker.pak | quote }}
   BROKKR__AGENT__DEPLOYMENT_HEALTH_ENABLED: {{ .Values.agent.deploymentHealth.enabled | quote }}
   BROKKR__AGENT__DEPLOYMENT_HEALTH_INTERVAL: {{ .Values.agent.deploymentHealth.intervalSeconds | quote }}

@@ -1,0 +1,22 @@
+# Empty [workspace] table makes this a standalone crate, excluded from the
+# parent workspace (which globs crates/*). It builds with its own lockfile.
+[workspace]
+
+[package]
+name = "ws-loadtest"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+# Standalone, intentionally NOT a workspace member (workspace = "crates/*").
+# This is a one-off operational baseline tool (BROKKR-T-0177); keeping it out
+# of the workspace means it never slows the normal build/test cycle. Run it
+# by hand against an `angreal local up` stack. See README.md.
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+tokio-tungstenite = "0.24"
+futures-util = "0.3"
+reqwest = { version = "0.11", features = ["json"] }
+serde_json = "1"
+chrono = "0.4"

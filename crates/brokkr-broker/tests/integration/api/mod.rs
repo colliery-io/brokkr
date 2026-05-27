@@ -17,3 +17,4 @@ mod stacks;
 mod templates;
 mod webhooks;
 mod work_orders;
+mod ws;

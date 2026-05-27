@@ -11,12 +11,14 @@ use crate::metrics;
 use crate::utils::audit;
 use crate::utils::matching::template_matches_stack;
 use crate::utils::templating;
+use crate::ws::{push_stack_changed_to_targets, ConnectionRegistry};
 use axum::{
     extract::{Extension, Path, State},
     http::StatusCode,
     routing::{delete, get, post},
     Json, Router,
 };
+use std::sync::Arc;
 use brokkr_models::models::audit_logs::{
     ACTION_STACK_CREATED, ACTION_STACK_DELETED, ACTION_STACK_UPDATED, ACTOR_TYPE_ADMIN,
     RESOURCE_TYPE_STACK,
@@ -54,6 +56,10 @@ pub fn routes() -> Router<DAL> {
             get(list_annotations).post(add_annotation),
         )
         .route("/stacks/:id/annotations/:key", delete(remove_annotation))
+        // WS-10: short-lived telemetry history (BROKKR-I-0019). Bounded by
+        // the 6h retention ceiling (project_log_retention_stance).
+        .route("/stacks/:id/events", get(list_telemetry_events))
+        .route("/stacks/:id/logs", get(list_telemetry_logs))
 }
 
 /// Fetch a stack or return 404; also enforces admin-or-generator-owner access.
@@ -348,16 +354,23 @@ pub struct CreateDeploymentObjectRequest {
 pub async fn create_deployment_object(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
+    Extension(ws_registry): Extension<Arc<ConnectionRegistry>>,
     Path(stack_id): Path<Uuid>,
     Json(req): Json<CreateDeploymentObjectRequest>,
 ) -> Result<(StatusCode, Json<DeploymentObject>), ApiError> {
-    fetch_owned_stack(&dal, &auth_payload, stack_id).await?;
+    let stack = fetch_owned_stack(&dal, &auth_payload, stack_id).await?;
     let new_object = NewDeploymentObject::new(stack_id, req.yaml_content, req.is_deletion_marker)
         .map_err(|e| ApiError::bad_request("invalid_deployment_object", e))?;
     let object = dal
         .deployment_objects()
         .create(&new_object)
         .map_err(|_| ApiError::internal("failed to create deployment object"))?;
+
+    // Post-commit: notify every connected agent that targets this stack so
+    // they can reconcile the new deployment object immediately rather than
+    // waiting for the next REST polling tick.
+    push_stack_changed_to_targets(&ws_registry, &dal, &stack);
+
     Ok((StatusCode::CREATED, Json(object)))
 }
 
@@ -738,4 +751,162 @@ async fn instantiate_template(
         template.id, deployment_object.id, stack_id, stack.generator_id
     );
     Ok((StatusCode::CREATED, Json(deployment_object)))
+}
+
+// =============================================================================
+// WS-10: telemetry history endpoints
+//
+// Short-lived operational buffer with a hard 6h retention ceiling. The
+// retention metadata is included in every response so callers — including
+// the UI and the generated SDKs — render the right "this is not your
+// long-term log store" UX (NFR-007). See project_log_retention_stance.
+// =============================================================================
+
+use brokkr_models::models::agent_k8s_events::AgentK8sEvent;
+use brokkr_models::models::agent_pod_logs::AgentPodLog;
+use crate::ws::HARD_RETENTION_CEILING;
+
+/// Default page size for the telemetry history endpoints.
+const TELEMETRY_DEFAULT_LIMIT: i64 = 500;
+/// Maximum page size — protect the broker from "give me everything" callers.
+const TELEMETRY_MAX_LIMIT: i64 = 5000;
+
+#[derive(Debug, serde::Deserialize, utoipa::IntoParams)]
+pub struct TelemetryHistoryQuery {
+    /// Earliest `created_at` to include (ISO-8601). Defaults to
+    /// `now - retention_ceiling_seconds`. Values older than the ceiling
+    /// are silently clamped: only the retained window can be returned.
+    #[serde(default)]
+    pub since: Option<chrono::DateTime<chrono::Utc>>,
+    /// Maximum rows to return. Defaults to 500; capped at 5000.
+    #[serde(default)]
+    pub limit: Option<i64>,
+}
+
+#[derive(Debug, serde::Serialize, utoipa::ToSchema)]
+pub struct RetentionInfo {
+    /// Hard upper bound on retention. Never exceeds 21600 (6h).
+    pub retention_ceiling_seconds: u64,
+    /// Effective retention window for the stack. <= ceiling.
+    pub effective_retention_seconds: u64,
+    /// Server-side timestamp of the oldest row currently retained for
+    /// this stack, or null when no rows exist in the window.
+    pub oldest_available_ts: Option<chrono::DateTime<chrono::Utc>>,
+    /// Recommended sink for long-term centralisation. Brokkr is NOT a
+    /// log warehouse — see project_log_retention_stance.
+    pub long_term_sink_hint: &'static str,
+}
+
+#[derive(Debug, serde::Serialize, utoipa::ToSchema)]
+pub struct K8sEventHistoryResponse {
+    pub retention: RetentionInfo,
+    pub events: Vec<AgentK8sEvent>,
+}
+
+#[derive(Debug, serde::Serialize, utoipa::ToSchema)]
+pub struct PodLogHistoryResponse {
+    pub retention: RetentionInfo,
+    pub lines: Vec<AgentPodLog>,
+}
+
+fn retention_info(
+    oldest: Option<chrono::DateTime<chrono::Utc>>,
+) -> RetentionInfo {
+    RetentionInfo {
+        retention_ceiling_seconds: HARD_RETENTION_CEILING.as_secs(),
+        effective_retention_seconds: HARD_RETENTION_CEILING.as_secs(),
+        oldest_available_ts: oldest,
+        long_term_sink_hint: "Brokkr retains telemetry for at most 6 hours. \
+                              For long-term log centralisation, ship to Datadog or equivalent.",
+    }
+}
+
+fn clamp_since(since: Option<chrono::DateTime<chrono::Utc>>) -> chrono::DateTime<chrono::Utc> {
+    let ceiling_ago = chrono::Utc::now()
+        - chrono::Duration::from_std(HARD_RETENTION_CEILING).unwrap_or_default();
+    match since {
+        Some(s) if s > ceiling_ago => s,
+        _ => ceiling_ago,
+    }
+}
+
+fn clamp_limit(limit: Option<i64>) -> i64 {
+    let l = limit.unwrap_or(TELEMETRY_DEFAULT_LIMIT);
+    l.clamp(1, TELEMETRY_MAX_LIMIT)
+}
+
+#[utoipa::path(
+    get,
+    path = "/stacks/{id}/events",
+    tag = "stack-telemetry",
+    params(
+        ("id" = Uuid, Path, description = "Stack ID"),
+        TelemetryHistoryQuery,
+    ),
+    responses(
+        (status = 200, description = "Retained kube events for this stack", body = K8sEventHistoryResponse),
+        (status = 403, description = "Forbidden", body = ErrorResponse),
+        (status = 404, description = "Stack not found", body = ErrorResponse),
+    ),
+    security(("admin_pak" = []), ("generator_pak" = []))
+)]
+pub async fn list_telemetry_events(
+    State(dal): State<DAL>,
+    Extension(auth): Extension<AuthPayload>,
+    Path(stack_id): Path<Uuid>,
+    axum::extract::Query(q): axum::extract::Query<TelemetryHistoryQuery>,
+) -> Result<Json<K8sEventHistoryResponse>, ApiError> {
+    fetch_owned_stack(&dal, &auth, stack_id).await?;
+    let since = clamp_since(q.since);
+    let limit = clamp_limit(q.limit);
+    let events = dal
+        .agent_k8s_events()
+        .list_for_stack(stack_id, since, limit)
+        .map_err(|e| {
+            error!("failed to list k8s events for stack {}: {:?}", stack_id, e);
+            ApiError::internal("failed to list telemetry events")
+        })?;
+    let oldest = events.last().map(|e| e.created_at);
+    Ok(Json(K8sEventHistoryResponse {
+        retention: retention_info(oldest),
+        events,
+    }))
+}
+
+#[utoipa::path(
+    get,
+    path = "/stacks/{id}/logs",
+    tag = "stack-telemetry",
+    params(
+        ("id" = Uuid, Path, description = "Stack ID"),
+        TelemetryHistoryQuery,
+    ),
+    responses(
+        (status = 200, description = "Retained pod log lines for this stack", body = PodLogHistoryResponse),
+        (status = 403, description = "Forbidden", body = ErrorResponse),
+        (status = 404, description = "Stack not found", body = ErrorResponse),
+    ),
+    security(("admin_pak" = []), ("generator_pak" = []))
+)]
+pub async fn list_telemetry_logs(
+    State(dal): State<DAL>,
+    Extension(auth): Extension<AuthPayload>,
+    Path(stack_id): Path<Uuid>,
+    axum::extract::Query(q): axum::extract::Query<TelemetryHistoryQuery>,
+) -> Result<Json<PodLogHistoryResponse>, ApiError> {
+    fetch_owned_stack(&dal, &auth, stack_id).await?;
+    let since = clamp_since(q.since);
+    let limit = clamp_limit(q.limit);
+    let lines = dal
+        .agent_pod_logs()
+        .list_for_stack(stack_id, since, limit)
+        .map_err(|e| {
+            error!("failed to list pod logs for stack {}: {:?}", stack_id, e);
+            ApiError::internal("failed to list telemetry logs")
+        })?;
+    let oldest = lines.last().map(|l| l.created_at);
+    Ok(Json(PodLogHistoryResponse {
+        retention: retention_info(oldest),
+        lines,
+    }))
 }

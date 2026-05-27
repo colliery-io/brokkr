@@ -240,6 +240,7 @@ checksum = "edca88bc138befd0323b20752846e6587272d3b03b0343c8ea28a6f819e6e71f"
 dependencies = [
  "async-trait",
  "axum-core",
+ "base64 0.22.1",
  "bytes",
  "futures-util",
  "http 1.4.0",
@@ -258,8 +259,10 @@ dependencies = [
  "serde_json",
  "serde_path_to_error",
  "serde_urlencoded",
+ "sha1",
  "sync_wrapper 1.0.2",
  "tokio",
+ "tokio-tungstenite",
  "tower 0.5.2",
  "tower-layer",
  "tower-service",
@@ -372,7 +375,7 @@ dependencies = [
 
 [[package]]
 name = "brokkr-agent"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "aquamarine",
  "axum",
@@ -381,19 +384,25 @@ dependencies = [
  "brokkr-client",
  "brokkr-models",
  "brokkr-utils",
+ "brokkr-wire",
  "chrono",
  "clap",
+ "futures",
  "k8s-openapi",
  "kube",
+ "lru",
  "once_cell",
  "opentelemetry",
  "prometheus",
+ "rand",
  "reqwest 0.11.27",
  "serde",
  "serde_json",
  "serde_yaml",
  "serial_test",
  "tokio",
+ "tokio-tungstenite",
+ "tokio-util",
  "tower 0.5.2",
  "tracing",
  "uuid",
@@ -401,12 +410,13 @@ dependencies = [
 
 [[package]]
 name = "brokkr-broker"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "aes-gcm",
  "axum",
  "brokkr-models",
  "brokkr-utils",
+ "brokkr-wire",
  "chrono",
  "clap",
  "diesel",
@@ -435,6 +445,7 @@ dependencies = [
  "sha2",
  "tera",
  "tokio",
+ "tokio-tungstenite",
  "tower 0.5.2",
  "tower-http 0.5.2",
  "tracing",
@@ -446,7 +457,7 @@ dependencies = [
 
 [[package]]
 name = "brokkr-client"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "bytes",
  "chrono",
@@ -462,7 +473,7 @@ dependencies = [
 
 [[package]]
 name = "brokkr-models"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "brokkr-utils",
  "chrono",
@@ -481,7 +492,7 @@ dependencies = [
 
 [[package]]
 name = "brokkr-utils"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "chrono",
  "config",
@@ -499,6 +510,17 @@ dependencies = [
  "tracing",
  "tracing-opentelemetry",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "brokkr-wire"
+version = "0.5.0"
+dependencies = [
+ "brokkr-models",
+ "chrono",
+ "serde",
+ "serde_json",
+ "uuid",
 ]
 
 [[package]]
@@ -817,6 +839,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "data-encoding"
+version = "2.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a4ae5f15dda3c708c0ade84bfee31ccab44a3da4f88015ed22f63732abe300c8"
+
+[[package]]
 name = "deranged"
 version = "0.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1058,6 +1086,12 @@ name = "fnv"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
+
+[[package]]
+name = "foldhash"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d9c4f5dac5e15c24eb999c26181a6ca40b39fe946cbe4c263c7209467bc83af2"
 
 [[package]]
 name = "foldhash"
@@ -1336,13 +1370,24 @@ dependencies = [
 
 [[package]]
 name = "hashbrown"
+version = "0.15.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9229cfe53dfd69f0609a49f65461bd93001ea1ef889cd5529dd176593f5338a1"
+dependencies = [
+ "allocator-api2",
+ "equivalent",
+ "foldhash 0.1.5",
+]
+
+[[package]]
+name = "hashbrown"
 version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "841d1cc9bed7f9236f321df977030373f4a4163ae1a7dbfe1a51a2c1a51d9100"
 dependencies = [
  "allocator-api2",
  "equivalent",
- "foldhash",
+ "foldhash 0.2.0",
 ]
 
 [[package]]
@@ -2077,6 +2122,15 @@ name = "log"
 version = "0.4.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e5032e24019045c762d3c0f28f5b6b8bbf38563a65908389bf7978758920897"
+
+[[package]]
+name = "lru"
+version = "0.12.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "234cf4f4a04dc1f57e24b96cc0cd600cf2af460d4161ac5ecdd0af8e1f3b2a38"
+dependencies = [
+ "hashbrown 0.15.5",
+]
 
 [[package]]
 name = "matchers"
@@ -4047,6 +4101,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "tokio-tungstenite"
+version = "0.24.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "edc5f74e248dc973e0dbb7b74c7e0d6fcc301c694ff50049504004ef4d0cdcd9"
+dependencies = [
+ "futures-util",
+ "log",
+ "tokio",
+ "tungstenite",
+]
+
+[[package]]
 name = "tokio-util"
 version = "0.7.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4054,6 +4120,7 @@ checksum = "61e7c3654c13bcd040d4a03abee2c75b1d14a37b423cf5a813ceae1cc903ec6a"
 dependencies = [
  "bytes",
  "futures-core",
+ "futures-io",
  "futures-sink",
  "pin-project-lite",
  "slab",
@@ -4319,6 +4386,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
+name = "tungstenite"
+version = "0.24.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "18e5b8366ee7a95b16d32197d0b2604b43a0be89dc5fac9f8e96ccafbaedda8a"
+dependencies = [
+ "byteorder",
+ "bytes",
+ "data-encoding",
+ "http 1.4.0",
+ "httparse",
+ "log",
+ "rand",
+ "sha1",
+ "thiserror 1.0.64",
+ "utf-8",
+]
+
+[[package]]
 name = "typenum"
 version = "1.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4448,6 +4533,12 @@ dependencies = [
  "idna",
  "percent-encoding",
 ]
+
+[[package]]
+name = "utf-8"
+version = "0.7.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09cc8ee72d2a9becf2f2febe0205bbed8fc6615b7cb429ad062dc7b7ddd036a9"
 
 [[package]]
 name = "utf8parse"

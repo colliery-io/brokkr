@@ -1,6 +1,6 @@
 [package]
 name = "brokkr-agent"
-version = "0.4.2"
+version = "0.5.0"
 edition = "2021"
 
 [lib]
@@ -17,6 +17,7 @@ brokkr-broker = { path = "../brokkr-broker" }
 brokkr-client = { path = "../brokkr-client" }
 brokkr-models = { path = "../brokkr-models" }
 brokkr-utils = { path = "../brokkr-utils" }
+brokkr-wire = { path = "../brokkr-wire" }
 
 # External dependencies
 aquamarine = { workspace = true }
@@ -26,12 +27,17 @@ chrono = { workspace = true }
 clap = { workspace = true }
 k8s-openapi = { version = "0.23.0", features = ["latest"] }
 kube = { version = "0.95.0", features = ["client"] }
+lru = "0.12"
 prometheus = { workspace = true }
 reqwest = { version = "0.11", features = ["json"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
 tokio = { workspace = true }
+tokio-tungstenite = "0.24"
+tokio-util = { version = "0.7", features = ["compat"] }
+futures = "0.3"
+rand = { workspace = true }
 uuid = { workspace = true }
 
 # OpenTelemetry dependencies
@@ -43,3 +49,5 @@ once_cell = { workspace = true }
 serial_test = "3.2.0"
 tokio = { workspace = true }
 tower = { workspace = true }
+# In-test broker WS server for broker_ws integration tests (WS-03).
+axum = { workspace = true, features = ["ws"] }

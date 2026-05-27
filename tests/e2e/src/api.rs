@@ -90,6 +90,13 @@ impl Client {
         self.request(reqwest::Method::GET, path, None).await
     }
 
+    /// Public GET that returns a raw `serde_json::Value`. Used by scenarios
+    /// (e.g. A3 telemetry) that poll an endpoint whose typed wrapper would
+    /// add a one-off `pub async fn` for a single caller.
+    pub async fn get_json(&self, path: &str) -> Result<Value> {
+        self.request(reqwest::Method::GET, path, None).await
+    }
+
     async fn post<T: DeserializeOwned>(&self, path: &str, body: Value) -> Result<T> {
         self.request(reqwest::Method::POST, path, Some(body)).await
     }
@@ -522,6 +529,77 @@ impl Client {
         }
 
         Ok(text)
+    }
+
+    /// Parse a single Prometheus metric value from the broker's `/metrics`
+    /// output. Matches by metric name plus an optional `key=value` label
+    /// filter (all filters must match). Returns 0.0 if the series is absent —
+    /// counters/gauges are only emitted once they've been touched.
+    ///
+    /// This is deliberately a tiny ad-hoc parser, not a dep on prometheus-parse:
+    /// the only callers are smoke/chaos scenarios checking a handful of WS
+    /// metrics, and adding a parser crate to this isolated e2e binary is
+    /// overkill.
+    pub async fn metric_value(&self, name: &str, labels: &[(&str, &str)]) -> Result<f64> {
+        let text = self.get_metrics().await?;
+        for line in text.lines() {
+            if line.starts_with('#') || line.is_empty() {
+                continue;
+            }
+            // Lines look like: `metric_name{k1="v1",k2="v2"} 3` or `metric_name 3`.
+            let Some(space_idx) = line.rfind(' ') else { continue };
+            let (lhs, rhs) = line.split_at(space_idx);
+            let value_str = rhs.trim();
+            let (metric_name, label_part) = match lhs.find('{') {
+                Some(i) => (&lhs[..i], &lhs[i..]),
+                None => (lhs, ""),
+            };
+            if metric_name != name {
+                continue;
+            }
+            if labels.iter().all(|(k, v)| {
+                let needle = format!("{}=\"{}\"", k, v);
+                label_part.contains(&needle)
+            }) {
+                return value_str.parse::<f64>().map_err(|e| e.into());
+            }
+        }
+        Ok(0.0)
+    }
+
+    /// Poll `metric_value` until `predicate` is true or `timeout_secs` elapses.
+    /// Used by smoke/chaos scenarios that need to wait on gauges crossing a
+    /// threshold without rolling a fresh sleep loop each time.
+    pub async fn wait_for_metric<F>(
+        &self,
+        name: &str,
+        labels: &[(&str, &str)],
+        timeout_secs: u64,
+        predicate: F,
+    ) -> Result<f64>
+    where
+        F: Fn(f64) -> bool,
+    {
+        let start = std::time::Instant::now();
+        loop {
+            // Tolerate transient `/metrics` failures (e.g. broker just restarted)
+            // by treating fetch errors as "value not ready yet" and polling on.
+            let observed = match self.metric_value(name, labels).await {
+                Ok(v) => v,
+                Err(_) => f64::NAN,
+            };
+            if observed.is_finite() && predicate(observed) {
+                return Ok(observed);
+            }
+            if start.elapsed() > Duration::from_secs(timeout_secs) {
+                return Err(format!(
+                    "metric {}{:?} did not satisfy predicate within {}s (last: {})",
+                    name, labels, timeout_secs, observed
+                )
+                .into());
+            }
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
     }
 
     /// Fetch health check endpoint

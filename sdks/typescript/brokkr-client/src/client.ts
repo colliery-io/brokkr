@@ -16,9 +16,20 @@
 
 import {
   type BrokkrApi,
+  type K8sEventHistoryResponse,
+  type PodLogHistoryResponse,
+  type WsConnectionsResponse,
   createBrokkrClient,
 } from "./index.js";
 import { BrokkrError } from "./error.js";
+
+export interface TelemetryHistoryQuery {
+  /** Earliest `created_at` to include (ISO-8601). Clamped server-side
+   * to the 6h retention ceiling. */
+  since?: string;
+  /** Maximum rows to return. Server default 500, capped at 5000. */
+  limit?: number;
+}
 
 export interface BrokkrClientOptions {
   baseUrl: string;
@@ -50,8 +61,10 @@ export class BrokkrClient {
   readonly api: BrokkrApi;
   readonly maxRetries: number;
   readonly initialBackoffMs: number;
+  readonly baseUrl: string;
 
   constructor(options: BrokkrClientOptions) {
+    this.baseUrl = options.baseUrl;
     const maxRetries = options.maxRetries ?? DEFAULTS.maxRetries;
     const initialBackoffMs =
       options.initialBackoffMs ?? DEFAULTS.initialBackoffMs;
@@ -86,6 +99,72 @@ export class BrokkrClient {
     });
     this.maxRetries = maxRetries;
     this.initialBackoffMs = initialBackoffMs;
+  }
+
+  // -------------------------------------------------------------------
+  // Ergonomic methods for the internal-WS-channel surface
+  // (BROKKR-I-0019). These wrap the openapi-fetch builders for the
+  // most-common calls. The retention metadata in the responses is
+  // part of the typed return — surface it in any UI that consumes
+  // this SDK per ADR-0008 / project_log_retention_stance.
+  // -------------------------------------------------------------------
+
+  /** Paginated kube-event history for a stack (6h window). */
+  async listTelemetryEvents(
+    stackId: string,
+    query: TelemetryHistoryQuery = {},
+  ): Promise<K8sEventHistoryResponse> {
+    return this.retry<K8sEventHistoryResponse>((api) =>
+      api.GET("/stacks/{id}/events", {
+        params: { path: { id: stackId }, query },
+      }),
+    );
+  }
+
+  /** Paginated pod-log history for a stack (6h window). */
+  async listTelemetryLogs(
+    stackId: string,
+    query: TelemetryHistoryQuery = {},
+  ): Promise<PodLogHistoryResponse> {
+    return this.retry<PodLogHistoryResponse>((api) =>
+      api.GET("/stacks/{id}/logs", {
+        params: { path: { id: stackId }, query },
+      }),
+    );
+  }
+
+  /** Admin-only snapshot of currently-connected agents on the
+   * internal WS channel. For continuous monitoring prefer scraping
+   * the `brokkr_ws_connected_agents` Prometheus gauge. */
+  async listWsConnections(): Promise<WsConnectionsResponse> {
+    return this.retry<WsConnectionsResponse>((api) =>
+      api.GET("/admin/ws/connections", {}),
+    );
+  }
+
+  /**
+   * Open a live WebSocket subscription to a stack's event + log tail.
+   * The URL is computed from the configured `baseUrl` (http→ws,
+   * https→wss). The caller is responsible for providing a
+   * `WebSocket` constructor compatible with their runtime (browser:
+   * `globalThis.WebSocket`; node: `ws` package).
+   *
+   * Frames are `WsMessage` JSON-encoded text — see the broker docs
+   * for the wire schema. Lagged subscribers receive a
+   * `log_gap` frame so the UI can render a visible gap.
+   */
+  liveSubscriptionUrl(stackId: string): string {
+    // The broker mounts the live subscription at /api/v1/stacks/{id}/live,
+    // even though the OpenAPI schema strips that prefix from operation
+    // paths. baseUrl conventionally includes /api/v1 (matching how
+    // BrokkrClient is constructed everywhere else), so strip it once
+    // before re-appending the canonical full path.
+    const trimmed = this.baseUrl.replace(/\/+$/, "");
+    const root = trimmed.endsWith("/api/v1")
+      ? trimmed.slice(0, -"/api/v1".length)
+      : trimmed;
+    const wsRoot = root.replace(/^http:/, "ws:").replace(/^https:/, "wss:");
+    return `${wsRoot}/api/v1/stacks/${stackId}/live`;
   }
 
   /**

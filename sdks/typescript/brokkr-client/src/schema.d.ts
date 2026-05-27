@@ -81,6 +81,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/ws/connections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_ws_connections"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/agent-events": {
         parameters: {
             query?: never;
@@ -663,6 +679,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/stacks/{id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_telemetry_events"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/stacks/{id}/health": {
         parameters: {
             query?: never;
@@ -711,6 +743,22 @@ export interface paths {
         put?: never;
         post?: never;
         delete: operations["stacks_remove_label"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stacks/{id}/logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_telemetry_logs"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1146,6 +1194,23 @@ export interface components {
              */
             updated_at: string;
         };
+        AgentK8sEvent: {
+            /** Format: uuid */
+            agent_id: string;
+            /** Format: date-time */
+            created_at: string;
+            event_type: string;
+            /** Format: uuid */
+            id: string;
+            involved_object: unknown;
+            message: string;
+            /** Format: date-time */
+            observed_at: string;
+            reason: string;
+            source?: string | null;
+            /** Format: uuid */
+            stack_id: string;
+        };
         /** @description Represents an agent label in the database. */
         AgentLabel: {
             /**
@@ -1160,6 +1225,22 @@ export interface components {
             id: string;
             /** @description The label text (max 64 characters, no whitespace). */
             label: string;
+        };
+        AgentPodLog: {
+            /** Format: uuid */
+            agent_id: string;
+            container: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: uuid */
+            id: string;
+            line: string;
+            namespace: string;
+            pod: string;
+            /** Format: uuid */
+            stack_id: string;
+            /** Format: date-time */
+            ts: string;
         };
         /** @description Represents an agent target in the database. */
         AgentTarget: {
@@ -1661,6 +1742,10 @@ export interface components {
             /** @description Optional detailed resource status. */
             resources?: components["schemas"]["ResourceHealth"][] | null;
         };
+        K8sEventHistoryResponse: {
+            events: components["schemas"]["AgentK8sEvent"][];
+            retention: components["schemas"]["RetentionInfo"];
+        };
         ListDeliveriesQuery: {
             /** Format: int64 */
             limit?: number | null;
@@ -1845,6 +1930,10 @@ export interface components {
             timeout_seconds: number;
             url: string;
         };
+        PodLogHistoryResponse: {
+            lines: components["schemas"]["AgentPodLog"][];
+            retention: components["schemas"]["RetentionInfo"];
+        };
         /** @description Health status for an individual Kubernetes resource. */
         ResourceHealth: {
             /** @description Resource kind (e.g., Deployment, StatefulSet). */
@@ -1857,6 +1946,29 @@ export interface components {
             namespace: string;
             /** @description Whether the resource is ready. */
             ready: boolean;
+        };
+        RetentionInfo: {
+            /**
+             * Format: int64
+             * @description Effective retention window for the stack. <= ceiling.
+             */
+            effective_retention_seconds: number;
+            /**
+             * @description Recommended sink for long-term centralisation. Brokkr is NOT a
+             *     log warehouse — see project_log_retention_stance.
+             */
+            long_term_sink_hint: string;
+            /**
+             * Format: date-time
+             * @description Server-side timestamp of the oldest row currently retained for
+             *     this stack, or null when no rows exist in the window.
+             */
+            oldest_available_ts?: string | null;
+            /**
+             * Format: int64
+             * @description Hard upper bound on retention. Never exceeds 21600 (6h).
+             */
+            retention_ceiling_seconds: number;
         };
         /** @description Represents a stack in the database. */
         Stack: {
@@ -2388,6 +2500,22 @@ export interface components {
             } | null;
             labels?: string[] | null;
         };
+        WsConnectionInfo: {
+            /** Format: uuid */
+            agent_id: string;
+            /** Format: date-time */
+            connected_since: string;
+            /** Format: int64 */
+            messages_in: number;
+            /** Format: int64 */
+            messages_out: number;
+        };
+        WsConnectionsResponse: {
+            connected_agents: number;
+            connections: components["schemas"]["WsConnectionInfo"][];
+            /** @description Aggregated live-subscriber count across all stacks (WS-11). */
+            live_subscribers: number;
+        };
     };
     responses: never;
     parameters: never;
@@ -2516,6 +2644,35 @@ export interface operations {
             };
             /** @description Failed to reload configuration */
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_ws_connections: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current WS connections snapshot */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WsConnectionsResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4924,6 +5081,56 @@ export interface operations {
             };
         };
     };
+    list_telemetry_events: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Earliest `created_at` to include (ISO-8601). Defaults to
+                 *     `now - retention_ceiling_seconds`. Values older than the ceiling
+                 *     are silently clamped: only the retained window can be returned.
+                 */
+                since?: string | null;
+                /** @description Maximum rows to return. Defaults to 500; capped at 5000. */
+                limit?: number | null;
+            };
+            header?: never;
+            path: {
+                /** @description Stack ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Retained kube events for this stack */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["K8sEventHistoryResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Stack not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     get_stack_health: {
         parameters: {
             query?: never;
@@ -5120,6 +5327,56 @@ export interface operations {
             };
             /** @description Internal server error */
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_telemetry_logs: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Earliest `created_at` to include (ISO-8601). Defaults to
+                 *     `now - retention_ceiling_seconds`. Values older than the ceiling
+                 *     are silently clamped: only the retained window can be returned.
+                 */
+                since?: string | null;
+                /** @description Maximum rows to return. Defaults to 500; capped at 5000. */
+                limit?: number | null;
+            };
+            header?: never;
+            path: {
+                /** @description Stack ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Retained pod log lines for this stack */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PodLogHistoryResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Stack not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

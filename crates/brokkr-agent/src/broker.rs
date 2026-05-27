@@ -21,19 +21,53 @@
 use std::time::{Duration, Instant};
 
 use brokkr_client::{BrokkrClient, BrokkrError};
-use brokkr_models::models::agent_events::NewAgentEvent;
+use brokkr_models::models::agent_events::{AgentEvent, NewAgentEvent};
 use brokkr_models::models::agents::Agent;
+use brokkr_models::models::deployment_health::DeploymentHealth;
 use brokkr_models::models::deployment_objects::DeploymentObject;
 use brokkr_utils::Settings;
+use brokkr_wire::{Heartbeat, WsMessage};
+use chrono::Utc;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use tokio::time::sleep;
 use tracing::{debug, error, info, instrument, trace, warn};
 use uuid::Uuid;
 
+use crate::broker_ws::WsUplink;
 use crate::deployment_health::{DeploymentObjectHealthUpdate, HealthStatusUpdate};
 use crate::diagnostics::{DiagnosticRequest, SubmitDiagnosticResult};
 use crate::metrics;
+
+/// Try to send an event over the WS uplink. Returns true when the WS path
+/// was used (and thus the REST call should be skipped). Returns false when
+/// the caller should fall through to REST — either because no uplink was
+/// passed, WS is not up, or the outbound lane is full.
+fn try_ws_send(uplink: Option<&WsUplink>, build: impl FnOnce() -> WsMessage) -> bool {
+    let Some(u) = uplink else { return false };
+    if !u.is_up() {
+        return false;
+    }
+    u.try_send(build()).is_ok()
+}
+
+/// Build the wire-side `AgentEvent` body from the to-be-inserted shape.
+/// `id` / `created_at` / `updated_at` / `deleted_at` are set by the
+/// broker on insert; we send placeholders.
+fn synth_agent_event(new_event: &NewAgentEvent) -> WsMessage {
+    let now = Utc::now();
+    WsMessage::AgentEvent(AgentEvent {
+        id: Uuid::nil(),
+        created_at: now,
+        updated_at: now,
+        deleted_at: None,
+        agent_id: new_event.agent_id,
+        deployment_object_id: new_event.deployment_object_id,
+        event_type: new_event.event_type.clone(),
+        status: new_event.status.clone(),
+        message: new_event.message.clone(),
+    })
+}
 
 /// HTTP status helper. The agent and `brokkr-client` link different reqwest
 /// majors (0.11 vs 0.13), so we never compare `StatusCode` values directly —
@@ -231,6 +265,7 @@ pub async fn send_success_event(
     agent: &Agent,
     deployment_object_id: Uuid,
     message: Option<String>,
+    ws_uplink: Option<&WsUplink>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     debug!(
         "Sending success event for deployment {} for agent {}",
@@ -244,6 +279,18 @@ pub async fn send_success_event(
         status: "SUCCESS".to_string(),
         message,
     };
+
+    // Prefer WS when the channel is up. Broker's reader_task dispatches
+    // the same DAL write the REST handler would do (see WS-05 in
+    // BROKKR-A-0008).
+    if try_ws_send(ws_uplink, || synth_agent_event(&event)) {
+        debug!(
+            "Sent success event for deployment {} via WS",
+            deployment_object_id
+        );
+        return Ok(());
+    }
+
     let sdk_event: brokkr_client::types::NewAgentEvent = convert(event).map_err(|e| {
         error!("Failed to convert NewAgentEvent: {}", e);
         Box::new(e) as Box<dyn std::error::Error>
@@ -279,6 +326,7 @@ pub async fn send_failure_event(
     agent: &Agent,
     deployment_object_id: Uuid,
     error_message: String,
+    ws_uplink: Option<&WsUplink>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     debug!(
         "Sending failure event for deployment {} for agent {}",
@@ -292,6 +340,15 @@ pub async fn send_failure_event(
         status: "FAILURE".to_string(),
         message: Some(error_message),
     };
+
+    if try_ws_send(ws_uplink, || synth_agent_event(&event)) {
+        debug!(
+            "Sent failure event for deployment {} via WS",
+            deployment_object_id
+        );
+        return Ok(());
+    }
+
     let sdk_event: brokkr_client::types::NewAgentEvent = convert(event).map_err(|e| {
         error!("Failed to convert NewAgentEvent: {}", e);
         Box::new(e) as Box<dyn std::error::Error>
@@ -328,7 +385,25 @@ pub async fn send_heartbeat(
     _config: &Settings,
     client: &BrokkrClient,
     agent: &Agent,
+    ws_uplink: Option<&WsUplink>,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    if try_ws_send(ws_uplink, || {
+        WsMessage::Heartbeat(Heartbeat {
+            agent_id: agent.id,
+            sent_at: Utc::now(),
+        })
+    }) {
+        trace!("Heartbeat sent via WS for agent {}", agent.name);
+        metrics::heartbeat_sent_total().inc();
+        metrics::last_successful_poll_timestamp().set(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs_f64(),
+        );
+        return Ok(());
+    }
+
     match client.api().record_heartbeat().id(agent.id).send().await {
         Ok(_) => {
             trace!("Heartbeat sent successfully for agent {}", agent.name);
@@ -364,6 +439,7 @@ pub async fn send_health_status(
     client: &BrokkrClient,
     agent: &Agent,
     health_updates: Vec<DeploymentObjectHealthUpdate>,
+    ws_uplink: Option<&WsUplink>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     if health_updates.is_empty() {
         return Ok(());
@@ -374,6 +450,41 @@ pub async fn send_health_status(
         health_updates.len(),
         agent.name
     );
+
+    // Try WS first — one frame per deployment-object update. If the lane
+    // can absorb the whole batch we're done; otherwise fall through to
+    // the REST batch endpoint with the full set.
+    if let Some(uplink) = ws_uplink {
+        if uplink.is_up() {
+            let now = Utc::now();
+            let all_ok = health_updates.iter().all(|u| {
+                let summary_json = u
+                    .summary
+                    .as_ref()
+                    .and_then(|s| serde_json::to_string(s).ok());
+                let msg = WsMessage::AgentHealth(DeploymentHealth {
+                    id: Uuid::nil(), // server assigns
+                    agent_id: agent.id,
+                    deployment_object_id: u.id,
+                    status: u.status.to_string(),
+                    summary: summary_json,
+                    checked_at: u.checked_at,
+                    created_at: now,
+                    updated_at: now,
+                });
+                uplink.try_send(msg).is_ok()
+            });
+            if all_ok {
+                debug!(
+                    "Sent {} health updates via WS for agent {}",
+                    health_updates.len(),
+                    agent.name
+                );
+                return Ok(());
+            }
+            warn!("WS health-update lane back-pressured; falling back to REST batch");
+        }
+    }
 
     let update = HealthStatusUpdate {
         deployment_objects: health_updates,

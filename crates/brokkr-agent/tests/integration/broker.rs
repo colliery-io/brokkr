@@ -131,6 +131,7 @@ async fn test_successful_event_apply() {
         &fixture_guard.agent.as_ref().unwrap(),
         deployment_objects[0].id,
         None,
+        None,
     )
     .await;
 
@@ -188,6 +189,7 @@ async fn test_failure_event_apply() {
         &fixture_guard.agent.as_ref().unwrap(),
         deployment_objects[0].id,
         "Test failure".to_string(),
+        None,
     )
     .await;
 
@@ -221,6 +223,7 @@ async fn test_send_heartbeat() {
         &fixture_guard.agent_settings,
         &fixture_guard.sdk_client,
         &fixture_guard.agent.as_ref().unwrap(),
+        None,
     )
     .await;
 

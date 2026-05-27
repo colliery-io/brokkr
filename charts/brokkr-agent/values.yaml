@@ -70,6 +70,13 @@ broker:
 
 agent:
   pollingInterval: 30
+  # Optional override for the internal WebSocket upgrade URL. Leave null to
+  # derive it from broker.url (http→ws, https→wss, append /internal/ws/agent),
+  # which is correct for almost every deployment. Set it (e.g.
+  # "wss://ws.brokkr.example.com/internal/ws/agent") only when WS traffic must
+  # flow through a different ingress / load balancer than REST. See
+  # docs/explanation/internal-ws-channel "When to use ws_url".
+  wsUrl: null
   # Deployment health checking configuration
   deploymentHealth:
     # Enable deployment health checking
