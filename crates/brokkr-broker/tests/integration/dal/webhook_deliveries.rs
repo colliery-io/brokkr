@@ -6,7 +6,17 @@
 
 use crate::fixtures::TestFixture;
 use brokkr_models::models::webhooks::{BrokkrEvent, NewWebhookDelivery, NewWebhookSubscription};
+use serial_test::serial;
 use uuid::Uuid;
+
+// These tests share one database (TestFixture connects to a single DB) and the
+// webhook-delivery queue operations `claim_for_broker` / `claim_for_agent` /
+// `release_expired` act on the *global* pending/expired set, not just a single
+// subscription's rows. Run in parallel they race — one test's claim or
+// release sweep steals or releases another's rows (this flaked
+// `test_release_expired`'s `released >= 1` in CI). `#[serial(webhook_queue)]`
+// runs them one-at-a-time relative to each other while still parallelising
+// against the rest of the suite.
 
 fn create_test_subscription(name: &str) -> NewWebhookSubscription {
     NewWebhookSubscription {
@@ -53,6 +63,7 @@ fn create_test_event() -> BrokkrEvent {
 }
 
 #[test]
+#[serial(webhook_queue)]
 fn test_create_delivery() {
     let fixture = TestFixture::new();
 
@@ -83,6 +94,7 @@ fn test_create_delivery() {
 }
 
 #[test]
+#[serial(webhook_queue)]
 fn test_create_delivery_with_target_labels() {
     let fixture = TestFixture::new();
 
@@ -108,6 +120,7 @@ fn test_create_delivery_with_target_labels() {
 }
 
 #[test]
+#[serial(webhook_queue)]
 fn test_get_delivery() {
     let fixture = TestFixture::new();
 
@@ -134,6 +147,7 @@ fn test_get_delivery() {
 }
 
 #[test]
+#[serial(webhook_queue)]
 fn test_claim_for_broker() {
     let fixture = TestFixture::new();
 
@@ -167,6 +181,7 @@ fn test_claim_for_broker() {
 }
 
 #[test]
+#[serial(webhook_queue)]
 fn test_claim_for_agent_with_matching_labels() {
     let fixture = TestFixture::new();
 
@@ -201,6 +216,7 @@ fn test_claim_for_agent_with_matching_labels() {
 }
 
 #[test]
+#[serial(webhook_queue)]
 fn test_claim_for_agent_without_matching_labels() {
     let fixture = TestFixture::new();
 
@@ -233,6 +249,7 @@ fn test_claim_for_agent_without_matching_labels() {
 }
 
 #[test]
+#[serial(webhook_queue)]
 fn test_release_expired() {
     let fixture = TestFixture::new();
 
@@ -293,6 +310,7 @@ fn test_release_expired() {
 }
 
 #[test]
+#[serial(webhook_queue)]
 fn test_mark_success() {
     let fixture = TestFixture::new();
 
@@ -320,6 +338,7 @@ fn test_mark_success() {
 }
 
 #[test]
+#[serial(webhook_queue)]
 fn test_mark_failed_with_retry() {
     let fixture = TestFixture::new();
 
@@ -348,6 +367,7 @@ fn test_mark_failed_with_retry() {
 }
 
 #[test]
+#[serial(webhook_queue)]
 fn test_process_retries() {
     let fixture = TestFixture::new();
 
@@ -418,6 +438,7 @@ fn test_process_retries() {
 }
 
 #[test]
+#[serial(webhook_queue)]
 fn test_mark_failed_max_retries_exceeded() {
     let fixture = TestFixture::new();
 
@@ -445,6 +466,7 @@ fn test_mark_failed_max_retries_exceeded() {
 }
 
 #[test]
+#[serial(webhook_queue)]
 fn test_list_for_subscription() {
     let fixture = TestFixture::new();
 
@@ -502,6 +524,7 @@ fn test_list_for_subscription() {
 }
 
 #[test]
+#[serial(webhook_queue)]
 fn test_cleanup_old_deliveries() {
     let fixture = TestFixture::new();
 
@@ -561,6 +584,7 @@ fn test_cleanup_old_deliveries() {
 }
 
 #[test]
+#[serial(webhook_queue)]
 fn test_claim_pagination() {
     let fixture = TestFixture::new();
 
@@ -598,6 +622,7 @@ fn test_claim_pagination() {
 }
 
 #[test]
+#[serial(webhook_queue)]
 fn test_retry_failed_delivery() {
     let fixture = TestFixture::new();
 
@@ -632,6 +657,7 @@ fn test_retry_failed_delivery() {
 }
 
 #[test]
+#[serial(webhook_queue)]
 fn test_get_stats() {
     let fixture = TestFixture::new();
 
@@ -687,6 +713,7 @@ fn test_get_stats() {
 // =============================================================================
 
 #[test]
+#[serial(webhook_queue)]
 fn test_exponential_backoff_timing() {
     use chrono::{Duration, Utc};
 
@@ -788,6 +815,7 @@ fn test_exponential_backoff_timing() {
 // =============================================================================
 
 #[test]
+#[serial(webhook_queue)]
 fn test_claim_requires_all_labels() {
     let fixture = TestFixture::new();
 
@@ -849,6 +877,7 @@ fn test_claim_requires_all_labels() {
 }
 
 #[test]
+#[serial(webhook_queue)]
 fn test_empty_target_labels_matches_broker() {
     let fixture = TestFixture::new();
 
@@ -895,6 +924,7 @@ fn test_empty_target_labels_matches_broker() {
 // =============================================================================
 
 #[test]
+#[serial(webhook_queue)]
 fn test_valid_acquired_until_stays_acquired() {
     let fixture = TestFixture::new();
 
@@ -935,6 +965,7 @@ fn test_valid_acquired_until_stays_acquired() {
 }
 
 #[test]
+#[serial(webhook_queue)]
 fn test_released_delivery_claimable_by_different_agent() {
     let fixture = TestFixture::new();
 
