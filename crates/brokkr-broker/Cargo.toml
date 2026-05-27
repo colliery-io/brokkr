@@ -72,3 +72,6 @@ notify = "7"
 # Real-TCP WebSocket client for /internal/ws/agent integration tests (WS-02).
 tokio-tungstenite = "0.24"
 brokkr-wire = { path = "../brokkr-wire" }
+# Serialize integration tests that contend on the shared DB's global webhook
+# delivery queue (claim/release sweeps) so they don't race each other.
+serial_test = { workspace = true }
