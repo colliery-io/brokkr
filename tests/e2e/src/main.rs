@@ -116,6 +116,12 @@ async fn main() -> ExitCode {
                     scenarios::test_ws_chaos(&client)
                 );
             }
+            "ws-workorders" => {
+                run_scenario!(
+                    "BROKKR-T-0183 (A2 follow-up): work-order completion under WS sever",
+                    scenarios::test_ws_workorders(&client)
+                );
+            }
             "ws-telemetry" => {
                 run_scenario!(
                     "BROKKR-T-0172 (A3): WS telemetry tailer (real k3s)",

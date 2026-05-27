@@ -1473,6 +1473,154 @@ pub async fn test_ws_chaos(client: &Client) -> Result<()> {
 }
 
 // =============================================================================
+// BROKKR-T-0183 (A2 follow-up): work-order completion under WS sever
+// =============================================================================
+
+/// Prove the full work-order lifecycle survives a WS outage: with the WS
+/// channel severed, the agent must still **discover, claim, execute, and
+/// complete** work orders over REST polling. Uses `custom` work orders (each a
+/// unique ConfigMap applied to k3s) so completion is deterministic and needs no
+/// external build infra — unlike `build` work orders (Shipwright/ttl.sh), which
+/// is why the original A2 ([[BROKKR-T-0171]]) deferred this.
+pub async fn test_ws_workorders(client: &Client) -> Result<()> {
+    const N: usize = 8;
+    let toxiproxy_url =
+        std::env::var("TOXIPROXY_URL").unwrap_or_else(|_| "http://localhost:8474".to_string());
+
+    // Locate the real docker-compose agent (the one actually wired to k3s).
+    let agents = client.list_agents().await?;
+    let agent = agents
+        .iter()
+        .find(|a| a.get("name").and_then(|n| n.as_str()) == Some("brokkr-integration-test-agent"))
+        .ok_or("expected brokkr-integration-test-agent in agent list")?;
+    let agent_id: Uuid = agent
+        .get("id")
+        .and_then(|v| v.as_str())
+        .and_then(|s| Uuid::parse_str(s).ok())
+        .ok_or("agent missing id")?;
+    println!("  → test agent id: {}", agent_id);
+
+    // The agent skips work-order processing unless its status is ACTIVE
+    // (commands.rs). The docker-compose agent boots INACTIVE, so activate it
+    // explicitly (mirrors Part 5 test_work_orders). The agent refreshes its
+    // own status over REST each cycle, so this propagates even with WS down.
+    println!("  → Setting agent ACTIVE so it will process work orders...");
+    client
+        .update_agent(agent_id, json!({"status": "ACTIVE"}))
+        .await?;
+
+    // Confirm WS is up before we sever it.
+    println!("  → Confirming WS connected (gauge >= 1, 30s)...");
+    client
+        .wait_for_metric("brokkr_ws_connected_agents", &[], 30, |v| v >= 1.0)
+        .await?;
+
+    // Sever WS — from here the agent has only REST polling to find work.
+    println!("  → Severing WS via toxiproxy...");
+    toxiproxy_set_enabled(&toxiproxy_url, "ws-channel", false).await?;
+    client
+        .wait_for_metric("brokkr_ws_connected_agents", &[], 30, |v| v < 1.0)
+        .await?;
+    println!("    WS severed (gauge < 1) ✓");
+
+    // Seed N custom work orders (unique ConfigMaps) targeting the agent.
+    let suffix = Uuid::new_v4().to_string()[..8].to_string();
+    println!("  → Seeding {N} custom work orders while WS is down...");
+    let mut wo_ids: Vec<Uuid> = Vec::with_capacity(N);
+    for i in 0..N {
+        let name = format!("brokkr-a2-wo-{suffix}-{i}");
+        let yaml = format!(
+            "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: {name}\n  namespace: default\ndata:\n  idx: \"{i}\"\n"
+        );
+        let wo = client
+            .create_work_order("custom", &yaml, Some(vec![agent_id]), None)
+            .await?;
+        let id: Uuid = wo["id"].as_str().ok_or("work order missing id")?.parse()?;
+        assert_eq!(wo["status"], "PENDING", "new work order should be PENDING");
+        wo_ids.push(id);
+    }
+    println!("    seeded {} work orders ✓", wo_ids.len());
+
+    // Poll each work order's completion log. The agent must claim+apply+complete
+    // them over REST while WS stays severed.
+    println!("  → Waiting for all {N} to complete via REST fallback (150s timeout)...");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(150);
+    let mut completed: std::collections::HashSet<Uuid> = std::collections::HashSet::new();
+    while completed.len() < wo_ids.len() {
+        for id in &wo_ids {
+            if completed.contains(id) {
+                continue;
+            }
+            if let Ok(log) = client.get_work_order_log(*id).await {
+                // Present in the log == the agent called complete_work_order.
+                let success = log.get("success").and_then(|v| v.as_bool()).unwrap_or(false);
+                if !success {
+                    toxiproxy_set_enabled(&toxiproxy_url, "ws-channel", true).await.ok();
+                    return Err(format!("work order {} completed but success=false: {}", id, log).into());
+                }
+                let claimed_by = log.get("claimed_by").and_then(|v| v.as_str());
+                if claimed_by != Some(agent_id.to_string().as_str()) {
+                    toxiproxy_set_enabled(&toxiproxy_url, "ws-channel", true).await.ok();
+                    return Err(format!(
+                        "work order {} claimed_by {:?}, expected the test agent {}",
+                        id, claimed_by, agent_id
+                    )
+                    .into());
+                }
+                completed.insert(*id);
+                println!("    completed {}/{} ({})", completed.len(), wo_ids.len(), id);
+            }
+        }
+        if completed.len() < wo_ids.len() && std::time::Instant::now() > deadline {
+            toxiproxy_set_enabled(&toxiproxy_url, "ws-channel", true).await.ok();
+            return Err(format!(
+                "only {}/{} work orders completed within 150s with WS severed — REST \
+                 fallback did not drain the queue",
+                completed.len(),
+                wo_ids.len()
+            )
+            .into());
+        }
+        if completed.len() < wo_ids.len() {
+            tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+        }
+    }
+    println!("    all {} work orders completed with WS severed ✓", wo_ids.len());
+
+    // No duplicate / leftover: each id is gone from the active queue.
+    let active = client.list_work_orders().await?;
+    let leftover: Vec<&serde_json::Value> = active
+        .iter()
+        .filter(|w| {
+            w.get("id")
+                .and_then(|v| v.as_str())
+                .and_then(|s| Uuid::parse_str(s).ok())
+                .map(|id| wo_ids.contains(&id))
+                .unwrap_or(false)
+        })
+        .collect();
+    if !leftover.is_empty() {
+        toxiproxy_set_enabled(&toxiproxy_url, "ws-channel", true).await.ok();
+        return Err(format!(
+            "{} seeded work order(s) still in the active queue after completion — \
+             not drained cleanly",
+            leftover.len()
+        )
+        .into());
+    }
+    println!("    active queue clean (no leftovers) ✓");
+
+    // Restore WS for a clean teardown.
+    println!("  → Restoring WS...");
+    toxiproxy_set_enabled(&toxiproxy_url, "ws-channel", true).await?;
+    client
+        .wait_for_metric("brokkr_ws_connected_agents", &[], 60, |v| v >= 1.0)
+        .await?;
+    println!("  → WS work-order chaos scenario passed (REST fallback drained {N} work orders)");
+    Ok(())
+}
+
+// =============================================================================
 // BROKKR-T-0172 (A3): Real-k3s telemetry tailer test
 // =============================================================================
 

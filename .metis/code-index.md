@@ -1,6 +1,6 @@
 # Code Index
 
-> Generated: 2026-05-26T19:43:37Z | 389 files | JavaScript, Python, Rust, TypeScript
+> Generated: 2026-05-27T01:12:14Z | 389 files | JavaScript, Python, Rust, TypeScript
 
 ## Project Structure
 
@@ -514,47 +514,50 @@
 
 #### crates/brokkr-agent/src/broker_ws.rs
 
-- pub `WsState` enum L40-49 — `Down | Up | ForceRestOnly` — Current state of the WS channel from the agent's point of view.
-- pub `is_up` function L52-54 — `(self) -> bool` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
-- pub `WsClient` struct L74-82 — `{ state: watch::Receiver<WsState>, outbound_tx: mpsc::Sender<WsMessage>, inbound...` — Public handle to the WS client.
-- pub `state` function L86-88 — `(&self) -> watch::Receiver<WsState>` — Watch the connection state.
-- pub `outbound` function L93-95 — `(&self) -> mpsc::Sender<WsMessage>` — Sender for outbound messages (heartbeat, agent events, health,
-- pub `uplink` function L100-105 — `(&self) -> WsUplink` — Cheap clonable handle bundling the outbound sender with a current
-- pub `take_inbound` function L109-111 — `(&mut self) -> Option<mpsc::Receiver<WsMessage>>` — Take ownership of the inbound receiver.
-- pub `WsUplink` struct L118-121 — `{ state: watch::Receiver<WsState>, outbound: mpsc::Sender<WsMessage> }` — Send-side handle for agent components that want to prefer WS but fall
-- pub `is_up` function L127-129 — `(&self) -> bool` — True iff the WS state is currently `Up`.
-- pub `try_send` function L134-143 — `(&self, msg: WsMessage) -> Result<(), WsMessage>` — Try to send a message over WS.
-- pub `spawn` function L152-204 — `(settings: &Settings) -> WsClient` — Spawn the WS connection task and return a client handle.
-- pub `ws_url_from_broker_url` function L210-222 — `(broker_url: &str) -> String` — Convert `http(s)://broker/api/v1`-style URLs into the
--  `WsState` type L51-55 — `= WsState` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `OUTBOUND_CAPACITY` variable L61 — `: usize` — Capacity of the outbound queue from the agent's emitters to the WS task.
--  `INBOUND_CAPACITY` variable L65 — `: usize` — Capacity of the inbound queue from the WS task to in-agent consumers.
--  `BACKOFF_INITIAL` variable L68 — `: Duration` — Bounds on the reconnect backoff schedule.
--  `BACKOFF_MAX` variable L69 — `: Duration` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `WsClient` type L84-112 — `= WsClient` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `WsUplink` type L123-144 — `= WsUplink` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `reconnect_loop` function L224-251 — `( url: String, pak: String, state_tx: watch::Sender<WsState>, inbound_tx: mpsc::...` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `dial` function L253-272 — `( url: &str, pak: &str, ) -> Result< tokio_tungstenite::WebSocketStream<tokio_tu...` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `run_socket` function L274-339 — `( socket: tokio_tungstenite::WebSocketStream< tokio_tungstenite::MaybeTlsStream<...` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `BackoffSchedule` struct L344-346 — `{ current: Duration }` — Exponential backoff with capped maximum and ±20% jitter.
--  `BackoffSchedule` type L348-366 — `= BackoffSchedule` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `new` function L349-353 — `() -> Self` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `reset` function L355-357 — `(&mut self)` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `next` function L359-365 — `(&mut self) -> Duration` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `with_jitter` function L368-377 — `(d: Duration) -> Duration` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `tests` module L380-528 — `-` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `ws_url_translates_scheme_and_appends_path` function L384-397 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `backoff_grows_exponentially_then_caps` function L400-417 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `backoff_reset_restores_initial` function L420-428 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `jitter_stays_within_twenty_percent` function L431-438 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `uplink_with` function L448-456 — `(state: WsState, capacity: usize) -> (WsUplink, watch::Sender<WsState>, mpsc::Re...` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `heartbeat_msg` function L458-463 — `() -> WsMessage` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `try_send_returns_message_when_down` function L466-472 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `try_send_returns_message_when_force_rest_only` function L475-479 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `try_send_delivers_when_up` function L482-488 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `try_send_returns_message_when_lane_full` function L491-498 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `ws_is_on_by_default_per_adr_0008` function L501-510 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `try_send_follows_state_flip_back_to_rest` function L513-527 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+- pub `WsState` enum L40-56 — `Down | Up | ForceRestOnly | AuthRejected` — Current state of the WS channel from the agent's point of view.
+- pub `is_up` function L59-61 — `(self) -> bool` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+- pub `WsClient` struct L87-95 — `{ state: watch::Receiver<WsState>, outbound_tx: mpsc::Sender<WsMessage>, inbound...` — Public handle to the WS client.
+- pub `state` function L99-101 — `(&self) -> watch::Receiver<WsState>` — Watch the connection state.
+- pub `outbound` function L106-108 — `(&self) -> mpsc::Sender<WsMessage>` — Sender for outbound messages (heartbeat, agent events, health,
+- pub `uplink` function L113-118 — `(&self) -> WsUplink` — Cheap clonable handle bundling the outbound sender with a current
+- pub `take_inbound` function L122-124 — `(&mut self) -> Option<mpsc::Receiver<WsMessage>>` — Take ownership of the inbound receiver.
+- pub `WsUplink` struct L131-134 — `{ state: watch::Receiver<WsState>, outbound: mpsc::Sender<WsMessage> }` — Send-side handle for agent components that want to prefer WS but fall
+- pub `is_up` function L140-142 — `(&self) -> bool` — True iff the WS state is currently `Up`.
+- pub `try_send` function L147-156 — `(&self, msg: WsMessage) -> Result<(), WsMessage>` — Try to send a message over WS.
+- pub `spawn` function L165-217 — `(settings: &Settings) -> WsClient` — Spawn the WS connection task and return a client handle.
+- pub `ws_url_from_broker_url` function L223-235 — `(broker_url: &str) -> String` — Convert `http(s)://broker/api/v1`-style URLs into the
+-  `WsState` type L58-62 — `= WsState` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `OUTBOUND_CAPACITY` variable L68 — `: usize` — Capacity of the outbound queue from the agent's emitters to the WS task.
+-  `INBOUND_CAPACITY` variable L72 — `: usize` — Capacity of the inbound queue from the WS task to in-agent consumers.
+-  `BACKOFF_INITIAL` variable L75 — `: Duration` — Bounds on the reconnect backoff schedule.
+-  `BACKOFF_MAX` variable L76 — `: Duration` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `MAX_CONSECUTIVE_AUTH_REJECTIONS` variable L82 — `: u32` — Consecutive WS-upgrade auth rejections (HTTP 401/403) after which the
+-  `WsClient` type L97-125 — `= WsClient` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `WsUplink` type L136-157 — `= WsUplink` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `reconnect_loop` function L237-288 — `( url: String, pak: String, state_tx: watch::Sender<WsState>, inbound_tx: mpsc::...` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `is_auth_rejection` function L292-300 — `(err: &tokio_tungstenite::tungstenite::Error) -> bool` — True when a WS-upgrade error is a credential rejection (HTTP 401/403),
+-  `dial` function L302-321 — `( url: &str, pak: &str, ) -> Result< tokio_tungstenite::WebSocketStream<tokio_tu...` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `run_socket` function L323-388 — `( socket: tokio_tungstenite::WebSocketStream< tokio_tungstenite::MaybeTlsStream<...` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `BackoffSchedule` struct L393-395 — `{ current: Duration }` — Exponential backoff with capped maximum and ±20% jitter.
+-  `BackoffSchedule` type L397-415 — `= BackoffSchedule` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `new` function L398-402 — `() -> Self` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `reset` function L404-406 — `(&mut self)` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `next` function L408-414 — `(&mut self) -> Duration` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `with_jitter` function L417-426 — `(d: Duration) -> Duration` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `tests` module L429-596 — `-` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `ws_url_translates_scheme_and_appends_path` function L433-446 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `auth_rejection_detects_401_and_403_only` function L449-465 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `backoff_grows_exponentially_then_caps` function L468-485 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `backoff_reset_restores_initial` function L488-496 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `jitter_stays_within_twenty_percent` function L499-506 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `uplink_with` function L516-524 — `(state: WsState, capacity: usize) -> (WsUplink, watch::Sender<WsState>, mpsc::Re...` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `heartbeat_msg` function L526-531 — `() -> WsMessage` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `try_send_returns_message_when_down` function L534-540 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `try_send_returns_message_when_force_rest_only` function L543-547 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `try_send_delivers_when_up` function L550-556 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `try_send_returns_message_when_lane_full` function L559-566 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `ws_is_on_by_default_per_adr_0008` function L569-578 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `try_send_follows_state_flip_back_to_rest` function L581-595 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
 
 #### crates/brokkr-agent/src/deployment_health.rs
 
@@ -7734,7 +7737,7 @@
 
 -  `api` module L18 — `-` — Brokkr End-to-End Test Suite
 -  `scenarios` module L19 — `-` — Run with: angreal tests e2e
--  `main` function L25-198 — `() -> ExitCode` — Run with: angreal tests e2e
+-  `main` function L25-204 — `() -> ExitCode` — Run with: angreal tests e2e
 -  `run_scenario` macro L58-75 — `-` — Run with: angreal tests e2e
 -  `run_scenario_allow_fail` macro L82-102 — `-` — Run with: angreal tests e2e
 
@@ -7753,16 +7756,18 @@
 - pub `test_metrics` function L1020-1096 — `(client: &Client) -> Result<()>` — Each scenario tests a complete user workflow through the system.
 - pub `test_ws_smoke` function L1116-1263 — `(client: &Client) -> Result<()>` — I-0019 / I-0020 A1 smoke test.
 - pub `test_ws_chaos` function L1314-1473 — `(client: &Client) -> Result<()>` — I-0019 / I-0020 A2 chaos test — Pass 1 (infrastructure validation).
-- pub `test_ws_telemetry` function L1638-1889 — `(client: &Client) -> Result<()>` — I-0019 / I-0020 A3 telemetry-tailer test against real k3s.
+- pub `test_ws_workorders` function L1485-1621 — `(client: &Client) -> Result<()>` — Prove the full work-order lifecycle survives a WS outage: with the WS
+- pub `test_ws_telemetry` function L1786-2037 — `(client: &Client) -> Result<()>` — I-0019 / I-0020 A3 telemetry-tailer test against real k3s.
 -  `DEMO_DEPLOYMENT_YAML` variable L16-53 — `: &str` — Sample deployment YAML for testing
 -  `MICROSERVICE_TEMPLATE` variable L56-76 — `: &str` — Microservice template for testing
 -  `MICROSERVICE_SCHEMA` variable L78-88 — `: &str` — Each scenario tests a complete user workflow through the system.
 -  `JOB_YAML` variable L91-105 — `: &str` — Job YAML for work order testing
 -  `BUILD_YAML` variable L110-127 — `: &str` — Shipwright Build YAML for build work order testing
 -  `toxiproxy_set_enabled` function L1274-1298 — `( toxiproxy_url: &str, proxy_name: &str, enabled: bool, ) -> Result<()>` — Toggle a toxiproxy proxy's `enabled` flag via the admin API.
--  `k3s_apply` function L1483-1520 — `(compose_file: &str, manifest: &str) -> Result<()>` — Apply a Kubernetes manifest by piping it through `docker compose exec k3s
--  `dump_diagnostics` function L1524-1591 — `(compose_file: &str, pod_name: &str)` — On A3 Pass 2 failure, dump pod status + agent logs so the next iteration
--  `k3s_delete_best_effort` function L1595-1617 — `(compose_file: &str, args: &[&str])` — Run `kubectl delete` against the k3s cluster.
+-  `N` variable L1486 — `: usize` — Each scenario tests a complete user workflow through the system.
+-  `k3s_apply` function L1631-1668 — `(compose_file: &str, manifest: &str) -> Result<()>` — Apply a Kubernetes manifest by piping it through `docker compose exec k3s
+-  `dump_diagnostics` function L1672-1739 — `(compose_file: &str, pod_name: &str)` — On A3 Pass 2 failure, dump pod status + agent logs so the next iteration
+-  `k3s_delete_best_effort` function L1743-1765 — `(compose_file: &str, args: &[&str])` — Run `kubectl delete` against the k3s cluster.
 
 ### tests/sdk-contract/python
 
