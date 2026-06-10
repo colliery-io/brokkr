@@ -128,6 +128,7 @@ pub fn spawn(
     uplink: WsUplink,
     agent_id: Uuid,
     uid_cache_cap: usize,
+    watch_namespace: Option<String>,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         let cache: Arc<RwLock<UidCache>> = Arc::new(RwLock::new(UidCache::new(uid_cache_cap)));
@@ -148,7 +149,15 @@ pub fn spawn(
         });
 
         loop {
-            if let Err(e) = watch_loop(client.clone(), agent_id, tx.clone(), cache.clone()).await {
+            if let Err(e) = watch_loop(
+                client.clone(),
+                agent_id,
+                tx.clone(),
+                cache.clone(),
+                watch_namespace.as_deref(),
+            )
+            .await
+            {
                 warn!(error = %e, "kube events tailer fell out of watch loop; restarting");
             }
             tokio::time::sleep(Duration::from_secs(5)).await;
@@ -162,9 +171,13 @@ async fn watch_loop(
     agent_id: Uuid,
     tx: mpsc::Sender<WsMessage>,
     cache: Arc<RwLock<UidCache>>,
+    watch_namespace: Option<&str>,
 ) -> Result<(), watcher::Error> {
-    info!("starting kube events tailer");
-    let api: Api<K8sEventResource> = Api::all(client.clone());
+    info!(namespace = ?watch_namespace, "starting kube events tailer");
+    let api: Api<K8sEventResource> = match watch_namespace {
+        Some(ns) => Api::namespaced(client.clone(), ns),
+        None => Api::all(client.clone()),
+    };
     let mut stream = watcher(api, watcher::Config::default()).boxed();
 
     while let Some(event) = stream.try_next().await? {

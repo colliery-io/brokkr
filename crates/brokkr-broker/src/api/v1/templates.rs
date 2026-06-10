@@ -9,7 +9,12 @@
 use crate::api::v1::error::{ApiError, ErrorResponse};
 use crate::api::v1::middleware::AuthPayload;
 use crate::dal::DAL;
+use crate::utils::audit;
 use crate::utils::templating;
+use brokkr_models::models::audit_logs::{
+    ACTION_TEMPLATE_CREATED, ACTION_TEMPLATE_DELETED, ACTION_TEMPLATE_UPDATED, ACTOR_TYPE_ADMIN,
+    ACTOR_TYPE_GENERATOR, RESOURCE_TYPE_TEMPLATE,
+};
 use axum::{
     extract::{Extension, Path, State},
     http::StatusCode,
@@ -150,6 +155,17 @@ async fn list_templates(
     Ok(Json(templates))
 }
 
+
+/// Resolves the audit actor for template endpoints: the admin, or the
+/// generator acting on its own templates.
+fn audit_actor(auth_payload: &AuthPayload) -> (&'static str, Option<uuid::Uuid>) {
+    if auth_payload.admin {
+        (ACTOR_TYPE_ADMIN, None)
+    } else {
+        (ACTOR_TYPE_GENERATOR, auth_payload.generator)
+    }
+}
+
 #[utoipa::path(
     post,
     path = "/templates",
@@ -204,6 +220,17 @@ async fn create_template(
     info!(
         "Successfully created template with ID: {} version: {}",
         template.id, template.version
+    );
+    let (actor_type, actor_id) = audit_actor(&auth_payload);
+    audit::log_action(
+        actor_type,
+        actor_id,
+        ACTION_TEMPLATE_CREATED,
+        RESOURCE_TYPE_TEMPLATE,
+        Some(template.id),
+        Some(serde_json::json!({ "name": template.name, "version": template.version })),
+        None,
+        None,
     );
     Ok((StatusCode::CREATED, Json(template)))
 }
@@ -288,6 +315,17 @@ async fn update_template(
         "Successfully created new version {} for template: {}",
         template.version, template.name
     );
+    let (actor_type, actor_id) = audit_actor(&auth_payload);
+    audit::log_action(
+        actor_type,
+        actor_id,
+        ACTION_TEMPLATE_UPDATED,
+        RESOURCE_TYPE_TEMPLATE,
+        Some(template.id),
+        Some(serde_json::json!({ "name": template.name, "version": template.version })),
+        None,
+        None,
+    );
     Ok(Json(template))
 }
 
@@ -325,6 +363,17 @@ async fn delete_template(
         ApiError::internal("failed to delete template")
     })?;
     info!("Successfully deleted template with ID: {}", id);
+    let (actor_type, actor_id) = audit_actor(&auth_payload);
+    audit::log_action(
+        actor_type,
+        actor_id,
+        ACTION_TEMPLATE_DELETED,
+        RESOURCE_TYPE_TEMPLATE,
+        Some(id),
+        None,
+        None,
+        None,
+    );
     Ok(StatusCode::NO_CONTENT)
 }
 

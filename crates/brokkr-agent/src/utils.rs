@@ -23,9 +23,51 @@ pub fn multidoc_deserialize(multi_doc_str: &str) -> Result<Vec<serde_yaml::Value
     Ok(docs)
 }
 
+/// Extracts the unique Kubernetes namespaces referenced by a multi-document
+/// YAML manifest, in first-seen order. Documents without an explicit
+/// `metadata.namespace` contribute `"default"` (BROKKR-T-0190).
+///
+/// # Arguments
+/// * `multi_doc_str` - String containing multiple YAML documents
+///
+/// # Returns
+/// * `Vec<String>` - Unique namespaces; `["default"]` when the manifest is
+///   empty or unparseable so callers always have somewhere to search
+pub fn manifest_namespaces(multi_doc_str: &str) -> Vec<String> {
+    let mut namespaces: Vec<String> = Vec::new();
+    if let Ok(docs) = multidoc_deserialize(multi_doc_str) {
+        for doc in docs {
+            if doc.is_null() {
+                continue;
+            }
+            let ns = doc
+                .get("metadata")
+                .and_then(|m| m.get("namespace"))
+                .and_then(|n| n.as_str())
+                .unwrap_or("default")
+                .to_string();
+            if !namespaces.contains(&ns) {
+                namespaces.push(ns);
+            }
+        }
+    }
+    if namespaces.is_empty() {
+        namespaces.push("default".to_string());
+    }
+    namespaces
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_manifest_namespaces() {
+        let yaml = "---\napiVersion: v1\nkind: Service\nmetadata:\n  name: a\n  namespace: prod\n---\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: b\n---\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: c\n  namespace: prod\n";
+        assert_eq!(manifest_namespaces(yaml), vec!["prod", "default"]);
+        assert_eq!(manifest_namespaces(""), vec!["default"]);
+        assert_eq!(manifest_namespaces("not: [valid"), vec!["default"]);
+    }
 
     #[test]
     fn test_multidoc_deserialize_success() {

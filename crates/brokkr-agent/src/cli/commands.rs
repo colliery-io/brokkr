@@ -72,7 +72,10 @@ use tokio::time::{interval, Duration};
 use uuid::Uuid;
 
 pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
-    let config = Settings::new(None).expect("Failed to load configuration");
+    // BROKKR_CONFIG_FILE adds an optional file layer between embedded
+    // defaults and BROKKR__ env vars (BROKKR-T-0187).
+    let config = Settings::new(std::env::var("BROKKR_CONFIG_FILE").ok())
+        .expect("Failed to load configuration");
 
     // Initialize telemetry (includes tracing/logging setup)
     let telemetry_config = config.telemetry.for_agent();
@@ -128,13 +131,19 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
             .agent
             .kube_event_uid_cache_cap
             .unwrap_or(kube_events::DEFAULT_UID_CACHE_CAP),
+        config.agent.watch_namespace.clone(),
     );
 
     // WS-08: tail pod logs for stacks that opt in via the
     // `brokkr.io/stream-logs: "true"` annotation on the pod template.
     // Rate-limited per container; over-rate lines surface as LogGap
     // markers so the UI renders visible gaps rather than swallowing data.
-    let _pod_logs_handle = pod_logs::spawn(k8s_client.clone(), ws_uplink.clone(), agent.id);
+    let _pod_logs_handle = pod_logs::spawn(
+        k8s_client.clone(),
+        ws_uplink.clone(),
+        agent.id,
+        config.agent.watch_namespace.clone(),
+    );
 
     // Initialize health state for health endpoints
     let broker_status = Arc::new(RwLock::new(health::BrokerStatus {
@@ -193,7 +202,8 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
         Arc::new(RwLock::new(HashSet::new()));
 
     // Create health checker
-    let health_checker = deployment_health::HealthChecker::new(k8s_client.clone());
+    let health_checker = deployment_health::HealthChecker::new(k8s_client.clone())
+        .with_watch_namespace(config.agent.watch_namespace.clone());
 
     if health_check_enabled {
         info!(
@@ -381,13 +391,22 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
                             // Claim the request
                             match broker::claim_diagnostic_request(&config, &sdk_client, request.id).await {
                                 Ok(_claimed) => {
-                                    // Collect diagnostics
-                                    // For now, use a default namespace and label selector
-                                    // In production, this should be derived from the deployment object
-                                    let namespace = "default";
+                                    // Collect diagnostics. The namespaces to
+                                    // search are derived from the deployment
+                                    // object's manifests (BROKKR-T-0190);
+                                    // documents without an explicit namespace
+                                    // contribute "default".
                                     let label_selector = format!("brokkr.io/deployment-object-id={}", request.deployment_object_id);
+                                    let namespaces = match broker::fetch_deployment_object(&sdk_client, request.deployment_object_id).await {
+                                        Ok(obj) => crate::utils::manifest_namespaces(&obj.yaml_content),
+                                        Err(e) => {
+                                            warn!("Failed to fetch deployment object {} to derive diagnostic namespaces; falling back to 'default': {}",
+                                                request.deployment_object_id, e);
+                                            vec!["default".to_string()]
+                                        }
+                                    };
 
-                                    match diagnostics_handler.collect_diagnostics(namespace, &label_selector).await {
+                                    match diagnostics_handler.collect_diagnostics_in(&namespaces, &label_selector).await {
                                         Ok(result) => {
                                             // Submit the result
                                             if let Err(e) = broker::submit_diagnostic_result(

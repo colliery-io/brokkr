@@ -17,6 +17,12 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use crate::utils::audit;
+use brokkr_models::models::audit_logs::{
+    ACTION_WORKORDER_CLAIMED, ACTION_WORKORDER_COMPLETED, ACTION_WORKORDER_CREATED,
+    ACTION_WORKORDER_FAILED, ACTION_WORKORDER_RETRY, ACTOR_TYPE_ADMIN, ACTOR_TYPE_AGENT,
+    ACTOR_TYPE_GENERATOR, RESOURCE_TYPE_WORKORDER,
+};
 use brokkr_models::models::work_orders::{NewWorkOrder, WorkOrder, WorkOrderLog};
 use std::sync::Arc;
 use serde::{Deserialize, Serialize};
@@ -247,6 +253,21 @@ async fn create_work_order(
     push_work_order(&ws_registry, &work_order, &agent_ids);
 
     info!("Successfully created work order with ID: {}", work_order.id);
+    let (actor_type, actor_id) = if auth_payload.admin {
+        (ACTOR_TYPE_ADMIN, None)
+    } else {
+        (ACTOR_TYPE_GENERATOR, auth_payload.generator)
+    };
+    audit::log_action(
+        actor_type,
+        actor_id,
+        ACTION_WORKORDER_CREATED,
+        RESOURCE_TYPE_WORKORDER,
+        Some(work_order.id),
+        Some(serde_json::json!({ "work_type": work_order.work_type })),
+        None,
+        None,
+    );
     Ok((StatusCode::CREATED, Json(work_order)))
 }
 
@@ -464,6 +485,16 @@ async fn claim_work_order(
                 "Successfully claimed work order {} by agent {}",
                 id, request.agent_id
             );
+            audit::log_action(
+                ACTOR_TYPE_AGENT,
+                Some(request.agent_id),
+                ACTION_WORKORDER_CLAIMED,
+                RESOURCE_TYPE_WORKORDER,
+                Some(id),
+                None,
+                None,
+                None,
+            );
             Ok(Json(work_order))
         }
         Err(diesel::result::Error::NotFound) => {
@@ -540,6 +571,16 @@ async fn complete_work_order(
                 ApiError::internal("failed to complete work order")
             })?;
         info!("Successfully completed work order {} with success", id);
+        audit::log_action(
+            ACTOR_TYPE_AGENT,
+            auth_payload.agent,
+            ACTION_WORKORDER_COMPLETED,
+            RESOURCE_TYPE_WORKORDER,
+            Some(id),
+            None,
+            None,
+            None,
+        );
         Ok((StatusCode::OK, Json(log_entry)).into_response())
     } else {
         let error_message = request
@@ -564,10 +605,30 @@ async fn complete_work_order(
                         id
                     );
                 }
+                audit::log_action(
+                    ACTOR_TYPE_AGENT,
+                    auth_payload.agent,
+                    ACTION_WORKORDER_FAILED,
+                    RESOURCE_TYPE_WORKORDER,
+                    Some(id),
+                    Some(serde_json::json!({ "retryable": request.retryable })),
+                    None,
+                    None,
+                );
                 Ok((StatusCode::OK, Json(log_entry)).into_response())
             }
             None => {
                 info!("Work order {} failed and scheduled for retry", id);
+                audit::log_action(
+                    ACTOR_TYPE_AGENT,
+                    auth_payload.agent,
+                    ACTION_WORKORDER_RETRY,
+                    RESOURCE_TYPE_WORKORDER,
+                    Some(id),
+                    None,
+                    None,
+                    None,
+                );
                 Ok((
                     StatusCode::ACCEPTED,
                     Json(serde_json::json!({"status": "retry_scheduled"})),

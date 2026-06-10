@@ -77,7 +77,10 @@ pub fn create_k8s_objects(
         }
 
         let mut obj: DynamicObject = serde_yaml::from_value(yaml_doc)?;
-        let mut annotations = BTreeMap::new();
+        // Merge Brokkr's tracking keys into the manifest's own annotations
+        // rather than replacing the map — user-declared annotations must
+        // survive apply (BROKKR-T-0191).
+        let mut annotations = obj.metadata.annotations.take().unwrap_or_else(BTreeMap::new);
         annotations.insert(
             STACK_LABEL.to_string(),
             deployment_object.stack_id.to_string(),

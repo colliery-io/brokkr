@@ -234,6 +234,13 @@ pub struct Agent {
     /// vs. how often an evicted entry forces a fresh dynamic-API lookup.
     #[serde(default)]
     pub kube_event_uid_cache_cap: Option<usize>,
+
+    /// Restrict the agent's cluster-wide watchers and health discovery to a
+    /// single namespace (for namespace-scoped RBAC deployments). When unset
+    /// the agent watches cluster-wide. The Helm chart sets this from the
+    /// downward API when `rbac.clusterWide: false`.
+    #[serde(default)]
+    pub watch_namespace: Option<String>,
 }
 
 /// Represents the database configuration

@@ -18,7 +18,9 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use brokkr_models::models::audit_logs::{AuditLog, AuditLogFilter};
+use brokkr_models::models::audit_logs::{
+    AuditLog, AuditLogFilter, ACTION_CONFIG_RELOADED, ACTOR_TYPE_ADMIN, RESOURCE_TYPE_CONFIG,
+};
 use brokkr_utils::config::ReloadableConfig;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -245,6 +247,27 @@ async fn reload_config(
     } else {
         info!("Configuration reloaded with no changes detected");
     }
+
+    // Record the reload for compliance review (BROKKR-T-0189).
+    crate::utils::audit::log_action(
+        ACTOR_TYPE_ADMIN,
+        None,
+        ACTION_CONFIG_RELOADED,
+        RESOURCE_TYPE_CONFIG,
+        None,
+        Some(serde_json::json!({
+            "changes": change_infos
+                .iter()
+                .map(|c| serde_json::json!({
+                    "key": c.key,
+                    "old_value": c.old_value,
+                    "new_value": c.new_value,
+                }))
+                .collect::<Vec<_>>(),
+        })),
+        None,
+        None,
+    );
 
     Ok(Json(ConfigReloadResponse {
         reloaded_at: Utc::now(),

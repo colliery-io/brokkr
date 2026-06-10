@@ -270,7 +270,7 @@ rbac:
 
 **Important**: Cluster-scoped resources (nodes, namespaces, persistentvolumes, clusterroles, clusterrolebindings) are automatically excluded from the Role when using namespace-scoped mode. These resources cannot be accessed with a namespace-scoped Role.
 
-**Current Limitation**: The agent currently requires cluster-wide access to function properly. Namespace-scoped mode and disabled RBAC will cause the agent to fail during startup. This will be addressed in a future release to allow the agent to operate with limited permissions.
+**Namespace-scoped operation**: When `rbac.clusterWide: false`, the chart sets `BROKKR__AGENT__WATCH_NAMESPACE` to the release namespace via the downward API, and the agent's pod-log tailer, kube-event tailer, and deployment-health discovery operate within that namespace. Remaining limitations: reconciliation pruning skips resource types it cannot list (logged as warnings), and stacks containing cluster-scoped resources (Namespaces, CRDs) fail to apply. Disabled RBAC (`rbac.create: false` without pre-existing permissions) leaves the agent unable to perform any Kubernetes operations.
 
 ### Additional Custom Rules
 

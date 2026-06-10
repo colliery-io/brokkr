@@ -170,6 +170,53 @@ impl DiagnosticsHandler {
         })
     }
 
+    /// Collects diagnostics across multiple namespaces and merges the results.
+    ///
+    /// Namespaces are derived from the deployment object's manifests so
+    /// diagnostics work for workloads outside `default` (BROKKR-T-0190).
+    ///
+    /// # Arguments
+    /// * `namespaces` - The Kubernetes namespaces to search
+    /// * `label_selector` - Label selector to find the resources
+    ///
+    /// # Returns
+    /// A SubmitDiagnosticResult containing the merged diagnostics
+    pub async fn collect_diagnostics_in(
+        &self,
+        namespaces: &[String],
+        label_selector: &str,
+    ) -> Result<SubmitDiagnosticResult, Box<dyn std::error::Error + Send + Sync>> {
+        info!(
+            "Collecting diagnostics for namespaces={:?}, labels={}",
+            namespaces, label_selector
+        );
+
+        let mut pod_statuses = Vec::new();
+        let mut events = Vec::new();
+        let mut log_tails: HashMap<String, String> = HashMap::new();
+        let mut any_log_tails = false;
+
+        for namespace in namespaces {
+            pod_statuses.extend(self.collect_pod_statuses(namespace, label_selector).await?);
+            events.extend(self.collect_events(namespace, label_selector).await?);
+            if let Ok(tails) = self.collect_log_tails(namespace, label_selector).await {
+                any_log_tails = true;
+                log_tails.extend(tails);
+            }
+        }
+
+        Ok(SubmitDiagnosticResult {
+            pod_statuses: serde_json::to_string(&pod_statuses)?,
+            events: serde_json::to_string(&events)?,
+            log_tails: if any_log_tails {
+                Some(serde_json::to_string(&log_tails)?)
+            } else {
+                None
+            },
+            collected_at: Utc::now(),
+        })
+    }
+
     /// Collects pod statuses for matching pods.
     async fn collect_pod_statuses(
         &self,

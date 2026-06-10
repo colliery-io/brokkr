@@ -10,6 +10,9 @@
 //! system health and cleanup expired data.
 
 use crate::dal::DAL;
+use brokkr_models::models::audit_logs::{
+    ACTION_WEBHOOK_DELIVERY_FAILED, ACTOR_TYPE_SYSTEM, RESOURCE_TYPE_WEBHOOK,
+};
 use std::time::Duration;
 use tokio::time::interval;
 use tracing::{debug, error, info, warn};
@@ -350,6 +353,21 @@ pub fn start_webhook_delivery_task(dal: DAL, config: WebhookDeliveryConfig) {
                                     warn!(
                                         "Webhook delivery {} dead after {} attempts: {}",
                                         delivery.id, updated.attempts, error
+                                    );
+                                    crate::utils::audit::log_action(
+                                        ACTOR_TYPE_SYSTEM,
+                                        None,
+                                        ACTION_WEBHOOK_DELIVERY_FAILED,
+                                        RESOURCE_TYPE_WEBHOOK,
+                                        Some(delivery.subscription_id),
+                                        Some(serde_json::json!({
+                                            "delivery_id": delivery.id,
+                                            "event_type": delivery.event_type,
+                                            "attempts": updated.attempts,
+                                            "error": error,
+                                        })),
+                                        None,
+                                        None,
                                     );
                                 } else {
                                     debug!(

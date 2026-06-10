@@ -717,7 +717,10 @@ pub async fn reconcile_target_state(
                 priority_objects.len()
             );
             for object in &priority_objects {
-                // Track namespace names for potential rollback
+                // Track namespace names for potential rollback — but only
+                // namespaces that do NOT already exist. Rolling back a
+                // pre-existing namespace would delete everything inside it
+                // (BROKKR-T-0193).
                 if object
                     .types
                     .as_ref()
@@ -725,7 +728,24 @@ pub async fn reconcile_target_state(
                     .unwrap_or(false)
                 {
                     if let Some(name) = &object.metadata.name {
-                        created_namespaces.push(name.clone());
+                        let ns_api: Api<Namespace> = Api::all(client.clone());
+                        match ns_api.get_opt(name).await {
+                            Ok(None) => created_namespaces.push(name.clone()),
+                            Ok(Some(_)) => {
+                                debug!(
+                                    "Namespace '{}' already exists; excluded from rollback",
+                                    name
+                                );
+                            }
+                            Err(e) => {
+                                // If we can't tell, err on the side of NOT
+                                // deleting it during rollback.
+                                warn!(
+                                    "Could not check existence of namespace '{}' ({}); excluding from rollback",
+                                    name, e
+                                );
+                            }
+                        }
                     }
                 }
 

@@ -59,13 +59,25 @@ const DEFAULT_LINES_PER_SEC: u64 = 100;
 /// Window for the token-bucket counter.
 const RATE_WINDOW: Duration = Duration::from_secs(1);
 
-pub fn spawn(client: Client, uplink: WsUplink, agent_id: Uuid) -> JoinHandle<()> {
+pub fn spawn(
+    client: Client,
+    uplink: WsUplink,
+    agent_id: Uuid,
+    watch_namespace: Option<String>,
+) -> JoinHandle<()> {
     tokio::spawn(async move {
         let active: Arc<RwLock<HashMap<String, Vec<JoinHandle<()>>>>> =
             Arc::new(RwLock::new(HashMap::new()));
         loop {
             if let Err(e) =
-                watch_pods(client.clone(), uplink.clone(), agent_id, active.clone()).await
+                watch_pods(
+                client.clone(),
+                uplink.clone(),
+                agent_id,
+                active.clone(),
+                watch_namespace.as_deref(),
+            )
+            .await
             {
                 warn!(error = %e, "pod-logs watcher fell out; restarting in 5s");
             }
@@ -79,9 +91,14 @@ async fn watch_pods(
     uplink: WsUplink,
     agent_id: Uuid,
     active: Arc<RwLock<HashMap<String, Vec<JoinHandle<()>>>>>,
+
+    watch_namespace: Option<&str>,
 ) -> Result<(), watcher::Error> {
-    info!("starting pod-logs tailer");
-    let api: Api<Pod> = Api::all(client.clone());
+    info!(namespace = ?watch_namespace, "starting pod-logs tailer");
+    let api: Api<Pod> = match watch_namespace {
+        Some(ns) => Api::namespaced(client.clone(), ns),
+        None => Api::all(client.clone()),
+    };
     let mut stream = futures::stream::StreamExt::boxed(watcher(api, watcher::Config::default()));
 
     while let Some(event) = stream.try_next().await? {

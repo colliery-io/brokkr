@@ -56,6 +56,15 @@ spec:
         envFrom:
         - configMapRef:
             name: {{ include "brokkr-agent.fullname" . }}
+        {{- if not .Values.rbac.clusterWide }}
+        env:
+        # Namespace-scoped RBAC: restrict the agent's watchers and health
+        # discovery to the release namespace (BROKKR-T-0192).
+        - name: BROKKR__AGENT__WATCH_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        {{- end }}
         volumeMounts:
         # Writable /tmp directory (required for read-only root filesystem)
         - name: tmp

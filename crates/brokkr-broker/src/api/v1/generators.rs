@@ -9,7 +9,12 @@
 use crate::api::v1::error::{ApiError, ErrorResponse};
 use crate::api::v1::middleware::AuthPayload;
 use crate::dal::DAL;
-use crate::utils::pak;
+use crate::utils::{audit, pak};
+use brokkr_models::models::audit_logs::{
+    ACTION_GENERATOR_CREATED, ACTION_GENERATOR_DELETED, ACTION_GENERATOR_UPDATED,
+    ACTION_PAK_CREATED, ACTION_PAK_ROTATED, ACTOR_TYPE_ADMIN, ACTOR_TYPE_GENERATOR,
+    RESOURCE_TYPE_GENERATOR, RESOURCE_TYPE_PAK,
+};
 use axum::http::StatusCode;
 use axum::{
     extract::{Extension, Path, State},
@@ -71,6 +76,17 @@ async fn list_generators(
     Ok(Json(generators))
 }
 
+
+/// Resolves the audit actor for generator endpoints: the admin, or the
+/// generator acting on itself.
+fn audit_actor(auth_payload: &AuthPayload) -> (&'static str, Option<Uuid>) {
+    if auth_payload.admin {
+        (ACTOR_TYPE_ADMIN, None)
+    } else {
+        (ACTOR_TYPE_GENERATOR, auth_payload.generator)
+    }
+}
+
 #[utoipa::path(
     post,
     path = "/generators",
@@ -117,6 +133,26 @@ async fn create_generator(
     info!(
         "Successfully created generator with ID: {}",
         updated_generator.id
+    );
+    audit::log_action(
+        ACTOR_TYPE_ADMIN,
+        None,
+        ACTION_GENERATOR_CREATED,
+        RESOURCE_TYPE_GENERATOR,
+        Some(updated_generator.id),
+        Some(serde_json::json!({ "name": updated_generator.name })),
+        None,
+        None,
+    );
+    audit::log_action(
+        ACTOR_TYPE_ADMIN,
+        None,
+        ACTION_PAK_CREATED,
+        RESOURCE_TYPE_PAK,
+        Some(updated_generator.id),
+        Some(serde_json::json!({ "entity": "generator", "name": updated_generator.name })),
+        None,
+        None,
     );
     Ok((
         StatusCode::CREATED,
@@ -204,6 +240,17 @@ async fn update_generator(
         ApiError::internal("failed to update generator")
     })?;
     info!("Successfully updated generator with ID: {}", id);
+    let (actor_type, actor_id) = audit_actor(&auth_payload);
+    audit::log_action(
+        actor_type,
+        actor_id,
+        ACTION_GENERATOR_UPDATED,
+        RESOURCE_TYPE_GENERATOR,
+        Some(id),
+        Some(serde_json::json!({ "name": generator.name })),
+        None,
+        None,
+    );
     Ok(Json(generator))
 }
 
@@ -250,6 +297,17 @@ async fn delete_generator(
     if let Some(ref hash) = old_pak_hash {
         dal.invalidate_auth_cache(hash);
     }
+    let (actor_type, actor_id) = audit_actor(&auth_payload);
+    audit::log_action(
+        actor_type,
+        actor_id,
+        ACTION_GENERATOR_DELETED,
+        RESOURCE_TYPE_GENERATOR,
+        Some(id),
+        None,
+        None,
+        None,
+    );
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -305,6 +363,25 @@ async fn rotate_generator_pak(
     if let Some(ref hash) = old_pak_hash {
         dal.invalidate_auth_cache(hash);
     }
+
+    let (actor_type, actor_id) = if auth_payload.admin {
+        (ACTOR_TYPE_ADMIN, None)
+    } else {
+        (ACTOR_TYPE_GENERATOR, auth_payload.generator)
+    };
+    audit::log_action(
+        actor_type,
+        actor_id,
+        ACTION_PAK_ROTATED,
+        RESOURCE_TYPE_GENERATOR,
+        Some(id),
+        Some(serde_json::json!({
+            "generator_name": updated_generator.name,
+        })),
+        None,
+        None,
+    );
+
     Ok((
         StatusCode::CREATED,
         Json(CreateGeneratorResponse {

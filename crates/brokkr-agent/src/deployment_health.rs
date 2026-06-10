@@ -10,13 +10,27 @@
 //! to the broker. Detects common issues like ImagePullBackOff, CrashLoopBackOff,
 //! OOMKilled, and other problematic conditions.
 
+use crate::k8s::api::dynamic_api;
 use crate::k8s::objects::DEPLOYMENT_OBJECT_ID_LABEL;
 use chrono::{DateTime, Utc};
 use k8s_openapi::api::core::v1::Pod;
-use kube::{api::ListParams, Api, Client};
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::OwnerReference;
+use kube::api::{DynamicObject, GroupVersionKind, ListParams};
+use kube::discovery::Discovery;
+use kube::{Api, Client};
 use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use tracing::warn;
 use uuid::Uuid;
+
+/// Maximum ownerReference hops walked when attributing a pod to a
+/// Brokkr-applied top-level object (Pod→ReplicaSet→Deployment is two hops;
+/// CronJob-owned Jobs add one more).
+const MAX_OWNER_DEPTH: usize = 4;
+
+/// Cache key for owner-chain resolution within one discovery pass:
+/// (namespace, apiVersion, kind, name).
+type OwnerKey = (String, String, String, String);
 
 /// Known problematic waiting conditions that indicate degraded health
 const DEGRADED_CONDITIONS: &[&str] = &[
@@ -81,26 +95,41 @@ pub struct ResourceHealth {
 /// Checks deployment health for Kubernetes resources
 pub struct HealthChecker {
     k8s_client: Client,
+    /// When set, pod discovery is restricted to this namespace
+    /// (namespace-scoped RBAC deployments, BROKKR-T-0192).
+    watch_namespace: Option<String>,
 }
 
 impl HealthChecker {
-    /// Creates a new HealthChecker instance
+    /// Creates a new HealthChecker instance watching the whole cluster
     pub fn new(k8s_client: Client) -> Self {
-        Self { k8s_client }
+        Self {
+            k8s_client,
+            watch_namespace: None,
+        }
     }
 
-    /// Checks the health of a specific deployment object by ID
-    ///
-    /// Finds all pods labeled with the deployment object ID and analyzes
-    /// their status to determine overall health.
+    /// Restricts pod discovery to a single namespace when `namespace` is
+    /// `Some` (for namespace-scoped RBAC deployments).
+    pub fn with_watch_namespace(mut self, namespace: Option<String>) -> Self {
+        self.watch_namespace = namespace;
+        self
+    }
+
+    /// Checks the health of a specific deployment object by ID.
     pub async fn check_deployment_object(
         &self,
         deployment_object_id: Uuid,
     ) -> Result<DeploymentHealthStatus, Box<dyn std::error::Error + Send + Sync>> {
-        let checked_at = Utc::now();
+        let mut grouped = self.discover_pods(&[deployment_object_id]).await?;
+        let pods = grouped.remove(&deployment_object_id).unwrap_or_default();
+        Ok(self.analyze_pods(deployment_object_id, &pods))
+    }
 
-        // Find pods matching this deployment object
-        let pods = self.find_pods_for_deployment(deployment_object_id).await?;
+    /// Analyzes a set of pods attributed to one deployment object and
+    /// produces its health status.
+    fn analyze_pods(&self, deployment_object_id: Uuid, pods: &[Pod]) -> DeploymentHealthStatus {
+        let checked_at = Utc::now();
 
         let mut summary = HealthSummary::default();
         let mut overall_status = "healthy";
@@ -109,7 +138,7 @@ impl HealthChecker {
 
         summary.pods_total = pods.len();
 
-        for pod in &pods {
+        for pod in pods {
             let pod_name = pod.metadata.name.clone().unwrap_or_default();
             let pod_namespace = pod.metadata.namespace.clone().unwrap_or_default();
 
@@ -216,53 +245,198 @@ impl HealthChecker {
             overall_status = "unknown";
         }
 
-        Ok(DeploymentHealthStatus {
+        DeploymentHealthStatus {
             id: deployment_object_id,
             status: overall_status.to_string(),
             summary,
             checked_at,
-        })
+        }
     }
 
-    /// Finds all pods labeled with the given deployment object ID
-    async fn find_pods_for_deployment(
-        &self,
-        deployment_object_id: Uuid,
-    ) -> Result<Vec<Pod>, Box<dyn std::error::Error + Send + Sync>> {
-        // Query pods across all namespaces with the deployment object label
-        let pods_api: Api<Pod> = Api::all(self.k8s_client.clone());
-
-        let label_selector = format!("{}={}", DEPLOYMENT_OBJECT_ID_LABEL, deployment_object_id);
-        let lp = ListParams::default().labels(&label_selector);
-
-        let pod_list = pods_api.list(&lp).await?;
-        Ok(pod_list.items)
-    }
-
-    /// Checks health for multiple deployment objects
-    pub async fn check_deployment_objects(
+    /// Discovers the pods belonging to each requested deployment object in a
+    /// single cluster-wide pass. A pod is attributed to a deployment object
+    /// when, in order:
+    ///
+    /// 1. it carries the `brokkr.io/deployment-object-id` **label** (manual
+    ///    opt-in, the historical mechanism),
+    /// 2. it carries the key as an annotation directly (bare `Pod` manifests
+    ///    applied by Brokkr are stamped with it),
+    /// 3. an object in its ownerReference chain carries the annotation —
+    ///    pods created by controllers (Deployment→ReplicaSet→Pod, Job→Pod,
+    ///    StatefulSet/DaemonSet→Pod) resolve to the Brokkr-applied top-level
+    ///    object (BROKKR-T-0191).
+    async fn discover_pods(
         &self,
         deployment_object_ids: &[Uuid],
-    ) -> Vec<DeploymentHealthStatus> {
-        let mut results = Vec::new();
+    ) -> Result<HashMap<Uuid, Vec<Pod>>, Box<dyn std::error::Error + Send + Sync>> {
+        let wanted: HashSet<Uuid> = deployment_object_ids.iter().copied().collect();
+        let pods_api: Api<Pod> = match self.watch_namespace.as_deref() {
+            Some(ns) => Api::namespaced(self.k8s_client.clone(), ns),
+            None => Api::all(self.k8s_client.clone()),
+        };
+        let pods = pods_api.list(&ListParams::default()).await?;
 
-        for &id in deployment_object_ids {
-            match self.check_deployment_object(id).await {
-                Ok(status) => results.push(status),
-                Err(e) => {
-                    warn!("Failed to check health for deployment object {}: {}", id, e);
-                    // Report as unknown on error
-                    results.push(DeploymentHealthStatus {
-                        id,
-                        status: "unknown".to_string(),
-                        summary: HealthSummary::default(),
-                        checked_at: Utc::now(),
-                    });
+        // Discovery is needed only when owner chains must be walked; build it
+        // lazily so clusters where every pod is directly attributable skip
+        // the cost.
+        let mut discovery: Option<Discovery> = None;
+        let mut owner_cache: HashMap<OwnerKey, Option<Uuid>> = HashMap::new();
+        let mut grouped: HashMap<Uuid, Vec<Pod>> = HashMap::new();
+
+        for pod in pods {
+            let doid = match pod_direct_doid(&pod) {
+                Some(id) => Some(id),
+                None => {
+                    self.resolve_owner_doid(&pod, &mut discovery, &mut owner_cache)
+                        .await
+                }
+            };
+            if let Some(id) = doid {
+                if wanted.contains(&id) {
+                    grouped.entry(id).or_default().push(pod);
                 }
             }
         }
 
-        results
+        Ok(grouped)
+    }
+
+    /// Walks a pod's controller ownerReference chain upward until an object
+    /// carrying the deployment-object annotation is found, the chain ends,
+    /// or `MAX_OWNER_DEPTH` is reached. Results (including misses) are
+    /// memoized per owner so pods sharing a ReplicaSet cost one lookup.
+    async fn resolve_owner_doid(
+        &self,
+        pod: &Pod,
+        discovery: &mut Option<Discovery>,
+        cache: &mut HashMap<OwnerKey, Option<Uuid>>,
+    ) -> Option<Uuid> {
+        let namespace = pod.metadata.namespace.clone()?;
+        let mut owner = controller_owner(pod.metadata.owner_references.as_deref())?.clone();
+        let mut visited: Vec<OwnerKey> = Vec::new();
+        let mut result: Option<Uuid> = None;
+
+        for _ in 0..MAX_OWNER_DEPTH {
+            let key: OwnerKey = (
+                namespace.clone(),
+                owner.api_version.clone(),
+                owner.kind.clone(),
+                owner.name.clone(),
+            );
+            if let Some(cached) = cache.get(&key) {
+                result = *cached;
+                break;
+            }
+            visited.push(key);
+
+            if discovery.is_none() {
+                match Discovery::new(self.k8s_client.clone()).run().await {
+                    Ok(d) => *discovery = Some(d),
+                    Err(e) => {
+                        warn!("Discovery failed during health pod attribution: {}", e);
+                        break;
+                    }
+                }
+            }
+            let gvk = gvk_of(&owner.api_version, &owner.kind);
+            let Some((ar, caps)) = discovery.as_ref().and_then(|d| d.resolve_gvk(&gvk)) else {
+                break;
+            };
+            let api: Api<DynamicObject> =
+                dynamic_api(ar, caps, self.k8s_client.clone(), Some(&namespace), false);
+            let obj = match api.get_opt(&owner.name).await {
+                Ok(Some(o)) => o,
+                Ok(None) => break,
+                Err(e) => {
+                    warn!(
+                        "Failed to fetch owner {}/{} '{}' during health pod attribution: {}",
+                        owner.api_version, owner.kind, owner.name, e
+                    );
+                    break;
+                }
+            };
+            if let Some(id) = annotations_doid(obj.metadata.annotations.as_ref()) {
+                result = Some(id);
+                break;
+            }
+            match controller_owner(obj.metadata.owner_references.as_deref()) {
+                Some(next) => owner = next.clone(),
+                None => break,
+            }
+        }
+
+        for key in visited {
+            cache.insert(key, result);
+        }
+        result
+    }
+
+    /// Checks health for multiple deployment objects with one cluster-wide
+    /// pod-discovery pass.
+    pub async fn check_deployment_objects(
+        &self,
+        deployment_object_ids: &[Uuid],
+    ) -> Vec<DeploymentHealthStatus> {
+        let grouped = match self.discover_pods(deployment_object_ids).await {
+            Ok(grouped) => grouped,
+            Err(e) => {
+                warn!("Failed to discover pods for health checking: {}", e);
+                // Report everything as unknown on discovery error
+                return deployment_object_ids
+                    .iter()
+                    .map(|&id| DeploymentHealthStatus {
+                        id,
+                        status: "unknown".to_string(),
+                        summary: HealthSummary::default(),
+                        checked_at: Utc::now(),
+                    })
+                    .collect();
+            }
+        };
+
+        deployment_object_ids
+            .iter()
+            .map(|&id| {
+                let pods = grouped.get(&id).map(|v| v.as_slice()).unwrap_or(&[]);
+                self.analyze_pods(id, pods)
+            })
+            .collect()
+    }
+}
+
+/// Extracts the deployment-object id directly carried by a pod: the
+/// `brokkr.io/deployment-object-id` label, or the same key as an annotation
+/// (bare Pod manifests applied by Brokkr are stamped with the annotation).
+fn pod_direct_doid(pod: &Pod) -> Option<Uuid> {
+    pod.metadata
+        .labels
+        .as_ref()
+        .and_then(|labels| labels.get(DEPLOYMENT_OBJECT_ID_LABEL))
+        .and_then(|v| Uuid::parse_str(v).ok())
+        .or_else(|| annotations_doid(pod.metadata.annotations.as_ref()))
+}
+
+/// Extracts the deployment-object id from an annotation map.
+fn annotations_doid(annotations: Option<&BTreeMap<String, String>>) -> Option<Uuid> {
+    annotations
+        .and_then(|a| a.get(DEPLOYMENT_OBJECT_ID_LABEL))
+        .and_then(|v| Uuid::parse_str(v).ok())
+}
+
+/// Picks the owner to walk: the controller reference when present, otherwise
+/// the first reference.
+fn controller_owner(refs: Option<&[OwnerReference]>) -> Option<&OwnerReference> {
+    let refs = refs?;
+    refs.iter()
+        .find(|r| r.controller == Some(true))
+        .or_else(|| refs.first())
+}
+
+/// Builds a GroupVersionKind from an ownerReference's apiVersion + kind.
+fn gvk_of(api_version: &str, kind: &str) -> GroupVersionKind {
+    match api_version.split_once('/') {
+        Some((group, version)) => GroupVersionKind::gvk(group, version, kind),
+        None => GroupVersionKind::gvk("", api_version, kind),
     }
 }
 
@@ -313,6 +487,78 @@ impl From<DeploymentHealthStatus> for DeploymentObjectHealthUpdate {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn pod_with(
+        labels: Option<BTreeMap<String, String>>,
+        annotations: Option<BTreeMap<String, String>>,
+    ) -> Pod {
+        let mut pod = Pod::default();
+        pod.metadata.labels = labels;
+        pod.metadata.annotations = annotations;
+        pod
+    }
+
+    #[test]
+    fn test_pod_direct_doid_prefers_label_then_annotation() {
+        let id = Uuid::new_v4();
+        let other = Uuid::new_v4();
+        let mut labels = BTreeMap::new();
+        labels.insert(DEPLOYMENT_OBJECT_ID_LABEL.to_string(), id.to_string());
+        let mut annotations = BTreeMap::new();
+        annotations.insert(DEPLOYMENT_OBJECT_ID_LABEL.to_string(), other.to_string());
+
+        // label wins when both are present
+        let pod = pod_with(Some(labels.clone()), Some(annotations.clone()));
+        assert_eq!(pod_direct_doid(&pod), Some(id));
+
+        // annotation used when no label
+        let pod = pod_with(None, Some(annotations));
+        assert_eq!(pod_direct_doid(&pod), Some(other));
+
+        // neither → None
+        let pod = pod_with(None, None);
+        assert_eq!(pod_direct_doid(&pod), None);
+
+        // unparseable value → None
+        let mut bad = BTreeMap::new();
+        bad.insert(DEPLOYMENT_OBJECT_ID_LABEL.to_string(), "not-a-uuid".to_string());
+        let pod = pod_with(Some(bad), None);
+        assert_eq!(pod_direct_doid(&pod), None);
+    }
+
+    #[test]
+    fn test_controller_owner_prefers_controller_ref() {
+        let plain = OwnerReference {
+            api_version: "apps/v1".into(),
+            kind: "ReplicaSet".into(),
+            name: "plain".into(),
+            uid: "1".into(),
+            controller: None,
+            ..Default::default()
+        };
+        let controller = OwnerReference {
+            api_version: "apps/v1".into(),
+            kind: "ReplicaSet".into(),
+            name: "controller".into(),
+            uid: "2".into(),
+            controller: Some(true),
+            ..Default::default()
+        };
+        let refs = vec![plain.clone(), controller.clone()];
+        assert_eq!(controller_owner(Some(&refs)).unwrap().name, "controller");
+        let refs = vec![plain.clone()];
+        assert_eq!(controller_owner(Some(&refs)).unwrap().name, "plain");
+        assert!(controller_owner(None).is_none());
+        assert!(controller_owner(Some(&[])).is_none());
+    }
+
+    #[test]
+    fn test_gvk_of_grouped_and_core() {
+        let gvk = gvk_of("apps/v1", "Deployment");
+        assert_eq!((gvk.group.as_str(), gvk.version.as_str(), gvk.kind.as_str()), ("apps", "v1", "Deployment"));
+        let gvk = gvk_of("v1", "Pod");
+        assert_eq!((gvk.group.as_str(), gvk.version.as_str(), gvk.kind.as_str()), ("", "v1", "Pod"));
+    }
 
     #[test]
     fn test_degraded_conditions_are_detected() {

@@ -25,8 +25,8 @@ use brokkr_models::models::agent_labels::{AgentLabel, NewAgentLabel};
 use brokkr_models::models::agent_targets::{AgentTarget, NewAgentTarget};
 use brokkr_models::models::agents::{Agent, NewAgent};
 use brokkr_models::models::audit_logs::{
-    ACTION_AGENT_CREATED, ACTION_AGENT_DELETED, ACTION_AGENT_UPDATED, ACTION_PAK_ROTATED,
-    ACTOR_TYPE_ADMIN, RESOURCE_TYPE_AGENT,
+    ACTION_AGENT_CREATED, ACTION_AGENT_DELETED, ACTION_AGENT_UPDATED, ACTION_PAK_CREATED,
+    ACTION_PAK_ROTATED, ACTOR_TYPE_ADMIN, RESOURCE_TYPE_AGENT, RESOURCE_TYPE_PAK,
 };
 use brokkr_models::models::deployment_objects::DeploymentObject;
 use brokkr_models::models::stacks::Stack;
@@ -169,6 +169,16 @@ async fn create_agent(
             "name": updated_agent.name,
             "cluster_name": updated_agent.cluster_name,
         })),
+        None,
+        None,
+    );
+    audit::log_action(
+        ACTOR_TYPE_ADMIN,
+        None,
+        ACTION_PAK_CREATED,
+        RESOURCE_TYPE_PAK,
+        Some(agent.id),
+        Some(serde_json::json!({ "entity": "agent", "name": updated_agent.name })),
         None,
         None,
     );

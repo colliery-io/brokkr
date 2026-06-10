@@ -6,6 +6,8 @@
 
 mod broker;
 mod broker_ws;
+mod deployment_health;
+mod diagnostics;
 #[path = "../fixtures.rs"]
 mod fixtures;
 mod health;

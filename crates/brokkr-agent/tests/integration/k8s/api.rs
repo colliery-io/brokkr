@@ -1190,6 +1190,166 @@ async fn test_reconcile_namespace_in_same_deployment() {
 }
 
 #[tokio::test]
+async fn test_reconcile_rollback_spares_preexisting_namespace() {
+    // BROKKR-T-0193: when a deployment declares a Namespace that already
+    // exists in the cluster, a failed reconciliation must NOT delete that
+    // namespace during rollback (it was not created by this reconcile pass).
+    let test_namespace = format!("test-ns-preexisting-{}", Uuid::new_v4());
+    let agent_id = Uuid::new_v4();
+    let stack_id = format!("test-stack-{}", Uuid::new_v4());
+    let checksum = format!("test-checksum-{}", Uuid::new_v4());
+
+    let (client, _discovery) = setup().await;
+
+    // The namespace pre-exists: create it manually before reconciling
+    setup_namespace(&client, &test_namespace, &agent_id).await;
+
+    // Deployment set declares that same Namespace plus a deliberately
+    // invalid object so reconciliation fails after namespaces are applied
+    let objects = vec![
+        serde_json::json!({
+            "apiVersion": "v1",
+            "kind": "Namespace",
+            "metadata": {
+                "name": test_namespace,
+                "annotations": {
+                    STACK_LABEL: stack_id,
+                    CHECKSUM_ANNOTATION: checksum
+                }
+            }
+        }),
+        serde_json::json!({
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+                "name": "invalid-pod",
+                "namespace": test_namespace,
+                "annotations": {
+                    STACK_LABEL: stack_id,
+                    CHECKSUM_ANNOTATION: checksum
+                }
+            }
+            // Missing required 'spec' field - should fail validation
+        }),
+    ];
+
+    let objects: Vec<DynamicObject> = objects
+        .into_iter()
+        .map(|obj| serde_json::from_value(obj).unwrap())
+        .collect();
+
+    let result = reconcile_target_state(&objects, client.clone(), &stack_id, &checksum).await;
+    assert!(
+        result.is_err(),
+        "Reconciliation should fail due to invalid Pod"
+    );
+
+    // Give k8s a moment to process any (erroneous) deletions
+    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+
+    // The pre-existing namespace must survive the rollback untouched
+    let ns_api = Api::<Namespace>::all(client.clone());
+    let ns = ns_api
+        .get(&test_namespace)
+        .await
+        .expect("Pre-existing namespace should still exist after failed reconciliation");
+    assert!(
+        ns.metadata.deletion_timestamp.is_none(),
+        "Pre-existing namespace should not be terminating after rollback"
+    );
+
+    cleanup(&client, &test_namespace).await;
+}
+
+#[tokio::test]
+async fn test_reconcile_rollback_deletes_newly_created_namespace() {
+    // BROKKR-T-0193 counter-case: when the declared Namespace did NOT exist
+    // before reconciliation, a failed reconciliation must roll it back
+    // (delete it), since this reconcile pass created it.
+    let test_namespace = format!("test-ns-fresh-rollback-{}", Uuid::new_v4());
+    let stack_id = format!("test-stack-{}", Uuid::new_v4());
+    let checksum = format!("test-checksum-{}", Uuid::new_v4());
+
+    let (client, _discovery) = setup().await;
+
+    // Deliberately do NOT create the namespace beforehand
+    let ns_api = Api::<Namespace>::all(client.clone());
+    assert!(
+        ns_api
+            .get_opt(&test_namespace)
+            .await
+            .expect("Failed to check namespace existence")
+            .is_none(),
+        "Test namespace must not exist before reconciliation"
+    );
+
+    let objects = vec![
+        serde_json::json!({
+            "apiVersion": "v1",
+            "kind": "Namespace",
+            "metadata": {
+                "name": test_namespace,
+                "annotations": {
+                    STACK_LABEL: stack_id,
+                    CHECKSUM_ANNOTATION: checksum
+                }
+            }
+        }),
+        serde_json::json!({
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+                "name": "invalid-pod",
+                "namespace": test_namespace,
+                "annotations": {
+                    STACK_LABEL: stack_id,
+                    CHECKSUM_ANNOTATION: checksum
+                }
+            }
+            // Missing required 'spec' field - should fail validation
+        }),
+    ];
+
+    let objects: Vec<DynamicObject> = objects
+        .into_iter()
+        .map(|obj| serde_json::from_value(obj).unwrap())
+        .collect();
+
+    let result = reconcile_target_state(&objects, client.clone(), &stack_id, &checksum).await;
+    assert!(
+        result.is_err(),
+        "Reconciliation should fail due to invalid Pod"
+    );
+
+    // Poll for deletion: the namespace may linger in Terminating state, so
+    // treat absent-or-terminating (deletion_timestamp set) as rolled back
+    let mut rolled_back = false;
+    for _ in 0..30 {
+        match ns_api.get_opt(&test_namespace).await {
+            Ok(None) => {
+                rolled_back = true;
+                break;
+            }
+            Ok(Some(ns)) => {
+                if ns.metadata.deletion_timestamp.is_some() {
+                    rolled_back = true;
+                    break;
+                }
+            }
+            Err(_) => {}
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    }
+    assert!(
+        rolled_back,
+        "Newly created namespace should be deleted (or terminating) after rollback"
+    );
+
+    // Best-effort cleanup in case the namespace is still around
+    cleanup(&client, &test_namespace).await;
+}
+
+#[tokio::test]
 async fn test_reconcile_namespace_rollback_on_failure() {
     // This test verifies that if validation fails for objects in a newly created
     // namespace, the namespace is rolled back (deleted).

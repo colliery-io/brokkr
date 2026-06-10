@@ -564,6 +564,40 @@ pub async fn fetch_pending_diagnostics(
 }
 
 /// Claims a diagnostic request for processing.
+/// Fetches a single deployment object by id. Used by the diagnostics loop to
+/// derive the namespaces to search from the object's manifests
+/// (BROKKR-T-0190).
+pub async fn fetch_deployment_object(
+    client: &BrokkrClient,
+    deployment_object_id: Uuid,
+) -> Result<DeploymentObject, Box<dyn std::error::Error>> {
+    debug!("Fetching deployment object {}", deployment_object_id);
+
+    match client
+        .api()
+        .get_deployment_object()
+        .id(deployment_object_id)
+        .send()
+        .await
+    {
+        Ok(rv) => {
+            let object: DeploymentObject = convert(rv.into_inner()).map_err(|e| {
+                error!("Failed to convert deployment object: {}", e);
+                Box::new(e) as Box<dyn std::error::Error>
+            })?;
+            Ok(object)
+        }
+        Err(raw) => {
+            let wrapped = BrokkrError::from(raw);
+            error!(
+                "Failed to fetch deployment object {}: {}",
+                deployment_object_id, wrapped
+            );
+            Err(Box::new(wrapped))
+        }
+    }
+}
+
 pub async fn claim_diagnostic_request(
     _config: &Settings,
     client: &BrokkrClient,

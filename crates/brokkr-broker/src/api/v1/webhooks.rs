@@ -17,7 +17,8 @@ use axum::{
     Json, Router,
 };
 use brokkr_models::models::audit_logs::{
-    ACTION_WEBHOOK_CREATED, ACTION_WEBHOOK_DELETED, ACTION_WEBHOOK_UPDATED, ACTOR_TYPE_ADMIN,
+    ACTION_WEBHOOK_CREATED, ACTION_WEBHOOK_DELETED, ACTION_WEBHOOK_DELIVERY_FAILED,
+    ACTION_WEBHOOK_UPDATED, ACTOR_TYPE_ADMIN, ACTOR_TYPE_SYSTEM,
     RESOURCE_TYPE_WEBHOOK,
 };
 use brokkr_models::models::webhooks::{
@@ -823,6 +824,23 @@ async fn report_delivery_result(
             "Webhook delivery {} failed via agent {}: {}",
             delivery_id, agent_id, error_msg
         );
+        if updated.status == "dead" {
+            audit::log_action(
+                ACTOR_TYPE_SYSTEM,
+                None,
+                ACTION_WEBHOOK_DELIVERY_FAILED,
+                RESOURCE_TYPE_WEBHOOK,
+                Some(updated.subscription_id),
+                Some(serde_json::json!({
+                    "delivery_id": delivery_id,
+                    "attempts": updated.attempts,
+                    "error": error_msg,
+                    "delivered_by_agent": agent_id,
+                })),
+                None,
+                None,
+            );
+        }
         Ok(Json(serde_json::json!({
             "status": updated.status,
             "delivery_id": delivery_id,
