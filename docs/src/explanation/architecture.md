@@ -33,22 +33,27 @@ C4Container
     Person(engineer, "Platform Engineer", "Manages deployments")
     System_Ext(cicd, "CI/CD Pipeline", "Generator identity")
 
-    Container_Boundary(brokkr, "Brokkr Platform") {
+    Container_Boundary(brokkr, "Control Plane") {
         Container(broker, "Broker", "Rust, Axum", "REST API, background tasks, webhook dispatch")
-        Container(agent, "Agent", "Rust, kube-rs", "Polls broker, reconciles cluster state")
         ContainerDb(db, "PostgreSQL", "PostgreSQL 15+", "Stacks, deployment objects, events, audit logs")
     }
 
-    System_Ext(k8s, "Kubernetes API", "Target cluster")
+    Container_Boundary(cluster, "Target Kubernetes Cluster (one per cluster)") {
+        Container(agent, "Agent", "Rust, kube-rs", "Polls broker, reconciles cluster state")
+        System_Ext(k8s, "Kubernetes API", "Target cluster")
+    }
+
     System_Ext(webhooks, "Webhook Endpoints", "External notification receivers")
 
     Rel(engineer, broker, "Manages", "HTTPS REST API")
     Rel(cicd, broker, "Deploys", "HTTPS REST API")
-    Rel(agent, broker, "Polls for state, reports events", "HTTPS REST")
+    Rel(agent, broker, "Polls for state, reports events", "HTTPS REST + internal WebSocket")
     Rel(broker, db, "Reads/writes state", "SQL :5432")
     Rel(agent, k8s, "Applies/deletes resources", "HTTPS :6443")
     Rel(broker, webhooks, "Delivers events", "HTTPS")
 ```
+
+The broker and database form the control plane and typically run together; each agent runs inside the cluster it manages, reaching the broker over outbound connections only. Alongside REST polling, the agent maintains an internal WebSocket channel to the broker for low-latency pushes and telemetry streaming — REST remains the load-bearing path (see [Internal Broker↔Agent WS Channel](./internal-ws-channel.md)).
 
 This pull-based model was chosen deliberately over a push-based approach for several reasons. First, it simplifies network topology since agents only need outbound connectivity to the broker rather than requiring the broker to reach into potentially firewalled cluster networks. Second, it provides natural resilience since agents can continue operating with their cached state during temporary broker unavailability. Third, it allows agents to control their own reconciliation pace based on their cluster's capabilities and load.
 
@@ -127,7 +132,7 @@ The broker runs five concurrent background tasks that handle various maintenance
 
 ### Audit Logger
 
-The audit logger provides asynchronous, batched recording of security-relevant events for compliance and forensic purposes. Like the event bus, it is implemented as a singleton with an internal mpsc channel and background writer task.
+The audit logger provides asynchronous, batched recording of security-relevant events for compliance and forensic purposes. It is implemented as a singleton with an internal mpsc channel and background writer task (unlike event emission, which is database-centric with no in-memory channel).
 
 Rather than writing each audit entry immediately to the database, which would create significant write amplification, the logger buffers entries and writes them in batches. The writer task accumulates entries up to a configurable batch size (default: 100) or until a flush interval elapses (default: 1 second), whichever comes first. This approach dramatically reduces database write pressure while maintaining a nearly real-time audit trail.
 
@@ -226,7 +231,7 @@ When deployment health monitoring is enabled, the agent periodically evaluates t
 
 The health checker examines pod phase, conditions, and container states to produce a health assessment. It specifically looks for problematic conditions like ImagePullBackOff, CrashLoopBackOff, OOMKilled, and various container creation errors. Based on its analysis, it assigns one of four health statuses: healthy (all pods running and ready), degraded (issues detected but not failed), failing (pod in Failed phase), or unknown (unable to determine status).
 
-Health summaries include the count of ready versus total pods, a list of detected issues, and detailed resource information. This data is reported to the broker, which stores it for display in management interfaces and can trigger webhook notifications based on health changes.
+Health reports are stored per agent and deployment object and surfaced through the health API; health-status changes do not emit webhook events (webhooks fire on apply outcomes such as `deployment.failed`).
 
 ## Component Interaction Patterns
 
@@ -234,9 +239,9 @@ Understanding how the broker and agents interact is essential for operating and 
 
 ### Deployment Flow
 
-The deployment lifecycle begins when an administrator or CI/CD system (acting as a generator) creates a stack and adds deployment objects to it. The stack serves as a logical grouping with labels that determine which agents will receive its deployments.
+The deployment lifecycle begins when an administrator or CI/CD system (acting as a generator) creates a stack and adds deployment objects to it. The stack serves as a logical grouping with labels and annotations that determine which agents will receive its deployments.
 
-When a deployment object is created, the broker's matching engine evaluates all registered agents to find those whose labels satisfy the stack's targeting requirements. For each matching agent, it creates an agent target record linking the agent to the stack.
+Creating a deployment object does not trigger any matching or write any agent associations. Instead, the agent-to-stack association is resolved dynamically at read time, on every poll. Rows in the `agent_targets` table exist only when an operator explicitly creates them via `POST /api/v1/agents/{id}/targets`. When an agent requests its target state, the broker computes the union of three sets: stacks explicitly targeted to the agent, stacks sharing *any* label with the agent (OR semantics), and stacks sharing *any* annotation key/value pair with the agent (also OR). Deployment objects are then served from that union.
 
 ```mermaid
 sequenceDiagram
@@ -250,12 +255,15 @@ sequenceDiagram
     Broker->>DB: Store Stack
     Admin->>Broker: Create Deployment Object
     Broker->>DB: Store Deployment Object
-    Broker->>Broker: Find Matching Agents
-    Broker->>DB: Create Agent Targets
+    opt Explicit targeting only
+        Admin->>Broker: POST /agents/{id}/targets
+        Broker->>DB: Create Agent Target
+    end
 
     loop Every Polling Interval
         Agent->>Broker: Request Target State
-        Broker->>DB: Query Agent's Deployments
+        Broker->>DB: Resolve associated stacks (explicit targets ∪ label matches ∪ annotation matches)
+        Broker->>DB: Query Deployment Objects for those stacks
         Broker-->>Agent: Deployment Objects
         Agent->>Agent: Compare Desired vs Actual
         Agent->>K8s: Apply Resources
@@ -266,7 +274,7 @@ sequenceDiagram
     end
 ```
 
-On the agent side, the deployment check timer fires and requests the agent's target state from the broker. The broker returns all deployment objects from stacks the agent is targeting, along with sequence IDs that enable incremental synchronization. The agent compares this desired state against what it has applied, performs the necessary create, update, or delete operations in Kubernetes, and reports events back to the broker.
+On the agent side, the deployment check timer fires and requests the agent's target state from the broker. The broker resolves the agent's associated stacks at that moment and returns their deployment objects, along with sequence IDs that establish ordering. The agent compares this desired state against what it has applied, performs the necessary create, update, or delete operations in Kubernetes, and reports events back to the broker.
 
 ### Event and Webhook Flow
 
@@ -326,13 +334,7 @@ For very large clusters or high deployment volumes, the agent's polling interval
 
 ## Resource Requirements
 
-| Component | CPU Request | Memory Request | CPU Limit | Memory Limit |
-|-----------|-------------|----------------|-----------|--------------|
-| Broker | 100m | 256Mi | 500m | 512Mi |
-| Agent | 50m | 128Mi | 200m | 256Mi |
-| PostgreSQL | 250m | 256Mi | 500m | 512Mi |
-
-These are conservative defaults suitable for small to medium deployments. Production deployments handling thousands of deployment objects or hundreds of agents should increase these limits based on observed resource utilization.
+The Helm charts ship conservative CPU and memory defaults suitable for small to medium deployments; see the per-component tables in the [installation guide](../getting-started/installation.md) or the chart `values.yaml` files for the current values. Production deployments handling thousands of deployment objects or hundreds of agents should increase these limits based on observed resource utilization.
 
 ## Multi-Tenancy
 

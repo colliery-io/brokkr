@@ -49,9 +49,9 @@ The **Semi-Trusted Zone** exists in each target cluster where agents operate. Ag
 
 Four principles guide Brokkr's security architecture:
 
-**Zero Trust by Default** requires all external requests to authenticate. The broker's API middleware rejects any request without valid credentials before route handlers execute. There are no anonymous endpoints except health checks.
+**Zero Trust by Default** requires all external requests to authenticate. The broker's API middleware rejects any request without valid credentials before route handlers execute. There are no anonymous endpoints except the health checks (`/healthz`, `/readyz`) and the Prometheus `/metrics` endpoint, which sit outside the authentication middleware.
 
-**Least Privilege** restricts each identity to the minimum permissions necessary. Agents can only access deployment objects targeted to them through the agent_targets association. Generators can only manage stacks they created. This scoping limits the blast radius of credential compromise.
+**Least Privilege** restricts each identity to the minimum permissions necessary. Agents can only access deployment objects from stacks associated with them—explicit targets plus stacks matching their labels or annotations. Generators can only manage stacks they created. This scoping limits the blast radius of credential compromise.
 
 **Defense in Depth** implements multiple overlapping security controls. Even if an attacker bypasses network security, they face application-level authentication. Even with valid credentials, authorization limits accessible resources. Even with resource access, audit logging records all actions.
 
@@ -86,7 +86,7 @@ A typical PAK looks like `brokkr_BRabc123_xyzSecretTokenHere...`. In this exampl
 
 PAK generation occurs when creating agents, generators, or admin credentials. The process uses cryptographically secure randomness from the operating system's entropy source:
 
-1. The system generates a random short token of configurable length. This token uses URL-safe characters and serves as the lookup key in the database.
+1. The system generates a random short token of configurable length. This token uses URL-safe characters and serves as a loggable identifier; database lookups during verification key off the long-token hash, not the short token.
 
 2. A separate random long token is generated with sufficient entropy for cryptographic security. This token never leaves the generation response.
 
@@ -109,24 +109,25 @@ sequenceDiagram
     participant DB as PostgreSQL
 
     Client->>Middleware: Request with PAK header
-    Middleware->>Middleware: Parse PAK structure
-    Middleware->>Middleware: Extract short token
-    Middleware->>DB: Lookup by pak_hash index
-    DB-->>Middleware: Record with stored hash
+    Middleware->>Middleware: Parse PAK, hash long token (SHA-256)
+    Middleware->>DB: Fetch admin role pak_hash, compare
+    alt Not admin
+        Middleware->>DB: Lookup agents by pak_hash (indexed)
+        alt Not an agent
+            Middleware->>DB: Lookup generators by pak_hash (indexed)
+        end
+    end
 
-    Middleware->>Middleware: Hash long token from request
-    Middleware->>Middleware: Constant-time hash comparison
-
-    alt Hashes match
+    alt Matching record found
         Middleware-->>Client: Authenticated (continue to handler)
-    else Hashes don't match
+    else No match
         Middleware-->>Client: 401 Unauthorized
     end
 ```
 
-The middleware first parses the PAK to extract its components. Using the short token as an identifier, it performs an indexed database lookup to find the associated record. This lookup uses the `pak_hash` column index, ensuring O(1) performance regardless of how many credentials exist.
+The middleware parses the presented PAK and hashes its long token with the same SHA-256 algorithm used at generation time. A malformed PAK is rejected with 401 at this step. It then resolves the identity by that hash, in order: it fetches the admin role row and compares hashes, then performs an indexed lookup in the agents table by `pak_hash`, then in the generators table. The partial indexes on `pak_hash` exclude soft-deleted records, so lookups stay O(1) regardless of how many credentials exist.
 
-The middleware then hashes the long token from the incoming request using the same SHA-256 algorithm used during generation. Finally, it compares this computed hash with the stored hash. The comparison uses constant-time algorithms to prevent timing attacks that could reveal information about valid hashes.
+Hash comparison uses a constant-time equality primitive (`subtle::ConstantTimeEq`) on the hex-encoded SHA-256 digests.
 
 If verification succeeds, the middleware populates an `AuthPayload` structure identifying the authenticated entity (agent, generator, or admin) and attaches it to the request for downstream handlers. If verification fails, the request is rejected with a 401 status before reaching any route handler.
 
@@ -138,7 +139,7 @@ If verification succeeds, the middleware populates an `AuthPayload` structure id
 | **Non-repudiation** | PAK uniquely identifies the acting entity |
 | **Revocation** | Entity can be disabled; PAK immediately invalid |
 | **Rotation** | New PAK generated via rotate endpoint; old one invalidated |
-| **Performance** | Indexed lookup prevents timing-based enumeration |
+| **Performance** | Indexed `pak_hash` lookup; O(1) regardless of credential count |
 
 ### Admin Authentication
 
@@ -196,24 +197,18 @@ The following table summarizes which roles can access each API endpoint category
 | `/api/v1/agents/*` (management) | No | No | Yes |
 | `/api/v1/admin/*` | No | No | Yes |
 | `/api/v1/webhooks/*` | No | No | Yes |
-| `/healthz`, `/readyz` | Yes | Yes | Yes |
-| `/metrics` | No | No | Yes |
+| `/healthz`, `/readyz` | Public (no auth) | Public (no auth) | Public (no auth) |
+| `/metrics` | Public (no auth) | Public (no auth) | Public (no auth) |
+
+Note that `/metrics` is mounted outside the authentication middleware, exactly like `/healthz` and `/readyz`—any client that can reach the broker port can scrape it. Metrics can reveal operational details (request rates, agent counts), so restrict access at the network level: use a NetworkPolicy (`networkPolicy.allowMetricsFrom`) or firewall rules to limit scraping to your monitoring infrastructure.
 
 ### Resource-Level Access Control
 
 Beyond endpoint-level authorization, Brokkr enforces resource-level access control through database queries.
 
-**Agent Scope** limits agents to resources explicitly targeted to them. When an agent requests deployment objects, the query joins through the `agent_targets` table:
+**Agent Scope** limits agents to resources from stacks associated with them. When an agent requests deployment objects, the broker resolves the agent's associated stacks as the union of explicit targets (`agent_targets` rows), stacks sharing any of the agent's labels, and stacks sharing any of the agent's annotations—then serves only those stacks' objects.
 
-```sql
-SELECT do.* FROM deployment_objects do
-JOIN agent_targets at ON at.stack_id = do.stack_id
-WHERE at.agent_id = :requesting_agent_id
-  AND at.deleted_at IS NULL
-  AND do.deleted_at IS NULL;
-```
-
-This query structure ensures agents can never see deployment objects from stacks not targeted to them, regardless of what parameters they provide in API requests.
+This resolution happens server-side on every request, so agents can never see deployment objects from stacks outside that union, regardless of what parameters they provide in API requests.
 
 **Generator Scope** restricts generators to stacks they created:
 
@@ -257,17 +252,7 @@ The encryption key is configured via the `BROKKR__BROKER__WEBHOOK_ENCRYPTION_KEY
 
 PAK rotation replaces an entity's authentication credential without disrupting its identity or permissions. The `POST /api/v1/agents/{id}/rotate-pak` endpoint (and similar endpoints for generators) generates a new PAK and invalidates the previous one atomically.
 
-```bash
-# Rotate an agent's PAK
-curl -X POST https://broker/api/v1/agents/{id}/rotate-pak \
-  -H "Authorization: Bearer <admin-pak>"
-# Returns: new PAK (store immediately; cannot be retrieved again)
-
-# Update agent configuration with new PAK
-kubectl set env deployment/brokkr-agent BROKKR__AGENT__PAK=<new-pak>
-```
-
-After rotation, the old PAK becomes invalid immediately. Any requests using the old PAK receive 401 Unauthorized responses. The agent must be updated with the new PAK before its next broker communication.
+After rotation, the old PAK becomes invalid immediately — the endpoint updates the stored hash, invalidates the broker's auth cache, and closes any open WebSocket authenticated with the old credential, all before returning the new PAK (which is shown once and cannot be retrieved again). The entity must then be reconfigured with the new PAK before its next broker communication. Step-by-step rotation procedures are in [Managing PAKs](../how-to/pak-management.md).
 
 ### Credential Revocation
 
@@ -315,25 +300,7 @@ Each audit log entry captures comprehensive context about the action:
 
 ### Recorded Actions
 
-The audit system records actions across several categories:
-
-**Authentication Events** track credential usage and failures:
-- `auth.success` - Successful authentication
-- `auth.failed` - Failed authentication attempt
-- `pak.created` - New PAK generated
-- `pak.rotated` - PAK rotated
-- `pak.deleted` - PAK revoked
-
-**Resource Lifecycle** tracks creation, modification, and deletion:
-- `agent.created`, `agent.updated`, `agent.deleted`
-- `stack.created`, `stack.updated`, `stack.deleted`
-- `generator.created`, `generator.updated`, `generator.deleted`
-- `webhook.created`, `webhook.updated`, `webhook.deleted`
-
-**Operational Events** record system activities:
-- `workorder.created`, `workorder.claimed`, `workorder.completed`, `workorder.failed`
-- `config.reloaded` - Configuration hot-reload triggered
-- `webhook.delivery_failed` - Webhook delivery failure
+The audit system records lifecycle events for agents, generators, templates, stacks, work orders, and webhook subscriptions; PAK issuance and rotation (`pak.created`/`pak.rotated`, via REST or CLI); webhook deliveries that exhaust retries (`webhook.delivery_failed`); failed authentication attempts (`auth.failed`, with source IP and request path); and configuration reloads (`config.reloaded`, with the change set). Two constants are intentionally unrecorded — `auth.success` (volume) and `pak.deleted` (PAKs die with their entity) — see the [Audit Logs Reference](../reference/audit-logs.md).
 
 ### Query Capabilities
 
@@ -400,59 +367,11 @@ The agent requires Kubernetes permissions to manage resources in target clusters
 
 **Optional secret access** is disabled by default. When enabled via `rbac.secretAccess.enabled`, the agent can list and watch secrets. The `rbac.secretAccess.readContents` flag controls whether the agent can read actual secret values.
 
-The RBAC configuration supports both namespace-scoped (Role/RoleBinding) and cluster-wide (ClusterRole/ClusterRoleBinding) permissions, configured via `rbac.clusterWide`.
+The RBAC configuration supports both namespace-scoped (Role/RoleBinding) and cluster-wide (ClusterRole/ClusterRoleBinding) permissions, configured via `rbac.clusterWide`. Namespace-scoped mode (`rbac.clusterWide: false`) deploys within its namespace, and the chart automatically sets `BROKKR__AGENT__WATCH_NAMESPACE` so telemetry streaming and health discovery operate in-namespace too. Remaining constraints: reconciliation pruning skips resource types it cannot list, and stacks containing cluster-scoped resources (Namespaces, CRDs) fail to apply.
 
 ## Security Best Practices
 
-### Production Deployment Checklist
-
-Before deploying Brokkr to production, verify these security configurations:
-
-- [ ] **TLS Everywhere**: Enable TLS for all external connections via ingress or direct TLS
-- [ ] **Strong Secrets**: Use cryptographically secure random values for all PAKs and encryption keys
-- [ ] **External Database**: Use managed PostgreSQL with encryption at rest
-- [ ] **Secret Management**: Store credentials in Kubernetes Secrets or external vault
-- [ ] **NetworkPolicy**: Enable and configure network policies to restrict traffic
-- [ ] **RBAC**: Use minimal required permissions for service accounts
-- [ ] **Pod Security**: Enable pod security standards (restricted profile)
-- [ ] **Audit Logging**: Enable and monitor audit logs
-- [ ] **Resource Limits**: Set CPU/memory limits to prevent resource exhaustion
-- [ ] **Image Scanning**: Scan container images for vulnerabilities before deployment
-
-### Monitoring for Security Events
-
-Monitor these metrics and events for security-relevant activity:
-
-| Indicator | Alert Threshold | Potential Issue |
-|-----------|-----------------|-----------------|
-| Failed authentication rate | > 10/minute | Brute force attack |
-| Unexpected agent disconnections | Any | Possible compromise or network attack |
-| Webhook delivery failure rate | > 50% | Network issues or endpoint compromise |
-| Audit log volume spike | 10x normal | Unusual activity, possible attack |
-| Admin action from unknown IP | Any | Credential theft |
-
-### Incident Response
-
-#### Suspected Agent Compromise
-
-If you suspect an agent's credentials have been compromised:
-
-1. **Revoke immediately**: Delete or disable the agent via the admin API
-2. **Review audit logs**: Search for unusual actions by the agent's actor_id
-3. **Inspect cluster**: Review resources the agent may have created or modified
-4. **Rotate secrets**: Generate new PAK if re-enabling the agent
-5. **Investigate**: Determine how the compromise occurred
-
-#### Suspected Broker Compromise
-
-If you suspect the broker itself has been compromised:
-
-1. **Isolate**: Remove external network access to the broker
-2. **Preserve evidence**: Capture logs, database state, and container images
-3. **Rotate all credentials**: Generate new PAKs for all agents, generators, and admins
-4. **Review webhooks**: Check for unauthorized webhook subscriptions
-5. **Audit database**: Look for unauthorized modifications to stacks or agents
-6. **Rebuild**: Consider deploying fresh broker instances rather than cleaning compromised ones
+Operational hardening guidance—the production deployment checklist, security monitoring thresholds, and incident response procedures for suspected agent or broker compromise—lives in the [Security Hardening how-to guide](../how-to/security-hardening.md).
 
 ## Compliance Considerations
 

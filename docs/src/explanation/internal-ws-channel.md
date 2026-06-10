@@ -53,7 +53,7 @@ that connection is up, the following traffic moves over it:
 | Broker → Agent   | `stack_changed`    | Replaces stack-mutation polling latency                |
 | Agent → Broker   | `heartbeat`        | Replaces `POST /agents/{id}/heartbeat`                 |
 | Agent → Broker   | `agent_event`      | Replaces `POST /agents/{id}/events`                    |
-| Agent → Broker   | `agent_health`     | Replaces `POST /agents/{id}/health`                    |
+| Agent → Broker   | `agent_health`     | Replaces `PATCH /agents/{id}/health-status`            |
 | Agent → Broker   | `k8s_event`        | New — see "Telemetry track" below                      |
 | Agent → Broker   | `pod_log_line`     | New — see "Telemetry track" below                      |
 | Agent → Broker   | `log_gap`          | New — gap marker for dropped log lines                 |
@@ -72,10 +72,11 @@ The single user-facing knob is in the agent's config:
 ws_force_rest = false
 ```
 
-Set `ws_force_rest = true` for restricted environments (no WS through
-ingress) or for debugging the REST fallback path in isolation. In this
-mode the agent **never** opens a WebSocket — the state pins at
-`ForceRestOnly` and every emitter short-circuits to REST.
+`ws_force_rest = true` exists for restricted environments (no WS through
+ingress) and for debugging the REST fallback path in isolation: the agent
+**never** opens a WebSocket — the state pins at `ForceRestOnly` and every
+emitter short-circuits to REST. The knob is cataloged in the
+[Environment Variables Reference](../reference/environment-variables.md).
 
 There is no broker-side opt-out: the broker always serves
 `/internal/ws/agent`. Operators that want to keep agents off WS for
@@ -112,7 +113,7 @@ load balancer than REST**. Real cases:
 
 The URL must be a full `ws://host:port/internal/ws/agent` (or `wss://`).
 The agent gates on `ws_url` when set and falls back to deriving from
-`broker_url` otherwise — see [ADR-0008](#) (the WS-channel decision record)
+`broker_url` otherwise — see [ADR-0008](https://github.com/colliery-io/brokkr/blob/main/.metis/adrs/BROKKR-A-0008.md) (the WS-channel decision record)
 for the invariant.
 
 ### Tuning the kube-events UID cache (large clusters)
@@ -121,13 +122,9 @@ The agent's kube-events tailer (WS-07) does one dynamic-API lookup per
 *new* object UID to decide whether an Event belongs to a Brokkr-managed
 object, then caches the answer. The cache is a bounded LRU (default
 **10 000** entries, 5-minute TTL) so a cluster with high churn of
-unmanaged objects can't grow it without limit:
-
-```toml
-[agent]
-# default 10000 — sized for ~10k managed pods
-kube_event_uid_cache_cap = 10000
-```
+unmanaged objects can't grow it without limit. The capacity is
+`agent.kube_event_uid_cache_cap` (default 10 000, sized for roughly 10k
+managed pods; see the [Environment Variables Reference](../reference/environment-variables.md)).
 
 The default suits clusters up to ~10k managed pods. Bump it for larger
 fleets; the trade-off is agent memory versus how often an evicted entry
@@ -140,12 +137,13 @@ lookup.
 Brokkr streams Kubernetes Events and pod logs for objects an agent
 manages, persists them, and lets the UI tail them live. **It is not a
 log warehouse.** A hard 6-hour retention ceiling is enforced in-process
-by a continuous eviction worker; per-stack config can shorten the window
-but never extend it.
+by a continuous eviction worker. There is no user-facing retention
+setting: the window is fixed at the 6-hour ceiling and cannot be
+shortened or extended through configuration.
 
 | Concern                        | Decision                                                                                                                  |
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
-| Retention ceiling              | **6 hours**, never configurable upward (`ws::eviction::HARD_RETENTION_CEILING`)                                          |
+| Retention ceiling              | **6 hours**, fixed — not user-configurable in either direction (`ws::eviction::HARD_RETENTION_CEILING`)                  |
 | Eviction cadence               | Continuous (default 60s tick); not lazy-on-read                                                                          |
 | Eviction key                   | Server-side `created_at`, not the agent's timestamp — backdated frames cannot extend retention                            |
 | Log opt-in granularity         | Per-pod annotation `brokkr.io/stream-logs: "true"` (set on the pod template). Off by default.                          |
@@ -153,28 +151,17 @@ but never extend it.
 | Rate limit                     | 100 lines/sec per container by default; over-rate lines drop with a `LogGap{RateLimit}` marker                            |
 | Long-term log centralisation   | **Use Datadog** (or equivalent). Brokkr will not grow into that role.                                                    |
 
-If a stack needs more than 6 hours of log history, the answer is "ship to
-Datadog", not "raise the ceiling". The 6h limit is a product invariant
-captured in the [project_log_retention_stance] memory and ADR-0008.
-
-[project_log_retention_stance]: https://github.com/colliery-io/brokkr/blob/main/.metis/
+If a stack needs more than 6 hours of log history, the answer is "ship it
+to a dedicated log platform (e.g. Datadog)", not "raise the ceiling". The
+6h limit is a product invariant recorded in [ADR-0008](https://github.com/colliery-io/brokkr/blob/main/.metis/adrs/BROKKR-A-0008.md).
 
 ## Endpoints
 
-### Internal (not in OpenAPI)
-
-| Path                            | Method | Auth        | Notes                                                              |
-| ------------------------------- | ------ | ----------- | ------------------------------------------------------------------ |
-| `/internal/ws/agent`            | GET    | Agent PAK   | WebSocket upgrade. Admin/generator PAKs → 403.                     |
-
-### Public REST + WS (in OpenAPI, generated into all three SDKs)
-
-| Path                                       | Method | Auth                  | Notes                                                                                  |
-| ------------------------------------------ | ------ | --------------------- | -------------------------------------------------------------------------------------- |
-| `/api/v1/stacks/{id}/events`               | GET    | Admin / owning gen    | Paginated kube-event history within the 6h window                                      |
-| `/api/v1/stacks/{id}/logs`                 | GET    | Admin / owning gen    | Paginated pod-log history within the 6h window                                          |
-| `/api/v1/stacks/{id}/live`                 | GET    | Admin / owning gen    | WebSocket upgrade for live event+log tail. Lagged subscribers see `log_gap` frames.   |
-| `/api/v1/admin/ws/connections`             | GET    | Admin                 | Snapshot of currently-connected agents and aggregate live-subscriber count            |
+The full endpoint catalog — the internal `/internal/ws/agent` upgrade,
+the public history endpoints (`/api/v1/stacks/{id}/events`, `/logs`),
+the live-tail upgrade (`/api/v1/stacks/{id}/live`), and the admin
+connection snapshot — is documented in the
+[WebSocket Protocol reference](../reference/ws-protocol.md).
 
 Every history-endpoint response carries a `retention` object that calls
 out the ceiling, the effective retention, the oldest available timestamp,
@@ -183,15 +170,9 @@ should surface this rather than hiding it.
 
 ## Observability (Prometheus)
 
-All metrics exposed under the existing `/metrics` scrape endpoint:
-
-| Metric                                                | Type          | Notes                                                            |
-| ----------------------------------------------------- | ------------- | ---------------------------------------------------------------- |
-| `brokkr_ws_connected_agents`                          | gauge         | Currently-connected agents on the internal channel               |
-| `brokkr_ws_messages_total{direction, type}`           | counter       | `direction ∈ {in, out}`, `type` = wire enum tag                  |
-| `brokkr_ws_live_subscribers`                          | gauge         | Live fan-out subscribers across all stacks                       |
-| `brokkr_ws_log_eviction_runs_total`                   | counter       | Eviction passes executed                                          |
-| `brokkr_ws_telemetry_evicted_total{table}`            | counter       | Rows evicted by table (`agent_k8s_events`, `agent_pod_logs`)     |
+All WS-channel metrics are exposed under the existing `/metrics` scrape
+endpoint; the catalog lives in the
+[Monitoring reference](../reference/monitoring.md#websocket-channel-metrics).
 
 Counters intentionally avoid per-agent / per-stack labels to keep
 cardinality bounded. Per-agent visibility lives in
@@ -205,8 +186,8 @@ the repo:
 - **Dashboard**: `docs/grafana/brokkr-ws-channel-dashboard.json` (uid
   `brokkr-ws-channel`). Panels: connected agents, live subscribers, WS
   message rate by `direction · type`, eviction-worker liveness, and rows
-  evicted by table. Import it and pick your Prometheus datasource for the
-  `DS_PROMETHEUS` variable.
+  evicted by table. Import steps are in
+  [Setting Up Monitoring](../how-to/monitoring-setup.md#import-grafana-dashboards).
 - **Alert**: `docs/grafana/brokkr-ws-channel.rules.yml` —
   `BrokkrWsEvictionWorkerStalled` fires (severity `warning`) when
   `brokkr_ws_log_eviction_runs_total` stops incrementing for >10m, i.e. the
@@ -220,19 +201,10 @@ the repo:
 The internal WS connection and the live-tail subscription are
 **long-lived** — they only close on agent crash, broker restart,
 explicit client close, or credential revocation (see below). Ingress
-controllers / reverse proxies in front
-of the broker should be configured to allow idle WebSocket connections
-for at least 5 minutes (anything longer is fine; the broker has no idle
-timeout of its own).
-
-Specific guidance:
-
-- **nginx-ingress**: `nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"`
-  and `proxy-send-timeout` on the broker service.
-- **Traefik**: defaults are usually fine; bump `transport.respondingTimeouts`
-  if you see cuts at 60s.
-- **AWS ALB**: increase the idle timeout on the listener (default 60s
-  is too aggressive).
+controllers / reverse proxies in front of the broker must therefore
+tolerate idle WebSocket connections. Concrete settings for
+nginx-ingress, Traefik, and AWS ALB are in the
+[Network Configuration how-to](../how-to/network-configuration.md#websocket-timeouts).
 
 ### Recovery semantics
 
@@ -277,7 +249,7 @@ normal auth path and echoes back only the non-secret `brokkr.v1` marker.
 This is additive: clients that can set headers (agents, SDKs, the Node
 `ws` package) keep using `Authorization: Bearer` unchanged — the
 subprotocol PAK is consulted only when no auth header is present. See the
-[ADR-0008 amendment](#) "Browser WS auth". `ui-slim`'s Telemetry panel uses
+the "Browser WS auth" amendment in [ADR-0008](https://github.com/colliery-io/brokkr/blob/main/.metis/adrs/BROKKR-A-0008.md). `ui-slim`'s Telemetry panel uses
 this for its **Go Live** toggle, streaming `k8s_event` / `pod_log_line`
 frames (and rendering `log_gap` markers) into the same events/logs tabs.
 

@@ -19,7 +19,7 @@ Shipwright integration requires **Kubernetes 1.29 or later** due to dependencies
 
 ```bash
 # Verify your Kubernetes version
-kubectl version --short
+kubectl version
 ```
 
 ### Cluster Requirements
@@ -43,42 +43,47 @@ helm install brokkr-agent oci://ghcr.io/colliery-io/charts/brokkr-agent \
 ```
 
 This installs:
-- **Tekton Pipelines** (v0.37.2) - Task execution engine
-- **Shipwright Build** (v0.10.0) - Build orchestration
-- **buildah ClusterBuildStrategy** - Default build strategy
+- **Tekton Pipelines** (v0.68.1) - Task execution engine
+- **Shipwright Build** (v0.18.1) - Build orchestration
+- **Sample ClusterBuildStrategies** (buildah, kaniko, etc.)
+
+The bundled versions are pinned in the chart's values (`shipwright.install.tektonVersion` and `shipwright.install.shipwrightVersion` in `charts/brokkr-agent/values.yaml`) and are the versions the integration is tested against. Override them there if you need different releases.
 
 ### Option 2: Bring Your Own Shipwright
 
-If you already have Shipwright and Tekton installed, or need specific versions:
+If you already have Shipwright and Tekton installed, or need specific versions, disable the bundled installation but **keep `shipwright.enabled=true`** — that flag also gates the agent's RBAC for `shipwright.io` and `tekton.dev` resources, which build work orders require:
 
 ```bash
-# Disable bundled Shipwright
+# Skip bundled installation, keep Shipwright integration (and RBAC) enabled
 helm install brokkr-agent oci://ghcr.io/colliery-io/charts/brokkr-agent \
   --set broker.url=http://brokkr-broker:3000 \
   --set broker.pak="<YOUR_PAK>" \
-  --set shipwright.enabled=false \
+  --set shipwright.install.tekton=false \
+  --set shipwright.install.shipwright=false \
   --wait
 ```
 
+Set `shipwright.enabled=false` only if you are not using build work orders at all.
+
 #### Manual Shipwright Installation
 
-If installing Shipwright manually, ensure you have compatible versions:
+If installing Shipwright manually, prefer the versions the chart bundles (Tekton v0.68.1, Shipwright v0.18.1) — older releases may work but are not what Brokkr is tested against:
 
 ```bash
-# Install Tekton Pipelines (v0.59.0 or later recommended)
-kubectl apply -f https://storage.googleapis.com/tekton-releases/pipeline/previous/v0.59.0/release.yaml
+# Install Tekton Pipelines
+kubectl apply -f https://storage.googleapis.com/tekton-releases/pipeline/previous/v0.68.1/release.yaml
 
 # Wait for Tekton to be ready
 kubectl wait --for=condition=Ready pods -l app=tekton-pipelines-controller -n tekton-pipelines --timeout=300s
 
-# Install Shipwright Build (v0.13.0 or later recommended)
-kubectl apply -f https://github.com/shipwright-io/build/releases/download/v0.13.0/release.yaml
+# Install Shipwright Build
+kubectl apply -f https://github.com/shipwright-io/build/releases/download/v0.18.1/release.yaml
 
 # Wait for Shipwright to be ready
 kubectl wait --for=condition=Ready pods -l app=shipwright-build-controller -n shipwright-build --timeout=300s
 
 # Install sample build strategies
-kubectl apply -f https://github.com/shipwright-io/build/releases/download/v0.13.0/sample-strategies.yaml
+kubectl apply -f https://github.com/shipwright-io/build/releases/download/v0.18.1/sample-strategies.yaml
 ```
 
 ## Verifying Installation
@@ -144,13 +149,13 @@ kubectl logs -l buildrun.shipwright.io/name=test-build-run-xxxxx -c step-build
 
 ### Build Strategies
 
-The bundled installation includes a `buildah` ClusterBuildStrategy. You can install additional strategies:
+The bundled installation includes the official sample ClusterBuildStrategies (buildah, kaniko, buildpacks, etc.) by default via `shipwright.install.sampleStrategies`:
 
 ```bash
-# Install all sample strategies (buildah, kaniko, buildpacks, etc.)
+# Sample strategies are installed by default; re-enable explicitly if needed
 helm upgrade brokkr-agent oci://ghcr.io/colliery-io/charts/brokkr-agent \
   --reuse-values \
-  --set shipwright.installSampleStrategies=true
+  --set shipwright.install.sampleStrategies=true
 ```
 
 ### Disable Sample Strategies
@@ -162,22 +167,24 @@ helm install brokkr-agent oci://ghcr.io/colliery-io/charts/brokkr-agent \
   --set broker.url=http://brokkr-broker:3000 \
   --set broker.pak="<YOUR_PAK>" \
   --set shipwright.enabled=true \
-  --set shipwright.installSampleStrategies=false
+  --set shipwright.install.sampleStrategies=false
 ```
 
 ## RBAC Configuration
 
-The brokkr-agent automatically includes RBAC rules for Shipwright when enabled:
+Build work orders require the agent to manage `shipwright.io` and `tekton.dev` resources. The brokkr-agent chart includes these RBAC rules in the agent ClusterRole whenever `shipwright.enabled=true` (even when the bundled installation is skipped):
 
 ```yaml
 # Automatically included when shipwright.enabled=true
 - apiGroups: ["shipwright.io"]
-  resources: ["builds", "buildruns"]
-  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-- apiGroups: ["shipwright.io"]
-  resources: ["buildstrategies", "clusterbuildstrategies"]
-  verbs: ["get", "list", "watch"]
+  resources: ["*"]
+  verbs: ["*"]
+- apiGroups: ["tekton.dev"]
+  resources: ["*"]
+  verbs: ["*"]
 ```
+
+If you disable `shipwright.enabled`, the agent loses these permissions and build work orders will fail.
 
 ## Registry Authentication
 
@@ -237,6 +244,33 @@ spec:
       url: https://github.com/org/private-repo
       cloneSecret: git-creds
 ```
+
+## Triggering a Build Through Brokkr
+
+Builds run through Brokkr's work order system. Create a work order with `work_type: "build"` and the Shipwright Build YAML in `yaml_content`, targeting agents by ID, label, or annotation:
+
+```bash
+curl -X POST "http://broker:3000/api/v1/work-orders" \
+  -H "Authorization: Bearer $ADMIN_PAK" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "work_type": "build",
+    "yaml_content": "apiVersion: shipwright.io/v1beta1\nkind: Build\nmetadata:\n  name: my-build\nspec:\n  source:\n    type: Git\n    git:\n      url: https://github.com/org/repo\n  strategy:\n    name: buildah\n    kind: ClusterBuildStrategy\n  output:\n    image: ghcr.io/org/my-image:latest\n    pushSecret: registry-creds",
+    "targeting": {
+      "labels": ["builder"]
+    }
+  }'
+```
+
+A matching agent claims the work order, applies the Build, creates a BuildRun, and watches it to completion with a 15-minute timeout. On success, the work order completes with the image digest as its result message; on failure, the error details are recorded instead. Completed work orders move to the work-order log:
+
+```bash
+# View completed builds (the message field carries the image digest)
+curl "http://broker:3000/api/v1/work-order-log?work_type=build" \
+  -H "Authorization: Bearer $ADMIN_PAK"
+```
+
+See the [Work Orders Reference](../reference/work-orders.md) for the full request schema, targeting semantics, and retry behavior.
 
 ## Troubleshooting
 

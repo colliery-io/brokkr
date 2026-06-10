@@ -1,6 +1,6 @@
 # How-To: Managing PAKs (Key Rotation)
 
-Pre-Authentication Keys (PAKs) are the authentication credentials for all Brokkr entities — admins, agents, and generators. This guide covers creating, rotating, and managing PAKs.
+Prefixed API Keys (PAKs) are the authentication credentials for all Brokkr entities — admins, agents, and generators. This guide covers creating, rotating, and managing PAKs.
 
 ## Overview
 
@@ -8,15 +8,27 @@ PAKs look like `brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8`. Brokkr store
 
 ## Rotating the Admin PAK
 
-### Via CLI (recommended)
+### Via CLI
 
-Run on the broker host:
+The `rotate admin` command re-runs the same admin upsert that runs at startup, and its behavior depends on `broker.pak_hash`:
+
+- **If `broker.pak_hash` is set** (it is by default, to a publicly-known development hash), the command simply re-applies that hash — **nothing rotates**.
+- **If `broker.pak_hash` is unset or empty**, a fresh PAK is generated and written to `/tmp/brokkr-keys/key.txt` on the broker host. It is never printed to stdout.
+
+To actually rotate:
 
 ```bash
+# 1. Clear the configured hash so a fresh PAK is generated
+export BROKKR__BROKER__PAK_HASH=""
+
+# 2. Rotate (or restart the broker — startup runs the same upsert)
 brokkr-broker rotate admin
+
+# 3. Read the new PAK from the key file
+cat /tmp/brokkr-keys/key.txt
 ```
 
-The new PAK is printed to stdout. The old PAK immediately stops working.
+The old admin PAK stops working once the new hash is in the database (subject to the auth cache — see below). If you manage `broker.pak_hash` explicitly, instead generate a new PAK/hash pair yourself and set the new hash in every place the broker config defines it.
 
 ### Via API
 
@@ -32,11 +44,14 @@ Not available — admin PAK rotation requires CLI access to prevent an attacker 
 
 ### Via CLI
 
+The CLI prints the new PAK to stdout (`New PAK: ...`); it is shown once, like the REST endpoint's response.
+
 ```bash
+# Revokes the agent's current PAK; the replacement is unrecoverable
 brokkr-broker rotate agent --uuid <agent-uuid>
 ```
 
-### Via API
+### Via API (recommended)
 
 An agent can rotate its own PAK, or an admin can rotate any agent's PAK:
 
@@ -87,11 +102,14 @@ kubectl create secret generic brokkr-agent-pak \
 
 ### Via CLI
 
+As with agents, the CLI prints the new generator PAK to stdout once.
+
 ```bash
+# Revokes the generator's current PAK; the replacement is unrecoverable
 brokkr-broker rotate generator --uuid <generator-uuid>
 ```
 
-### Via API
+### Via API (recommended)
 
 ```bash
 # As admin
@@ -117,16 +135,11 @@ Update the stored secret in your CI/CD system:
 
 ## Cache Considerations After CLI Rotation
 
-API-based rotation automatically invalidates the auth cache. CLI-based rotation operates directly on the database, so the old PAK may still work for up to 60 seconds (the default `broker.auth_cache_ttl_seconds`). To force immediate invalidation after a CLI rotation:
-
-```bash
-curl -s -X POST "http://localhost:3000/api/v1/admin/config/reload" \
-  -H "Authorization: <admin-pak>"
-```
+API-based rotation evicts the old PAK from the broker's auth cache immediately, so it stops working right away. CLI-based rotation (including `rotate admin`) operates directly on the database without touching the running broker's cache, so the old PAK may still authenticate for up to 60 seconds (the default `broker.auth_cache_ttl_seconds`). There is no endpoint to flush the cache; if a 60-second window is unacceptable, restart the broker after a CLI rotation.
 
 ## Verifying Rotation via Audit Logs
 
-All PAK operations are recorded. Query PAK-related audit events:
+All PAK rotations — agent and generator, via the REST endpoints or the CLI — are recorded as `pak.rotated` audit events (CLI entries carry `details.via = "cli"`).
 
 ```bash
 curl -s "http://localhost:3000/api/v1/admin/audit-logs?action=pak.*" \

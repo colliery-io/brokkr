@@ -18,30 +18,13 @@ In this tutorial, you'll set up a generator — Brokkr's mechanism for CI/CD int
 
 ## Step 1: Create a Generator
 
-Generators represent automated systems (CI/CD pipelines, GitOps controllers, deployment scripts) that push resources to Brokkr. They have their own PAK and can only manage resources they own.
+Generators represent automated systems (CI/CD pipelines, GitOps controllers, deployment scripts) that push resources to Brokkr. They have their own PAK (Prefixed API Key) and can only manage resources they own.
 
-Create a generator using the CLI:
-
-```bash
-brokkr-broker create generator --name "github-actions" --description "GitHub Actions deployment pipeline"
-```
-
-This prints the generator's ID and PAK:
-
-```
-Generator created successfully:
-ID: f8e7d6c5-b4a3-...
-Name: github-actions
-Initial PAK: brokkr_BRx9y2Kq_A1B2C3D4E5F6G7H8I9J0K1L2
-```
-
-**Save this PAK immediately** — it's only shown once. You'll store it as a CI secret.
-
-Alternatively, use the API:
+Create a generator via the API (the `brokkr-broker` CLI can do this too — see the [CLI Reference](../reference/cli.md)):
 
 ```bash
 GENERATOR_RESPONSE=$(curl -s -X POST http://localhost:3000/api/v1/generators \
-  -H "Authorization: <your-admin-pak>" \
+  -H "Authorization: Bearer <your-admin-pak>" \
   -H "Content-Type: application/json" \
   -d '{"name": "github-actions", "description": "GitHub Actions deployment pipeline"}')
 
@@ -52,23 +35,23 @@ echo "Generator ID: $GENERATOR_ID"
 echo "Generator PAK: $GENERATOR_PAK"
 ```
 
+**Save this PAK immediately** — it's only shown once. You'll store it as a CI secret.
+
 ## Step 2: Create a Stack as the Generator
 
-Switch to using the generator's PAK. The generator can create stacks, and those stacks become "owned" by the generator.
+Switch to using the generator's PAK. The generator can create stacks, and those stacks become "owned" by the generator. The request must carry a `generator_id`, and a generator PAK may only pass its **own** ID — anything else is rejected with a `403`:
 
 ```bash
-GENERATOR_PAK="brokkr_BRx9y2Kq_A1B2C3D4E5F6G7H8I9J0K1L2"  # your actual PAK
-
 STACK_ID=$(curl -s -X POST http://localhost:3000/api/v1/stacks \
-  -H "Authorization: ${GENERATOR_PAK}" \
+  -H "Authorization: Bearer ${GENERATOR_PAK}" \
   -H "Content-Type: application/json" \
-  -d '{"name": "myapp-v2", "description": "My application deployed via CI/CD"}' \
+  -d "{\"name\": \"myapp-v2\", \"description\": \"My application deployed via CI/CD\", \"generator_id\": \"${GENERATOR_ID}\"}" \
   | jq -r '.id')
 
 echo "Stack ID: $STACK_ID"
 ```
 
-The stack's `generator_id` field is now set to your generator's ID. This ownership means:
+The stack's `generator_id` field is set to your generator's ID. This ownership means:
 
 - The generator can update and delete this stack
 - The generator can push deployment objects to this stack
@@ -82,11 +65,11 @@ Generators have scoped access — they can only manage resources they own. Let's
 ```bash
 # Generator can list its own stacks
 curl -s http://localhost:3000/api/v1/stacks \
-  -H "Authorization: ${GENERATOR_PAK}" | jq '.[].name'
+  -H "Authorization: Bearer ${GENERATOR_PAK}" | jq '.[].name'
 
 # Generator CANNOT list agents (admin-only)
 curl -s http://localhost:3000/api/v1/agents \
-  -H "Authorization: ${GENERATOR_PAK}"
+  -H "Authorization: Bearer ${GENERATOR_PAK}"
 # Returns: 403 Forbidden
 ```
 
@@ -98,12 +81,12 @@ Before pushing deployment objects, an agent must be targeted to the stack. Other
 
 ```bash
 AGENT_ID=$(curl -s http://localhost:3000/api/v1/agents \
-  -H "Authorization: <your-admin-pak>" | jq -r '.[0].id')
+  -H "Authorization: Bearer <your-admin-pak>" | jq -r '.[0].id')
 
 curl -s -X POST "http://localhost:3000/api/v1/agents/${AGENT_ID}/targets" \
-  -H "Authorization: <your-admin-pak>" \
+  -H "Authorization: Bearer <your-admin-pak>" \
   -H "Content-Type: application/json" \
-  -d "{\"stack_id\": \"${STACK_ID}\"}" | jq .
+  -d "{\"agent_id\": \"${AGENT_ID}\", \"stack_id\": \"${STACK_ID}\"}" | jq .
 ```
 
 > **Note:** Generators cannot manage agents or targets — that requires admin access. In production, an admin sets up the targeting once and the generator just pushes deployments.
@@ -115,7 +98,7 @@ Now simulate what a CI/CD pipeline would do — push a deployment object after b
 ```bash
 # This is what your CI/CD pipeline would run after building
 curl -s -X POST "http://localhost:3000/api/v1/stacks/${STACK_ID}/deployment-objects" \
-  -H "Authorization: ${GENERATOR_PAK}" \
+  -H "Authorization: Bearer ${GENERATOR_PAK}" \
   -H "Content-Type: application/json" \
   -d '{
     "yaml_content": "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: myapp\n---\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: myapp\n  namespace: myapp\n  labels:\n    app: myapp\nspec:\n  replicas: 2\n  selector:\n    matchLabels:\n      app: myapp\n  template:\n    metadata:\n      labels:\n        app: myapp\n    spec:\n      containers:\n      - name: myapp\n        image: myregistry.example.com/myapp:v1.2.3\n        ports:\n        - containerPort: 8080\n        env:\n        - name: VERSION\n          value: v1.2.3"
@@ -130,7 +113,7 @@ Push a new version (as a CI/CD pipeline would on the next merge):
 
 ```bash
 curl -s -X POST "http://localhost:3000/api/v1/stacks/${STACK_ID}/deployment-objects" \
-  -H "Authorization: ${GENERATOR_PAK}" \
+  -H "Authorization: Bearer ${GENERATOR_PAK}" \
   -H "Content-Type: application/json" \
   -d '{
     "yaml_content": "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: myapp\n---\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: myapp\n  namespace: myapp\n  labels:\n    app: myapp\nspec:\n  replicas: 2\n  selector:\n    matchLabels:\n      app: myapp\n  template:\n    metadata:\n      labels:\n        app: myapp\n    spec:\n      containers:\n      - name: myapp\n        image: myregistry.example.com/myapp:v1.3.0\n        ports:\n        - containerPort: 8080\n        env:\n        - name: VERSION\n          value: v1.3.0"
@@ -200,7 +183,7 @@ jobs:
         run: |
           YAML_CONTENT=$(cat deployment.yaml | jq -Rs .)
           curl -sf -X POST "${BROKKR_URL}/api/v1/stacks/${STACK_ID}/deployment-objects" \
-            -H "Authorization: ${{ secrets.BROKKR_GENERATOR_PAK }}" \
+            -H "Authorization: Bearer ${{ secrets.BROKKR_GENERATOR_PAK }}" \
             -H "Content-Type: application/json" \
             -d "{\"yaml_content\": ${YAML_CONTENT}}"
 ```
@@ -209,29 +192,26 @@ Store the generator PAK as `BROKKR_GENERATOR_PAK` in your repository's GitHub Ac
 
 ## Step 8: Rotate the Generator PAK
 
-PAKs should be rotated periodically. You can rotate via CLI or API:
+PAKs should be rotated periodically (also possible via the `brokkr-broker` CLI — see the [PAK Management guide](../how-to/pak-management.md)):
 
 ```bash
-# Via CLI (requires admin access to the broker host)
-brokkr-broker rotate generator --uuid <generator-uuid>
-
-# Via API
-curl -s -X POST "http://localhost:3000/api/v1/generators/${GENERATOR_ID}/rotate-pak" \
-  -H "Authorization: ${GENERATOR_PAK}" | jq .
+GENERATOR_PAK=$(curl -s -X POST "http://localhost:3000/api/v1/generators/${GENERATOR_ID}/rotate-pak" \
+  -H "Authorization: Bearer ${GENERATOR_PAK}" | jq -r '.pak')
+echo "New PAK: ${GENERATOR_PAK}"
 ```
 
-The response contains the new PAK. Update your CI secrets immediately — the old PAK stops working.
+The response contains the new PAK (captured above so the cleanup step below keeps working). Update your CI secrets immediately — the old PAK stops working the moment rotation succeeds.
 
 ## Clean Up
 
 ```bash
 # Delete the stack (as generator)
 curl -s -X DELETE "http://localhost:3000/api/v1/stacks/${STACK_ID}" \
-  -H "Authorization: ${GENERATOR_PAK}"
+  -H "Authorization: Bearer ${GENERATOR_PAK}"
 
 # Delete the generator (requires admin)
 curl -s -X DELETE "http://localhost:3000/api/v1/generators/${GENERATOR_ID}" \
-  -H "Authorization: <your-admin-pak>"
+  -H "Authorization: Bearer <your-admin-pak>"
 ```
 
 ## What You've Learned

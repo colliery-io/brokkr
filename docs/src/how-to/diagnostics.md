@@ -17,6 +17,7 @@ Use on-demand diagnostics when:
 - The `deployment_object_id` of the resource you want to diagnose
 - The `agent_id` of the agent running in the target cluster
 - The agent must be connected and sending heartbeats
+- The workload's pods must carry the `brokkr.io/deployment-object-id=<id>` label — diagnostics discover pods by it, in the namespaces declared by the deployment object's manifests; see [Known Limitations](../reference/diagnostics.md#known-limitations)
 
 ## Step 1: Identify the Deployment Object
 

@@ -10,7 +10,7 @@ Brokkr implements a three-tier health check system:
 2. **`/readyz`** - Readiness probe: Validates that the service is ready to accept traffic
 3. **`/health`** - Detailed diagnostics: Comprehensive JSON status for monitoring and debugging
 
-This pattern aligns with Kubernetes best practices and provides appropriate checks for different operational needs.
+The three tiers map to Kubernetes liveness probes, readiness probes, and external monitoring respectively.
 
 ## Broker Health Endpoints
 
@@ -160,7 +160,7 @@ curl http://brokkr-agent:8080/health
     "last_heartbeat": "2024-01-15T10:29:55Z"
   },
   "uptime_seconds": 3600,
-  "version": "0.1.0",
+  "version": "0.5.0",
   "timestamp": "2024-01-15T10:30:00Z"
 }
 ```
@@ -179,7 +179,7 @@ curl http://brokkr-agent:8080/health
     "last_heartbeat": "2024-01-15T10:29:55Z"
   },
   "uptime_seconds": 3600,
-  "version": "0.1.0",
+  "version": "0.5.0",
   "timestamp": "2024-01-15T10:30:00Z"
 }
 ```
@@ -196,7 +196,7 @@ curl http://brokkr-agent:8080/health
     "connected": false
   },
   "uptime_seconds": 3600,
-  "version": "0.1.0",
+  "version": "0.5.0",
   "timestamp": "2024-01-15T10:30:00Z"
 }
 ```
@@ -212,309 +212,18 @@ curl http://brokkr-agent:8080/health
 - `version`: Application version from Cargo.toml
 - `timestamp`: Current timestamp in RFC3339 format
 
-## Kubernetes Probe Configuration
+## Default Probe Configuration
 
-### Broker Deployment
+The Helm charts ship with these probe defaults for both broker and agent:
 
-The broker Helm chart includes these recommended probe configurations:
+| Setting | Liveness (`/healthz`) | Readiness (`/readyz`) |
+|---------|----------------------|----------------------|
+| `initialDelaySeconds` | 30 | 10 |
+| `periodSeconds` | 10 | 5 |
+| `timeoutSeconds` | 5 | 3 |
+| `failureThreshold` | 3 | 3 |
 
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: brokkr-broker
-spec:
-  template:
-    spec:
-      containers:
-      - name: broker
-        image: ghcr.io/colliery-io/brokkr-broker:latest
-        ports:
-        - name: http
-          containerPort: 3000
-          protocol: TCP
-        livenessProbe:
-          httpGet:
-            path: /healthz
-            port: http
-          initialDelaySeconds: 30
-          periodSeconds: 10
-          timeoutSeconds: 5
-          failureThreshold: 3
-        readinessProbe:
-          httpGet:
-            path: /readyz
-            port: http
-          initialDelaySeconds: 10
-          periodSeconds: 5
-          timeoutSeconds: 3
-          failureThreshold: 3
-```
-
-**Configuration Rationale:**
-- **Liveness:**
-  - `initialDelaySeconds: 30` - Allow broker startup and database connection
-  - `periodSeconds: 10` - Check every 10 seconds
-  - `failureThreshold: 3` - Restart after 30 seconds of failures
-- **Readiness:**
-  - `initialDelaySeconds: 10` - Quick readiness check after startup
-  - `periodSeconds: 5` - Check frequently to minimize downtime
-  - `failureThreshold: 3` - Remove from service after 15 seconds
-
-### Agent Deployment
-
-The agent Helm chart includes these recommended probe configurations:
-
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: brokkr-agent
-spec:
-  template:
-    spec:
-      containers:
-      - name: agent
-        image: ghcr.io/colliery-io/brokkr-agent:latest
-        ports:
-        - name: http
-          containerPort: 8080
-          protocol: TCP
-        livenessProbe:
-          httpGet:
-            path: /healthz
-            port: 8080
-          initialDelaySeconds: 30
-          periodSeconds: 10
-          timeoutSeconds: 5
-          failureThreshold: 3
-        readinessProbe:
-          httpGet:
-            path: /readyz
-            port: 8080
-          initialDelaySeconds: 10
-          periodSeconds: 5
-          timeoutSeconds: 3
-          failureThreshold: 3
-```
-
-**Configuration Rationale:**
-- **Liveness:**
-  - `initialDelaySeconds: 30` - Allow agent startup and K8s/broker connection
-  - `periodSeconds: 10` - Check every 10 seconds
-  - `failureThreshold: 3` - Restart after 30 seconds of failures
-- **Readiness:**
-  - `initialDelaySeconds: 10` - Quick readiness check after startup
-  - `periodSeconds: 5` - Check frequently for K8s API issues
-  - `failureThreshold: 3` - Remove from service after 15 seconds
-
-## Monitoring Integration
-
-### Prometheus Health Check Monitoring
-
-While health endpoints are primarily for Kubernetes probes, you can also monitor them with Prometheus using the Blackbox Exporter:
-
-```yaml
-# Prometheus scrape config for blackbox exporter
-scrape_configs:
-  - job_name: 'brokkr-health-checks'
-    metrics_path: /probe
-    params:
-      module: [http_2xx]
-    static_configs:
-      - targets:
-          - http://brokkr-broker:3000/healthz
-          - http://brokkr-broker:3000/readyz
-          - http://brokkr-agent:8080/healthz
-          - http://brokkr-agent:8080/readyz
-          - http://brokkr-agent:8080/health
-    relabel_configs:
-      - source_labels: [__address__]
-        target_label: __param_target
-      - source_labels: [__param_target]
-        target_label: instance
-      - target_label: __address__
-        replacement: blackbox-exporter:9115
-```
-
-### Custom Health Check Script
-
-You can create custom monitoring scripts to poll the health endpoints:
-
-```bash
-#!/bin/bash
-# check-brokkr-health.sh - Monitor Brokkr component health
-
-BROKER_URL="http://brokkr-broker:3000"
-AGENT_URL="http://brokkr-agent:8080"
-
-# Check broker readiness
-if ! curl -sf "$BROKER_URL/readyz" > /dev/null; then
-  echo "ALERT: Broker not ready"
-  # Send alert to monitoring system
-fi
-
-# Check agent detailed health
-AGENT_HEALTH=$(curl -sf "$AGENT_URL/health")
-if [ $? -ne 0 ]; then
-  echo "ALERT: Agent health check failed"
-  # Send alert
-else
-  STATUS=$(echo "$AGENT_HEALTH" | jq -r '.status')
-  if [ "$STATUS" != "healthy" ]; then
-    echo "ALERT: Agent unhealthy - $AGENT_HEALTH"
-    # Send alert with details
-  fi
-fi
-```
-
-### Datadog Integration
-
-Monitor health endpoints using Datadog's HTTP check:
-
-```yaml
-# datadog-checks.yaml
-init_config:
-
-instances:
-  # Broker health checks
-  - name: brokkr-broker-liveness
-    url: http://brokkr-broker:3000/healthz
-    timeout: 3
-    method: GET
-
-  - name: brokkr-broker-readiness
-    url: http://brokkr-broker:3000/readyz
-    timeout: 3
-    method: GET
-
-  # Agent health checks
-  - name: brokkr-agent-liveness
-    url: http://brokkr-agent:8080/healthz
-    timeout: 3
-    method: GET
-
-  - name: brokkr-agent-readiness
-    url: http://brokkr-agent:8080/readyz
-    timeout: 3
-    method: GET
-
-  - name: brokkr-agent-detailed
-    url: http://brokkr-agent:8080/health
-    timeout: 5
-    method: GET
-    content_match: '"status":"healthy"'
-```
-
-## Troubleshooting
-
-### Health Check Failures
-
-**Symptom:** Broker `/readyz` returning errors or timeouts
-
-**Possible Causes:**
-- Database connectivity issues
-- Broker process overloaded
-- Network policy blocking health probe
-
-**Resolution:**
-```bash
-# Check broker logs
-kubectl logs -l app.kubernetes.io/name=brokkr-broker
-
-# Test database connectivity
-kubectl exec -it <broker-pod> -- env | grep DATABASE
-
-# Test health endpoint manually
-kubectl port-forward svc/brokkr-broker 3000:3000
-curl -v http://localhost:3000/readyz
-```
-
-**Symptom:** Agent `/readyz` failing with "Kubernetes API unavailable"
-
-**Possible Causes:**
-- Invalid or expired service account credentials
-- RBAC permissions insufficient
-- Kubernetes API server unreachable
-- Network policy blocking API access
-
-**Resolution:**
-```bash
-# Check agent logs for detailed error
-kubectl logs -l app.kubernetes.io/name=brokkr-agent
-
-# Verify service account exists
-kubectl get serviceaccount brokkr-agent
-
-# Test K8s API access from agent pod
-kubectl exec -it <agent-pod> -- sh
-# Inside pod:
-curl -k https://kubernetes.default.svc/api/v1/namespaces/default
-```
-
-**Symptom:** Agent `/health` showing `"broker.connected": false`
-
-**Possible Causes:**
-- Broker service unavailable
-- Invalid broker URL configuration
-- Network policy blocking broker access
-- Authentication issues (invalid PAK)
-
-**Resolution:**
-```bash
-# Check broker service
-kubectl get svc brokkr-broker
-
-# Test connectivity from agent to broker
-kubectl exec -it <agent-pod> -- sh
-# Inside pod:
-curl http://brokkr-broker:3000/healthz
-
-# Check agent configuration
-kubectl get configmap <agent-configmap> -o yaml | grep BROKER
-
-# Check agent logs for authentication errors
-kubectl logs -l app.kubernetes.io/name=brokkr-agent | grep -i "auth\|broker"
-```
-
-### Probe Configuration Issues
-
-**Symptom:** Container restarting frequently due to failed liveness probes
-
-**Possible Causes:**
-- `initialDelaySeconds` too low for startup time
-- `timeoutSeconds` too low for slow responses
-- `failureThreshold` too low (not enough retry tolerance)
-
-**Resolution:**
-```bash
-# Check recent pod events
-kubectl describe pod <pod-name>
-
-# Look for "Liveness probe failed" messages
-# Adjust probe configuration based on actual startup time
-
-# For slow-starting containers, increase initialDelaySeconds:
-kubectl edit deployment brokkr-broker
-# Set initialDelaySeconds: 60 for livenessProbe
-```
-
-**Symptom:** Pod marked not ready immediately after deployment
-
-**Possible Causes:**
-- Dependencies not available at startup
-- `initialDelaySeconds` on readiness probe too aggressive
-
-**Resolution:**
-```bash
-# Check readiness probe configuration
-kubectl get deployment brokkr-agent -o yaml | grep -A10 readinessProbe
-
-# Test readiness endpoint manually during startup
-kubectl port-forward <pod-name> 8080:8080
-# In another terminal:
-watch -n 1 'curl -i http://localhost:8080/readyz'
-```
+Probe manifests, tuning, and troubleshooting are covered in [Setting Up Monitoring](../how-to/monitoring-setup.md#configure-kubernetes-probes).
 
 ## Performance Considerations
 
@@ -543,92 +252,9 @@ This generates minimal load:
 - **Memory:** Negligible
 - **Network:** <1KB per probe
 
-### Recommended Probe Intervals
-
-**Production Environments:**
-```yaml
-livenessProbe:
-  initialDelaySeconds: 30
-  periodSeconds: 10
-  timeoutSeconds: 5
-  failureThreshold: 3
-
-readinessProbe:
-  initialDelaySeconds: 10
-  periodSeconds: 5
-  timeoutSeconds: 3
-  failureThreshold: 3
-```
-
-**High-Availability Environments (faster failure detection):**
-```yaml
-livenessProbe:
-  initialDelaySeconds: 30
-  periodSeconds: 5
-  timeoutSeconds: 3
-  failureThreshold: 2
-
-readinessProbe:
-  initialDelaySeconds: 10
-  periodSeconds: 3
-  timeoutSeconds: 2
-  failureThreshold: 2
-```
-
-**Development/Testing (more forgiving):**
-```yaml
-livenessProbe:
-  initialDelaySeconds: 60
-  periodSeconds: 30
-  timeoutSeconds: 10
-  failureThreshold: 5
-
-readinessProbe:
-  initialDelaySeconds: 30
-  periodSeconds: 10
-  timeoutSeconds: 5
-  failureThreshold: 5
-```
-
-## Best Practices
-
-1. **Use all three endpoint types appropriately:**
-   - `/healthz` for liveness probes only
-   - `/readyz` for readiness probes only
-   - `/health` for monitoring and debugging (not for probes)
-
-2. **Set appropriate timeouts:**
-   - Account for slow network conditions
-   - Consider cold start performance
-   - Test probe timing in staging before production
-
-3. **Monitor probe failures:**
-   - Alert on excessive readiness probe failures
-   - Track liveness probe failure rate
-   - Use Prometheus to monitor probe success rate
-
-4. **Tune for your environment:**
-   - Adjust `initialDelaySeconds` based on actual startup time
-   - Increase `periodSeconds` if probes cause excessive load
-   - Increase `failureThreshold` in high-latency environments
-
-5. **Test probe configurations:**
-   - Simulate failures in staging
-   - Verify restarts work as expected
-   - Ensure startup timing is adequate
-
-6. **Use `/health` endpoint for operational visibility:**
-   - Monitor detailed status in dashboards
-   - Parse JSON response for alerting
-   - Track component dependencies (K8s API, broker)
-
-7. **Avoid common mistakes:**
-   - Don't use `/health` for Kubernetes probes (too detailed, may cause false positives)
-   - Don't set timeouts shorter than actual endpoint latency
-   - Don't set `initialDelaySeconds` too low for startup dependencies
-
 ## Related Documentation
 
+- [Setting Up Monitoring](../how-to/monitoring-setup.md) - Probe configuration, external health monitoring, troubleshooting
 - [Monitoring & Observability](./monitoring.md) - Prometheus metrics and dashboards
 - [Installation Guide](../getting-started/installation.md) - Helm chart installation with probe configuration
 - [Configuration Reference](../getting-started/configuration.md) - Environment variables and advanced configuration

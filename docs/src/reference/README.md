@@ -18,36 +18,7 @@ Our interactive Swagger UI provides a complete reference of all available endpoi
 
 ### API Endpoints Overview
 
-The Brokkr API is organized into the following main sections:
-
-#### Health Check
-- `GET /healthz` - Liveness check
-- `GET /readyz` - Readiness check
-- `GET /api/v1/health` - Detailed health diagnostics
-
-#### Agent Management
-- `POST /api/v1/agents` - Create a new agent
-- `GET /api/v1/agents` - List all agents
-- `GET /api/v1/agents/{agent_id}` - Get agent details
-- `PUT /api/v1/agents/{agent_id}` - Update an agent
-- `DELETE /api/v1/agents/{agent_id}` - Delete an agent
-
-#### Stack Management
-- `POST /api/v1/stacks` - Create a new stack
-- `GET /api/v1/stacks` - List all stacks
-- `GET /api/v1/stacks/{stack_id}` - Get stack details
-- `PUT /api/v1/stacks/{stack_id}` - Update a stack
-- `DELETE /api/v1/stacks/{stack_id}` - Delete a stack
-
-#### Deployment Object Management
-- `POST /api/v1/stacks/{stack_id}/deployment-objects` - Create a deployment object
-- `GET /api/v1/stacks/{stack_id}/deployment-objects` - List deployment objects
-
-#### Event Management
-- `POST /api/v1/events` - Report a deployment event
-- `GET /api/v1/events` - List events
-
-For detailed information about each endpoint, including request/response formats and examples, please refer to the [Interactive API Documentation](./api/README.md).
+The full endpoint catalog — every route, method, and authorization requirement — is maintained in the [API Reference](./api/README.md), with an interactive Swagger UI served by the broker at `/swagger-ui` and the OpenAPI spec at `/docs/openapi.json`.
 
 ## Rust API Documentation
 

@@ -187,14 +187,14 @@ POST /api/v1/stacks/{stack_id}/deployment-objects/from-template
 ```
 
 **Process:**
-1. Fetches the latest version of the template
+1. Fetches the exact template row identified by `template_id`
 2. Validates parameters against the JSON Schema
 3. Checks template-to-stack matching rules (labels/annotations)
 4. Renders the Tera template with the provided parameters
 5. Creates a deployment object with the rendered YAML
 6. Records the rendered deployment object provenance
 
-**Response:** `200 OK` — `DeploymentObject[]`
+**Response:** `201 Created` — `DeploymentObject`
 
 ---
 
@@ -334,8 +334,8 @@ Template with labels `["env:production", "tier:frontend"]`:
 ## Versioning Behavior
 
 - Creating a template starts at version 1
-- Updating via `PUT` auto-increments the version
-- Instantiation always uses the **latest version** of the template
+- Updating via `PUT` inserts a new row at version+1 with a **new template ID**; the old ID continues to identify the old version
+- Instantiation uses the exact template version identified by `template_id` — to render a newer version, reference the new version's ID
 - Old versions remain in the database for provenance
 - Deployment objects rendered from old versions are not affected by template updates
 - The `rendered_deployment_objects` table records which version was used

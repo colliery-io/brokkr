@@ -6,51 +6,24 @@ Brokkr agents continuously monitor the health of deployed Kubernetes resources a
 
 When an agent applies deployment objects to a Kubernetes cluster, it tracks those resources and periodically checks their health. The agent examines pod status, container states, and Kubernetes conditions to determine overall health. This information is reported to the broker, where it can be viewed through the API or UI.
 
-Health monitoring runs as a background process on each agent. On each check interval, the agent queries the Kubernetes API for pods associated with each deployment object, analyzes their status, and sends a consolidated health report to the broker.
+Health monitoring runs as a background process on each agent. On each check interval, the agent lists pods across all namespaces, attributes each pod to its deployment object — by the `brokkr.io/deployment-object-id` label or annotation when present, otherwise by walking the pod's ownerReference chain up to the Brokkr-applied top-level object — analyzes pod status, and sends a consolidated health report to the broker. Standard controller-managed workloads are attributed automatically; see the [Deployment Health Reference](../reference/deployment-health.md) for the exact discovery rules.
 
 ## Health Status Values
 
-The health monitoring system reports one of four status values:
-
-| Status | Description |
-|--------|-------------|
-| `healthy` | All pods are ready and running without issues |
-| `degraded` | Some pods have issues but the deployment is partially functional |
-| `failing` | The deployment has failed or all pods are in error states |
-| `unknown` | Health cannot be determined (no pods found or API errors) |
-
-### Detected Conditions
-
-The agent detects and reports these problematic conditions:
-
-**Container Issues:**
-- `ImagePullBackOff` - Unable to pull container image
-- `ErrImagePull` - Error pulling container image
-- `CrashLoopBackOff` - Container repeatedly crashing
-- `CreateContainerConfigError` - Invalid container configuration
-- `InvalidImageName` - Malformed image reference
-- `RunContainerError` - Error starting container
-- `ContainerCannotRun` - Container failed to run
-
-**Resource Issues:**
-- `OOMKilled` - Container killed due to memory limits
-- `Error` - Container exited with error
-
-**Pod Issues:**
-- `PodFailed` - Pod entered failed phase
+The health monitoring system reports one of four statuses: `healthy`, `degraded`, `failing`, or `unknown`. The agent derives these from pod conditions such as `ImagePullBackOff`, `CrashLoopBackOff`, and `OOMKilled`. See the [Deployment Health Reference](../reference/deployment-health.md) for the full status definitions, detected conditions, and the health summary schema.
 
 ## Configuring Health Monitoring
 
 ### Enabling Health Monitoring
 
-Health monitoring is enabled by default. Configure it through environment variables:
+Health monitoring is enabled by default. Configure it through Helm values:
 
 ```yaml
 # Helm values for agent
 agent:
-  config:
-    deploymentHealthEnabled: true
-    deploymentHealthInterval: 60
+  deploymentHealth:
+    enabled: true
+    intervalSeconds: 60
 ```
 
 Or set environment variables directly:
@@ -68,16 +41,16 @@ For environments where rapid detection is critical:
 
 ```yaml
 agent:
-  config:
-    deploymentHealthInterval: 30  # Check every 30 seconds
+  deploymentHealth:
+    intervalSeconds: 30  # Check every 30 seconds
 ```
 
 For large clusters with many deployments, increase the interval to reduce API load:
 
 ```yaml
 agent:
-  config:
-    deploymentHealthInterval: 120  # Check every 2 minutes
+  deploymentHealth:
+    intervalSeconds: 120  # Check every 2 minutes
 ```
 
 ### Disabling Health Monitoring
@@ -86,8 +59,8 @@ To disable health monitoring entirely:
 
 ```yaml
 agent:
-  config:
-    deploymentHealthEnabled: false
+  deploymentHealth:
+    enabled: false
 ```
 
 Note that disabling health monitoring means the broker will not have visibility into deployment status.
@@ -113,11 +86,7 @@ Response:
     {
       "agent_id": "e5f6g7h8-...",
       "status": "healthy",
-      "summary": {
-        "pods_ready": 3,
-        "pods_total": 3,
-        "conditions": []
-      },
+      "summary": "{\"pods_ready\": 3, \"pods_total\": 3, \"conditions\": []}",
       "checked_at": "2025-01-02T10:00:00Z"
     }
   ]
@@ -126,31 +95,7 @@ Response:
 
 ### Understanding the Summary
 
-The health summary provides details about pod status:
-
-```json
-{
-  "pods_ready": 2,
-  "pods_total": 3,
-  "conditions": ["ImagePullBackOff"],
-  "resources": [
-    {
-      "kind": "Pod",
-      "name": "my-app-abc123",
-      "namespace": "production",
-      "ready": false,
-      "message": "Back-off pulling image \"myapp:invalid\""
-    }
-  ]
-}
-```
-
-| Field | Description |
-|-------|-------------|
-| `pods_ready` | Number of pods in Ready state |
-| `pods_total` | Total number of pods found |
-| `conditions` | List of detected problematic conditions |
-| `resources` | Per-resource details (optional) |
+The `summary` field reports how many pods were found and ready, which problematic conditions were detected, and optional per-resource detail. The field-by-field schema is documented in the [Deployment Health Reference](../reference/deployment-health.md#healthsummary).
 
 ## Common Scenarios
 
@@ -206,7 +151,7 @@ When status shows as `unknown`:
 2. Check the agent has RBAC permissions to list pods
 3. Check agent logs for API errors:
    ```bash
-   kubectl logs -l app=brokkr-agent -c agent
+   kubectl logs -l app.kubernetes.io/name=brokkr-agent -c agent
    ```
 
 ## Multi-Agent Deployments
@@ -222,20 +167,20 @@ curl "http://broker:3000/api/v1/deployment-objects/{id}/health" \
 
 ## Webhook Integration
 
-Configure webhooks to receive notifications when deployment health changes:
+Health-status changes do not emit webhooks: health reports are stored by the broker and only surfaced through the health API. The closest webhook signal is `deployment.failed`, which fires when an agent posts a FAILURE apply event for a deployment object — that is, when applying the resources failed, not when monitored pods later become unhealthy:
 
 ```bash
 curl -X POST "http://broker:3000/api/v1/webhooks" \
   -H "Authorization: Bearer $ADMIN_PAK" \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "Health Alerts",
+    "name": "Apply Failure Alerts",
     "url": "https://alerts.example.com/webhook",
     "event_types": ["deployment.failed"]
   }'
 ```
 
-The `deployment.failed` event fires when a deployment transitions to failing status.
+To alert on health degradation (e.g., `CrashLoopBackOff` after a successful apply), poll the health endpoints or feed cluster-side monitoring from the pods themselves.
 
 ## Troubleshooting
 
@@ -245,7 +190,7 @@ If health status isn't updating:
 
 1. Check the agent is running and connected:
    ```bash
-   kubectl get pods -l app=brokkr-agent
+   kubectl get pods -l app.kubernetes.io/name=brokkr-agent
    ```
 
 2. Verify health monitoring is enabled:
@@ -255,7 +200,7 @@ If health status isn't updating:
 
 3. Check agent logs for health check errors:
    ```bash
-   kubectl logs -l app=brokkr-agent -c agent | grep -i health
+   kubectl logs -l app.kubernetes.io/name=brokkr-agent -c agent | grep -i health
    ```
 
 ### Incorrect Health Status
@@ -276,6 +221,7 @@ If health monitoring causes excessive Kubernetes API load:
 
 ## Related Documentation
 
+- [Deployment Health Reference](../reference/deployment-health.md) - Statuses, conditions, and summary schema
 - [Configuration Reference](../getting-started/configuration.md) - Agent configuration options
 - [Architecture](../explanation/architecture.md) - How agents monitor health
-- [Webhooks](./webhooks.md) - Alert on health changes
+- [Webhooks](./webhooks.md) - Alert on apply failures

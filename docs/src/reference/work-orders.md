@@ -208,15 +208,16 @@ next_retry_after = now + (backoff_seconds * 2^retry_count)
 
 ## Stale Claim Detection
 
-The broker runs a background job every 30 seconds to detect and recover stale claims. A claim is considered stale when an agent has held a work order for longer than `claim_timeout_seconds` without completing it.
+The broker runs a background job every 10 seconds to detect and recover stale claims. A claim is considered stale when an agent has held a work order for longer than `claim_timeout_seconds` without completing it.
 
 When a stale claim is detected:
 
 1. The work order's `claimed_at` timestamp is compared against the current time
 2. If the elapsed time exceeds `claim_timeout_seconds`, the claim is released
 3. The work order status returns to `PENDING`
-4. The `claimed_by` field is cleared, allowing any eligible agent to claim it
-5. The `retry_count` is incremented (counts as a failed attempt)
+4. The `claimed_by` and `claimed_at` fields are cleared, allowing any eligible agent to claim it
+
+Reclamation does not increment `retry_count`; a stale claim does not count as a failed attempt.
 
 This mechanism handles several failure scenarios:
 

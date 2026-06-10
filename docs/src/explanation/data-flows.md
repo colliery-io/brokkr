@@ -8,14 +8,13 @@ The deployment lifecycle encompasses the complete journey of a deployment object
 
 ### Creating a Deployment
 
-Deployments begin their lifecycle when an administrator or generator creates a stack and submits deployment objects to it. The broker processes these submissions through several stages, ultimately targeting them to appropriate agents.
+Deployments begin their lifecycle when an administrator or generator creates a stack and submits deployment objects to it. Creating a deployment object is a pure write: the broker stores the object and returns. No matching runs and no agent associations are written at creation time.
 
 ```mermaid
 sequenceDiagram
     participant Client as Admin/Generator
     participant Broker as Broker API
     participant DB as PostgreSQL
-    participant Match as Targeting Logic
 
     Client->>Broker: POST /api/v1/stacks
     Broker->>DB: INSERT stack
@@ -24,22 +23,23 @@ sequenceDiagram
 
     Client->>Broker: POST /api/v1/stacks/{id}/labels
     Broker->>DB: INSERT stack_labels
-    Note over Broker: Labels used for agent targeting
+    Note over Broker: Labels matched against agent labels at read time
 
     Client->>Broker: POST /api/v1/stacks/{id}/deployment-objects
     Broker->>DB: INSERT deployment_object
-    Broker->>Match: Find matching agents
-    Match->>DB: Query agents by labels
-    DB-->>Match: Matching agents
-    Match->>DB: INSERT agent_targets
     Broker-->>Client: Deployment object response
+
+    opt Explicit targeting (only source of agent_targets rows)
+        Client->>Broker: POST /api/v1/agents/{id}/targets
+        Broker->>DB: INSERT agent_targets
+    end
 
     Note over DB: Deployment objects are immutable after creation
 ```
 
 The broker assigns each deployment object a sequence ID upon creation, establishing a strict ordering that agents use to process updates in the correct sequence. This sequence ID is monotonically increasing within each stack, ensuring that newer deployment objects always have higher sequence IDs than older ones. The combination of stack ID and sequence ID provides a reliable mechanism for agents to track which objects they have already processed.
 
-When a deployment object is created, the broker does not immediately push it to agents. Instead, the targeting logic creates entries in the `agent_targets` table that associate the stack with eligible agents. Agents discover these targets during their next polling cycle and fetch the relevant deployment objects.
+When a deployment object is created, the broker does not push it to agents, and it does not precompute which agents should receive it. The agent-to-stack association is resolved dynamically every time an agent polls: the broker unions the stacks explicitly targeted to the agent (rows in `agent_targets`, created only via `POST /api/v1/agents/{id}/targets`) with stacks that share *any* label with the agent and stacks that share *any* annotation key/value pair with the agent (OR semantics in both cases). Deployment objects from that union form the agent's target state.
 
 ### Agent Reconciliation
 
@@ -55,7 +55,8 @@ sequenceDiagram
 
     loop Every polling interval (default: 10s)
         Agent->>Broker: GET /api/v1/agents/{id}/target-state
-        Broker->>DB: Query targeted objects for agent
+        Broker->>DB: Resolve associated stacks (targets ∪ labels ∪ annotations)
+        Broker->>DB: Query their deployment objects
         DB-->>Broker: Deployment objects list
         Broker-->>Agent: Deployment objects (with sequence IDs)
 
@@ -94,8 +95,8 @@ Deployment objects follow an implicit lifecycle tracked through their presence, 
 ```mermaid
 stateDiagram-v2
     [*] --> Created: POST deployment-object
-    Created --> Targeted: Agent matching
-    Targeted --> Applied: Agent applies
+    Created --> Fetched: Agent polls (association resolved at read time)
+    Fetched --> Applied: Agent applies
     Applied --> Updated: New version created
     Updated --> Applied: Agent applies update
     Applied --> MarkedForDeletion: Deletion marker created
@@ -103,9 +104,9 @@ stateDiagram-v2
     Deleted --> [*]: Soft delete (retained)
 ```
 
-**Created** indicates a deployment object exists in the database but has not yet been targeted to any agents. This state typically transitions quickly to Targeted as the broker processes agent matching.
+**Created** indicates a deployment object exists in the database. There is no separate "targeting" step: which agents are responsible for the object is computed dynamically each time an agent polls, by unioning the agent's explicit targets (`agent_targets` rows, written only via `POST /api/v1/agents/{id}/targets`) with stacks matching any of the agent's labels or annotations.
 
-**Targeted** means one or more agents are responsible for this deployment object. The `agent_targets` table records these associations, linking stacks to agents based on label matching.
+**Fetched** means at least one agent's poll has resolved an association to the object's stack and received the object in its target state.
 
 **Applied** indicates the agent has successfully applied the resource to its cluster and reported an event confirming the operation. The agent event records the deployment object ID, timestamp, and outcome.
 
@@ -142,7 +143,7 @@ sequenceDiagram
     K8s-->>Agent: Deleted
 
     Agent->>Broker: POST /api/v1/agents/{id}/events
-    Note over Broker: Event type: DELETED
+    Note over Broker: event_type: DEPLOY, status: SUCCESS
 
     Note over DB: Both original and marker<br/>remain for audit trail
 ```
@@ -196,17 +197,16 @@ Audit logging uses a separate asynchronous channel with a 10,000-entry buffer. A
 
 Agents report events to the broker after completing each operation. The `POST /api/v1/agents/{id}/events` endpoint accepts event data and persists it to the `agent_events` table.
 
-| Event Type | Trigger | Data Included |
-|------------|---------|---------------|
-| `APPLIED` | Resource successfully applied | Resource details, timestamp |
-| `UPDATED` | Resource successfully updated | Resource details, changes |
-| `DELETED` | Resource successfully deleted | Resource details |
-| `FAILED` | Operation failed | Error message, resource details |
-| `HEALTH_CHECK` | Periodic health status | Deployment health summary |
+Every event the agent emits today carries `event_type: "DEPLOY"`, with the outcome expressed in the `status` field. The broker validates that `status` is one of `SUCCESS` or `FAILURE`:
 
-The agent includes comprehensive metadata with each event: the deployment object ID, resource GVK (Group/Version/Kind), namespace and name, operation result, and any error messages. This data enables precise tracking of deployment state and troubleshooting of failures.
+| event_type | status | Trigger | Data Included |
+|------------|--------|---------|---------------|
+| `DEPLOY` | `SUCCESS` | Resource(s) applied or deleted successfully | Deployment object ID, optional message |
+| `DEPLOY` | `FAILURE` | Apply or delete operation failed | Deployment object ID, error message |
 
-Events are processed synchronously in the API handler—the database insert must succeed before the endpoint returns. However, downstream processing (webhook delivery, audit logging) happens asynchronously through the event bus.
+Each event references the deployment object it concerns and may carry a free-form message (for failures, the error description). This data enables tracking of deployment state and troubleshooting of failures.
+
+Events are processed synchronously in the API handler—the database insert must succeed before the endpoint returns. However, downstream processing (webhook delivery, audit logging) happens asynchronously.
 
 ### Webhook Delivery
 
@@ -326,14 +326,11 @@ sequenceDiagram
     Note over Agent,Broker: Authorization: Bearer {PAK}
 
     Broker->>Auth: Validate PAK
-    Auth->>Auth: Parse PAK structure
-    Auth->>Auth: Extract short token (identifier)
-    Auth->>DB: Lookup agent by short token
-    DB-->>Auth: Agent record with hash
-    Auth->>Auth: Hash long token from request
-    Auth->>Auth: Compare with stored hash
+    Auth->>Auth: Parse PAK and hash long token (SHA-256)
+    Auth->>DB: Lookup agent by pak_hash (indexed)
+    DB-->>Auth: Agent record (if hash matches)
 
-    alt Hashes match
+    alt Record found
         Auth-->>Broker: Agent identity
         Broker->>Broker: Continue with request
         Broker-->>Agent: Response
@@ -345,7 +342,7 @@ sequenceDiagram
 
 PAK structure follows a defined format: `brokkr_BR{short_token}_{long_token}`. The short token serves as an identifier that can be safely logged and displayed. The long token is the secret component—it is hashed with SHA-256 before storage, and the plaintext is never persisted.
 
-When an agent authenticates, the middleware extracts the short token to locate the agent record, then hashes the provided long token and compares it with the stored hash. This constant-time comparison prevents timing attacks that could reveal information about valid tokens.
+When an agent authenticates, the middleware hashes the presented PAK's long token with SHA-256 and looks the result up directly in the indexed `pak_hash` column (checking the admin role first, then agents, then generators). A request authenticates if and only if a live record with that hash exists.
 
 PAKs can be rotated through the `POST /api/v1/agents/{id}/rotate-pak` endpoint, which generates a new PAK and invalidates the previous one. The new PAK is returned only once—it cannot be retrieved later.
 
@@ -364,11 +361,10 @@ sequenceDiagram
     Note over Admin,Broker: Authorization: Bearer {PAK}
 
     Broker->>Auth: Validate PAK
-    Auth->>Auth: Parse PAK structure
-    Auth->>Auth: Extract short token
-    Auth->>DB: Lookup admin by pak_hash
-    DB-->>Auth: Admin record with hash
-    Auth->>Auth: Hash long token and compare
+    Auth->>Auth: Parse PAK and hash long token (SHA-256)
+    Auth->>DB: Fetch admin role pak_hash
+    DB-->>Auth: Stored hash
+    Auth->>Auth: Compare hashes
 
     alt Valid PAK
         Auth-->>Broker: Admin identity (admin flag set)
@@ -380,7 +376,7 @@ sequenceDiagram
     end
 ```
 
-Admin PAKs enable access to sensitive operations including configuration reload, audit log queries, agent management, and system health endpoints. The PAK is verified using the same mechanism as agent authentication—SHA-256 hashing with constant-time comparison.
+Admin PAKs enable access to sensitive operations including configuration reload, audit log queries, agent management, and system health endpoints. The PAK is verified using the same mechanism as agent authentication—SHA-256 hashing of the long token and lookup against the stored hash.
 
 ### Generator Authentication
 
@@ -397,11 +393,9 @@ sequenceDiagram
     Note over Generator,Broker: Authorization: Bearer {PAK}
 
     Broker->>Auth: Validate PAK
-    Auth->>Auth: Parse PAK structure
-    Auth->>Auth: Extract short token
-    Auth->>DB: Lookup generator by pak_hash
-    DB-->>Auth: Generator record with hash
-    Auth->>Auth: Hash long token and compare
+    Auth->>Auth: Parse PAK and hash long token (SHA-256)
+    Auth->>DB: Lookup generator by pak_hash (indexed)
+    DB-->>Auth: Generator record (if hash matches)
 
     alt Valid PAK
         Auth-->>Broker: Generator identity
@@ -500,8 +494,8 @@ The `deleted_at` timestamp implements soft deletion across most entity types. Qu
 
 Background tasks run at regular intervals to enforce retention policies. The webhook cleanup task runs hourly, removing deliveries older than the configured retention period. The audit log cleanup task runs daily, removing entries beyond the retention window. Diagnostic results have a short retention period (1 hour by default) as they contain point-in-time debugging information.
 
-### Sequence ID Tracking
+### Incremental Target-State Filtering
 
-Agents track the highest sequence ID they have processed for each stack, enabling efficient incremental fetching. When an agent reconnects after downtime, it requests only objects with sequence IDs higher than its last processed value. This mechanism ensures reliable delivery of all updates while minimizing network traffic and processing time.
+Agents do not track sequence IDs or request "objects newer than X"—there is no such request parameter. Instead, the broker filters server-side using the agent's own event history. The `GET /api/v1/agents/{id}/target-state` endpoint accepts a `mode` query parameter: in the default `incremental` mode, the broker excludes deployment objects for which the agent has already recorded an agent event (i.e., objects it has already deployed); `mode=full` returns everything, including already-deployed objects.
 
-The `GET /api/v1/agents/{id}/target-state` endpoint leverages sequence tracking to return only unprocessed objects, reducing response size for agents managing large deployments.
+Sequence IDs still matter for ordering: each deployment object carries a monotonically increasing sequence ID within its stack, and the broker returns target state sorted by sequence ID, so agents process updates in a well-defined order. When an agent reconnects after downtime, the incremental filter naturally surfaces exactly the objects it has not yet reported events for, ensuring reliable delivery while minimizing payload size.

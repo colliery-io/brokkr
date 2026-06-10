@@ -4,11 +4,7 @@ Brokkr's webhook system enables external systems to receive real-time notificati
 
 ## Overview
 
-Webhooks provide HTTP callbacks for events such as:
-- Deployment applied or failed
-- Work order completed or failed
-- Agent registered or deregistered
-- Stack created or deleted
+Webhooks provide HTTP callbacks for events such as deployments applied or failed, work orders completed, agents registered, and stacks created or deleted. The full catalog is in the [Event Types reference](../reference/webhooks.md#event-types).
 
 Brokkr supports two delivery modes:
 - **Broker delivery** (default): The broker sends webhooks directly
@@ -90,12 +86,7 @@ curl -X POST "http://broker:3000/api/v1/webhooks" \
   }'
 ```
 
-Supported wildcards:
-- `deployment.*` - All deployment events
-- `workorder.*` - All work order events
-- `agent.*` - All agent events
-- `stack.*` - All stack events
-- `*` - All events
+See [Wildcard Patterns](../reference/webhooks.md#wildcard-patterns) for the supported patterns.
 
 ## Configuring Delivery Options
 
@@ -203,38 +194,11 @@ curl "http://broker:3000/api/v1/webhooks/{webhook_id}/deliveries?status=dead" \
   -H "Authorization: Bearer $ADMIN_PAK"
 ```
 
-Delivery statuses:
-- `pending` - Waiting to be delivered
-- `acquired` - Claimed by broker or agent, delivery in progress
-- `success` - Successfully delivered
-- `failed` - Delivery failed, will retry
-- `dead` - Max retries exceeded
+See [Delivery Status](../reference/webhooks.md#delivery-status) for what each status means and the state transitions between them.
 
 ## Webhook Payload Format
 
-All webhook deliveries include these headers:
-
-```
-Content-Type: application/json
-X-Brokkr-Event-Type: deployment.applied
-X-Brokkr-Delivery-Id: a1b2c3d4-e5f6-7890-abcd-ef1234567890
-Authorization: <your-configured-auth-header>
-```
-
-Payload structure:
-
-```json
-{
-  "id": "event-uuid",
-  "event_type": "deployment.applied",
-  "timestamp": "2025-01-02T10:00:00Z",
-  "data": {
-    "deployment_object_id": "...",
-    "agent_id": "...",
-    "status": "SUCCESS"
-  }
-}
-```
+Deliveries are JSON POSTs carrying `X-Brokkr-Event-Type` and `X-Brokkr-Delivery-Id` headers (plus your configured auth header) and a body with `id`, `event_type`, `timestamp`, and event-specific `data`. See the [Webhook Payload Format reference](../reference/webhooks.md#webhook-payload-format) for headers, body structure, and example payloads.
 
 ## Common Patterns
 
@@ -300,15 +264,15 @@ curl -X POST "http://broker:3000/api/v1/webhooks" \
 
 ### Agent-Delivered Webhooks Failing
 
-1. Verify agent has matching labels:
+1. Verify agent has matching labels (labels are a subresource, not part of the agent object):
    ```bash
-   curl "http://broker:3000/api/v1/agents/{agent_id}" \
+   curl "http://broker:3000/api/v1/agents/{agent_id}/labels" \
      -H "Authorization: Bearer $ADMIN_PAK"
    ```
 
 2. Check agent logs for delivery errors:
    ```bash
-   kubectl logs -l app=brokkr-agent -c agent
+   kubectl logs -l app.kubernetes.io/name=brokkr-agent -c agent
    ```
 
 3. Ensure the agent is ACTIVE and polling

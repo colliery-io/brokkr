@@ -40,22 +40,22 @@ Brokkr uses multiple tagging strategies to support different use cases and deplo
 
 ### Semantic Versioning for Releases
 
-When a release is tagged (e.g., `v1.2.3`), multiple version tags are created:
+When a release git tag (e.g., `v1.2.3`) is pushed, the workflow publishes image tags **without** the `v` prefix:
 
-- **Full version** (`v1.2.3`): Exact release identifier
-- **Minor version** (`v1.2`): Latest patch within minor version
-- **Major version** (`v1`): Latest minor within major version
+- **Full version** (`1.2.3`): Exact release identifier
+- **Minor version** (`1.2`): Latest patch within that minor version — moves with each patch release
+- **Major version** (`1`): Latest minor within that major version — moves with each release
 - **Latest** (`latest`): Most recent stable release
 
 **Rationale**: This allows users to choose their update cadence:
-- Pin to `v1.2.3` for no automatic updates
-- Use `v1.2` to get patch updates automatically
-- Use `v1` to track the major version
+- Pin to `1.2.3` for no automatic updates
+- Use `1.2` to get patch updates automatically
+- Use `1` to track the major version
 - Use `latest` for the bleeding edge (not recommended for production)
 
 ### Commit SHA Tags
 
-Every commit that triggers a build gets a SHA-based tag (e.g., `sha-abc1234`).
+Every commit that triggers a build gets a SHA-based tag in the form `{branch}-{short-sha}` (e.g., `develop-abc1234`; pull requests use `pr-{number}-{short-sha}`).
 
 **Rationale**:
 - Enables exact reproducibility
@@ -88,12 +88,14 @@ Not all tags are created equal. Understanding mutability is critical for product
 ### Immutable Tags
 
 These tags never change once created:
-- Semantic versions: `v1.2.3`, `v1.2`, `v1`
-- SHA tags: `sha-abc1234`
+- Full semantic version: `1.2.3`
+- SHA tags: `develop-abc1234` (branch + commit short SHA)
+- Digest references: `@sha256:...`
 
 ### Mutable Tags
 
 These tags are updated with new pushes:
+- Minor and major versions: `1.2`, `1` (move to the newest matching release)
 - Nightly: `nightly` (rebuilt daily from `main`)
 - Latest: `latest`
 - PR tags: `pr-123` (if the PR is updated)
@@ -106,11 +108,11 @@ For production deployments, **always use digest references** instead of tags:
 # Best - digest reference (immutable)
 image: ghcr.io/colliery-io/brokkr-broker@sha256:9fc91fae...
 
-# Good - semantic version (immutable)
-image: ghcr.io/colliery-io/brokkr-broker:v1.2.3
+# Good - full semantic version (immutable)
+image: ghcr.io/colliery-io/brokkr-broker:1.2.3
 
-# Acceptable - minor version (gets patches)
-image: ghcr.io/colliery-io/brokkr-broker:v1.2
+# Acceptable - minor version (mutable; gets patches automatically)
+image: ghcr.io/colliery-io/brokkr-broker:1.2
 
 # Avoid - mutable tags
 image: ghcr.io/colliery-io/brokkr-broker:latest
@@ -135,7 +137,7 @@ Brokkr uses Docker Buildx to create multi-architecture manifest lists. When you 
 
 ```bash
 # Same command works on AMD64 and ARM64
-docker pull ghcr.io/colliery-io/brokkr-broker:v1.0.0
+docker pull ghcr.io/colliery-io/brokkr-broker:1.0.0
 ```
 
 The manifest list contains references to both architectures, and Docker pulls the appropriate one based on the host platform.

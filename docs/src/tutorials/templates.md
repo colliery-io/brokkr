@@ -31,7 +31,7 @@ Create a template for a standard web service deployment:
 
 ```bash
 curl -s -X POST http://localhost:3000/api/v1/templates \
-  -H "Authorization: <your-admin-pak>" \
+  -H "Authorization: Bearer <your-admin-pak>" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "web-service",
@@ -60,25 +60,29 @@ TEMPLATE_ID="t1234567-..."  # use the actual ID from the response
 
 ## Step 3: Understand the Parameters Schema
 
-The JSON Schema you provided defines 10 parameters: four required (`service_name`, `namespace`, `image_repository`, `image_tag`) and six optional with defaults (`replicas` defaults to 2, `container_port` to 8080, etc.). The schema enforces constraints — for example, `replicas` must be between 1 and 20, and `service_name` must be 1-63 characters.
+The JSON Schema you provided defines 10 parameters: four required (`service_name`, `namespace`, `image_repository`, `image_tag`) and six more with documented defaults. The schema enforces constraints — for example, `replicas` must be between 1 and 20, and `service_name` must be 1-63 characters. One important nuance: schema `default` values are documentation and validation metadata only — the renderer does **not** inject them. Every variable the template body references must be supplied at instantiation (or the template must use Tera's `default` filter, e.g. `{{ replicas | default(value=2) }}`).
 
 The schema ensures that callers provide the required values and that constraints are enforced at instantiation time, before any YAML is rendered. See the [Templates Reference](../reference/templates.md#json-schema-for-parameters) for the full JSON Schema syntax guide.
 
 ## Step 4: Create a Stack and Instantiate the Template
 
-Create a stack, then instantiate the template into it:
+Create a stack, then instantiate the template into it. As in the earlier tutorials, stacks need an owning generator — look up the `admin-generator` the broker created at first startup:
 
 ```bash
+GEN_ID=$(curl -s http://localhost:3000/api/v1/generators \
+  -H "Authorization: Bearer <your-admin-pak>" \
+  | jq -r '.[] | select(.name=="admin-generator") | .id')
+
 # Create the stack
 STACK_ID=$(curl -s -X POST http://localhost:3000/api/v1/stacks \
-  -H "Authorization: <your-admin-pak>" \
+  -H "Authorization: Bearer <your-admin-pak>" \
   -H "Content-Type: application/json" \
-  -d '{"name": "frontend-app", "description": "Frontend web application", "generator_id": "00000000-0000-0000-0000-000000000000"}' \
+  -d "{\"name\": \"frontend-app\", \"description\": \"Frontend web application\", \"generator_id\": \"${GEN_ID}\"}" \
   | jq -r '.id')
 
 # Instantiate the template
 curl -s -X POST "http://localhost:3000/api/v1/stacks/${STACK_ID}/deployment-objects/from-template" \
-  -H "Authorization: <your-admin-pak>" \
+  -H "Authorization: Bearer <your-admin-pak>" \
   -H "Content-Type: application/json" \
   -d "{
     \"template_id\": \"${TEMPLATE_ID}\",
@@ -89,9 +93,12 @@ curl -s -X POST "http://localhost:3000/api/v1/stacks/${STACK_ID}/deployment-obje
       \"image_tag\": \"v2.1.0\",
       \"replicas\": 3,
       \"container_port\": 3000,
+      \"cpu_request\": \"100m\",
+      \"memory_request\": \"128Mi\",
+      \"cpu_limit\": \"500m\",
       \"memory_limit\": \"512Mi\"
     }
-  }" | jq '.[0] | {id, sequence_id, yaml_checksum}'
+  }" | jq '{id, sequence_id, yaml_checksum}'
 ```
 
 Brokkr validated the parameters, rendered the Tera template, and created a deployment object. The resulting YAML has all placeholders replaced with actual values.
@@ -102,10 +109,10 @@ Fetch the deployment object to see the rendered YAML:
 
 ```bash
 DO_ID=$(curl -s "http://localhost:3000/api/v1/stacks/${STACK_ID}/deployment-objects" \
-  -H "Authorization: <your-admin-pak>" | jq -r '.[0].id')
+  -H "Authorization: Bearer <your-admin-pak>" | jq -r '.[0].id')
 
 curl -s "http://localhost:3000/api/v1/deployment-objects/${DO_ID}" \
-  -H "Authorization: <your-admin-pak>" | jq -r '.yaml_content'
+  -H "Authorization: Bearer <your-admin-pak>" | jq -r '.yaml_content'
 ```
 
 You'll see fully-rendered Kubernetes YAML with all template variables replaced:
@@ -167,14 +174,14 @@ The same template works for a different service by changing the parameters:
 ```bash
 # Create a backend stack
 BACKEND_STACK=$(curl -s -X POST http://localhost:3000/api/v1/stacks \
-  -H "Authorization: <your-admin-pak>" \
+  -H "Authorization: Bearer <your-admin-pak>" \
   -H "Content-Type: application/json" \
-  -d '{"name": "backend-api", "description": "Backend API service", "generator_id": "00000000-0000-0000-0000-000000000000"}' \
+  -d "{\"name\": \"backend-api\", \"description\": \"Backend API service\", \"generator_id\": \"${GEN_ID}\"}" \
   | jq -r '.id')
 
 # Instantiate with different parameters
 curl -s -X POST "http://localhost:3000/api/v1/stacks/${BACKEND_STACK}/deployment-objects/from-template" \
-  -H "Authorization: <your-admin-pak>" \
+  -H "Authorization: Bearer <your-admin-pak>" \
   -H "Content-Type: application/json" \
   -d "{
     \"template_id\": \"${TEMPLATE_ID}\",
@@ -185,10 +192,12 @@ curl -s -X POST "http://localhost:3000/api/v1/stacks/${BACKEND_STACK}/deployment
       \"image_tag\": \"v3.0.1\",
       \"replicas\": 5,
       \"container_port\": 8080,
+      \"cpu_request\": \"250m\",
+      \"memory_request\": \"256Mi\",
       \"cpu_limit\": \"1000m\",
       \"memory_limit\": \"1Gi\"
     }
-  }" | jq '.[0] | {id, sequence_id}'
+  }" | jq '{id, sequence_id}'
 ```
 
 One template, multiple services, each with appropriate configuration.
@@ -198,17 +207,20 @@ One template, multiple services, each with appropriate configuration.
 Templates are versioned. Updating a template creates a new version while preserving the old one:
 
 ```bash
-curl -s -X PUT "http://localhost:3000/api/v1/templates/${TEMPLATE_ID}" \
-  -H "Authorization: <your-admin-pak>" \
+UPDATED=$(curl -s -X PUT "http://localhost:3000/api/v1/templates/${TEMPLATE_ID}" \
+  -H "Authorization: Bearer <your-admin-pak>" \
   -H "Content-Type: application/json" \
   -d '{
     "description": "Standard web service v2 - adds liveness probe",
     "template_content": "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: {{ namespace }}\n---\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: {{ service_name }}\n  namespace: {{ namespace }}\n  labels:\n    app: {{ service_name }}\n    managed-by: brokkr\nspec:\n  replicas: {{ replicas }}\n  selector:\n    matchLabels:\n      app: {{ service_name }}\n  template:\n    metadata:\n      labels:\n        app: {{ service_name }}\n    spec:\n      containers:\n      - name: {{ service_name }}\n        image: {{ image_repository }}:{{ image_tag }}\n        ports:\n        - containerPort: {{ container_port }}\n        livenessProbe:\n          httpGet:\n            path: /healthz\n            port: {{ container_port }}\n          initialDelaySeconds: 10\n          periodSeconds: 30\n        resources:\n          requests:\n            cpu: {{ cpu_request }}\n            memory: {{ memory_request }}\n          limits:\n            cpu: {{ cpu_limit }}\n            memory: {{ memory_limit }}\n---\napiVersion: v1\nkind: Service\nmetadata:\n  name: {{ service_name }}\n  namespace: {{ namespace }}\nspec:\n  selector:\n    app: {{ service_name }}\n  ports:\n  - port: 80\n    targetPort: {{ container_port }}",
     "parameters_schema": "{\"type\": \"object\", \"required\": [\"service_name\", \"namespace\", \"image_repository\", \"image_tag\"], \"properties\": {\"service_name\": {\"type\": \"string\", \"minLength\": 1, \"maxLength\": 63}, \"namespace\": {\"type\": \"string\", \"minLength\": 1}, \"image_repository\": {\"type\": \"string\"}, \"image_tag\": {\"type\": \"string\", \"default\": \"latest\"}, \"replicas\": {\"type\": \"integer\", \"default\": 2, \"minimum\": 1, \"maximum\": 20}, \"container_port\": {\"type\": \"integer\", \"default\": 8080}, \"cpu_request\": {\"type\": \"string\", \"default\": \"100m\"}, \"memory_request\": {\"type\": \"string\", \"default\": \"128Mi\"}, \"cpu_limit\": {\"type\": \"string\", \"default\": \"500m\"}, \"memory_limit\": {\"type\": \"string\", \"default\": \"256Mi\"}}}"
-  }' | jq '{id, name, version}'
+  }' | jq '{id, name, version}')
+TEMPLATE_V1_ID=${TEMPLATE_ID}
+TEMPLATE_ID=$(echo "${UPDATED}" | jq -r '.id')
+echo "${UPDATED}"
 ```
 
-The response shows `version: 2`. Existing deployment objects rendered from version 1 are unaffected. New instantiations will use the latest version.
+The response shows `version: 2` — and a **new template ID**. Updating a template inserts a new versioned row; the old ID keeps pointing at version 1. Instantiation always uses the exact template ID you reference, so capture the new ID (done above) to use version 2; deployment objects already rendered from version 1 are unaffected.
 
 ## Step 8: Schema Validation in Action
 
@@ -217,7 +229,7 @@ Try instantiating with invalid parameters to see validation:
 ```bash
 # Missing required field (service_name)
 curl -s -X POST "http://localhost:3000/api/v1/stacks/${STACK_ID}/deployment-objects/from-template" \
-  -H "Authorization: <your-admin-pak>" \
+  -H "Authorization: Bearer <your-admin-pak>" \
   -H "Content-Type: application/json" \
   -d "{
     \"template_id\": \"${TEMPLATE_ID}\",
@@ -230,7 +242,7 @@ curl -s -X POST "http://localhost:3000/api/v1/stacks/${STACK_ID}/deployment-obje
 
 # Replicas out of range (max is 20)
 curl -s -X POST "http://localhost:3000/api/v1/stacks/${STACK_ID}/deployment-objects/from-template" \
-  -H "Authorization: <your-admin-pak>" \
+  -H "Authorization: Bearer <your-admin-pak>" \
   -H "Content-Type: application/json" \
   -d "{
     \"template_id\": \"${TEMPLATE_ID}\",
@@ -250,12 +262,16 @@ Both requests return validation errors, preventing invalid YAML from reaching yo
 
 ```bash
 curl -s -X DELETE "http://localhost:3000/api/v1/stacks/${STACK_ID}" \
-  -H "Authorization: <your-admin-pak>"
+  -H "Authorization: Bearer <your-admin-pak>"
 curl -s -X DELETE "http://localhost:3000/api/v1/stacks/${BACKEND_STACK}" \
-  -H "Authorization: <your-admin-pak>"
+  -H "Authorization: Bearer <your-admin-pak>"
 curl -s -X DELETE "http://localhost:3000/api/v1/templates/${TEMPLATE_ID}" \
-  -H "Authorization: <your-admin-pak>"
+  -H "Authorization: Bearer <your-admin-pak>"
+curl -s -X DELETE "http://localhost:3000/api/v1/templates/${TEMPLATE_V1_ID}" \
+  -H "Authorization: Bearer <your-admin-pak>"
 ```
+
+Both template versions are deleted — each version is its own row with its own ID.
 
 ## What You've Learned
 

@@ -45,135 +45,11 @@ curl -X POST http://localhost:3000/api/v1/templates \
 
 ## Tera Templating
 
-### Variable Substitution
-
-Use `{{ variable }}` syntax for simple substitution:
-
-```yaml
-metadata:
-  name: {{ name }}
-  namespace: {{ namespace }}
-```
-
-### Default Values
-
-Use the `default` filter for optional parameters:
-
-```yaml
-spec:
-  replicas: {{ replicas | default(value=1) }}
-```
-
-### Conditionals
-
-Use `{% if %}` blocks for conditional content:
-
-```yaml
-{% if enable_hpa %}
----
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
-metadata:
-  name: {{ name }}-hpa
-spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: {{ name }}
-  minReplicas: {{ min_replicas | default(value=1) }}
-  maxReplicas: {{ max_replicas | default(value=10) }}
-{% endif %}
-```
-
-### Loops
-
-Use `{% for %}` to iterate over arrays:
-
-```yaml
-spec:
-  containers:
-  {% for container in containers %}
-  - name: {{ container.name }}
-    image: {{ container.image }}
-    ports:
-    {% for port in container.ports %}
-    - containerPort: {{ port }}
-    {% endfor %}
-  {% endfor %}
-```
-
-### Filters
-
-Tera provides many built-in filters:
-
-```yaml
-metadata:
-  name: {{ name | lower }}           # lowercase
-  labels:
-    version: "{{ version | upper }}" # uppercase
-    slug: {{ name | slugify }}        # URL-safe slug
-```
-
-See the [Tera documentation](https://tera.netlify.app/docs/#filters) for all available filters.
+Template content uses `{{ variable }}` substitution, `{% if %}` conditionals, `{% for %}` loops, and filters like `{{ replicas | default(value=1) }}` for optional parameters. See [Tera Template Syntax](../reference/templates.md#tera-template-syntax) in the reference and the [Tera documentation](https://tera.netlify.app/docs/#filters) for the full feature set.
 
 ## JSON Schema Validation
 
-### Basic Schema
-
-Define required and optional parameters:
-
-```json
-{
-  "type": "object",
-  "required": ["name", "image"],
-  "properties": {
-    "name": {
-      "type": "string",
-      "minLength": 1,
-      "description": "Resource name"
-    },
-    "image": {
-      "type": "string",
-      "pattern": "^[a-z0-9./-]+:[a-zA-Z0-9.-]+$"
-    },
-    "replicas": {
-      "type": "integer",
-      "minimum": 1,
-      "maximum": 100,
-      "default": 1
-    }
-  }
-}
-```
-
-### Validation Constraints
-
-Common JSON Schema constraints:
-
-| Constraint | Type | Description |
-|------------|------|-------------|
-| `minLength`, `maxLength` | string | String length limits |
-| `pattern` | string | Regex pattern |
-| `minimum`, `maximum` | number | Numeric bounds |
-| `enum` | any | Allowed values |
-| `minItems`, `maxItems` | array | Array length limits |
-
-### Nested Objects
-
-```json
-{
-  "type": "object",
-  "properties": {
-    "resources": {
-      "type": "object",
-      "properties": {
-        "cpu": {"type": "string", "pattern": "^[0-9]+m?$"},
-        "memory": {"type": "string", "pattern": "^[0-9]+[GMK]i$"}
-      }
-    }
-  }
-}
-```
+The `parameters_schema` is a standard JSON Schema declaring each parameter's type, which parameters are `required`, and constraints like `minimum`/`maximum`, `pattern`, and `enum`. See [JSON Schema for Parameters](../reference/templates.md#json-schema-for-parameters) in the reference for examples of each.
 
 ## Instantiating Templates
 
@@ -229,13 +105,16 @@ curl -X POST http://localhost:3000/api/v1/templates/$TEMPLATE_ID/annotations \
 | `env=prod` | `env=staging` | No match |
 | `env=prod, tier=1` | `env=prod` | No match (missing tier) |
 
-When instantiation fails due to label mismatch, you'll receive a 422 response with details:
+When instantiation fails due to label mismatch, you'll receive a 422 response with the missing keys under `details`:
 
 ```json
 {
-  "error": "Template labels do not match stack",
-  "missing_labels": ["tier=1"],
-  "missing_annotations": []
+  "code": "template_stack_mismatch",
+  "message": "template labels do not match stack",
+  "details": {
+    "missing_labels": ["tier=1"],
+    "missing_annotations": []
+  }
 }
 ```
 
@@ -325,13 +204,16 @@ curl -X POST http://localhost:3000/api/v1/stacks/$PROD_STACK_ID/deployment-objec
 
 ## Troubleshooting
 
+Errors follow the standard API error shape: `{"code": ..., "message": ..., "details": ...}`.
+
 ### Invalid Tera Syntax
 
 Template creation fails with syntax errors:
 
 ```json
 {
-  "error": "Invalid Tera syntax: ..."
+  "code": "invalid_template_syntax",
+  "message": "..."
 }
 ```
 
@@ -344,7 +226,8 @@ Check for:
 
 ```json
 {
-  "error": "Invalid JSON Schema: ..."
+  "code": "invalid_parameters_schema",
+  "message": "..."
 }
 ```
 
@@ -354,10 +237,13 @@ Validate your schema at [jsonschemavalidator.net](https://www.jsonschemavalidato
 
 ```json
 {
-  "error": "Invalid parameters",
-  "validation_errors": [
-    "/replicas: 0 is less than the minimum of 1"
-  ]
+  "code": "invalid_parameters",
+  "message": "invalid parameters",
+  "details": {
+    "validation_errors": [
+      "/replicas: 0 is less than the minimum of 1"
+    ]
+  }
 }
 ```
 
@@ -367,7 +253,8 @@ Check that parameters match the schema constraints.
 
 ```json
 {
-  "error": "Template rendering failed: Variable `name` not found"
+  "code": "template_render_failed",
+  "message": "Variable `name` not found"
 }
 ```
 
