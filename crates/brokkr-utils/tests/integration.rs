@@ -35,7 +35,8 @@ fn test_settings_from_file_and_env() {
     fs::write(&file_path, test_config).expect("Failed to write test config file");
 
     // Set an environment variable to override a setting
-    env::set_var("BROKKR__LOG__LEVEL", "debug");
+    // TODO: Audit that the environment access only happens in single-threaded code.
+    unsafe { env::set_var("BROKKR__LOG__LEVEL", "debug") };
 
     // Load settings from the test file
     let settings = Settings::new(Some(file_path.to_str().unwrap().to_string()))
@@ -55,7 +56,8 @@ fn test_settings_from_file_and_env() {
 
     // Clean up: remove the temporary directory and unset the environment variable
     temp_dir.close().expect("Failed to remove temp dir");
-    env::remove_var("BROKKR__LOG__LEVEL");
+    // TODO: Audit that the environment access only happens in single-threaded code.
+    unsafe { env::remove_var("BROKKR__LOG__LEVEL") };
 }
 
 #[test]
@@ -99,7 +101,8 @@ fn test_settings_via_brokkr_config_file_env() {
     "#;
     fs::write(&file_path, test_config).expect("Failed to write test config file");
 
-    env::set_var("BROKKR_CONFIG_FILE", file_path.to_str().unwrap());
+    // TODO: Audit that the environment access only happens in single-threaded code.
+    unsafe { env::set_var("BROKKR_CONFIG_FILE", file_path.to_str().unwrap()) };
 
     // The exact expression used by the binaries.
     let settings = Settings::new(env::var("BROKKR_CONFIG_FILE").ok())
@@ -110,6 +113,7 @@ fn test_settings_via_brokkr_config_file_env() {
         "Settings loaded through BROKKR_CONFIG_FILE must apply the file layer"
     );
 
-    env::remove_var("BROKKR_CONFIG_FILE");
+    // TODO: Audit that the environment access only happens in single-threaded code.
+    unsafe { env::remove_var("BROKKR_CONFIG_FILE") };
     temp_dir.close().expect("Failed to remove temp dir");
 }

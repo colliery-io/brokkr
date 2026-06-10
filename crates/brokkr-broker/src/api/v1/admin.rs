@@ -13,13 +13,13 @@ use super::middleware::AuthPayload;
 use crate::api::v1::error::{ApiError, ErrorResponse};
 use crate::dal::DAL;
 use axum::{
+    Json, Router,
     extract::{Extension, Query, State},
     response::IntoResponse,
     routing::{get, post},
-    Json, Router,
 };
 use brokkr_models::models::audit_logs::{
-    AuditLog, AuditLogFilter, ACTION_CONFIG_RELOADED, ACTOR_TYPE_ADMIN, RESOURCE_TYPE_CONFIG,
+    ACTION_CONFIG_RELOADED, ACTOR_TYPE_ADMIN, AuditLog, AuditLogFilter, RESOURCE_TYPE_CONFIG,
 };
 use brokkr_utils::config::ReloadableConfig;
 use chrono::{DateTime, Utc};

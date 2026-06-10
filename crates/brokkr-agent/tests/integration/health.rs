@@ -5,10 +5,10 @@
  */
 
 use axum::{
-    body::{to_bytes, Body},
+    body::{Body, to_bytes},
     http::{Request, StatusCode},
 };
-use brokkr_agent::health::{configure_health_routes, BrokerStatus, HealthState};
+use brokkr_agent::health::{BrokerStatus, HealthState, configure_health_routes};
 use kube::Client;
 use std::sync::Arc;
 use std::time::SystemTime;

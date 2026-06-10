@@ -23,8 +23,8 @@ pub mod registry;
 pub mod subscribe;
 
 pub use broadcaster::LiveBroadcaster;
-pub use eviction::{spawn as spawn_eviction, RetentionConfig, HARD_RETENTION_CEILING};
-pub use handler::{internal_routes, INTERNAL_WS_PATH};
+pub use eviction::{HARD_RETENTION_CEILING, RetentionConfig, spawn as spawn_eviction};
+pub use handler::{INTERNAL_WS_PATH, internal_routes};
 pub use push::{push_stack_changed_to_targets, push_target_changed, push_work_order};
 pub use registry::{ConnectionHandle, ConnectionInfo, ConnectionRegistry, SendError};
-pub use subscribe::{subscribe_routes, LIVE_SUBSCRIPTION_PATH_TEMPLATE};
+pub use subscribe::{LIVE_SUBSCRIPTION_PATH_TEMPLATE, subscribe_routes};

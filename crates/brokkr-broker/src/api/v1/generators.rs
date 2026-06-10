@@ -12,9 +12,9 @@ use crate::dal::DAL;
 use crate::utils::{audit, pak};
 use axum::http::StatusCode;
 use axum::{
+    Json, Router,
     extract::{Extension, Path, State},
     routing::{delete, get, post, put},
-    Json, Router,
 };
 use brokkr_models::models::audit_logs::{
     ACTION_GENERATOR_CREATED, ACTION_GENERATOR_DELETED, ACTION_GENERATOR_UPDATED,

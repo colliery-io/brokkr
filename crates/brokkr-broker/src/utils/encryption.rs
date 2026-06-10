@@ -18,8 +18,8 @@
 //! - 0x01: AES-256-GCM encryption
 
 use aes_gcm::{
-    aead::{Aead, KeyInit},
     Aes256Gcm, Nonce,
+    aead::{Aead, KeyInit},
 };
 use once_cell::sync::OnceCell;
 use rand::RngCore;

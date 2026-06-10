@@ -33,9 +33,9 @@ use brokkr_models::models::{
     work_order_labels::{NewWorkOrderLabel, WorkOrderLabel},
     work_orders::{NewWorkOrder, NewWorkOrderTarget, WorkOrder, WorkOrderTarget},
 };
-use brokkr_utils::config::{Cors, ReloadableConfig};
 use brokkr_utils::Settings;
-use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
+use brokkr_utils::config::{Cors, ReloadableConfig};
+use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
 use dotenv::dotenv;
 use uuid::Uuid;
 

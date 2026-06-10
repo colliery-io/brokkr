@@ -14,9 +14,9 @@ use crate::api::v1::middleware::AuthPayload;
 use crate::dal::DAL;
 use axum::http::StatusCode;
 use axum::{
+    Json, Router,
     extract::{Extension, Path, State},
     routing::{get, patch},
-    Json, Router,
 };
 use brokkr_models::models::deployment_health::{
     DeploymentHealth, HealthSummary, NewDeploymentHealth,

@@ -25,15 +25,15 @@ use axum::{
 use futures::{SinkExt, StreamExt};
 use tokio::net::TcpListener;
 use tokio_tungstenite::tungstenite::{
-    client::IntoClientRequest,
-    http::{header, HeaderValue},
     Message,
+    client::IntoClientRequest,
+    http::{HeaderValue, header},
 };
 use tower::ServiceExt;
 use uuid::Uuid;
 
 use brokkr_broker::utils::pak;
-use brokkr_broker::ws::{ConnectionRegistry, LiveBroadcaster, INTERNAL_WS_PATH};
+use brokkr_broker::ws::{ConnectionRegistry, INTERNAL_WS_PATH, LiveBroadcaster};
 use brokkr_wire::{Heartbeat, WsMessage};
 
 use crate::fixtures::TestFixture;
@@ -1004,10 +1004,12 @@ async fn rest_history_endpoints_return_retained_telemetry_with_retention_metadat
         .unwrap();
     assert_eq!(resp["retention"]["retention_ceiling_seconds"], 21600);
     assert_eq!(resp["retention"]["effective_retention_seconds"], 21600);
-    assert!(resp["retention"]["long_term_sink_hint"]
-        .as_str()
-        .unwrap()
-        .contains("Datadog"));
+    assert!(
+        resp["retention"]["long_term_sink_hint"]
+            .as_str()
+            .unwrap()
+            .contains("Datadog")
+    );
     let events = resp["events"].as_array().unwrap();
     assert_eq!(events.len(), 1);
     assert_eq!(events[0]["reason"], "Pulled");
@@ -1169,7 +1171,7 @@ async fn ws_telemetry_ingestion_lands_in_agent_telemetry_tables() {
 
 #[tokio::test]
 async fn eviction_worker_drops_rows_past_retention() {
-    use brokkr_broker::ws::eviction::{run_once, RetentionConfig};
+    use brokkr_broker::ws::eviction::{RetentionConfig, run_once};
     use brokkr_models::models::agent_k8s_events::NewAgentK8sEvent;
     use brokkr_models::models::agent_pod_logs::NewAgentPodLog;
     use brokkr_models::models::deployment_objects::NewDeploymentObject;

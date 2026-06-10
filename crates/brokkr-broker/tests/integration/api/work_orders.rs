@@ -6,11 +6,11 @@
 
 use crate::fixtures::TestFixture;
 use axum::{
-    body::{to_bytes, Body},
-    http::{Request, StatusCode},
     Router,
+    body::{Body, to_bytes},
+    http::{Request, StatusCode},
 };
-use brokkr_models::models::work_orders::{WorkOrder, WorkOrderLog, WORK_TYPE_BUILD};
+use brokkr_models::models::work_orders::{WORK_TYPE_BUILD, WorkOrder, WorkOrderLog};
 use serde_json::Value;
 use tower::ServiceExt;
 use uuid::Uuid;

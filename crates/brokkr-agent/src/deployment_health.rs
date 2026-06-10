@@ -155,44 +155,40 @@ impl HealthChecker {
                     for cs in container_statuses {
                         if let Some(state) = &cs.state {
                             // Check waiting state
-                            if let Some(waiting) = &state.waiting {
-                                if let Some(reason) = &waiting.reason {
-                                    if DEGRADED_CONDITIONS.contains(&reason.as_str()) {
-                                        conditions_set.insert(reason.clone());
-                                        overall_status = "degraded";
+                            if let Some(waiting) = &state.waiting
+                                && let Some(reason) = &waiting.reason
+                                && DEGRADED_CONDITIONS.contains(&reason.as_str())
+                            {
+                                conditions_set.insert(reason.clone());
+                                overall_status = "degraded";
 
-                                        summary.resources.push(ResourceHealth {
-                                            kind: "Pod".to_string(),
-                                            name: pod_name.clone(),
-                                            namespace: pod_namespace.clone(),
-                                            ready: false,
-                                            message: waiting.message.clone(),
-                                        });
-                                    }
-                                }
+                                summary.resources.push(ResourceHealth {
+                                    kind: "Pod".to_string(),
+                                    name: pod_name.clone(),
+                                    namespace: pod_namespace.clone(),
+                                    ready: false,
+                                    message: waiting.message.clone(),
+                                });
                             }
 
                             // Check terminated state for issues
-                            if let Some(terminated) = &state.terminated {
-                                if let Some(reason) = &terminated.reason {
-                                    if TERMINATED_ISSUES.contains(&reason.as_str()) {
-                                        conditions_set.insert(reason.clone());
-                                        overall_status = "degraded";
-                                    }
-                                }
+                            if let Some(terminated) = &state.terminated
+                                && let Some(reason) = &terminated.reason
+                                && TERMINATED_ISSUES.contains(&reason.as_str())
+                            {
+                                conditions_set.insert(reason.clone());
+                                overall_status = "degraded";
                             }
                         }
 
                         // Check last terminated state for recent crashes
-                        if let Some(last_state) = &cs.last_state {
-                            if let Some(terminated) = &last_state.terminated {
-                                if let Some(reason) = &terminated.reason {
-                                    if reason == "OOMKilled" {
-                                        conditions_set.insert("OOMKilled".to_string());
-                                        overall_status = "degraded";
-                                    }
-                                }
-                            }
+                        if let Some(last_state) = &cs.last_state
+                            && let Some(terminated) = &last_state.terminated
+                            && let Some(reason) = &terminated.reason
+                            && reason == "OOMKilled"
+                        {
+                            conditions_set.insert("OOMKilled".to_string());
+                            overall_status = "degraded";
                         }
                     }
                 }
@@ -200,15 +196,13 @@ impl HealthChecker {
                 // Check init container statuses
                 if let Some(init_statuses) = &pod_status.init_container_statuses {
                     for cs in init_statuses {
-                        if let Some(state) = &cs.state {
-                            if let Some(waiting) = &state.waiting {
-                                if let Some(reason) = &waiting.reason {
-                                    if DEGRADED_CONDITIONS.contains(&reason.as_str()) {
-                                        conditions_set.insert(format!("InitContainer:{}", reason));
-                                        overall_status = "degraded";
-                                    }
-                                }
-                            }
+                        if let Some(state) = &cs.state
+                            && let Some(waiting) = &state.waiting
+                            && let Some(reason) = &waiting.reason
+                            && DEGRADED_CONDITIONS.contains(&reason.as_str())
+                        {
+                            conditions_set.insert(format!("InitContainer:{}", reason));
+                            overall_status = "degraded";
                         }
                     }
                 }
@@ -291,10 +285,10 @@ impl HealthChecker {
                         .await
                 }
             };
-            if let Some(id) = doid {
-                if wanted.contains(&id) {
-                    grouped.entry(id).or_default().push(pod);
-                }
+            if let Some(id) = doid
+                && wanted.contains(&id)
+            {
+                grouped.entry(id).or_default().push(pod);
             }
         }
 

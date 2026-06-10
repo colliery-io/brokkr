@@ -69,10 +69,10 @@ async fn wait_for_configmap_value(
     for _ in 0..max_attempts {
         match api.get(name).await {
             Ok(cm) => {
-                if let Some(data) = &cm.data {
-                    if data.get("key1") == Some(&expected_value.to_string()) {
-                        return true;
-                    }
+                if let Some(data) = &cm.data
+                    && data.get("key1") == Some(&expected_value.to_string())
+                {
+                    return true;
                 }
                 tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             }
@@ -650,10 +650,12 @@ async fn test_k8s_setup_and_cleanup() {
         .list(&Default::default())
         .await
         .expect("Failed to list namespaces");
-    assert!(namespaces
-        .items
-        .iter()
-        .any(|ns| ns.metadata.name.as_ref().unwrap() == test_namespace));
+    assert!(
+        namespaces
+            .items
+            .iter()
+            .any(|ns| ns.metadata.name.as_ref().unwrap() == test_namespace)
+    );
 
     // Test cleanup
     cleanup(&client, test_namespace).await;

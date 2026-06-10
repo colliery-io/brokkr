@@ -65,13 +65,13 @@ use crate::{
 use brokkr_utils::config::Settings;
 use brokkr_utils::telemetry::prelude::*;
 use std::collections::HashSet;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::SystemTime;
 use tokio::select;
 use tokio::signal::ctrl_c;
 use tokio::sync::RwLock;
-use tokio::time::{interval, Duration};
+use tokio::time::{Duration, interval};
 use uuid::Uuid;
 
 pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
@@ -369,12 +369,12 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
                     health_statuses.into_iter().map(|s| s.into()).collect();
 
                 // Send health status to broker
-                if let Err(e) = broker::send_health_status(&config, &sdk_client, &agent, health_updates, Some(&ws_uplink)).await {
+                match broker::send_health_status(&config, &sdk_client, &agent, health_updates, Some(&ws_uplink)).await { Err(e) => {
                     error!("Failed to send health status for agent '{}': {}", agent.name, e);
-                } else {
+                } _ => {
                     debug!("Successfully sent health status for {} deployment objects",
                         deployment_ids.len());
-                }
+                }}
             }
             _ = diagnostics_interval.tick() => {
                 // Skip diagnostics processing if agent is inactive
@@ -412,18 +412,18 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
                                     match diagnostics_handler.collect_diagnostics_in(&namespaces, &label_selector).await {
                                         Ok(result) => {
                                             // Submit the result
-                                            if let Err(e) = broker::submit_diagnostic_result(
+                                            match broker::submit_diagnostic_result(
                                                 &config,
                                                 &sdk_client,
                                                 request.id,
                                                 result,
-                                            ).await {
+                                            ).await { Err(e) => {
                                                 error!("Failed to submit diagnostic result for request {}: {}",
                                                     request.id, e);
-                                            } else {
+                                            } _ => {
                                                 info!("Successfully submitted diagnostic result for request {}",
                                                     request.id);
-                                            }
+                                            }}
                                         }
                                         Err(e) => {
                                             error!("Failed to collect diagnostics for request {}: {}",

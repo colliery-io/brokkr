@@ -6,7 +6,7 @@
 
 use crate::fixtures::get_or_init_fixture;
 use brokkr_agent::broker;
-use tokio::time::{timeout, Duration};
+use tokio::time::{Duration, timeout};
 
 const TEST_NAMESPACE_YAML: &str = r#"
 apiVersion: v1

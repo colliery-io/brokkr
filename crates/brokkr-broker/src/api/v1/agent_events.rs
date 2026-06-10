@@ -12,9 +12,9 @@
 use crate::api::v1::error::{ApiError, ErrorResponse};
 use crate::dal::DAL;
 use axum::{
+    Json, Router,
     extract::{Extension, Path, State},
     routing::get,
-    Json, Router,
 };
 use brokkr_models::models::agent_events::AgentEvent;
 use tracing::{error, info, warn};

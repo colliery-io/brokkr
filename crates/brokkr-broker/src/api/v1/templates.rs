@@ -12,10 +12,10 @@ use crate::dal::DAL;
 use crate::utils::audit;
 use crate::utils::templating;
 use axum::{
+    Json, Router,
     extract::{Extension, Path, State},
     http::StatusCode,
     routing::{delete, get},
-    Json, Router,
 };
 use brokkr_models::models::audit_logs::{
     ACTION_TEMPLATE_CREATED, ACTION_TEMPLATE_DELETED, ACTION_TEMPLATE_UPDATED, ACTOR_TYPE_ADMIN,

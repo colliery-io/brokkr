@@ -38,7 +38,7 @@ use crate::api::v1::{
     templates, webhooks, work_orders,
 };
 use crate::dal::DAL;
-use axum::{response::Json, routing::get, Router};
+use axum::{Router, response::Json, routing::get};
 use brokkr_models::models::{
     agent_annotations::{AgentAnnotation, NewAgentAnnotation},
     agent_events::{AgentEvent, NewAgentEvent},
@@ -63,11 +63,11 @@ use brokkr_models::models::{
     work_orders::{WorkOrder, WorkOrderLog},
 };
 use utoipa::{
-    openapi::{
-        security::{ApiKey, ApiKeyValue, SecurityScheme},
-        Server,
-    },
     OpenApi,
+    openapi::{
+        Server,
+        security::{ApiKey, ApiKeyValue, SecurityScheme},
+    },
 };
 use utoipa_swagger_ui::SwaggerUi;
 

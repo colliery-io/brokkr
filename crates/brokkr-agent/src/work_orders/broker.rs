@@ -14,8 +14,8 @@ use brokkr_client::{BrokkrClient, BrokkrError};
 use brokkr_models::models::agents::Agent;
 use brokkr_models::models::work_orders::WorkOrder;
 use brokkr_utils::config::Settings;
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 

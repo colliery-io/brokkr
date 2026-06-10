@@ -21,10 +21,10 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use axum::{
+    Router,
     extract::ws::{Message, WebSocket, WebSocketUpgrade},
     response::IntoResponse,
     routing::get,
-    Router,
 };
 use brokkr_agent::broker_ws::{self, WsState};
 use brokkr_utils::config::Settings;

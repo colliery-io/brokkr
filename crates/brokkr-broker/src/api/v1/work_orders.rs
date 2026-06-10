@@ -10,13 +10,13 @@ use crate::api::v1::error::{ApiError, ErrorResponse};
 use crate::api::v1::middleware::AuthPayload;
 use crate::dal::DAL;
 use crate::utils::audit;
-use crate::ws::{push_work_order, ConnectionRegistry};
+use crate::ws::{ConnectionRegistry, push_work_order};
 use axum::{
+    Json, Router,
     extract::{Extension, Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
     routing::{get, post},
-    Json, Router,
 };
 use brokkr_models::models::audit_logs::{
     ACTION_WORKORDER_CLAIMED, ACTION_WORKORDER_COMPLETED, ACTION_WORKORDER_CREATED,
@@ -225,26 +225,27 @@ async fn create_work_order(
     })?;
 
     let mut targeting_failed: Option<ApiError> = None;
-    if !agent_ids.is_empty() {
-        if let Err(e) = dal.work_orders().add_targets(work_order.id, &agent_ids) {
-            error!("Failed to add work order targets: {:?}", e);
-            targeting_failed = Some(ApiError::internal("failed to add work order targets"));
-        }
+    if !agent_ids.is_empty()
+        && let Err(e) = dal.work_orders().add_targets(work_order.id, &agent_ids)
+    {
+        error!("Failed to add work order targets: {:?}", e);
+        targeting_failed = Some(ApiError::internal("failed to add work order targets"));
     }
-    if targeting_failed.is_none() && !labels.is_empty() {
-        if let Err(e) = dal.work_orders().add_labels(work_order.id, &labels) {
-            error!("Failed to add work order labels: {:?}", e);
-            targeting_failed = Some(ApiError::internal("failed to add work order labels"));
-        }
+    if targeting_failed.is_none()
+        && !labels.is_empty()
+        && let Err(e) = dal.work_orders().add_labels(work_order.id, &labels)
+    {
+        error!("Failed to add work order labels: {:?}", e);
+        targeting_failed = Some(ApiError::internal("failed to add work order labels"));
     }
-    if targeting_failed.is_none() && !annotations.is_empty() {
-        if let Err(e) = dal
+    if targeting_failed.is_none()
+        && !annotations.is_empty()
+        && let Err(e) = dal
             .work_orders()
             .add_annotations(work_order.id, &annotations)
-        {
-            error!("Failed to add work order annotations: {:?}", e);
-            targeting_failed = Some(ApiError::internal("failed to add work order annotations"));
-        }
+    {
+        error!("Failed to add work order annotations: {:?}", e);
+        targeting_failed = Some(ApiError::internal("failed to add work order annotations"));
     }
 
     if let Some(err) = targeting_failed {

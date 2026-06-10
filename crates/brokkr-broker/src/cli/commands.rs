@@ -11,7 +11,7 @@ use crate::utils;
 use crate::utils::pak;
 use brokkr_models::models::agents::NewAgent;
 use brokkr_models::models::audit_logs::{
-    NewAuditLog, ACTION_PAK_CREATED, ACTION_PAK_ROTATED, ACTOR_TYPE_ADMIN, RESOURCE_TYPE_AGENT,
+    ACTION_PAK_CREATED, ACTION_PAK_ROTATED, ACTOR_TYPE_ADMIN, NewAuditLog, RESOURCE_TYPE_AGENT,
     RESOURCE_TYPE_GENERATOR, RESOURCE_TYPE_PAK,
 };
 use brokkr_models::models::generator::NewGenerator;
@@ -20,7 +20,7 @@ use diesel::prelude::*;
 use diesel::result::Error as DieselError;
 use diesel::sql_query;
 use diesel::sql_types::BigInt;
-use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
+use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
 use tokio::signal;
 use tracing::{info, warn};
 use uuid::Uuid;

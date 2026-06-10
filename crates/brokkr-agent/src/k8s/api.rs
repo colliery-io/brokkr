@@ -42,6 +42,12 @@ use crate::k8s::objects::{CHECKSUM_ANNOTATION, STACK_LABEL};
 use crate::metrics;
 use backoff::ExponentialBackoffBuilder;
 use k8s_openapi::api::core::v1::Namespace;
+use kube::Api;
+use kube::Client;
+use kube::Client as K8sClient;
+use kube::Discovery;
+use kube::Error as KubeError;
+use kube::ResourceExt;
 use kube::api::DeleteParams;
 use kube::api::DynamicObject;
 use kube::api::GroupVersionKind;
@@ -51,12 +57,6 @@ use kube::core::TypeMeta;
 use kube::discovery::ApiCapabilities;
 use kube::discovery::ApiResource;
 use kube::discovery::Scope;
-use kube::Api;
-use kube::Client;
-use kube::Client as K8sClient;
-use kube::Discovery;
-use kube::Error as KubeError;
-use kube::ResourceExt;
 use std::collections::BTreeMap;
 use std::time::Duration;
 use std::time::Instant;
@@ -603,26 +603,27 @@ async fn apply_single_object(
 
     if let Some(gvk) = object.types.as_ref() {
         let gvk = GroupVersionKind::try_from(gvk)?;
-        if let Some((ar, caps)) = Discovery::new(client.clone())
+        match Discovery::new(client.clone())
             .run()
             .await?
             .resolve_gvk(&gvk)
         {
-            let api = dynamic_api(ar, caps, client.clone(), Some(&namespace), false);
+            Some((ar, caps)) => {
+                let api = dynamic_api(ar, caps, client.clone(), Some(&namespace), false);
 
-            let patch = Patch::Apply(&object);
-            match api.patch(&name, &params, &patch).await {
-                Ok(_) => {
-                    debug!("Successfully applied priority object {}", key);
-                    Ok(())
-                }
-                Err(e) => {
-                    error!("Failed to apply priority object {}: {}", key, e);
-                    Err(Box::new(e))
+                let patch = Patch::Apply(&object);
+                match api.patch(&name, &params, &patch).await {
+                    Ok(_) => {
+                        debug!("Successfully applied priority object {}", key);
+                        Ok(())
+                    }
+                    Err(e) => {
+                        error!("Failed to apply priority object {}: {}", key, e);
+                        Err(Box::new(e))
+                    }
                 }
             }
-        } else {
-            Err(format!("Failed to resolve GVK for {}", key).into())
+            _ => Err(format!("Failed to resolve GVK for {}", key).into()),
         }
     } else {
         Err(format!("Missing TypeMeta for {}", key).into())
@@ -726,25 +727,24 @@ pub async fn reconcile_target_state(
                     .as_ref()
                     .map(|t| t.kind == "Namespace")
                     .unwrap_or(false)
+                    && let Some(name) = &object.metadata.name
                 {
-                    if let Some(name) = &object.metadata.name {
-                        let ns_api: Api<Namespace> = Api::all(client.clone());
-                        match ns_api.get_opt(name).await {
-                            Ok(None) => created_namespaces.push(name.clone()),
-                            Ok(Some(_)) => {
-                                debug!(
-                                    "Namespace '{}' already exists; excluded from rollback",
-                                    name
-                                );
-                            }
-                            Err(e) => {
-                                // If we can't tell, err on the side of NOT
-                                // deleting it during rollback.
-                                warn!(
-                                    "Could not check existence of namespace '{}' ({}); excluding from rollback",
-                                    name, e
-                                );
-                            }
+                    let ns_api: Api<Namespace> = Api::all(client.clone());
+                    match ns_api.get_opt(name).await {
+                        Ok(None) => created_namespaces.push(name.clone()),
+                        Ok(Some(_)) => {
+                            debug!(
+                                "Namespace '{}' already exists; excluded from rollback",
+                                name
+                            );
+                        }
+                        Err(e) => {
+                            // If we can't tell, err on the side of NOT
+                            // deleting it during rollback.
+                            warn!(
+                                "Could not check existence of namespace '{}' ({}); excluding from rollback",
+                                name, e
+                            );
                         }
                     }
                 }
@@ -859,11 +859,11 @@ pub async fn reconcile_target_state(
         let key = format!("{}:{}@{}", kind, name, namespace);
 
         // Skip if object has owner references
-        if let Some(owner_refs) = &existing_obj.metadata.owner_references {
-            if !owner_refs.is_empty() {
-                debug!("Skipping object {} with owner references", key);
-                continue;
-            }
+        if let Some(owner_refs) = &existing_obj.metadata.owner_references
+            && !owner_refs.is_empty()
+        {
+            debug!("Skipping object {} with owner references", key);
+            continue;
         }
 
         // Delete if checksum doesn't match the new checksum
@@ -918,7 +918,8 @@ pub async fn create_k8s_client(
     // Set KUBECONFIG environment variable if path is provided
     if let Some(path) = kubeconfig_path {
         info!("Setting KUBECONFIG environment variable to: {}", path);
-        std::env::set_var("KUBECONFIG", path);
+        // TODO: Audit that the environment access only happens in single-threaded code.
+        unsafe { std::env::set_var("KUBECONFIG", path) };
     } else {
         info!("Using default Kubernetes configuration");
     }

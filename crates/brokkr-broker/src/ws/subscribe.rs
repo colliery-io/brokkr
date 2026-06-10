@@ -20,15 +20,15 @@
 use std::sync::Arc;
 
 use axum::{
+    Router,
     body::Body,
     extract::ws::{Message, WebSocket, WebSocketUpgrade},
     extract::{Extension, Path, State},
     http::header::{AUTHORIZATION, SEC_WEBSOCKET_PROTOCOL},
     http::{HeaderValue, Request, StatusCode},
-    middleware::{from_fn, from_fn_with_state, Next},
+    middleware::{Next, from_fn, from_fn_with_state},
     response::Response,
     routing::get,
-    Router,
 };
 use brokkr_wire::{GapReason, LogGap, WsMessage};
 use chrono::Utc;
@@ -79,8 +79,8 @@ pub fn subscribe_routes(dal: DAL, broadcaster: Arc<LiveBroadcaster>) -> Router<D
 /// SDKs, the Node `ws` contract test) are entirely unaffected — both auth
 /// paths reach the same `auth_middleware`.
 async fn ws_subprotocol_auth(mut request: Request<Body>, next: Next) -> Response {
-    if request.headers().get(AUTHORIZATION).is_none() {
-        if let Some(pak) = request
+    if request.headers().get(AUTHORIZATION).is_none()
+        && let Some(pak) = request
             .headers()
             .get(SEC_WEBSOCKET_PROTOCOL)
             .and_then(|v| v.to_str().ok())
@@ -89,11 +89,9 @@ async fn ws_subprotocol_auth(mut request: Request<Body>, next: Next) -> Response
                     .map(str::trim)
                     .find_map(|p| p.strip_prefix(PAK_SUBPROTOCOL_PREFIX))
             })
-        {
-            if let Ok(value) = HeaderValue::from_str(&format!("Bearer {pak}")) {
-                request.headers_mut().insert(AUTHORIZATION, value);
-            }
-        }
+        && let Ok(value) = HeaderValue::from_str(&format!("Bearer {pak}"))
+    {
+        request.headers_mut().insert(AUTHORIZATION, value);
     }
     next.run(request).await
 }

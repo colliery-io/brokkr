@@ -21,8 +21,8 @@
 
 use crate::k8s;
 use kube::{
-    api::{Api, DynamicObject, PatchParams, PostParams},
     Client as K8sClient, Discovery,
+    api::{Api, DynamicObject, PatchParams, PostParams},
 };
 use serde::Deserialize;
 use serde_json::json;
@@ -146,16 +146,14 @@ pub async fn execute_build(
             }
             (Some(av), Some("WorkOrder")) if av.starts_with("brokkr.io") => {
                 // Extract buildRef from WorkOrder if present
-                if let Some(spec) = doc.get("spec") {
-                    if let Some(build_ref) = spec
+                if let Some(spec) = doc.get("spec")
+                    && let Some(build_ref) = spec
                         .get("buildRef")
                         .and_then(|b| b.get("name"))
                         .and_then(|n| n.as_str())
-                    {
-                        if build_name.is_none() {
-                            build_name = Some(build_ref.to_string());
-                        }
-                    }
+                    && build_name.is_none()
+                {
+                    build_name = Some(build_ref.to_string());
                 }
                 debug!("Found brokkr WorkOrder resource, skipping apply (handled separately)");
             }
@@ -403,16 +401,14 @@ pub(crate) fn parse_build_yaml(
             }
             (Some(av), Some("WorkOrder")) if av.starts_with("brokkr.io") => {
                 // Extract buildRef from WorkOrder if present
-                if let Some(spec) = doc.get("spec") {
-                    if let Some(build_ref) = spec
+                if let Some(spec) = doc.get("spec")
+                    && let Some(build_ref) = spec
                         .get("buildRef")
                         .and_then(|b| b.get("name"))
                         .and_then(|n| n.as_str())
-                    {
-                        if build_name.is_none() {
-                            build_name = Some(build_ref.to_string());
-                        }
-                    }
+                    && build_name.is_none()
+                {
+                    build_name = Some(build_ref.to_string());
                 }
             }
             _ => {
@@ -576,10 +572,12 @@ spec:
         let result = parse_build_yaml(yaml);
         assert!(result.is_err());
         // Empty string parses as no documents, which means no Build resource found
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("No Build resource"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("No Build resource")
+        );
     }
 
     #[test]
@@ -595,10 +593,12 @@ data:
 "#;
         let result = parse_build_yaml(yaml);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("No Build resource"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("No Build resource")
+        );
     }
 
     #[test]

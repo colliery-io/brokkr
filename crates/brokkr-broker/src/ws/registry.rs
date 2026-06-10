@@ -103,10 +103,10 @@ impl ConnectionRegistry {
     /// fresh reconnect that happens to share its agent id.
     pub fn unregister_if_matches(&self, agent_id: Uuid, connected_since: DateTime<Utc>) {
         let mut map = self.inner.write().expect("registry poisoned");
-        if let Some(existing) = map.get(&agent_id) {
-            if existing.connected_since == connected_since {
-                map.remove(&agent_id);
-            }
+        if let Some(existing) = map.get(&agent_id)
+            && existing.connected_since == connected_since
+        {
+            map.remove(&agent_id);
         }
     }
 

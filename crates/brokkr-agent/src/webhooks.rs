@@ -12,7 +12,7 @@
 use brokkr_client::{BrokkrClient, BrokkrError};
 use brokkr_models::models::agents::Agent;
 use brokkr_utils::Settings;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::time::{Duration, Instant};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;

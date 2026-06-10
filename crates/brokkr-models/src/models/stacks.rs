@@ -107,10 +107,10 @@ impl NewStack {
         }
 
         // Validate description (if provided)
-        if let Some(desc) = &description {
-            if desc.trim().is_empty() {
-                return Err("Stack description cannot be empty if provided".to_string());
-            }
+        if let Some(desc) = &description
+            && desc.trim().is_empty()
+        {
+            return Err("Stack description cannot be empty if provided".to_string());
         }
 
         Ok(NewStack {

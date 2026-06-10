@@ -8,8 +8,8 @@
 //!
 //! For detailed documentation, see the [Brokkr Documentation](https://brokkr.io/explanation/components#database-module).
 
-use diesel::r2d2::{ConnectionManager, Pool};
 use diesel::PgConnection;
+use diesel::r2d2::{ConnectionManager, Pool};
 use url::Url;
 
 /// Represents a pool of PostgreSQL database connections.

@@ -36,15 +36,15 @@ use lru::LruCache;
 
 use brokkr_wire::{K8sEvent as WireK8sEvent, ObjectRef, WsMessage};
 use chrono::Utc;
-use futures::stream::StreamExt;
 use futures::TryStreamExt;
+use futures::stream::StreamExt;
 use k8s_openapi::api::core::v1::Event as K8sEventResource;
+use kube::Client;
 use kube::api::{Api, DynamicObject};
 use kube::core::GroupVersionKind;
 use kube::discovery;
 use kube::runtime::watcher;
-use kube::Client;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{RwLock, mpsc};
 use tracing::{debug, info, warn};
 use uuid::Uuid;
 

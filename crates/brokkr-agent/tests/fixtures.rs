@@ -56,6 +56,12 @@ pub struct TestFixture {
     pub agent: Option<Agent>,
 }
 
+impl Default for TestFixture {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TestFixture {
     /// Creates a new TestFixture instance with default values
     pub fn new() -> Self {

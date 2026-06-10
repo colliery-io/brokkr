@@ -6,9 +6,9 @@
 
 use crate::fixtures::TestFixture;
 use axum::{
-    body::{to_bytes, Body},
-    http::{Request, StatusCode},
     Router,
+    body::{Body, to_bytes},
+    http::{Request, StatusCode},
 };
 use brokkr_models::models::agent_annotations::NewAgentAnnotation;
 use brokkr_models::models::agent_events::NewAgentEvent;
@@ -152,10 +152,12 @@ async fn test_update_agent() {
     assert_eq!(updated_agent.deleted_at, None);
 
     // Verify that pak_hash is not returned in the response
-    assert!(serde_json::to_string(&updated_agent)
-        .unwrap()
-        .contains("pak_hash")
-        .not());
+    assert!(
+        serde_json::to_string(&updated_agent)
+            .unwrap()
+            .contains("pak_hash")
+            .not()
+    );
 
     // Fetch the agent from the database to verify the update
     let db_agent = fixture.dal.agents().get(test_agent.id).unwrap().unwrap();

@@ -5,13 +5,13 @@
  */
 
 use axum::{
-    body::{to_bytes, Body},
+    body::{Body, to_bytes},
     http::{Request, StatusCode},
 };
 use tower::ServiceExt;
 
 use crate::fixtures::TestFixture;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 #[tokio::test]
 async fn test_create_diagnostic_request() {
@@ -481,10 +481,12 @@ async fn test_get_diagnostic_with_result() {
 
     assert_eq!(diagnostic["request"]["status"], "completed");
     assert!(!diagnostic["result"].is_null());
-    assert!(diagnostic["result"]["pod_statuses"]
-        .as_str()
-        .unwrap()
-        .contains("test-pod"));
+    assert!(
+        diagnostic["result"]["pod_statuses"]
+            .as_str()
+            .unwrap()
+            .contains("test-pod")
+    );
 }
 
 #[tokio::test]

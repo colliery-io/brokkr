@@ -23,17 +23,17 @@
 //! lane drop, decode error, etc.) the other is unblocked so the agent's
 //! entry is removed from the registry cleanly.
 
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 use axum::{
+    Router,
     body::Body,
     extract::ws::{Message, WebSocket, WebSocketUpgrade},
     extract::{Extension, State},
     http::{Request, StatusCode},
     middleware::from_fn_with_state,
     routing::get,
-    Router,
 };
 use brokkr_models::models::agent_events::NewAgentEvent;
 use brokkr_models::models::agent_k8s_events::NewAgentK8sEvent;

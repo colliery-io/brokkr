@@ -9,7 +9,7 @@
 //! This module provides the command-line interface for the Brokkr Broker application.
 //! It includes functionality for serving the broker, rotating keys, and managing the application.
 
-use brokkr_broker::cli::{parse_cli, Commands, CreateSubcommands, RotateSubcommands};
+use brokkr_broker::cli::{Commands, CreateSubcommands, RotateSubcommands, parse_cli};
 
 use brokkr_broker::utils;
 use brokkr_utils::config::Settings;

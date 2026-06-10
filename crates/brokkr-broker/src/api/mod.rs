@@ -158,16 +158,16 @@ pub mod v1;
 use crate::dal::DAL;
 use crate::metrics;
 use crate::ws::{
-    internal_routes, spawn_eviction, subscribe_routes, ConnectionRegistry, LiveBroadcaster,
-    RetentionConfig,
+    ConnectionRegistry, LiveBroadcaster, RetentionConfig, internal_routes, spawn_eviction,
+    subscribe_routes,
 };
 use axum::{
+    Router,
     body::Body,
     extract::Request,
     middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::get,
-    Router,
 };
 use brokkr_utils::config::{Cors, ReloadableConfig};
 use hyper::StatusCode;

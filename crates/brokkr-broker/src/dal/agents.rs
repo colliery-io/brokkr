@@ -4,8 +4,8 @@
  * See LICENSE file in the project root for full license text.
  */
 
-use crate::dal::FilterType;
 use crate::dal::DAL;
+use crate::dal::FilterType;
 use crate::utils::event_bus;
 use brokkr_models::models::agent_annotations::AgentAnnotation;
 use brokkr_models::models::agent_labels::AgentLabel;
@@ -364,10 +364,10 @@ impl AgentsDAL<'_> {
                         None => Some(matching_agents),
                     };
 
-                    if let Some(ref agents) = all_matching_agents {
-                        if agents.is_empty() {
-                            break;
-                        }
+                    if let Some(ref agents) = all_matching_agents
+                        && agents.is_empty()
+                    {
+                        break;
                     }
                 }
 

@@ -33,12 +33,12 @@
 use std::time::Duration;
 
 use progenitor_client::Error as RawError;
-use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
+use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 
+use crate::Client;
 use crate::types::{
     ErrorResponse, K8sEventHistoryResponse, PodLogHistoryResponse, WsConnectionsResponse,
 };
-use crate::Client;
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 

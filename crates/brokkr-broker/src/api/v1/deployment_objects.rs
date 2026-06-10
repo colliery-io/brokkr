@@ -13,9 +13,9 @@ use crate::api::v1::error::{ApiError, ErrorResponse};
 use crate::api::v1::middleware::AuthPayload;
 use crate::dal::DAL;
 use axum::{
+    Json, Router,
     extract::{Extension, Path, State},
     routing::get,
-    Json, Router,
 };
 use brokkr_models::models::deployment_objects::DeploymentObject;
 use tracing::{error, info, warn};

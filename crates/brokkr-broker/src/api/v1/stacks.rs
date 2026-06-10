@@ -11,12 +11,12 @@ use crate::metrics;
 use crate::utils::audit;
 use crate::utils::matching::template_matches_stack;
 use crate::utils::templating;
-use crate::ws::{push_stack_changed_to_targets, ConnectionRegistry};
+use crate::ws::{ConnectionRegistry, push_stack_changed_to_targets};
 use axum::{
+    Json, Router,
     extract::{Extension, Path, State},
     http::StatusCode,
     routing::{delete, get, post},
-    Json, Router,
 };
 use brokkr_models::models::audit_logs::{
     ACTION_STACK_CREATED, ACTION_STACK_DELETED, ACTION_STACK_UPDATED, ACTOR_TYPE_ADMIN,
@@ -156,13 +156,13 @@ async fn create_stack(
             "admin or generator access required",
         ));
     }
-    if let Some(generator_id) = auth_payload.generator {
-        if generator_id != new_stack.generator_id {
-            return Err(ApiError::forbidden(
-                "stack_generator_mismatch",
-                "generator can only create stacks for itself",
-            ));
-        }
+    if let Some(generator_id) = auth_payload.generator
+        && generator_id != new_stack.generator_id
+    {
+        return Err(ApiError::forbidden(
+            "stack_generator_mismatch",
+            "generator can only create stacks for itself",
+        ));
     }
 
     let stack = dal.stacks().create(&new_stack).map_err(|e| {

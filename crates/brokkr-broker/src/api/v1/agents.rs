@@ -11,12 +11,12 @@ use crate::api::v1::middleware::AuthPayload;
 use crate::dal::DAL;
 use crate::metrics;
 use crate::utils::{audit, event_bus, pak};
-use crate::ws::{push_target_changed, ConnectionRegistry};
+use crate::ws::{ConnectionRegistry, push_target_changed};
 use axum::http::StatusCode;
 use axum::{
+    Json, Router,
     extract::{Extension, Path, Query, State},
     routing::{delete, get, post},
-    Json, Router,
 };
 use brokkr_models::models::agent_annotations::{AgentAnnotation, NewAgentAnnotation};
 use brokkr_models::models::agent_events::{AgentEvent, NewAgentEvent};

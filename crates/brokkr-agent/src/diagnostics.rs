@@ -12,8 +12,8 @@
 use chrono::{DateTime, Utc};
 use k8s_openapi::api::core::v1::{Event, Pod};
 use kube::{
-    api::{Api, ListParams},
     Client,
+    api::{Api, ListParams},
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

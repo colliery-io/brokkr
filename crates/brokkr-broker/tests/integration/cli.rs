@@ -11,7 +11,7 @@
 use crate::fixtures::TestFixture;
 use brokkr_broker::cli::commands::{rotate_agent_key, rotate_generator_key};
 use brokkr_broker::utils::pak;
-use brokkr_models::models::audit_logs::{AuditLogFilter, ACTION_PAK_ROTATED};
+use brokkr_models::models::audit_logs::{ACTION_PAK_ROTATED, AuditLogFilter};
 
 #[tokio::test]
 async fn test_rotate_agent_key_returns_usable_pak_and_audits() {

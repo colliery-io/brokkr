@@ -28,8 +28,8 @@ use brokkr_models::models::deployment_objects::DeploymentObject;
 use brokkr_utils::Settings;
 use brokkr_wire::{Heartbeat, WsMessage};
 use chrono::Utc;
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use tokio::time::sleep;
 use tracing::{debug, error, info, instrument, trace, warn};
 use uuid::Uuid;
@@ -454,36 +454,36 @@ pub async fn send_health_status(
     // Try WS first — one frame per deployment-object update. If the lane
     // can absorb the whole batch we're done; otherwise fall through to
     // the REST batch endpoint with the full set.
-    if let Some(uplink) = ws_uplink {
-        if uplink.is_up() {
-            let now = Utc::now();
-            let all_ok = health_updates.iter().all(|u| {
-                let summary_json = u
-                    .summary
-                    .as_ref()
-                    .and_then(|s| serde_json::to_string(s).ok());
-                let msg = WsMessage::AgentHealth(DeploymentHealth {
-                    id: Uuid::nil(), // server assigns
-                    agent_id: agent.id,
-                    deployment_object_id: u.id,
-                    status: u.status.to_string(),
-                    summary: summary_json,
-                    checked_at: u.checked_at,
-                    created_at: now,
-                    updated_at: now,
-                });
-                uplink.try_send(msg).is_ok()
+    if let Some(uplink) = ws_uplink
+        && uplink.is_up()
+    {
+        let now = Utc::now();
+        let all_ok = health_updates.iter().all(|u| {
+            let summary_json = u
+                .summary
+                .as_ref()
+                .and_then(|s| serde_json::to_string(s).ok());
+            let msg = WsMessage::AgentHealth(DeploymentHealth {
+                id: Uuid::nil(), // server assigns
+                agent_id: agent.id,
+                deployment_object_id: u.id,
+                status: u.status.to_string(),
+                summary: summary_json,
+                checked_at: u.checked_at,
+                created_at: now,
+                updated_at: now,
             });
-            if all_ok {
-                debug!(
-                    "Sent {} health updates via WS for agent {}",
-                    health_updates.len(),
-                    agent.name
-                );
-                return Ok(());
-            }
-            warn!("WS health-update lane back-pressured; falling back to REST batch");
+            uplink.try_send(msg).is_ok()
+        });
+        if all_ok {
+            debug!(
+                "Sent {} health updates via WS for agent {}",
+                health_updates.len(),
+                agent.name
+            );
+            return Ok(());
         }
+        warn!("WS health-update lane back-pressured; falling back to REST batch");
     }
 
     let update = HealthStatusUpdate {

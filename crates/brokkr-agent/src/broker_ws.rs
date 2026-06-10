@@ -29,9 +29,9 @@ use rand::Rng;
 use tokio::sync::{mpsc, watch};
 use tokio::task::JoinHandle;
 use tokio_tungstenite::tungstenite::{
-    client::IntoClientRequest,
-    http::{header, HeaderValue},
     Message,
+    client::IntoClientRequest,
+    http::{HeaderValue, header},
 };
 use tracing::{debug, error, info, warn};
 
@@ -442,8 +442,8 @@ mod tests {
 
     #[test]
     fn auth_rejection_detects_401_and_403_only() {
-        use tokio_tungstenite::tungstenite::http::{Response, StatusCode};
         use tokio_tungstenite::tungstenite::Error;
+        use tokio_tungstenite::tungstenite::http::{Response, StatusCode};
 
         let http_err = |status: StatusCode| {
             Error::Http(Response::builder().status(status).body(None).unwrap())
