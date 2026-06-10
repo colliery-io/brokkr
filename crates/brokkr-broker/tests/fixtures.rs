@@ -31,11 +31,11 @@ use brokkr_models::models::{
     template_labels::{NewTemplateLabel, TemplateLabel},
     work_order_annotations::{NewWorkOrderAnnotation, WorkOrderAnnotation},
     work_order_labels::{NewWorkOrderLabel, WorkOrderLabel},
-    work_orders::{NewWorkOrder, NewWorkOrderTarget, WorkOrder, WorkOrderTarget, WORK_TYPE_BUILD},
+    work_orders::{NewWorkOrder, NewWorkOrderTarget, WorkOrder, WorkOrderTarget},
 };
-use brokkr_utils::config::{Cors, ReloadableConfig};
 use brokkr_utils::Settings;
-use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
+use brokkr_utils::config::{Cors, ReloadableConfig};
+use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
 use dotenv::dotenv;
 use uuid::Uuid;
 
@@ -43,7 +43,6 @@ use uuid::Uuid;
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("../brokkr-models/migrations");
 
 /// Represents a test fixture for the Brokkr project.
-
 #[allow(dead_code)]
 #[derive(Clone)]
 pub struct TestFixture {

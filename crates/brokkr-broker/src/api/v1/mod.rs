@@ -27,10 +27,10 @@ pub mod webhooks;
 pub mod work_orders;
 
 use crate::dal::DAL;
-use axum::middleware::from_fn_with_state;
 use axum::Router;
+use axum::middleware::from_fn_with_state;
 use brokkr_utils::config::{Cors, ReloadableConfig};
-use hyper::{header::HeaderName, Method};
+use hyper::{Method, header::HeaderName};
 use std::time::Duration;
 use tower_http::cors::CorsLayer;
 use tracing::info;

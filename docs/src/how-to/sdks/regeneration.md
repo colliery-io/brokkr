@@ -41,4 +41,4 @@ If a check fails, run the matching `gen-*` task locally and commit the result.
 1. Add the handler with a `#[utoipa::path(...)]` annotation. Include every status code the handler can return (notably `409` for create paths that hit unique constraints — the drift check will catch you).
 2. Wire the handler into the `OpenApi` derive in `crates/brokkr-broker/src/api/v1/openapi.rs`.
 3. Run the three commands above.
-4. If you introduced a new error `code`, document it in [stable error codes](./errors.md).
+4. If you introduced a new error `code`, document it in [stable error codes](../../reference/error-codes.md).

@@ -36,15 +36,15 @@ use lru::LruCache;
 
 use brokkr_wire::{K8sEvent as WireK8sEvent, ObjectRef, WsMessage};
 use chrono::Utc;
-use futures::stream::StreamExt;
 use futures::TryStreamExt;
+use futures::stream::StreamExt;
 use k8s_openapi::api::core::v1::Event as K8sEventResource;
+use kube::Client;
 use kube::api::{Api, DynamicObject};
 use kube::core::GroupVersionKind;
 use kube::discovery;
 use kube::runtime::watcher;
-use kube::Client;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{RwLock, mpsc};
 use tracing::{debug, info, warn};
 use uuid::Uuid;
 
@@ -128,6 +128,7 @@ pub fn spawn(
     uplink: WsUplink,
     agent_id: Uuid,
     uid_cache_cap: usize,
+    watch_namespace: Option<String>,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         let cache: Arc<RwLock<UidCache>> = Arc::new(RwLock::new(UidCache::new(uid_cache_cap)));
@@ -148,12 +149,19 @@ pub fn spawn(
         });
 
         loop {
-            if let Err(e) = watch_loop(client.clone(), agent_id, tx.clone(), cache.clone()).await {
+            if let Err(e) = watch_loop(
+                client.clone(),
+                agent_id,
+                tx.clone(),
+                cache.clone(),
+                watch_namespace.as_deref(),
+            )
+            .await
+            {
                 warn!(error = %e, "kube events tailer fell out of watch loop; restarting");
             }
             tokio::time::sleep(Duration::from_secs(5)).await;
         }
-
     })
 }
 
@@ -162,9 +170,13 @@ async fn watch_loop(
     agent_id: Uuid,
     tx: mpsc::Sender<WsMessage>,
     cache: Arc<RwLock<UidCache>>,
+    watch_namespace: Option<&str>,
 ) -> Result<(), watcher::Error> {
-    info!("starting kube events tailer");
-    let api: Api<K8sEventResource> = Api::all(client.clone());
+    info!(namespace = ?watch_namespace, "starting kube events tailer");
+    let api: Api<K8sEventResource> = match watch_namespace {
+        Some(ns) => Api::namespaced(client.clone(), ns),
+        None => Api::all(client.clone()),
+    };
     let mut stream = watcher(api, watcher::Config::default()).boxed();
 
     while let Some(event) = stream.try_next().await? {
@@ -187,7 +199,7 @@ async fn handle_event(
         None => return, // synthesised events without involvedObject UIDs aren't ours
     };
 
-    let stack_id = match resolve_stack(client, &ev, &involved, cache).await {
+    let stack_id = match resolve_stack(client, ev, &involved, cache).await {
         Some(id) => id,
         None => return,
     };
@@ -195,7 +207,8 @@ async fn handle_event(
     let frame = WsMessage::K8sEvent(WireK8sEvent {
         agent_id,
         stack_id,
-        observed_at: ev.event_time
+        observed_at: ev
+            .event_time
             .as_ref()
             .map(|t| t.0)
             .or_else(|| ev.last_timestamp.as_ref().map(|t| t.0))
@@ -203,10 +216,7 @@ async fn handle_event(
         reason: ev.reason.clone().unwrap_or_default(),
         message: ev.message.clone().unwrap_or_default(),
         event_type: ev.type_.clone().unwrap_or_else(|| "Normal".to_string()),
-        source: ev
-            .source
-            .as_ref()
-            .and_then(|s| s.component.clone()),
+        source: ev.source.as_ref().and_then(|s| s.component.clone()),
         involved_object: ObjectRef {
             api_version: ev.involved_object.api_version.clone().unwrap_or_default(),
             kind: ev.involved_object.kind.clone().unwrap_or_default(),
@@ -305,7 +315,7 @@ mod tests {
         c.put("u".into(), CacheEntry::Owned(id));
         match c.get("u") {
             Some(CacheEntry::Owned(got)) => assert_eq!(got, id),
-            other => panic!("expected Owned, got {:?}", matches!(other, Some(_))),
+            other => panic!("expected Owned, got {:?}", other.is_some()),
         }
     }
 
@@ -341,7 +351,10 @@ mod tests {
             lookup_or_miss(&mut c, &format!("uid-{i}"), &mut api_calls);
             assert!(c.len() <= cap, "cache exceeded cap of {cap}");
         }
-        assert_eq!(api_calls, 50_000, "every unique UID should miss exactly once");
+        assert_eq!(
+            api_calls, 50_000,
+            "every unique UID should miss exactly once"
+        );
         assert_eq!(c.len(), cap, "cache must be pinned at the cap, not grow");
     }
 

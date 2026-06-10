@@ -8,6 +8,7 @@ use crate::api::v1::admin::{
     AuditLogListResponse, ConfigChangeInfo, ConfigReloadResponse, WsConnectionInfo,
     WsConnectionsResponse,
 };
+use crate::api::v1::agents::CreateAgentResponse;
 use crate::api::v1::diagnostics::{
     CreateDiagnosticRequest, DiagnosticResponse, SubmitDiagnosticResult,
 };
@@ -18,7 +19,6 @@ use crate::api::v1::health::{
     HealthStatusUpdate, StackHealthResponse,
 };
 use crate::api::v1::middleware::AuthResponse;
-use crate::api::v1::agents::CreateAgentResponse;
 use crate::api::v1::stacks::{
     CreateDeploymentObjectRequest, K8sEventHistoryResponse, PodLogHistoryResponse, RetentionInfo,
     TemplateInstantiationRequest,
@@ -38,13 +38,13 @@ use crate::api::v1::{
     templates, webhooks, work_orders,
 };
 use crate::dal::DAL;
-use axum::{response::Json, routing::get, Router};
+use axum::{Router, response::Json, routing::get};
 use brokkr_models::models::{
     agent_annotations::{AgentAnnotation, NewAgentAnnotation},
     agent_events::{AgentEvent, NewAgentEvent},
     agent_k8s_events::AgentK8sEvent,
-    agent_pod_logs::AgentPodLog,
     agent_labels::{AgentLabel, NewAgentLabel},
+    agent_pod_logs::AgentPodLog,
     agent_targets::{AgentTarget, NewAgentTarget},
     agents::{Agent, NewAgent},
     audit_logs::AuditLog,
@@ -63,11 +63,11 @@ use brokkr_models::models::{
     work_orders::{WorkOrder, WorkOrderLog},
 };
 use utoipa::{
-    openapi::{
-        security::{ApiKey, ApiKeyValue, SecurityScheme},
-        Server,
-    },
     OpenApi,
+    openapi::{
+        Server,
+        security::{ApiKey, ApiKeyValue, SecurityScheme},
+    },
 };
 use utoipa_swagger_ui::SwaggerUi;
 

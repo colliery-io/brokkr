@@ -170,3 +170,28 @@ Method: For each ADR, verify that the "decided" status accurately reflects imple
 | BROKKR-T-0127 | ADR Accuracy | 5 ADRs | Implementation state of each decision, status annotations, cross-ADR consistency |
 
 All tasks are independent and can execute in parallel.
+
+## Progress Note — 2026-06-09 /docs-diataxis run (post-domain-tasks follow-up)
+
+A full Diátaxis pass was run against the mdBook (inventory → plan → write → 4 adversarial reviewers → fix loop). Key outcomes so far:
+
+- Code-cited inventory at `docs/INVENTORY.md` (working artifact, not in the book).
+- New pages: `reference/ws-protocol.md`, `reference/agent-annotations.md`, `how-to/log-streaming.md`, `how-to/sdks/typescript.md` (+ more being created by fixers: error-codes reference, monitoring-setup/network-configuration/security-hardening/build-and-publish-images how-tos, deployment-health reference, explanation/reconciliation).
+- Major drift fixed: create-agent response shape `{agent, initial_pak}`; missing Authorization headers in install guide; fictional PAK prefixes (`brk_gen_`, `brokkr_BA/BG`) — all PAKs are `brokkr_BR…`, role resolved by hash lookup; kubeconfig default is literal unexpanded `/home/${USER}/.kube/config`; live tail is admin/generator-only.
+- Verified product-behavior surprises now documented: stack-creation requires `generator_id` (all tutorial examples were broken); stack soft-delete trigger auto-creates an empty deletion marker; label/annotation→stack matching is dynamic at query time via `get_associated_stacks` and DOES feed target state; config-file layer is dead in shipped binaries (`Settings::new(None)`); CLI `rotate agent|generator` discards the new PAK (unrecoverable — API rotation is the only usable path); `/metrics` is public; release image tags have no `v` prefix; deployment health needs a pod label Brokkr never injects (else `unknown`); diagnostics namespace hardcoded `default` (the namespace the agent searches when fulfilling a diagnostics request is the literal `"default"` at `crates/brokkr-agent/src/cli/commands.rs:387`; workloads in any other namespace yield an empty-but-successful result with no error — known TODO in code).
+- Inventory corrections fed back: "one deployment object per tick" was wrong (agent applies all per tick); `custom` work orders are not a placeholder.
+- Candidate CODE issues surfaced (not doc-fixable, may warrant tasks): Cargo.toml `rust-version = "1.8"` typo (edition 2024 needs ≥1.85); CLI rotate discarding PAKs; config-file loading never wired; PAK comparison not constant-time; agent_events never emit `auth.failed`/config-reload audit events despite constants existing.
+
+Remaining: fixer agents completing across getting-started/tutorials, how-to, reference, explanation/SDK partitions; then SUMMARY.md update and reviewer re-run until zero blockers/majors.
+
+## Run Complete — 2026-06-09 (gate passed)
+
+Four fixer agents applied all first-round findings; four re-review gates then ran (accuracy, completeness, clarity, diátaxis). Every blocker and major from all gates is resolved; minors fixed except one waived (installation.md keeps its curated chart-values table — install-scoped, linked to values.yaml). Final state: 62 hand-written pages, mdbook builds clean, all internal links/anchors verified resolving.
+
+Notable second-round catches (all fixed): tutorial payload shapes (agent labels/annotations need object bodies; PUT stack/generator need the full model — GET-modify-PUT pattern documented); empty deletion markers rejected by API validation (trigger-inserted ones bypass it — placeholder content now shown); JSON-Schema `default` values are never injected at render time (Tera-only — templates tutorial corrected); template PUT creates a NEW id per version and instantiation pins to exact id; webhook cleanup deletes only success/dead; X-Brokkr-* headers are agent-delivery-only; audit-action catalog split into emitted-vs-defined.
+
+Code fixed this session (uncommitted, `cargo check` + 187 unit tests green): T-0185 rust-version 1.85; T-0186 CLI rotate prints PAK; T-0187 BROKKR_CONFIG_FILE wired into Settings + reload; T-0188 constant-time PAK compare; T-0189 auth.failed + config.reloaded emissions (remaining: generator-rotation + CLI audit, other constants); T-0190 diagnostics namespaces from manifests; T-0191 annotation merge (label-injection half awaits design decision: pod-template label w/ forced rollouts vs ownerRef walking). T-0192 rescoped (namespace RBAC degrades, doesn't fail — RBAC.md + 3 book pages corrected). T-0193 filed (rollback deletes pre-existing namespaces — data-loss-grade).
+
+## Post-Gate Addendum — 2026-06-10
+
+User decisions applied: (1) T-0191 ownerRef option implemented — health attributes pods via one cluster-wide list + label/annotation/controller-ownerReference chain walk (≤4 hops, memoized, lazy Discovery); standard workloads report real health with no manifest changes or rollouts. (2) T-0193 fixed — rollback now tracks only namespaces that did not exist before the reconciliation (existence check; lookup errors err toward not deleting). (3) T-0189 residue fixed — generator REST rotation emits pak.rotated; CLI rotations write synchronous DAL audit rows (details.via="cli"). 166 unit tests green (3 new); book pages updated (deployment-health ref/how-to, agent-annotations, reconciliation, audit-logs). All work uncommitted in the working tree pending user's commit decision. Waived minor (documented): installation.md retains its curated chart-values table. Integration suites not run (they pause interactively before docker teardown).

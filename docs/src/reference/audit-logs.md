@@ -33,59 +33,43 @@ The `actor_type` field identifies what kind of entity performed the action:
 
 ## Actions
 
-Actions follow a `resource.verb` naming convention. The following actions are currently logged:
+Actions follow a `resource.verb` naming convention.
 
-### Authentication
+### Currently Emitted
 
-| Action | Description |
-|--------|-------------|
-| `pak.created` | A new PAK was generated |
-| `pak.rotated` | An existing PAK was rotated |
-| `pak.deleted` | A PAK was invalidated |
-| `auth.failed` | Authentication attempt failed |
-| `auth.success` | Authentication succeeded |
-
-### Resource Management
+These actions are recorded by the broker today (emit sites in `crates/brokkr-broker/src/api/v1/{agents,stacks,webhooks,middleware,admin}.rs`):
 
 | Action | Description |
 |--------|-------------|
 | `agent.created` | New agent registered |
 | `agent.updated` | Agent details modified |
 | `agent.deleted` | Agent removed |
+| `pak.rotated` | An agent or generator PAK was rotated (REST endpoint or CLI; CLI entries carry `details.via = "cli"`) |
 | `stack.created` | New stack created |
 | `stack.updated` | Stack details modified |
 | `stack.deleted` | Stack removed |
-| `generator.created` | New generator created |
-| `generator.updated` | Generator details modified |
-| `generator.deleted` | Generator removed |
-| `template.created` | New template created |
-| `template.updated` | Template modified |
-| `template.deleted` | Template removed |
-
-### Webhooks
-
-| Action | Description |
-|--------|-------------|
 | `webhook.created` | New webhook subscription created |
 | `webhook.updated` | Webhook subscription modified |
 | `webhook.deleted` | Webhook subscription removed |
-| `webhook.delivery_failed` | Webhook delivery failed after retries |
-
-### Work Orders
-
-| Action | Description |
-|--------|-------------|
+| `generator.created` | New generator created (paired with a `pak.created` entry) |
+| `generator.updated` | Generator details modified |
+| `generator.deleted` | Generator removed |
+| `template.created` | New template created |
+| `template.updated` | Template updated (new version row) |
+| `template.deleted` | Template removed |
 | `workorder.created` | New work order created |
 | `workorder.claimed` | Work order claimed by an agent |
 | `workorder.completed` | Work order completed successfully |
-| `workorder.failed` | Work order failed |
-| `workorder.retry` | Work order returned for retry |
+| `workorder.failed` | Work order failed terminally (max retries or non-retryable) |
+| `workorder.retry` | Work order failed and was scheduled for retry |
+| `webhook.delivery_failed` | A webhook delivery exhausted retries and went `dead` |
+| `pak.created` | A PAK was issued at agent/generator creation (REST or CLI) |
+| `auth.failed` | A request presented an invalid PAK (recorded with source IP and path) |
+| `config.reloaded` | Configuration hot-reload performed (recorded with the change set) |
 
-### Administration
+### Defined but Not Yet Emitted
 
-| Action | Description |
-|--------|-------------|
-| `config.reloaded` | Configuration hot-reload performed |
+Two action constants exist in the data model (`crates/brokkr-models/src/models/audit_logs.rs`) but are intentionally not recorded: `auth.success` (one row per uncached authenticated request would dwarf the rest of the log; successful access is observable via the resource-level events) and `pak.deleted` (PAKs have no standalone deletion — they are replaced on rotation or die with their entity, both of which are audited).
 
 ## Resource Types
 
@@ -206,20 +190,19 @@ The `details` field contains structured JSON with context specific to each actio
 }
 ```
 
-**Authentication failure:**
+**Agent update** (`agent.updated`, from `crates/brokkr-broker/src/api/v1/agents.rs`):
 ```json
 {
-  "reason": "invalid_pak",
-  "pak_prefix": "brk_gen_"
+  "name": "my-agent",
+  "cluster_name": "production",
+  "status": "ACTIVE"
 }
 ```
 
-**Configuration changes:**
+**PAK rotation** (`pak.rotated`):
 ```json
 {
-  "key": "webhook.timeout",
-  "old_value": "30",
-  "new_value": "60"
+  "agent_name": "my-agent"
 }
 ```
 
@@ -227,8 +210,8 @@ The `details` field contains structured JSON with context specific to each actio
 
 Audit logs are subject to a retention policy that automatically removes old entries:
 
-- **Retention period**: Configurable (default varies by deployment)
-- **Cleanup frequency**: Background task runs periodically
+- **Retention period**: Configurable via `broker.audit_log_retention_days` (default 90 days)
+- **Cleanup frequency**: Background task runs daily (86400-second interval)
 - **Deletion method**: Hard delete (permanent removal)
 
 Configure retention through broker settings:
@@ -272,41 +255,9 @@ For query performance, the following indexes exist:
 
 **Failed auth tracking**: Failed authentication attempts are logged with IP addresses, enabling detection of brute force attacks or credential stuffing.
 
-## Integration Patterns
-
-### Security Monitoring
-
-Query failed authentication attempts to detect attack patterns:
-
-```bash
-# Get failed auth count by IP in last 24 hours
-curl "http://localhost:3000/api/v1/admin/audit-logs?action=auth.failed&from=$(date -u -d '24 hours ago' +%Y-%m-%dT%H:%M:%SZ)&limit=1000" \
-  -H "Authorization: Bearer $ADMIN_PAK" | \
-  jq '[.logs[].ip_address] | group_by(.) | map({ip: .[0], count: length}) | sort_by(-.count)'
-```
-
-### Compliance Reporting
-
-Export audit logs for compliance audits:
-
-```bash
-# Export all actions for a time period
-curl "http://localhost:3000/api/v1/admin/audit-logs?from=2025-01-01T00:00:00Z&to=2025-02-01T00:00:00Z&limit=1000" \
-  -H "Authorization: Bearer $ADMIN_PAK" > audit-january-2025.json
-```
-
-### Change Tracking
-
-Track changes to a specific resource over time:
-
-```bash
-# See complete history of an agent
-curl "http://localhost:3000/api/v1/admin/audit-logs?resource_type=agent&resource_id=$AGENT_ID&limit=50" \
-  -H "Authorization: Bearer $ADMIN_PAK"
-```
-
 ## Related Documentation
 
+- [Working with Audit Logs](../how-to/audit-logs.md) - Security monitoring, compliance reporting, and change-tracking queries
 - [Security Model](../explanation/security-model.md) - Authentication and authorization
 - [Soft Deletion](./soft-deletion.md) - Resource deletion patterns
 - [Webhooks](../how-to/webhooks.md) - Event notification system

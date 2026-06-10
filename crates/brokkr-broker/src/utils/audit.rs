@@ -223,13 +223,16 @@ pub fn get_audit_logger() -> Option<Arc<AuditLogger>> {
 /// # Arguments
 /// * `entry` - The audit log entry to record.
 pub fn log(entry: NewAuditLog) {
-    if let Some(logger) = get_audit_logger() {
-        logger.log(entry);
-    } else {
-        warn!(
-            "Audit logger not initialized, entry dropped: {}",
-            entry.action
-        );
+    match get_audit_logger() {
+        Some(logger) => {
+            logger.log(entry);
+        }
+        _ => {
+            warn!(
+                "Audit logger not initialized, entry dropped: {}",
+                entry.action
+            );
+        }
     }
 }
 
@@ -241,14 +244,15 @@ pub fn log(entry: NewAuditLog) {
 /// # Returns
 /// true if logged, false if channel full or logger not initialized.
 pub fn try_log(entry: NewAuditLog) -> bool {
-    if let Some(logger) = get_audit_logger() {
-        logger.try_log(entry)
-    } else {
-        warn!(
-            "Audit logger not initialized, entry dropped: {}",
-            entry.action
-        );
-        false
+    match get_audit_logger() {
+        Some(logger) => logger.try_log(entry),
+        _ => {
+            warn!(
+                "Audit logger not initialized, entry dropped: {}",
+                entry.action
+            );
+            false
+        }
     }
 }
 

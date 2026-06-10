@@ -9,8 +9,8 @@
 //! This module provides functionality to interact with the database for Stack Template-related
 //! operations, including creating, retrieving, listing, and managing template versions.
 
-use crate::dal::FilterType;
 use crate::dal::DAL;
+use crate::dal::FilterType;
 use brokkr_models::models::stack_templates::{NewStackTemplate, StackTemplate};
 use brokkr_models::schema::{stack_templates, template_annotations, template_labels};
 use chrono::Utc;
@@ -426,10 +426,10 @@ impl TemplatesDAL<'_> {
                         None => Some(matching_templates),
                     };
 
-                    if let Some(ref templates) = all_matching_templates {
-                        if templates.is_empty() {
-                            break;
-                        }
+                    if let Some(ref templates) = all_matching_templates
+                        && templates.is_empty()
+                    {
+                        break;
                     }
                 }
 

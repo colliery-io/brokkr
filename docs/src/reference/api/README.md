@@ -52,6 +52,9 @@ Stacks are collections of Kubernetes resources managed as a unit.
 | GET | `/stacks/:id/deployment-objects` | List deployment objects |
 | POST | `/stacks/:id/deployment-objects` | Create deployment object |
 | POST | `/stacks/:id/deployment-objects/from-template` | Instantiate template |
+| GET | `/stacks/:id/health` | Aggregated stack health (computed on read) |
+| GET | `/stacks/:id/events` | Retained Kubernetes events (6h window; `since`, `limit`) |
+| GET | `/stacks/:id/logs` | Retained pod log lines (6h window; `since`, `limit`) |
 
 #### Agents
 Agents run in Kubernetes clusters and apply deployment objects.
@@ -64,16 +67,24 @@ Agents run in Kubernetes clusters and apply deployment objects.
 | PUT | `/agents/:id` | Update an agent |
 | DELETE | `/agents/:id` | Delete an agent |
 | GET | `/agents/:id/target-state` | Get agent's target state |
-| POST | `/agents/:id/heartbeat` | Record agent heartbeat |
+| POST | `/agents/:id/heartbeat` | Record agent heartbeat (agent PAK only; admin PAK rejected) |
 | GET | `/agents/:id/labels` | List agent labels |
 | POST | `/agents/:id/labels` | Add label to agent |
+| DELETE | `/agents/:id/labels/:label` | Remove label from agent |
 | GET | `/agents/:id/annotations` | List agent annotations |
 | POST | `/agents/:id/annotations` | Add annotation to agent |
+| DELETE | `/agents/:id/annotations/:key` | Remove annotation from agent |
 | GET | `/agents/:id/stacks` | List agent's associated stacks |
 | GET | `/agents/:id/targets` | List agent's stack targets |
 | POST | `/agents/:id/targets` | Add stack target |
 | DELETE | `/agents/:id/targets/:stack_id` | Remove stack target |
 | POST | `/agents/:id/rotate-pak` | Rotate agent PAK |
+| PATCH | `/agents/:id/health-status` | Agent reports deployment health |
+| GET | `/agents/:id/events` | List agent events |
+| POST | `/agents/:id/events` | Record agent event |
+| GET | `/agents/:id/diagnostics/pending` | Pending diagnostics for agent |
+| GET | `/agents/:agent_id/webhooks/pending` | Pending webhook deliveries (auto-claims) |
+| GET | `/agents/` | Search agents by query string |
 
 #### Templates
 Reusable stack templates with Tera templating and JSON Schema validation.
@@ -87,8 +98,10 @@ Reusable stack templates with Tera templating and JSON Schema validation.
 | DELETE | `/templates/:id` | Delete a template |
 | GET | `/templates/:id/labels` | List template labels |
 | POST | `/templates/:id/labels` | Add label to template |
+| DELETE | `/templates/:id/labels/:label` | Remove label from template |
 | GET | `/templates/:id/annotations` | List template annotations |
 | POST | `/templates/:id/annotations` | Add annotation to template |
+| DELETE | `/templates/:id/annotations/:key` | Remove annotation from template |
 
 #### Work Orders
 Transient operations like container builds routed to agents.
@@ -138,21 +151,33 @@ External systems that create deployment objects.
 | DELETE | `/webhooks/:id` | Delete webhook subscription |
 | POST | `/webhooks/:id/test` | Test webhook delivery |
 | GET | `/webhooks/:id/deliveries` | List webhook deliveries |
+| POST | `/webhook-deliveries/:id/result` | Report delivery result (agent) |
 
 #### Admin
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/admin/audit-logs` | Query audit logs |
+| GET | `/admin/audit-logs` | Query audit logs (`limit` default 100, max 1000; `offset`; actor/action/resource/time filters) |
 | POST | `/admin/config/reload` | Reload broker configuration |
+| GET | `/admin/ws/connections` | Snapshot of active WebSocket connections |
 
-#### Health Monitoring
+#### Health Monitoring & Diagnostics
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/deployment-objects/:id/health` | Get deployment health |
-| GET | `/deployment-objects/:id/diagnostics` | Get diagnostics |
-| POST | `/deployment-objects/:id/diagnostics` | Request diagnostic |
+| POST | `/deployment-objects/:id/diagnostics` | Request a diagnostic collection |
+| GET | `/diagnostics/:id` | Get diagnostic request and result |
+| POST | `/diagnostics/:id/claim` | Claim a diagnostic request (agent) |
+| POST | `/diagnostics/:id/result` | Submit diagnostic result (agent) |
+
+### Pagination
+
+Most list endpoints return the full collection without pagination. The exceptions take query parameters: `/admin/audit-logs` (`limit`/`offset`), the stack telemetry endpoints (`since`/`limit`, clamped to the 6-hour retention window), `/work-order-log` (`work_type`, `success`, `agent_id`, `limit`), and `/webhooks/:id/deliveries` (`status` filter).
+
+### WebSocket Endpoints
+
+The broker also serves two WebSocket upgrade endpoints — the internal agent channel (`/internal/ws/agent`) and the per-stack live tail (`/api/v1/stacks/:id/live`). These are not part of the OpenAPI spec; see the [WebSocket Protocol reference](../ws-protocol.md).
 
 ## Health Endpoints
 
@@ -168,20 +193,25 @@ See [Health Endpoints](../health-endpoints.md) for details.
 
 ## Error Handling
 
-All API errors return JSON with an `error` field:
+All API errors return a JSON body with a stable machine-readable `code`, a human-readable `message` (wording may change between releases), and optional structured `details` (`crates/brokkr-broker/src/api/v1/error.rs`):
 
 ```json
 {
-  "error": "Description of what went wrong"
+  "code": "agent_not_found",
+  "message": "No agent with id 550e8400-e29b-41d4-a716-446655440000",
+  "details": null
 }
 ```
+
+Match on `code`, not `message` — the codes are part of the SDK contract. See [Stable Error Codes](../error-codes.md) for the catalog.
 
 Common HTTP status codes:
 - `400` - Bad request (invalid input)
 - `401` - Unauthorized (missing or invalid PAK)
 - `403` - Forbidden (valid PAK but insufficient permissions)
 - `404` - Not found
-- `422` - Unprocessable entity (validation failed)
+- `409` - Conflict (unique constraint violations)
+- `422` - Unprocessable entity (validation, foreign-key, check, or not-null violations)
 - `500` - Internal server error
 
 ## Rate Limiting

@@ -47,10 +47,7 @@ impl AgentK8sEventsDAL<'_> {
     }
 
     /// Delete rows older than `cutoff`. Returns row count.
-    pub fn evict_older_than(
-        &self,
-        cutoff: DateTime<Utc>,
-    ) -> Result<usize, diesel::result::Error> {
+    pub fn evict_older_than(&self, cutoff: DateTime<Utc>) -> Result<usize, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         diesel::delete(agent_k8s_events::table.filter(agent_k8s_events::created_at.lt(cutoff)))
             .execute(conn)

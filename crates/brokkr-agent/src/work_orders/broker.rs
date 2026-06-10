@@ -14,8 +14,8 @@ use brokkr_client::{BrokkrClient, BrokkrError};
 use brokkr_models::models::agents::Agent;
 use brokkr_models::models::work_orders::WorkOrder;
 use brokkr_utils::config::Settings;
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
@@ -89,11 +89,12 @@ pub async fn claim_work_order(
     agent: &Agent,
     work_order_id: Uuid,
 ) -> Result<WorkOrder, Box<dyn std::error::Error>> {
-    debug!("Claiming work order {} for agent {}", work_order_id, agent.name);
+    debug!(
+        "Claiming work order {} for agent {}",
+        work_order_id, agent.name
+    );
 
-    let body = brokkr_client::types::ClaimWorkOrderRequest {
-        agent_id: agent.id,
-    };
+    let body = brokkr_client::types::ClaimWorkOrderRequest { agent_id: agent.id };
 
     match client
         .api()
@@ -136,10 +137,7 @@ pub async fn claim_work_order(
                     Err("Access denied".into())
                 }
                 _ => {
-                    error!(
-                        "Failed to claim work order {}: {}",
-                        work_order_id, wrapped
-                    );
+                    error!("Failed to claim work order {}: {}", work_order_id, wrapped);
                     Err(boxed("Failed to claim work order", wrapped))
                 }
             }

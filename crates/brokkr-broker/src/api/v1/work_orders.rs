@@ -9,17 +9,23 @@
 use crate::api::v1::error::{ApiError, ErrorResponse};
 use crate::api::v1::middleware::AuthPayload;
 use crate::dal::DAL;
-use crate::ws::{push_work_order, ConnectionRegistry};
+use crate::utils::audit;
+use crate::ws::{ConnectionRegistry, push_work_order};
 use axum::{
+    Json, Router,
     extract::{Extension, Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
     routing::{get, post},
-    Json, Router,
+};
+use brokkr_models::models::audit_logs::{
+    ACTION_WORKORDER_CLAIMED, ACTION_WORKORDER_COMPLETED, ACTION_WORKORDER_CREATED,
+    ACTION_WORKORDER_FAILED, ACTION_WORKORDER_RETRY, ACTOR_TYPE_ADMIN, ACTOR_TYPE_AGENT,
+    ACTOR_TYPE_GENERATOR, RESOURCE_TYPE_WORKORDER,
 };
 use brokkr_models::models::work_orders::{NewWorkOrder, WorkOrder, WorkOrderLog};
-use std::sync::Arc;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -141,7 +147,10 @@ async fn list_work_orders(
     info!("Handling request to list work orders");
     if !auth_payload.admin {
         warn!("Unauthorized attempt to list work orders");
-        return Err(ApiError::forbidden("admin_required", "admin access required"));
+        return Err(ApiError::forbidden(
+            "admin_required",
+            "admin access required",
+        ));
     }
 
     let work_orders = dal
@@ -177,7 +186,10 @@ async fn create_work_order(
     info!("Handling request to create a new work order");
     if !auth_payload.admin {
         warn!("Unauthorized attempt to create work order");
-        return Err(ApiError::forbidden("admin_required", "admin access required"));
+        return Err(ApiError::forbidden(
+            "admin_required",
+            "admin access required",
+        ));
     }
 
     let targeting = request.targeting.unwrap_or_default();
@@ -213,26 +225,27 @@ async fn create_work_order(
     })?;
 
     let mut targeting_failed: Option<ApiError> = None;
-    if !agent_ids.is_empty() {
-        if let Err(e) = dal.work_orders().add_targets(work_order.id, &agent_ids) {
-            error!("Failed to add work order targets: {:?}", e);
-            targeting_failed = Some(ApiError::internal("failed to add work order targets"));
-        }
+    if !agent_ids.is_empty()
+        && let Err(e) = dal.work_orders().add_targets(work_order.id, &agent_ids)
+    {
+        error!("Failed to add work order targets: {:?}", e);
+        targeting_failed = Some(ApiError::internal("failed to add work order targets"));
     }
-    if targeting_failed.is_none() && !labels.is_empty() {
-        if let Err(e) = dal.work_orders().add_labels(work_order.id, &labels) {
-            error!("Failed to add work order labels: {:?}", e);
-            targeting_failed = Some(ApiError::internal("failed to add work order labels"));
-        }
+    if targeting_failed.is_none()
+        && !labels.is_empty()
+        && let Err(e) = dal.work_orders().add_labels(work_order.id, &labels)
+    {
+        error!("Failed to add work order labels: {:?}", e);
+        targeting_failed = Some(ApiError::internal("failed to add work order labels"));
     }
-    if targeting_failed.is_none() && !annotations.is_empty() {
-        if let Err(e) = dal
+    if targeting_failed.is_none()
+        && !annotations.is_empty()
+        && let Err(e) = dal
             .work_orders()
             .add_annotations(work_order.id, &annotations)
-        {
-            error!("Failed to add work order annotations: {:?}", e);
-            targeting_failed = Some(ApiError::internal("failed to add work order annotations"));
-        }
+    {
+        error!("Failed to add work order annotations: {:?}", e);
+        targeting_failed = Some(ApiError::internal("failed to add work order annotations"));
     }
 
     if let Some(err) = targeting_failed {
@@ -247,6 +260,21 @@ async fn create_work_order(
     push_work_order(&ws_registry, &work_order, &agent_ids);
 
     info!("Successfully created work order with ID: {}", work_order.id);
+    let (actor_type, actor_id) = if auth_payload.admin {
+        (ACTOR_TYPE_ADMIN, None)
+    } else {
+        (ACTOR_TYPE_GENERATOR, auth_payload.generator)
+    };
+    audit::log_action(
+        actor_type,
+        actor_id,
+        ACTION_WORKORDER_CREATED,
+        RESOURCE_TYPE_WORKORDER,
+        Some(work_order.id),
+        Some(serde_json::json!({ "work_type": work_order.work_type })),
+        None,
+        None,
+    );
     Ok((StatusCode::CREATED, Json(work_order)))
 }
 
@@ -271,7 +299,10 @@ async fn get_work_order(
     info!("Handling request to get work order with ID: {}", id);
     if !auth_payload.admin {
         warn!("Unauthorized attempt to get work order");
-        return Err(ApiError::forbidden("admin_required", "admin access required"));
+        return Err(ApiError::forbidden(
+            "admin_required",
+            "admin access required",
+        ));
     }
 
     if let Some(work_order) = dal.work_orders().get(id).map_err(|e| {
@@ -352,7 +383,10 @@ async fn delete_work_order(
     info!("Handling request to delete work order with ID: {}", id);
     if !auth_payload.admin {
         warn!("Unauthorized attempt to delete work order");
-        return Err(ApiError::forbidden("admin_required", "admin access required"));
+        return Err(ApiError::forbidden(
+            "admin_required",
+            "admin access required",
+        ));
     }
 
     let deleted = dal.work_orders().delete(id).map_err(|e| {
@@ -362,7 +396,10 @@ async fn delete_work_order(
 
     if deleted == 0 {
         warn!("Work order not found with ID: {}", id);
-        return Err(ApiError::not_found("work_order_not_found", "work order not found"));
+        return Err(ApiError::not_found(
+            "work_order_not_found",
+            "work order not found",
+        ));
     }
     info!("Successfully deleted work order with ID: {}", id);
     Ok(StatusCode::NO_CONTENT)
@@ -464,6 +501,16 @@ async fn claim_work_order(
                 "Successfully claimed work order {} by agent {}",
                 id, request.agent_id
             );
+            audit::log_action(
+                ACTOR_TYPE_AGENT,
+                Some(request.agent_id),
+                ACTION_WORKORDER_CLAIMED,
+                RESOURCE_TYPE_WORKORDER,
+                Some(id),
+                None,
+                None,
+                None,
+            );
             Ok(Json(work_order))
         }
         Err(diesel::result::Error::NotFound) => {
@@ -540,6 +587,16 @@ async fn complete_work_order(
                 ApiError::internal("failed to complete work order")
             })?;
         info!("Successfully completed work order {} with success", id);
+        audit::log_action(
+            ACTOR_TYPE_AGENT,
+            auth_payload.agent,
+            ACTION_WORKORDER_COMPLETED,
+            RESOURCE_TYPE_WORKORDER,
+            Some(id),
+            None,
+            None,
+            None,
+        );
         Ok((StatusCode::OK, Json(log_entry)).into_response())
     } else {
         let error_message = request
@@ -564,10 +621,30 @@ async fn complete_work_order(
                         id
                     );
                 }
+                audit::log_action(
+                    ACTOR_TYPE_AGENT,
+                    auth_payload.agent,
+                    ACTION_WORKORDER_FAILED,
+                    RESOURCE_TYPE_WORKORDER,
+                    Some(id),
+                    Some(serde_json::json!({ "retryable": request.retryable })),
+                    None,
+                    None,
+                );
                 Ok((StatusCode::OK, Json(log_entry)).into_response())
             }
             None => {
                 info!("Work order {} failed and scheduled for retry", id);
+                audit::log_action(
+                    ACTOR_TYPE_AGENT,
+                    auth_payload.agent,
+                    ACTION_WORKORDER_RETRY,
+                    RESOURCE_TYPE_WORKORDER,
+                    Some(id),
+                    None,
+                    None,
+                    None,
+                );
                 Ok((
                     StatusCode::ACCEPTED,
                     Json(serde_json::json!({"status": "retry_scheduled"})),
@@ -607,7 +684,10 @@ async fn list_work_order_log(
     info!("Handling request to list work order log");
     if !auth_payload.admin {
         warn!("Unauthorized attempt to list work order log");
-        return Err(ApiError::forbidden("admin_required", "admin access required"));
+        return Err(ApiError::forbidden(
+            "admin_required",
+            "admin access required",
+        ));
     }
 
     let log_entries = dal
@@ -647,17 +727,26 @@ async fn get_work_order_log(
     Extension(auth_payload): Extension<AuthPayload>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<WorkOrderLog>, ApiError> {
-    info!("Handling request to get work order log entry with ID: {}", id);
+    info!(
+        "Handling request to get work order log entry with ID: {}",
+        id
+    );
     if !auth_payload.admin {
         warn!("Unauthorized attempt to get work order log entry");
-        return Err(ApiError::forbidden("admin_required", "admin access required"));
+        return Err(ApiError::forbidden(
+            "admin_required",
+            "admin access required",
+        ));
     }
 
     let log_entry = dal
         .work_orders()
         .get_log(id)
         .map_err(|e| {
-            error!("Failed to fetch work order log entry with ID {}: {:?}", id, e);
+            error!(
+                "Failed to fetch work order log entry with ID {}: {:?}",
+                id, e
+            );
             ApiError::internal("failed to fetch work order log entry")
         })?
         .ok_or_else(|| {
@@ -667,6 +756,9 @@ async fn get_work_order_log(
                 "work order log entry not found",
             )
         })?;
-    info!("Successfully retrieved work order log entry with ID: {}", id);
+    info!(
+        "Successfully retrieved work order log entry with ID: {}",
+        id
+    );
     Ok(Json(log_entry))
 }

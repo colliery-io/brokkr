@@ -113,6 +113,28 @@ curl -s "http://localhost:3000/api/v1/admin/audit-logs?action=auth.failed" \
   | jq '.logs[] | {timestamp, ip_address, user_agent, details}'
 ```
 
+### Security Monitoring: Failed Auth by Source IP
+
+Aggregate failed attempts over the last 24 hours to spot attack patterns:
+
+```bash
+FROM=$(date -u -v-24H +%Y-%m-%dT%H:%M:%SZ)  # GNU date: date -u -d '24 hours ago' ...
+curl -s "http://localhost:3000/api/v1/admin/audit-logs?action=auth.failed&from=${FROM}&limit=1000" \
+  -H "Authorization: <admin-pak>" \
+  | jq '[.logs[].ip_address] | group_by(.) | map({ip: .[0], count: length}) | sort_by(-.count)'
+```
+
+### Compliance Export
+
+Export all actions for a reporting period to a file:
+
+```bash
+curl -s "http://localhost:3000/api/v1/admin/audit-logs?from=2025-01-01T00:00:00Z&to=2025-02-01T00:00:00Z&limit=1000" \
+  -H "Authorization: <admin-pak>" > audit-january-2025.json
+```
+
+For periods with more than 1000 entries, page through with `offset` and concatenate.
+
 ### Recent PAK Rotations
 
 ```bash

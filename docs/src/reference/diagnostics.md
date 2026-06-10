@@ -245,6 +245,12 @@ The cleanup task:
 
 ---
 
+## Known Limitations
+
+The agent searches the namespaces declared in the deployment object's manifests (`metadata.namespace`, with `default` for documents that omit it), using the pod label selector `brokkr.io/deployment-object-id=<id>` (`crates/brokkr-agent/src/cli/commands.rs`). Pods are matched by that label, which Brokkr does not inject into pod templates — without it, the request completes successfully with empty results (`pod_statuses: []`).
+
+---
+
 ## Related Documentation
 
 - [How-To: Running On-Demand Diagnostics](../how-to/diagnostics.md) — step-by-step guide

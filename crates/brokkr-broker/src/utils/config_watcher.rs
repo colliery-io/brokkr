@@ -233,18 +233,23 @@ mod tests {
 
     #[test]
     fn test_config_from_environment_no_file() {
-        std::env::remove_var("BROKKR_CONFIG_FILE");
+        // TODO: Audit that the environment access only happens in single-threaded code.
+        unsafe { std::env::remove_var("BROKKR_CONFIG_FILE") };
         let config = ConfigWatcherConfig::from_environment();
         assert!(config.is_none());
     }
 
     #[test]
     fn test_config_from_environment_disabled() {
-        std::env::set_var("BROKKR_CONFIG_FILE", "/tmp/test-config.toml");
-        std::env::set_var("BROKKR_CONFIG_WATCHER_ENABLED", "false");
+        // TODO: Audit that the environment access only happens in single-threaded code.
+        unsafe { std::env::set_var("BROKKR_CONFIG_FILE", "/tmp/test-config.toml") };
+        // TODO: Audit that the environment access only happens in single-threaded code.
+        unsafe { std::env::set_var("BROKKR_CONFIG_WATCHER_ENABLED", "false") };
         let config = ConfigWatcherConfig::from_environment();
         assert!(config.is_none());
-        std::env::remove_var("BROKKR_CONFIG_FILE");
-        std::env::remove_var("BROKKR_CONFIG_WATCHER_ENABLED");
+        // TODO: Audit that the environment access only happens in single-threaded code.
+        unsafe { std::env::remove_var("BROKKR_CONFIG_FILE") };
+        // TODO: Audit that the environment access only happens in single-threaded code.
+        unsafe { std::env::remove_var("BROKKR_CONFIG_WATCHER_ENABLED") };
     }
 }

@@ -6,7 +6,7 @@
 
 use crate::fixtures::TestFixture;
 use brokkr_models::models::work_orders::{
-    NewWorkOrder, NewWorkOrderTarget, WORK_ORDER_STATUS_CLAIMED, WORK_ORDER_STATUS_PENDING,
+    NewWorkOrder, WORK_ORDER_STATUS_CLAIMED, WORK_ORDER_STATUS_PENDING,
     WORK_ORDER_STATUS_RETRY_PENDING, WORK_TYPE_BUILD,
 };
 use uuid::Uuid;
@@ -379,7 +379,7 @@ fn test_complete_failure_with_retries() {
     let agent = fixture.create_test_agent("Agent".to_string(), "Cluster".to_string());
 
     // Create work order with retries
-    let mut new_wo = NewWorkOrder::new(
+    let new_wo = NewWorkOrder::new(
         WORK_TYPE_BUILD.to_string(),
         "yaml".to_string(),
         Some(3), // max_retries

@@ -59,52 +59,23 @@ helm install brokkr-globex oci://ghcr.io/colliery-io/charts/brokkr-broker \
 
 ### Option B: Environment Variables (Direct)
 
-Run each broker with different schema settings:
+Run each broker with different schema settings. The broker's bind address is fixed at `0.0.0.0:3000` — there is no configuration option to change the port — so each tenant's broker must run in its own container or on its own host (or behind its own port mapping):
 
 ```bash
-# Terminal 1: Acme broker (port 3000)
+# Host/container 1: Acme broker
 BROKKR__DATABASE__URL=postgres://brokkr:password@postgres.example.com:5432/brokkr \
 BROKKR__DATABASE__SCHEMA=tenant_acme \
 BROKKR__LOG__LEVEL=info \
   brokkr-broker serve
 
-# Terminal 2: Globex broker (port 3001 - change bind port in config)
+# Host/container 2: Globex broker
 BROKKR__DATABASE__URL=postgres://brokkr:password@postgres.example.com:5432/brokkr \
 BROKKR__DATABASE__SCHEMA=tenant_globex \
 BROKKR__LOG__LEVEL=info \
   brokkr-broker serve
 ```
 
-### Option C: Configuration Files
-
-Create a config file per tenant:
-
-```toml
-# /etc/brokkr/acme.toml
-[database]
-url = "postgres://brokkr:password@postgres.example.com:5432/brokkr"
-schema = "tenant_acme"
-
-[log]
-level = "info"
-format = "json"
-```
-
-```toml
-# /etc/brokkr/globex.toml
-[database]
-url = "postgres://brokkr:password@postgres.example.com:5432/brokkr"
-schema = "tenant_globex"
-
-[log]
-level = "info"
-format = "json"
-```
-
-```bash
-BROKKR_CONFIG_FILE=/etc/brokkr/acme.toml brokkr-broker serve
-BROKKR_CONFIG_FILE=/etc/brokkr/globex.toml brokkr-broker serve
-```
+Per-tenant settings can be provided as `BROKKR__*` environment variables as shown above, or via a per-tenant TOML file referenced by `BROKKR_CONFIG_FILE` (environment variables still override file values).
 
 ## Step 3: First Startup
 
@@ -112,14 +83,25 @@ On first startup, each broker instance:
 
 1. Creates the schema (`CREATE SCHEMA IF NOT EXISTS tenant_acme`)
 2. Runs all database migrations within the schema
-3. Creates the admin role and generates an admin PAK
-4. Logs the admin PAK to stdout
+3. Creates the admin role and an admin PAK
 
-**Capture the admin PAK for each tenant** — it's only shown once:
+By default, `broker.pak_hash` is set to a publicly-known development hash, which would give **both tenants the same well-known dev PAK**. For any real multi-tenant setup, override it per tenant: either supply your own per-tenant hash, or set it empty to force the broker to generate a fresh PAK:
 
 ```bash
-# Look for this line in the logs
-# INFO  Admin PAK: brokkr_BR...
+# Force per-tenant PAK generation
+BROKKR__BROKER__PAK_HASH="" \
+BROKKR__DATABASE__SCHEMA=tenant_acme \
+... brokkr-broker serve
+```
+
+When the broker generates a PAK, it is written to `/tmp/brokkr-keys/key.txt` inside the broker's filesystem — it is not logged. **Capture it for each tenant**:
+
+```bash
+# Kubernetes
+kubectl exec -n brokkr-acme <acme-broker-pod> -- cat /tmp/brokkr-keys/key.txt
+
+# Direct/container
+cat /tmp/brokkr-keys/key.txt
 ```
 
 ## Step 4: Register Agents Per Tenant

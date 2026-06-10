@@ -46,12 +46,7 @@ pub struct Cors {
 }
 ```
 
-#### Debugging
-
-Enable debug logging with environment variables:
-- `RUST_LOG=debug` - General debug output
-- `RUST_LOG=brokkr_broker=trace` - Detailed broker tracing
-- `RUST_LOG=tower_http=debug` - HTTP layer debugging
+For debugging, the `RUST_LOG` environment variable controls log verbosity (e.g., `RUST_LOG=debug`, `RUST_LOG=brokkr_broker=trace`, or `RUST_LOG=tower_http=debug` for the HTTP layer).
 
 ### DAL (Data Access Layer) Module
 
@@ -153,7 +148,7 @@ The agent is implemented in Rust using Tokio for async operations and kube-rs fo
 
 ### Broker Communication Module
 
-The broker module handles all communication with the Brokkr Broker service using REST API calls with PAK authentication. The agent polls the broker at configurable intervals rather than maintaining persistent connections.
+The broker module handles all communication with the Brokkr Broker service using REST API calls with PAK authentication. The agent polls the broker at configurable intervals; in addition, the `broker_ws` module maintains a persistent internal WebSocket connection used as a latency optimization for control-plane pushes and for streaming telemetry. REST polling remains the load-bearing path — when the WebSocket is down or its send lanes are full, every operation falls back to REST transparently (see [Internal Broker↔Agent WS Channel](./internal-ws-channel.md)).
 
 #### Communication Pattern
 
@@ -241,20 +236,18 @@ This ordering prevents failures from missing dependencies during initial deploym
 
 #### Ownership Tracking
 
-The agent tracks resource ownership using a combination of labels and annotations:
+The agent stamps tracking metadata onto every object it applies. Despite the `*_LABEL` constant names, all five keys are written as **annotations** on the applied object:
 
 ```rust
-// Labels (used for selection and filtering)
+// All five are stamped as annotations by create_k8s_objects()
 pub static STACK_LABEL: &str = "k8s.brokkr.io/stack";
 pub static DEPLOYMENT_OBJECT_ID_LABEL: &str = "brokkr.io/deployment-object-id";
-
-// Annotations (used for metadata)
 pub static CHECKSUM_ANNOTATION: &str = "k8s.brokkr.io/deployment-checksum";
 pub static LAST_CONFIG_ANNOTATION: &str = "k8s.brokkr.io/last-config-applied";
 pub static BROKKR_AGENT_OWNER_ANNOTATION: &str = "brokkr.io/owner-id";
 ```
 
-Before deleting resources, the agent verifies ownership by checking the owner annotation to prevent removing resources managed by other systems. The checksum annotation enables detection of configuration drift.
+Before deleting resources, the agent verifies ownership by checking the owner annotation to prevent removing resources managed by other systems. The checksum annotation enables detection of configuration drift. See the [Agent Annotations and Labels reference](../reference/agent-annotations.md) for the full catalog, including the keys the agent *looks for* (some of which are labels) for health checks and log streaming.
 
 #### Reconciliation
 
@@ -327,91 +320,11 @@ BROKKR__AGENT__POLLING_INTERVAL=10
 BROKKR__AGENT__HEALTH_PORT=8080
 ```
 
-## Configuration Reference
+## Configuration
 
-### Broker Configuration
+The full configuration catalogs for both components live in the [Configuration guide](../getting-started/configuration.md) and the [Environment Variables reference](../reference/environment-variables.md).
 
-```rust
-pub struct Settings {
-    pub database: Database,
-    pub log: Log,
-    pub broker: Broker,
-    pub cors: Cors,
-    pub telemetry: Telemetry,
-}
-
-pub struct Database {
-    pub url: String,
-    pub schema: Option<String>,
-}
-
-pub struct Broker {
-    pub diagnostic_cleanup_interval_seconds: Option<u64>,  // default: 900
-    pub diagnostic_max_age_hours: Option<i64>,              // default: 1
-    pub webhook_encryption_key: Option<String>,
-    pub webhook_delivery_interval_seconds: Option<u64>,     // default: 5
-    pub webhook_delivery_batch_size: Option<i64>,           // default: 50
-    pub webhook_cleanup_retention_days: Option<i64>,        // default: 7
-    pub audit_log_retention_days: Option<i64>,              // default: 90
-}
-
-pub struct Cors {
-    pub allowed_origins: Vec<String>,
-    pub allowed_methods: Vec<String>,
-    pub allowed_headers: Vec<String>,
-    pub max_age_seconds: u64,
-}
-```
-
-### Agent Configuration
-
-```rust
-pub struct Settings {
-    pub agent: Agent,
-    pub log: Log,
-    pub telemetry: Telemetry,
-}
-
-pub struct Agent {
-    pub broker_url: String,
-    pub pak: String,
-    pub agent_name: String,
-    pub cluster_name: String,
-    pub polling_interval: u64,                    // default: 10
-    pub kubeconfig_path: Option<String>,
-    pub max_retries: u32,
-    pub max_event_message_retries: usize,
-    pub event_message_retry_delay: u64,
-    pub health_port: Option<u16>,                 // default: 8080
-    pub deployment_health_enabled: Option<bool>,  // default: true
-    pub deployment_health_interval: Option<u64>,  // default: 60
-}
-```
-
-### Hot-Reload Configuration
-
-The broker supports dynamic configuration reloading for certain settings:
-
-**Hot-reloadable** (apply without restart):
-- Log level
-- CORS settings (origins, methods, headers, max-age)
-- Webhook delivery interval and batch size
-- Diagnostic cleanup settings
-
-**Static** (require restart):
-- Database URL and schema
-- Webhook encryption key
-- PAK configuration
-- Telemetry settings
-
-Trigger a manual reload via the admin API:
-
-```bash
-curl -X POST https://broker/api/v1/admin/config/reload \
-  -H "Authorization: Bearer <admin-pak>"
-```
-
-When a configuration file is specified, the broker automatically watches it for filesystem changes with a 5-second debounce.
+The broker supports hot-reloading a limited set of values without a restart: the log level, diagnostic cleanup settings, webhook delivery interval/batch size/retention, and — of the CORS settings — only the allowed origins and the preflight `max_age_seconds` (allowed methods and headers require a restart). A manual reload can be triggered via `POST /api/v1/admin/config/reload`; when a configuration file is specified, the broker also watches it for filesystem changes with a 5-second debounce.
 
 ## Component Lifecycle
 
@@ -421,7 +334,7 @@ When a configuration file is specified, the broker automatically watches it for 
 2. **Database Connection** - Establish r2d2 connection pool to PostgreSQL
 3. **Migration Check** - Verify database schema is current
 4. **Encryption Initialization** - Load or generate webhook encryption key
-5. **Event Bus Initialization** - Start event dispatcher with mpsc channel
+5. **Event Emission Setup** - Database-centric: events are matched against subscriptions and inserted directly into `webhook_deliveries`; no in-memory event bus exists
 6. **Audit Logger Initialization** - Start background writer with batching
 7. **Background Tasks** - Spawn diagnostic cleanup, work order, webhook, and audit tasks
 8. **API Server** - Bind to configured port and start accepting requests
@@ -458,7 +371,7 @@ Both components handle SIGTERM and SIGINT for graceful shutdown:
 
 ### Agent Optimization
 
-**Incremental Fetching** - Agents track processed sequence IDs to fetch only new deployment objects.
+**Incremental Fetching** - The broker's target-state endpoint defaults to incremental mode, filtering out objects the agent has already reported events for, so polls return only new work.
 
 **Parallel Apply** - Independent resources can be applied concurrently within priority groups.
 

@@ -1,7 +1,8 @@
 [package]
 name = "brokkr-broker"
 version = "0.5.0"
-edition = "2021"
+edition.workspace = true
+rust-version.workspace = true
 
 [lib]
 name = "brokkr_broker"
@@ -43,6 +44,7 @@ rand_core = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
+subtle = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }
 tower-http = { workspace = true }

@@ -6,7 +6,7 @@
 
 use crate::fixtures::TestFixture;
 use axum::{
-    body::{to_bytes, Body},
+    body::{Body, to_bytes},
     http::{Request, StatusCode},
 };
 use brokkr_models::models::agent_events::NewAgentEvent;

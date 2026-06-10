@@ -1,6 +1,6 @@
 # Multi-Tenancy Reference
 
-Brokkr supports multi-tenant deployments through PostgreSQL schema isolation. Each tenant gets a separate database schema, providing logical separation of all data while sharing a single database server and Brokkr broker instance.
+Brokkr supports multi-tenant deployments through PostgreSQL schema isolation. Each tenant gets a separate database schema, providing logical separation of all data while sharing a single database server, with one broker instance per tenant.
 
 ## Behavior
 
@@ -76,29 +76,7 @@ Each broker instance:
 
 ## Kubernetes Deployment
 
-In Kubernetes, deploy separate broker instances per tenant using the Helm chart with different schema values:
-
-```bash
-# Tenant: Acme
-helm install brokkr-acme oci://ghcr.io/colliery-io/charts/brokkr-broker \
-  --set postgresql.enabled=false \
-  --set postgresql.external.host=shared-postgres.example.com \
-  --set postgresql.external.database=brokkr \
-  --set postgresql.external.username=brokkr \
-  --set postgresql.external.password=secret \
-  --set postgresql.external.schema=tenant_acme \
-  --namespace brokkr-acme
-
-# Tenant: Globex
-helm install brokkr-globex oci://ghcr.io/colliery-io/charts/brokkr-broker \
-  --set postgresql.enabled=false \
-  --set postgresql.external.host=shared-postgres.example.com \
-  --set postgresql.external.database=brokkr \
-  --set postgresql.external.username=brokkr \
-  --set postgresql.external.password=secret \
-  --set postgresql.external.schema=tenant_globex \
-  --namespace brokkr-globex
-```
+For the Helm-based per-tenant deployment walkthrough, see [Multi-Tenant Setup](../how-to/multi-tenant-setup.md).
 
 ## Connection Pool Behavior
 
@@ -108,7 +86,7 @@ When a schema is configured:
 - Every connection acquired from the pool automatically executes `SET search_path TO <schema>` before use
 - This happens at the r2d2 pool level, so application code doesn't need schema awareness
 
-The connection pool size is 50 by default. In multi-tenant deployments with many tenants on one database server, consider the total connection count across all broker instances against PostgreSQL's `max_connections`.
+The connection pool size is 50 by default. The total connection count across all broker instances on one database server is bounded by PostgreSQL's `max_connections`; each additional tenant adds up to one pool's worth of connections.
 
 ## Data Isolation Guarantees
 
@@ -126,7 +104,7 @@ The connection pool size is 50 by default. In multi-tenant deployments with many
 - Network access to the database server
 - Database-level settings (e.g., `max_connections`)
 
-For stronger isolation requirements, use separate PostgreSQL databases or servers.
+Stronger isolation requires separate PostgreSQL databases or servers.
 
 ## Migration Behavior
 

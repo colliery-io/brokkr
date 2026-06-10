@@ -10,6 +10,7 @@
 //! and handling different types of authenticated entities (admin, agent, generator).
 
 use crate::dal::DAL;
+use crate::utils::audit;
 use crate::utils::pak;
 use axum::{
     body::Body,
@@ -17,6 +18,9 @@ use axum::{
     http::{Request, StatusCode},
     middleware::Next,
     response::Response,
+};
+use brokkr_models::models::audit_logs::{
+    ACTION_AUTH_FAILED, ACTOR_TYPE_SYSTEM, RESOURCE_TYPE_SYSTEM,
 };
 use brokkr_models::schema::admin_role;
 use diesel::prelude::*;
@@ -95,6 +99,34 @@ pub async fn auth_middleware<B>(
         }
         Err(status) => {
             warn!("Authentication failed with status: {:?}", status);
+            // Record genuine credential rejections (not infrastructure 5xx)
+            // for security review (BROKKR-T-0189). The audit logger batches
+            // writes, so this stays off the request hot path.
+            if status == StatusCode::UNAUTHORIZED {
+                let ip_address = request
+                    .headers()
+                    .get("x-forwarded-for")
+                    .and_then(|v| v.to_str().ok())
+                    .map(|s| s.split(',').next().unwrap_or(s).trim().to_string());
+                let user_agent = request
+                    .headers()
+                    .get("user-agent")
+                    .and_then(|v| v.to_str().ok())
+                    .map(String::from);
+                audit::log_action(
+                    ACTOR_TYPE_SYSTEM,
+                    None,
+                    ACTION_AUTH_FAILED,
+                    RESOURCE_TYPE_SYSTEM,
+                    None,
+                    Some(serde_json::json!({
+                        "reason": "invalid_pak",
+                        "path": request.uri().path(),
+                    })),
+                    ip_address,
+                    user_agent,
+                );
+            }
             Err(status)
         }
     }

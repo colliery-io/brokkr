@@ -13,9 +13,9 @@ use crate::api::v1::error::{ApiError, ErrorResponse};
 use crate::api::v1::middleware::AuthPayload;
 use crate::dal::DAL;
 use axum::{
+    Json, Router,
     extract::{Extension, Path, State},
     routing::get,
-    Json, Router,
 };
 use brokkr_models::models::deployment_objects::DeploymentObject;
 use tracing::{error, info, warn};
@@ -119,7 +119,10 @@ async fn get_deployment_object(
                 "Stack not found for deployment object '{}' (id: {}, stack_id: {})",
                 object.yaml_content, id, object.stack_id
             );
-            ApiError::not_found("stack_not_found", "stack not found for this deployment object")
+            ApiError::not_found(
+                "stack_not_found",
+                "stack not found for this deployment object",
+            )
         })?;
 
         if stack.generator_id == generator_id {

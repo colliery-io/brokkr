@@ -13,7 +13,7 @@ use crate::api::v1::middleware::AuthResponse;
 use crate::dal::DAL;
 use axum::extract::Extension;
 
-use axum::{routing::post, Json, Router};
+use axum::{Json, Router, routing::post};
 
 /// Creates and returns the authentication routes for the API.
 pub fn routes() -> Router<DAL> {

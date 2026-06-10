@@ -5,6 +5,7 @@
  */
 
 mod api;
+mod cli;
 mod dal;
 mod db;
 #[path = "../fixtures.rs"]

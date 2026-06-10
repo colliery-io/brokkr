@@ -10,8 +10,8 @@
 //! including creating, retrieving, updating, and deleting stacks, as well as filtering stacks
 //! based on various criteria.
 
-use crate::dal::FilterType;
 use crate::dal::DAL;
+use crate::dal::FilterType;
 use crate::utils::event_bus;
 use brokkr_models::models::stacks::{NewStack, Stack};
 use brokkr_models::models::webhooks::{BrokkrEvent, EVENT_STACK_CREATED, EVENT_STACK_DELETED};

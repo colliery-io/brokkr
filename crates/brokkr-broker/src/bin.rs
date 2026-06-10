@@ -9,7 +9,7 @@
 //! This module provides the command-line interface for the Brokkr Broker application.
 //! It includes functionality for serving the broker, rotating keys, and managing the application.
 
-use brokkr_broker::cli::{parse_cli, Commands, CreateSubcommands, RotateSubcommands};
+use brokkr_broker::cli::{Commands, CreateSubcommands, RotateSubcommands, parse_cli};
 
 use brokkr_broker::utils;
 use brokkr_utils::config::Settings;
@@ -24,8 +24,10 @@ use brokkr_broker::cli::commands;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = parse_cli();
 
-    // Load configuration
-    let config = Settings::new(None).expect("Failed to load configuration");
+    // Load configuration. BROKKR_CONFIG_FILE adds an optional file layer
+    // between embedded defaults and BROKKR__ env vars (BROKKR-T-0187).
+    let config = Settings::new(std::env::var("BROKKR_CONFIG_FILE").ok())
+        .expect("Failed to load configuration");
 
     // Initialize telemetry (includes tracing/logging setup)
     let telemetry_config = config.telemetry.for_broker();
@@ -49,8 +51,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
         Commands::Rotate(rotate_commands) => match rotate_commands.command {
             RotateSubcommands::Admin => commands::rotate_admin(&config)?,
-            RotateSubcommands::Agent { uuid } => commands::rotate_agent_key(&config, uuid)?,
-            RotateSubcommands::Generator { uuid } => commands::rotate_generator_key(&config, uuid)?,
+            RotateSubcommands::Agent { uuid } => {
+                commands::rotate_agent_key(&config, uuid)?;
+            }
+            RotateSubcommands::Generator { uuid } => {
+                commands::rotate_generator_key(&config, uuid)?;
+            }
         },
     }
 

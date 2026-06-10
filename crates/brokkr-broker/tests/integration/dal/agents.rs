@@ -554,12 +554,16 @@ fn test_get_agent_details() {
 
     // Assert annotations
     assert_eq!(annotations.len(), 2);
-    assert!(annotations
-        .iter()
-        .any(|a| a.key == "key1" && a.value == "value1"));
-    assert!(annotations
-        .iter()
-        .any(|a| a.key == "key2" && a.value == "value2"));
+    assert!(
+        annotations
+            .iter()
+            .any(|a| a.key == "key1" && a.value == "value1")
+    );
+    assert!(
+        annotations
+            .iter()
+            .any(|a| a.key == "key2" && a.value == "value2")
+    );
 
     // Test with non-existent agent
     let non_existent_uuid = Uuid::new_v4();

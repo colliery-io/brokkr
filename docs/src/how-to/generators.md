@@ -4,7 +4,7 @@ Generators are identity principals that enable external systems to interact with
 
 ## Understanding Generators
 
-A generator represents an external system that creates and manages Brokkr resources. Each generator receives a Pre-Authentication Key (PAK) that grants it permission to create stacks, templates, and deployment objects. Resources created by a generator are scoped to that generator, providing natural isolation between different automation pipelines or teams.
+A generator represents an external system that creates and manages Brokkr resources. Each generator receives a Prefixed API Key (PAK) that grants it permission to create stacks, templates, and deployment objects. Resources created by a generator are scoped to that generator, providing natural isolation between different automation pipelines or teams.
 
 Generators differ from the admin PAK in important ways. The admin PAK has full access to all resources and administrative functions. Generator PAKs can only access resources they created and cannot perform administrative operations like creating other generators or managing agents.
 
@@ -41,13 +41,13 @@ The response includes the generator details and its PAK:
     "created_at": "2025-01-02T10:00:00Z",
     "updated_at": "2025-01-02T10:00:00Z"
   },
-  "pak": "brk_gen_abc123...xyz789"
+  "pak": "brokkr_BRgen12ab_GeneratorLongTokenExample01"
 }
 ```
 
 ### Step 2: Store the PAK Securely
 
-The PAK is only returned once at creation time. Store it immediately in your secret management system:
+The PAK is only returned once at creation time, and the generator's UUID is what stack creation requests must reference as `generator_id`. Store both immediately in your secret management system — never in source code, configuration files, or logs:
 
 - **GitHub Actions**: Add as a repository or organization secret
 - **GitLab CI**: Add as a protected variable
@@ -57,6 +57,8 @@ The PAK is only returned once at creation time. Store it immediately in your sec
 If you lose the PAK, you'll need to rotate it (see PAK Rotation below).
 
 ## CI/CD Integration
+
+When a generator creates a stack, the request body must include `generator_id` set to the generator's own ID — the broker rejects any other value for a generator PAK.
 
 ### GitHub Actions Example
 
@@ -77,14 +79,17 @@ jobs:
       - name: Create Stack
         env:
           BROKKR_PAK: ${{ secrets.BROKKR_GENERATOR_PAK }}
+          BROKKR_GENERATOR_ID: ${{ secrets.BROKKR_GENERATOR_ID }}
           BROKKR_URL: ${{ vars.BROKKR_URL }}
         run: |
           curl -X POST "$BROKKR_URL/api/v1/stacks" \
             -H "Authorization: Bearer $BROKKR_PAK" \
             -H "Content-Type: application/json" \
+            -o stack-response.json \
             -d '{
               "name": "my-app-${{ github.sha }}",
-              "description": "Deployed from commit ${{ github.sha }}"
+              "description": "Deployed from commit ${{ github.sha }}",
+              "generator_id": "'"$BROKKR_GENERATOR_ID"'"
             }'
 
       - name: Add Deployment Objects
@@ -111,7 +116,8 @@ deploy:
         -H "Content-Type: application/json" \
         -d "{
           \"name\": \"my-app-$CI_COMMIT_SHA\",
-          \"description\": \"Pipeline $CI_PIPELINE_ID\"
+          \"description\": \"Pipeline $CI_PIPELINE_ID\",
+          \"generator_id\": \"$BROKKR_GENERATOR_ID\"
         }"
   only:
     - main
@@ -119,7 +125,7 @@ deploy:
 
 ### Using Templates
 
-Generators can create and use stack templates for consistent deployments:
+Generators can create stack templates and instantiate them into stacks they own. A template carries `template_content` (Tera-templated YAML) and `parameters_schema` (a JSON Schema string); instantiation renders the template into a deployment object within an existing stack:
 
 ```bash
 # Create a template (using generator PAK)
@@ -129,23 +135,24 @@ curl -X POST "http://broker:3000/api/v1/templates" \
   -d '{
     "name": "web-service",
     "description": "Standard web service deployment",
-    "template_yaml": "...",
-    "schema_json": "..."
+    "template_content": "...",
+    "parameters_schema": "..."
   }'
 
-# Create stack from template
-curl -X POST "http://broker:3000/api/v1/stacks" \
+# Instantiate the template into an existing stack
+curl -X POST "http://broker:3000/api/v1/stacks/$STACK_ID/deployment-objects/from-template" \
   -H "Authorization: Bearer $GENERATOR_PAK" \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "my-web-service",
-    "template_name": "web-service",
+    "template_id": "'"$TEMPLATE_ID"'",
     "parameters": {
       "replicas": 3,
       "image": "myapp:v1.2.3"
     }
   }'
 ```
+
+The instantiation endpoint returns `201 Created` with the rendered deployment object. See [Stack Templates](./templates.md) for the full workflow.
 
 ## Managing Generators
 
@@ -169,15 +176,16 @@ curl "http://broker:3000/api/v1/generators/$GENERATOR_ID" \
 
 ### Update Generator
 
-Update the generator's metadata:
+The update endpoint takes the complete generator object (`PUT` replaces, it does not patch), so fetch the current record, modify the fields you want, and send the whole object back:
 
 ```bash
-curl -X PUT "http://broker:3000/api/v1/generators/$GENERATOR_ID" \
+curl -s "http://broker:3000/api/v1/generators/$GENERATOR_ID" \
   -H "Authorization: Bearer $GENERATOR_PAK" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "description": "Updated description"
-  }'
+  | jq '.description = "Updated description"' \
+  | curl -X PUT "http://broker:3000/api/v1/generators/$GENERATOR_ID" \
+      -H "Authorization: Bearer $GENERATOR_PAK" \
+      -H "Content-Type: application/json" \
+      -d @-
 ```
 
 ### Delete Generator
@@ -209,13 +217,13 @@ The response contains the new PAK:
     "name": "github-actions-prod",
     ...
   },
-  "pak": "brk_gen_new123...newxyz"
+  "pak": "brokkr_BRnew34cd_GeneratorLongTokenExample02"
 }
 ```
 
 After rotation:
 
-1. The old PAK is immediately invalidated
+1. The old PAK is immediately invalidated — the API endpoint replaces the stored hash and evicts the old PAK from the broker's auth cache, so it stops working right away. (This immediate invalidation applies only to API rotation; the CLI `rotate generator` command behaves differently — see [Managing PAKs](./pak-management.md).)
 2. Update all CI/CD systems with the new PAK
 3. Verify deployments work with the new credentials
 
@@ -228,21 +236,7 @@ Consider rotating PAKs:
 
 ## Access Control
 
-Generators operate under a scoped permission model:
-
-| Operation | Admin PAK | Generator PAK |
-|-----------|-----------|---------------|
-| Create generators | Yes | No |
-| List all generators | Yes | No |
-| View own generator | Yes | Yes |
-| Update own generator | Yes | Yes |
-| Delete own generator | Yes | Yes |
-| Rotate own PAK | Yes | Yes |
-| Create stacks | Yes | Yes |
-| View own stacks | Yes | Yes |
-| View other generators' stacks | Yes | No |
-| Manage agents | Yes | No |
-| Manage webhooks | Yes | No |
+Generators operate under a scoped permission model: a generator PAK can manage the generator itself and the resources it created, while administrative operations remain admin-only. See the [permission model](../reference/generators.md#permission-model) and [resource scoping](../reference/generators.md#resource-scoping) sections of the Generators API Reference for the full matrix.
 
 ## Best Practices
 
@@ -263,20 +257,6 @@ Use descriptive names that identify the purpose and scope:
 - `gitlab-ci-staging` - Staging pipeline in GitLab CI
 - `jenkins-nightly-builds` - Nightly build automation
 - `team-platform-prod` - Platform team's production deployments
-
-### Secret Management
-
-Never store PAKs in:
-
-- Source code repositories
-- Unencrypted configuration files
-- Logs or console output
-
-Always use:
-
-- CI/CD secret management (GitHub Secrets, GitLab Variables)
-- Secret management systems (Vault, AWS Secrets Manager)
-- Encrypted environment variables
 
 ## Troubleshooting
 

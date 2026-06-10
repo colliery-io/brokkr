@@ -90,7 +90,7 @@ Content-Type: application/json
 | `name` | string | Yes | Unique name (max 255 characters) |
 | `description` | string | No | Optional description |
 
-**Response: 200 OK**
+**Response: 201 Created**
 
 ```json
 {
@@ -102,7 +102,7 @@ Content-Type: application/json
     "updated_at": "2025-01-02T10:00:00Z",
     "deleted_at": null
   },
-  "pak": "brk_gen_abc123...xyz789"
+  "pak": "brokkr_BRgen12ab_GeneratorLongTokenExample01"
 }
 ```
 
@@ -112,7 +112,8 @@ The `pak` field is only returned once at creation time. Store it securely immedi
 
 | Status | Description |
 |--------|-------------|
-| 400 | Invalid generator data (e.g., duplicate name) |
+| 400 | Invalid generator data |
+| 409 | Duplicate generator name (`unique_violation`) |
 | 403 | Admin access required |
 | 500 | Internal server error |
 
@@ -251,7 +252,7 @@ Authorization: Bearer <admin_pak | generator_pak>
 |-----------|------|-------------|
 | `id` | UUID | Generator ID |
 
-**Response: 200 OK**
+**Response: 201 Created**
 
 ```json
 {
@@ -263,7 +264,7 @@ Authorization: Bearer <admin_pak | generator_pak>
     "updated_at": "2025-01-02T12:00:00Z",
     "deleted_at": null
   },
-  "pak": "brk_gen_new123...newxyz"
+  "pak": "brokkr_BRnew34cd_GeneratorLongTokenExample02"
 }
 ```
 
@@ -281,16 +282,14 @@ The old PAK is immediately invalidated. Store the new PAK securely and update al
 
 ### PAK Format
 
-Generator PAKs follow the format: `brk_gen_<random_string>`
-
-The prefix identifies this as a generator PAK (as opposed to admin or agent PAKs).
+All PAKs — admin, agent, and generator — share the same format: `<prefix>_<short-token>_<long-token>`, by default `brokkr_BR<8 chars>_<24 chars>` (configured by the `pak.*` settings; see [Environment Variables](./environment-variables.md)). The token itself does not encode the role: the broker determines whether a PAK belongs to the admin role, an agent, or a generator by hash lookup. Use `POST /api/v1/auth/pak` to discover which identity a PAK resolves to.
 
 ### Authorization Header
 
 Include the PAK in the Authorization header:
 
 ```
-Authorization: Bearer brk_gen_abc123...xyz789
+Authorization: Bearer brokkr_BRgen12ab_GeneratorLongTokenExample01
 ```
 
 ### Permission Model
@@ -336,14 +335,14 @@ Deployment objects inherit the `generator_id` from their parent stack.
 | `updated_at` | TIMESTAMP | NOT NULL, DEFAULT NOW() |
 | `deleted_at` | TIMESTAMP | NULL (soft delete) |
 | `last_active_at` | TIMESTAMP | NULL |
-| `is_active` | BOOLEAN | NOT NULL, DEFAULT false |
+| `is_active` | BOOLEAN | NOT NULL, DEFAULT true |
 
 ### Unique Constraint
 
 The `name` column has a partial unique index excluding soft-deleted rows:
 
 ```sql
-CREATE UNIQUE INDEX generators_name_unique
+CREATE UNIQUE INDEX unique_generator_name
 ON generators (name)
 WHERE deleted_at IS NULL;
 ```

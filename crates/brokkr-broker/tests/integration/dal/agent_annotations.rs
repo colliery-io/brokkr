@@ -61,12 +61,16 @@ fn test_list_agent_annotations() {
         .expect("Failed to list agent annotations");
 
     assert_eq!(annotations.len(), 2);
-    assert!(annotations
-        .iter()
-        .any(|a| a.key == "key1" && a.value == "value1"));
-    assert!(annotations
-        .iter()
-        .any(|a| a.key == "key2" && a.value == "value2"));
+    assert!(
+        annotations
+            .iter()
+            .any(|a| a.key == "key1" && a.value == "value1")
+    );
+    assert!(
+        annotations
+            .iter()
+            .any(|a| a.key == "key2" && a.value == "value2")
+    );
 }
 
 #[test]

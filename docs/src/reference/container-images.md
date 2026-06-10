@@ -1,6 +1,6 @@
 # Container Images Reference
 
-This reference documents Brokkr's container images, repository locations, tag formats, and publishing commands.
+This reference documents Brokkr's container images, repository locations, tag formats, and image characteristics. For build and publish procedures, see [Building and Publishing Images](../how-to/build-and-publish-images.md).
 
 ## Image Repositories
 
@@ -24,7 +24,7 @@ All images support the following platforms:
 
 ### Semantic Version Tags
 
-Created when a git tag matching `v*.*.*` is pushed.
+Created when a git tag matching `v*.*.*` is pushed. The image tags carry no `v` prefix.
 
 | Tag Format | Example | Description | Mutable |
 |------------|---------|-------------|---------|
@@ -47,11 +47,11 @@ Created for every commit that triggers a container build.
 
 | Tag Format | Example | Description | Mutable |
 |------------|---------|-------------|---------|
-| `{branch}-sha-{short-sha}` | `develop-sha-abc1234` | Branch-prefixed 7-character commit SHA | No |
+| `{branch}-{short-sha}` | `develop-abc1234` | Branch-prefixed short commit SHA | No |
 
 **Example**: Commit `abc1234def5678` on the `develop` branch creates:
 ```
-ghcr.io/colliery-io/brokkr-broker:develop-sha-abc1234
+ghcr.io/colliery-io/brokkr-broker:develop-abc1234
 ```
 
 ### Branch Tags
@@ -70,7 +70,7 @@ ghcr.io/colliery-io/brokkr-broker:develop
 
 ### Pull Request Tags
 
-Optionally created for pull request builds.
+Created for pull request builds.
 
 | Tag Format | Example | Description | Mutable |
 |------------|---------|-------------|---------|
@@ -89,111 +89,14 @@ Every image has a unique SHA256 digest that never changes:
 ghcr.io/colliery-io/brokkr-broker@sha256:9fc91fae0f07c60ccbec61d86ff93fe825f92c42e5136295552ae196200dbe86
 ```
 
-**Production recommendation**: Always use digest references for deployments to ensure immutability.
-
-## Building Images
-
-### Local Build (Single Architecture)
-
-Build for your current platform:
-
-```bash
-angreal build multi-arch <component> --tag <tag>
-```
-
-**Parameters**:
-- `<component>`: `broker`, `agent`, `ui`, or `all`
-- `--tag <tag>`: Image tag (default: `dev`)
-- `--registry <url>`: Registry URL (default: `ghcr.io/colliery-io`)
-- `--platforms <platforms>`: Platform list (default: current platform for local builds)
-
-**Examples**:
-```bash
-# Build broker for current platform
-angreal build multi-arch broker --tag dev
-
-# Build agent for specific platform
-angreal build multi-arch agent --tag test --platforms linux/amd64
-
-# Build all components
-angreal build multi-arch all --tag v1.0.0
-```
-
-### Publishing to Registry
-
-Add `--push` to publish directly to the registry:
-
-```bash
-angreal build multi-arch <component> --tag <tag> --push
-```
-
-**Important**: When using `--push`, the build automatically targets both AMD64 and ARM64 unless `--platforms` is specified.
-
-**Examples**:
-```bash
-# Push broker with multi-arch support
-angreal build multi-arch broker --tag v1.0.0 --push
-
-# Push all components
-angreal build multi-arch all --tag v1.0.0 --push
-
-# Push to custom registry
-angreal build multi-arch broker --tag dev --registry myregistry.io/myorg --push
-```
-
-## Pulling Images
-
-### Public Images
-
-Images are publicly accessible and do not require authentication:
-
-```bash
-docker pull ghcr.io/colliery-io/brokkr-broker:v1.0.0
-```
-
-### Using Specific Architectures
-
-Docker automatically selects the appropriate architecture. To explicitly choose:
-
-```bash
-docker pull --platform linux/amd64 ghcr.io/colliery-io/brokkr-broker:v1.0.0
-docker pull --platform linux/arm64 ghcr.io/colliery-io/brokkr-broker:v1.0.0
-```
-
-### Using Digests
-
-For immutable deployments:
-
-```bash
-docker pull ghcr.io/colliery-io/brokkr-broker@sha256:9fc91fae0f07c60ccbec61d86ff93fe825f92c42e5136295552ae196200dbe86
-```
-
-## Authentication for Publishing
-
-### GitHub Personal Access Token
-
-Required for manual publishing. Create a token with `write:packages` scope.
-
-**Set environment variable**:
-```bash
-export GITHUB_TOKEN=ghp_yourtokenhere
-```
-
-**Login to registry**:
-```bash
-docker login ghcr.io -u <your-github-username> --password "$GITHUB_TOKEN"
-```
-
-### GitHub Actions
-
-Automated workflows use the built-in `GITHUB_TOKEN` secret with automatic permissions.
+A digest reference is immutable: it always resolves to the same image content, whereas mutable tags (`1.2`, `1`, `latest`, branch tags) move as new images are published.
 
 ## Inspecting Images
 
 ### View Manifest
 
 ```bash
-docker manifest inspect ghcr.io/colliery-io/brokkr-broker:v1.0.0
+docker manifest inspect ghcr.io/colliery-io/brokkr-broker:1.2.3
 ```
 
 ### List Available Tags
@@ -206,7 +109,7 @@ https://github.com/orgs/colliery-io/packages/container/brokkr-broker
 ### Check Image Architecture
 
 ```bash
-docker image inspect ghcr.io/colliery-io/brokkr-broker:v1.0.0 | grep Architecture
+docker image inspect ghcr.io/colliery-io/brokkr-broker:1.2.3 | grep Architecture
 ```
 
 ## Image Layer Structure
@@ -224,38 +127,6 @@ Brokkr images use multi-stage builds optimized for size and security.
 
 1. **Single stage**: Node.js Alpine (`node:18-alpine`) with npm install and application start
 
-## Kubernetes Deployment
-
-### Using Semantic Versions
-
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: brokkr-broker
-spec:
-  template:
-    spec:
-      containers:
-      - name: broker
-        image: ghcr.io/colliery-io/brokkr-broker:v1.2.3
-```
-
-### Using Digests (Recommended)
-
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: brokkr-broker
-spec:
-  template:
-    spec:
-      containers:
-      - name: broker
-        image: ghcr.io/colliery-io/brokkr-broker@sha256:9fc91fae0f07c60ccbec61d86ff93fe825f92c42e5136295552ae196200dbe86
-```
-
 ## Image Size Reference
 
 Approximate compressed image sizes:
@@ -270,4 +141,5 @@ Approximate compressed image sizes:
 
 ## Related Documentation
 
+- [Building and Publishing Images](../how-to/build-and-publish-images.md) - Build, publish, and deployment procedures
 - [Publishing Strategy](../explanation/publishing-strategy.md) - Understanding the tagging and distribution strategy

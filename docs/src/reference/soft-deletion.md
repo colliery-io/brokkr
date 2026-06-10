@@ -122,22 +122,14 @@ Hard deletion is typically reserved for:
 - Cleaning up test data
 - Emergency data removal scenarios
 
-## Recovery Considerations
+## Recovery
 
-While soft-deleted records remain in the database, Brokkr does not currently expose a recovery API. Manual recovery requires database access:
+Brokkr does not expose a recovery API; recovery is possible only by clearing `deleted_at` directly in the database (e.g. `UPDATE stacks SET deleted_at = NULL WHERE id = ...`), and cascade-deleted children carry their own `deleted_at` values that must be cleared individually.
 
-```sql
--- Example: Recover a soft-deleted stack
-UPDATE stacks SET deleted_at = NULL WHERE id = 'stack-uuid';
-
--- Note: Cascade-deleted children must also be recovered
-UPDATE deployment_objects SET deleted_at = NULL WHERE stack_id = 'stack-uuid';
-```
-
-Recovery is complicated by several factors:
-- Cascade-deleted children must be individually recovered
+Constraints on recovery:
+- Cascade-deleted children are recovered individually
 - Deletion markers created during soft deletion remain
-- Unique constraint conflicts may arise if a new resource was created with the same name
+- Unique constraint conflicts arise if a new resource was created with the same name
 
 ## Database Schema Details
 
@@ -164,25 +156,13 @@ Soft deletion cascades are implemented as PostgreSQL trigger functions:
 | `cascade_soft_delete_generators` | generators | AFTER UPDATE | `cascade_soft_delete_generators()` |
 | `trigger_stack_hard_delete` | stacks | BEFORE DELETE | `handle_stack_hard_delete()` |
 
-## Performance Implications
+## Performance Characteristics
 
-Soft deletion has modest performance implications:
+**Query overhead**: Every query includes `WHERE deleted_at IS NULL`; the `deleted_at` column is indexed.
 
-**Query overhead**: Every query must include `WHERE deleted_at IS NULL`. This is mitigated by indexing the `deleted_at` column.
-
-**Table growth**: Soft-deleted records accumulate over time. For high-churn environments, periodic hard deletion of old soft-deleted records may be necessary.
+**Table growth**: Soft-deleted records accumulate over time; they are removed only by hard deletion.
 
 **Index size**: Partial unique indexes only include active records, keeping index size proportional to active data rather than total data.
-
-## Best Practices
-
-**Prefer soft deletion**: Use the standard DELETE endpoints which perform soft deletion. This preserves audit trails and enables recovery.
-
-**Monitor table growth**: Track the ratio of soft-deleted to active records. Consider periodic cleanup of very old soft-deleted records.
-
-**Test recovery procedures**: If recovery is important for your use case, establish and test recovery procedures before you need them.
-
-**Understand cascade effects**: Before deleting generators or stacks, understand the cascade implications for dependent resources.
 
 ## Related Documentation
 

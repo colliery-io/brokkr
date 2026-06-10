@@ -8,7 +8,7 @@ Configuration precedence (highest wins): Environment variables > Config file > E
 
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
-| `BROKKR__DATABASE__URL` | String | `postgres://brokkr:brokkr@localhost:5432/brokkr` | PostgreSQL connection URL |
+| `BROKKR__DATABASE__URL` | String | `postgres://brokkr:brokkr@localhost:5433/brokkr` | PostgreSQL connection URL |
 | `BROKKR__DATABASE__SCHEMA` | String | *(none)* | Schema name for multi-tenant isolation. When set, all queries use this schema. |
 
 ## Logging
@@ -24,7 +24,7 @@ The log level is **hot-reloadable** — changes take effect without restarting.
 
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
-| `BROKKR__BROKER__PAK_HASH` | String | *(generated)* | Admin PAK hash (set during first startup) |
+| `BROKKR__BROKER__PAK_HASH` | String | *(embedded development hash)* | Hash of the admin PAK. The compiled-in default is a publicly known development hash from `default.toml`, not a generated value. |
 | `BROKKR__BROKER__DIAGNOSTIC_CLEANUP_INTERVAL_SECONDS` | Integer | `900` | Interval for diagnostic cleanup task (seconds) |
 | `BROKKR__BROKER__DIAGNOSTIC_MAX_AGE_HOURS` | Integer | `1` | Max age for completed diagnostics before deletion (hours) |
 | `BROKKR__BROKER__WEBHOOK_ENCRYPTION_KEY` | String | *(random)* | Hex-encoded 32-byte AES-256 key for encrypting webhook URLs and auth headers. If empty, a random key is generated on startup (not recommended for production — webhooks won't decrypt after restart). |
@@ -34,13 +34,15 @@ The log level is **hot-reloadable** — changes take effect without restarting.
 | `BROKKR__BROKER__AUDIT_LOG_RETENTION_DAYS` | Integer | `90` | How long to keep audit log entries (days) |
 | `BROKKR__BROKER__AUTH_CACHE_TTL_SECONDS` | Integer | `60` | TTL for PAK authentication cache (seconds). Set to `0` to disable caching. |
 
+A fresh admin PAK is generated (and written to `/tmp/brokkr-keys/key.txt`) only when `BROKKR__BROKER__PAK_HASH` is explicitly set to an empty value; when left at the default, the embedded development hash — and its corresponding publicly known development PAK — remain in effect.
+
 ## Agent
 
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
 | `BROKKR__AGENT__BROKER_URL` | String | `http://localhost:3000` | Broker API base URL |
 | `BROKKR__AGENT__POLLING_INTERVAL` | Integer | `10` | How often to poll broker for updates (seconds) |
-| `BROKKR__AGENT__KUBECONFIG_PATH` | String | *(in-cluster)* | Path to kubeconfig file. If unset, uses in-cluster configuration. |
+| `BROKKR__AGENT__KUBECONFIG_PATH` | String | `/home/${USER}/.kube/config` (literal, not shell-expanded) | Exported as `KUBECONFIG` before client creation; if the file cannot be loaded, kube's config inference falls back to in-cluster configuration |
 | `BROKKR__AGENT__MAX_RETRIES` | Integer | `60` | Max retries when waiting for broker on startup |
 | `BROKKR__AGENT__PAK` | String | *(required)* | Agent's PAK for broker authentication |
 | `BROKKR__AGENT__AGENT_NAME` | String | `DEFAULT` | Agent name (must match broker registration) |
@@ -50,6 +52,10 @@ The log level is **hot-reloadable** — changes take effect without restarting.
 | `BROKKR__AGENT__HEALTH_PORT` | Integer | `8080` | Port for agent health check HTTP server |
 | `BROKKR__AGENT__DEPLOYMENT_HEALTH_ENABLED` | Boolean | `true` | Enable deployment health checking |
 | `BROKKR__AGENT__DEPLOYMENT_HEALTH_INTERVAL` | Integer | `60` | Interval for deployment health checks (seconds) |
+| `BROKKR__AGENT__WS_FORCE_REST` | Boolean | `false` | Disable the internal WebSocket channel; use REST polling only |
+| `BROKKR__AGENT__WS_URL` | String | *(derived)* | Override the WebSocket URL; defaults to `broker_url` with `http`→`ws`/`https`→`wss` and `/internal/ws/agent` appended |
+| `BROKKR__AGENT__KUBE_EVENT_UID_CACHE_CAP` | Integer | `10000` | LRU capacity for the kube-event UID→stack ownership cache |
+| `BROKKR__AGENT__WATCH_NAMESPACE` | String | *(none — cluster-wide)* | Restrict pod-log/kube-event watchers and health discovery to one namespace (namespace-scoped RBAC). The agent Helm chart sets this from the downward API when `rbac.clusterWide: false` |
 
 ## PAK (Pre-Authentication Key) Generation
 
@@ -114,7 +120,7 @@ These environment variables control the configuration system itself and are **no
 
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
-| `BROKKR_CONFIG_FILE` | String | *(none)* | Path to TOML configuration file |
+| `BROKKR_CONFIG_FILE` | String | *(none)* | Path to a TOML configuration file, loaded between embedded defaults and `BROKKR__*` variables; also arms the broker's hot-reload file watcher |
 | `BROKKR_CONFIG_WATCHER_ENABLED` | Boolean | *(auto)* | Enable/disable ConfigMap hot-reload watcher |
 | `BROKKR_CONFIG_WATCHER_DEBOUNCE_SECONDS` | Integer | `5` | Debounce window for config file changes |
 

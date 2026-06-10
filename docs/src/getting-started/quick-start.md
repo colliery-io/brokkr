@@ -16,18 +16,26 @@ The deployment flow works as follows: when you create a deployment object in a s
 
 Stacks serve as containers for related Kubernetes resources. Every deployment in Brokkr belongs to a stack, so you'll start by creating one for your quick-start application.
 
+Every stack is owned by a **generator**—the identity that manages its deployments. The broker creates an `admin-generator` automatically at first startup, linked to the admin PAK (Prefixed API Key). Look up its ID and use it when creating stacks as an admin:
+
 ```bash
 # Set your admin PAK for convenience
 export ADMIN_PAK="brokkr_BR..."  # Replace with your actual PAK
+
+# Look up the admin generator's ID
+GEN_ID=$(curl -s http://localhost:3000/api/v1/generators \
+  -H "Authorization: Bearer $ADMIN_PAK" \
+  | jq -r '.[] | select(.name=="admin-generator") | .id')
 
 # Create a stack
 curl -s -X POST http://localhost:3000/api/v1/stacks \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $ADMIN_PAK" \
-  -d '{
-    "name": "quick-start-app",
-    "description": "My first Brokkr deployment"
-  }' | jq .
+  -d "{
+    \"name\": \"quick-start-app\",
+    \"description\": \"My first Brokkr deployment\",
+    \"generator_id\": \"$GEN_ID\"
+  }" | jq .
 ```
 
 The response includes a stack ID that you'll use in subsequent commands:
@@ -37,6 +45,7 @@ The response includes a stack ID that you'll use in subsequent commands:
   "id": "550e8400-e29b-41d4-a716-446655440000",
   "name": "quick-start-app",
   "description": "My first Brokkr deployment",
+  "generator_id": "7f1c2a9e-4b3d-4f6a-9c8e-2d5b1a0e3f47",
   "created_at": "2024-01-15T10:30:00Z"
 }
 ```
@@ -135,7 +144,7 @@ curl -s -X POST "http://localhost:3000/api/v1/stacks/$STACK_ID/deployment-object
   -d "$(jq -n --arg yaml "$(cat quick-start.yaml)" '{yaml_content: $yaml, is_deletion_marker: false}')" | jq .
 ```
 
-The broker stores this deployment object and marks it pending. On the agent's next polling cycle (default: every 30 seconds), it retrieves the object and applies the resources to the cluster.
+The broker stores this deployment object and marks it pending. On the agent's next polling cycle, it retrieves the object and applies the resources to the cluster. The polling interval defaults to 10 seconds in the agent binary's embedded configuration; the Helm chart sets it to 30 seconds via `agent.pollingInterval`.
 
 ## Step 4: Verify the Deployment
 
@@ -158,12 +167,19 @@ kubectl logs -n quick-start -l app=quick-start-app
 
 You should see the pod running and logging "Hello from Brokkr!" every 30 seconds.
 
-You can also check the deployment status through the Brokkr API to see how the broker tracked this deployment:
+You can also list the stack's deployment objects through the Brokkr API to see what the broker has recorded:
 
 ```bash
 # View deployment objects in the stack
 curl -s "http://localhost:3000/api/v1/stacks/$STACK_ID/deployment-objects" \
-  -H "Authorization: Bearer $ADMIN_PAK" | jq '.[] | {id, sequence_id, status, created_at}'
+  -H "Authorization: Bearer $ADMIN_PAK" | jq '.[] | {id, sequence_id, is_deletion_marker, submitted_at}'
+```
+
+Deployment objects record what was submitted, not whether it succeeded. For deployment outcomes, query the agent's events:
+
+```bash
+curl -s "http://localhost:3000/api/v1/agents/$AGENT_ID/events" \
+  -H "Authorization: Bearer $ADMIN_PAK" | jq '.[] | {event_type, status, message}'
 ```
 
 ## Step 5: Update the Application
@@ -238,16 +254,16 @@ kubectl get configmap app-config -n quick-start -o jsonpath='{.data.message}'
 
 ## Step 6: Clean Up
 
-To delete resources through Brokkr, submit a deployment object with `is_deletion_marker: true`. This signals the agent to remove the specified resources rather than apply them.
+To delete resources through Brokkr, submit a deployment object with `is_deletion_marker: true`. When the agent processes a deletion marker, it removes everything the stack previously stamped onto the cluster—every object the agent annotated with `k8s.brokkr.io/stack=<stack-id>` when applying—regardless of what YAML the marker carries. You may include YAML in the marker, but it is not what drives the deletion.
 
 ```bash
 curl -s -X POST "http://localhost:3000/api/v1/stacks/$STACK_ID/deployment-objects" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $ADMIN_PAK" \
-  -d "$(jq -n --arg yaml "$(cat quick-start-updated.yaml)" '{yaml_content: $yaml, is_deletion_marker: true}')" | jq .
+  -d '{"yaml_content": "# deletion", "is_deletion_marker": true}' | jq .
 ```
 
-The YAML content is required even for deletions so the agent knows exactly which resources to remove. After the agent processes this deletion marker, verify the resources are gone:
+After the agent processes this deletion marker, verify the resources are gone:
 
 ```bash
 # The namespace should be terminating or gone
@@ -265,6 +281,8 @@ curl -s -X DELETE "http://localhost:3000/api/v1/agents/$AGENT_ID/targets/$STACK_
 curl -s -X DELETE "http://localhost:3000/api/v1/stacks/$STACK_ID" \
   -H "Authorization: Bearer $ADMIN_PAK"
 ```
+
+Deleting a stack soft-deletes its deployment objects and automatically inserts a deletion marker, so deleting the stack alone is also enough to clear its resources from the cluster.
 
 ## Next Steps
 

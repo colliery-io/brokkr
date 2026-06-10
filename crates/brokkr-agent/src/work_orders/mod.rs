@@ -26,11 +26,11 @@
 pub mod broker;
 pub mod build;
 
+use brokkr_client::BrokkrClient;
 use brokkr_models::models::agents::Agent;
 use brokkr_models::models::work_orders::WorkOrder;
 use brokkr_utils::config::Settings;
 use kube::Client as K8sClient;
-use brokkr_client::BrokkrClient;
 use tracing::{debug, error, info, trace, warn};
 
 /// Determines if an error is retryable by inspecting the error message.

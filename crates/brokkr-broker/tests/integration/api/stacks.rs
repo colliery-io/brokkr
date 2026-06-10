@@ -5,7 +5,7 @@
  */
 
 use axum::{
-    body::{to_bytes, Body},
+    body::{Body, to_bytes},
     http::{Request, StatusCode},
 };
 use brokkr_models::models::{
@@ -176,10 +176,7 @@ async fn test_list_stacks_with_generator_pak_filters_to_own() {
     let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let stacks: Vec<serde_json::Value> = serde_json::from_slice(&body).unwrap();
 
-    let ids: Vec<&str> = stacks
-        .iter()
-        .map(|s| s["id"].as_str().unwrap())
-        .collect();
+    let ids: Vec<&str> = stacks.iter().map(|s| s["id"].as_str().unwrap()).collect();
     assert_eq!(
         ids.len(),
         2,

@@ -4,24 +4,31 @@ Stacks are the fundamental organizational unit in Brokkr, representing collectio
 
 ## Understanding Stacks
 
-A stack serves as a container for deployment objects—the versioned snapshots of Kubernetes resources you want to deploy. When you create a stack, you establish a logical boundary for a set of resources, whether that's an application, a service, or any collection of related Kubernetes manifests. Agents are then assigned to stacks through targeting relationships, enabling you to control which clusters receive which resources.
-
-Each stack maintains a history of deployment objects, providing an immutable audit trail of every configuration change. This history enables rollback capabilities and satisfies compliance requirements for tracking what was deployed and when.
+A stack is a container for deployment objects—the versioned snapshots of Kubernetes resources you want to deploy—and the unit that agents target. See [Core Concepts](../explanation/core-concepts.md) for how stacks fit into Brokkr's architecture.
 
 ## Creating Stacks
 
 ### Basic Stack Creation
 
-To create a stack, send a POST request to the stacks endpoint with a name and optional description:
+Every stack belongs to a generator, so `generator_id` is required when creating one. Generators use their own ID (the broker rejects anything else). Admins use the UUID of the auto-created `admin-generator`, which you can look up first:
+
+```bash
+GENERATOR_ID=$(curl -s http://localhost:3000/api/v1/generators \
+  -H "Authorization: Bearer $ADMIN_PAK" \
+  | jq -r '.[] | select(.name == "admin-generator") | .id')
+```
+
+Then create the stack with a name, optional description, and the generator ID:
 
 ```bash
 curl -X POST http://localhost:3000/api/v1/stacks \
   -H "Authorization: Bearer $ADMIN_PAK" \
   -H "Content-Type: application/json" \
-  -d '{
-    "name": "payment-service",
-    "description": "Payment processing microservice and dependencies"
-  }'
+  -d "{
+    \"name\": \"payment-service\",
+    \"description\": \"Payment processing microservice and dependencies\",
+    \"generator_id\": \"$GENERATOR_ID\"
+  }"
 ```
 
 The response includes the stack's UUID which you'll use for all subsequent operations:
@@ -33,7 +40,7 @@ The response includes the stack's UUID which you'll use for all subsequent opera
   "description": "Payment processing microservice and dependencies",
   "created_at": "2025-01-02T10:00:00Z",
   "updated_at": "2025-01-02T10:00:00Z",
-  "generator_id": "00000000-0000-0000-0000-000000000000"
+  "generator_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 }
 ```
 
@@ -97,11 +104,11 @@ Annotations carry key-value metadata for integration with external systems or co
 curl -X POST http://localhost:3000/api/v1/stacks/$STACK_ID/annotations \
   -H "Authorization: Bearer $ADMIN_PAK" \
   -H "Content-Type: application/json" \
-  -d '{
-    "stack_id": "550e8400-e29b-41d4-a716-446655440000",
-    "key": "cost-center",
-    "value": "engineering-team-a"
-  }'
+  -d "{
+    \"stack_id\": \"$STACK_ID\",
+    \"key\": \"cost-center\",
+    \"value\": \"engineering-team-a\"
+  }"
 ```
 
 Both keys and values must be non-empty strings up to 64 characters with no whitespace. Annotations are useful for:
@@ -133,7 +140,7 @@ curl -X DELETE http://localhost:3000/api/v1/stacks/$STACK_ID/annotations/cost-ce
 
 ## Targeting Stacks to Agents
 
-Targeting establishes the relationship between stacks and the agents that should manage them. Without targeting, an agent won't receive deployment objects from a stack regardless of other configuration.
+Targeting establishes the relationship between stacks and the agents that should manage them. Without either an explicit target or a shared label/annotation, an agent won't receive deployment objects from a stack regardless of other configuration.
 
 ### Direct Assignment
 
@@ -153,15 +160,28 @@ Direct assignment is appropriate when you have explicit control over which agent
 
 ### Label-Based Targeting
 
-When both agents and stacks carry matching labels, you can configure agents to automatically target all stacks with those labels. This enables patterns like "all production agents receive all production stacks" without maintaining explicit per-pair associations.
+Beyond direct assignment, stacks and agents are associated dynamically through their metadata: a stack is associated with an agent if it shares **any** label string with the agent, or **any** annotation key-value pair (OR semantics). The broker evaluates this match at query time whenever the agent polls—no targeting rows are created and no configuration step is required. Deployment objects from every matched stack flow into the agent's target state automatically.
 
-To set up label-based targeting:
+For example, to have every production agent receive a stack:
 
-1. Add labels to your stacks that represent their characteristics
-2. Add corresponding labels to agents that should manage those stacks
-3. Configure the targeting policy (see agent configuration)
+```bash
+# Label the stack
+curl -X POST http://localhost:3000/api/v1/stacks/$STACK_ID/labels \
+  -H "Authorization: Bearer $ADMIN_PAK" \
+  -H "Content-Type: application/json" \
+  -d '"production"'
 
-The agent polls for stacks matching its label configuration and creates targeting relationships automatically.
+# Add the same label to each agent that should manage it
+curl -X POST http://localhost:3000/api/v1/agents/$AGENT_ID/labels \
+  -H "Authorization: Bearer $ADMIN_PAK" \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"agent_id\": \"$AGENT_ID\",
+    \"label\": \"production\"
+  }"
+```
+
+From the next poll onward, the agent's target state includes the stack's deployment objects. Removing the shared label (or annotation) dissolves the association just as automatically.
 
 ### Multi-Cluster Deployments
 
@@ -220,17 +240,16 @@ The template's parameters are validated against its JSON Schema before rendering
 
 ### Updating Stacks
 
-Modify a stack's name or description:
+The update endpoint takes the complete stack object (`PUT` replaces, it does not patch), so fetch the current record, modify the fields you want, and send the whole object back:
 
 ```bash
-curl -X PUT http://localhost:3000/api/v1/stacks/$STACK_ID \
+curl -s http://localhost:3000/api/v1/stacks/$STACK_ID \
   -H "Authorization: Bearer $ADMIN_PAK" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "id": "550e8400-e29b-41d4-a716-446655440000",
-    "name": "payment-service-v2",
-    "description": "Updated payment service with new features"
-  }'
+  | jq '.name = "payment-service-v2" | .description = "Updated payment service with new features"' \
+  | curl -X PUT http://localhost:3000/api/v1/stacks/$STACK_ID \
+      -H "Authorization: Bearer $ADMIN_PAK" \
+      -H "Content-Type: application/json" \
+      -d @-
 ```
 
 ### Deleting Stacks
@@ -242,15 +261,16 @@ curl -X DELETE http://localhost:3000/api/v1/stacks/$STACK_ID \
   -H "Authorization: Bearer $ADMIN_PAK"
 ```
 
-Soft deletion marks the stack with a `deleted_at` timestamp:
-- The stack stops appearing in list queries
-- The underlying data remains intact for audit purposes and potential recovery
+Soft deletion does three things, atomically via a database trigger:
+- The stack stops appearing in list queries, while the underlying data remains intact for audit purposes
+- All of the stack's deployment objects are soft-deleted along with it
+- An empty deletion marker deployment object is inserted automatically
 
-Note that soft-deleting a stack does not automatically cascade to its deployment objects or create deletion markers. To ensure agents remove resources from clusters, create a deletion marker deployment object before deleting the stack.
+The deletion marker is how cluster cleanup happens: agents targeting the stack receive it on their next poll and delete the stack's resources rather than apply them. No manual step is needed—deleting the stack is sufficient.
 
 ### Understanding Deletion Markers
 
-To clean up cluster resources, create a deployment object with `is_deletion_marker: true` for the stack before deleting it. Agents receiving this marker understand they should delete the stack's resources rather than apply them. This ensures resources are cleaned up from clusters.
+You can also create a deletion marker yourself by submitting a deployment object with `is_deletion_marker: true`. This removes the stack's resources from clusters while keeping the stack itself alive—useful for clearing out a stack you intend to repopulate. For stack deletion, the marker is created for you by the trigger described above.
 
 ## Generator Integration
 
@@ -258,17 +278,11 @@ Generators are external systems like CI/CD pipelines that create stacks programm
 
 Generators can only access stacks they created. This scoping ensures pipelines can't accidentally modify resources belonging to other systems. See the [Generators Guide](./generators.md) for details on integrating CI/CD systems.
 
-## Best Practices
+## Warnings
 
-**Organize by responsibility**: Group resources into stacks based on what changes together. A stack should contain resources that are deployed, updated, and scaled as a unit.
+**Deletion removes cluster resources**: Deleting a stack automatically creates a deletion marker, and every targeted agent will delete the stack's resources from its cluster. Confirm which agents are associated with the stack before deleting.
 
-**Use labels for targeting**: Rather than creating explicit targeting relationships for each stack-agent pair, use labels to establish patterns. This reduces configuration overhead as your infrastructure grows.
-
-**Keep stacks focused**: While you can put any resources in a stack, keeping stacks focused on specific applications or services makes management clearer and reduces blast radius for changes.
-
-**Document with annotations**: Use annotations to record metadata that helps teams understand the stack's purpose, ownership, and relationship to business systems.
-
-**Plan for deletion**: Remember that deleting a stack triggers resource deletion on targeted clusters. Ensure you understand which clusters are affected before deleting.
+**Shared labels create associations**: Because any shared label or annotation associates a stack with an agent, an overly generic label (e.g., `default`) can unintentionally deploy a stack to agents you didn't have in mind. Choose label values deliberately.
 
 ## Related Documentation
 

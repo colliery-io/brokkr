@@ -35,7 +35,8 @@ fn test_settings_from_file_and_env() {
     fs::write(&file_path, test_config).expect("Failed to write test config file");
 
     // Set an environment variable to override a setting
-    env::set_var("BROKKR__LOG__LEVEL", "debug");
+    // TODO: Audit that the environment access only happens in single-threaded code.
+    unsafe { env::set_var("BROKKR__LOG__LEVEL", "debug") };
 
     // Load settings from the test file
     let settings = Settings::new(Some(file_path.to_str().unwrap().to_string()))
@@ -55,7 +56,8 @@ fn test_settings_from_file_and_env() {
 
     // Clean up: remove the temporary directory and unset the environment variable
     temp_dir.close().expect("Failed to remove temp dir");
-    env::remove_var("BROKKR__LOG__LEVEL");
+    // TODO: Audit that the environment access only happens in single-threaded code.
+    unsafe { env::remove_var("BROKKR__LOG__LEVEL") };
 }
 
 #[test]
@@ -73,7 +75,7 @@ fn test_settings_default() {
     let settings = Settings::new(None).expect("Failed to load default settings");
 
     assert_eq!(
-        settings.database.url, "postgres://brokkr:brokkr@localhost:5432/brokkr",
+        settings.database.url, "postgres://brokkr:brokkr@localhost:5433/brokkr",
         "Default database URL should match the expected value"
     );
 
@@ -81,4 +83,37 @@ fn test_settings_default() {
         settings.log.level, "debug",
         "Default log level should be set to 'debug'"
     );
+}
+
+#[test]
+/// Tests the `BROKKR_CONFIG_FILE` wiring used by the shipped binaries
+/// (BROKKR-T-0187): both `brokkr-broker` and `brokkr-agent` load settings via
+/// `Settings::new(std::env::var("BROKKR_CONFIG_FILE").ok())`, so a file named
+/// by that variable must land as a layer between embedded defaults and
+/// `BROKKR__*` environment variables.
+fn test_settings_via_brokkr_config_file_env() {
+    let temp_dir = tempdir().expect("Failed to create temp dir");
+    let file_path = temp_dir.path().join("wired_config.toml");
+
+    let test_config = r#"
+        [database]
+        url = "postgres://wired:wired@confighost:5432/wireddb"
+    "#;
+    fs::write(&file_path, test_config).expect("Failed to write test config file");
+
+    // TODO: Audit that the environment access only happens in single-threaded code.
+    unsafe { env::set_var("BROKKR_CONFIG_FILE", file_path.to_str().unwrap()) };
+
+    // The exact expression used by the binaries.
+    let settings = Settings::new(env::var("BROKKR_CONFIG_FILE").ok())
+        .expect("Failed to load settings via BROKKR_CONFIG_FILE");
+
+    assert_eq!(
+        settings.database.url, "postgres://wired:wired@confighost:5432/wireddb",
+        "Settings loaded through BROKKR_CONFIG_FILE must apply the file layer"
+    );
+
+    // TODO: Audit that the environment access only happens in single-threaded code.
+    unsafe { env::remove_var("BROKKR_CONFIG_FILE") };
+    temp_dir.close().expect("Failed to remove temp dir");
 }

@@ -13,12 +13,14 @@ use super::middleware::AuthPayload;
 use crate::api::v1::error::{ApiError, ErrorResponse};
 use crate::dal::DAL;
 use axum::{
+    Json, Router,
     extract::{Extension, Query, State},
     response::IntoResponse,
     routing::{get, post},
-    Json, Router,
 };
-use brokkr_models::models::audit_logs::{AuditLog, AuditLogFilter};
+use brokkr_models::models::audit_logs::{
+    ACTION_CONFIG_RELOADED, ACTOR_TYPE_ADMIN, AuditLog, AuditLogFilter, RESOURCE_TYPE_CONFIG,
+};
 use brokkr_utils::config::ReloadableConfig;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -216,7 +218,10 @@ async fn reload_config(
 ) -> Result<impl IntoResponse, ApiError> {
     if !auth.admin {
         warn!("Non-admin attempted to reload configuration");
-        return Err(ApiError::forbidden("admin_required", "admin access required"));
+        return Err(ApiError::forbidden(
+            "admin_required",
+            "admin access required",
+        ));
     }
 
     info!("Admin initiated configuration reload");
@@ -245,6 +250,27 @@ async fn reload_config(
     } else {
         info!("Configuration reloaded with no changes detected");
     }
+
+    // Record the reload for compliance review (BROKKR-T-0189).
+    crate::utils::audit::log_action(
+        ACTOR_TYPE_ADMIN,
+        None,
+        ACTION_CONFIG_RELOADED,
+        RESOURCE_TYPE_CONFIG,
+        None,
+        Some(serde_json::json!({
+            "changes": change_infos
+                .iter()
+                .map(|c| serde_json::json!({
+                    "key": c.key,
+                    "old_value": c.old_value,
+                    "new_value": c.new_value,
+                }))
+                .collect::<Vec<_>>(),
+        })),
+        None,
+        None,
+    );
 
     Ok(Json(ConfigReloadResponse {
         reloaded_at: Utc::now(),
@@ -307,7 +333,10 @@ async fn list_audit_logs(
 ) -> Result<impl IntoResponse, ApiError> {
     if !auth.admin {
         warn!("Non-admin attempted to access audit logs");
-        return Err(ApiError::forbidden("admin_required", "admin access required"));
+        return Err(ApiError::forbidden(
+            "admin_required",
+            "admin access required",
+        ));
     }
 
     let limit = params.limit.unwrap_or(100).min(1000);

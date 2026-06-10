@@ -10,7 +10,7 @@
 //! webhook events and create corresponding delivery records.
 
 use crate::fixtures::TestFixture;
-use brokkr_models::models::webhooks::{NewWebhookSubscription, EVENT_WORKORDER_COMPLETED};
+use brokkr_models::models::webhooks::{EVENT_WORKORDER_COMPLETED, NewWebhookSubscription};
 use brokkr_models::models::work_orders::NewWorkOrder;
 
 fn create_subscription_for_event(name: &str, event_type: &str) -> NewWebhookSubscription {

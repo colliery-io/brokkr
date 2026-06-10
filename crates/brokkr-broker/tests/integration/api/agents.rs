@@ -6,9 +6,9 @@
 
 use crate::fixtures::TestFixture;
 use axum::{
-    body::{to_bytes, Body},
-    http::{Request, StatusCode},
     Router,
+    body::{Body, to_bytes},
+    http::{Request, StatusCode},
 };
 use brokkr_models::models::agent_annotations::NewAgentAnnotation;
 use brokkr_models::models::agent_events::NewAgentEvent;
@@ -152,10 +152,12 @@ async fn test_update_agent() {
     assert_eq!(updated_agent.deleted_at, None);
 
     // Verify that pak_hash is not returned in the response
-    assert!(serde_json::to_string(&updated_agent)
-        .unwrap()
-        .contains("pak_hash")
-        .not());
+    assert!(
+        serde_json::to_string(&updated_agent)
+            .unwrap()
+            .contains("pak_hash")
+            .not()
+    );
 
     // Fetch the agent from the database to verify the update
     let db_agent = fixture.dal.agents().get(test_agent.id).unwrap().unwrap();
@@ -986,10 +988,7 @@ async fn test_get_target_state_incremental() {
     let resp = app
         .oneshot(
             Request::builder()
-                .uri(format!(
-                    "/api/v1/agents/{}/target-state",
-                    agent.id.to_string()
-                ))
+                .uri(format!("/api/v1/agents/{}/target-state", agent.id))
                 .method("GET")
                 .header("Authorization", format!("Bearer {}", agent_pak))
                 .body(Body::empty())
@@ -1049,7 +1048,7 @@ async fn test_get_target_state_full() {
             Request::builder()
                 .uri(format!(
                     "/api/v1/agents/{}/target-state?mode=full",
-                    agent.id.to_string()
+                    agent.id
                 ))
                 .method("GET")
                 .header("Authorization", format!("Bearer {}", agent_pak))
@@ -1112,7 +1111,7 @@ async fn test_get_target_state_with_invalid_mode() {
             Request::builder()
                 .uri(format!(
                     "/api/v1/agents/{}/target-state?mode=invalid",
-                    agent.id.to_string()
+                    agent.id
                 ))
                 .method("GET")
                 .header("Authorization", format!("Bearer {}", agent_pak))
@@ -1459,7 +1458,7 @@ async fn test_get_target_state_with_mismatched_auth() {
             Request::builder()
                 .uri(format!(
                     "/api/v1/agents/{}/target-state?mode=full",
-                    agent1.id.to_string()
+                    agent1.id
                 ))
                 .method("GET")
                 .header("Authorization", format!("Bearer {}", agent2_pak))

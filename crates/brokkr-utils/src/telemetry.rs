@@ -33,14 +33,14 @@
 //! ```
 
 use crate::config::ResolvedTelemetry;
-use opentelemetry::trace::TracerProvider;
 use opentelemetry::KeyValue;
+use opentelemetry::trace::TracerProvider;
 use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::trace::Sampler;
-use opentelemetry_sdk::{runtime, Resource};
+use opentelemetry_sdk::{Resource, runtime};
+use tracing_subscriber::EnvFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::EnvFilter;
 
 /// Error type for telemetry initialization
 #[derive(Debug)]
@@ -176,8 +176,8 @@ pub fn shutdown() {
 /// Re-export tracing macros for convenience
 pub mod prelude {
     pub use tracing::Instrument;
+    pub use tracing::{Level, instrument, span};
     pub use tracing::{debug, error, info, trace, warn};
-    pub use tracing::{instrument, span, Level};
 }
 
 #[cfg(test)]

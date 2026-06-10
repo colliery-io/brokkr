@@ -318,12 +318,21 @@ pending → acquired → success
 
 ### HTTP Headers
 
+Broker-delivered webhooks send:
+
 ```
 Content-Type: application/json
-X-Brokkr-Event-Type: deployment.applied
-X-Brokkr-Delivery-Id: a1b2c3d4-e5f6-7890-abcd-ef1234567890
 Authorization: <configured auth_header>
 ```
+
+Agent-delivered webhooks (subscriptions with `target_labels`) additionally include:
+
+```
+X-Brokkr-Event-Type: deployment.applied
+X-Brokkr-Delivery-Id: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+```
+
+Consumers should not rely on the `X-Brokkr-*` headers for broker-delivered events.
 
 ### Body Structure
 
@@ -438,7 +447,7 @@ Authorization: <configured auth_header>
 Webhook URLs and authentication headers contain sensitive information and are encrypted before storage:
 
 - **Algorithm**: AES-256-GCM (Authenticated Encryption with Associated Data)
-- **Key management**: Encryption key configured via `BROKKR__WEBHOOKS__ENCRYPTION_KEY` environment variable
+- **Key management**: Encryption key configured via `BROKKR__BROKER__WEBHOOK_ENCRYPTION_KEY` environment variable
 - **Fields encrypted**: `url_encrypted`, `auth_header_encrypted`
 - **Response handling**: API responses show `has_url: true` and `has_auth_header: true/false` rather than the actual values
 
@@ -457,7 +466,7 @@ The webhook system automatically cleans up old delivery records to prevent unbou
 
 - **Retention period**: 7 days
 - **Cleanup frequency**: Every hour
-- **Scope**: All deliveries older than 7 days are permanently deleted, regardless of status
+- **Scope**: Deliveries in a terminal state (`success` or `dead`) older than the retention period are permanently deleted; `pending`, `acquired`, and `failed` deliveries are not removed by this task
 - **Subscriptions**: Deleted when explicitly removed; delivery history is cleaned up by the retention policy
 
 Deliveries in terminal states (`success`, `dead`) are retained for the full 7-day period to support troubleshooting and audit requirements. Adjust retention by modifying the cleanup background task configuration if needed.
@@ -467,13 +476,13 @@ Deliveries in terminal states (`success`, `dead`) are retained for the full 7-da
 ### Broker Delivery
 
 - Background task polls every 5 seconds
-- Batch size: 10 deliveries per cycle
+- Batch size: 50 deliveries per cycle (hot-reloadable via `broker.webhook_delivery_batch_size`)
 - Concurrent delivery: single-threaded per broker instance
 
 ### Agent Delivery
 
 - Polling interval: 10 seconds
-- Batch size: 10 deliveries per poll
+- Batch size: 50 deliveries per poll
 - Concurrent delivery: single-threaded per agent
 - TTL: 60 seconds for acquired deliveries
 

@@ -28,8 +28,8 @@ use brokkr_models::models::deployment_objects::DeploymentObject;
 use brokkr_utils::Settings;
 use brokkr_wire::{Heartbeat, WsMessage};
 use chrono::Utc;
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use tokio::time::sleep;
 use tracing::{debug, error, info, instrument, trace, warn};
 use uuid::Uuid;
@@ -213,7 +213,10 @@ pub async fn fetch_and_process_deployment_objects(
     client: &BrokkrClient,
     agent: &Agent,
 ) -> Result<Vec<DeploymentObject>, Box<dyn std::error::Error>> {
-    debug!("Fetching target-state deployment objects for agent {}", agent.name);
+    debug!(
+        "Fetching target-state deployment objects for agent {}",
+        agent.name
+    );
 
     let start = Instant::now();
     let result = client.api().get_target_state().id(agent.id).send().await;
@@ -423,10 +426,7 @@ pub async fn send_heartbeat(
                 error!("Heartbeat unauthorized for agent {}", agent.name);
                 Err("Unauthorized: Invalid agent PAK".into())
             } else {
-                error!(
-                    "Heartbeat failed for agent {}: {}",
-                    agent.name, wrapped
-                );
+                error!("Heartbeat failed for agent {}: {}", agent.name, wrapped);
                 Err(boxed("Heartbeat failed", wrapped))
             }
         }
@@ -454,36 +454,36 @@ pub async fn send_health_status(
     // Try WS first — one frame per deployment-object update. If the lane
     // can absorb the whole batch we're done; otherwise fall through to
     // the REST batch endpoint with the full set.
-    if let Some(uplink) = ws_uplink {
-        if uplink.is_up() {
-            let now = Utc::now();
-            let all_ok = health_updates.iter().all(|u| {
-                let summary_json = u
-                    .summary
-                    .as_ref()
-                    .and_then(|s| serde_json::to_string(s).ok());
-                let msg = WsMessage::AgentHealth(DeploymentHealth {
-                    id: Uuid::nil(), // server assigns
-                    agent_id: agent.id,
-                    deployment_object_id: u.id,
-                    status: u.status.to_string(),
-                    summary: summary_json,
-                    checked_at: u.checked_at,
-                    created_at: now,
-                    updated_at: now,
-                });
-                uplink.try_send(msg).is_ok()
+    if let Some(uplink) = ws_uplink
+        && uplink.is_up()
+    {
+        let now = Utc::now();
+        let all_ok = health_updates.iter().all(|u| {
+            let summary_json = u
+                .summary
+                .as_ref()
+                .and_then(|s| serde_json::to_string(s).ok());
+            let msg = WsMessage::AgentHealth(DeploymentHealth {
+                id: Uuid::nil(), // server assigns
+                agent_id: agent.id,
+                deployment_object_id: u.id,
+                status: u.status.to_string(),
+                summary: summary_json,
+                checked_at: u.checked_at,
+                created_at: now,
+                updated_at: now,
             });
-            if all_ok {
-                debug!(
-                    "Sent {} health updates via WS for agent {}",
-                    health_updates.len(),
-                    agent.name
-                );
-                return Ok(());
-            }
-            warn!("WS health-update lane back-pressured; falling back to REST batch");
+            uplink.try_send(msg).is_ok()
+        });
+        if all_ok {
+            debug!(
+                "Sent {} health updates via WS for agent {}",
+                health_updates.len(),
+                agent.name
+            );
+            return Ok(());
         }
+        warn!("WS health-update lane back-pressured; falling back to REST batch");
     }
 
     let update = HealthStatusUpdate {
@@ -564,6 +564,40 @@ pub async fn fetch_pending_diagnostics(
 }
 
 /// Claims a diagnostic request for processing.
+/// Fetches a single deployment object by id. Used by the diagnostics loop to
+/// derive the namespaces to search from the object's manifests
+/// (BROKKR-T-0190).
+pub async fn fetch_deployment_object(
+    client: &BrokkrClient,
+    deployment_object_id: Uuid,
+) -> Result<DeploymentObject, Box<dyn std::error::Error>> {
+    debug!("Fetching deployment object {}", deployment_object_id);
+
+    match client
+        .api()
+        .get_deployment_object()
+        .id(deployment_object_id)
+        .send()
+        .await
+    {
+        Ok(rv) => {
+            let object: DeploymentObject = convert(rv.into_inner()).map_err(|e| {
+                error!("Failed to convert deployment object: {}", e);
+                Box::new(e) as Box<dyn std::error::Error>
+            })?;
+            Ok(object)
+        }
+        Err(raw) => {
+            let wrapped = BrokkrError::from(raw);
+            error!(
+                "Failed to fetch deployment object {}: {}",
+                deployment_object_id, wrapped
+            );
+            Err(Box::new(wrapped))
+        }
+    }
+}
+
 pub async fn claim_diagnostic_request(
     _config: &Settings,
     client: &BrokkrClient,
@@ -587,10 +621,7 @@ pub async fn claim_diagnostic_request(
                     "Diagnostic request {} already claimed or completed",
                     request_id
                 );
-                Err(format!(
-                    "Diagnostic request {request_id} already claimed or completed"
-                )
-                .into())
+                Err(format!("Diagnostic request {request_id} already claimed or completed").into())
             } else {
                 error!(
                     "Failed to claim diagnostic request {}: {}",

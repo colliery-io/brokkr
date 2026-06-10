@@ -11,27 +11,46 @@ classDiagram
     class deployment_objects
     class agent_events
     class agent_targets
-    class stack_labels
-    class stack_annotations
-    class agent_labels
-    class agent_annotations
     class generators
     class stack_templates
+    class template_targets
+    class rendered_deployment_objects
     class work_orders
+    class work_order_targets
+    class work_order_log
+    class deployment_health
+    class diagnostic_requests
+    class diagnostic_results
+    class webhook_subscriptions
+    class webhook_deliveries
+    class agent_k8s_events
+    class agent_pod_logs
+    class audit_logs
 
     generators "1" -- "0..*" stacks : owns
+    generators "1" -- "0..*" stack_templates : owns
     stacks "1" -- "0..*" deployment_objects : contains
     stacks "1" -- "0..*" agent_targets : targeted by
-    agents "1" -- "0..*" agent_events : reports
     agents "1" -- "0..*" agent_targets : targets
+    agents "1" -- "0..*" agent_events : reports
     deployment_objects "1" -- "0..*" agent_events : triggers
-    stacks "1" -- "0..*" stack_labels : has
-    stacks "1" -- "0..*" stack_annotations : has
-    agents "1" -- "0..*" agent_labels : has
-    agents "1" -- "0..*" agent_annotations : has
-    generators "1" -- "0..*" stack_templates : owns
-    stacks "1" -- "0..*" work_orders : targets
+    stack_templates "1" -- "0..*" template_targets : matches
+    stacks "1" -- "0..*" template_targets : matched by
+    stack_templates "1" -- "0..*" rendered_deployment_objects : rendered as
+    deployment_objects "1" -- "0..1" rendered_deployment_objects : provenance
+    agents "0..1" -- "0..*" work_orders : claims
+    work_orders "1" -- "0..*" work_order_targets : eligible agents
+    work_orders "1" -- "0..1" work_order_log : archived as
+    agents "1" -- "0..*" deployment_health : reports
+    deployment_objects "1" -- "0..*" deployment_health : status of
+    deployment_objects "1" -- "0..*" diagnostic_requests : diagnosed by
+    diagnostic_requests "1" -- "0..1" diagnostic_results : produces
+    webhook_subscriptions "1" -- "0..*" webhook_deliveries : delivers
+    agents "1" -- "0..*" agent_k8s_events : streams
+    agents "1" -- "0..*" agent_pod_logs : streams
 ```
+
+Labels and annotations are omitted from the diagram for legibility: stacks, agents, templates, and work orders each have their own `*_labels` (single string values) and `*_annotations` (key-value pairs) tables. `audit_logs` stands alone — it records actor/action/resource tuples without foreign keys, so rows survive the deletion of what they describe. `agent_k8s_events` and `agent_pod_logs` are short-lived telemetry buffers evicted on a 6-hour ceiling, not part of the relational core.
 
 ## Design Philosophy
 

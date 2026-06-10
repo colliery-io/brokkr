@@ -11,22 +11,21 @@ use crate::api::v1::middleware::AuthPayload;
 use crate::dal::DAL;
 use crate::metrics;
 use crate::utils::{audit, event_bus, pak};
-use crate::ws::{push_target_changed, ConnectionRegistry};
+use crate::ws::{ConnectionRegistry, push_target_changed};
 use axum::http::StatusCode;
 use axum::{
+    Json, Router,
     extract::{Extension, Path, Query, State},
     routing::{delete, get, post},
-    Json, Router,
 };
-use std::sync::Arc;
 use brokkr_models::models::agent_annotations::{AgentAnnotation, NewAgentAnnotation};
 use brokkr_models::models::agent_events::{AgentEvent, NewAgentEvent};
 use brokkr_models::models::agent_labels::{AgentLabel, NewAgentLabel};
 use brokkr_models::models::agent_targets::{AgentTarget, NewAgentTarget};
 use brokkr_models::models::agents::{Agent, NewAgent};
 use brokkr_models::models::audit_logs::{
-    ACTION_AGENT_CREATED, ACTION_AGENT_DELETED, ACTION_AGENT_UPDATED, ACTION_PAK_ROTATED,
-    ACTOR_TYPE_ADMIN, RESOURCE_TYPE_AGENT,
+    ACTION_AGENT_CREATED, ACTION_AGENT_DELETED, ACTION_AGENT_UPDATED, ACTION_PAK_CREATED,
+    ACTION_PAK_ROTATED, ACTOR_TYPE_ADMIN, RESOURCE_TYPE_AGENT, RESOURCE_TYPE_PAK,
 };
 use brokkr_models::models::deployment_objects::DeploymentObject;
 use brokkr_models::models::stacks::Stack;
@@ -35,8 +34,9 @@ use brokkr_models::models::webhooks::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use utoipa::ToSchema;
+use std::sync::Arc;
 use tracing::{error, info, warn};
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 pub fn routes() -> Router<DAL> {
@@ -68,7 +68,10 @@ fn require_admin(auth: &AuthPayload) -> Result<(), ApiError> {
     if auth.admin {
         Ok(())
     } else {
-        Err(ApiError::forbidden("admin_required", "admin access required"))
+        Err(ApiError::forbidden(
+            "admin_required",
+            "admin access required",
+        ))
     }
 }
 
@@ -154,10 +157,13 @@ async fn create_agent(
         ApiError::internal("failed to create PAK")
     })?;
 
-    let updated_agent = dal.agents().update_pak_hash(agent.id, pak_hash).map_err(|e| {
-        error!("Failed to update agent PAK hash: {:?}", e);
-        ApiError::internal("failed to update agent PAK hash")
-    })?;
+    let updated_agent = dal
+        .agents()
+        .update_pak_hash(agent.id, pak_hash)
+        .map_err(|e| {
+            error!("Failed to update agent PAK hash: {:?}", e);
+            ApiError::internal("failed to update agent PAK hash")
+        })?;
 
     audit::log_action(
         ACTOR_TYPE_ADMIN,
@@ -169,6 +175,16 @@ async fn create_agent(
             "name": updated_agent.name,
             "cluster_name": updated_agent.cluster_name,
         })),
+        None,
+        None,
+    );
+    audit::log_action(
+        ACTOR_TYPE_ADMIN,
+        None,
+        ACTION_PAK_CREATED,
+        RESOURCE_TYPE_PAK,
+        Some(agent.id),
+        Some(serde_json::json!({ "entity": "agent", "name": updated_agent.name })),
         None,
         None,
     );
@@ -398,7 +414,11 @@ async fn list_events(
         error!("Failed to fetch events for agent with ID {}: {:?}", id, e);
         ApiError::internal("failed to fetch agent events")
     })?;
-    info!("Successfully retrieved {} events for agent with ID: {}", events.len(), id);
+    info!(
+        "Successfully retrieved {} events for agent with ID: {}",
+        events.len(),
+        id
+    );
     Ok(Json(
         events
             .into_iter()
@@ -475,7 +495,11 @@ async fn list_labels(
         error!("Failed to fetch labels for agent with ID {}: {:?}", id, e);
         ApiError::internal("failed to fetch agent labels")
     })?;
-    info!("Successfully retrieved {} labels for agent with ID: {}", labels.len(), id);
+    info!(
+        "Successfully retrieved {} labels for agent with ID: {}",
+        labels.len(),
+        id
+    );
     Ok(Json(labels))
 }
 
@@ -529,19 +553,28 @@ async fn remove_label(
     Extension(auth_payload): Extension<AuthPayload>,
     Path((id, label)): Path<(Uuid, String)>,
 ) -> Result<StatusCode, ApiError> {
-    info!("Handling request to remove label '{}' from agent with ID: {}", label, id);
+    info!(
+        "Handling request to remove label '{}' from agent with ID: {}",
+        label, id
+    );
     require_admin(&auth_payload)?;
     let deleted = dal
         .agent_labels()
         .delete_by_agent_and_label(id, &label)
         .map_err(|e| {
-            error!("Failed to remove label '{}' from agent with ID {}: {:?}", label, id, e);
+            error!(
+                "Failed to remove label '{}' from agent with ID {}: {:?}",
+                label, id, e
+            );
             ApiError::internal("failed to remove agent label")
         })?;
     if deleted > 0 {
         Ok(StatusCode::NO_CONTENT)
     } else {
-        Err(ApiError::not_found("agent_label_not_found", "label not found"))
+        Err(ApiError::not_found(
+            "agent_label_not_found",
+            "label not found",
+        ))
     }
 }
 
@@ -562,10 +595,16 @@ async fn list_annotations(
     Extension(auth_payload): Extension<AuthPayload>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Vec<AgentAnnotation>>, ApiError> {
-    info!("Handling request to list annotations for agent with ID: {}", id);
+    info!(
+        "Handling request to list annotations for agent with ID: {}",
+        id
+    );
     require_admin_or_agent(&auth_payload, id)?;
     let annotations = dal.agent_annotations().list_for_agent(id).map_err(|e| {
-        error!("Failed to fetch annotations for agent with ID {}: {:?}", id, e);
+        error!(
+            "Failed to fetch annotations for agent with ID {}: {:?}",
+            id, e
+        );
         ApiError::internal("failed to fetch agent annotations")
     })?;
     Ok(Json(annotations))
@@ -590,12 +629,18 @@ async fn add_annotation(
     Path(id): Path<Uuid>,
     Json(new_annotation): Json<NewAgentAnnotation>,
 ) -> Result<(StatusCode, Json<AgentAnnotation>), ApiError> {
-    info!("Handling request to add annotation for agent with ID: {}", id);
+    info!(
+        "Handling request to add annotation for agent with ID: {}",
+        id
+    );
     require_admin(&auth_payload)?;
-    let annotation = dal.agent_annotations().create(&new_annotation).map_err(|e| {
-        error!("Failed to add annotation for agent with ID {}: {:?}", id, e);
-        ApiError::internal("failed to add agent annotation")
-    })?;
+    let annotation = dal
+        .agent_annotations()
+        .create(&new_annotation)
+        .map_err(|e| {
+            error!("Failed to add annotation for agent with ID {}: {:?}", id, e);
+            ApiError::internal("failed to add agent annotation")
+        })?;
     Ok((StatusCode::CREATED, Json(annotation)))
 }
 
@@ -620,19 +665,28 @@ async fn remove_annotation(
     Extension(auth_payload): Extension<AuthPayload>,
     Path((id, key)): Path<(Uuid, String)>,
 ) -> Result<StatusCode, ApiError> {
-    info!("Handling request to remove annotation '{}' from agent with ID: {}", key, id);
+    info!(
+        "Handling request to remove annotation '{}' from agent with ID: {}",
+        key, id
+    );
     require_admin(&auth_payload)?;
     let deleted = dal
         .agent_annotations()
         .delete_by_agent_and_key(id, &key)
         .map_err(|e| {
-            error!("Failed to remove annotation '{}' from agent with ID {}: {:?}", key, id, e);
+            error!(
+                "Failed to remove annotation '{}' from agent with ID {}: {:?}",
+                key, id, e
+            );
             ApiError::internal("failed to remove agent annotation")
         })?;
     if deleted > 0 {
         Ok(StatusCode::NO_CONTENT)
     } else {
-        Err(ApiError::not_found("agent_annotation_not_found", "annotation not found"))
+        Err(ApiError::not_found(
+            "agent_annotation_not_found",
+            "annotation not found",
+        ))
     }
 }
 
@@ -707,7 +761,10 @@ fn authorize_target_mutation(
     }
     if let Some(generator_id) = auth.generator {
         let mut stacks = dal.stacks().get(vec![stack_id]).map_err(|e| {
-            error!("Failed to fetch stack {} for target auth: {:?}", stack_id, e);
+            error!(
+                "Failed to fetch stack {} for target auth: {:?}",
+                stack_id, e
+            );
             ApiError::internal("failed to fetch stack")
         })?;
         let stack = stacks
@@ -746,19 +803,28 @@ async fn remove_target(
     Extension(auth_payload): Extension<AuthPayload>,
     Path((id, stack_id)): Path<(Uuid, Uuid)>,
 ) -> Result<StatusCode, ApiError> {
-    info!("Handling request to remove target for stack {} from agent with ID: {}", stack_id, id);
+    info!(
+        "Handling request to remove target for stack {} from agent with ID: {}",
+        stack_id, id
+    );
     authorize_target_mutation(&dal, &auth_payload, stack_id)?;
     let deleted = dal
         .agent_targets()
         .delete_by_agent_and_stack(id, stack_id)
         .map_err(|e| {
-            error!("Failed to remove target for stack {} from agent with ID {}: {:?}", stack_id, id, e);
+            error!(
+                "Failed to remove target for stack {} from agent with ID {}: {:?}",
+                stack_id, id, e
+            );
             ApiError::internal("failed to remove agent target")
         })?;
     if deleted > 0 {
         Ok(StatusCode::NO_CONTENT)
     } else {
-        Err(ApiError::not_found("agent_target_not_found", "target not found"))
+        Err(ApiError::not_found(
+            "agent_target_not_found",
+            "target not found",
+        ))
     }
 }
 
@@ -777,7 +843,10 @@ async fn record_heartbeat(
     Extension(auth_payload): Extension<AuthPayload>,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, ApiError> {
-    info!("Handling request to record heartbeat for agent with ID: {}", id);
+    info!(
+        "Handling request to record heartbeat for agent with ID: {}",
+        id
+    );
     if auth_payload.agent != Some(id) {
         return Err(ApiError::forbidden(
             "agent_pak_mismatch",
@@ -785,7 +854,10 @@ async fn record_heartbeat(
         ));
     }
     dal.agents().record_heartbeat(id).map_err(|e| {
-        error!("Failed to record heartbeat for agent with ID {}: {:?}", id, e);
+        error!(
+            "Failed to record heartbeat for agent with ID {}: {:?}",
+            id, e
+        );
         ApiError::internal("failed to record agent heartbeat")
     })?;
     if let Ok(Some(agent)) = dal.agents().get(id) {
@@ -818,7 +890,10 @@ async fn get_target_state(
     Path(id): Path<Uuid>,
     Query(params): Query<TargetStateParams>,
 ) -> Result<Json<Vec<DeploymentObject>>, ApiError> {
-    info!("Handling request to get target state for agent with ID: {}", id);
+    info!(
+        "Handling request to get target state for agent with ID: {}",
+        id
+    );
     require_admin_or_agent(&auth_payload, id)?;
     let include_deployed = params.mode.as_deref() == Some("full");
     info!(
@@ -830,10 +905,17 @@ async fn get_target_state(
         .deployment_objects()
         .get_target_state_for_agent(id, include_deployed)
         .map_err(|e| {
-            error!("Failed to fetch target state for agent with ID {}: {:?}", id, e);
+            error!(
+                "Failed to fetch target state for agent with ID {}: {:?}",
+                id, e
+            );
             ApiError::internal("failed to fetch target state")
         })?;
-    info!("Successfully retrieved {} objects in target state for agent with ID: {}", objects.len(), id);
+    info!(
+        "Successfully retrieved {} objects in target state for agent with ID: {}",
+        objects.len(),
+        id
+    );
     Ok(Json(objects))
 }
 
@@ -852,10 +934,16 @@ async fn get_associated_stacks(
     Extension(auth_payload): Extension<AuthPayload>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Vec<Stack>>, ApiError> {
-    info!("Handling request to get associated stacks for agent with ID: {}", id);
+    info!(
+        "Handling request to get associated stacks for agent with ID: {}",
+        id
+    );
     require_admin_or_agent(&auth_payload, id)?;
     let stacks = dal.stacks().get_associated_stacks(id).map_err(|e| {
-        error!("Failed to fetch associated stacks for agent with ID {}: {:?}", id, e);
+        error!(
+            "Failed to fetch associated stacks for agent with ID {}: {:?}",
+            id, e
+        );
         ApiError::internal("failed to fetch associated stacks")
     })?;
     Ok(Json(stacks))

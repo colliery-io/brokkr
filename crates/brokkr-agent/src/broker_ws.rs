@@ -29,9 +29,9 @@ use rand::Rng;
 use tokio::sync::{mpsc, watch};
 use tokio::task::JoinHandle;
 use tokio_tungstenite::tungstenite::{
-    client::IntoClientRequest,
-    http::{header, HeaderValue},
     Message,
+    client::IntoClientRequest,
+    http::{HeaderValue, header},
 };
 use tracing::{debug, error, info, warn};
 
@@ -200,13 +200,7 @@ pub fn spawn(settings: &Settings) -> WsClient {
         .map(|s| s.to_string())
         .unwrap_or_else(|| ws_url_from_broker_url(&settings.agent.broker_url));
     let pak = settings.agent.pak.clone();
-    let task = tokio::spawn(reconnect_loop(
-        url,
-        pak,
-        state_tx,
-        inbound_tx,
-        outbound_rx,
-    ));
+    let task = tokio::spawn(reconnect_loop(url, pak, state_tx, inbound_tx, outbound_rx));
 
     WsClient {
         state: state_rx,
@@ -309,12 +303,13 @@ async fn dial(
     let mut request = url.into_client_request()?;
     request.headers_mut().insert(
         header::AUTHORIZATION,
-        HeaderValue::from_str(&format!("Bearer {pak}"))
-            .map_err(|_| tokio_tungstenite::tungstenite::Error::Url(
+        HeaderValue::from_str(&format!("Bearer {pak}")).map_err(|_| {
+            tokio_tungstenite::tungstenite::Error::Url(
                 tokio_tungstenite::tungstenite::error::UrlError::UnableToConnect(
                     "invalid PAK header value".into(),
                 ),
-            ))?,
+            )
+        })?,
     );
     let (socket, _resp) = tokio_tungstenite::connect_async(request).await?;
     Ok(socket)
@@ -447,8 +442,8 @@ mod tests {
 
     #[test]
     fn auth_rejection_detects_401_and_403_only() {
-        use tokio_tungstenite::tungstenite::http::{Response, StatusCode};
         use tokio_tungstenite::tungstenite::Error;
+        use tokio_tungstenite::tungstenite::http::{Response, StatusCode};
 
         let http_err = |status: StatusCode| {
             Error::Http(Response::builder().status(status).body(None).unwrap())
@@ -458,8 +453,12 @@ mod tests {
         assert!(is_auth_rejection(&http_err(StatusCode::FORBIDDEN)));
         // Non-auth HTTP statuses and transport errors are transient, not
         // credential rejections.
-        assert!(!is_auth_rejection(&http_err(StatusCode::INTERNAL_SERVER_ERROR)));
-        assert!(!is_auth_rejection(&http_err(StatusCode::SERVICE_UNAVAILABLE)));
+        assert!(!is_auth_rejection(&http_err(
+            StatusCode::INTERNAL_SERVER_ERROR
+        )));
+        assert!(!is_auth_rejection(&http_err(
+            StatusCode::SERVICE_UNAVAILABLE
+        )));
         assert!(!is_auth_rejection(&Error::ConnectionClosed));
         assert!(!is_auth_rejection(&Error::AlreadyClosed));
     }
@@ -513,7 +512,10 @@ mod tests {
     // path through that decision; the round-trip integration coverage that
     // proves the broker accepts the WS path lives in `tests/integration/`.
 
-    fn uplink_with(state: WsState, capacity: usize) -> (WsUplink, watch::Sender<WsState>, mpsc::Receiver<WsMessage>) {
+    fn uplink_with(
+        state: WsState,
+        capacity: usize,
+    ) -> (WsUplink, watch::Sender<WsState>, mpsc::Receiver<WsMessage>) {
         let (state_tx, state_rx) = watch::channel(state);
         let (tx, rx) = mpsc::channel::<WsMessage>(capacity);
         let uplink = WsUplink {
@@ -587,7 +589,10 @@ mod tests {
         let _ = rx.recv().await.unwrap();
 
         state_tx.send(WsState::Down).unwrap();
-        assert!(uplink.try_send(heartbeat_msg()).is_err(), "must REST after flip down");
+        assert!(
+            uplink.try_send(heartbeat_msg()).is_err(),
+            "must REST after flip down"
+        );
 
         state_tx.send(WsState::Up).unwrap();
         uplink.try_send(heartbeat_msg()).unwrap();

@@ -16,6 +16,7 @@ use prefixed_api_key::PrefixedApiKeyController;
 use rand::rngs::OsRng;
 use sha2::Sha256;
 use std::sync::Arc;
+use subtle::ConstantTimeEq;
 use tracing::info;
 
 /// Singleton instance of the PAK controller.
@@ -106,7 +107,12 @@ pub fn verify_pak(pak: String, stored_hash: String) -> Result<bool, PakError> {
     let pak = PrefixedApiKey::from_string(pak.as_str()).map_err(|_| PakError::Parse)?;
     let controller = create_pak_controller(None).map_err(|_| PakError::Controller)?;
     let computed_hash = controller.long_token_hashed(&pak);
-    Ok(stored_hash == computed_hash)
+    // Constant-time comparison: hash equality must not leak match length
+    // through timing (BROKKR-T-0188).
+    Ok(stored_hash
+        .as_bytes()
+        .ct_eq(computed_hash.as_bytes())
+        .into())
 }
 
 /// Generates a hash for a given Prefixed API Key.

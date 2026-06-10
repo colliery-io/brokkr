@@ -503,9 +503,11 @@ mod tests {
         let result = NewWebhookDelivery::new(Uuid::nil(), &event, None);
 
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .contains("Subscription ID cannot be nil"));
+        assert!(
+            result
+                .unwrap_err()
+                .contains("Subscription ID cannot be nil")
+        );
     }
 
     #[test]

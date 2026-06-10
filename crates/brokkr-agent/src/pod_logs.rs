@@ -59,13 +59,24 @@ const DEFAULT_LINES_PER_SEC: u64 = 100;
 /// Window for the token-bucket counter.
 const RATE_WINDOW: Duration = Duration::from_secs(1);
 
-pub fn spawn(client: Client, uplink: WsUplink, agent_id: Uuid) -> JoinHandle<()> {
+pub fn spawn(
+    client: Client,
+    uplink: WsUplink,
+    agent_id: Uuid,
+    watch_namespace: Option<String>,
+) -> JoinHandle<()> {
     tokio::spawn(async move {
         let active: Arc<RwLock<HashMap<String, Vec<JoinHandle<()>>>>> =
             Arc::new(RwLock::new(HashMap::new()));
         loop {
-            if let Err(e) =
-                watch_pods(client.clone(), uplink.clone(), agent_id, active.clone()).await
+            if let Err(e) = watch_pods(
+                client.clone(),
+                uplink.clone(),
+                agent_id,
+                active.clone(),
+                watch_namespace.as_deref(),
+            )
+            .await
             {
                 warn!(error = %e, "pod-logs watcher fell out; restarting in 5s");
             }
@@ -79,15 +90,22 @@ async fn watch_pods(
     uplink: WsUplink,
     agent_id: Uuid,
     active: Arc<RwLock<HashMap<String, Vec<JoinHandle<()>>>>>,
+
+    watch_namespace: Option<&str>,
 ) -> Result<(), watcher::Error> {
-    info!("starting pod-logs tailer");
-    let api: Api<Pod> = Api::all(client.clone());
+    info!(namespace = ?watch_namespace, "starting pod-logs tailer");
+    let api: Api<Pod> = match watch_namespace {
+        Some(ns) => Api::namespaced(client.clone(), ns),
+        None => Api::all(client.clone()),
+    };
     let mut stream = futures::stream::StreamExt::boxed(watcher(api, watcher::Config::default()));
 
     while let Some(event) = stream.try_next().await? {
         match event {
             watcher::Event::Apply(pod) => {
-                let Some(uid) = pod.metadata.uid.clone() else { continue };
+                let Some(uid) = pod.metadata.uid.clone() else {
+                    continue;
+                };
                 if !is_opted_in(&pod) {
                     teardown_for(&uid, &active).await;
                     continue;
@@ -96,16 +114,7 @@ async fn watch_pods(
                     teardown_for(&uid, &active).await;
                     continue;
                 };
-                ensure_tails(
-                    &client,
-                    &uplink,
-                    agent_id,
-                    stack_id,
-                    &pod,
-                    &uid,
-                    &active,
-                )
-                .await;
+                ensure_tails(&client, &uplink, agent_id, stack_id, &pod, &uid, &active).await;
             }
             watcher::Event::Delete(pod) => {
                 if let Some(uid) = pod.metadata.uid.clone() {
@@ -175,10 +184,7 @@ async fn ensure_tails(
     guard.insert(uid.to_string(), handles);
 }
 
-async fn teardown_for(
-    uid: &str,
-    active: &Arc<RwLock<HashMap<String, Vec<JoinHandle<()>>>>>,
-) {
+async fn teardown_for(uid: &str, active: &Arc<RwLock<HashMap<String, Vec<JoinHandle<()>>>>>) {
     let mut guard = active.write().await;
     if let Some(handles) = guard.remove(uid) {
         for h in handles {

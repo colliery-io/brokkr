@@ -11,8 +11,8 @@
 
 use once_cell::sync::Lazy;
 use prometheus::{
-    CounterVec, Encoder, GaugeVec, HistogramOpts, HistogramVec, IntCounter, IntCounterVec, IntGauge,
-    Opts, Registry, TextEncoder,
+    CounterVec, Encoder, GaugeVec, HistogramOpts, HistogramVec, IntCounter, IntCounterVec,
+    IntGauge, Opts, Registry, TextEncoder,
 };
 
 /// Global Prometheus registry for all broker metrics
@@ -148,7 +148,9 @@ pub static WS_CONNECTED_AGENTS: Lazy<IntGauge> = Lazy::new(|| {
         "Currently-connected agents on the internal WS channel",
     );
     let g = IntGauge::with_opts(opts).expect("ws connected gauge");
-    REGISTRY.register(Box::new(g.clone())).expect("register ws_connected_agents");
+    REGISTRY
+        .register(Box::new(g.clone()))
+        .expect("register ws_connected_agents");
     g
 });
 
@@ -160,7 +162,9 @@ pub static WS_MESSAGES_TOTAL: Lazy<IntCounterVec> = Lazy::new(|| {
         "WS messages by direction (in/out) and wire-enum variant type",
     );
     let c = IntCounterVec::new(opts, &["direction", "type"]).expect("ws messages counter");
-    REGISTRY.register(Box::new(c.clone())).expect("register ws_messages_total");
+    REGISTRY
+        .register(Box::new(c.clone()))
+        .expect("register ws_messages_total");
     c
 });
 
@@ -171,7 +175,9 @@ pub static WS_LIVE_SUBSCRIBERS: Lazy<IntGauge> = Lazy::new(|| {
         "Total subscribers on the live fan-out hub across all stacks",
     );
     let g = IntGauge::with_opts(opts).expect("ws subs gauge");
-    REGISTRY.register(Box::new(g.clone())).expect("register ws_live_subscribers");
+    REGISTRY
+        .register(Box::new(g.clone()))
+        .expect("register ws_live_subscribers");
     g
 });
 
@@ -182,7 +188,9 @@ pub static WS_LOG_EVICTION_RUNS_TOTAL: Lazy<IntCounter> = Lazy::new(|| {
         "Eviction passes executed by the 6h retention worker",
     );
     let c = IntCounter::with_opts(opts).expect("eviction counter");
-    REGISTRY.register(Box::new(c.clone())).expect("register ws_log_eviction_runs_total");
+    REGISTRY
+        .register(Box::new(c.clone()))
+        .expect("register ws_log_eviction_runs_total");
     c
 });
 
@@ -194,13 +202,14 @@ pub static WS_TELEMETRY_EVICTED_TOTAL: Lazy<IntCounterVec> = Lazy::new(|| {
         "Telemetry rows evicted by the retention worker, by table",
     );
     let c = IntCounterVec::new(opts, &["table"]).expect("evicted counter");
-    REGISTRY.register(Box::new(c.clone())).expect("register ws_telemetry_evicted_total");
+    REGISTRY
+        .register(Box::new(c.clone()))
+        .expect("register ws_telemetry_evicted_total");
     c
 });
 
 /// Convenience accessors keep call sites short and avoid the static names
 /// leaking into call-site readability.
-
 pub fn ws_connected_agents() -> &'static IntGauge {
     &WS_CONNECTED_AGENTS
 }

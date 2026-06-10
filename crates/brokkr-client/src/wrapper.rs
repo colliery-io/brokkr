@@ -33,12 +33,12 @@
 use std::time::Duration;
 
 use progenitor_client::Error as RawError;
-use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
+use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 
+use crate::Client;
 use crate::types::{
     ErrorResponse, K8sEventHistoryResponse, PodLogHistoryResponse, WsConnectionsResponse,
 };
-use crate::Client;
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
@@ -129,7 +129,10 @@ impl From<RawError<ErrorResponse>> for BrokkrError {
             RawError::InvalidRequest(msg) => Self::InvalidRequest(msg),
             RawError::InvalidResponsePayload(bytes, e) => Self::UnexpectedResponse {
                 status: None,
-                detail: format!("payload deserialization failed: {e} ({} bytes)", bytes.len()),
+                detail: format!(
+                    "payload deserialization failed: {e} ({} bytes)",
+                    bytes.len()
+                ),
             },
             RawError::UnexpectedResponse(resp) => Self::UnexpectedResponse {
                 status: Some(resp.status()),

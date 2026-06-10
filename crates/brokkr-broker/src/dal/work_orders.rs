@@ -32,8 +32,9 @@ use brokkr_models::models::webhooks::{
 use brokkr_models::models::work_order_annotations::{NewWorkOrderAnnotation, WorkOrderAnnotation};
 use brokkr_models::models::work_order_labels::{NewWorkOrderLabel, WorkOrderLabel};
 use brokkr_models::models::work_orders::{
-    NewWorkOrder, NewWorkOrderLog, NewWorkOrderTarget, WorkOrder, WorkOrderLog, WorkOrderTarget,
-    WORK_ORDER_STATUS_CLAIMED, WORK_ORDER_STATUS_PENDING, WORK_ORDER_STATUS_RETRY_PENDING,
+    NewWorkOrder, NewWorkOrderLog, NewWorkOrderTarget, WORK_ORDER_STATUS_CLAIMED,
+    WORK_ORDER_STATUS_PENDING, WORK_ORDER_STATUS_RETRY_PENDING, WorkOrder, WorkOrderLog,
+    WorkOrderTarget,
 };
 use brokkr_models::schema::{
     agent_annotations, agent_labels, work_order_annotations, work_order_labels, work_order_log,

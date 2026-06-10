@@ -12,7 +12,7 @@ Or by hand in `Cargo.toml`:
 
 ```toml
 [dependencies]
-brokkr-client = "0.3"
+brokkr-client = "0.5"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 
@@ -27,12 +27,12 @@ brokkr-client = { path = "../brokkr-client" }
 ```rust
 use brokkr_client::BrokkrClient;
 
-let client = BrokkrClient::builder("https://broker.example.com")
-    .token("brokkr_BA...")  // agent PAK
+let client = BrokkrClient::builder("https://broker.example.com/api/v1")
+    .token("brokkr_BRabcd1234_AgentLongTokenExample0001")  // agent PAK
     .build()?;
 ```
 
-The constructor takes a base URL and one PAK. The wrapper attaches `Authorization: Bearer <pak>` on every request — you do not need to know which of the three `*_pak` security schemes your role maps to.
+The constructor takes a base URL and one PAK. **The base URL must include the `/api/v1` prefix** — the OpenAPI spec declares its server as `/api/v1`, and the generated operations append unprefixed paths like `/agents` to whatever base you provide, so omitting the prefix makes every call 404. The wrapper attaches `Authorization: Bearer <pak>` on every request — you do not need to know which of the three `*_pak` security schemes your role maps to.
 
 ## Call one endpoint
 
@@ -64,16 +64,18 @@ match client.api().get_agent().id(agent_id).send().await {
 }
 ```
 
-See [stable error codes](./errors.md) for the full list.
+See [stable error codes](../../reference/error-codes.md) for the full list.
 
 ## Retry on transient failures
 
 `BrokkrClient::retry` re-runs a closure with exponential backoff (200 ms, doubling, capped at 10 s; 3 attempts by default). Transport errors and HTTP `408/429/502/503/504` retry; everything else returns immediately.
 
 ```rust
+use brokkr_client::BrokkrError;
+
 let response = client
     .retry(|api| Box::pin(async move {
-        api.list_agents().send().await
+        api.list_agents().send().await.map_err(BrokkrError::from)
     }))
     .await?;
 ```
@@ -90,6 +92,7 @@ use uuid::Uuid;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // e.g. BROKKR_BROKER_URL=https://broker.example.com/api/v1
     let client = BrokkrClient::builder(std::env::var("BROKKR_BROKER_URL")?)
         .token(std::env::var("BROKKR_AGENT_PAK")?)
         .build()?;
@@ -101,11 +104,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map_err(BrokkrError::from)?;
 
     // 2. Fetch target state and print one summary line.
+    //    get_target_state returns a Vec<DeploymentObject>.
     let state = client.api().get_target_state().id(agent_id).send().await
         .map_err(BrokkrError::from)?
         .into_inner();
 
-    println!("target state: {} deployment objects", state.deployment_objects.len());
+    println!("target state: {} deployment objects", state.len());
     Ok(())
 }
 ```

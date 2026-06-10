@@ -92,24 +92,24 @@ fn rewrite_nullable_types(value: &mut Value) {
             // already optional via `required`, so callers handle absence the
             // same way.
             for key in ["oneOf", "anyOf"] {
-                if let Some(arr) = map.get(key).and_then(|v| v.as_array()) {
-                    if arr.len() == 2 {
-                        let null_idx = arr.iter().position(|v| {
-                            v.as_object()
-                                .and_then(|o| o.get("type"))
-                                .and_then(|t| t.as_str())
-                                == Some("null")
-                        });
-                        if let Some(idx) = null_idx {
-                            let other = arr[1 - idx].clone();
-                            map.remove(key);
-                            if let Some(other_obj) = other.as_object() {
-                                for (k, v) in other_obj {
-                                    map.insert(k.clone(), v.clone());
-                                }
+                if let Some(arr) = map.get(key).and_then(|v| v.as_array())
+                    && arr.len() == 2
+                {
+                    let null_idx = arr.iter().position(|v| {
+                        v.as_object()
+                            .and_then(|o| o.get("type"))
+                            .and_then(|t| t.as_str())
+                            == Some("null")
+                    });
+                    if let Some(idx) = null_idx {
+                        let other = arr[1 - idx].clone();
+                        map.remove(key);
+                        if let Some(other_obj) = other.as_object() {
+                            for (k, v) in other_obj {
+                                map.insert(k.clone(), v.clone());
                             }
-                            break;
                         }
+                        break;
                     }
                 }
             }
