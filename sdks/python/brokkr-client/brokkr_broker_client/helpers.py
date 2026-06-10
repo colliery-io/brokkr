@@ -33,12 +33,12 @@ if TYPE_CHECKING:
 
 
 def list_telemetry_events(
-    client: "AuthenticatedClient",
+    client: AuthenticatedClient,
     stack_id: UUID,
     *,
     since: datetime.datetime | None = None,
     limit: int | None = None,
-) -> "K8SEventHistoryResponse":
+) -> K8SEventHistoryResponse:
     """Paginated kube-event history for a stack within the 6h retention window."""
     from .api.stack_telemetry import list_telemetry_events as _op
     from .types import UNSET
@@ -50,19 +50,17 @@ def list_telemetry_events(
         limit=limit if limit is not None else UNSET,
     )
     if result is None:
-        raise RuntimeError(
-            "list_telemetry_events returned None — check broker response"
-        )
+        raise RuntimeError("list_telemetry_events returned None — check broker response")
     return result
 
 
 async def list_telemetry_events_async(
-    client: "AuthenticatedClient",
+    client: AuthenticatedClient,
     stack_id: UUID,
     *,
     since: datetime.datetime | None = None,
     limit: int | None = None,
-) -> "K8SEventHistoryResponse":
+) -> K8SEventHistoryResponse:
     """Async variant of :func:`list_telemetry_events`."""
     from .api.stack_telemetry import list_telemetry_events as _op
     from .types import UNSET
@@ -74,19 +72,17 @@ async def list_telemetry_events_async(
         limit=limit if limit is not None else UNSET,
     )
     if result is None:
-        raise RuntimeError(
-            "list_telemetry_events returned None — check broker response"
-        )
+        raise RuntimeError("list_telemetry_events returned None — check broker response")
     return result
 
 
 def list_telemetry_logs(
-    client: "AuthenticatedClient",
+    client: AuthenticatedClient,
     stack_id: UUID,
     *,
     since: datetime.datetime | None = None,
     limit: int | None = None,
-) -> "PodLogHistoryResponse":
+) -> PodLogHistoryResponse:
     """Paginated pod-log history for a stack within the 6h retention window."""
     from .api.stack_telemetry import list_telemetry_logs as _op
     from .types import UNSET
@@ -103,12 +99,12 @@ def list_telemetry_logs(
 
 
 async def list_telemetry_logs_async(
-    client: "AuthenticatedClient",
+    client: AuthenticatedClient,
     stack_id: UUID,
     *,
     since: datetime.datetime | None = None,
     limit: int | None = None,
-) -> "PodLogHistoryResponse":
+) -> PodLogHistoryResponse:
     """Async variant of :func:`list_telemetry_logs`."""
     from .api.stack_telemetry import list_telemetry_logs as _op
     from .types import UNSET
@@ -124,7 +120,7 @@ async def list_telemetry_logs_async(
     return result
 
 
-def list_ws_connections(client: "AuthenticatedClient") -> "WsConnectionsResponse":
+def list_ws_connections(client: AuthenticatedClient) -> WsConnectionsResponse:
     """Admin-only snapshot of currently-connected agents on the internal WS channel.
 
     For continuous monitoring prefer scraping the
@@ -135,23 +131,19 @@ def list_ws_connections(client: "AuthenticatedClient") -> "WsConnectionsResponse
 
     result = _op.sync(client=client)
     if result is None:
-        raise RuntimeError(
-            "list_ws_connections returned None — check broker response"
-        )
+        raise RuntimeError("list_ws_connections returned None — check broker response")
     return result
 
 
 async def list_ws_connections_async(
-    client: "AuthenticatedClient",
-) -> "WsConnectionsResponse":
+    client: AuthenticatedClient,
+) -> WsConnectionsResponse:
     """Async variant of :func:`list_ws_connections`."""
     from .api.admin import list_ws_connections as _op
 
     result = await _op.asyncio(client=client)
     if result is None:
-        raise RuntimeError(
-            "list_ws_connections returned None — check broker response"
-        )
+        raise RuntimeError("list_ws_connections returned None — check broker response")
     return result
 
 

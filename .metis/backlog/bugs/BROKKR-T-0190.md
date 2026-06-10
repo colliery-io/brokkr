@@ -4,15 +4,15 @@ level: task
 title: "Diagnostics namespace hardcoded to 'default' — derive from deployment object"
 short_code: "BROKKR-T-0190"
 created_at: 2026-06-10T03:04:11.031061+00:00
-updated_at: 2026-06-10T03:04:11.031061+00:00
+updated_at: 2026-06-10T11:19:07.512767+00:00
 parent: 
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/backlog"
   - "#bug"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -26,6 +26,12 @@ initiative_id: NULL
 The namespace the agent searches when fulfilling an on-demand diagnostics request is the unconditional literal `"default"` (`crates/brokkr-agent/src/cli/commands.rs:387`, flowing into `collect_diagnostics()` at `diagnostics.rs:146` for pod statuses, events, and log tails). For workloads in any other namespace the label selector matches nothing and the agent submits an empty-but-successful result (`pod_statuses: []`) — no error indicates the namespace mismatch. The code comment marks it as a known TODO ("should be derived from the deployment object").
 
 Derive the namespace(s) from the deployment object's manifests (parse `metadata.namespace` from `yaml_content`), or search across namespaces by label.
+
+## Acceptance Criteria
+
+## Acceptance Criteria
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

@@ -4,15 +4,15 @@ level: task
 title: "CLI rotate agent/generator discards the new PAK — credential unrecoverable"
 short_code: "BROKKR-T-0186"
 created_at: 2026-06-10T03:03:53.125495+00:00
-updated_at: 2026-06-10T03:03:53.125495+00:00
+updated_at: 2026-06-10T11:19:05.602248+00:00
 parent: 
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/backlog"
   - "#bug"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -24,6 +24,12 @@ initiative_id: NULL
 ## Objective
 
 `brokkr-broker rotate agent --uuid <id>` and `rotate generator --uuid <id>` generate a new PAK, store only its hash, and never output the key (`crates/brokkr-broker/src/cli/commands.rs:206-250`: `let new_pak_hash = utils::pak::create_pak()?.1;`). After CLI rotation nobody possesses the credential — the entity is locked out until rotated again via the REST API. The API endpoints (`POST /api/v1/{agents,generators}/{id}/rotate-pak`) return the PAK and are unaffected.
+
+## Acceptance Criteria
+
+## Acceptance Criteria
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

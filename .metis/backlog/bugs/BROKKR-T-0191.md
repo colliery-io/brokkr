@@ -4,15 +4,15 @@ level: task
 title: "Deployment health discovery label is never injected — health always 'unknown'"
 short_code: "BROKKR-T-0191"
 created_at: 2026-06-10T03:04:17.905088+00:00
-updated_at: 2026-06-10T03:04:17.905088+00:00
+updated_at: 2026-06-10T11:19:08.966529+00:00
 parent: 
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/backlog"
   - "#bug"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -26,6 +26,12 @@ initiative_id: NULL
 Deployment health discovers pods via the label selector `brokkr.io/deployment-object-id=<uuid>` across all namespaces (`crates/brokkr-agent/src/deployment_health.rs:235`), but nothing in Brokkr injects that label: the agent stamps tracking keys as **annotations** on the top-level applied objects only (`crates/brokkr-agent/src/k8s/objects.rs:80-100`), and those don't propagate to controller-created pods. Result: zero pods found ⇒ every deployment object reports `unknown` unless an operator manually labels pod templates with a UUID they can only learn after creation. Related defect found in the same code: `obj.metadata.annotations = Some(annotations)` REPLACES the manifest's own top-level annotations rather than merging.
 
 Options: inject the label into `spec.template.metadata.labels` for workload kinds during `create_k8s_objects`, or resolve pods via ownerReferences from stack-annotated objects. Fix the annotation-clobbering while in there (merge, don't replace).
+
+## Acceptance Criteria
+
+## Acceptance Criteria
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 
