@@ -213,7 +213,10 @@ pub async fn fetch_and_process_deployment_objects(
     client: &BrokkrClient,
     agent: &Agent,
 ) -> Result<Vec<DeploymentObject>, Box<dyn std::error::Error>> {
-    debug!("Fetching target-state deployment objects for agent {}", agent.name);
+    debug!(
+        "Fetching target-state deployment objects for agent {}",
+        agent.name
+    );
 
     let start = Instant::now();
     let result = client.api().get_target_state().id(agent.id).send().await;
@@ -423,10 +426,7 @@ pub async fn send_heartbeat(
                 error!("Heartbeat unauthorized for agent {}", agent.name);
                 Err("Unauthorized: Invalid agent PAK".into())
             } else {
-                error!(
-                    "Heartbeat failed for agent {}: {}",
-                    agent.name, wrapped
-                );
+                error!("Heartbeat failed for agent {}: {}", agent.name, wrapped);
                 Err(boxed("Heartbeat failed", wrapped))
             }
         }
@@ -621,10 +621,7 @@ pub async fn claim_diagnostic_request(
                     "Diagnostic request {} already claimed or completed",
                     request_id
                 );
-                Err(format!(
-                    "Diagnostic request {request_id} already claimed or completed"
-                )
-                .into())
+                Err(format!("Diagnostic request {request_id} already claimed or completed").into())
             } else {
                 error!(
                     "Failed to claim diagnostic request {}: {}",

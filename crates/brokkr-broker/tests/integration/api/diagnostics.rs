@@ -19,7 +19,7 @@ async fn test_create_diagnostic_request() {
     let app = fixture.create_test_router().with_state(fixture.dal.clone());
 
     // Create agent and deployment object
-    let (agent, agent_pak) = fixture
+    let (agent, _agent_pak) = fixture
         .create_test_agent_with_pak("Diag Test Agent".to_string(), "Test Cluster".to_string());
     let stack = fixture.create_test_stack(
         "Diag Test Stack".to_string(),
@@ -411,7 +411,7 @@ async fn test_submit_result_not_claimed() {
 async fn test_get_diagnostic_with_result() {
     let fixture = TestFixture::new();
 
-    let (agent, agent_pak) = fixture.create_test_agent_with_pak(
+    let (agent, _agent_pak) = fixture.create_test_agent_with_pak(
         "Get With Result Agent".to_string(),
         "Test Cluster".to_string(),
     );

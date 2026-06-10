@@ -109,7 +109,10 @@ pub fn verify_pak(pak: String, stored_hash: String) -> Result<bool, PakError> {
     let computed_hash = controller.long_token_hashed(&pak);
     // Constant-time comparison: hash equality must not leak match length
     // through timing (BROKKR-T-0188).
-    Ok(stored_hash.as_bytes().ct_eq(computed_hash.as_bytes()).into())
+    Ok(stored_hash
+        .as_bytes()
+        .ct_eq(computed_hash.as_bytes())
+        .into())
 }
 
 /// Generates a hash for a given Prefixed API Key.

@@ -41,10 +41,7 @@ impl AgentPodLogsDAL<'_> {
             .load::<AgentPodLog>(conn)
     }
 
-    pub fn evict_older_than(
-        &self,
-        cutoff: DateTime<Utc>,
-    ) -> Result<usize, diesel::result::Error> {
+    pub fn evict_older_than(&self, cutoff: DateTime<Utc>) -> Result<usize, diesel::result::Error> {
         let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
         diesel::delete(agent_pod_logs::table.filter(agent_pod_logs::created_at.lt(cutoff)))
             .execute(conn)

@@ -923,7 +923,7 @@ async fn test_get_objects_by_annotation_found() {
     annotations.insert("brokkr.io/test-key".to_string(), "test-value".to_string());
     k8s_object.metadata.annotations = Some(annotations);
 
-    let result = apply_k8s_objects(&vec![k8s_object], client.clone(), patch_params).await;
+    let result = apply_k8s_objects(&[k8s_object], client.clone(), patch_params).await;
     assert!(result.is_ok(), "Failed to apply k8s objects");
 
     // Get objects by annotation
@@ -932,7 +932,7 @@ async fn test_get_objects_by_annotation_found() {
 
     let found_objects = result.unwrap();
     assert!(
-        found_objects.len() > 0,
+        !found_objects.is_empty(),
         "Should find at least one object with the annotation"
     );
 

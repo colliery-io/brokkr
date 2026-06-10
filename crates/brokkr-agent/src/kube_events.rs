@@ -162,7 +162,6 @@ pub fn spawn(
             }
             tokio::time::sleep(Duration::from_secs(5)).await;
         }
-
     })
 }
 
@@ -200,7 +199,7 @@ async fn handle_event(
         None => return, // synthesised events without involvedObject UIDs aren't ours
     };
 
-    let stack_id = match resolve_stack(client, &ev, &involved, cache).await {
+    let stack_id = match resolve_stack(client, ev, &involved, cache).await {
         Some(id) => id,
         None => return,
     };
@@ -208,7 +207,8 @@ async fn handle_event(
     let frame = WsMessage::K8sEvent(WireK8sEvent {
         agent_id,
         stack_id,
-        observed_at: ev.event_time
+        observed_at: ev
+            .event_time
             .as_ref()
             .map(|t| t.0)
             .or_else(|| ev.last_timestamp.as_ref().map(|t| t.0))
@@ -216,10 +216,7 @@ async fn handle_event(
         reason: ev.reason.clone().unwrap_or_default(),
         message: ev.message.clone().unwrap_or_default(),
         event_type: ev.type_.clone().unwrap_or_else(|| "Normal".to_string()),
-        source: ev
-            .source
-            .as_ref()
-            .and_then(|s| s.component.clone()),
+        source: ev.source.as_ref().and_then(|s| s.component.clone()),
         involved_object: ObjectRef {
             api_version: ev.involved_object.api_version.clone().unwrap_or_default(),
             kind: ev.involved_object.kind.clone().unwrap_or_default(),
@@ -318,7 +315,7 @@ mod tests {
         c.put("u".into(), CacheEntry::Owned(id));
         match c.get("u") {
             Some(CacheEntry::Owned(got)) => assert_eq!(got, id),
-            other => panic!("expected Owned, got {:?}", matches!(other, Some(_))),
+            other => panic!("expected Owned, got {:?}", other.is_some()),
         }
     }
 
@@ -354,7 +351,10 @@ mod tests {
             lookup_or_miss(&mut c, &format!("uid-{i}"), &mut api_calls);
             assert!(c.len() <= cap, "cache exceeded cap of {cap}");
         }
-        assert_eq!(api_calls, 50_000, "every unique UID should miss exactly once");
+        assert_eq!(
+            api_calls, 50_000,
+            "every unique UID should miss exactly once"
+        );
         assert_eq!(c.len(), cap, "cache must be pinned at the cap, not grow");
     }
 

@@ -9,6 +9,7 @@
 use crate::api::v1::error::{ApiError, ErrorResponse};
 use crate::api::v1::middleware::AuthPayload;
 use crate::dal::DAL;
+use crate::utils::audit;
 use crate::ws::{push_work_order, ConnectionRegistry};
 use axum::{
     extract::{Extension, Path, Query, State},
@@ -17,15 +18,14 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use crate::utils::audit;
 use brokkr_models::models::audit_logs::{
     ACTION_WORKORDER_CLAIMED, ACTION_WORKORDER_COMPLETED, ACTION_WORKORDER_CREATED,
     ACTION_WORKORDER_FAILED, ACTION_WORKORDER_RETRY, ACTOR_TYPE_ADMIN, ACTOR_TYPE_AGENT,
     ACTOR_TYPE_GENERATOR, RESOURCE_TYPE_WORKORDER,
 };
 use brokkr_models::models::work_orders::{NewWorkOrder, WorkOrder, WorkOrderLog};
-use std::sync::Arc;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -147,7 +147,10 @@ async fn list_work_orders(
     info!("Handling request to list work orders");
     if !auth_payload.admin {
         warn!("Unauthorized attempt to list work orders");
-        return Err(ApiError::forbidden("admin_required", "admin access required"));
+        return Err(ApiError::forbidden(
+            "admin_required",
+            "admin access required",
+        ));
     }
 
     let work_orders = dal
@@ -183,7 +186,10 @@ async fn create_work_order(
     info!("Handling request to create a new work order");
     if !auth_payload.admin {
         warn!("Unauthorized attempt to create work order");
-        return Err(ApiError::forbidden("admin_required", "admin access required"));
+        return Err(ApiError::forbidden(
+            "admin_required",
+            "admin access required",
+        ));
     }
 
     let targeting = request.targeting.unwrap_or_default();
@@ -292,7 +298,10 @@ async fn get_work_order(
     info!("Handling request to get work order with ID: {}", id);
     if !auth_payload.admin {
         warn!("Unauthorized attempt to get work order");
-        return Err(ApiError::forbidden("admin_required", "admin access required"));
+        return Err(ApiError::forbidden(
+            "admin_required",
+            "admin access required",
+        ));
     }
 
     if let Some(work_order) = dal.work_orders().get(id).map_err(|e| {
@@ -373,7 +382,10 @@ async fn delete_work_order(
     info!("Handling request to delete work order with ID: {}", id);
     if !auth_payload.admin {
         warn!("Unauthorized attempt to delete work order");
-        return Err(ApiError::forbidden("admin_required", "admin access required"));
+        return Err(ApiError::forbidden(
+            "admin_required",
+            "admin access required",
+        ));
     }
 
     let deleted = dal.work_orders().delete(id).map_err(|e| {
@@ -383,7 +395,10 @@ async fn delete_work_order(
 
     if deleted == 0 {
         warn!("Work order not found with ID: {}", id);
-        return Err(ApiError::not_found("work_order_not_found", "work order not found"));
+        return Err(ApiError::not_found(
+            "work_order_not_found",
+            "work order not found",
+        ));
     }
     info!("Successfully deleted work order with ID: {}", id);
     Ok(StatusCode::NO_CONTENT)
@@ -668,7 +683,10 @@ async fn list_work_order_log(
     info!("Handling request to list work order log");
     if !auth_payload.admin {
         warn!("Unauthorized attempt to list work order log");
-        return Err(ApiError::forbidden("admin_required", "admin access required"));
+        return Err(ApiError::forbidden(
+            "admin_required",
+            "admin access required",
+        ));
     }
 
     let log_entries = dal
@@ -708,17 +726,26 @@ async fn get_work_order_log(
     Extension(auth_payload): Extension<AuthPayload>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<WorkOrderLog>, ApiError> {
-    info!("Handling request to get work order log entry with ID: {}", id);
+    info!(
+        "Handling request to get work order log entry with ID: {}",
+        id
+    );
     if !auth_payload.admin {
         warn!("Unauthorized attempt to get work order log entry");
-        return Err(ApiError::forbidden("admin_required", "admin access required"));
+        return Err(ApiError::forbidden(
+            "admin_required",
+            "admin access required",
+        ));
     }
 
     let log_entry = dal
         .work_orders()
         .get_log(id)
         .map_err(|e| {
-            error!("Failed to fetch work order log entry with ID {}: {:?}", id, e);
+            error!(
+                "Failed to fetch work order log entry with ID {}: {:?}",
+                id, e
+            );
             ApiError::internal("failed to fetch work order log entry")
         })?
         .ok_or_else(|| {
@@ -728,6 +755,9 @@ async fn get_work_order_log(
                 "work order log entry not found",
             )
         })?;
-    info!("Successfully retrieved work order log entry with ID: {}", id);
+    info!(
+        "Successfully retrieved work order log entry with ID: {}",
+        id
+    );
     Ok(Json(log_entry))
 }

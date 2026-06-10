@@ -129,7 +129,10 @@ impl From<RawError<ErrorResponse>> for BrokkrError {
             RawError::InvalidRequest(msg) => Self::InvalidRequest(msg),
             RawError::InvalidResponsePayload(bytes, e) => Self::UnexpectedResponse {
                 status: None,
-                detail: format!("payload deserialization failed: {e} ({} bytes)", bytes.len()),
+                detail: format!(
+                    "payload deserialization failed: {e} ({} bytes)",
+                    bytes.len()
+                ),
             },
             RawError::UnexpectedResponse(resp) => Self::UnexpectedResponse {
                 status: Some(resp.status()),

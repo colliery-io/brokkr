@@ -18,10 +18,7 @@
 //! wrapper (auth, retries, pagination, typed errors) lives in a separate
 //! layer added by task BROKKR-T-0137 (C1).
 
-progenitor::generate_api!(
-    spec = "spec/brokkr-v1.json",
-    interface = Builder,
-);
+progenitor::generate_api!(spec = "spec/brokkr-v1.json", interface = Builder,);
 
 mod wrapper;
 pub use wrapper::{BrokkrClient, BrokkrClientBuilder, BrokkrError};

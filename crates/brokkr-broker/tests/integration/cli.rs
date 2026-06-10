@@ -16,7 +16,8 @@ use brokkr_models::models::audit_logs::{AuditLogFilter, ACTION_PAK_ROTATED};
 #[tokio::test]
 async fn test_rotate_agent_key_returns_usable_pak_and_audits() {
     let fixture = TestFixture::new();
-    let agent = fixture.create_test_agent("rotate-cli-agent".to_string(), "test-cluster".to_string());
+    let agent =
+        fixture.create_test_agent("rotate-cli-agent".to_string(), "test-cluster".to_string());
 
     let new_pak = rotate_agent_key(&fixture.settings, agent.id).expect("rotation should succeed");
     assert!(!new_pak.is_empty(), "rotation must return the new PAK");

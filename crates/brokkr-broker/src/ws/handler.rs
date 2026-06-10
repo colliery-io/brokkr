@@ -115,9 +115,8 @@ async fn ws_upgrade(
     };
 
     info!(%agent_id, "agent WS upgrade accepted");
-    Ok(upgrade.on_upgrade(move |socket| {
-        run_connection(socket, agent_id, registry, broadcaster, dal)
-    }))
+    Ok(upgrade
+        .on_upgrade(move |socket| run_connection(socket, agent_id, registry, broadcaster, dal)))
 }
 
 async fn run_connection(
@@ -147,8 +146,19 @@ async fn run_connection(
     let (sender, receiver) = socket.split();
 
     let writer_messages_out = messages_out.clone();
-    let writer = tokio::spawn(writer_task(sender, control_rx, telemetry_rx, writer_messages_out));
-    let reader = tokio::spawn(reader_task(receiver, agent_id, messages_in, dal, broadcaster));
+    let writer = tokio::spawn(writer_task(
+        sender,
+        control_rx,
+        telemetry_rx,
+        writer_messages_out,
+    ));
+    let reader = tokio::spawn(reader_task(
+        receiver,
+        agent_id,
+        messages_in,
+        dal,
+        broadcaster,
+    ));
 
     // First task to finish wins; the other is aborted so we don't leak a
     // socket-half task after the peer is gone.
@@ -200,12 +210,7 @@ async fn reader_task(
 /// send upstream (broker→agent control plane, future fan-out telemetry)
 /// are dropped with a warning. The connection's authenticated `agent_id`
 /// is used; any mismatched value in the message body is ignored.
-fn dispatch_uplink(
-    msg: WsMessage,
-    agent_id: uuid::Uuid,
-    dal: &DAL,
-    broadcaster: &LiveBroadcaster,
-) {
+fn dispatch_uplink(msg: WsMessage, agent_id: uuid::Uuid, dal: &DAL, broadcaster: &LiveBroadcaster) {
     metrics::ws_messages_total("in", ws_variant_name(&msg)).inc();
     match msg {
         WsMessage::Heartbeat(_) => {

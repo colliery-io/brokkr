@@ -521,7 +521,10 @@ mod tests {
 
         // unparseable value → None
         let mut bad = BTreeMap::new();
-        bad.insert(DEPLOYMENT_OBJECT_ID_LABEL.to_string(), "not-a-uuid".to_string());
+        bad.insert(
+            DEPLOYMENT_OBJECT_ID_LABEL.to_string(),
+            "not-a-uuid".to_string(),
+        );
         let pod = pod_with(Some(bad), None);
         assert_eq!(pod_direct_doid(&pod), None);
     }
@@ -555,9 +558,15 @@ mod tests {
     #[test]
     fn test_gvk_of_grouped_and_core() {
         let gvk = gvk_of("apps/v1", "Deployment");
-        assert_eq!((gvk.group.as_str(), gvk.version.as_str(), gvk.kind.as_str()), ("apps", "v1", "Deployment"));
+        assert_eq!(
+            (gvk.group.as_str(), gvk.version.as_str(), gvk.kind.as_str()),
+            ("apps", "v1", "Deployment")
+        );
         let gvk = gvk_of("v1", "Pod");
-        assert_eq!((gvk.group.as_str(), gvk.version.as_str(), gvk.kind.as_str()), ("", "v1", "Pod"));
+        assert_eq!(
+            (gvk.group.as_str(), gvk.version.as_str(), gvk.kind.as_str()),
+            ("", "v1", "Pod")
+        );
     }
 
     #[test]

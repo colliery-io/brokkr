@@ -40,9 +40,7 @@ use crate::fixtures::TestFixture;
 
 /// Bind the broker on a random local port and return the bound address plus
 /// the shared `ConnectionRegistry` so tests can push synthetic messages.
-async fn spawn_broker(
-    fixture: &TestFixture,
-) -> (std::net::SocketAddr, Arc<ConnectionRegistry>) {
+async fn spawn_broker(fixture: &TestFixture) -> (std::net::SocketAddr, Arc<ConnectionRegistry>) {
     use brokkr_broker::ws::internal_routes;
     use brokkr_utils::config::Cors;
 
@@ -138,7 +136,10 @@ async fn ws_endpoint_is_not_in_openapi_spec() {
 /// Build a tokio-tungstenite client request with `Authorization: Bearer <pak>`.
 /// Tungstenite synthesises the WebSocket headers from the URL automatically;
 /// we only need to add the auth header.
-fn ws_request_with_pak(url: &str, pak_value: &str) -> tokio_tungstenite::tungstenite::handshake::client::Request {
+fn ws_request_with_pak(
+    url: &str,
+    pak_value: &str,
+) -> tokio_tungstenite::tungstenite::handshake::client::Request {
     let mut request = url.into_client_request().unwrap();
     request.headers_mut().insert(
         header::AUTHORIZATION,
@@ -171,8 +172,7 @@ async fn ws_upgrade_with_agent_pak_round_trips_messages() {
     let (addr, registry) = spawn_broker(&fixture).await;
 
     // Provision an agent and bind a fresh PAK to it.
-    let agent =
-        fixture.create_test_agent("WS Test Agent".to_string(), "Test Cluster".to_string());
+    let agent = fixture.create_test_agent("WS Test Agent".to_string(), "Test Cluster".to_string());
     let (agent_pak, agent_hash) = pak::create_pak().unwrap();
     fixture
         .dal
@@ -271,7 +271,9 @@ async fn wait_for_disconnection(registry: &Arc<ConnectionRegistry>, agent_id: Uu
 //   POST /api/v1/stacks/{id}/deployment-objects  → WsMessage::StackChanged
 //   POST /api/v1/work-orders                     → WsMessage::WorkOrder
 
-async fn spawn_full_broker(fixture: &TestFixture) -> (std::net::SocketAddr, Arc<ConnectionRegistry>) {
+async fn spawn_full_broker(
+    fixture: &TestFixture,
+) -> (std::net::SocketAddr, Arc<ConnectionRegistry>) {
     use brokkr_broker::api;
     use brokkr_broker::ws::{internal_routes, subscribe_routes};
     use brokkr_utils::config::Cors;
@@ -356,7 +358,11 @@ async fn rest_mutations_push_messages_over_ws() {
     // 1. Provision agent + PAK and open the WS connection.
     let agent = fixture.create_test_agent("WS-04 agent".into(), "cluster".into());
     let (agent_pak, agent_hash) = pak::create_pak().unwrap();
-    fixture.dal.agents().update_pak_hash(agent.id, agent_hash).unwrap();
+    fixture
+        .dal
+        .agents()
+        .update_pak_hash(agent.id, agent_hash)
+        .unwrap();
 
     let ws_req = ws_request_with_pak(&ws_url(addr), &agent_pak);
     let (mut socket, _resp) = tokio_tungstenite::connect_async(ws_req).await.unwrap();
@@ -393,7 +399,10 @@ async fn rest_mutations_push_messages_over_ws() {
     // 3. POST a deployment object on that stack — the agent should
     //    receive StackChanged (it now targets the stack from step 2).
     let resp = http
-        .post(format!("{base}/api/v1/stacks/{}/deployment-objects", stack.id))
+        .post(format!(
+            "{base}/api/v1/stacks/{}/deployment-objects",
+            stack.id
+        ))
         .header("Authorization", format!("Bearer {}", fixture.admin_pak))
         .json(&json!({
             "yaml_content": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: ws04\n",
@@ -456,7 +465,11 @@ async fn push_to_disconnected_agent_is_a_clean_noop() {
         .send()
         .await
         .unwrap();
-    assert_eq!(resp.status(), 201, "REST POST must succeed even with no WS subscriber");
+    assert_eq!(
+        resp.status(),
+        201,
+        "REST POST must succeed even with no WS subscriber"
+    );
 }
 
 // =============================================================================
@@ -490,11 +503,7 @@ async fn ws_uplink_persists_heartbeat_event_and_health() {
     .expect("registry registers agent within 2s");
 
     // We need a deployment object to anchor agent_event / agent_health to.
-    let stack = fixture.create_test_stack(
-        "ws05 stack".into(),
-        None,
-        fixture.admin_generator.id,
-    );
+    let stack = fixture.create_test_stack("ws05 stack".into(), None, fixture.admin_generator.id);
     let new_obj = NewDeploymentObject::new(
         stack.id,
         "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: ws05\n".to_string(),
@@ -529,7 +538,10 @@ async fn ws_uplink_persists_heartbeat_event_and_health() {
             .is_some()
     })
     .await;
-    assert!(persisted, "heartbeat over WS should land in agents.last_heartbeat");
+    assert!(
+        persisted,
+        "heartbeat over WS should land in agents.last_heartbeat"
+    );
 
     // 2. AgentEvent over WS → broker inserts an agent_events row.
     let event = AgentEvent {
@@ -560,7 +572,10 @@ async fn ws_uplink_persists_heartbeat_event_and_health() {
         })
     })
     .await;
-    assert!(event_seen, "AgentEvent over WS should appear in agent_events");
+    assert!(
+        event_seen,
+        "AgentEvent over WS should appear in agent_events"
+    );
 
     // 3. AgentHealth over WS → broker upserts deployment_health.
     let health = DeploymentHealth {
@@ -815,7 +830,11 @@ async fn live_subscription_authenticates_via_subprotocol() {
         .headers()
         .get(header::SEC_WEBSOCKET_PROTOCOL)
         .and_then(|v| v.to_str().ok());
-    assert_eq!(echoed, Some("brokkr.v1"), "broker should echo only the marker subprotocol");
+    assert_eq!(
+        echoed,
+        Some("brokkr.v1"),
+        "broker should echo only the marker subprotocol"
+    );
 
     // Agent connects (header auth) and pushes a K8sEvent → subscriber sees it.
     let agent_req = ws_request_with_pak(&ws_url(addr), &agent_pak);
@@ -1157,7 +1176,8 @@ async fn eviction_worker_drops_rows_past_retention() {
 
     let fixture = TestFixture::new();
     let agent = fixture.create_test_agent("ws09 evict".into(), "cluster".into());
-    let stack = fixture.create_test_stack("ws09 evict stack".into(), None, fixture.admin_generator.id);
+    let stack =
+        fixture.create_test_stack("ws09 evict stack".into(), None, fixture.admin_generator.id);
     let new_obj = NewDeploymentObject::new(
         stack.id,
         "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: evict\n".into(),
@@ -1301,7 +1321,11 @@ async fn concurrent_target_post_and_get_delivers_every_push_without_dupes() {
             let targets_url = format!("{base}/api/v1/agents/{}/targets", agent_id);
             let auth = format!("Bearer {}", admin_pak);
             if get_first {
-                let _ = http.get(&targets_url).header("Authorization", &auth).send().await;
+                let _ = http
+                    .get(&targets_url)
+                    .header("Authorization", &auth)
+                    .send()
+                    .await;
             }
             let status = http
                 .post(&targets_url)
@@ -1313,7 +1337,11 @@ async fn concurrent_target_post_and_get_delivers_every_push_without_dupes() {
                 .status()
                 .as_u16();
             if !get_first {
-                let _ = http.get(&targets_url).header("Authorization", &auth).send().await;
+                let _ = http
+                    .get(&targets_url)
+                    .header("Authorization", &auth)
+                    .send()
+                    .await;
             }
             status
         }));
@@ -1330,8 +1358,7 @@ async fn concurrent_target_post_and_get_delivers_every_push_without_dupes() {
         }
         match tokio::time::timeout(remaining, socket.next()).await {
             Ok(Some(Ok(Message::Text(t)))) => {
-                if let Ok(WsMessage::TargetChanged(target)) =
-                    serde_json::from_str::<WsMessage>(&t)
+                if let Ok(WsMessage::TargetChanged(target)) = serde_json::from_str::<WsMessage>(&t)
                 {
                     delivered.insert(target.stack_id);
                 }
@@ -1350,7 +1377,8 @@ async fn concurrent_target_post_and_get_delivers_every_push_without_dupes() {
     // Set equality proves every push was delivered exactly to the right
     // agent — no drops, no stray stack_ids.
     assert_eq!(
-        delivered, expected,
+        delivered,
+        expected,
         "every target_changed push must be delivered ({} of {} arrived)",
         delivered.len(),
         N
@@ -1371,7 +1399,11 @@ async fn concurrent_target_post_and_get_delivers_every_push_without_dupes() {
         .iter()
         .map(|t| Uuid::parse_str(t["stack_id"].as_str().unwrap()).unwrap())
         .collect();
-    assert_eq!(targets.len(), N, "no duplicate target rows should be created");
+    assert_eq!(
+        targets.len(),
+        N,
+        "no duplicate target rows should be created"
+    );
     assert_eq!(
         final_ids, expected,
         "final target list must match every pushed stack"

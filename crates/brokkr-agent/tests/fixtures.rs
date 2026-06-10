@@ -67,7 +67,7 @@ impl TestFixture {
         let sdk_client = broker_sdk::build_client(&agent_settings)
             .expect("Failed to build BrokkrClient for tests");
 
-        let test_fixture = TestFixture {
+        TestFixture {
             admin_settings,
             client,
             sdk_client,
@@ -77,8 +77,7 @@ impl TestFixture {
             generator: None,
             generator_pak: None,
             stack: None,
-        };
-        test_fixture
+        }
     }
 
     /// Initializes the test fixture by setting up necessary resources
@@ -96,7 +95,7 @@ impl TestFixture {
         // Create the agent
         let response = self
             .client
-            .post(&format!(
+            .post(format!(
                 "{}/api/v1/agents",
                 self.admin_settings.agent.broker_url
             ))
@@ -165,7 +164,7 @@ impl TestFixture {
 
         let response = self
             .client
-            .post(&format!(
+            .post(format!(
                 "{}/api/v1/generators",
                 self.admin_settings.agent.broker_url
             ))
@@ -221,7 +220,7 @@ impl TestFixture {
 
         let response = self
             .client
-            .post(&format!(
+            .post(format!(
                 "{}/api/v1/stacks",
                 self.admin_settings.agent.broker_url
             ))
@@ -254,7 +253,7 @@ impl TestFixture {
 
         let response = self
             .client
-            .post(&format!(
+            .post(format!(
                 "{}/api/v1/agents/{}/targets",
                 self.admin_settings.agent.broker_url,
                 self.agent.as_ref().unwrap().id
@@ -291,7 +290,7 @@ impl TestFixture {
 
         let response = self
             .client
-            .post(&format!(
+            .post(format!(
                 "{}/api/v1/stacks/{}/deployment-objects",
                 self.admin_settings.agent.broker_url,
                 self.stack.as_ref().unwrap().id

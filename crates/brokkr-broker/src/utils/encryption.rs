@@ -414,8 +414,8 @@ mod tests {
         rand::thread_rng().fill_bytes(&mut nonce);
 
         let mut hasher = Sha256::new();
-        hasher.update(&key.key);
-        hasher.update(&nonce);
+        hasher.update(key.key);
+        hasher.update(nonce);
         let mask = hasher.finalize();
 
         let ciphertext: Vec<u8> = plaintext

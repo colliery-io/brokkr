@@ -69,8 +69,7 @@ pub fn spawn(
         let active: Arc<RwLock<HashMap<String, Vec<JoinHandle<()>>>>> =
             Arc::new(RwLock::new(HashMap::new()));
         loop {
-            if let Err(e) =
-                watch_pods(
+            if let Err(e) = watch_pods(
                 client.clone(),
                 uplink.clone(),
                 agent_id,
@@ -104,7 +103,9 @@ async fn watch_pods(
     while let Some(event) = stream.try_next().await? {
         match event {
             watcher::Event::Apply(pod) => {
-                let Some(uid) = pod.metadata.uid.clone() else { continue };
+                let Some(uid) = pod.metadata.uid.clone() else {
+                    continue;
+                };
                 if !is_opted_in(&pod) {
                     teardown_for(&uid, &active).await;
                     continue;
@@ -113,16 +114,7 @@ async fn watch_pods(
                     teardown_for(&uid, &active).await;
                     continue;
                 };
-                ensure_tails(
-                    &client,
-                    &uplink,
-                    agent_id,
-                    stack_id,
-                    &pod,
-                    &uid,
-                    &active,
-                )
-                .await;
+                ensure_tails(&client, &uplink, agent_id, stack_id, &pod, &uid, &active).await;
             }
             watcher::Event::Delete(pod) => {
                 if let Some(uid) = pod.metadata.uid.clone() {
@@ -192,10 +184,7 @@ async fn ensure_tails(
     guard.insert(uid.to_string(), handles);
 }
 
-async fn teardown_for(
-    uid: &str,
-    active: &Arc<RwLock<HashMap<String, Vec<JoinHandle<()>>>>>,
-) {
+async fn teardown_for(uid: &str, active: &Arc<RwLock<HashMap<String, Vec<JoinHandle<()>>>>>) {
     let mut guard = active.write().await;
     if let Some(handles) = guard.remove(uid) {
         for h in handles {

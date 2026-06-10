@@ -43,7 +43,9 @@ impl std::fmt::Display for SendError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::NotConnected(id) => write!(f, "agent {id} is not connected"),
-            Self::LaneUnavailable(id) => write!(f, "send to agent {id} failed (lane full or closed)"),
+            Self::LaneUnavailable(id) => {
+                write!(f, "send to agent {id} failed (lane full or closed)")
+            }
         }
     }
 }
@@ -199,7 +201,13 @@ mod tests {
     use super::*;
     use brokkr_wire::Heartbeat;
 
-    fn handle_for(agent_id: Uuid) -> (ConnectionHandle, mpsc::Receiver<WsMessage>, mpsc::Receiver<WsMessage>) {
+    fn handle_for(
+        agent_id: Uuid,
+    ) -> (
+        ConnectionHandle,
+        mpsc::Receiver<WsMessage>,
+        mpsc::Receiver<WsMessage>,
+    ) {
         let (control_tx, control_rx) = mpsc::channel(8);
         let (telemetry_tx, telemetry_rx) = mpsc::channel(8);
         let handle = ConnectionHandle {
@@ -241,7 +249,10 @@ mod tests {
         reg.send_telemetry(id, sample_heartbeat(id)).unwrap();
 
         assert!(matches!(control_rx.try_recv(), Ok(WsMessage::Heartbeat(_))));
-        assert!(matches!(telemetry_rx.try_recv(), Ok(WsMessage::Heartbeat(_))));
+        assert!(matches!(
+            telemetry_rx.try_recv(),
+            Ok(WsMessage::Heartbeat(_))
+        ));
     }
 
     #[test]

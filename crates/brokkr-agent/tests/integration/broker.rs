@@ -86,7 +86,7 @@ async fn test_fetch_and_process_deployment_objects() {
     let result = broker::fetch_and_process_deployment_objects(
         &fixture_guard.agent_settings,
         &fixture_guard.sdk_client,
-        &fixture_guard.agent.as_ref().unwrap(),
+        fixture_guard.agent.as_ref().unwrap(),
     )
     .await;
     assert!(
@@ -111,7 +111,7 @@ async fn test_successful_event_apply() {
     let result = broker::fetch_and_process_deployment_objects(
         &fixture_guard.agent_settings,
         &fixture_guard.sdk_client,
-        &fixture_guard.agent.as_ref().unwrap(),
+        fixture_guard.agent.as_ref().unwrap(),
     )
     .await;
     assert!(
@@ -128,7 +128,7 @@ async fn test_successful_event_apply() {
     let result = broker::send_success_event(
         &fixture_guard.agent_settings,
         &fixture_guard.sdk_client,
-        &fixture_guard.agent.as_ref().unwrap(),
+        fixture_guard.agent.as_ref().unwrap(),
         deployment_objects[0].id,
         None,
         None,
@@ -140,7 +140,7 @@ async fn test_successful_event_apply() {
     let result = broker::fetch_and_process_deployment_objects(
         &fixture_guard.agent_settings,
         &fixture_guard.sdk_client,
-        &fixture_guard.agent.as_ref().unwrap(),
+        fixture_guard.agent.as_ref().unwrap(),
     )
     .await;
     assert!(
@@ -168,7 +168,7 @@ async fn test_failure_event_apply() {
     let result = broker::fetch_and_process_deployment_objects(
         &fixture_guard.agent_settings,
         &fixture_guard.sdk_client,
-        &fixture_guard.agent.as_ref().unwrap(),
+        fixture_guard.agent.as_ref().unwrap(),
     )
     .await;
     assert!(
@@ -186,7 +186,7 @@ async fn test_failure_event_apply() {
     let result = broker::send_failure_event(
         &fixture_guard.agent_settings,
         &fixture_guard.sdk_client,
-        &fixture_guard.agent.as_ref().unwrap(),
+        fixture_guard.agent.as_ref().unwrap(),
         deployment_objects[0].id,
         "Test failure".to_string(),
         None,
@@ -198,7 +198,7 @@ async fn test_failure_event_apply() {
     let result = broker::fetch_and_process_deployment_objects(
         &fixture_guard.agent_settings,
         &fixture_guard.sdk_client,
-        &fixture_guard.agent.as_ref().unwrap(),
+        fixture_guard.agent.as_ref().unwrap(),
     )
     .await;
     assert!(
@@ -222,7 +222,7 @@ async fn test_send_heartbeat() {
     let result = broker::send_heartbeat(
         &fixture_guard.agent_settings,
         &fixture_guard.sdk_client,
-        &fixture_guard.agent.as_ref().unwrap(),
+        fixture_guard.agent.as_ref().unwrap(),
         None,
     )
     .await;

@@ -128,7 +128,10 @@ async fn update_health_status(
             "Unauthorized attempt to update health status for agent {}",
             agent_id
         );
-        return Err(ApiError::forbidden("agent_pak_mismatch", "agent PAK does not match the agent ID"));
+        return Err(ApiError::forbidden(
+            "agent_pak_mismatch",
+            "agent PAK does not match the agent ID",
+        ));
     }
 
     let health_records: Vec<NewDeploymentHealth> = update
@@ -200,7 +203,10 @@ async fn get_deployment_health(
 
     if !auth_payload.admin {
         warn!("Unauthorized attempt to get deployment health");
-        return Err(ApiError::forbidden("admin_required", "admin access required"));
+        return Err(ApiError::forbidden(
+            "admin_required",
+            "admin access required",
+        ));
     }
 
     let health_records = dal
@@ -250,13 +256,19 @@ async fn get_stack_health(
 
     if !auth_payload.admin {
         warn!("Unauthorized attempt to get stack health");
-        return Err(ApiError::forbidden("admin_required", "admin access required"));
+        return Err(ApiError::forbidden(
+            "admin_required",
+            "admin access required",
+        ));
     }
 
-    let health_records = dal.deployment_health().list_by_stack(stack_id).map_err(|e| {
-        error!("Failed to get health for stack {}: {:?}", stack_id, e);
-        ApiError::internal("failed to get stack health")
-    })?;
+    let health_records = dal
+        .deployment_health()
+        .list_by_stack(stack_id)
+        .map_err(|e| {
+            error!("Failed to get health for stack {}: {:?}", stack_id, e);
+            ApiError::internal("failed to get stack health")
+        })?;
 
     let mut deployment_health_map: std::collections::HashMap<Uuid, Vec<&DeploymentHealth>> =
         std::collections::HashMap::new();

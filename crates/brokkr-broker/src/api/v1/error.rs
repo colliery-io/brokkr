@@ -111,7 +111,13 @@ impl IntoResponse for ApiError {
 
 impl std::fmt::Display for ApiError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "[{}] {}: {}", self.status.as_u16(), self.code, self.message)
+        write!(
+            f,
+            "[{}] {}: {}",
+            self.status.as_u16(),
+            self.code,
+            self.message
+        )
     }
 }
 
@@ -182,9 +188,7 @@ impl ApiError {
                     format!("required column `{column}` is null"),
                 )
             }
-            DieselErr::NotFound => {
-                ApiError::not_found("not_found", internal_message)
-            }
+            DieselErr::NotFound => ApiError::not_found("not_found", internal_message),
             other => {
                 tracing::error!("diesel error: {:?}", other);
                 ApiError::internal(internal_message)

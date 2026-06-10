@@ -58,7 +58,10 @@
 //! - JSON output format
 //! - Contextual information
 
-use crate::{broker, broker_sdk, broker_ws, deployment_health, diagnostics, health, k8s, kube_events, pod_logs, webhooks, work_orders};
+use crate::{
+    broker, broker_sdk, broker_ws, deployment_health, diagnostics, health, k8s, kube_events,
+    pod_logs, webhooks, work_orders,
+};
 use brokkr_utils::config::Settings;
 use brokkr_utils::telemetry::prelude::*;
 use std::collections::HashSet;

@@ -143,11 +143,7 @@ fn authorise(dal: &DAL, auth: &AuthPayload, stack_id: Uuid) -> bool {
     }
 }
 
-async fn run_subscriber(
-    socket: WebSocket,
-    stack_id: Uuid,
-    broadcaster: Arc<LiveBroadcaster>,
-) {
+async fn run_subscriber(socket: WebSocket, stack_id: Uuid, broadcaster: Arc<LiveBroadcaster>) {
     let mut rx = broadcaster.subscribe(stack_id);
     let (mut sink, mut stream) = socket.split();
 

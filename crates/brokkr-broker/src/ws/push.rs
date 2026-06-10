@@ -38,7 +38,12 @@ pub fn push_work_order(
     agent_ids: &[Uuid],
 ) {
     for &agent_id in agent_ids {
-        deliver(registry, agent_id, WsMessage::WorkOrder(work_order.clone()), "work_order");
+        deliver(
+            registry,
+            agent_id,
+            WsMessage::WorkOrder(work_order.clone()),
+            "work_order",
+        );
     }
 }
 
@@ -64,11 +69,7 @@ pub fn push_target_changed(registry: &Arc<ConnectionRegistry>, target: &AgentTar
 ///
 /// Errors fetching the target list are logged and swallowed; the REST
 /// polling fallback will catch up the affected agents.
-pub fn push_stack_changed_to_targets(
-    registry: &Arc<ConnectionRegistry>,
-    dal: &DAL,
-    stack: &Stack,
-) {
+pub fn push_stack_changed_to_targets(registry: &Arc<ConnectionRegistry>, dal: &DAL, stack: &Stack) {
     let targets = match dal.agent_targets().list_for_stack(stack.id) {
         Ok(targets) => targets,
         Err(e) => {
@@ -90,12 +91,7 @@ pub fn push_stack_changed_to_targets(
     }
 }
 
-fn deliver(
-    registry: &Arc<ConnectionRegistry>,
-    agent_id: Uuid,
-    msg: WsMessage,
-    kind: &'static str,
-) {
+fn deliver(registry: &Arc<ConnectionRegistry>, agent_id: Uuid, msg: WsMessage, kind: &'static str) {
     match registry.send_control(agent_id, msg) {
         Ok(()) => debug!(%agent_id, kind, "pushed WS message"),
         Err(SendError::NotConnected(_)) => {

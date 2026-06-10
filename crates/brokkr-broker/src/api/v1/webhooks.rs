@@ -18,8 +18,7 @@ use axum::{
 };
 use brokkr_models::models::audit_logs::{
     ACTION_WEBHOOK_CREATED, ACTION_WEBHOOK_DELETED, ACTION_WEBHOOK_DELIVERY_FAILED,
-    ACTION_WEBHOOK_UPDATED, ACTOR_TYPE_ADMIN, ACTOR_TYPE_SYSTEM,
-    RESOURCE_TYPE_WEBHOOK,
+    ACTION_WEBHOOK_UPDATED, ACTOR_TYPE_ADMIN, ACTOR_TYPE_SYSTEM, RESOURCE_TYPE_WEBHOOK,
 };
 use brokkr_models::models::webhooks::{
     NewWebhookSubscription, UpdateWebhookSubscription, WebhookDelivery, WebhookFilters,
@@ -212,13 +211,19 @@ async fn list_webhooks(
 ) -> Result<Json<Vec<WebhookResponse>>, ApiError> {
     info!("Handling request to list webhook subscriptions");
     if !auth_payload.admin {
-        return Err(ApiError::forbidden("admin_required", "admin access required"));
+        return Err(ApiError::forbidden(
+            "admin_required",
+            "admin access required",
+        ));
     }
     let subscriptions = dal.webhook_subscriptions().list(false).map_err(|e| {
         error!("Failed to fetch webhook subscriptions: {:?}", e);
         ApiError::internal("failed to fetch webhook subscriptions")
     })?;
-    info!("Successfully retrieved {} webhook subscriptions", subscriptions.len());
+    info!(
+        "Successfully retrieved {} webhook subscriptions",
+        subscriptions.len()
+    );
     Ok(Json(subscriptions.into_iter().map(Into::into).collect()))
 }
 
@@ -234,7 +239,10 @@ async fn list_event_types(
     Extension(auth_payload): Extension<AuthPayload>,
 ) -> Result<Json<Vec<&'static str>>, ApiError> {
     if !auth_payload.admin {
-        return Err(ApiError::forbidden("admin_required", "admin access required"));
+        return Err(ApiError::forbidden(
+            "admin_required",
+            "admin access required",
+        ));
     }
     Ok(Json(VALID_EVENT_TYPES.to_vec()))
 }
@@ -257,7 +265,10 @@ async fn create_webhook(
 ) -> Result<(StatusCode, Json<WebhookResponse>), ApiError> {
     info!("Handling request to create webhook subscription");
     if !auth_payload.admin {
-        return Err(ApiError::forbidden("admin_required", "admin access required"));
+        return Err(ApiError::forbidden(
+            "admin_required",
+            "admin access required",
+        ));
     }
 
     if request.url.trim().is_empty() {
@@ -303,7 +314,10 @@ async fn create_webhook(
         warn!("Failed to create webhook subscription: {:?}", e);
         ApiError::from_diesel(e, "failed to create webhook subscription")
     })?;
-    info!("Successfully created webhook subscription with ID: {}", subscription.id);
+    info!(
+        "Successfully created webhook subscription with ID: {}",
+        subscription.id
+    );
 
     audit::log_action(
         ACTOR_TYPE_ADMIN,
@@ -338,18 +352,29 @@ async fn get_webhook(
     Extension(auth_payload): Extension<AuthPayload>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<WebhookResponse>, ApiError> {
-    info!("Handling request to get webhook subscription with ID: {}", id);
+    info!(
+        "Handling request to get webhook subscription with ID: {}",
+        id
+    );
     if !auth_payload.admin {
-        return Err(ApiError::forbidden("admin_required", "admin access required"));
+        return Err(ApiError::forbidden(
+            "admin_required",
+            "admin access required",
+        ));
     }
     let subscription = dal
         .webhook_subscriptions()
         .get(id)
         .map_err(|e| {
-            error!("Failed to fetch webhook subscription with ID {}: {:?}", id, e);
+            error!(
+                "Failed to fetch webhook subscription with ID {}: {:?}",
+                id, e
+            );
             ApiError::internal("failed to fetch webhook subscription")
         })?
-        .ok_or_else(|| ApiError::not_found("webhook_not_found", "webhook subscription not found"))?;
+        .ok_or_else(|| {
+            ApiError::not_found("webhook_not_found", "webhook subscription not found")
+        })?;
     Ok(Json(subscription.into()))
 }
 
@@ -372,9 +397,15 @@ async fn update_webhook(
     Path(id): Path<Uuid>,
     Json(request): Json<UpdateWebhookRequest>,
 ) -> Result<Json<WebhookResponse>, ApiError> {
-    info!("Handling request to update webhook subscription with ID: {}", id);
+    info!(
+        "Handling request to update webhook subscription with ID: {}",
+        id
+    );
     if !auth_payload.admin {
-        return Err(ApiError::forbidden("admin_required", "admin access required"));
+        return Err(ApiError::forbidden(
+            "admin_required",
+            "admin access required",
+        ));
     }
 
     dal.webhook_subscriptions()
@@ -383,7 +414,9 @@ async fn update_webhook(
             error!("Failed to fetch webhook subscription: {:?}", e);
             ApiError::internal("failed to fetch webhook subscription")
         })?
-        .ok_or_else(|| ApiError::not_found("webhook_not_found", "webhook subscription not found"))?;
+        .ok_or_else(|| {
+            ApiError::not_found("webhook_not_found", "webhook subscription not found")
+        })?;
 
     let url_encrypted = match request.url {
         Some(u) => Some(encrypt_value(&u)?),
@@ -414,10 +447,16 @@ async fn update_webhook(
         timeout_seconds: request.timeout_seconds,
     };
 
-    let subscription = dal.webhook_subscriptions().update(id, &changeset).map_err(|e| {
-        error!("Failed to update webhook subscription with ID {}: {:?}", id, e);
-        ApiError::internal("failed to update webhook subscription")
-    })?;
+    let subscription = dal
+        .webhook_subscriptions()
+        .update(id, &changeset)
+        .map_err(|e| {
+            error!(
+                "Failed to update webhook subscription with ID {}: {:?}",
+                id, e
+            );
+            ApiError::internal("failed to update webhook subscription")
+        })?;
     info!("Successfully updated webhook subscription with ID: {}", id);
 
     audit::log_action(
@@ -453,18 +492,30 @@ async fn delete_webhook(
     Extension(auth_payload): Extension<AuthPayload>,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, ApiError> {
-    info!("Handling request to delete webhook subscription with ID: {}", id);
+    info!(
+        "Handling request to delete webhook subscription with ID: {}",
+        id
+    );
     if !auth_payload.admin {
-        return Err(ApiError::forbidden("admin_required", "admin access required"));
+        return Err(ApiError::forbidden(
+            "admin_required",
+            "admin access required",
+        ));
     }
 
     let count = dal.webhook_subscriptions().delete(id).map_err(|e| {
-        error!("Failed to delete webhook subscription with ID {}: {:?}", id, e);
+        error!(
+            "Failed to delete webhook subscription with ID {}: {:?}",
+            id, e
+        );
         ApiError::internal("failed to delete webhook subscription")
     })?;
 
     if count == 0 {
-        return Err(ApiError::not_found("webhook_not_found", "webhook subscription not found"));
+        return Err(ApiError::not_found(
+            "webhook_not_found",
+            "webhook subscription not found",
+        ));
     }
     info!("Successfully deleted webhook subscription with ID: {}", id);
     audit::log_action(
@@ -502,9 +553,15 @@ async fn list_deliveries(
     Path(id): Path<Uuid>,
     Query(query): Query<ListDeliveriesQuery>,
 ) -> Result<Json<Vec<WebhookDelivery>>, ApiError> {
-    info!("Handling request to list deliveries for webhook subscription: {}", id);
+    info!(
+        "Handling request to list deliveries for webhook subscription: {}",
+        id
+    );
     if !auth_payload.admin {
-        return Err(ApiError::forbidden("admin_required", "admin access required"));
+        return Err(ApiError::forbidden(
+            "admin_required",
+            "admin access required",
+        ));
     }
 
     dal.webhook_subscriptions()
@@ -513,7 +570,9 @@ async fn list_deliveries(
             error!("Failed to fetch webhook subscription: {:?}", e);
             ApiError::internal("failed to fetch webhook subscription")
         })?
-        .ok_or_else(|| ApiError::not_found("webhook_not_found", "webhook subscription not found"))?;
+        .ok_or_else(|| {
+            ApiError::not_found("webhook_not_found", "webhook subscription not found")
+        })?;
 
     let limit = query.limit.unwrap_or(50);
     let offset = query.offset.unwrap_or(0);
@@ -522,10 +581,17 @@ async fn list_deliveries(
         .webhook_deliveries()
         .list_for_subscription(id, query.status.as_deref(), limit, offset)
         .map_err(|e| {
-            error!("Failed to fetch deliveries for subscription {}: {:?}", id, e);
+            error!(
+                "Failed to fetch deliveries for subscription {}: {:?}",
+                id, e
+            );
             ApiError::internal("failed to fetch deliveries")
         })?;
-    info!("Successfully retrieved {} deliveries for subscription {}", deliveries.len(), id);
+    info!(
+        "Successfully retrieved {} deliveries for subscription {}",
+        deliveries.len(),
+        id
+    );
     Ok(Json(deliveries))
 }
 
@@ -546,9 +612,15 @@ async fn test_webhook(
     Extension(auth_payload): Extension<AuthPayload>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    info!("Handling request to test webhook subscription with ID: {}", id);
+    info!(
+        "Handling request to test webhook subscription with ID: {}",
+        id
+    );
     if !auth_payload.admin {
-        return Err(ApiError::forbidden("admin_required", "admin access required"));
+        return Err(ApiError::forbidden(
+            "admin_required",
+            "admin access required",
+        ));
     }
 
     let subscription = dal
@@ -558,7 +630,9 @@ async fn test_webhook(
             error!("Failed to fetch webhook subscription: {:?}", e);
             ApiError::internal("failed to fetch webhook subscription")
         })?
-        .ok_or_else(|| ApiError::not_found("webhook_not_found", "webhook subscription not found"))?;
+        .ok_or_else(|| {
+            ApiError::not_found("webhook_not_found", "webhook subscription not found")
+        })?;
 
     let url = decrypt_value(&subscription.url_encrypted).map_err(|e| {
         error!("Failed to decrypt URL: {}", e);
@@ -585,7 +659,9 @@ async fn test_webhook(
     });
 
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(subscription.timeout_seconds as u64))
+        .timeout(std::time::Duration::from_secs(
+            subscription.timeout_seconds as u64,
+        ))
         .build()
         .map_err(|e| {
             error!("Failed to create HTTP client: {:?}", e);
@@ -612,7 +688,10 @@ async fn test_webhook(
                 })))
             } else {
                 let body = response.text().await.unwrap_or_default();
-                warn!("Test webhook delivery failed with status {}: {}", status, body);
+                warn!(
+                    "Test webhook delivery failed with status {}: {}",
+                    status, body
+                );
                 let mut details = std::collections::BTreeMap::new();
                 details.insert("status_code".into(), serde_json::json!(status.as_u16()));
                 details.insert(
@@ -656,7 +735,10 @@ async fn get_pending_agent_webhooks(
     Extension(auth_payload): Extension<AuthPayload>,
     Path(agent_id): Path<Uuid>,
 ) -> Result<Json<Vec<PendingWebhookDelivery>>, ApiError> {
-    debug!("Handling request for pending webhooks for agent: {}", agent_id);
+    debug!(
+        "Handling request for pending webhooks for agent: {}",
+        agent_id
+    );
     if !auth_payload.admin && auth_payload.agent != Some(agent_id) {
         warn!(
             "Unauthorized access to agent webhooks: {:?} != {:?}",
@@ -711,7 +793,10 @@ async fn get_pending_agent_webhooks(
         let url = match decrypt_value(&subscription.url_encrypted) {
             Ok(u) => u,
             Err(e) => {
-                error!("Failed to decrypt URL for subscription {}: {}", subscription.id, e);
+                error!(
+                    "Failed to decrypt URL for subscription {}: {}",
+                    subscription.id, e
+                );
                 continue;
             }
         };
@@ -719,7 +804,10 @@ async fn get_pending_agent_webhooks(
             Some(ref encrypted) => match decrypt_value(encrypted) {
                 Ok(h) => Some(h),
                 Err(e) => {
-                    error!("Failed to decrypt auth header for subscription {}: {}", subscription.id, e);
+                    error!(
+                        "Failed to decrypt auth header for subscription {}: {}",
+                        subscription.id, e
+                    );
                     None
                 }
             },
@@ -738,7 +826,11 @@ async fn get_pending_agent_webhooks(
         });
     }
 
-    debug!("Returning {} pending webhook deliveries for agent {}", pending.len(), agent_id);
+    debug!(
+        "Returning {} pending webhook deliveries for agent {}",
+        pending.len(),
+        agent_id
+    );
     Ok(Json(pending))
 }
 
@@ -760,7 +852,10 @@ async fn report_delivery_result(
     Path(delivery_id): Path<Uuid>,
     Json(request): Json<DeliveryResultRequest>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    debug!("Handling delivery result report for delivery: {}", delivery_id);
+    debug!(
+        "Handling delivery result report for delivery: {}",
+        delivery_id
+    );
 
     let agent_id = auth_payload.agent.ok_or_else(|| {
         ApiError::forbidden("agent_pak_required", "agent authentication required")
@@ -802,11 +897,16 @@ async fn report_delivery_result(
         })?;
 
     if request.success {
-        dal.webhook_deliveries().mark_success(delivery_id).map_err(|e| {
-            error!("Failed to mark delivery as success: {:?}", e);
-            ApiError::internal("failed to update delivery")
-        })?;
-        info!("Webhook delivery {} succeeded via agent {}", delivery_id, agent_id);
+        dal.webhook_deliveries()
+            .mark_success(delivery_id)
+            .map_err(|e| {
+                error!("Failed to mark delivery as success: {:?}", e);
+                ApiError::internal("failed to update delivery")
+            })?;
+        info!(
+            "Webhook delivery {} succeeded via agent {}",
+            delivery_id, agent_id
+        );
         Ok(Json(serde_json::json!({
             "status": "success",
             "delivery_id": delivery_id

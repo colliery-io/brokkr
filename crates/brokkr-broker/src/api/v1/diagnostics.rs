@@ -106,7 +106,10 @@ async fn create_diagnostic_request(
 
     if !auth_payload.admin {
         warn!("Unauthorized attempt to create diagnostic request");
-        return Err(ApiError::forbidden("admin_required", "admin access required"));
+        return Err(ApiError::forbidden(
+            "admin_required",
+            "admin access required",
+        ));
     }
 
     dal.deployment_objects()
@@ -118,7 +121,9 @@ async fn create_diagnostic_request(
             );
             ApiError::internal("failed to verify deployment object")
         })?
-        .ok_or_else(|| ApiError::not_found("deployment_object_not_found", "deployment object not found"))?;
+        .ok_or_else(|| {
+            ApiError::not_found("deployment_object_not_found", "deployment object not found")
+        })?;
 
     dal.agents()
         .get(request.agent_id)
@@ -202,7 +207,10 @@ async fn get_diagnostic(
     let result = match dal.diagnostic_results().get_by_request(id) {
         Ok(result) => result,
         Err(e) => {
-            error!("Failed to fetch diagnostic result for request {}: {:?}", id, e);
+            error!(
+                "Failed to fetch diagnostic result for request {}: {:?}",
+                id, e
+            );
             None
         }
     };
@@ -239,7 +247,10 @@ async fn get_pending_diagnostics(
             "Unauthorized attempt to get pending diagnostics for agent {}",
             agent_id
         );
-        return Err(ApiError::forbidden("agent_pak_mismatch", "agent PAK does not match the agent ID"));
+        return Err(ApiError::forbidden(
+            "agent_pak_mismatch",
+            "agent PAK does not match the agent ID",
+        ));
     }
 
     let requests = dal
@@ -288,7 +299,10 @@ async fn claim_diagnostic(
         .diagnostic_requests()
         .get(id)
         .map_err(|e| {
-            error!("Failed to fetch diagnostic request {} for claim: {:?}", id, e);
+            error!(
+                "Failed to fetch diagnostic request {} for claim: {:?}",
+                id, e
+            );
             ApiError::internal("failed to fetch diagnostic request")
         })?
         .ok_or_else(|| {
@@ -320,7 +334,10 @@ async fn claim_diagnostic(
         ApiError::internal("failed to claim diagnostic request")
     })?;
 
-    info!("Agent {} claimed diagnostic request {}", request.agent_id, id);
+    info!(
+        "Agent {} claimed diagnostic request {}",
+        request.agent_id, id
+    );
     Ok(Json(claimed))
 }
 
@@ -389,10 +406,7 @@ async fn submit_diagnostic_result(
         );
         return Err(ApiError::conflict(
             "diagnostic_not_claimed",
-            format!(
-                "request status is {}, expected 'claimed'",
-                request.status
-            ),
+            format!("request status is {}, expected 'claimed'", request.status),
         ));
     }
 

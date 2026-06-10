@@ -218,7 +218,10 @@ async fn reload_config(
 ) -> Result<impl IntoResponse, ApiError> {
     if !auth.admin {
         warn!("Non-admin attempted to reload configuration");
-        return Err(ApiError::forbidden("admin_required", "admin access required"));
+        return Err(ApiError::forbidden(
+            "admin_required",
+            "admin access required",
+        ));
     }
 
     info!("Admin initiated configuration reload");
@@ -330,7 +333,10 @@ async fn list_audit_logs(
 ) -> Result<impl IntoResponse, ApiError> {
     if !auth.admin {
         warn!("Non-admin attempted to access audit logs");
-        return Err(ApiError::forbidden("admin_required", "admin access required"));
+        return Err(ApiError::forbidden(
+            "admin_required",
+            "admin access required",
+        ));
     }
 
     let limit = params.limit.unwrap_or(100).min(1000);

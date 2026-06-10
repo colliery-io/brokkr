@@ -157,10 +157,8 @@ pub async fn serve(config: &Settings) -> Result<(), Box<dyn std::error::Error>> 
 
     // Create reloadable configuration for hot-reload support
     info!("Initializing reloadable configuration");
-    let reloadable_config = ReloadableConfig::from_settings(
-        config.clone(),
-        std::env::var("BROKKR_CONFIG_FILE").ok(),
-    );
+    let reloadable_config =
+        ReloadableConfig::from_settings(config.clone(), std::env::var("BROKKR_CONFIG_FILE").ok());
 
     // Start ConfigMap watcher for Kubernetes hot-reload (if running in K8s)
     if let Some(watcher_config) = utils::config_watcher::ConfigWatcherConfig::from_environment() {
@@ -210,7 +208,6 @@ pub fn rotate_admin(config: &Settings) -> Result<(), Box<dyn std::error::Error>>
     Ok(())
 }
 
-
 /// Synchronously records a PAK lifecycle event performed via the CLI. The
 /// async batched audit logger is not initialized outside `serve`, so CLI
 /// commands write the row directly (BROKKR-T-0189).
@@ -248,7 +245,13 @@ pub fn rotate_agent_key(
     dal.agents().update_pak_hash(agent.id, new_pak_hash)?;
 
     info!("Agent key rotated successfully for agent: {}", agent.name);
-    audit_cli_pak_event(&dal, ACTION_PAK_ROTATED, RESOURCE_TYPE_AGENT, agent.id, &agent.name);
+    audit_cli_pak_event(
+        &dal,
+        ACTION_PAK_ROTATED,
+        RESOURCE_TYPE_AGENT,
+        agent.id,
+        &agent.name,
+    );
     println!("Agent PAK rotated successfully:");
     println!("ID: {}", agent.id);
     println!("Name: {}", agent.name);
@@ -280,7 +283,13 @@ pub fn rotate_generator_key(
         "Generator key rotated successfully for generator: {}",
         generator.name
     );
-    audit_cli_pak_event(&dal, ACTION_PAK_ROTATED, RESOURCE_TYPE_GENERATOR, generator.id, &generator.name);
+    audit_cli_pak_event(
+        &dal,
+        ACTION_PAK_ROTATED,
+        RESOURCE_TYPE_GENERATOR,
+        generator.id,
+        &generator.name,
+    );
     println!("Generator PAK rotated successfully:");
     println!("ID: {}", generator.id);
     println!("Name: {}", generator.name);
@@ -312,7 +321,13 @@ pub fn create_agent(
 
     let agent = dal.agents().create(&new_agent)?;
     dal.agents().update_pak_hash(agent.id, pak_hash)?;
-    audit_cli_pak_event(&dal, ACTION_PAK_CREATED, RESOURCE_TYPE_PAK, agent.id, &agent.name);
+    audit_cli_pak_event(
+        &dal,
+        ACTION_PAK_CREATED,
+        RESOURCE_TYPE_PAK,
+        agent.id,
+        &agent.name,
+    );
 
     info!("Successfully created agent with ID: {}", agent.id);
     println!("Agent created successfully:");
@@ -346,7 +361,13 @@ pub fn create_generator(
 
     let generator = dal.generators().create(&new_generator)?;
     dal.generators().update_pak_hash(generator.id, pak_hash)?;
-    audit_cli_pak_event(&dal, ACTION_PAK_CREATED, RESOURCE_TYPE_PAK, generator.id, &generator.name);
+    audit_cli_pak_event(
+        &dal,
+        ACTION_PAK_CREATED,
+        RESOURCE_TYPE_PAK,
+        generator.id,
+        &generator.name,
+    );
 
     info!("Successfully created generator with ID: {}", generator.id);
     println!("Generator created successfully:");

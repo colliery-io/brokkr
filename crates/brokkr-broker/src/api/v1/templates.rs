@@ -11,15 +11,15 @@ use crate::api::v1::middleware::AuthPayload;
 use crate::dal::DAL;
 use crate::utils::audit;
 use crate::utils::templating;
-use brokkr_models::models::audit_logs::{
-    ACTION_TEMPLATE_CREATED, ACTION_TEMPLATE_DELETED, ACTION_TEMPLATE_UPDATED, ACTOR_TYPE_ADMIN,
-    ACTOR_TYPE_GENERATOR, RESOURCE_TYPE_TEMPLATE,
-};
 use axum::{
     extract::{Extension, Path, State},
     http::StatusCode,
     routing::{delete, get},
     Json, Router,
+};
+use brokkr_models::models::audit_logs::{
+    ACTION_TEMPLATE_CREATED, ACTION_TEMPLATE_DELETED, ACTION_TEMPLATE_UPDATED, ACTOR_TYPE_ADMIN,
+    ACTOR_TYPE_GENERATOR, RESOURCE_TYPE_TEMPLATE,
 };
 use brokkr_models::models::stack_templates::StackTemplate;
 use brokkr_models::models::template_annotations::{NewTemplateAnnotation, TemplateAnnotation};
@@ -154,7 +154,6 @@ async fn list_templates(
     info!("Successfully retrieved {} templates", templates.len());
     Ok(Json(templates))
 }
-
 
 /// Resolves the audit actor for template endpoints: the admin, or the
 /// generator acting on its own templates.

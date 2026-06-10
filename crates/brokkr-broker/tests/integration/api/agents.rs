@@ -986,10 +986,7 @@ async fn test_get_target_state_incremental() {
     let resp = app
         .oneshot(
             Request::builder()
-                .uri(format!(
-                    "/api/v1/agents/{}/target-state",
-                    agent.id.to_string()
-                ))
+                .uri(format!("/api/v1/agents/{}/target-state", agent.id))
                 .method("GET")
                 .header("Authorization", format!("Bearer {}", agent_pak))
                 .body(Body::empty())
@@ -1049,7 +1046,7 @@ async fn test_get_target_state_full() {
             Request::builder()
                 .uri(format!(
                     "/api/v1/agents/{}/target-state?mode=full",
-                    agent.id.to_string()
+                    agent.id
                 ))
                 .method("GET")
                 .header("Authorization", format!("Bearer {}", agent_pak))
@@ -1112,7 +1109,7 @@ async fn test_get_target_state_with_invalid_mode() {
             Request::builder()
                 .uri(format!(
                     "/api/v1/agents/{}/target-state?mode=invalid",
-                    agent.id.to_string()
+                    agent.id
                 ))
                 .method("GET")
                 .header("Authorization", format!("Bearer {}", agent_pak))
@@ -1459,7 +1456,7 @@ async fn test_get_target_state_with_mismatched_auth() {
             Request::builder()
                 .uri(format!(
                     "/api/v1/agents/{}/target-state?mode=full",
-                    agent1.id.to_string()
+                    agent1.id
                 ))
                 .method("GET")
                 .header("Authorization", format!("Bearer {}", agent2_pak))

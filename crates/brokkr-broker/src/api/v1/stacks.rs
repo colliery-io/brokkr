@@ -18,7 +18,6 @@ use axum::{
     routing::{delete, get, post},
     Json, Router,
 };
-use std::sync::Arc;
 use brokkr_models::models::audit_logs::{
     ACTION_STACK_CREATED, ACTION_STACK_DELETED, ACTION_STACK_UPDATED, ACTOR_TYPE_ADMIN,
     RESOURCE_TYPE_STACK,
@@ -29,6 +28,7 @@ use brokkr_models::models::stack_annotations::{NewStackAnnotation, StackAnnotati
 use brokkr_models::models::stack_labels::{NewStackLabel, StackLabel};
 use brokkr_models::models::stacks::{NewStack, Stack};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use tracing::{error, info, instrument, warn};
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -235,7 +235,10 @@ async fn update_stack(
     info!("Handling request to update stack with ID: {}", id);
     fetch_owned_stack(&dal, &auth_payload, id).await?;
     if id != updated_stack.id {
-        return Err(ApiError::bad_request("stack_id_mismatch", "stack ID mismatch"));
+        return Err(ApiError::bad_request(
+            "stack_id_mismatch",
+            "stack ID mismatch",
+        ));
     }
 
     let stack = dal.stacks().update(id, &updated_stack).map_err(|e| {
@@ -499,7 +502,10 @@ pub async fn remove_label(
     if deleted > 0 {
         Ok(StatusCode::NO_CONTENT)
     } else {
-        Err(ApiError::not_found("stack_label_not_found", "label not found"))
+        Err(ApiError::not_found(
+            "stack_label_not_found",
+            "label not found",
+        ))
     }
 }
 
@@ -559,7 +565,10 @@ pub async fn add_annotation(
 ) -> Result<(StatusCode, Json<StackAnnotation>), ApiError> {
     fetch_owned_stack(&dal, &auth_payload, stack_id).await?;
     if new_annotation.stack_id != stack_id {
-        return Err(ApiError::bad_request("stack_id_mismatch", "stack ID mismatch"));
+        return Err(ApiError::bad_request(
+            "stack_id_mismatch",
+            "stack ID mismatch",
+        ));
     }
     let annotation = dal
         .stack_annotations()
@@ -598,7 +607,10 @@ pub async fn remove_annotation(
     if deleted > 0 {
         Ok(StatusCode::NO_CONTENT)
     } else {
-        Err(ApiError::not_found("stack_annotation_not_found", "annotation not found"))
+        Err(ApiError::not_found(
+            "stack_annotation_not_found",
+            "annotation not found",
+        ))
     }
 }
 
@@ -708,20 +720,21 @@ async fn instantiate_template(
             "validation_errors".into(),
             serde_json::json!(error_messages),
         );
-        return Err(ApiError::bad_request("invalid_parameters", "invalid parameters")
-            .with_details(details));
+        return Err(
+            ApiError::bad_request("invalid_parameters", "invalid parameters").with_details(details),
+        );
     }
 
     let rendered_yaml =
-        templating::render_template(&template.template_content, &request.parameters)
-            .map_err(|e| {
+        templating::render_template(&template.template_content, &request.parameters).map_err(
+            |e| {
                 error!("Failed to render template: {:?}", e);
                 ApiError::bad_request("template_render_failed", e.to_string())
-            })?;
+            },
+        )?;
 
-    let new_deployment_object =
-        NewDeploymentObject::new(stack_id, rendered_yaml.clone(), false)
-            .map_err(|e| ApiError::bad_request("invalid_deployment_object", e))?;
+    let new_deployment_object = NewDeploymentObject::new(stack_id, rendered_yaml.clone(), false)
+        .map_err(|e| ApiError::bad_request("invalid_deployment_object", e))?;
     let deployment_object = dal
         .deployment_objects()
         .create(&new_deployment_object)
@@ -762,9 +775,9 @@ async fn instantiate_template(
 // long-term log store" UX (NFR-007). See project_log_retention_stance.
 // =============================================================================
 
+use crate::ws::HARD_RETENTION_CEILING;
 use brokkr_models::models::agent_k8s_events::AgentK8sEvent;
 use brokkr_models::models::agent_pod_logs::AgentPodLog;
-use crate::ws::HARD_RETENTION_CEILING;
 
 /// Default page size for the telemetry history endpoints.
 const TELEMETRY_DEFAULT_LIMIT: i64 = 500;
@@ -809,9 +822,7 @@ pub struct PodLogHistoryResponse {
     pub lines: Vec<AgentPodLog>,
 }
 
-fn retention_info(
-    oldest: Option<chrono::DateTime<chrono::Utc>>,
-) -> RetentionInfo {
+fn retention_info(oldest: Option<chrono::DateTime<chrono::Utc>>) -> RetentionInfo {
     RetentionInfo {
         retention_ceiling_seconds: HARD_RETENTION_CEILING.as_secs(),
         effective_retention_seconds: HARD_RETENTION_CEILING.as_secs(),
@@ -822,8 +833,8 @@ fn retention_info(
 }
 
 fn clamp_since(since: Option<chrono::DateTime<chrono::Utc>>) -> chrono::DateTime<chrono::Utc> {
-    let ceiling_ago = chrono::Utc::now()
-        - chrono::Duration::from_std(HARD_RETENTION_CEILING).unwrap_or_default();
+    let ceiling_ago =
+        chrono::Utc::now() - chrono::Duration::from_std(HARD_RETENTION_CEILING).unwrap_or_default();
     match since {
         Some(s) if s > ceiling_ago => s,
         _ => ceiling_ago,
