@@ -40,4 +40,4 @@ Correct the workspace MSRV declaration: `Cargo.toml:5` reads `rust-version = "1.
 ## Status Updates
 
 - 2026-06-09: Found during /docs-diataxis accuracy review (BROKKR-I-0015 follow-up).
-- 2026-06-09: IMPLEMENTED (uncommitted, unit tests green): `rust-version = "1.85"` in Cargo.toml; docs already updated.
+- 2026-06-09: IMPLEMENTED (uncommitted, unit tests green): `rust-version = "1.85"` in Cargo.toml; docs already updated.- 2026-06-10 (proper resolution): the original premise was WRONG — the crates were edition 2021, and `edition`/`rust-version` under `[workspace]` were dead keys (Cargo "unused manifest key"), so the 1.8→1.85 change had no effect. Fixed properly per user direction (option 3): moved both into `[workspace.package]` with edition 2024 + rust-version 1.90, members inherit via `.workspace = true`. cargo fix --edition applied (unsafe env::set_var, let-chains, 2024 fmt). Build + all units green; OpenAPI spec unchanged. Commit e53e8d8.

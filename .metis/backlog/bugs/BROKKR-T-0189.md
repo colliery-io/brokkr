@@ -4,15 +4,15 @@ level: task
 title: "Audit actions defined but never emitted (auth.failed, config.reloaded)"
 short_code: "BROKKR-T-0189"
 created_at: 2026-06-10T03:04:10.114868+00:00
-updated_at: 2026-06-10T03:04:10.114868+00:00
+updated_at: 2026-06-10T11:19:06.537658+00:00
 parent: 
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/backlog"
   - "#bug"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -24,6 +24,12 @@ initiative_id: NULL
 ## Objective
 
 Audit action constants exist that are never emitted: `ACTION_AUTH_FAILED` is defined and even queried by the DAL (`crates/brokkr-broker/src/dal/audit_logs.rs:278-283`) but no code path logs it; `POST /api/v1/admin/config/reload` emits no audit event despite config changes being audit-relevant. Today only `agents.rs`, `stacks.rs`, and `webhooks.rs` call `audit::log_action`. The audit-log reference previously documented these phantom events (now corrected).
+
+## Acceptance Criteria
+
+## Acceptance Criteria
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 
