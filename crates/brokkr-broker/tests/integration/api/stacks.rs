@@ -457,6 +457,50 @@ async fn test_add_stack_label() {
 }
 
 #[tokio::test]
+async fn test_add_stack_label_duplicate_returns_409() {
+    // Re-adding an existing label hits the UNIQUE (stack_id, label) constraint.
+    // It must surface as 409 unique_violation (not a blanket 500) so idempotent
+    // callers like the SDK `apply` helper can treat it as a no-op.
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+    let admin_pak = fixture.admin_pak.clone();
+
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
+    let stack = fixture.create_test_stack("Test Stack".to_string(), None, generator.id);
+    fixture.create_test_stack_label(stack.id, "dup_label".to_string());
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/stacks/{}/labels", stack.id))
+                .header("Content-Type", "application/json")
+                .header("Authorization", &admin_pak)
+                .body(Body::from(
+                    serde_json::to_string(&"dup_label".to_string()).unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let status = response.status();
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+    assert_eq!(
+        status,
+        StatusCode::CONFLICT,
+        "duplicate label should be 409, got body: {json}"
+    );
+    assert_eq!(json["code"], "unique_violation");
+}
+
+#[tokio::test]
 async fn test_remove_stack_label() {
     let fixture = TestFixture::new();
     let app = fixture.create_test_router().with_state(fixture.dal.clone());

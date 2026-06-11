@@ -551,10 +551,14 @@ pub async fn add_label(
     fetch_owned_stack(&dal, &auth_payload, stack_id).await?;
     let new_label = NewStackLabel::new(stack_id, label)
         .map_err(|e| ApiError::bad_request("invalid_label", e))?;
+    // Route the DB error through the standard conversion so a re-added label
+    // (UNIQUE (stack_id, label)) surfaces as 409 unique_violation rather than a
+    // blanket 500 — idempotent callers like `apply` rely on the 409 to treat a
+    // label that already exists as a no-op.
     let label = dal
         .stack_labels()
         .create(&new_label)
-        .map_err(|_| ApiError::internal("failed to add stack label"))?;
+        .map_err(|e| ApiError::from_diesel(e, "failed to add stack label"))?;
     Ok((StatusCode::CREATED, Json(label)))
 }
 
