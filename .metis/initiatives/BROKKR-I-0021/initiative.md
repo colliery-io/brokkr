@@ -4,14 +4,14 @@ level: initiative
 title: "Ergonomic manifest submission: folder-of-objects on-ramp"
 short_code: "BROKKR-I-0021"
 created_at: 2026-06-11T02:18:37.762221+00:00
-updated_at: 2026-06-11T02:18:37.762221+00:00
+updated_at: 2026-06-11T10:42:20.521461+00:00
 parent: BROKKR-V-0001
 blocked_by: []
 archived: false
 
 tags:
   - "#initiative"
-  - "#phase/discovery"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
