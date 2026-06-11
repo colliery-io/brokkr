@@ -26,7 +26,7 @@ use brokkr_client::types::{
     CreateAgentResponse, CreateDeploymentObjectRequest, ErrorResponse, NewAgent, NewAgentTarget,
     NewGenerator, NewStack, NewStackAnnotation,
 };
-use brokkr_client::{BrokkrClient, BrokkrError, Client as RawClient};
+use brokkr_client::{ApplyOutcome, BrokkrClient, BrokkrError, Client as RawClient};
 use uuid::Uuid;
 
 /// Convert a progenitor `Error<ErrorResponse>` into our typed [`BrokkrError`].
@@ -109,6 +109,10 @@ async fn main() -> ExitCode {
     run!(
         "WS-10/13: telemetry history + ws connections via wrapper",
         scenario_telemetry_and_ws_diagnostics(&base_url, &admin_pak)
+    );
+    run!(
+        "I-0021: submit_manifests + idempotent apply (folder helpers)",
+        scenario_manifest_apply(&base_url, &admin_pak)
     );
 
     println!("══════════════════════════════════════════════════════════════════");
@@ -598,4 +602,94 @@ fn last4(s: &str) -> String {
     } else {
         s[len - 4..].to_string()
     }
+}
+
+
+/// BROKKR-T-0195: the manifest folder helpers — `submit_manifests` on an
+/// existing stack, and idempotent `apply` (create → unchanged → updated).
+async fn scenario_manifest_apply(base_url: &str, admin_pak: &str) -> Result<()> {
+    let admin = client(base_url, admin_pak)?;
+
+    // admin creates a generator → generator PAK (apply needs a generator).
+    let gen_name = unique("sdk-contract-rust-apply-gen");
+    let gen_resp = admin
+        .api()
+        .create_generator()
+        .body(NewGenerator::builder().name(gen_name).description(Some("apply contract".to_string())))
+        .send()
+        .await
+        .map_err(berr)
+        .context("create_generator")?
+        .into_inner();
+    let generator_id = gen_resp.generator.id;
+    let gen = client(base_url, &gen_resp.pak)?;
+
+    // A temp folder of manifests, intentionally unsorted on disk.
+    let dir = tempfile::tempdir().context("tempdir")?;
+    std::fs::write(
+        dir.path().join("02-cm.yaml"),
+        "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: apply-cm\n",
+    )?;
+    std::fs::write(
+        dir.path().join("01-ns.yaml"),
+        "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: apply-ns\n",
+    )?;
+
+    let stack_name = unique("sdk-contract-rust-apply-stack");
+
+    // First apply → Created, stack auto-created, label set.
+    println!("  → [generator] apply folder (expect Created)");
+    match gen.apply(&stack_name, dir.path(), &["env:contract".to_string()]).await? {
+        ApplyOutcome::Created(obj) => {
+            if obj.is_deletion_marker {
+                return Err(anyhow!("first apply should not be a deletion marker"));
+            }
+        }
+        other => return Err(anyhow!("expected Created, got {other:?}")),
+    }
+
+    // Second apply, unchanged folder → Unchanged (no new revision).
+    println!("  → [generator] apply same folder (expect Unchanged)");
+    match gen.apply(&stack_name, dir.path(), &["env:contract".to_string()]).await? {
+        ApplyOutcome::Unchanged => {}
+        other => return Err(anyhow!("expected Unchanged, got {other:?}")),
+    }
+
+    // Mutate the folder → Updated.
+    std::fs::write(
+        dir.path().join("03-svc.yaml"),
+        "apiVersion: v1\nkind: Service\nmetadata:\n  name: apply-svc\nspec:\n  selector:\n    app: x\n  ports:\n  - port: 80\n",
+    )?;
+    println!("  → [generator] apply changed folder (expect Updated)");
+    match gen.apply(&stack_name, dir.path(), &["env:contract".to_string()]).await? {
+        ApplyOutcome::Updated(_) => {}
+        other => return Err(anyhow!("expected Updated, got {other:?}")),
+    }
+
+    // The stack now exists and carries the targeting label.
+    let stacks = gen.api().list_stacks().send().await.map_err(berr)?.into_inner();
+    let stack = stacks
+        .iter()
+        .find(|s| s.name == stack_name)
+        .ok_or_else(|| anyhow!("apply did not create the named stack"))?;
+    let labels = gen
+        .api()
+        .stacks_list_labels()
+        .id(stack.id)
+        .send()
+        .await
+        .map_err(berr)?
+        .into_inner();
+    if !labels.iter().any(|l| l.label == "env:contract") {
+        return Err(anyhow!("targeting label was not applied"));
+    }
+
+    // submit_manifests against the existing stack id returns a new object.
+    println!("  → [generator] submit_manifests on stack id");
+    let obj = gen.submit_manifests(stack.id, dir.path()).await?;
+    if obj.stack_id != stack.id {
+        return Err(anyhow!("submit_manifests returned object for the wrong stack"));
+    }
+
+    Ok(())
 }

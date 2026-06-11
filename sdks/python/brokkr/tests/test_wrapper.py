@@ -139,3 +139,60 @@ def test_template_generator_reexport_resolves_to_generated_type() -> None:
     # The wrapper re-exports the generated `Generator` model under a less
     # confusable name. Both should point at the same class.
     assert TemplateGenerator is generated_models.Generator
+
+
+# --- BROKKR-T-0196: manifest folder helpers ---
+
+from pathlib import Path
+
+from brokkr.client import _read_manifests, _sha256_hex
+
+
+def _write(d: Path, name: str, content: str) -> None:
+    (d / name).write_text(content)
+
+
+def test_read_manifests_concatenates_folder_sorted(tmp_path: Path) -> None:
+    _write(tmp_path, "02-cm.yaml", "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: c\n")
+    _write(tmp_path, "01-ns.yaml", "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: n\n")
+    _write(tmp_path, "notes.txt", "ignored")
+    stream = _read_manifests(tmp_path)
+    assert stream.index("kind: Namespace") < stream.index("kind: ConfigMap")
+    assert "\n---\n" in stream
+    assert "ignored" not in stream
+
+
+def test_read_manifests_single_file_multidoc(tmp_path: Path) -> None:
+    _write(
+        tmp_path,
+        "all.yaml",
+        "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: a\n---\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: b\n",
+    )
+    stream = _read_manifests(tmp_path / "all.yaml")
+    assert "kind: Namespace" in stream and "kind: ConfigMap" in stream
+
+
+def test_read_manifests_rejects_missing_apiversion_or_kind(tmp_path: Path) -> None:
+    _write(tmp_path, "bad.yaml", "kind: ConfigMap\nmetadata:\n  name: x\n")
+    with pytest.raises(BrokkrError):
+        _read_manifests(tmp_path)
+
+
+def test_read_manifests_rejects_malformed_yaml(tmp_path: Path) -> None:
+    _write(tmp_path, "bad.yaml", "kind: : : [unbalanced")
+    with pytest.raises(BrokkrError):
+        _read_manifests(tmp_path)
+
+
+def test_read_manifests_errors_on_empty_and_missing(tmp_path: Path) -> None:
+    with pytest.raises(BrokkrError):
+        _read_manifests(tmp_path)  # empty dir
+    with pytest.raises(BrokkrError):
+        _read_manifests(tmp_path / "nope")  # missing path
+
+
+def test_sha256_hex_matches_known_vector() -> None:
+    assert _sha256_hex("") == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    a = "apiVersion: v1\nkind: ConfigMap\n"
+    assert _sha256_hex(a) == _sha256_hex(a)
+    assert _sha256_hex(a) != _sha256_hex("apiVersion: v1\nkind: Secret\n")

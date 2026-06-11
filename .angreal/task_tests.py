@@ -205,6 +205,8 @@ def run_sdk_contract_python():
                 "--quiet",
                 "-e",
                 "sdks/python/brokkr-client",
+                "-e",
+                "sdks/python/brokkr",
                 "pytest>=8.0",
             ],
         ]
@@ -224,6 +226,8 @@ def run_sdk_contract_python():
                 "--quiet",
                 "-e",
                 "sdks/python/brokkr-client",
+                "-e",
+                "sdks/python/brokkr",
                 "pytest>=8.0",
             ],
             cwd=cwd,

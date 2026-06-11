@@ -15,13 +15,22 @@
  */
 
 import {
+  type AuthResponse,
   type BrokkrApi,
+  type DeploymentObject,
   type K8sEventHistoryResponse,
   type PodLogHistoryResponse,
+  type Stack,
   type WsConnectionsResponse,
   createBrokkrClient,
 } from "./index.js";
 import { BrokkrError } from "./error.js";
+
+/** Outcome of {@link BrokkrClient.apply}. */
+export type ApplyResult =
+  | { status: "created"; deploymentObject: DeploymentObject }
+  | { status: "updated"; deploymentObject: DeploymentObject }
+  | { status: "unchanged" };
 
 export interface TelemetryHistoryQuery {
   /** Earliest `created_at` to include (ISO-8601). Clamped server-side
@@ -142,6 +151,101 @@ export class BrokkrClient {
     );
   }
 
+  // -------------------------------------------------------------------
+  // Manifest submission helpers (BROKKR-I-0021). Node-only: they read the
+  // filesystem via dynamic imports so the browser bundle stays clean.
+  // -------------------------------------------------------------------
+
+  /**
+   * Read a folder (top-level `*.yaml`/`*.yml`, sorted) or a single file of
+   * manifests, concatenate into one multi-document YAML stream, and submit it
+   * as a new deployment object on an existing stack. Node-only.
+   */
+  async submitManifests(
+    stackId: string,
+    path: string,
+  ): Promise<DeploymentObject> {
+    const yaml = await readManifests(path);
+    return this.retry<DeploymentObject>((api) =>
+      api.POST("/stacks/{id}/deployment-objects", {
+        params: { path: { id: stackId } },
+        body: { yaml_content: yaml, is_deletion_marker: false },
+      }),
+    );
+  }
+
+  /**
+   * Idempotently make a folder of manifests the desired state of the stack
+   * named `stackName`, creating the stack if needed, applying `targeting`
+   * labels for fan-out, and submitting a new revision only when the bundle
+   * changed. Requires a generator PAK. Node-only.
+   */
+  async apply(
+    stackName: string,
+    path: string,
+    targeting: string[] = [],
+  ): Promise<ApplyResult> {
+    const yaml = await readManifests(path);
+    const checksum = await sha256Hex(yaml);
+
+    const auth = await this.retry<AuthResponse>((api) =>
+      api.POST("/auth/pak", {}),
+    );
+    const generatorId = auth.generator;
+    if (!generatorId) {
+      throw new BrokkrError({
+        message:
+          "apply by name requires a generator PAK; admin callers should create the stack explicitly and use submitManifests",
+      });
+    }
+
+    const stacks = await this.retry<Stack[]>((api) => api.GET("/stacks", {}));
+    let stack = stacks.find((s) => s.name === stackName);
+    if (!stack) {
+      stack = await this.retry<Stack>((api) =>
+        api.POST("/stacks", {
+          body: { name: stackName, generator_id: generatorId },
+        }),
+      );
+    }
+    const stackId = stack.id;
+
+    // Targeting labels: a 409 means the label is already present — fine.
+    for (const label of targeting) {
+      const res = await this.api.POST("/stacks/{id}/labels", {
+        params: { path: { id: stackId } },
+        body: label,
+      });
+      if (res.error !== undefined && res.response.status !== 409) {
+        throw BrokkrError.fromOpenapiFetch(res.error, res.response);
+      }
+    }
+
+    const objects = await this.retry<DeploymentObject[]>((api) =>
+      api.GET("/stacks/{id}/deployment-objects", {
+        params: { path: { id: stackId } },
+      }),
+    );
+    const latest = objects.reduce<DeploymentObject | undefined>(
+      (acc, o) => (acc && acc.sequence_id >= o.sequence_id ? acc : o),
+      undefined,
+    );
+    if (latest && latest.yaml_checksum === checksum) {
+      return { status: "unchanged" };
+    }
+    const hadPrior = objects.length > 0;
+
+    const object = await this.retry<DeploymentObject>((api) =>
+      api.POST("/stacks/{id}/deployment-objects", {
+        params: { path: { id: stackId } },
+        body: { yaml_content: yaml, is_deletion_marker: false },
+      }),
+    );
+    return hadPrior
+      ? { status: "updated", deploymentObject: object }
+      : { status: "created", deploymentObject: object };
+  }
+
   /**
    * Open a live WebSocket subscription to a stack's event + log tail.
    * The URL is computed from the configured `baseUrl` (http→ws,
@@ -259,4 +363,69 @@ function mergeSignals(signals: AbortSignal[]): AbortSignal {
     });
   }
   return controller.signal;
+}
+
+// -------------------------------------------------------------------
+// Node-only manifest helpers (BROKKR-T-0197). Dynamic imports keep
+// `node:*` out of the top-level module graph so browser bundles that
+// never call submitManifests/apply stay clean.
+// -------------------------------------------------------------------
+
+/**
+ * Read a manifest path into one validated multi-document YAML stream. `path`
+ * may be a single file or a directory; for a directory, top-level
+ * `*.yaml`/`*.yml` files are concatenated in sorted-name order. Each non-empty
+ * document is checked for `apiVersion` and `kind` (the broker validates the
+ * full parse on ingest).
+ */
+export async function readManifests(path: string): Promise<string> {
+  const fs = await import("node:fs/promises");
+  const nodePath = await import("node:path");
+
+  const stat = await fs.stat(path).catch(() => undefined);
+  if (!stat) {
+    throw new BrokkrError({ message: `path not found: ${path}` });
+  }
+
+  let files: string[];
+  if (stat.isDirectory()) {
+    const entries = await fs.readdir(path);
+    files = entries
+      .filter((name) => name.endsWith(".yaml") || name.endsWith(".yml"))
+      .sort()
+      .map((name) => nodePath.join(path, name));
+  } else {
+    files = [path];
+  }
+  if (files.length === 0) {
+    throw new BrokkrError({
+      message: `no .yaml/.yml manifests found in ${path}`,
+    });
+  }
+
+  const parts: string[] = [];
+  for (const file of files) {
+    const content = await fs.readFile(file, "utf8");
+    for (const doc of content.split(/^---\s*$/m)) {
+      if (doc.trim() === "") continue;
+      const hasApiVersion = /^apiVersion:/m.test(doc);
+      const hasKind = /^kind:/m.test(doc);
+      if (!hasApiVersion || !hasKind) {
+        throw new BrokkrError({
+          message: `${file}: every manifest document must have apiVersion and kind`,
+        });
+      }
+    }
+    parts.push(content.replace(/\s+$/, ""));
+  }
+  return `${parts.join("\n---\n")}\n`;
+}
+
+/**
+ * Lowercase hex SHA-256, matching the broker's deployment-object checksum so
+ * {@link BrokkrClient.apply} can detect an unchanged bundle. Node-only.
+ */
+export async function sha256Hex(content: string): Promise<string> {
+  const { createHash } = await import("node:crypto");
+  return createHash("sha256").update(content, "utf8").digest("hex");
 }

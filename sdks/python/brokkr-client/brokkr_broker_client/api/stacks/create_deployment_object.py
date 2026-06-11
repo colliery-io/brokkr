@@ -10,21 +10,34 @@ from ...client import AuthenticatedClient, Client
 from ...models.create_deployment_object_request import CreateDeploymentObjectRequest
 from ...models.deployment_object import DeploymentObject
 from ...models.error_response import ErrorResponse
-from ...types import Response
+from ...types import UNSET, Response, Unset
 
 
 def _get_kwargs(
     id: UUID,
     *,
     body: CreateDeploymentObjectRequest,
+    deletion_marker: bool | None | Unset = UNSET,
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
+
+    params: dict[str, Any] = {}
+
+    json_deletion_marker: bool | None | Unset
+    if isinstance(deletion_marker, Unset):
+        json_deletion_marker = UNSET
+    else:
+        json_deletion_marker = deletion_marker
+    params["deletion_marker"] = json_deletion_marker
+
+    params = {k: v for k, v in params.items() if v is not UNSET and v is not None}
 
     _kwargs: dict[str, Any] = {
         "method": "post",
         "url": "/stacks/{id}/deployment-objects".format(
             id=quote(str(id), safe=""),
         ),
+        "params": params,
     }
 
     _kwargs["json"] = body.to_dict()
@@ -85,10 +98,12 @@ def sync_detailed(
     *,
     client: AuthenticatedClient,
     body: CreateDeploymentObjectRequest,
+    deletion_marker: bool | None | Unset = UNSET,
 ) -> Response[DeploymentObject | ErrorResponse]:
     """
     Args:
         id (UUID):
+        deletion_marker (bool | None | Unset):
         body (CreateDeploymentObjectRequest): Wire DTO for creating a deployment object via the
             public API.
 
@@ -106,6 +121,7 @@ def sync_detailed(
     kwargs = _get_kwargs(
         id=id,
         body=body,
+        deletion_marker=deletion_marker,
     )
 
     response = client.get_httpx_client().request(
@@ -120,10 +136,12 @@ def sync(
     *,
     client: AuthenticatedClient,
     body: CreateDeploymentObjectRequest,
+    deletion_marker: bool | None | Unset = UNSET,
 ) -> DeploymentObject | ErrorResponse | None:
     """
     Args:
         id (UUID):
+        deletion_marker (bool | None | Unset):
         body (CreateDeploymentObjectRequest): Wire DTO for creating a deployment object via the
             public API.
 
@@ -142,6 +160,7 @@ def sync(
         id=id,
         client=client,
         body=body,
+        deletion_marker=deletion_marker,
     ).parsed
 
 
@@ -150,10 +169,12 @@ async def asyncio_detailed(
     *,
     client: AuthenticatedClient,
     body: CreateDeploymentObjectRequest,
+    deletion_marker: bool | None | Unset = UNSET,
 ) -> Response[DeploymentObject | ErrorResponse]:
     """
     Args:
         id (UUID):
+        deletion_marker (bool | None | Unset):
         body (CreateDeploymentObjectRequest): Wire DTO for creating a deployment object via the
             public API.
 
@@ -171,6 +192,7 @@ async def asyncio_detailed(
     kwargs = _get_kwargs(
         id=id,
         body=body,
+        deletion_marker=deletion_marker,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -183,10 +205,12 @@ async def asyncio(
     *,
     client: AuthenticatedClient,
     body: CreateDeploymentObjectRequest,
+    deletion_marker: bool | None | Unset = UNSET,
 ) -> DeploymentObject | ErrorResponse | None:
     """
     Args:
         id (UUID):
+        deletion_marker (bool | None | Unset):
         body (CreateDeploymentObjectRequest): Wire DTO for creating a deployment object via the
             public API.
 
@@ -206,5 +230,6 @@ async def asyncio(
             id=id,
             client=client,
             body=body,
+            deletion_marker=deletion_marker,
         )
     ).parsed

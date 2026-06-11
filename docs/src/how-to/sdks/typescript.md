@@ -39,6 +39,26 @@ if (data) {
 }
 ```
 
+## Submit a folder of manifests (Node)
+
+You usually have a *folder* of manifests, not a hand-built YAML blob. `submitManifests` reads the folder (top-level `*.yaml`/`*.yml`, sorted) or a single file, concatenates it into one multi-document stream, validates each document has `apiVersion`+`kind`, and submits it as a new deployment object on an existing stack. These helpers are **Node-only** (they read the filesystem via dynamic imports, so the browser bundle stays clean):
+
+```typescript
+const object = await client.submitManifests(stackId, "./manifests");
+console.log("submitted revision", object.sequence_id);
+```
+
+For the control-plane loop, `apply` is idempotent: it creates the stack by name if needed, applies targeting labels for fan-out, and submits a new revision **only when the bundle changed**. It requires a generator PAK (the stack is owned by that generator):
+
+```typescript
+import type { ApplyResult } from "@colliery-io/brokkr-client";
+
+const result: ApplyResult = await client.apply("payments", "./manifests", ["env:prod", "region:us"]);
+console.log(result.status); // "created" | "updated" | "unchanged"
+```
+
+A stack's desired state is the single latest deployment object, and the agent reconciles + prunes — so removing a file and re-applying deletes that resource on the next reconcile. Ordering is forgiving: the agent front-loads `Namespace`/`CustomResourceDefinition` objects.
+
 ## Handle one error
 
 `BrokkrError` carries the broker's stable wire `code` plus the HTTP `status` and the typed `ErrorResponse` body:

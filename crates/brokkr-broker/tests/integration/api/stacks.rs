@@ -457,6 +457,50 @@ async fn test_add_stack_label() {
 }
 
 #[tokio::test]
+async fn test_add_stack_label_duplicate_returns_409() {
+    // Re-adding an existing label hits the UNIQUE (stack_id, label) constraint.
+    // It must surface as 409 unique_violation (not a blanket 500) so idempotent
+    // callers like the SDK `apply` helper can treat it as a no-op.
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+    let admin_pak = fixture.admin_pak.clone();
+
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
+    let stack = fixture.create_test_stack("Test Stack".to_string(), None, generator.id);
+    fixture.create_test_stack_label(stack.id, "dup_label".to_string());
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/stacks/{}/labels", stack.id))
+                .header("Content-Type", "application/json")
+                .header("Authorization", &admin_pak)
+                .body(Body::from(
+                    serde_json::to_string(&"dup_label".to_string()).unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let status = response.status();
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+    assert_eq!(
+        status,
+        StatusCode::CONFLICT,
+        "duplicate label should be 409, got body: {json}"
+    );
+    assert_eq!(json["code"], "unique_violation");
+}
+
+#[tokio::test]
 async fn test_remove_stack_label() {
     let fixture = TestFixture::new();
     let app = fixture.create_test_router().with_state(fixture.dal.clone());
@@ -780,4 +824,183 @@ async fn test_add_stack_annotation_with_wrong_generator_pak() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+// --- BROKKR-T-0194: raw-YAML submission + Accept round-trip ---
+
+#[tokio::test]
+async fn test_create_deployment_object_yaml_body() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+    let admin_pak = fixture.admin_pak.clone();
+    let generator =
+        fixture.create_test_generator("yaml-gen".to_string(), None, "h".to_string());
+    let stack = fixture.create_test_stack("yaml-stack".to_string(), None, generator.id);
+
+    let yaml = "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: foo\n---\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: bar\n";
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/stacks/{}/deployment-objects", stack.id))
+                .header("Content-Type", "application/yaml")
+                .header("Authorization", &admin_pak)
+                .body(Body::from(yaml))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let created: DeploymentObject = serde_json::from_slice(&body).unwrap();
+    assert_eq!(created.yaml_content, yaml, "raw YAML body stored verbatim");
+    assert!(!created.is_deletion_marker);
+    assert!(!created.yaml_checksum.is_empty());
+}
+
+#[tokio::test]
+async fn test_create_deployment_object_yaml_deletion_marker_empty() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+    let admin_pak = fixture.admin_pak.clone();
+    let generator =
+        fixture.create_test_generator("del-gen".to_string(), None, "h".to_string());
+    let stack = fixture.create_test_stack("del-stack".to_string(), None, generator.id);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!(
+                    "/api/v1/stacks/{}/deployment-objects?deletion_marker=true",
+                    stack.id
+                ))
+                .header("Content-Type", "application/yaml")
+                .header("Authorization", &admin_pak)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.status(),
+        StatusCode::CREATED,
+        "empty body + deletion_marker=true should be accepted"
+    );
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let created: DeploymentObject = serde_json::from_slice(&body).unwrap();
+    assert!(created.is_deletion_marker);
+    assert!(created.yaml_content.is_empty());
+}
+
+#[tokio::test]
+async fn test_create_deployment_object_malformed_yaml_rejected() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+    let admin_pak = fixture.admin_pak.clone();
+    let generator =
+        fixture.create_test_generator("bad-gen".to_string(), None, "h".to_string());
+    let stack = fixture.create_test_stack("bad-stack".to_string(), None, generator.id);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/stacks/{}/deployment-objects", stack.id))
+                .header("Content-Type", "application/yaml")
+                .header("Authorization", &admin_pak)
+                .body(Body::from("kind: : : [unbalanced"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn test_get_deployment_object_accept_yaml_roundtrip() {
+    let fixture = TestFixture::new();
+    let admin_pak = fixture.admin_pak.clone();
+    let generator =
+        fixture.create_test_generator("rt-gen".to_string(), None, "h".to_string());
+    let stack = fixture.create_test_stack("rt-stack".to_string(), None, generator.id);
+    let yaml = "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: rt\n";
+
+    // create via YAML body
+    let created: DeploymentObject = {
+        let app = fixture.create_test_router().with_state(fixture.dal.clone());
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/api/v1/stacks/{}/deployment-objects", stack.id))
+                    .header("Content-Type", "application/yaml")
+                    .header("Authorization", &admin_pak)
+                    .body(Body::from(yaml))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        let b = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        serde_json::from_slice(&b).unwrap()
+    };
+
+    // GET it back as raw YAML
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/api/v1/deployment-objects/{}", created.id))
+                .header("Accept", "application/yaml")
+                .header("Authorization", &admin_pak)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::OK);
+    let ct = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    assert!(ct.starts_with("application/yaml"), "got content-type {ct}");
+    let body = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    assert_eq!(String::from_utf8(body.to_vec()).unwrap(), yaml);
+}
+
+#[tokio::test]
+async fn test_create_deployment_object_json_still_works() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+    let admin_pak = fixture.admin_pak.clone();
+    let generator =
+        fixture.create_test_generator("json-gen".to_string(), None, "h".to_string());
+    let stack = fixture.create_test_stack("json-stack".to_string(), None, generator.id);
+
+    let payload = serde_json::json!({
+        "yaml_content": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: j\n",
+        "is_deletion_marker": false
+    });
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/stacks/{}/deployment-objects", stack.id))
+                .header("Content-Type", "application/json")
+                .header("Authorization", &admin_pak)
+                .body(Body::from(serde_json::to_string(&payload).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
 }

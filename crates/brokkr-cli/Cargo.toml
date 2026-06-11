@@ -1,0 +1,26 @@
+[package]
+name = "brokkr-cli"
+version = "0.6.0"
+edition.workspace = true
+rust-version.workspace = true
+description = "Command-line client for the Brokkr control plane: apply a folder of Kubernetes manifests as a stack's desired state."
+license = "Elastic-2.0"
+repository = "https://github.com/colliery-io/brokkr"
+homepage = "https://github.com/colliery-io/brokkr"
+
+[[bin]]
+name = "brokkr"
+path = "src/main.rs"
+
+[dependencies]
+# Internal crates
+brokkr-client = { path = "../brokkr-client" }
+
+clap = { workspace = true, features = ["derive", "env"] }
+tokio = { workspace = true }
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+dirs = "5"
+
+[dev-dependencies]
+tempfile = "3"

@@ -11,6 +11,7 @@ dependencies = [
     # for installed releases.
     "brokkr-client-generated",
     "httpx>=0.23.0,<0.29.0",
+    "pyyaml>=6",
 ]
 
 [project.urls]
@@ -25,8 +26,13 @@ test = [
     "respx>=0.21",
 ]
 
+# Dev-only resolution of the generated client to the in-tree path. `editable`
+# keeps it consistent with the contract suite, which installs the generated
+# package with `-e`; without it uv sees the same path required two ways
+# (editable vs not) and refuses. Ignored when building the published wheel,
+# which depends on `brokkr-client-generated` from PyPI.
 [tool.uv.sources]
-brokkr-client-generated = { path = "../brokkr-client" }
+brokkr-client-generated = { path = "../brokkr-client", editable = true }
 
 [tool.uv.build-backend]
 module-name = "brokkr"

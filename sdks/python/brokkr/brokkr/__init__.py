@@ -1,6 +1,6 @@
 """Ergonomic Python wrapper around brokkr-broker-client."""
 
-from brokkr.client import BrokkrClient
+from brokkr.client import ApplyResult, BrokkrClient
 from brokkr.errors import BrokkrError
 
 # Re-export the typed ErrorResponse model so consumers don't need to dig into
@@ -13,4 +13,4 @@ from brokkr_broker_client.models import ErrorResponse
 # `brokkr_broker_client.models.Generator`.
 from brokkr_broker_client.models import Generator as TemplateGenerator
 
-__all__ = ["BrokkrClient", "BrokkrError", "ErrorResponse", "TemplateGenerator"]
+__all__ = ["ApplyResult", "BrokkrClient", "BrokkrError", "ErrorResponse", "TemplateGenerator"]

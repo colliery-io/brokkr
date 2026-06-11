@@ -25,3 +25,4 @@ anyhow = "1"
 # raw progenitor `Client::new_with_client`. All scenario traffic goes through
 # the SDK.
 reqwest = { version = "0.13", default-features = false, features = ["json"] }
+tempfile = "3"

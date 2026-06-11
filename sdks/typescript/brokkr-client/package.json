@@ -36,6 +36,7 @@
     "openapi-fetch": "0.17.0"
   },
   "devDependencies": {
+    "@types/node": "^25.9.3",
     "openapi-typescript": "7.13.0",
     "typescript": "5.7.3",
     "vitest": "3.0.4"

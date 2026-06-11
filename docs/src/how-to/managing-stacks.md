@@ -197,7 +197,33 @@ Once a stack exists and is targeted to agents, you populate it with deployment o
 
 ### Creating Deployment Objects
 
-Submit Kubernetes YAML as a deployment object:
+The deployment object's body is a single multi-document YAML stream (the complete desired state for the stack). The endpoint accepts it two ways.
+
+**Raw YAML (recommended).** Send the manifest as the request body with `Content-Type: application/yaml` — no JSON wrapping or newline escaping:
+
+```bash
+curl -X POST "http://localhost:3000/api/v1/stacks/$STACK_ID/deployment-objects" \
+  -H "Authorization: Bearer $ADMIN_PAK" \
+  -H "Content-Type: application/yaml" \
+  --data-binary @resources.yaml
+```
+
+Because the body is just a YAML stream, anything that emits one pipes straight in:
+
+```bash
+kustomize build ./overlay | curl -X POST ".../stacks/$STACK_ID/deployment-objects" \
+  -H "Authorization: Bearer $ADMIN_PAK" -H "Content-Type: application/yaml" --data-binary @-
+helm template app ./chart -f values.yaml | curl ... --data-binary @-
+```
+
+To submit a deletion marker this way, add `?deletion_marker=true` (the body may be empty):
+
+```bash
+curl -X POST ".../stacks/$STACK_ID/deployment-objects?deletion_marker=true" \
+  -H "Authorization: Bearer $ADMIN_PAK" -H "Content-Type: application/yaml" --data-binary ''
+```
+
+**JSON envelope.** The original form still works, with the YAML embedded as a string field:
 
 ```bash
 curl -X POST "http://localhost:3000/api/v1/stacks/$STACK_ID/deployment-objects" \
@@ -206,7 +232,13 @@ curl -X POST "http://localhost:3000/api/v1/stacks/$STACK_ID/deployment-objects" 
   -d "$(jq -n --arg yaml "$(cat resources.yaml)" '{yaml_content: $yaml, is_deletion_marker: false}')"
 ```
 
-Each deployment object receives a sequence ID that guarantees ordering. Agents process deployment objects in sequence order, ensuring resources are applied in the intended order.
+Either way the broker validates the YAML parses on ingest (malformed input is rejected with `400 invalid_deployment_object`) and computes the checksum. Each deployment object receives a sequence ID that guarantees ordering; the latest is the stack's desired state.
+
+You can also pull a deployment object back out as raw YAML with `Accept: application/yaml`:
+
+```bash
+curl ".../deployment-objects/$OBJECT_ID" -H "Authorization: Bearer $ADMIN_PAK" -H "Accept: application/yaml"
+```
 
 ### Listing Deployment Objects
 

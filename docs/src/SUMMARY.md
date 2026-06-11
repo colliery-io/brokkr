@@ -26,6 +26,7 @@
   - [Building & Publishing Images](./how-to/build-and-publish-images.md)
   - [Configuring Webhooks](./how-to/webhooks.md)
   - [Managing Stacks](./how-to/managing-stacks.md)
+  - [Submitting a Folder of Manifests (CLI)](./how-to/cli-apply.md)
   - [Working with Generators](./how-to/generators.md)
   - [Monitoring Deployment Health](./how-to/deployment-health.md)
   - [Streaming Pod Logs & Live Tail](./how-to/log-streaming.md)

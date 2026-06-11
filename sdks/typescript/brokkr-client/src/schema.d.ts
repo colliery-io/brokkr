@@ -5020,7 +5020,13 @@ export interface operations {
     };
     create_deployment_object: {
         parameters: {
-            query?: never;
+            query?: {
+                /**
+                 * @description Marks the submission as a deletion marker. Only consulted on the
+                 *     raw-YAML path; on the JSON path the body field wins.
+                 */
+                deletion_marker?: boolean | null;
+            };
             header?: never;
             path: {
                 /** @description Stack ID */

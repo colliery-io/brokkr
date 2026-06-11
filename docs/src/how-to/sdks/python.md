@@ -53,6 +53,26 @@ agents = await list_agents.asyncio(client=client.api)
 print(f"{len(agents)} agents")
 ```
 
+## Submit a folder of manifests
+
+You usually have a *folder* of manifests, not a hand-built YAML blob. `submit_manifests` reads the folder (top-level `*.yaml`/`*.yml`, sorted) or a single file, concatenates it into one multi-document stream, validates each document has `apiVersion`+`kind`, and submits it as a new deployment object on an existing stack:
+
+```python
+obj = await client.submit_manifests(stack_id, "./manifests")
+print("submitted revision", obj.sequence_id)
+```
+
+For the control-plane loop, `apply` is idempotent: it creates the stack by name if needed, applies targeting labels for fan-out, and submits a new revision **only when the bundle changed**. It requires a generator PAK (the stack is owned by that generator):
+
+```python
+from brokkr import ApplyResult
+
+result: ApplyResult = await client.apply("payments", "./manifests", ["env:prod", "region:us"])
+print(result.status)  # "created" | "updated" | "unchanged"
+```
+
+A stack's desired state is the single latest deployment object, and the agent reconciles + prunes — so removing a file and re-applying deletes that resource on the next reconcile. Ordering is forgiving: the agent front-loads `Namespace`/`CustomResourceDefinition` objects.
+
 ## Handle one error
 
 Direct calls on the generated modules do **not** raise `BrokkrError`. The generator folds documented 4xx/5xx bodies into the return union, so a failed call returns an `ErrorResponse` (and transport failures surface as `httpx` exceptions). `BrokkrError` enters the picture in two ways: route the call through `client.retry()`, which converts both cases into raised `BrokkrError`s, or convert an `ErrorResponse` yourself with `BrokkrError.from_response()`.
