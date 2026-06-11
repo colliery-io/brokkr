@@ -3,9 +3,10 @@ name = "brokkr-wire"
 version = "0.6.0"
 edition.workspace = true
 rust-version.workspace = true
-license = "Elastic-2.0"
+license.workspace = true
 description = "Internal wire protocol for the broker↔agent WebSocket channel. Not a public API."
-repository = "https://github.com/colliery-io/brokkr"
+repository.workspace = true
+homepage.workspace = true
 publish = false
 
 [dependencies]

@@ -3,6 +3,10 @@ name = "brokkr-agent"
 version = "0.6.0"
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Brokkr cluster agent: a pull-based reconciler that applies a stack's desired state into a Kubernetes cluster."
 
 [lib]
 name = "brokkr_agent"
