@@ -1,6 +1,6 @@
 # Code Index
 
-> Generated: 2026-06-11T15:59:10Z | 398 files | JavaScript, Python, Rust, TypeScript
+> Generated: 2026-06-11T18:57:34Z | 398 files | JavaScript, Python, Rust, TypeScript
 
 ## Project Structure
 
@@ -6028,15 +6028,18 @@
 
 #### sdks/python/brokkr/brokkr/client.py
 
-- pub `BrokkrClient` class L31-222 — `{ __init__, max_retries, initial_backoff, retry, submit_manifests, apply }` — Ergonomic Brokkr broker client.
+- pub `BrokkrClient` class L31-302 — `{ __init__, max_retries, initial_backoff, retry, submit_manifests, apply, list_t...` — Ergonomic Brokkr broker client.
 - pub `__init__` method L40-69 — `def __init__( self, base_url: str, *, token: str | None = None, request_timeout:...`
-- pub `retry` method L79-115 — `def retry(self, op: Callable[[Any], Awaitable[T]]) -> T` — Run ``op(client)`` with exponential backoff on retryable failures.
-- pub `submit_manifests` method L117-136 — `def submit_manifests(self, stack_id: UUID, path: Any) -> Any` — Read a folder (or file) of manifests, concatenate into one
-- pub `apply` method L138-222 — `def apply( self, stack_name: str, path: Any, targeting: Optional[Sequence[str]] ...` — Idempotently make a folder of manifests the desired state of the
-- pub `ApplyResult` class L227-231 — `-` — Outcome of :meth:`BrokkrClient.apply`.
--  `_expect` function L234-240 — `def _expect(result: Any, what: str) -> Any` — Unwrap a generated ``.asyncio`` result, raising on error/None.
--  `_read_manifests` function L243-277 — `def _read_manifests(path: Any) -> str` — Read a manifest path into one validated multi-document YAML stream.
--  `_sha256_hex` function L280-282 — `def _sha256_hex(content: str) -> str` — Lowercase hex SHA-256, matching the broker's deployment-object checksum.
+- pub `retry` method L79-125 — `def retry(self, op: Callable[[Any], Awaitable[T]]) -> T` — Run ``op(client)`` with exponential backoff on retryable failures.
+- pub `submit_manifests` method L127-146 — `def submit_manifests(self, stack_id: UUID, path: Any) -> Any` — Read a folder (or file) of manifests, concatenate into one
+- pub `apply` method L148-243 — `def apply( self, stack_name: str, path: Any, targeting: Optional[Sequence[str]] ...` — Idempotently make a folder of manifests the desired state of the
+- pub `list_telemetry_events` method L251-270 — `def list_telemetry_events( self, stack_id: UUID, since: Optional[Any] = None, li...` — Paginated kube-event history for a stack within the retention
+- pub `list_telemetry_logs` method L272-291 — `def list_telemetry_logs( self, stack_id: UUID, since: Optional[Any] = None, limi...` — Paginated pod-log history for a stack within the retention window.
+- pub `list_ws_connections` method L293-302 — `def list_ws_connections(self) -> Any` — Snapshot of agents currently connected on the internal WS channel
+- pub `ApplyResult` class L306-310 — `-` — Outcome of :meth:`BrokkrClient.apply`.
+-  `_expect` function L313-327 — `def _expect(response: Any, what: str) -> Any` — Unwrap a generated ``*_detailed`` Response, raising on error/None with
+-  `_read_manifests` function L330-364 — `def _read_manifests(path: Any) -> str` — Read a manifest path into one validated multi-document YAML stream.
+-  `_sha256_hex` function L367-369 — `def _sha256_hex(content: str) -> str` — Lowercase hex SHA-256, matching the broker's deployment-object checksum.
 
 #### sdks/python/brokkr/brokkr/errors.py
 
@@ -6051,24 +6054,27 @@
 
 #### sdks/python/brokkr/tests/test_wrapper.py
 
-- pub `test_constructs_authenticated_when_token_supplied` function L15-17 — `def test_constructs_authenticated_when_token_supplied() -> None`
-- pub `test_constructs_unauthenticated_when_token_omitted` function L20-22 — `def test_constructs_unauthenticated_when_token_omitted() -> None`
-- pub `test_rejects_invalid_max_retries` function L25-27 — `def test_rejects_invalid_max_retries() -> None`
-- pub `test_rejects_invalid_initial_backoff` function L30-32 — `def test_rejects_invalid_initial_backoff() -> None`
-- pub `test_error_code_and_status_round_trip` function L35-41 — `def test_error_code_and_status_round_trip() -> None`
-- pub `test_transport_error_default_retryable` function L56-59 — `def test_transport_error_default_retryable() -> None`
-- pub `test_retry_returns_on_first_success` function L62-73 — `def test_retry_returns_on_first_success() -> None`
-- pub `test_retry_stops_after_max_attempts_on_transport_error` function L76-88 — `def test_retry_stops_after_max_attempts_on_transport_error() -> None`
-- pub `test_retry_short_circuits_on_non_retryable_status` function L91-111 — `def test_retry_short_circuits_on_non_retryable_status() -> None`
-- pub `test_retry_backoff_doubles` function L114-135 — `def test_retry_backoff_doubles(monkeypatch: pytest.MonkeyPatch) -> None`
-- pub `test_template_generator_reexport_resolves_to_generated_type` function L138-141 — `def test_template_generator_reexport_resolves_to_generated_type() -> None`
-- pub `test_read_manifests_concatenates_folder_sorted` function L155-162 — `def test_read_manifests_concatenates_folder_sorted(tmp_path: Path) -> None`
-- pub `test_read_manifests_single_file_multidoc` function L165-172 — `def test_read_manifests_single_file_multidoc(tmp_path: Path) -> None`
-- pub `test_read_manifests_rejects_missing_apiversion_or_kind` function L175-178 — `def test_read_manifests_rejects_missing_apiversion_or_kind(tmp_path: Path) -> No...`
-- pub `test_read_manifests_rejects_malformed_yaml` function L181-184 — `def test_read_manifests_rejects_malformed_yaml(tmp_path: Path) -> None`
-- pub `test_read_manifests_errors_on_empty_and_missing` function L187-191 — `def test_read_manifests_errors_on_empty_and_missing(tmp_path: Path) -> None`
-- pub `test_sha256_hex_matches_known_vector` function L194-198 — `def test_sha256_hex_matches_known_vector() -> None`
--  `_write` function L151-152 — `def _write(d: Path, name: str, content: str) -> None`
+- pub `test_constructs_authenticated_when_token_supplied` function L22-24 — `def test_constructs_authenticated_when_token_supplied() -> None`
+- pub `test_constructs_unauthenticated_when_token_omitted` function L27-29 — `def test_constructs_unauthenticated_when_token_omitted() -> None`
+- pub `test_rejects_invalid_max_retries` function L32-34 — `def test_rejects_invalid_max_retries() -> None`
+- pub `test_rejects_invalid_initial_backoff` function L37-39 — `def test_rejects_invalid_initial_backoff() -> None`
+- pub `test_error_code_and_status_round_trip` function L42-48 — `def test_error_code_and_status_round_trip() -> None`
+- pub `test_transport_error_default_retryable` function L63-66 — `def test_transport_error_default_retryable() -> None`
+- pub `test_retry_returns_on_first_success` function L69-80 — `def test_retry_returns_on_first_success() -> None`
+- pub `test_retry_retries_retryable_status_then_succeeds` function L83-96 — `def test_retry_retries_retryable_status_then_succeeds() -> None`
+- pub `test_retry_raises_with_real_status_not_fabricated` function L99-115 — `def test_retry_raises_with_real_status_not_fabricated() -> None`
+- pub `test_retry_stops_after_max_attempts_on_transport_error` function L118-130 — `def test_retry_stops_after_max_attempts_on_transport_error() -> None`
+- pub `test_retry_short_circuits_on_non_retryable_status` function L133-148 — `def test_retry_short_circuits_on_non_retryable_status() -> None`
+- pub `test_retry_backoff_doubles` function L151-172 — `def test_retry_backoff_doubles(monkeypatch: pytest.MonkeyPatch) -> None`
+- pub `test_template_generator_reexport_resolves_to_generated_type` function L175-178 — `def test_template_generator_reexport_resolves_to_generated_type() -> None`
+- pub `test_read_manifests_concatenates_folder_sorted` function L192-199 — `def test_read_manifests_concatenates_folder_sorted(tmp_path: Path) -> None`
+- pub `test_read_manifests_single_file_multidoc` function L202-209 — `def test_read_manifests_single_file_multidoc(tmp_path: Path) -> None`
+- pub `test_read_manifests_rejects_missing_apiversion_or_kind` function L212-215 — `def test_read_manifests_rejects_missing_apiversion_or_kind(tmp_path: Path) -> No...`
+- pub `test_read_manifests_rejects_malformed_yaml` function L218-221 — `def test_read_manifests_rejects_malformed_yaml(tmp_path: Path) -> None`
+- pub `test_read_manifests_errors_on_empty_and_missing` function L224-228 — `def test_read_manifests_errors_on_empty_and_missing(tmp_path: Path) -> None`
+- pub `test_sha256_hex_matches_known_vector` function L231-235 — `def test_sha256_hex_matches_known_vector() -> None`
+-  `_resp` function L16-19 — `def _resp(status: int, parsed: object) -> SimpleNamespace` — Stand in for a generated ``*_detailed`` Response (``.status_code`` +
+-  `_write` function L188-189 — `def _write(d: Path, name: str, content: str) -> None`
 
 ### sdks/python/brokkr-client/brokkr_broker_client
 
@@ -7794,22 +7800,22 @@
 - pub `ApplyResult` type L30-33 — `= | { status: "created"; deploymentObject: DeploymentObject } | { status: "updat...`
 - pub `TelemetryHistoryQuery` interface L35-41 — `{ since: : string, limit: : number }`
 - pub `BrokkrClientOptions` interface L43-53 — `{ baseUrl: : string, token: : string, requestTimeoutMs: : number, maxRetries: : ...`
-- pub `BrokkrClient` class L69-317 — `-`
+- pub `BrokkrClient` class L69-329 — `-`
 - pub `constructor` method L75-111 — `constructor(options: BrokkrClientOptions)`
 - pub `listTelemetryEvents` method L122-131 — `listTelemetryEvents( stackId: string, query: TelemetryHistoryQuery = {}, ): Prom...`
 - pub `listTelemetryLogs` method L134-143 — `listTelemetryLogs( stackId: string, query: TelemetryHistoryQuery = {}, ): Promis...`
 - pub `listWsConnections` method L148-152 — `listWsConnections(): Promise<WsConnectionsResponse>`
-- pub `submitManifests` method L164-175 — `submitManifests( stackId: string, path: string, ): Promise<DeploymentObject>`
-- pub `apply` method L183-247 — `apply( stackName: string, path: string, targeting: string[] = [], ): Promise<App...`
-- pub `liveSubscriptionUrl` method L260-272 — `liveSubscriptionUrl(stackId: string): string`
-- pub `retry` method L286-316 — `retry(op: (api: BrokkrApi) => Promise<FetchResult<T>>): Promise<T>`
-- pub `readManifests` function L381-422 — `function readManifests(path: string): Promise<string>`
-- pub `sha256Hex` function L428-431 — `function sha256Hex(content: string): Promise<string>`
+- pub `submitManifests` method L164-179 — `submitManifests( stackId: string, path: string, ): Promise<DeploymentObject>`
+- pub `apply` method L187-259 — `apply( stackName: string, path: string, targeting: string[] = [], ): Promise<App...`
+- pub `liveSubscriptionUrl` method L272-284 — `liveSubscriptionUrl(stackId: string): string`
+- pub `retry` method L298-328 — `retry(op: (api: BrokkrApi) => Promise<FetchResult<T>>): Promise<T>`
+- pub `readManifests` function L393-465 — `function readManifests(path: string): Promise<string>`
+- pub `sha256Hex` function L471-474 — `function sha256Hex(content: string): Promise<string>`
 -  `FetchResult` type L63-67 — `= { data?: T; error?: unknown; response: Response; }`
 -  `customFetch` function L93-102 — `const customFetch = (input, init)`
--  `classify` function L319-347 — `function classify( result: FetchResult<T> | undefined, transportErr: unknown, ):...`
--  `sleep` function L349-351 — `function sleep(ms: number): Promise<void>`
--  `mergeSignals` function L354-366 — `function mergeSignals(signals: AbortSignal[]): AbortSignal`
+-  `classify` function L331-359 — `function classify( result: FetchResult<T> | undefined, transportErr: unknown, ):...`
+-  `sleep` function L361-363 — `function sleep(ms: number): Promise<void>`
+-  `mergeSignals` function L366-378 — `function mergeSignals(signals: AbortSignal[]): AbortSignal`
 
 #### sdks/typescript/brokkr-client/src/error.ts
 
@@ -7854,8 +7860,8 @@
 
 #### sdks/typescript/brokkr-client/src/wrapper.test.ts
 
--  `scriptedFetch` function L11-47 — `function scriptedFetch( steps: Array<{ status: number; body?: object } | { throw...`
--  `impl` function L16-45 — `const impl = (input, init)`
+-  `scriptedFetch` function L15-51 — `function scriptedFetch( steps: Array<{ status: number; body?: object } | { throw...`
+-  `impl` function L20-49 — `const impl = (input, init)`
 
 ### tests/e2e/src
 

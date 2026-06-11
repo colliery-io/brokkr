@@ -4,7 +4,7 @@ level: task
 title: "SDK parity polish: Python telemetry helpers, error wrapping, exports"
 short_code: "BROKKR-T-0214"
 created_at: 2026-06-11T11:02:08.223742+00:00
-updated_at: 2026-06-11T16:58:56.097970+00:00
+updated_at: 2026-06-11T19:21:30.864387+00:00
 parent: sdk-parity-retry-validation-and
 blocked_by: []
 archived: false
@@ -12,7 +12,7 @@ archived: false
 tags:
   - "#task"
   - "#task"
-  - "#phase/active"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -28,6 +28,8 @@ initiative_id: BROKKR-I-0025
 ## Objective
 
 Close the remaining cross-SDK asymmetries from the parity sweep (low/medium severity, batched).
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

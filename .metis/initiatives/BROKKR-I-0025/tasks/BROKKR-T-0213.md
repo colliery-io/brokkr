@@ -4,7 +4,7 @@ level: task
 title: "TS SDK: real YAML validation in readManifests"
 short_code: "BROKKR-T-0213"
 created_at: 2026-06-11T11:02:08.176225+00:00
-updated_at: 2026-06-11T16:55:42.242478+00:00
+updated_at: 2026-06-11T19:21:30.817572+00:00
 parent: sdk-parity-retry-validation-and
 blocked_by: []
 archived: false
@@ -12,7 +12,7 @@ archived: false
 tags:
   - "#task"
   - "#task"
-  - "#phase/active"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -28,6 +28,8 @@ initiative_id: BROKKR-I-0025
 ## Objective
 
 TS `readManifests` validates with regexes (`/^apiVersion:/m`, `/^kind:/m`, split on `/^---\s*$/m` — client.ts:409-417) while Rust/Python fully parse each document. Confirmed divergences: (1) false-accept — `kind: : : [unbalanced` passes TS, is rejected by Rust/Python; because TS validates before networking but the broker rejects on ingest, `apply` leaves a half-created stack (created + labeled, no deployment object); (2) false-reject — a trailing comments-only document (`---\n# comment`) throws in TS, parses to null and is skipped by Rust/Python (wrapper.rs:568-570, client.py:270-271); the regex split can also split inside block scalars containing a `---` line. Also: a subdirectory named `sub.yaml` throws raw `EISDIR` (no isFile filter, client.ts:393-396).
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

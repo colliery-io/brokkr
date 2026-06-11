@@ -4,7 +4,7 @@ level: task
 title: "Python SDK: real retry on HTTP status; stop fabricating BrokkrError.status"
 short_code: "BROKKR-T-0211"
 created_at: 2026-06-11T11:02:08.076118+00:00
-updated_at: 2026-06-11T16:41:25.734327+00:00
+updated_at: 2026-06-11T19:21:30.673490+00:00
 parent: sdk-parity-retry-validation-and
 blocked_by: []
 archived: false
@@ -12,7 +12,7 @@ archived: false
 tags:
   - "#task"
   - "#task"
-  - "#phase/active"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -28,6 +28,8 @@ initiative_id: BROKKR-I-0025
 ## Objective
 
 Two related defects in `sdks/python/brokkr/brokkr/client.py`. (1) The generated client defaults `raise_on_unexpected_status=False` and 408/429/502/503/504 are not documented response codes in the spec, so e.g. a 503 parses to `None` → `retry()` (client.py:100-111) treats it as **success and returns `None` to the caller**; the documented retry-on-status behavior is dead code (only `httpx.HTTPError` transport failures retry). (2) `_expect` hardcodes `status=400` (client.py:239) and the retry union path hardcodes `status=500` (client.py:107) — a 404 surfaces as `BrokkrError(status=400)`, corrupting both user pattern-matching and `is_retryable()`. Rust (wrapper.rs:90-100,479-492) and TS (error.ts) get both right.
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

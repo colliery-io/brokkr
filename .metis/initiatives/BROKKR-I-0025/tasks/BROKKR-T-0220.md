@@ -4,7 +4,7 @@ level: task
 title: "Rust SDK/CLI cannot reach an https broker — reqwest built with no TLS backend"
 short_code: "BROKKR-T-0220"
 created_at: 2026-06-11T12:16:45.335757+00:00
-updated_at: 2026-06-11T16:25:06.362055+00:00
+updated_at: 2026-06-11T19:21:30.910802+00:00
 parent: sdk-parity-retry-validation-and
 blocked_by: []
 archived: false
@@ -12,7 +12,7 @@ archived: false
 tags:
   - "#task"
   - "#task"
-  - "#phase/active"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -41,6 +41,8 @@ initiative_id: BROKKR-I-0025
 - **Affected Users**: anyone using the Rust SDK or `brokkr` CLI against a TLS-terminated broker (the documented default). HTTP-only/in-cluster users are unaffected, which is likely why it slipped through (contract tests run against `http://localhost:3000`).
 - **Reproduction**: `brokkr apply -f ./manifests --stack x --broker-url https://<broker> --pak <pak>` → transport error; same for any `BrokkrClient` call with an `https://` base URL.
 - **Expected vs Actual**: Expected TLS handshake + request; actual: no TLS backend compiled, request fails.
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 
