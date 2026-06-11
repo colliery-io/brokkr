@@ -337,6 +337,44 @@ async fn test_add_template_label() {
 }
 
 #[tokio::test]
+async fn test_add_template_label_duplicate_returns_409() {
+    // Re-adding an existing template label hits UNIQUE (template_id, label) and
+    // must surface as 409 unique_violation, not a blanket 500 (BROKKR-T-0207).
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+    let admin_pak = fixture.admin_pak.clone();
+
+    let template = fixture.create_test_template(
+        None,
+        "dup-labeled-template".to_string(),
+        None,
+        TEST_TEMPLATE_CONTENT.to_string(),
+        "{}".to_string(),
+    );
+    fixture.create_test_template_label(template.id, "dup=label".to_string());
+
+    let label = "dup=label".to_string();
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/templates/{}/labels", template.id))
+                .header("Content-Type", "application/json")
+                .header("Authorization", &admin_pak)
+                .body(Body::from(serde_json::to_string(&label).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let status = response.status();
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(status, StatusCode::CONFLICT, "body: {json}");
+    assert_eq!(json["code"], "unique_violation");
+}
+
+#[tokio::test]
 async fn test_list_template_labels() {
     let fixture = TestFixture::new();
     let app = fixture.create_test_router().with_state(fixture.dal.clone());

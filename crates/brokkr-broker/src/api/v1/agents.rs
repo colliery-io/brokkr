@@ -323,10 +323,10 @@ async fn update_agent(
         agent.status = status.to_string();
     }
 
-    let updated_agent = dal.agents().update(id, &agent).map_err(|e| {
-        error!("Failed to update agent with ID {}: {:?}", id, e);
-        ApiError::internal("failed to update agent")
-    })?;
+    let updated_agent = dal
+        .agents()
+        .update(id, &agent)
+        .map_err(|e| ApiError::from_diesel(e, format!("failed to update agent {id}")))?;
     info!("Successfully updated agent with ID: {}", id);
 
     audit::log_action(
@@ -447,10 +447,10 @@ async fn create_event(
     info!("Handling request to create event for agent with ID: {}", id);
     require_admin_or_agent(&auth_payload, id)?;
 
-    let event = dal.agent_events().create(&new_event).map_err(|e| {
-        error!("Failed to create event for agent with ID {}: {:?}", id, e);
-        ApiError::internal("failed to create agent event")
-    })?;
+    let event = dal
+        .agent_events()
+        .create(&new_event)
+        .map_err(|e| ApiError::from_diesel(e, format!("failed to create event for agent {id}")))?;
     info!("Successfully created event for agent with ID: {}", id);
 
     let webhook_event_type = if new_event.status.to_uppercase() == "SUCCESS" {
@@ -524,10 +524,10 @@ async fn add_label(
 ) -> Result<(StatusCode, Json<AgentLabel>), ApiError> {
     info!("Handling request to add label for agent with ID: {}", id);
     require_admin(&auth_payload)?;
-    let label = dal.agent_labels().create(&new_label).map_err(|e| {
-        error!("Failed to add label for agent with ID {}: {:?}", id, e);
-        ApiError::internal("failed to add agent label")
-    })?;
+    let label = dal
+        .agent_labels()
+        .create(&new_label)
+        .map_err(|e| ApiError::from_diesel(e, format!("failed to add label for agent {id}")))?;
     info!("Successfully added label for agent with ID: {}", id);
     Ok((StatusCode::CREATED, Json(label)))
 }
@@ -638,8 +638,7 @@ async fn add_annotation(
         .agent_annotations()
         .create(&new_annotation)
         .map_err(|e| {
-            error!("Failed to add annotation for agent with ID {}: {:?}", id, e);
-            ApiError::internal("failed to add agent annotation")
+            ApiError::from_diesel(e, format!("failed to add annotation for agent {id}"))
         })?;
     Ok((StatusCode::CREATED, Json(annotation)))
 }
@@ -735,10 +734,10 @@ async fn add_target(
 ) -> Result<(StatusCode, Json<AgentTarget>), ApiError> {
     info!("Handling request to add target for agent with ID: {}", id);
     authorize_target_mutation(&dal, &auth_payload, new_target.stack_id)?;
-    let target = dal.agent_targets().create(&new_target).map_err(|e| {
-        error!("Failed to add target for agent with ID {}: {:?}", id, e);
-        ApiError::internal("failed to add agent target")
-    })?;
+    let target = dal
+        .agent_targets()
+        .create(&new_target)
+        .map_err(|e| ApiError::from_diesel(e, format!("failed to add target for agent {id}")))?;
     // Post-commit: tell the affected agent its targets changed so it can
     // start reconciling the new stack immediately. Remove is intentionally
     // not pushed in v1 — REST polling surfaces deletions on the next tick.

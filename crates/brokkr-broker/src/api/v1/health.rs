@@ -159,11 +159,7 @@ async fn update_health_status(
         .deployment_health()
         .upsert_batch(&health_records)
         .map_err(|e| {
-            error!(
-                "Failed to update health status for agent {}: {:?}",
-                agent_id, e
-            );
-            ApiError::internal("failed to update health status")
+            ApiError::from_diesel(e, format!("failed to update health status for agent {agent_id}"))
         })?;
 
     info!(

@@ -211,10 +211,7 @@ async fn create_template(
             request.template_content,
             request.parameters_schema,
         )
-        .map_err(|e| {
-            error!("Failed to create template: {:?}", e);
-            ApiError::internal("failed to create template")
-        })?;
+        .map_err(|e| ApiError::from_diesel(e, "failed to create template"))?;
 
     info!(
         "Successfully created template with ID: {} version: {}",
@@ -305,10 +302,7 @@ async fn update_template(
             request.template_content,
             request.parameters_schema,
         )
-        .map_err(|e| {
-            error!("Failed to create new template version: {:?}", e);
-            ApiError::internal("failed to update template")
-        })?;
+        .map_err(|e| ApiError::from_diesel(e, "failed to create new template version"))?;
 
     info!(
         "Successfully created new version {} for template: {}",
@@ -440,7 +434,7 @@ async fn add_label(
     let label = dal
         .template_labels()
         .create(&new_label)
-        .map_err(|_| ApiError::internal("failed to add template label"))?;
+        .map_err(|e| ApiError::from_diesel(e, "failed to add template label"))?;
     Ok((StatusCode::CREATED, Json(label)))
 }
 
@@ -552,7 +546,7 @@ async fn add_annotation(
     let annotation = dal
         .template_annotations()
         .create(&new_annotation)
-        .map_err(|_| ApiError::internal("failed to add template annotation"))?;
+        .map_err(|e| ApiError::from_diesel(e, "failed to add template annotation"))?;
     Ok((StatusCode::CREATED, Json(annotation)))
 }
 
