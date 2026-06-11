@@ -11,6 +11,7 @@ dependencies = [
     # for installed releases.
     "brokkr-client-generated",
     "httpx>=0.23.0,<0.29.0",
+    "pyyaml>=6",
 ]
 
 [project.urls]

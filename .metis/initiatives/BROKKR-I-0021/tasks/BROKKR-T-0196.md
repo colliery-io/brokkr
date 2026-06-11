@@ -4,14 +4,14 @@ level: task
 title: "Python SDK: submit_manifests/apply folder helper"
 short_code: "BROKKR-T-0196"
 created_at: 2026-06-11T02:19:32.186237+00:00
-updated_at: 2026-06-11T02:19:32.186237+00:00
+updated_at: 2026-06-11T03:35:34.558519+00:00
 parent: BROKKR-I-0021
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/todo"
+  - "#phase/active"
 
 
 exit_criteria_met: false
@@ -36,6 +36,8 @@ Mirror the Rust folder helpers in the Python SDK ergonomic wrapper (`sdks/python
 
 ## Acceptance Criteria
 
+## Acceptance Criteria
+
 - [ ] `submit_manifests`/`apply` on `BrokkrClient`, reading a directory of YAML files
 - [ ] Idempotent `apply` (unchanged folder → no new revision)
 - [ ] Per-doc validation with clear `BrokkrError`s
@@ -45,3 +47,4 @@ Mirror the Rust folder helpers in the Python SDK ergonomic wrapper (`sdks/python
 ## Status Updates
 
 - 2026-06-11: Created under BROKKR-I-0021. Parallel with T-0195/T-0197.
+- 2026-06-11: IMPLEMENTED (branch feat/i0021-raw-yaml-submission). Added `submit_manifests(stack_id, path)` and idempotent `apply(stack_name, path, targeting=None) -> ApplyResult` (status created/updated/unchanged) to `sdks/python/brokkr/brokkr/client.py`, plus module helpers `_read_manifests` (folder walk via pathlib + yaml.safe_load_all validation of apiVersion/kind) and `_sha256_hex`. `apply` resolves the generator via verify_pak, find-or-creates the stack, applies targeting labels (asyncio_detailed, ignoring 409), submits only on checksum change. Added pyyaml dep; ApplyResult exported from `brokkr`. Unit tests: 6 in test_wrapper.py (folder concat sorted, single-file multidoc, missing apiVersion/kind reject, malformed reject, empty/missing errors, sha256 known-vector) — 30 pass under uv. Functional: tests/sdk-contract/python/test_manifest_apply.py (created→unchanged→updated + label + submit_manifests); contract runner now installs the brokkr wrapper editable. Docs: python SDK how-to. Remaining: contract test runs on CI.
