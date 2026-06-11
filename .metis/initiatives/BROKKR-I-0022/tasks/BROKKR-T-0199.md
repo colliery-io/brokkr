@@ -4,7 +4,7 @@ level: task
 title: "Replace retired macos-13 runner in release.yml CLI build matrix"
 short_code: "BROKKR-T-0199"
 created_at: 2026-06-11T11:02:07.481760+00:00
-updated_at: 2026-06-11T11:17:33.508390+00:00
+updated_at: 2026-06-11T12:02:22.456199+00:00
 parent: release-pipeline-blockers-retired
 blocked_by: []
 archived: false
@@ -12,7 +12,7 @@ archived: false
 tags:
   - "#task"
   - "#task"
-  - "#phase/active"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -28,6 +28,8 @@ initiative_id: BROKKR-I-0022
 ## Objective
 
 `release.yml:176` (`build-cli-binaries` matrix) pins `runner: macos-13`, which GitHub has retired (current runner-images: macos-14/15/26; x64 = `macos-15-intel`, `macos-15-large`, `macos-26-intel`). The `x86_64-apple-darwin` leg will fail on the next `v*` tag, and `publish-cli-binaries` needs all four legs — so no CLI binaries attach at all. Replace with a supported runner.
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

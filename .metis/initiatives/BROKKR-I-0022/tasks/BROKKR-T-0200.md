@@ -4,7 +4,7 @@ level: task
 title: "Bump Node-20/16 GitHub Actions to Node-24 majors across workflows"
 short_code: "BROKKR-T-0200"
 created_at: 2026-06-11T11:02:07.533160+00:00
-updated_at: 2026-06-11T11:14:49.205267+00:00
+updated_at: 2026-06-11T12:02:22.510891+00:00
 parent: release-pipeline-blockers-retired
 blocked_by: []
 archived: false
@@ -12,7 +12,7 @@ archived: false
 tags:
   - "#task"
   - "#task"
-  - "#phase/active"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -28,6 +28,8 @@ initiative_id: BROKKR-I-0022
 ## Objective
 
 GitHub forces Node-20 actions to run on Node 24 starting 2026-06-16. Upgrade every affected action to its verified Node-24 major and let the changes soak on main before the date. All target versions were verified node24 via each tag's `action.yml`.
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 
