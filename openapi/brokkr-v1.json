@@ -2681,9 +2681,10 @@
     }
   },
   "info": {
-    "description": "",
+    "description": "Brokkr broker: the central control-plane API server for distributing Kubernetes objects across clusters.",
     "license": {
-      "name": ""
+      "name": "Elastic-2.0",
+      "url": "https://www.elastic.co/licensing/elastic-license"
     },
     "title": "brokkr-broker",
     "version": "0.6.0"

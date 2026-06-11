@@ -11,7 +11,7 @@ To pin an installation to a specific release version:
 ```bash
 # Install a specific release version
 helm install brokkr-broker oci://ghcr.io/colliery-io/charts/brokkr-broker \
-  --version 1.0.0 \
+  --version 0.6.0 \
   --set postgresql.enabled=true
 
 # List available versions
@@ -20,12 +20,12 @@ helm install brokkr-broker oci://ghcr.io/colliery-io/charts/brokkr-broker \
 
 ## Install a Development Build
 
-Development builds use semver pre-release versions with timestamps (for example, `0.0.0-develop.20251021150606`). Find the latest one in the [package listing](https://github.com/orgs/colliery-io/packages/container/package/charts%2Fbrokkr-broker), then install it by version:
+Development builds use semver pre-release versions with timestamps (branch builds `0.0.0-main.<ts>`, PR builds `0.0.0-pr<N>.<ts>`; for example `0.0.0-main.20251021150606`). Find the latest one in the [package listing](https://github.com/orgs/colliery-io/packages/container/package/charts%2Fbrokkr-broker), then install it by version:
 
 ```bash
 # Install development build (replace timestamp with actual version)
 helm install brokkr-broker oci://ghcr.io/colliery-io/charts/brokkr-broker \
-  --version 0.0.0-develop.20251021150606 \
+  --version 0.0.0-main.20251021150606 \
   --set postgresql.enabled=true
 ```
 
@@ -36,12 +36,12 @@ To upgrade an existing installation to a newer version while keeping your curren
 ```bash
 # Upgrade broker
 helm upgrade brokkr-broker oci://ghcr.io/colliery-io/charts/brokkr-broker \
-  --version 1.1.0 \
+  --version 0.6.0 \
   --reuse-values
 
 # Upgrade agent
 helm upgrade brokkr-agent oci://ghcr.io/colliery-io/charts/brokkr-agent \
-  --version 1.1.0 \
+  --version 0.6.0 \
   --reuse-values
 ```
 

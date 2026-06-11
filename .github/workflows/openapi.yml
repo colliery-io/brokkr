@@ -3,6 +3,19 @@ name: OpenAPI Spec
 on:
   push:
     branches: [main]
+    # Mirror the PR paths so a docs-only / unrelated main push doesn't pay the
+    # full drift suite (cargo build + SDK regen + npm ci).
+    paths:
+      - "crates/brokkr-broker/src/api/**"
+      - "crates/brokkr-broker/examples/openapi_export.rs"
+      - "crates/brokkr-broker/Cargo.toml"
+      - "crates/brokkr-models/src/models/**"
+      - "crates/brokkr-client/**"
+      - "sdks/python/brokkr-client/**"
+      - "sdks/typescript/brokkr-client/**"
+      - "openapi/**"
+      - ".angreal/task_openapi.py"
+      - ".github/workflows/openapi.yml"
   pull_request:
     branches: [main]
     paths:
@@ -61,7 +74,7 @@ jobs:
       - name: Set up Node (for redocly lint)
         uses: actions/setup-node@v6
         with:
-          node-version: "20"
+          node-version: "22"
 
       - name: Lint OpenAPI spec
         run: npx --yes @redocly/cli@1.25.11 lint openapi/brokkr-v1.json

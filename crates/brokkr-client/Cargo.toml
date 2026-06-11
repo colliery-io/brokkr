@@ -3,10 +3,10 @@ name = "brokkr-client"
 version = "0.6.0"
 edition.workspace = true
 rust-version.workspace = true
-license = "Elastic-2.0"
+license.workspace = true
 description = "Auto-generated Rust client for the Brokkr broker API"
-repository = "https://github.com/colliery-io/brokkr"
-homepage = "https://github.com/colliery-io/brokkr"
+repository.workspace = true
+homepage.workspace = true
 documentation = "https://docs.rs/brokkr-client"
 readme = "../../README.md"
 

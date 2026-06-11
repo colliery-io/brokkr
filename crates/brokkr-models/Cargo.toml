@@ -3,6 +3,10 @@ name = "brokkr-models"
 version = "0.6.0"
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Brokkr data models and database schema."
 
 [dependencies]
 # Internal crates

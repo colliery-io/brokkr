@@ -4,9 +4,9 @@ version = "0.6.0"
 edition.workspace = true
 rust-version.workspace = true
 description = "Command-line client for the Brokkr control plane: apply a folder of Kubernetes manifests as a stack's desired state."
-license = "Elastic-2.0"
-repository = "https://github.com/colliery-io/brokkr"
-homepage = "https://github.com/colliery-io/brokkr"
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
 
 [[bin]]
 name = "brokkr"

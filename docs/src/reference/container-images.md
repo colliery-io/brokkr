@@ -12,7 +12,7 @@ All Brokkr images are published to GitHub Container Registry (GHCR) under the `c
 |-----------|------------|---------|
 | Broker | `ghcr.io/colliery-io/brokkr-broker` | Central management service |
 | Agent | `ghcr.io/colliery-io/brokkr-agent` | Kubernetes cluster agent |
-| UI | `ghcr.io/colliery-io/brokkr-ui` | Administrative web interface |
+| UI | `ghcr.io/colliery-io/brokkr-ui` | Administrative web interface — demo only; **not currently built or published by CI** |
 
 ### Supported Architectures
 
@@ -47,11 +47,11 @@ Created for every commit that triggers a container build.
 
 | Tag Format | Example | Description | Mutable |
 |------------|---------|-------------|---------|
-| `{branch}-{short-sha}` | `develop-abc1234` | Branch-prefixed short commit SHA | No |
+| `{branch}-{short-sha}` | `main-abc1234` | Branch-prefixed short commit SHA | No |
 
-**Example**: Commit `abc1234def5678` on the `develop` branch creates:
+**Example**: Commit `abc1234def5678` on the `main` branch creates:
 ```
-ghcr.io/colliery-io/brokkr-broker:develop-abc1234
+ghcr.io/colliery-io/brokkr-broker:main-abc1234
 ```
 
 ### Branch Tags
@@ -61,11 +61,11 @@ Created for pushes to tracked branches.
 | Tag Format | Example | Description | Mutable |
 |------------|---------|-------------|---------|
 | `{branch-name}` | `main` | Branch name (sanitized) | Yes |
-| `develop` | `develop` | Development branch | Yes |
+| `nightly` | `nightly` | Latest nightly build (broker + agent) | Yes |
 
-**Example**: Push to `develop` branch creates:
+**Example**: Push to `main` branch creates:
 ```
-ghcr.io/colliery-io/brokkr-broker:develop
+ghcr.io/colliery-io/brokkr-broker:main
 ```
 
 ### Pull Request Tags

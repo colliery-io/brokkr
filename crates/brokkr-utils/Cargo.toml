@@ -3,6 +3,10 @@ name = "brokkr-utils"
 version = "0.6.0"
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Shared configuration, telemetry, and utility code for Brokkr."
 
 [dependencies]
 chrono = { workspace = true }

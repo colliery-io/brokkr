@@ -5,6 +5,9 @@ resolver = "2"
 [workspace.package]
 edition = "2024"
 rust-version = "1.90"
+license = "Elastic-2.0"
+repository = "https://github.com/colliery-io/brokkr"
+homepage = "https://github.com/colliery-io/brokkr"
 
 [workspace.dependencies]
 # OpenAPI dependencies

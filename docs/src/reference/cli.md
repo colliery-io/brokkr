@@ -1,6 +1,6 @@
 # CLI Reference
 
-Brokkr provides two command-line binaries: `brokkr-broker` for the central management server and `brokkr-agent` for the cluster-side agent. Both are configured through embedded defaults, an optional `BROKKR_CONFIG_FILE` TOML layer, and environment variables.
+Brokkr provides three command-line binaries: `brokkr-broker` for the central management server, `brokkr-agent` for the cluster-side agent, and `brokkr`, the control-plane client (documented in the [`brokkr`](#brokkr) section below). The two server binaries are configured through embedded defaults, an optional `BROKKR_CONFIG_FILE` TOML layer, and environment variables; `brokkr` uses its own flags / `~/.brokkr/config` (see its section).
 
 ## brokkr-broker
 
@@ -163,13 +163,13 @@ brokkr-agent start
 
 ## Configuration
 
-Both binaries read configuration from the same layered system:
+Both **server** binaries (`brokkr-broker` and `brokkr-agent`) read configuration from the same layered system (the `brokkr` client is configured separately — see the [`brokkr`](#brokkr) section):
 
 1. **Embedded defaults** (`default.toml` compiled into the binary)
 2. **Configuration file** (optional; path from `BROKKR_CONFIG_FILE`)
 3. **Environment variables** (prefix: `BROKKR__`, separator: `__`)
 
-There is no command-line flag for loading a configuration file; set the `BROKKR_CONFIG_FILE` environment variable instead. It loads the TOML file as a layer between embedded defaults and `BROKKR__*` environment variables, and additionally enables the broker's file-change watcher used for hot-reload in Kubernetes (ConfigMap-mounted files).
+For the server binaries there is no command-line flag for loading a configuration file; set the `BROKKR_CONFIG_FILE` environment variable instead (the `brokkr` client does take a `--config` flag). It loads the TOML file as a layer between embedded defaults and `BROKKR__*` environment variables, and additionally enables the broker's file-change watcher used for hot-reload in Kubernetes (ConfigMap-mounted files).
 
 See the [Configuration Guide](../getting-started/configuration.md) for all available settings and the [Environment Variables Reference](./environment-variables.md) for the complete variable listing.
 

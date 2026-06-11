@@ -95,14 +95,51 @@ curl -s -X POST "http://localhost:3000/api/v1/agents/${AGENT_ID}/targets" \
 
 Now simulate what a CI/CD pipeline would do — push a deployment object after building an image:
 
+First write the manifests to a file — in a real pipeline these come straight from your repo (or `kustomize build` / `helm template` output):
+
+```bash
+cat > myapp.yaml <<'YAML'
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: myapp
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: myapp
+  namespace: myapp
+  labels:
+    app: myapp
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: myapp
+  template:
+    metadata:
+      labels:
+        app: myapp
+    spec:
+      containers:
+      - name: myapp
+        image: myregistry.example.com/myapp:v1.2.3
+        ports:
+        - containerPort: 8080
+        env:
+        - name: VERSION
+          value: v1.2.3
+YAML
+```
+
+Then submit the file as-is. With `Content-Type: application/yaml` the raw body *is* the manifest — no JSON envelope or `\n`-escaping:
+
 ```bash
 # This is what your CI/CD pipeline would run after building
 curl -s -X POST "http://localhost:3000/api/v1/stacks/${STACK_ID}/deployment-objects" \
   -H "Authorization: Bearer ${GENERATOR_PAK}" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "yaml_content": "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: myapp\n---\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: myapp\n  namespace: myapp\n  labels:\n    app: myapp\nspec:\n  replicas: 2\n  selector:\n    matchLabels:\n      app: myapp\n  template:\n    metadata:\n      labels:\n        app: myapp\n    spec:\n      containers:\n      - name: myapp\n        image: myregistry.example.com/myapp:v1.2.3\n        ports:\n        - containerPort: 8080\n        env:\n        - name: VERSION\n          value: v1.2.3"
-  }' | jq '{id, sequence_id, yaml_checksum}'
+  -H "Content-Type: application/yaml" \
+  --data-binary @myapp.yaml | jq '{id, sequence_id, yaml_checksum}'
 ```
 
 Each push creates a new deployment object with an incrementing `sequence_id`. The agent sees the new sequence and applies the latest version.
@@ -112,12 +149,13 @@ Each push creates a new deployment object with an incrementing `sequence_id`. Th
 Push a new version (as a CI/CD pipeline would on the next merge):
 
 ```bash
+# Bump the image tag in the same file and re-submit it.
+sed -i 's/v1\.2\.3/v1.3.0/g' myapp.yaml
+
 curl -s -X POST "http://localhost:3000/api/v1/stacks/${STACK_ID}/deployment-objects" \
   -H "Authorization: Bearer ${GENERATOR_PAK}" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "yaml_content": "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: myapp\n---\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: myapp\n  namespace: myapp\n  labels:\n    app: myapp\nspec:\n  replicas: 2\n  selector:\n    matchLabels:\n      app: myapp\n  template:\n    metadata:\n      labels:\n        app: myapp\n    spec:\n      containers:\n      - name: myapp\n        image: myregistry.example.com/myapp:v1.3.0\n        ports:\n        - containerPort: 8080\n        env:\n        - name: VERSION\n          value: v1.3.0"
-  }' | jq '{id, sequence_id, yaml_checksum}'
+  -H "Content-Type: application/yaml" \
+  --data-binary @myapp.yaml | jq '{id, sequence_id, yaml_checksum}'
 ```
 
 Notice the `sequence_id` incremented. The agent will apply this new version.
@@ -181,12 +219,15 @@ jobs:
 
       - name: Push to Brokkr
         run: |
-          YAML_CONTENT=$(cat deployment.yaml | jq -Rs .)
+          # Submit the rendered file as-is — application/yaml means no jq
+          # escaping or JSON envelope.
           curl -sf -X POST "${BROKKR_URL}/api/v1/stacks/${STACK_ID}/deployment-objects" \
             -H "Authorization: Bearer ${{ secrets.BROKKR_GENERATOR_PAK }}" \
-            -H "Content-Type: application/json" \
-            -d "{\"yaml_content\": ${YAML_CONTENT}}"
+            -H "Content-Type: application/yaml" \
+            --data-binary @deployment.yaml
 ```
+
+For a non-Rust-curl pipeline, the [`brokkr` CLI](../how-to/cli-apply.md) is even simpler — `brokkr apply -f ./manifests --stack <name>` is idempotent (it re-submits only when the bundle changed), so it drops straight into a CI step.
 
 Store the generator PAK as `BROKKR_GENERATOR_PAK` in your repository's GitHub Actions secrets.
 

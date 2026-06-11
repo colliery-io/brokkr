@@ -7,7 +7,7 @@ name: Release SDKs
 #
 # Versioning is lockstep: the git tag drives the version stamped into all
 # four packages (Rust crate, two Python distributions, one npm package).
-# Source manifests stay at 0.0.0; stamping happens in this workflow only.
+# Source manifests are lockstep-versioned; this workflow stamps the release version over them.
 #
 # Publish steps land in R2-D (BROKKR-T-0148). This skeleton builds and
 # uploads artifacts, and pauses at the publish-sdks environment gate.
@@ -80,7 +80,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Install angreal
         run: pipx install angreal
@@ -112,7 +112,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '22'
           registry-url: 'https://registry.npmjs.org'
 
       # --- Stamp the resolved version into every manifest. Manifests stay

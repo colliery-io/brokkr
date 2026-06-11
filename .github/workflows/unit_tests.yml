@@ -5,10 +5,6 @@ on:
 jobs:
   unit_tests:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        crate: [brokkr-agent, brokkr-broker, brokkr-models, brokkr-utils]
-      fail-fast: false
     steps:
       - uses: actions/checkout@v6
         with:
@@ -31,5 +27,14 @@ jobs:
           key: ${{ runner.os }}-rust-build-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
           restore-keys: |
             ${{ runner.os }}-rust-build-
+      # Single job over all lib crates (the list lives in
+      # .angreal/task_tests.py CRATES["unit_tests"] — the single source of
+      # truth). One workspace compile instead of the old matrix's N parallel
+      # re-compiles.
       - name: Run unit tests
-        run: angreal tests unit ${{ matrix.crate }}
+        run: angreal tests unit all
+      # brokkr-cli is a bin-only crate, so it has no lib target for the
+      # `--lib` model above. Run its unit + black-box binary tests directly
+      # (tests/cli.rs needs no broker).
+      - name: Run brokkr-cli tests
+        run: cargo test -p brokkr-cli -- --test-threads=1

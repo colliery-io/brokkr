@@ -70,7 +70,7 @@ use config::{Config, ConfigError, Environment, File};
 use serde::{Deserialize, Deserializer};
 use std::sync::{Arc, RwLock};
 
-/// Deserializes a comma-separated string or array into Vec<String>
+/// Deserializes a comma-separated string or array into `Vec<String>`
 /// This allows environment variables to be set as "value1,value2,value3"
 /// while also supporting proper arrays in config files
 fn deserialize_string_or_vec<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>

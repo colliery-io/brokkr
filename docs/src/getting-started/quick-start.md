@@ -135,13 +135,13 @@ spec:
 EOF
 ```
 
-Submit this YAML to Brokkr as a deployment object. The `jq` command properly encodes the YAML content for the JSON request:
+Submit this YAML to Brokkr as a deployment object. With `Content-Type: application/yaml` the raw file *is* the body — no JSON envelope or `jq` escaping:
 
 ```bash
 curl -s -X POST "http://localhost:3000/api/v1/stacks/$STACK_ID/deployment-objects" \
-  -H "Content-Type: application/json" \
+  -H "Content-Type: application/yaml" \
   -H "Authorization: Bearer $ADMIN_PAK" \
-  -d "$(jq -n --arg yaml "$(cat quick-start.yaml)" '{yaml_content: $yaml, is_deletion_marker: false}')" | jq .
+  --data-binary @quick-start.yaml | jq .
 ```
 
 The broker stores this deployment object and marks it pending. On the agent's next polling cycle, it retrieves the object and applies the resources to the cluster. The polling interval defaults to 10 seconds in the agent binary's embedded configuration; the Helm chart sets it to 30 seconds via `agent.pollingInterval`.
@@ -237,9 +237,9 @@ Deploy the updated resources through Brokkr:
 
 ```bash
 curl -s -X POST "http://localhost:3000/api/v1/stacks/$STACK_ID/deployment-objects" \
-  -H "Content-Type: application/json" \
+  -H "Content-Type: application/yaml" \
   -H "Authorization: Bearer $ADMIN_PAK" \
-  -d "$(jq -n --arg yaml "$(cat quick-start-updated.yaml)" '{yaml_content: $yaml, is_deletion_marker: false}')" | jq .
+  --data-binary @quick-start-updated.yaml | jq .
 ```
 
 After the agent polls and applies the update, verify the changes took effect:
@@ -257,10 +257,11 @@ kubectl get configmap app-config -n quick-start -o jsonpath='{.data.message}'
 To delete resources through Brokkr, submit a deployment object with `is_deletion_marker: true`. When the agent processes a deletion marker, it removes everything the stack previously stamped onto the cluster—every object the agent annotated with `k8s.brokkr.io/stack=<stack-id>` when applying—regardless of what YAML the marker carries. You may include YAML in the marker, but it is not what drives the deletion.
 
 ```bash
-curl -s -X POST "http://localhost:3000/api/v1/stacks/$STACK_ID/deployment-objects" \
-  -H "Content-Type: application/json" \
+# A deletion marker needs no body — the ?deletion_marker=true query flag is enough.
+curl -s -X POST "http://localhost:3000/api/v1/stacks/$STACK_ID/deployment-objects?deletion_marker=true" \
+  -H "Content-Type: application/yaml" \
   -H "Authorization: Bearer $ADMIN_PAK" \
-  -d '{"yaml_content": "# deletion", "is_deletion_marker": true}' | jq .
+  --data-binary '' | jq .
 ```
 
 After the agent processes this deletion marker, verify the resources are gone:
@@ -290,6 +291,7 @@ You have now completed the core Brokkr workflow: creating stacks, targeting them
 
 From here, explore more advanced capabilities:
 
+- Use the [`brokkr` CLI](../how-to/cli-apply.md) to apply a whole folder of manifests in one idempotent command instead of curling each deployment object
 - Read about [Core Concepts](../explanation/core-concepts.md) to understand Brokkr's design philosophy
 - Learn about the [Data Model](../explanation/data-model.md) to understand how entities relate
 - Explore the [Configuration Guide](./configuration.md) for production deployment options

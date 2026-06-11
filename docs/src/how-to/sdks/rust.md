@@ -12,7 +12,7 @@ Or by hand in `Cargo.toml`:
 
 ```toml
 [dependencies]
-brokkr-client = "0.5"
+brokkr-client = "0.6"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 

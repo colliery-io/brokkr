@@ -65,7 +65,7 @@ use brokkr_models::models::{
 use utoipa::{
     OpenApi,
     openapi::{
-        Server,
+        LicenseBuilder, Server,
         security::{ApiKey, ApiKeyValue, SecurityScheme},
     },
 };
@@ -259,7 +259,7 @@ use utoipa_swagger_ui::SwaggerUi;
         (name = "webhooks", description = "Webhook subscription and delivery API"),
         (name = "Admin", description = "Administrative operations API")
     ),
-    modifiers(&SecurityAddon, &ServersAddon)
+    modifiers(&SecurityAddon, &ServersAddon, &LicenseAddon)
 )]
 pub struct ApiDoc;
 
@@ -292,6 +292,24 @@ struct ServersAddon;
 impl utoipa::Modify for ServersAddon {
     fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
         openapi.servers = Some(vec![Server::new("/api/v1")]);
+    }
+}
+
+/// Normalizes `info.license` to a name+URL form. utoipa auto-derives the
+/// license from the crate's SPDX `license` field, which emits the OpenAPI
+/// **3.1-only** `info.license.identifier` member. `openapi-typescript` (used to
+/// generate the TS SDK) validates against 3.0 and rejects `identifier`, so we
+/// pin a 3.0-valid license here instead.
+struct LicenseAddon;
+
+impl utoipa::Modify for LicenseAddon {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        openapi.info.license = Some(
+            LicenseBuilder::new()
+                .name("Elastic-2.0")
+                .url(Some("https://www.elastic.co/licensing/elastic-license"))
+                .build(),
+        );
     }
 }
 

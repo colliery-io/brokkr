@@ -17,8 +17,8 @@ C4Context
     SystemDb(pg, "PostgreSQL", "Persistent state storage")
     System_Ext(webhooks, "External Systems", "Receive event notifications via webhooks")
 
-    Rel(engineer, brokkr, "Manages stacks and deployments", "HTTPS REST API")
-    Rel(cicd, brokkr, "Creates stacks and deployment objects", "HTTPS REST API")
+    Rel(engineer, brokkr, "Manages stacks and deployments", "brokkr CLI / SDKs / REST API")
+    Rel(cicd, brokkr, "Creates stacks and deployment objects", "brokkr CLI / SDKs / REST API")
     Rel(brokkr, pg, "Stores state", "SQL")
     Rel(brokkr, k8s, "Deploys resources via agents", "HTTPS")
     Rel(brokkr, webhooks, "Sends event notifications", "HTTPS")
@@ -45,8 +45,8 @@ C4Container
 
     System_Ext(webhooks, "Webhook Endpoints", "External notification receivers")
 
-    Rel(engineer, broker, "Manages", "HTTPS REST API")
-    Rel(cicd, broker, "Deploys", "HTTPS REST API")
+    Rel(engineer, broker, "Manages", "brokkr CLI / SDKs / REST API")
+    Rel(cicd, broker, "Deploys", "brokkr CLI / SDKs / REST API")
     Rel(agent, broker, "Polls for state, reports events", "HTTPS REST + internal WebSocket")
     Rel(broker, db, "Reads/writes state", "SQL :5432")
     Rel(agent, k8s, "Applies/deletes resources", "HTTPS :6443")

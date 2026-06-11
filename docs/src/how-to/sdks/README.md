@@ -6,6 +6,7 @@ Brokkr ships generated client SDKs for **Rust**, **Python**, and **TypeScript**.
 - Access the raw generated API surface via `.api` / `.api()` when the wrapper doesn't cover what you need.
 - Opt-in retry helper with exponential backoff for transient failures.
 - Typed errors with a stable `code` field for pattern matching.
+- Folder-of-manifests helpers — `submit_manifests`/`apply` (`submitManifests`/`apply` in TS) take a directory or file, validate each document, and submit it as a stack's desired state; `apply` is idempotent (re-submits only when the bundle changed).
 
 ## Getting started
 

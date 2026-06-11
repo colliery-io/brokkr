@@ -252,5 +252,6 @@ curl -s -X DELETE "http://localhost:3000/api/v1/agents/${PROD}" \
 ## Next Steps
 
 - [CI/CD with Generators](./cicd-generators.md) — automate deployments from pipelines
+- [Submitting a Folder of Manifests (CLI)](../how-to/cli-apply.md) — `brokkr apply -f ./manifests --stack <name> --target-label <k:v>` applies the same label-based fan-out from a single idempotent command
 - [Standardized Deployments with Templates](./templates.md) — use templates to reduce YAML duplication across environments
 - [Core Concepts](../explanation/core-concepts.md) — deeper understanding of the targeting model

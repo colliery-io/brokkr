@@ -270,7 +270,7 @@ pub async fn apply_k8s_objects(
 /// * `all_namespaces` - Whether to operate across all namespaces
 ///
 /// # Returns
-/// An Api<DynamicObject> instance configured for the specified resource type
+/// An `Api<DynamicObject>` instance configured for the specified resource type
 pub fn dynamic_api(
     ar: ApiResource,
     caps: ApiCapabilities,
