@@ -63,6 +63,7 @@ use crate::{
     pod_logs, webhooks, work_orders,
 };
 use brokkr_utils::config::Settings;
+use brokkr_wire::WsMessage;
 use brokkr_utils::telemetry::prelude::*;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -73,6 +74,28 @@ use tokio::signal::ctrl_c;
 use tokio::sync::RwLock;
 use tokio::time::{Duration, interval};
 use uuid::Uuid;
+
+/// What an inbound broker→agent WS push frame should trigger in the control
+/// loop. Uplink-typed frames the agent emits never arrive inbound, so they map
+/// to `Ignore`.
+#[derive(Debug, PartialEq, Eq)]
+enum PushAction {
+    /// `StackChanged` / `TargetChanged` — fetch and reconcile deployment objects.
+    Reconcile,
+    /// `WorkOrder` — poll pending work orders.
+    PollWorkOrders,
+    /// Anything else (e.g. an echoed uplink frame) — no action.
+    Ignore,
+}
+
+/// Route an inbound WS frame to the control-loop action it should trigger.
+fn classify_push_frame(msg: &WsMessage) -> PushAction {
+    match msg {
+        WsMessage::StackChanged(_) | WsMessage::TargetChanged(_) => PushAction::Reconcile,
+        WsMessage::WorkOrder(_) => PushAction::PollWorkOrders,
+        _ => PushAction::Ignore,
+    }
+}
 
 pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
     // BROKKR_CONFIG_FILE adds an optional file layer between embedded
@@ -101,7 +124,7 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
     // pins the state at ForceRestOnly and no dial is ever attempted.
     // Outbound emissions still call .uplink() — try_send short-circuits
     // when the channel is not Up and the caller falls back to REST.
-    let ws_client = broker_ws::spawn(&config);
+    let mut ws_client = broker_ws::spawn(&config);
     let ws_uplink = ws_client.uplink();
 
     // Spawn telemetry tailers. They run for the lifetime of the agent
@@ -224,9 +247,40 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
     // Webhook delivery configuration - poll every 10 seconds for pending webhooks
     let mut webhook_interval = interval(Duration::from_secs(10));
 
+    // Consume broker→agent push frames. A StackChanged/TargetChanged/WorkOrder
+    // pushed over the WS channel resets the relevant interval to fire now, so
+    // the agent reconciles on push instead of waiting for the next tick. Single
+    // consumer; if the WS task ends we fall back to plain interval polling.
+    let mut inbound_rx = ws_client.take_inbound();
+    let mut inbound_open = inbound_rx.is_some();
+
     // Main control loop
     while running.load(Ordering::SeqCst) {
         select! {
+            maybe_frame = async {
+                match inbound_rx.as_mut() {
+                    Some(rx) => rx.recv().await,
+                    None => std::future::pending::<Option<WsMessage>>().await,
+                }
+            }, if inbound_open => {
+                match maybe_frame {
+                    Some(frame) => match classify_push_frame(&frame) {
+                        PushAction::Reconcile => {
+                            debug!("WS push: control-plane change — reconciling immediately");
+                            deployment_check_interval.reset_immediately();
+                        }
+                        PushAction::PollWorkOrders => {
+                            debug!("WS push: work order — polling immediately");
+                            work_order_interval.reset_immediately();
+                        }
+                        PushAction::Ignore => debug!("WS push: ignoring non-control frame"),
+                    },
+                    None => {
+                        debug!("WS inbound channel closed; falling back to interval polling");
+                        inbound_open = false;
+                    }
+                }
+            }
             _ = heartbeat_interval.tick() => {
                 match broker::send_heartbeat(&config, &sdk_client, &agent, Some(&ws_uplink)).await {
                     Ok(_) => {
@@ -517,4 +571,80 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
     brokkr_utils::telemetry::shutdown();
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use brokkr_models::models::{agent_targets::AgentTarget, stacks::Stack, work_orders::WorkOrder};
+    use chrono::Utc;
+
+    fn stack() -> Stack {
+        Stack {
+            id: Uuid::new_v4(),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            deleted_at: None,
+            name: "s".into(),
+            description: None,
+            generator_id: Uuid::new_v4(),
+        }
+    }
+
+    fn target() -> AgentTarget {
+        AgentTarget {
+            id: Uuid::new_v4(),
+            agent_id: Uuid::new_v4(),
+            stack_id: Uuid::new_v4(),
+        }
+    }
+
+    fn work_order() -> WorkOrder {
+        WorkOrder {
+            id: Uuid::new_v4(),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            work_type: "image_build".into(),
+            yaml_content: String::new(),
+            status: "pending".into(),
+            claimed_by: None,
+            claimed_at: None,
+            claim_timeout_seconds: 300,
+            max_retries: 3,
+            retry_count: 0,
+            backoff_seconds: 10,
+            next_retry_after: None,
+            last_error: None,
+            last_error_at: None,
+        }
+    }
+
+    #[test]
+    fn stack_and_target_changes_trigger_reconcile() {
+        assert_eq!(
+            classify_push_frame(&WsMessage::StackChanged(stack())),
+            PushAction::Reconcile
+        );
+        assert_eq!(
+            classify_push_frame(&WsMessage::TargetChanged(target())),
+            PushAction::Reconcile
+        );
+    }
+
+    #[test]
+    fn work_order_triggers_poll() {
+        assert_eq!(
+            classify_push_frame(&WsMessage::WorkOrder(work_order())),
+            PushAction::PollWorkOrders
+        );
+    }
+
+    #[test]
+    fn uplink_frames_are_ignored() {
+        let hb = WsMessage::Heartbeat(brokkr_wire::Heartbeat {
+            agent_id: Uuid::nil(),
+            sent_at: Utc::now(),
+        });
+        assert_eq!(classify_push_frame(&hb), PushAction::Ignore);
+    }
 }
