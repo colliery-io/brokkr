@@ -61,3 +61,5 @@ Fix every stale-claim finding from the docs sweep (excluding submission-example 
   REMAINING (lower impact, follow-on): install-operations.md dev-build pattern (`0.0.0-develop.*` → `0.0.0-main.*`/`-pr<N>.*`) + `1.x` version examples → 0.6.0; architecture.md C4 L1/L2 (add CLI/SDKs as the front door); sdks/README.md shared folder-helper bullet. SUMMARY↔disk and cross-links were verified clean in the original sweep.
 
 - 2026-06-11: RESIDUALS (mostly) DONE. install-operations.md: `--version 1.0.0/1.1.0` → 0.6.0, dev-build pattern `0.0.0-develop.<ts>` → `0.0.0-main.<ts>` with the `0.0.0-pr<N>.<ts>` note. sdks/README.md: added the shared folder-helper (submit_manifests/apply) bullet. ONE remaining: architecture.md C4 L1/L2 diagrams (add the CLI/SDKs as the engineer/CI front door alongside the HTTPS REST API) — a diagram edit, low impact.
+
+- 2026-06-11: architecture.md C4 done — the L1/L2 engineer & CI/CD → broker relationships now read "brokkr CLI / SDKs / REST API" (the CLI/SDKs are the front door over the REST API). T-0215 fully complete.

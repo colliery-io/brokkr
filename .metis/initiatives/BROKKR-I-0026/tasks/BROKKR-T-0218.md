@@ -62,3 +62,5 @@ Harden the two flake classes that bit us this week (Docker Hub pull timeout duri
   - **upload-artifact ETIMEDOUT mitigation** (release.yml digests, build-and-test.yml): `continue-on-error` + guarded re-upload step.
   - **Efficiency**: setup.yml warms a `…-cargo-` cache that downstream jobs (`…-rust-build-`) don't read; build-and-test.yml `no-cache: true` forces full base-image re-pulls; docs.yml `curl` lacks `--retry` and `cargo install plissken` isn't cached.
   - **publish-cli-binaries `environment: release`** adds a second approval round after charts — keep or drop?
+
+- 2026-06-11: Contained flake fixes shipped (imagetools retries, node 22, openapi paths, || true, comment). The remaining items — Docker Hub auth (needs DOCKERHUB_TOKEN secret), upload-artifact retry, cache efficiency, and the publish-cli-binaries environment decision — split to backlog [[BROKKR-T-0224]] so I-0026 can close. T-0218's committed work is done.
