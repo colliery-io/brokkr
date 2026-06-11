@@ -2,11 +2,16 @@
 FROM rust:1.90-slim-bookworm AS builder
 WORKDIR /app
 
-# Install build dependencies
+# Install build dependencies. cmake + make are needed by aws-lc-sys, which the
+# agent now pulls transitively via brokkr-client's rustls TLS backend
+# (BROKKR-T-0220). The builder is a discarded stage, so this doesn't bloat the
+# runtime image.
 RUN apt-get update && apt-get install -y \
     libssl-dev \
     pkg-config \
     libpq-dev \
+    cmake \
+    make \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy source code and build
