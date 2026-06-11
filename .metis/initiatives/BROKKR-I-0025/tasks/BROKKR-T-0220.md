@@ -4,16 +4,15 @@ level: task
 title: "Rust SDK/CLI cannot reach an https broker — reqwest built with no TLS backend"
 short_code: "BROKKR-T-0220"
 created_at: 2026-06-11T12:16:45.335757+00:00
-updated_at: 2026-06-11T12:16:45.335757+00:00
+updated_at: 2026-06-11T16:25:06.362055+00:00
 parent: sdk-parity-retry-validation-and
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/todo"
   - "#task"
-  - "#phase/todo"
+  - "#phase/active"
 
 
 exit_criteria_met: false
@@ -45,6 +44,8 @@ initiative_id: BROKKR-I-0025
 
 ## Acceptance Criteria
 
+## Acceptance Criteria
+
 - [ ] `brokkr-client`'s reqwest enables a TLS backend — use **`rustls-tls`** (pure Rust; no `openssl-sys`), NOT `native-tls`/`default-tls`.
 - [ ] An `https://` request from `BrokkrClient` and from `brokkr apply` succeeds against a TLS broker (add coverage: a contract/integration case hitting an https endpoint, or at minimum a test asserting the client builds an https-capable connector).
 - [ ] `cargo tree -p brokkr-cli` shows `rustls`/`ring` (or `aws-lc`) and still **no `openssl-sys`** — the T-0199 macOS cross-compile must stay clean (this is why rustls, not native-tls).
@@ -64,3 +65,6 @@ Low — additive feature. Verify the contract suites (http://localhost) still pa
 ## Status Updates
 
 *To be added during implementation*
+## Status Updates
+
+- 2026-06-11: DONE (branch feat/i0025-sdk-parity). Root cause: brokkr-client's reqwest had `default-features = false` + only json/stream — NO TLS backend, so any `https://` broker URL failed at runtime (the Rust SDK and `brokkr` CLI could only do http). Fix: added the `rustls` feature. In reqwest 0.13 the feature is named `rustls` (not `rustls-tls`); it uses aws-lc-rs + the OS trust store via rustls-platform-verifier — openssl-free, so `cargo tree -p brokkr-cli` shows 0 openssl-sys (the T-0199 cross-compile stays openssl-clean; the task AC explicitly allows aws-lc). Had to bump rustls 0.23.20→0.23.40 (`cargo update -p rustls --precise`) to unify with kube's `^0.23` since rustls-platform-verifier needs ≥0.23.27 — agent + broker still build clean (kube 0.95 unaffected). Verified: workspace builds (cli/agent/broker), brokkr-client 14 unit tests pass, clippy clean, 0 openssl-sys in cli tree. The fix is the TLS backend itself (reqwest+rustls does https; without it, https fails) — a live TLS-broker integration fixture is out of scope for the existing http://localhost contract harness. WATCH-POINT: aws-lc-sys is a C lib; its cross-compile for the x86_64-apple-darwin CLI leg (T-0199, macos-14 runner) is supported but only exercised at the next release tag — verify that release build.

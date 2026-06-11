@@ -22,7 +22,12 @@ progenitor-client = "0.14"
 bytes = "1"
 chrono = { version = "0.4", features = ["serde"] }
 futures = "0.3"
-reqwest = { version = "0.13", default-features = false, features = ["json", "stream"] }
+# `rustls` (not native-tls) gives HTTPS without pulling openssl-sys. Without a
+# TLS feature reqwest can only do http:// and every https:// broker URL fails
+# at runtime. reqwest 0.13's `rustls` uses aws-lc-rs + the OS trust store
+# (rustls-platform-verifier) — openssl-free, so the CLI cross-compile (T-0199)
+# stays openssl-clean.
+reqwest = { version = "0.13", default-features = false, features = ["json", "stream", "rustls"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_yaml = "0.9"
