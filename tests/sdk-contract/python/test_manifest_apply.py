@@ -14,9 +14,10 @@ from brokkr import ApplyResult, BrokkrClient
 from brokkr_broker_client.api.generators import create_generator
 from brokkr_broker_client.api.stacks import list_stacks, stacks_list_labels
 from brokkr_broker_client.models import CreateGeneratorResponse, NewGenerator
+from conftest import unique
 
 
-def test_manifest_apply(admin_client, base_url, tmp_path, unique):
+def test_manifest_apply(admin_client, base_url, tmp_path):
     # admin creates a generator -> generator PAK (apply needs a generator)
     gen_name = unique("py-apply-gen")
     gen_resp = create_generator.sync(
