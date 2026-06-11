@@ -124,6 +124,25 @@ agents = await client.retry(fetch)
 
 Wrap only operations you consider safe to repeat — typically idempotent GETs.
 
+## Stack telemetry
+
+The wrapper has convenience methods for the retained telemetry surface (parity with the Rust/TS SDKs). History is bound to the 6-hour retention ceiling — the responses carry a `retention` block, so surface it in any UI rather than treating a short window as data loss.
+
+```python
+import datetime
+
+# Retained kube-event / pod-log history for a stack
+events = await client.list_telemetry_events(stack_id, limit=1000)
+logs = await client.list_telemetry_logs(
+    stack_id, since=datetime.datetime(2026, 6, 9, 12, 0, tzinfo=datetime.timezone.utc)
+)
+
+# Admin-only snapshot of agents on the internal WS channel
+conns = await client.list_ws_connections()
+```
+
+The live-tail WebSocket URL is not computed by the Python wrapper — it is browser-oriented and exists only in the TypeScript SDK (`liveSubscriptionUrl`); from Python, build the `ws(s)://…/stacks/{id}/live` URL yourself and use a `websockets`-style client. Frame shapes are in the [WebSocket Protocol reference](../../reference/ws-protocol.md).
+
 ## When you need to drop to the raw client
 
 For anything the wrapper doesn't cover, use `client.api` directly — it is the same `AuthenticatedClient` and still injects the auth header. The generated package documents every endpoint at `sdks/python/brokkr-client/brokkr_broker_client/api/`.

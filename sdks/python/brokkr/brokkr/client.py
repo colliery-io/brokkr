@@ -184,7 +184,12 @@ class BrokkrClient:
                     "create the stack explicitly and use submit_manifests"
                 )
             )
-        generator_id = UUID(str(generator))
+        try:
+            generator_id = UUID(str(generator))
+        except ValueError as exc:
+            raise BrokkrError(
+                message=f"auth response generator id is not a UUID: {generator!r}"
+            ) from exc
 
         stacks = _expect(
             await list_stacks.asyncio_detailed(client=self.api), "list_stacks"
@@ -237,6 +242,64 @@ class BrokkrClient:
             status="updated" if had_prior else "created", deployment_object=obj
         )
 
+    # ------------------------------------------------------------------
+    # Stack telemetry (parity with the Rust/TS wrappers). History is bound
+    # to the 6h retention window — the responses carry a `retention` block;
+    # surface it in any UI so users aren't surprised by missing rows.
+    # ------------------------------------------------------------------
+
+    async def list_telemetry_events(
+        self,
+        stack_id: UUID,
+        since: Optional[Any] = None,
+        limit: Optional[int] = None,
+    ) -> Any:
+        """Paginated kube-event history for a stack within the retention
+        window. ``since`` is a ``datetime``; ``limit`` caps the page size."""
+        from brokkr_broker_client.api.stack_telemetry import list_telemetry_events
+        from brokkr_broker_client.types import UNSET
+
+        return _expect(
+            await list_telemetry_events.asyncio_detailed(
+                stack_id,
+                client=self.api,
+                since=since if since is not None else UNSET,
+                limit=limit if limit is not None else UNSET,
+            ),
+            "list_telemetry_events",
+        )
+
+    async def list_telemetry_logs(
+        self,
+        stack_id: UUID,
+        since: Optional[Any] = None,
+        limit: Optional[int] = None,
+    ) -> Any:
+        """Paginated pod-log history for a stack within the retention window.
+        Same shape as :meth:`list_telemetry_events` modulo the row type."""
+        from brokkr_broker_client.api.stack_telemetry import list_telemetry_logs
+        from brokkr_broker_client.types import UNSET
+
+        return _expect(
+            await list_telemetry_logs.asyncio_detailed(
+                stack_id,
+                client=self.api,
+                since=since if since is not None else UNSET,
+                limit=limit if limit is not None else UNSET,
+            ),
+            "list_telemetry_logs",
+        )
+
+    async def list_ws_connections(self) -> Any:
+        """Snapshot of agents currently connected on the internal WS channel
+        (admin-only). For continuous monitoring prefer the
+        ``brokkr_ws_connected_agents`` Prometheus gauge."""
+        from brokkr_broker_client.api.admin import list_ws_connections
+
+        return _expect(
+            await list_ws_connections.asyncio_detailed(client=self.api),
+            "list_ws_connections",
+        )
 
 
 @dataclass
