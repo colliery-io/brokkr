@@ -4,7 +4,7 @@ level: task
 title: "Docs: modernize submission examples onto the yaml/CLI on-ramp"
 short_code: "BROKKR-T-0216"
 created_at: 2026-06-11T11:02:08.324875+00:00
-updated_at: 2026-06-11T20:00:35.714313+00:00
+updated_at: 2026-06-11T21:08:02.761123+00:00
 parent: docs-and-ci-hygiene-staleness
 blocked_by: []
 archived: false
@@ -12,7 +12,7 @@ archived: false
 tags:
   - "#task"
   - "#task"
-  - "#phase/active"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -28,6 +28,8 @@ initiative_id: BROKKR-I-0026
 ## Objective
 
 The tutorials and quick start still teach the pre-I-0021 submission path — hand-escaped `yaml_content` JSON — while `how-to/managing-stacks.md` now labels raw `application/yaml` "recommended" and the CLI exists for exactly the CI use case. Misleads by omission; modernize without breaking each page's Diátaxis lane.
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

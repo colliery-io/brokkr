@@ -4,7 +4,7 @@ level: task
 title: "CI: add brokkr-wire, brokkr-cli, brokkr-client to the unit-test matrix"
 short_code: "BROKKR-T-0217"
 created_at: 2026-06-11T11:02:08.378231+00:00
-updated_at: 2026-06-11T19:48:29.492021+00:00
+updated_at: 2026-06-11T21:08:02.808431+00:00
 parent: docs-and-ci-hygiene-staleness
 blocked_by: []
 archived: false
@@ -12,7 +12,7 @@ archived: false
 tags:
   - "#task"
   - "#task"
-  - "#phase/active"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -28,6 +28,8 @@ initiative_id: BROKKR-I-0026
 ## Objective
 
 `unit_tests.yml:9` matrix is `[brokkr-agent, brokkr-broker, brokkr-models, brokkr-utils]`, but `.angreal/task_tests.py:14` also lists `brokkr-wire` as a unit-test crate, and `brokkr-cli` (16 tests) and `brokkr-client` (14+ tests) have suites that run nowhere in CI — PR, nightly, or release gates.
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

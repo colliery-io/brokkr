@@ -4,7 +4,7 @@ level: task
 title: "Crates: workspace-inherited license/repository metadata + descriptions"
 short_code: "BROKKR-T-0219"
 created_at: 2026-06-11T11:02:08.479488+00:00
-updated_at: 2026-06-11T19:46:02.656776+00:00
+updated_at: 2026-06-11T21:08:02.901900+00:00
 parent: docs-and-ci-hygiene-staleness
 blocked_by: []
 archived: false
@@ -12,7 +12,7 @@ archived: false
 tags:
   - "#task"
   - "#task"
-  - "#phase/active"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -28,6 +28,8 @@ initiative_id: BROKKR-I-0026
 ## Objective
 
 `brokkr-agent`, `brokkr-broker`, `brokkr-models`, `brokkr-utils` have no `license`, `description`, or `repository` in Cargo.toml (brokkr-cli, brokkr-client, brokkr-wire have them). Add via workspace inheritance so future crates get them for free.
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 
