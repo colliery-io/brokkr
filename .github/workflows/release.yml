@@ -207,12 +207,20 @@ jobs:
       - name: Create manifest list and push
         working-directory: /tmp/digests/${{ matrix.component }}
         run: |
-          docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf '${{ env.REGISTRY }}/${{ github.repository_owner }}/brokkr-${{ matrix.component }}@sha256:%s ' *)
+          # Retry: imagetools talks to the registry and intermittently hits
+          # transient network errors / read-after-write races.
+          for attempt in 1 2 3; do
+            docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+              $(printf '${{ env.REGISTRY }}/${{ github.repository_owner }}/brokkr-${{ matrix.component }}@sha256:%s ' *) && break
+            echo "imagetools create failed (attempt $attempt); retrying in 15s"; sleep 15
+          done
 
       - name: Inspect image
         run: |
-          docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ github.repository_owner }}/brokkr-${{ matrix.component }}:${{ steps.meta.outputs.version }}
+          for attempt in 1 2 3; do
+            docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ github.repository_owner }}/brokkr-${{ matrix.component }}:${{ steps.meta.outputs.version }} && break
+            echo "imagetools inspect failed (attempt $attempt); retrying in 15s"; sleep 15
+          done
 
   build-cli-binaries:
     needs: [unit_tests, e2e_tests]
@@ -254,7 +262,7 @@ jobs:
           NAME="brokkr-${VERSION}-${{ matrix.target }}"
           mkdir -p "dist/${NAME}"
           cp "target/${{ matrix.target }}/release/brokkr" "dist/${NAME}/"
-          cp README.md LICENSE.txt "dist/${NAME}/" 2>/dev/null || true
+          cp README.md LICENSE.txt "dist/${NAME}/"
           tar -czf "dist/${NAME}.tar.gz" -C dist "${NAME}"
           echo "artifact=dist/${NAME}.tar.gz" >> "$GITHUB_OUTPUT"
 

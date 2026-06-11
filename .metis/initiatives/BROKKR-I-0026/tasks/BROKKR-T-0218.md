@@ -4,16 +4,15 @@ level: task
 title: "CI: flake hardening and efficiency (retries, registry auth, cache keys)"
 short_code: "BROKKR-T-0218"
 created_at: 2026-06-11T11:02:08.427026+00:00
-updated_at: 2026-06-11T11:02:08.427026+00:00
+updated_at: 2026-06-11T19:53:03.546611+00:00
 parent: docs-and-ci-hygiene-staleness
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/todo"
   - "#task"
-  - "#phase/todo"
+  - "#phase/active"
 
 
 exit_criteria_met: false
@@ -32,6 +31,8 @@ Harden the two flake classes that bit us this week (Docker Hub pull timeout duri
 
 ## Acceptance Criteria
 
+## Acceptance Criteria
+
 - [ ] `docker buildx imagetools create`/`inspect` wrapped in retry (release.yml:154-158, build-and-test.yml:167-171) — `nick-fields/retry` or a 3-attempt shell loop.
 - [ ] Authenticated Docker Hub pulls (rate limits): `docker/login-action` with Docker Hub creds in build-and-test.yml, release.yml, nightly.yml, and the three compose-based test workflows. NEEDS DECISION: add DOCKERHUB_USERNAME/DOCKERHUB_TOKEN secrets.
 - [ ] Artifact-upload timeout mitigation: `continue-on-error: true` + `id:` on the digest uploads (release.yml:100, build-and-test.yml:110; release.yml:204), with a guarded duplicate upload step on failure (upload-artifact has no retry input; `nick-fields/retry` cannot wrap `uses:`).
@@ -47,3 +48,17 @@ Harden the two flake classes that bit us this week (Docker Hub pull timeout duri
 ## Status Updates
 
 *To be added during implementation*
+## Status Updates
+
+- 2026-06-11: PARTIAL — contained flake fixes done; secret-dependent + efficiency items noted below. Branch feat/i0026-docs-ci-hygiene.
+  DONE:
+  - **imagetools create + inspect retries** (release.yml, build-and-test.yml): wrapped both in a 3-attempt shell loop with 15s backoff. This is the exact flake that failed `Create Multi-Arch Manifests` repeatedly this week (transient registry errors / read-after-write races).
+  - **node-version 20 → 22** (EOL April 2026): openapi.yml, release-sdks.yml ×2, sdk_contract_tests.yml.
+  - **openapi.yml push trigger** gained the same `paths:` filter as the PR trigger — a docs-only main push no longer pays the full drift suite (cargo build + SDK regen + npm ci).
+  - **release.yml** `cp README.md LICENSE.txt … || true` → no `|| true` (a future rename now fails loudly instead of silently shipping a tarball without them).
+  - **release-sdks.yml** stale "stay at 0.0.0" comment corrected to lockstep-versioned.
+  DEFERRED / NEEDS DECISION (Dylan):
+  - **Docker Hub auth (DOCKERHUB_USERNAME/DOCKERHUB_TOKEN secrets)** — the biggest lever: the 6-suite compose failures this week were Docker-Hub rate-limited pulls. Adding `docker/login-action` before the compose suites needs the secrets created first. Highest-value follow-up.
+  - **upload-artifact ETIMEDOUT mitigation** (release.yml digests, build-and-test.yml): `continue-on-error` + guarded re-upload step.
+  - **Efficiency**: setup.yml warms a `…-cargo-` cache that downstream jobs (`…-rust-build-`) don't read; build-and-test.yml `no-cache: true` forces full base-image re-pulls; docs.yml `curl` lacks `--retry` and `cargo install plissken` isn't cached.
+  - **publish-cli-binaries `environment: release`** adds a second approval round after charts — keep or drop?

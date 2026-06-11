@@ -167,12 +167,19 @@ jobs:
       - name: Create manifest list and push
         working-directory: /tmp/digests/${{ matrix.component }}
         run: |
-          docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf '${{ env.REGISTRY }}/${{ github.repository_owner }}/brokkr-${{ matrix.component }}@sha256:%s ' *)
+          # Retry transient registry network errors / read-after-write races.
+          for attempt in 1 2 3; do
+            docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+              $(printf '${{ env.REGISTRY }}/${{ github.repository_owner }}/brokkr-${{ matrix.component }}@sha256:%s ' *) && break
+            echo "imagetools create failed (attempt $attempt); retrying in 15s"; sleep 15
+          done
 
       - name: Inspect image
         run: |
-          docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ github.repository_owner }}/brokkr-${{ matrix.component }}:${{ steps.tag.outputs.tag }}
+          for attempt in 1 2 3; do
+            docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ github.repository_owner }}/brokkr-${{ matrix.component }}:${{ steps.tag.outputs.tag }} && break
+            echo "imagetools inspect failed (attempt $attempt); retrying in 15s"; sleep 15
+          done
 
   # Helm template validation - fast, reliable chart structure tests
   helm-template-tests:
