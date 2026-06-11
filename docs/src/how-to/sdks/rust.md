@@ -44,6 +44,29 @@ let agents = response.into_inner();
 println!("{} agents", agents.len());
 ```
 
+## Submit a folder of manifests
+
+You usually have a *folder* of Kubernetes manifests, not a hand-built YAML blob. `submit_manifests` reads the folder (top-level `*.yaml`/`*.yml`, sorted), concatenates it into one multi-document stream, validates each document has `apiVersion`+`kind`, and submits it as a new deployment object on an existing stack:
+
+```rust
+let object = client.submit_manifests(stack_id, "./manifests").await?;
+println!("submitted revision {}", object.sequence_id);
+```
+
+For the control-plane loop, `apply` is idempotent: it creates the stack by name if it doesn't exist, applies targeting labels for fan-out, and submits a new revision **only when the bundle changed** (so re-running with an unchanged folder is a no-op). It requires a generator PAK (the stack is owned by that generator).
+
+```rust
+use brokkr_client::ApplyOutcome;
+
+match client.apply("payments", "./manifests", &["env:prod".into(), "region:us".into()]).await? {
+    ApplyOutcome::Created(_) => println!("first revision"),
+    ApplyOutcome::Updated(_) => println!("new revision submitted"),
+    ApplyOutcome::Unchanged  => println!("already current"),
+}
+```
+
+A stack's desired state is the single latest deployment object, and the agent reconciles + prunes — so removing a file from the folder and re-applying deletes that resource on the next reconcile. Ordering is forgiving: the agent front-loads `Namespace`/`CustomResourceDefinition` objects.
+
 ## Handle one error
 
 Errors come back as `BrokkrError`. Match on `.code()` for the stable wire code:

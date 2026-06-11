@@ -37,9 +37,11 @@ use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 
 use crate::Client;
 use crate::types::{
-    ErrorResponse, K8sEventHistoryResponse, PodLogHistoryResponse, WsConnectionsResponse,
+    CreateDeploymentObjectRequest, DeploymentObject, ErrorResponse, K8sEventHistoryResponse,
+    NewStack, PodLogHistoryResponse, Stack, WsConnectionsResponse,
 };
 use chrono::{DateTime, Utc};
+use std::path::Path;
 use uuid::Uuid;
 
 /// Top-level error returned by every wrapper method. Mirrors
@@ -314,6 +316,150 @@ impl BrokkrClient {
         Ok(resp.into_inner())
     }
 
+    // -------------------------------------------------------------------
+    // Manifest submission helpers (BROKKR-I-0021). The control-plane
+    // friction is taking a folder of Kubernetes manifests and getting it
+    // submitted as a stack's desired state. These read the folder,
+    // concatenate it into one multi-document YAML stream, validate it, and
+    // submit — so callers hand over a directory, not a hand-built blob.
+    // "1 stack = 1 rendered bundle"; the latest deployment object is the
+    // stack's desired state, and the agent reconciles + prunes.
+    // -------------------------------------------------------------------
+
+    /// Read a folder (or file/list of files) of `*.yaml`/`*.yml` manifests,
+    /// concatenate them into one multi-document stream, validate that each
+    /// document parses and carries `apiVersion`+`kind`, and submit it as a
+    /// new deployment object on an existing stack.
+    ///
+    /// Files in a directory are concatenated in sorted-name order. Ordering
+    /// is forgiving: the agent front-loads `Namespace`/`CustomResourceDefinition`
+    /// objects during apply.
+    pub async fn submit_manifests(
+        &self,
+        stack_id: Uuid,
+        path: impl AsRef<Path>,
+    ) -> Result<DeploymentObject, BrokkrError> {
+        let yaml_content = read_manifests(path.as_ref())?;
+        let resp = self
+            .inner
+            .create_deployment_object()
+            .id(stack_id)
+            .body(CreateDeploymentObjectRequest {
+                yaml_content,
+                is_deletion_marker: Some(false),
+            })
+            .send()
+            .await?;
+        Ok(resp.into_inner())
+    }
+
+    /// Idempotently make a folder of manifests the desired state of the stack
+    /// named `stack_name`, creating the stack if it does not exist and
+    /// applying any `targeting` labels (for fan-out). A new revision is
+    /// submitted only when the bundle differs from the stack's current latest
+    /// deployment object, so this drops straight into a reconcile loop.
+    ///
+    /// Requires a generator PAK (the new stack is owned by that generator);
+    /// admin callers should create the stack explicitly and use
+    /// [`Self::submit_manifests`].
+    pub async fn apply(
+        &self,
+        stack_name: &str,
+        path: impl AsRef<Path>,
+        targeting: &[String],
+    ) -> Result<ApplyOutcome, BrokkrError> {
+        let yaml_content = read_manifests(path.as_ref())?;
+        let checksum = sha256_hex(&yaml_content);
+
+        // Resolve the caller's generator identity (needed to own a new stack).
+        let auth = self.inner.verify_pak().send().await?.into_inner();
+        let generator_id = auth
+            .generator
+            .ok_or_else(|| {
+                BrokkrError::InvalidRequest(
+                    "apply by name requires a generator PAK; admin callers should create the \
+                     stack explicitly and use submit_manifests"
+                        .to_string(),
+                )
+            })
+            .and_then(|g| {
+                Uuid::parse_str(&g).map_err(|e| BrokkrError::UnexpectedResponse {
+                    status: None,
+                    detail: format!("auth response generator id is not a UUID: {e}"),
+                })
+            })?;
+
+        // Find-or-create the stack by name.
+        let stacks: Vec<Stack> = self.inner.list_stacks().send().await?.into_inner();
+        let stack = match stacks.into_iter().find(|s| s.name == stack_name) {
+            Some(s) => s,
+            None => self
+                .inner
+                .create_stack()
+                .body(NewStack {
+                    name: stack_name.to_string(),
+                    generator_id,
+                    description: None,
+                })
+                .send()
+                .await?
+                .into_inner(),
+        };
+
+        // Apply targeting labels; a label that already exists is not an error.
+        for label in targeting {
+            if let Err(e) = self
+                .inner
+                .stacks_add_label()
+                .id(stack.id)
+                .body(label.clone())
+                .send()
+                .await
+            {
+                let err = BrokkrError::from(e);
+                if err.status() != Some(reqwest::StatusCode::CONFLICT) {
+                    return Err(err);
+                }
+            }
+        }
+
+        // Idempotency: skip submission when the latest bundle already matches.
+        let objects: Vec<DeploymentObject> = self
+            .inner
+            .list_deployment_objects()
+            .id(stack.id)
+            .send()
+            .await?
+            .into_inner();
+        let had_prior = !objects.is_empty();
+        let already_current = objects
+            .iter()
+            .max_by_key(|o| o.sequence_id)
+            .map(|latest| latest.yaml_checksum == checksum)
+            .unwrap_or(false);
+        if already_current {
+            return Ok(ApplyOutcome::Unchanged);
+        }
+
+        let object = self
+            .inner
+            .create_deployment_object()
+            .id(stack.id)
+            .body(CreateDeploymentObjectRequest {
+                yaml_content,
+                is_deletion_marker: Some(false),
+            })
+            .send()
+            .await?
+            .into_inner();
+
+        Ok(if had_prior {
+            ApplyOutcome::Updated(object)
+        } else {
+            ApplyOutcome::Created(object)
+        })
+    }
+
     /// Run `op` with exponential backoff on retryable errors.
     ///
     /// The closure is invoked at most `max_retries + 1` times (configured via
@@ -346,6 +492,100 @@ impl BrokkrClient {
             }
         }
     }
+}
+
+/// Outcome of [`BrokkrClient::apply`].
+#[derive(Debug)]
+pub enum ApplyOutcome {
+    /// The stack had no prior deployment object; this bundle is its first.
+    Created(DeploymentObject),
+    /// A new revision was submitted (the bundle differed from the latest).
+    Updated(DeploymentObject),
+    /// The stack's latest bundle already matched; nothing was submitted.
+    Unchanged,
+}
+
+/// Read a manifest path into one validated multi-document YAML stream.
+///
+/// `path` may be a single file or a directory; for a directory, top-level
+/// `*.yaml`/`*.yml` files are concatenated in sorted-name order. Each
+/// document must parse and carry `apiVersion` and `kind`.
+fn read_manifests(path: &Path) -> Result<String, BrokkrError> {
+    let files = collect_manifest_files(path)?;
+    if files.is_empty() {
+        return Err(BrokkrError::InvalidRequest(format!(
+            "no .yaml/.yml manifests found in {}",
+            path.display()
+        )));
+    }
+    let mut parts: Vec<String> = Vec::with_capacity(files.len());
+    for file in &files {
+        let content = std::fs::read_to_string(file).map_err(|e| {
+            BrokkrError::InvalidRequest(format!("cannot read {}: {e}", file.display()))
+        })?;
+        validate_manifest_documents(&content, file)?;
+        parts.push(content.trim_end().to_string());
+    }
+    Ok(format!("{}\n", parts.join("\n---\n")))
+}
+
+/// Resolve a manifest path to the concrete list of files to read.
+fn collect_manifest_files(path: &Path) -> Result<Vec<std::path::PathBuf>, BrokkrError> {
+    if path.is_file() {
+        return Ok(vec![path.to_path_buf()]);
+    }
+    if !path.is_dir() {
+        return Err(BrokkrError::InvalidRequest(format!(
+            "path not found: {}",
+            path.display()
+        )));
+    }
+    let mut files: Vec<std::path::PathBuf> = std::fs::read_dir(path)
+        .map_err(|e| {
+            BrokkrError::InvalidRequest(format!("cannot read directory {}: {e}", path.display()))
+        })?
+        .filter_map(|entry| entry.ok().map(|e| e.path()))
+        .filter(|p| {
+            p.is_file()
+                && matches!(
+                    p.extension().and_then(|s| s.to_str()),
+                    Some("yaml") | Some("yml")
+                )
+        })
+        .collect();
+    files.sort();
+    Ok(files)
+}
+
+/// Validate that every non-empty document in `content` parses and carries
+/// `apiVersion` and `kind`.
+fn validate_manifest_documents(content: &str, file: &Path) -> Result<(), BrokkrError> {
+    use serde::Deserialize;
+    for doc in serde_yaml::Deserializer::from_str(content) {
+        let value = serde_yaml::Value::deserialize(doc).map_err(|e| {
+            BrokkrError::InvalidRequest(format!("{}: invalid YAML: {e}", file.display()))
+        })?;
+        if value.is_null() {
+            continue;
+        }
+        let has = |key: &str| value.get(key).and_then(|v| v.as_str()).is_some();
+        if !has("apiVersion") || !has("kind") {
+            return Err(BrokkrError::InvalidRequest(format!(
+                "{}: every manifest document must have apiVersion and kind",
+                file.display()
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// Lowercase hex SHA-256, matching the broker's deployment-object checksum so
+/// [`BrokkrClient::apply`] can detect an unchanged bundle.
+fn sha256_hex(content: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(content.as_bytes());
+    format!("{:x}", hasher.finalize())
 }
 
 #[cfg(test)]
@@ -508,4 +748,68 @@ mod tests {
         assert!(result.is_err());
         assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
     }
+
+    // --- BROKKR-T-0195: manifest folder helpers ---
+
+    fn write(dir: &std::path::Path, name: &str, content: &str) {
+        std::fs::write(dir.join(name), content).unwrap();
+    }
+
+    #[test]
+    fn read_manifests_concatenates_folder_in_sorted_order() {
+        let dir = tempfile::tempdir().unwrap();
+        // intentionally out of order on disk; sorted by name on read
+        write(dir.path(), "02-deploy.yaml", "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: d\n");
+        write(dir.path(), "01-namespace.yaml", "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: ns\n");
+        write(dir.path(), "notes.txt", "ignored");
+        let stream = read_manifests(dir.path()).unwrap();
+        let ns_at = stream.find("kind: Namespace").unwrap();
+        let dep_at = stream.find("kind: Deployment").unwrap();
+        assert!(ns_at < dep_at, "01-namespace should come before 02-deploy");
+        assert!(stream.contains("\n---\n"), "documents joined with a separator");
+        assert!(!stream.contains("ignored"), "non-yaml files are skipped");
+    }
+
+    #[test]
+    fn read_manifests_accepts_single_file_and_multidoc() {
+        let dir = tempfile::tempdir().unwrap();
+        write(dir.path(), "all.yaml", "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: a\n---\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: b\n");
+        let stream = read_manifests(&dir.path().join("all.yaml")).unwrap();
+        assert!(stream.contains("kind: Namespace") && stream.contains("kind: ConfigMap"));
+    }
+
+    #[test]
+    fn read_manifests_rejects_missing_apiversion_or_kind() {
+        let dir = tempfile::tempdir().unwrap();
+        write(dir.path(), "bad.yaml", "kind: ConfigMap\nmetadata:\n  name: x\n");
+        let err = read_manifests(dir.path()).unwrap_err();
+        assert!(matches!(err, BrokkrError::InvalidRequest(_)), "got {err:?}");
+    }
+
+    #[test]
+    fn read_manifests_rejects_malformed_yaml() {
+        let dir = tempfile::tempdir().unwrap();
+        write(dir.path(), "bad.yaml", "kind: : : [unbalanced");
+        assert!(read_manifests(dir.path()).is_err());
+    }
+
+    #[test]
+    fn read_manifests_errors_on_empty_dir_and_missing_path() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(read_manifests(dir.path()).is_err(), "empty dir");
+        assert!(read_manifests(&dir.path().join("nope")).is_err(), "missing path");
+    }
+
+    #[test]
+    fn sha256_hex_is_stable_and_matches_known_vector() {
+        // Matches the broker's `format!("{:x}", Sha256::digest(...))`.
+        assert_eq!(
+            sha256_hex(""),
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
+        let a = "apiVersion: v1\nkind: ConfigMap\n";
+        assert_eq!(sha256_hex(a), sha256_hex(a));
+        assert_ne!(sha256_hex(a), sha256_hex("apiVersion: v1\nkind: Secret\n"));
+    }
+
 }
