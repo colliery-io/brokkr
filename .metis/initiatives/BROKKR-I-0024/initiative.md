@@ -4,7 +4,7 @@ level: initiative
 title: "Broker API correctness: error mapping and auth scoping"
 short_code: "BROKKR-I-0024"
 created_at: 2026-06-11T11:01:39.433117+00:00
-updated_at: 2026-06-11T15:34:10.621050+00:00
+updated_at: 2026-06-11T17:05:20.510214+00:00
 parent: brokkr-environment-aware
 blocked_by: []
 archived: false
@@ -12,7 +12,7 @@ archived: false
 tags:
   - "#initiative"
   - "#initiative"
-  - "#phase/active"
+  - "#phase/completed"
 
 
 exit_criteria_met: false

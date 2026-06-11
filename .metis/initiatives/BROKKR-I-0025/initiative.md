@@ -4,7 +4,7 @@ level: initiative
 title: "SDK parity: retry, validation, and surface harmonization"
 short_code: "BROKKR-I-0025"
 created_at: 2026-06-11T11:01:39.480559+00:00
-updated_at: 2026-06-11T11:08:30.436958+00:00
+updated_at: 2026-06-11T16:25:06.255752+00:00
 parent: brokkr-environment-aware
 blocked_by: []
 archived: false
@@ -12,7 +12,7 @@ archived: false
 tags:
   - "#initiative"
   - "#initiative"
-  - "#phase/decompose"
+  - "#phase/active"
 
 
 exit_criteria_met: false

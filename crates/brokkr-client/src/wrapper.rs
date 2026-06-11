@@ -86,7 +86,7 @@ impl BrokkrError {
 
     /// Whether this error is appropriate to retry. Mirrors
     /// [`progenitor_client::Error::is_retryable`]: transport errors and
-    /// 429/502/503/504 responses qualify.
+    /// 408/429/502/503/504 responses qualify.
     pub fn is_retryable(&self) -> bool {
         match self {
             Self::Transport(_) => true,

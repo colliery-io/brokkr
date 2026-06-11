@@ -3,6 +3,10 @@
  * Licensed under the Elastic License 2.0.
  */
 
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { BrokkrClient, BrokkrError, type ErrorResponse } from "./index.js";
@@ -318,5 +322,39 @@ describe("BrokkrClient.liveSubscriptionUrl", () => {
     expect(c.liveSubscriptionUrl("abc")).toBe(
       "ws://broker.test:3000/api/v1/stacks/abc/live",
     );
+  });
+});
+
+describe("non-idempotent POSTs are single-attempt (BROKKR-T-0212)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("does not retry submitManifests even on a retryable 502", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "brokkr-noretry-"));
+    writeFileSync(
+      join(dir, "ns.yaml"),
+      "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: n\n",
+    );
+    const body: ErrorResponse = { code: "internal_error", message: "boom" };
+    // Script several 502s: with the old retry wrapper this POST would be
+    // called maxRetries+1 times; single-attempt must call it exactly once.
+    const { fetch: scripted, calls } = scriptedFetch([
+      { status: 502, body },
+      { status: 502, body },
+      { status: 502, body },
+      { status: 502, body },
+    ]);
+    vi.stubGlobal("fetch", scripted);
+    const c = new BrokkrClient({
+      baseUrl,
+      token: "t",
+      maxRetries: 5,
+      initialBackoffMs: 1,
+    });
+    await expect(
+      c.submitManifests("00000000-0000-0000-0000-000000000001", dir),
+    ).rejects.toBeInstanceOf(BrokkrError);
+    expect(calls.length).toBe(1);
   });
 });
