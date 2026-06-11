@@ -132,12 +132,25 @@ pub fn last_successful_poll_timestamp() -> &'static Gauge {
 /// # Returns
 ///
 /// Returns a String containing all metrics in Prometheus exposition format
-pub fn encode_metrics() -> String {
+pub fn encode_metrics() -> Result<String, String> {
     let encoder = TextEncoder::new();
     let metric_families = registry().gather();
     let mut buffer = vec![];
     encoder
         .encode(&metric_families, &mut buffer)
-        .expect("Failed to encode metrics");
-    String::from_utf8(buffer).expect("Failed to convert metrics to UTF-8")
+        .map_err(|e| format!("failed to encode metrics: {e}"))?;
+    String::from_utf8(buffer).map_err(|e| format!("metrics are not valid UTF-8: {e}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn encode_metrics_succeeds() {
+        // Encoding the registry must return Ok valid-UTF-8 text rather than
+        // panicking — the /metrics handler maps an Err to a 500 instead of
+        // crashing the connection task.
+        assert!(encode_metrics().is_ok());
+    }
 }

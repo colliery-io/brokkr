@@ -307,7 +307,10 @@ pub async fn get_all_objects_by_annotation(
     let discovery = Discovery::new(k8s_client.clone())
         .run()
         .await
-        .expect("Failed to create discovery client");
+        .map_err(|e| {
+            error!("Failed to create Kubernetes discovery client: {}", e);
+            e
+        })?;
 
     // Search through all API groups and resources
     for group in discovery.groups() {
@@ -370,7 +373,10 @@ pub async fn delete_k8s_objects(
     let discovery = Discovery::new(k8s_client.clone())
         .run()
         .await
-        .expect("Failed to create discovery client");
+        .map_err(|e| {
+            error!("Failed to create Kubernetes discovery client: {}", e);
+            e
+        })?;
 
     for k8s_object in k8s_objects {
         // Verify ownership before attempting deletion
@@ -467,7 +473,10 @@ pub async fn validate_k8s_objects(
     let discovery = Discovery::new(k8s_client.clone())
         .run()
         .await
-        .expect("Failed to create discovery client");
+        .map_err(|e| {
+            error!("Failed to create Kubernetes discovery client: {}", e);
+            e
+        })?;
 
     for k8s_object in k8s_objects {
         let default_namespace = &"default".to_string();

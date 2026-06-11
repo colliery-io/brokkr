@@ -123,10 +123,11 @@ async fn readyz(State(state): State<HealthState>) -> impl IntoResponse {
 ///
 /// Returns 200 OK if all checks pass, 503 if any check fails.
 async fn health(State(state): State<HealthState>) -> impl IntoResponse {
-    // Get current timestamp
+    // Get current timestamp. A clock before the epoch is implausible and must
+    // not panic a liveness handler, so fall back to zero.
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .expect("Time went backwards");
+        .unwrap_or_default();
     let timestamp = chrono::Utc::now().to_rfc3339();
 
     // Calculate uptime
@@ -134,7 +135,7 @@ async fn health(State(state): State<HealthState>) -> impl IntoResponse {
         state
             .start_time
             .duration_since(UNIX_EPOCH)
-            .expect("Time went backwards")
+            .unwrap_or_default()
             .as_secs(),
     );
 
@@ -187,10 +188,19 @@ async fn health(State(state): State<HealthState>) -> impl IntoResponse {
 /// Returns Prometheus metrics in text exposition format.
 /// Metrics include broker polling, Kubernetes operations, and agent health.
 async fn metrics_handler() -> impl IntoResponse {
-    let metrics_data = metrics::encode_metrics();
-    (
-        StatusCode::OK,
-        [("Content-Type", "text/plain; version=0.0.4")],
-        metrics_data,
-    )
+    match metrics::encode_metrics() {
+        Ok(metrics_data) => (
+            StatusCode::OK,
+            [("Content-Type", "text/plain; version=0.0.4")],
+            metrics_data,
+        ),
+        Err(e) => {
+            error!("Failed to encode metrics: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                [("Content-Type", "text/plain; version=0.0.4")],
+                String::new(),
+            )
+        }
+    }
 }

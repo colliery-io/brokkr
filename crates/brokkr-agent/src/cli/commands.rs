@@ -265,7 +265,29 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
                 match broker::fetch_and_process_deployment_objects(&config, &sdk_client, &agent).await {
                     Ok(objects) => {
                         for obj in objects {
-                            let k8s_objects = k8s::objects::create_k8s_objects(obj.clone(),agent.id)?;
+                            // A malformed bundle must not crash the agent: log it,
+                            // report a failure event, and move on. Otherwise the
+                            // `?` exits the process and the restart re-fetches the
+                            // same bad object — a permanent crash loop.
+                            let k8s_objects = match k8s::objects::create_k8s_objects(obj.clone(), agent.id) {
+                                Ok(objs) => objs,
+                                Err(e) => {
+                                    error!("Failed to parse deployment object {} into Kubernetes objects for agent '{}' (id: {}): {}",
+                                        obj.id, agent.name, agent.id, e);
+                                    if let Err(send_err) = broker::send_failure_event(
+                                        &config,
+                                        &sdk_client,
+                                        &agent,
+                                        obj.id,
+                                        e.to_string(),
+                                        Some(&ws_uplink),
+                                    ).await {
+                                        error!("Failed to send failure event for deployment {} in agent '{}' (id: {}): {}",
+                                            obj.id, agent.name, agent.id, send_err);
+                                    }
+                                    continue;
+                                }
+                            };
                             match k8s::api::reconcile_target_state(
                                 &k8s_objects,
                                 k8s_client.clone(),
