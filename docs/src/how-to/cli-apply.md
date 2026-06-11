@@ -4,7 +4,7 @@ You have a folder of Kubernetes manifests and want it to become a stack's desire
 
 ## Prerequisites
 
-- The `brokkr` binary on your `PATH` (download the tarball for your platform from the [GitHub Release](https://github.com/colliery-io/brokkr/releases), or build it with `cargo build --release -p brokkr-cli`).
+- The `brokkr` binary on your `PATH` (download the Linux or macOS tarball for your architecture from the [GitHub Release](https://github.com/colliery-io/brokkr/releases), or build it from source with `cargo build --release -p brokkr-cli`).
 - A reachable broker and a **generator** PAK (the stack will be owned by that generator).
 
 ## Configure the connection once
