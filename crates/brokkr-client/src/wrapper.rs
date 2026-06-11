@@ -207,6 +207,12 @@ impl BrokkrClientBuilder {
     }
 
     pub fn build(self) -> Result<BrokkrClient, BrokkrError> {
+        // reqwest is built with `rustls-no-provider`, so a process-default
+        // crypto provider must be installed before the first TLS handshake.
+        // Idempotent: a second call — or one already made by kube in the same
+        // process (e.g. the agent) — returns Err, which we ignore.
+        let _ = rustls::crypto::ring::default_provider().install_default();
+
         let mut headers = HeaderMap::new();
         if let Some(token) = &self.token {
             let value = HeaderValue::from_str(token).map_err(|e| {

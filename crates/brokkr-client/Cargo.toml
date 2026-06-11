@@ -22,12 +22,13 @@ progenitor-client = "0.14"
 bytes = "1"
 chrono = { version = "0.4", features = ["serde"] }
 futures = "0.3"
-# `rustls` (not native-tls) gives HTTPS without pulling openssl-sys. Without a
-# TLS feature reqwest can only do http:// and every https:// broker URL fails
-# at runtime. reqwest 0.13's `rustls` uses aws-lc-rs + the OS trust store
-# (rustls-platform-verifier) — openssl-free, so the CLI cross-compile (T-0199)
-# stays openssl-clean.
-reqwest = { version = "0.13", default-features = false, features = ["json", "stream", "rustls"] }
+# TLS via rustls with the **ring** provider (installed in BrokkrClientBuilder::
+# build). reqwest 0.13's `rustls` feature would pull aws-lc-rs/aws-lc-sys — a C
+# library that needs cmake and is slow/heavy to build (it broke the agent's
+# Docker build and the CLI cross-compile). `rustls-no-provider` skips it; ring
+# is pure-Rust+asm, already in the workspace via kube, and openssl-free.
+reqwest = { version = "0.13", default-features = false, features = ["json", "stream", "rustls-no-provider"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_yaml = "0.9"
