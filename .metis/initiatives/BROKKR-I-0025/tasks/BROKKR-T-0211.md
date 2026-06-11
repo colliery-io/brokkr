@@ -4,16 +4,15 @@ level: task
 title: "Python SDK: real retry on HTTP status; stop fabricating BrokkrError.status"
 short_code: "BROKKR-T-0211"
 created_at: 2026-06-11T11:02:08.076118+00:00
-updated_at: 2026-06-11T11:02:08.076118+00:00
+updated_at: 2026-06-11T16:41:25.734327+00:00
 parent: sdk-parity-retry-validation-and
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/todo"
   - "#task"
-  - "#phase/todo"
+  - "#phase/active"
 
 
 exit_criteria_met: false
@@ -32,6 +31,8 @@ Two related defects in `sdks/python/brokkr/brokkr/client.py`. (1) The generated 
 
 ## Acceptance Criteria
 
+## Acceptance Criteria
+
 - [ ] `retry()` observes the real HTTP status (use `*_detailed` variants or `raise_on_unexpected_status=True` + classification) and retries exactly {408, 429, 502, 503, 504} + transport errors, matching Rust/TS.
 - [ ] `retry()` never returns `None` for an HTTP error — it raises `BrokkrError` with the real status.
 - [ ] `BrokkrError.status` is the wire status everywhere (no hardcoded 400/500).
@@ -41,3 +42,9 @@ Two related defects in `sdks/python/brokkr/brokkr/client.py`. (1) The generated 
 ## Status Updates
 
 *To be added during implementation*
+## Status Updates
+
+- 2026-06-11: DONE (branch feat/i0025-sdk-parity). Root of both bugs: the wrapper unwrapped non-detailed `.asyncio()` results, which drop the HTTP status. Fixed by routing through `*_detailed` Responses (carry `.status_code`), matching the add-label loop that already did this:
+  - **retry()**: `op` must now return a `*_detailed` Response. retry reads the real `status_code`: <400 returns `.parsed`; otherwise raises BrokkrError with the REAL status (ErrorResponse body → from_response, else a status-only error). Fixes (a) the `None`-returned-as-success bug for undocumented statuses (e.g. 503), and (b) retry classification now uses the true status. The old code returned None on a 503 and treated any ErrorResponse as status=500.
+  - **_expect()** (apply's internal unwrap): same change — reads status from the detailed Response, no more hardcoded `status=400`. The 6 apply/submit_manifests call sites switched from `.asyncio()` to `.asyncio_detailed()`.
+  Tests (test_wrapper.py): success returns parsed; **503-then-200 retries and succeeds** (was the None bug); **404 raises with status=404** (was fabricated); transport retry + backoff unchanged — 32 pass. Docs: python.md retry examples switched to `.asyncio_detailed` with a note on why. The apply/contract flow runs on CI's python contract suite.

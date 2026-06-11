@@ -85,30 +85,40 @@ class BrokkrClient:
         decide which operations are safe to retry. Non-idempotent POSTs
         should generally **not** be wrapped.
 
-        Retry classification matches the Rust wrapper: transport errors
-        and HTTP 408/429/502/503/504 qualify. Other 4xx/5xx responses
-        return immediately on the first failure.
+        ``op`` MUST return a generated ``*_detailed`` Response (e.g.
+        ``list_stacks.asyncio_detailed(client=api)``) — that carries the real
+        ``.status_code`` so the wrapper can classify retries and surface the
+        true wire status. The non-detailed ``.asyncio`` form silently returns
+        ``None`` on an undocumented status (e.g. a 503), which retry would
+        otherwise mistake for success.
+
+        Retry classification matches the Rust/TS wrappers: transport errors
+        and HTTP 408/429/502/503/504 qualify. Any other failing status raises
+        immediately with that status; a non-error response returns its parsed
+        body.
         """
         attempt = 0
         while True:
             try:
-                result = await op(self.api)
+                response = await op(self.api)
             except httpx.HTTPError as exc:
                 err = BrokkrError.from_transport(exc)
                 if not err.is_retryable() or attempt >= self._max_retries:
                     raise err from exc
             else:
-                if isinstance(result, ErrorResponse):
-                    # The generator folds documented errors into return
-                    # unions; we surface them as raises here. We don't know
-                    # the status code in this codepath — the *_detailed
-                    # variants carry it. Callers wanting status-aware retry
-                    # should use those and convert manually.
-                    err = BrokkrError.from_response(result, status=500)
-                    if not err.is_retryable() or attempt >= self._max_retries:
-                        raise err
-                else:
-                    return result
+                status = int(response.status_code)
+                if status < 400:
+                    return response.parsed
+                parsed = response.parsed
+                err = (
+                    BrokkrError.from_response(parsed, status=status)
+                    if isinstance(parsed, ErrorResponse)
+                    else BrokkrError(
+                        message=f"request failed with HTTP {status}", status=status
+                    )
+                )
+                if not err.is_retryable() or attempt >= self._max_retries:
+                    raise err
 
             backoff = min(self._initial_backoff * (2**attempt), _MAX_BACKOFF)
             await asyncio.sleep(backoff)
@@ -130,7 +140,7 @@ class BrokkrClient:
         body = CreateDeploymentObjectRequest(
             yaml_content=yaml_content, is_deletion_marker=False
         )
-        result = await create_deployment_object.asyncio(
+        result = await create_deployment_object.asyncio_detailed(
             stack_id, client=self.api, body=body
         )
         return _expect(result, "create_deployment_object")
@@ -163,7 +173,9 @@ class BrokkrClient:
         yaml_content = _read_manifests(path)
         checksum = _sha256_hex(yaml_content)
 
-        auth = _expect(await verify_pak.asyncio(client=self.api), "verify_pak")
+        auth = _expect(
+            await verify_pak.asyncio_detailed(client=self.api), "verify_pak"
+        )
         generator = auth.generator
         if generator is None or isinstance(generator, Unset):
             raise BrokkrError(
@@ -174,11 +186,13 @@ class BrokkrClient:
             )
         generator_id = UUID(str(generator))
 
-        stacks = _expect(await list_stacks.asyncio(client=self.api), "list_stacks")
+        stacks = _expect(
+            await list_stacks.asyncio_detailed(client=self.api), "list_stacks"
+        )
         stack = next((s for s in stacks if s.name == stack_name), None)
         if stack is None:
             stack = _expect(
-                await create_stack.asyncio(
+                await create_stack.asyncio_detailed(
                     client=self.api,
                     body=NewStack(generator_id=generator_id, name=stack_name),
                 ),
@@ -199,7 +213,9 @@ class BrokkrClient:
                 )
 
         objects = _expect(
-            await list_deployment_objects.asyncio(stack.id, client=self.api),
+            await list_deployment_objects.asyncio_detailed(
+                stack.id, client=self.api
+            ),
             "list_deployment_objects",
         )
         latest = max(objects, key=lambda o: o.sequence_id, default=None)
@@ -208,7 +224,7 @@ class BrokkrClient:
 
         had_prior = len(objects) > 0
         obj = _expect(
-            await create_deployment_object.asyncio(
+            await create_deployment_object.asyncio_detailed(
                 stack.id,
                 client=self.api,
                 body=CreateDeploymentObjectRequest(
@@ -231,13 +247,21 @@ class ApplyResult:
     deployment_object: Any | None = None
 
 
-def _expect(result: Any, what: str) -> Any:
-    """Unwrap a generated ``.asyncio`` result, raising on error/None."""
-    if result is None:
-        raise BrokkrError(message=f"{what}: empty response")
-    if isinstance(result, ErrorResponse):
-        raise BrokkrError.from_response(result, status=400)
-    return result
+def _expect(response: Any, what: str) -> Any:
+    """Unwrap a generated ``*_detailed`` Response, raising on error/None with
+    the *real* wire status (the non-detailed ``.asyncio`` form drops the status,
+    which is why callers pass the detailed variant)."""
+    status = int(response.status_code)
+    parsed = response.parsed
+    if status >= 400:
+        if isinstance(parsed, ErrorResponse):
+            raise BrokkrError.from_response(parsed, status=status)
+        raise BrokkrError(
+            message=f"{what}: request failed with HTTP {status}", status=status
+        )
+    if parsed is None:
+        raise BrokkrError(message=f"{what}: empty response", status=status)
+    return parsed
 
 
 def _read_manifests(path: Any) -> str:

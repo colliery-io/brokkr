@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -10,6 +11,12 @@ import pytest
 from brokkr import BrokkrClient, BrokkrError, ErrorResponse, TemplateGenerator
 from brokkr_broker_client import AuthenticatedClient, Client
 from brokkr_broker_client import models as generated_models
+
+
+def _resp(status: int, parsed: object) -> SimpleNamespace:
+    """Stand in for a generated ``*_detailed`` Response (``.status_code`` +
+    ``.parsed``), which is what ``retry``'s ``op`` must now return."""
+    return SimpleNamespace(status_code=status, parsed=parsed)
 
 
 def test_constructs_authenticated_when_token_supplied() -> None:
@@ -63,13 +70,48 @@ async def test_retry_returns_on_first_success() -> None:
     c = BrokkrClient("http://localhost", max_retries=5, initial_backoff=0.001)
     calls = 0
 
-    async def op(_api: object) -> str:
+    async def op(_api: object) -> object:
         nonlocal calls
         calls += 1
-        return "ok"
+        return _resp(200, "ok")
 
     result = await c.retry(op)
     assert result == "ok"
+    assert calls == 1
+
+
+async def test_retry_retries_retryable_status_then_succeeds() -> None:
+    c = BrokkrClient("http://localhost", max_retries=5, initial_backoff=0.001)
+    calls = 0
+
+    async def op(_api: object) -> object:
+        nonlocal calls
+        calls += 1
+        # 503 twice (retryable, parsed is None for an undocumented status),
+        # then a 200 — the old code returned None on the first 503.
+        return _resp(503, None) if calls < 3 else _resp(200, "ok")
+
+    result = await c.retry(op)
+    assert result == "ok"
+    assert calls == 3
+
+
+async def test_retry_raises_with_real_status_not_fabricated() -> None:
+    c = BrokkrClient("http://localhost", max_retries=5, initial_backoff=0.001)
+    calls = 0
+
+    async def op(_api: object) -> object:
+        nonlocal calls
+        calls += 1
+        return _resp(
+            404, ErrorResponse(code="agent_not_found", message="agent not found")
+        )
+
+    with pytest.raises(BrokkrError) as exc_info:
+        await c.retry(op)
+    # Real wire status, not the old hardcoded 400/500.
+    assert exc_info.value.status == 404
+    assert exc_info.value.code == "agent_not_found"
     assert calls == 1
 
 
@@ -92,19 +134,14 @@ async def test_retry_short_circuits_on_non_retryable_status() -> None:
     c = BrokkrClient("http://localhost", max_retries=5, initial_backoff=0.001)
     calls = 0
 
-    async def op(_api: object) -> ErrorResponse:
+    async def op(_api: object) -> object:
         nonlocal calls
         calls += 1
-        # Returning the typed error from the union — simulates the generated
-        # client's sync/asyncio return when the server responds 404.
-        # is_retryable_status(500) is False so we'd retry, so use 404-style
-        # body and verify that returning the ErrorResponse alone (status
-        # defaults to 500 in from_response) does NOT loop forever — it
-        # short-circuits via the wrapper's max_retries.
-        return ErrorResponse(code="agent_not_found", message="agent not found")
+        # A 404 detailed Response — non-retryable, so raise on first attempt.
+        return _resp(
+            404, ErrorResponse(code="agent_not_found", message="agent not found")
+        )
 
-    # Wrapper treats unknown-status ErrorResponse as status=500. 500 is not
-    # in the retryable set, so this should raise on the first attempt.
     with pytest.raises(BrokkrError) as exc_info:
         await c.retry(op)
     assert exc_info.value.code == "agent_not_found"
