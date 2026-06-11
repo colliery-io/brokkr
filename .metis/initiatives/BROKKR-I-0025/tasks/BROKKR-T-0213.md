@@ -4,16 +4,15 @@ level: task
 title: "TS SDK: real YAML validation in readManifests"
 short_code: "BROKKR-T-0213"
 created_at: 2026-06-11T11:02:08.176225+00:00
-updated_at: 2026-06-11T11:02:08.176225+00:00
+updated_at: 2026-06-11T16:55:42.242478+00:00
 parent: sdk-parity-retry-validation-and
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/todo"
   - "#task"
-  - "#phase/todo"
+  - "#phase/active"
 
 
 exit_criteria_met: false
@@ -32,6 +31,8 @@ TS `readManifests` validates with regexes (`/^apiVersion:/m`, `/^kind:/m`, split
 
 ## Acceptance Criteria
 
+## Acceptance Criteria
+
 - [ ] Documents parsed with a real YAML parser (dynamic import, keeping the browser bundle clean — same pattern as the node:* imports); semantics match Rust/Python: null docs skipped, every non-null doc requires apiVersion + kind.
 - [ ] Directory entries filtered to files (EISDIR fixed); fs errors wrapped in BrokkrError.
 - [ ] Byte output of readManifests UNCHANGED for valid inputs (the concatenation is parity-verified — only validation changes).
@@ -45,3 +46,6 @@ Add the YAML lib as a regular dependency but only load it via dynamic import ins
 ## Status Updates
 
 *To be added during implementation*
+## Status Updates
+
+- 2026-06-11: DONE (branch feat/i0025-sdk-parity). Replaced readManifests' regex validation (`/^---\s*$/m` split + `/^apiVersion:/m` / `/^kind:/m`) with a real multi-document parse via the `yaml` package (added as a dep, dynamic-imported alongside node:fs so the browser bundle stays clean). Now matches Rust/Python: malformed YAML rejected (`invalid YAML`), null/comment-only documents skipped, every non-null document must have apiVersion+kind, and an embedded `---` inside a block scalar is no longer mistaken for a separator. Also fixed: directory entries filtered with `withFileTypes`+`isFile()` (a sub-dir named `x.yaml` is skipped instead of throwing raw EISDIR), and fs.readFile errors wrapped in BrokkrError. **Byte output unchanged** for valid input (still per-file `\s+$` strip, joined `\n---\n`, trailing `\n`) — the cross-SDK checksum parity from T-0197 holds; only validation changed. Tests: 4 new (malformed reject, comment-only skip, block-scalar-with-`---` accepted, subdir ignored) — 36 vitest pass, build clean. This also fixes the apply side-effect leak (TS used to create the stack + labels before the bad-YAML POST failed on ingest; now it rejects before any network call).

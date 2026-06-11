@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -40,6 +40,43 @@ describe("readManifests (BROKKR-T-0197)", () => {
     const dir = tmp();
     await expect(readManifests(dir)).rejects.toThrow(/no .yaml/);
     await expect(readManifests(join(dir, "nope"))).rejects.toThrow(/path not found/);
+  });
+
+  // BROKKR-T-0213: real YAML parse instead of regexes.
+  it("rejects malformed YAML the regex check would have accepted", async () => {
+    const dir = tmp();
+    writeFileSync(join(dir, "bad.yaml"), "apiVersion: v1\nkind: : : [unbalanced\n");
+    await expect(readManifests(dir)).rejects.toThrow(/invalid YAML/);
+  });
+
+  it("skips a comment-only trailing document instead of rejecting it", async () => {
+    const dir = tmp();
+    writeFileSync(
+      join(dir, "ok.yaml"),
+      "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: c\n---\n# trailing comment only\n",
+    );
+    const stream = await readManifests(dir);
+    expect(stream).toContain("kind: ConfigMap");
+  });
+
+  it("does not split inside a block scalar that contains a --- line", async () => {
+    const dir = tmp();
+    writeFileSync(
+      join(dir, "cm.yaml"),
+      "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: c\ndata:\n  doc: |\n    line one\n    ---\n    line two\n",
+    );
+    // The embedded `---` is part of a block scalar, not a doc separator — the
+    // single document is valid and must not be rejected.
+    const stream = await readManifests(dir);
+    expect(stream).toContain("kind: ConfigMap");
+  });
+
+  it("ignores a sub-directory whose name ends in .yaml", async () => {
+    const dir = tmp();
+    mkdirSync(join(dir, "nested.yaml"));
+    writeFileSync(join(dir, "real.yaml"), "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: n\n");
+    const stream = await readManifests(dir);
+    expect(stream).toContain("kind: Namespace");
   });
 });
 

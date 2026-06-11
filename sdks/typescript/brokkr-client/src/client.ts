@@ -393,6 +393,7 @@ function mergeSignals(signals: AbortSignal[]): AbortSignal {
 export async function readManifests(path: string): Promise<string> {
   const fs = await import("node:fs/promises");
   const nodePath = await import("node:path");
+  const YAML = await import("yaml");
 
   const stat = await fs.stat(path).catch(() => undefined);
   if (!stat) {
@@ -401,9 +402,16 @@ export async function readManifests(path: string): Promise<string> {
 
   let files: string[];
   if (stat.isDirectory()) {
-    const entries = await fs.readdir(path);
+    // withFileTypes so a sub-directory named e.g. `x.yaml` is skipped rather
+    // than read (which would throw a raw EISDIR).
+    const entries = await fs.readdir(path, { withFileTypes: true });
     files = entries
-      .filter((name) => name.endsWith(".yaml") || name.endsWith(".yml"))
+      .filter(
+        (e) =>
+          e.isFile() &&
+          (e.name.endsWith(".yaml") || e.name.endsWith(".yml")),
+      )
+      .map((e) => e.name)
       .sort()
       .map((name) => nodePath.join(path, name));
   } else {
@@ -417,17 +425,40 @@ export async function readManifests(path: string): Promise<string> {
 
   const parts: string[] = [];
   for (const file of files) {
-    const content = await fs.readFile(file, "utf8");
-    for (const doc of content.split(/^---\s*$/m)) {
-      if (doc.trim() === "") continue;
-      const hasApiVersion = /^apiVersion:/m.test(doc);
-      const hasKind = /^kind:/m.test(doc);
-      if (!hasApiVersion || !hasKind) {
+    let content: string;
+    try {
+      content = await fs.readFile(file, "utf8");
+    } catch (err) {
+      throw new BrokkrError({
+        message: `${file}: ${err instanceof Error ? err.message : String(err)}`,
+      });
+    }
+    // Validate by a real multi-document parse (matches the Rust/Python SDKs):
+    // null documents (e.g. comment-only) are skipped, every other document
+    // must have apiVersion + kind, and malformed YAML is rejected — the regex
+    // approach false-accepted bad YAML and could split inside a block scalar
+    // containing a `---` line.
+    const docs = YAML.parseAllDocuments(content);
+    for (const doc of docs) {
+      if (doc.errors.length > 0) {
+        throw new BrokkrError({
+          message: `${file}: invalid YAML: ${doc.errors[0].message}`,
+        });
+      }
+      const obj = doc.toJSON();
+      if (obj === null || obj === undefined) continue;
+      if (
+        typeof obj !== "object" ||
+        (obj as Record<string, unknown>).apiVersion === undefined ||
+        (obj as Record<string, unknown>).kind === undefined
+      ) {
         throw new BrokkrError({
           message: `${file}: every manifest document must have apiVersion and kind`,
         });
       }
     }
+    // Byte output unchanged: per-file trailing-whitespace strip, joined with
+    // a `---` separator and a trailing newline (parity with Rust/Python).
     parts.push(content.replace(/\s+$/, ""));
   }
   return `${parts.join("\n---\n")}\n`;
