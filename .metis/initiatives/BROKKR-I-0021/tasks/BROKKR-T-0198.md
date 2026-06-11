@@ -4,14 +4,14 @@ level: task
 title: "brokkr CLI: apply -f folder of manifests"
 short_code: "BROKKR-T-0198"
 created_at: 2026-06-11T02:19:34.293955+00:00
-updated_at: 2026-06-11T04:05:51.102786+00:00
+updated_at: 2026-06-11T05:47:28.389491+00:00
 parent: BROKKR-I-0021
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/active"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -35,6 +35,8 @@ A new user-facing `brokkr` CLI (distinct from the broker/agent admin binaries) t
 - Config: `~/.brokkr/config` (kubeconfig-shaped — broker URL + PAK), overridable by `--broker-url`/`--pak` flags and `BROKKR_*` env.
 - Out of v1 (follow-ons): `brokkr diff`, `brokkr get -o yaml`, `brokkr stack {create,delete,prune}`, shell completion.
 - Decide packaging/release: the CLI is a user artifact — fold into the lockstep release (a `brokkr` binary alongside broker/agent images, or a published crate/brew/install script). Capture in the release workflow.
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

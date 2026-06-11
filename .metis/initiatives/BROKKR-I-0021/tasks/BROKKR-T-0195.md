@@ -4,14 +4,14 @@ level: task
 title: "Rust SDK: submit_manifests/apply folder helper"
 short_code: "BROKKR-T-0195"
 created_at: 2026-06-11T02:19:30.770706+00:00
-updated_at: 2026-06-11T03:26:24.386307+00:00
+updated_at: 2026-06-11T05:47:26.123155+00:00
 parent: BROKKR-I-0021
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/active"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -33,6 +33,8 @@ Add wrapper-layer helpers to the Rust SDK (`crates/brokkr-client`) so a folder o
 - `submit_manifests(stack_id, paths_or_dir)` — accept a dir, file, or globs; walk for `*.yaml`/`*.yml`; concatenate documents with `---`; validate each parses and carries `apiVersion`+`kind`; POST the stream (raw-YAML endpoint from T-0194 when available, else the JSON envelope).
 - `apply(stack_name, dir, targeting)` — idempotent: resolve stack by name; create if missing (owner = the client's generator identity); compute the bundle checksum and submit a new deployment object only when it differs from the stack's latest; set targeting labels. Return an enum/struct indicating Created / Updated / Unchanged.
 - Ordering is forgiving (agent front-loads Namespace/CRD); document that deleting a file and re-applying prunes the removed object.
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

@@ -4,14 +4,14 @@ level: task
 title: "TypeScript SDK: submitManifests/apply folder helper"
 short_code: "BROKKR-T-0197"
 created_at: 2026-06-11T02:19:33.135354+00:00
-updated_at: 2026-06-11T03:41:15.080103+00:00
+updated_at: 2026-06-11T05:47:27.947179+00:00
 parent: BROKKR-I-0021
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/active"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -33,6 +33,8 @@ Mirror the folder helpers in the TypeScript SDK wrapper (`sdks/typescript/brokkr
 - `submitManifests(stackId, pathOrPaths)` — accept a dir / file / globs (Node `fs`); read `*.yaml`/`*.yml`; concatenate with `---`; validate each doc parses (a YAML lib) and has `apiVersion`+`kind`; POST the stream (raw-YAML body when available).
 - `apply(stackName, path, targeting?)` — idempotent create-or-reuse + submit-on-change + targeting; return `{ status: "created"|"updated"|"unchanged" }`.
 - Node-only (filesystem); keep the browser build clean — folder helpers behind a Node entry point if needed.
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

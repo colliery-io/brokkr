@@ -4,14 +4,14 @@ level: task
 title: "Python SDK: submit_manifests/apply folder helper"
 short_code: "BROKKR-T-0196"
 created_at: 2026-06-11T02:19:32.186237+00:00
-updated_at: 2026-06-11T03:35:34.558519+00:00
+updated_at: 2026-06-11T05:47:27.050069+00:00
 parent: BROKKR-I-0021
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/active"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -33,6 +33,8 @@ Mirror the Rust folder helpers in the Python SDK ergonomic wrapper (`sdks/python
 - `submit_manifests(stack_id, path_or_paths)` — accept a dir / file / globs; read `*.yaml`/`*.yml`; concatenate with `---`; validate each doc parses (PyYAML safe_load_all) and has `apiVersion`+`kind`; POST the stream (raw-YAML body when available).
 - `apply(stack_name, path, targeting=None)` — idempotent create-or-reuse stack by name + submit-on-change + set targeting; return a result indicating created/updated/unchanged.
 - Async to match the wrapper's existing style; reuse the `retry`/error model.
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

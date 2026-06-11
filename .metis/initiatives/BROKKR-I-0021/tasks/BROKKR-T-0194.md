@@ -4,14 +4,14 @@ level: task
 title: "Raw-YAML submission primitive (application/yaml body)"
 short_code: "BROKKR-T-0194"
 created_at: 2026-06-11T02:19:29.351560+00:00
-updated_at: 2026-06-11T02:27:38.218780+00:00
+updated_at: 2026-06-11T05:47:25.124286+00:00
 parent: BROKKR-I-0021
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/active"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -37,6 +37,8 @@ Make `POST /api/v1/stacks/{id}/deployment-objects` content-type aware so a deplo
 - Deletion-marker wart: allow an empty body when `deletion_marker=true`; relax `NewDeploymentObject::new`'s non-empty requirement for markers (the agent prunes by stack annotation, the body is ignored for markers).
 - Optional round-trip: honor `Accept: application/yaml` on `GET /deployment-objects/{id}` to return `yaml_content` as a raw YAML file.
 - Checksum stays server-side — no downstream change. Keep the utoipa annotations/OpenAPI accurate (the JSON request body shape is unchanged; document the alternate content type).
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 
