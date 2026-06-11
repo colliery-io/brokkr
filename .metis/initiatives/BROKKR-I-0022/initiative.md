@@ -4,7 +4,7 @@ level: initiative
 title: "Release pipeline blockers: retired runner, Node 24 deadline, tag guard"
 short_code: "BROKKR-I-0022"
 created_at: 2026-06-11T11:01:39.334430+00:00
-updated_at: 2026-06-11T11:14:17.787661+00:00
+updated_at: 2026-06-11T13:03:34.911100+00:00
 parent: brokkr-environment-aware
 blocked_by: []
 archived: false
@@ -12,7 +12,7 @@ archived: false
 tags:
   - "#initiative"
   - "#initiative"
-  - "#phase/active"
+  - "#phase/completed"
 
 
 exit_criteria_met: false

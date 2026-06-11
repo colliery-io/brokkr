@@ -4,7 +4,7 @@ level: initiative
 title: "Agent reconciler hardening: crash loops, prune safety, liveness"
 short_code: "BROKKR-I-0023"
 created_at: 2026-06-11T11:01:39.384531+00:00
-updated_at: 2026-06-11T11:08:30.121080+00:00
+updated_at: 2026-06-11T13:03:35.011878+00:00
 parent: brokkr-environment-aware
 blocked_by: []
 archived: false
@@ -12,7 +12,7 @@ archived: false
 tags:
   - "#initiative"
   - "#initiative"
-  - "#phase/decompose"
+  - "#phase/active"
 
 
 exit_criteria_met: false
