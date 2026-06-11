@@ -16,8 +16,61 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # Fail fast if the tag doesn't match the version baked into every package.
+  # Tag v0.7.0 without the lockstep bump commit would otherwise ship tarballs
+  # named 0.7.0 containing a binary that reports 0.6.0 (and mislabeled images
+  # and charts). Runs before the tests so a mistag costs seconds, not the full
+  # suite.
+  verify-version:
+    name: Verify tag matches package versions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Assert tag == crate/SDK versions
+        run: |
+          set -uo pipefail
+          TAG="${GITHUB_REF_NAME#v}"
+          BASE="$(printf '%s' "$TAG" | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+')"
+          if [ -z "$BASE" ]; then
+            echo "::error::tag '$GITHUB_REF_NAME' is not a vMAJOR.MINOR.PATCH[...] tag"; exit 1
+          fi
+          echo "Tag version: $TAG (base $BASE)"
+          base_of() { printf '%s' "$1" | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+'; }
+          fail=0
+
+          # Workspace crates are semver, same format as the git tag, and the
+          # CLI binary reports its crate version — require an exact match.
+          while IFS=$'\t' read -r name version; do
+            if [ "$version" != "$TAG" ]; then
+              echo "::error::crate $name = $version, expected $TAG"; fail=1
+            fi
+          done < <(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | [.name, .version] | @tsv')
+
+          # SDK manifests use PEP 440 / npm prerelease spellings that differ
+          # from semver (0.7.0rc1 vs 0.7.0-rc.1), so compare the numeric base —
+          # enough to catch a forgotten lockstep bump.
+          check_base() {  # $1 = label, $2 = version string
+            local got; got="$(base_of "$2")"
+            if [ "$got" != "$BASE" ]; then
+              echo "::error::$1 = $2 (base $got), expected base $BASE"; fail=1
+            fi
+          }
+          check_base "python brokkr (pyproject.toml)" \
+            "$(grep -m1 '^version' sdks/python/brokkr/pyproject.toml | sed -E 's/.*"([^"]+)".*/\1/')"
+          check_base "python brokkr-client-generated (pyproject.toml)" \
+            "$(grep -m1 '^version' sdks/python/brokkr-client/pyproject.toml | sed -E 's/.*"([^"]+)".*/\1/')"
+          check_base "typescript brokkr-client (package.json)" \
+            "$(jq -r .version sdks/typescript/brokkr-client/package.json)"
+
+          if [ "$fail" -ne 0 ]; then
+            echo "::error::version mismatch — bump every package to match the tag before releasing"
+            exit 1
+          fi
+          echo "All package versions agree with tag $TAG"
+
   # Run the full test suite before building release artifacts
   setup:
+    needs: verify-version
     uses: ./.github/workflows/setup.yml
   unit_tests:
     needs: setup
