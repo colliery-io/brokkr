@@ -4,16 +4,15 @@ level: task
 title: "Bump Node-20/16 GitHub Actions to Node-24 majors across workflows"
 short_code: "BROKKR-T-0200"
 created_at: 2026-06-11T11:02:07.533160+00:00
-updated_at: 2026-06-11T11:02:07.533160+00:00
+updated_at: 2026-06-11T12:02:22.510891+00:00
 parent: release-pipeline-blockers-retired
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/todo"
   - "#task"
-  - "#phase/todo"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -29,6 +28,10 @@ initiative_id: BROKKR-I-0022
 ## Objective
 
 GitHub forces Node-20 actions to run on Node 24 starting 2026-06-16. Upgrade every affected action to its verified Node-24 major and let the changes soak on main before the date. All target versions were verified node24 via each tag's `action.yml`.
+
+## Acceptance Criteria
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 
@@ -48,3 +51,6 @@ GitHub forces Node-20 actions to run on Node 24 starting 2026-06-16. Upgrade eve
 ## Status Updates
 
 *To be added during implementation*
+## Status Updates
+
+- 2026-06-11: DONE. Bumped all 10 affected actions to their current-latest majors (verified each via `gh api repos/<r>/releases/latest`): compose-action v2.6.0→v3.0.0, setup-helm v3→v5.0.0, build-push v5→v7.2.0, setup-buildx v3→v4.1.0, login v3→v4.2.0, setup-qemu v3→v4.1.0, metadata v5→v6.1.0, action-gh-release v2→v3.0.0, paths-filter v3→v4.0.1, setup-uv v3→v8.2.0. Matched full `action@version` strings so shared `@v3`/`@v5` suffixes didn't collide. Verified no input/default breakage: setup-uv/our usage passes no inputs; setup-helm pins exact `version: v3.12.0` (no GitHub API token needed); gh-release uses only core inputs (files/generate_release_notes/draft/prerelease); build-push provenance has NO `default:` in action.yml for v5/v6/v7 (identical passthrough — the push-by-digest pattern is unaffected). `delete-package-versions` left at v5 (no node24 release exists; already continue-on-error). Validation: PR-triggered workflows (build-and-test, main, e2e, integration, sdk_contract) exercise the bumps; release.yml/nightly.yml/release-sdks.yml pins verified to exist but only run on tag/schedule.
