@@ -196,10 +196,6 @@ pub struct Agent {
     pub agent_name: String,
     /// Cluster name
     pub cluster_name: String,
-    /// Max number of retries for event messages
-    pub max_event_message_retries: usize,
-    /// Delay between event message retries in seconds
-    pub event_message_retry_delay: u64,
     /// Health check HTTP server port
     pub health_port: Option<u16>,
     /// Whether deployment health checking is enabled

@@ -819,10 +819,14 @@ pub async fn reconcile_target_state(
                 .as_ref()
                 .map(|t| t.kind.clone())
                 .unwrap_or_default();
+            // A manifest without an explicit namespace lands in the agent's
+            // watch_namespace when it is scoped to one, falling back to
+            // "default" only for a cluster-wide agent.
             let namespace = object
                 .metadata
                 .namespace
                 .as_deref()
+                .or(watch_namespace)
                 .unwrap_or("default")
                 .to_string();
             let name = object.metadata.name.as_deref().unwrap_or("").to_string();
@@ -920,6 +924,7 @@ pub async fn reconcile_target_state(
             .metadata
             .namespace
             .as_deref()
+            .or(watch_namespace)
             .unwrap_or("default")
             .to_string();
         let name = existing_obj

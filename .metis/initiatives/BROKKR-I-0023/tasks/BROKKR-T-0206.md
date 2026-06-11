@@ -4,16 +4,15 @@ level: task
 title: "Agent: misc hardening — SIGTERM, namespace fallbacks, tracked-object growth, dead config"
 short_code: "BROKKR-T-0206"
 created_at: 2026-06-11T11:02:07.827265+00:00
-updated_at: 2026-06-11T11:02:07.827265+00:00
+updated_at: 2026-06-11T14:46:44.115781+00:00
 parent: agent-reconciler-hardening-crash
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/todo"
   - "#task"
-  - "#phase/todo"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -29,6 +28,10 @@ initiative_id: BROKKR-I-0023
 ## Objective
 
 Checklist of small, independent hardening items from the sweep — each a contained fix.
+
+## Acceptance Criteria
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 
@@ -51,3 +54,15 @@ Stretch (do only if cheap): `work_orders/mod.rs:50-104` `is_error_retryable` cla
 ## Status Updates
 
 *To be added during implementation*
+## Status Updates
+
+- 2026-06-11: DONE (9 of 11 checklist items; 2 split to [[BROKKR-T-0221]]). Implemented on branch feat/i0023-agent-reconciler-hardening:
+  - **SIGTERM**: shutdown task now selects ctrl_c() OR SIGTERM (tokio::signal::unix; cfg(unix)) — k8s pod termination now drains gracefully and flushes telemetry. (commands.rs)
+  - **Diagnostics error payload**: `format!("[{{\"error\":...}}]")` → `serde_json::json!([{ "error": e.to_string() }])` (no JSON injection on quoted error messages); the `let _ =` on submit_diagnostic_result now logs failures. (commands.rs)
+  - **Dead config keys**: removed `agent.max_event_message_retries` / `event_message_retry_delay` from Settings + default.toml (referenced nowhere; serde ignores stale keys in user configs).
+  - **LAST_CONFIG_ANNOTATION**: stored the bounded yaml_checksum instead of `format!("{:?}", obj)` (Debug dump could push total annotations past the 256 KiB limit and fail apply; value is only ever presence-checked).
+  - **tracked_deployment_objects**: was insert-only (unbounded). Now rebuilt from each deployment cycle's applied ids, so superseded objects stop being health-checked.
+  - **Watcher backoff**: kube_events.rs and pod_logs.rs restart loops now use capped exponential backoff (1s→60s, reset on clean exit) instead of a fixed 5s, so a persistent RBAC denial doesn't re-dial every 5s forever.
+  - **Namespace fallback**: reconcile apply + prune namespace fallback now `.or(watch_namespace)` before "default" (a manifest with no explicit namespace lands in the agent's watch_namespace under namespace-scoped RBAC — same class as the prior hardcoded-default bug). The cluster-scoped priority-object site (apply_single_object) is unaffected (namespace ignored for Scope::Cluster).
+  - **Clippy**: broker_ws.rs try_send `#[allow(result_large_err)]` (the large Err is intentional — returns the message for REST fallback); pod_logs.rs `type ActiveTails` alias for the complex type. Agent clippy now fully clean.
+  DEFERRED to T-0221 (each needs its own change + integration test): Discovery reuse in reconcile (interacts with T-0203 fail-closed / CRD establishment timing) and pod-log tail re-attach (behavioral, handle-ownership race). Build clean, 73 agent + 24 utils unit tests pass, integration compiles, clippy clean.

@@ -144,6 +144,9 @@ impl WsUplink {
     /// Try to send a message over WS. Returns `Err(msg)` (giving the
     /// caller their message back) if WS is down or the outbound lane is
     /// full or closed — that signals the caller to take the REST path.
+    // The large Err variant is intentional: returning the message itself is
+    // what lets the caller fall back to REST without re-cloning it.
+    #[allow(clippy::result_large_err)]
     pub fn try_send(&self, msg: WsMessage) -> Result<(), WsMessage> {
         if !self.is_up() {
             return Err(msg);

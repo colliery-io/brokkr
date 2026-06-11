@@ -203,13 +203,30 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
     // Create channels for shutdown coordination
     let (shutdown_tx, mut shutdown_rx) = tokio::sync::broadcast::channel(1);
 
-    // Set up ctrl-c handler
+    // Shutdown on SIGINT *or* SIGTERM. Kubernetes terminates pods with
+    // SIGTERM, so handling only ctrl-c (SIGINT) meant the agent died on the
+    // default disposition with no graceful drain or telemetry flush.
     tokio::spawn(async move {
-        if let Ok(()) = ctrl_c().await {
-            info!("Received shutdown signal");
-            let _ = shutdown_tx.send(());
-            r.store(false, Ordering::SeqCst);
+        let terminate = async {
+            #[cfg(unix)]
+            match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+                Ok(mut s) => {
+                    s.recv().await;
+                }
+                Err(e) => {
+                    error!("failed to install SIGTERM handler: {}", e);
+                    std::future::pending::<()>().await;
+                }
+            }
+            #[cfg(not(unix))]
+            std::future::pending::<()>().await;
+        };
+        select! {
+            _ = ctrl_c() => info!("Received SIGINT; shutting down"),
+            _ = terminate => info!("Received SIGTERM; shutting down"),
         }
+        let _ = shutdown_tx.send(());
+        r.store(false, Ordering::SeqCst);
     });
 
     // Create interval timers for periodic tasks
@@ -323,6 +340,11 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
 
                 match broker::fetch_and_process_deployment_objects(&config, &sdk_client, &agent).await {
                     Ok(objects) => {
+                        // Collect this cycle's successfully-applied ids and
+                        // replace the tracked set at the end, so superseded
+                        // deployment objects stop being health-checked and the
+                        // set can't grow without bound (was insert-only).
+                        let mut applied_ids: Vec<Uuid> = Vec::new();
                         for obj in objects {
                             // A malformed bundle must not crash the agent: log it,
                             // report a failure event, and move on. Otherwise the
@@ -360,10 +382,7 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
                                         k8s_objects.len(), obj.id, agent.name, agent.id);
 
                                     // Track this deployment object for health checking
-                                    {
-                                        let mut tracked = tracked_deployment_objects.write().await;
-                                        tracked.insert(obj.id);
-                                    }
+                                    applied_ids.push(obj.id);
 
                                     if let Err(e) = broker::send_success_event(
                                         &config,
@@ -393,6 +412,12 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
                                     }
                                 }
                             }
+                        }
+                        // Rebuild the health-tracking set to exactly this
+                        // cycle's applied objects.
+                        {
+                            let mut tracked = tracked_deployment_objects.write().await;
+                            *tracked = applied_ids.into_iter().collect();
                         }
                     }
                     Err(e) => error!("Failed to fetch deployment objects for agent '{}' (id: {}): {}",
@@ -529,16 +554,22 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
                                             // Submit an error result
                                             let error_result = diagnostics::SubmitDiagnosticResult {
                                                 pod_statuses: "[]".to_string(),
-                                                events: format!("[{{\"error\": \"{}\"}}]", e),
+                                                // Build via serde_json so an error message containing
+                                                // quotes can't produce invalid JSON.
+                                                events: serde_json::json!([{ "error": e.to_string() }])
+                                                    .to_string(),
                                                 log_tails: None,
                                                 collected_at: chrono::Utc::now(),
                                             };
-                                            let _ = broker::submit_diagnostic_result(
+                                            if let Err(submit_err) = broker::submit_diagnostic_result(
                                                 &config,
                                                 &sdk_client,
                                                 request.id,
                                                 error_result,
-                                            ).await;
+                                            ).await {
+                                                error!("Failed to submit diagnostic error result for request {}: {}",
+                                                    request.id, submit_err);
+                                            }
                                         }
                                     }
                                 }

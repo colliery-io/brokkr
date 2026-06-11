@@ -48,6 +48,9 @@ use uuid::Uuid;
 use crate::broker_ws::WsUplink;
 use crate::k8s::objects::STACK_LABEL;
 
+/// Per-pod (by UID) set of running log-tail tasks.
+type ActiveTails = Arc<RwLock<HashMap<String, Vec<JoinHandle<()>>>>>;
+
 /// Annotation that opts a workload into log streaming.
 pub const STREAM_LOGS_ANNOTATION: &str = "brokkr.io/stream-logs";
 
@@ -66,10 +69,14 @@ pub fn spawn(
     watch_namespace: Option<String>,
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
-        let active: Arc<RwLock<HashMap<String, Vec<JoinHandle<()>>>>> =
+        let active: ActiveTails =
             Arc::new(RwLock::new(HashMap::new()));
+        // Capped exponential backoff so a persistent failure (e.g. an RBAC
+        // denial) doesn't re-dial the API server every 5s forever.
+        const MAX_BACKOFF: Duration = Duration::from_secs(60);
+        let mut backoff = Duration::from_secs(1);
         loop {
-            if let Err(e) = watch_pods(
+            match watch_pods(
                 client.clone(),
                 uplink.clone(),
                 agent_id,
@@ -78,9 +85,11 @@ pub fn spawn(
             )
             .await
             {
-                warn!(error = %e, "pod-logs watcher fell out; restarting in 5s");
+                Ok(()) => backoff = Duration::from_secs(1),
+                Err(e) => warn!(error = %e, "pod-logs watcher fell out; retrying in {:?}", backoff),
             }
-            tokio::time::sleep(Duration::from_secs(5)).await;
+            tokio::time::sleep(backoff).await;
+            backoff = (backoff * 2).min(MAX_BACKOFF);
         }
     })
 }
@@ -89,7 +98,7 @@ async fn watch_pods(
     client: Client,
     uplink: WsUplink,
     agent_id: Uuid,
-    active: Arc<RwLock<HashMap<String, Vec<JoinHandle<()>>>>>,
+    active: ActiveTails,
 
     watch_namespace: Option<&str>,
 ) -> Result<(), watcher::Error> {
@@ -152,7 +161,7 @@ async fn ensure_tails(
     stack_id: Uuid,
     pod: &Pod,
     uid: &str,
-    active: &Arc<RwLock<HashMap<String, Vec<JoinHandle<()>>>>>,
+    active: &ActiveTails,
 ) {
     let mut guard = active.write().await;
     if guard.contains_key(uid) {
@@ -184,7 +193,7 @@ async fn ensure_tails(
     guard.insert(uid.to_string(), handles);
 }
 
-async fn teardown_for(uid: &str, active: &Arc<RwLock<HashMap<String, Vec<JoinHandle<()>>>>>) {
+async fn teardown_for(uid: &str, active: &ActiveTails) {
     let mut guard = active.write().await;
     if let Some(handles) = guard.remove(uid) {
         for h in handles {
