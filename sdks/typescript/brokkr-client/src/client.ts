@@ -166,12 +166,16 @@ export class BrokkrClient {
     path: string,
   ): Promise<DeploymentObject> {
     const yaml = await readManifests(path);
-    return this.retry<DeploymentObject>((api) =>
-      api.POST("/stacks/{id}/deployment-objects", {
-        params: { path: { id: stackId } },
-        body: { yaml_content: yaml, is_deletion_marker: false },
-      }),
-    );
+    // Single attempt: submitting a deployment object is not idempotent, so a
+    // retry after a lost response could double-submit a revision.
+    const res = await this.api.POST("/stacks/{id}/deployment-objects", {
+      params: { path: { id: stackId } },
+      body: { yaml_content: yaml, is_deletion_marker: false },
+    });
+    if (res.error !== undefined) {
+      throw BrokkrError.fromOpenapiFetch(res.error, res.response);
+    }
+    return res.data as DeploymentObject;
   }
 
   /**
@@ -188,6 +192,8 @@ export class BrokkrClient {
     const yaml = await readManifests(path);
     const checksum = await sha256Hex(yaml);
 
+    // POST /auth/pak is a pure read (verify the PAK) with no side effect, so
+    // retrying it is safe.
     const auth = await this.retry<AuthResponse>((api) =>
       api.POST("/auth/pak", {}),
     );
@@ -202,11 +208,14 @@ export class BrokkrClient {
     const stacks = await this.retry<Stack[]>((api) => api.GET("/stacks", {}));
     let stack = stacks.find((s) => s.name === stackName);
     if (!stack) {
-      stack = await this.retry<Stack>((api) =>
-        api.POST("/stacks", {
-          body: { name: stackName, generator_id: generatorId },
-        }),
-      );
+      // Single attempt: creating a stack is not idempotent.
+      const stackRes = await this.api.POST("/stacks", {
+        body: { name: stackName, generator_id: generatorId },
+      });
+      if (stackRes.error !== undefined) {
+        throw BrokkrError.fromOpenapiFetch(stackRes.error, stackRes.response);
+      }
+      stack = stackRes.data as Stack;
     }
     const stackId = stack.id;
 
@@ -235,12 +244,15 @@ export class BrokkrClient {
     }
     const hadPrior = objects.length > 0;
 
-    const object = await this.retry<DeploymentObject>((api) =>
-      api.POST("/stacks/{id}/deployment-objects", {
-        params: { path: { id: stackId } },
-        body: { yaml_content: yaml, is_deletion_marker: false },
-      }),
-    );
+    // Single attempt: submitting a revision is not idempotent.
+    const objRes = await this.api.POST("/stacks/{id}/deployment-objects", {
+      params: { path: { id: stackId } },
+      body: { yaml_content: yaml, is_deletion_marker: false },
+    });
+    if (objRes.error !== undefined) {
+      throw BrokkrError.fromOpenapiFetch(objRes.error, objRes.response);
+    }
+    const object = objRes.data as DeploymentObject;
     return hadPrior
       ? { status: "updated", deploymentObject: object }
       : { status: "created", deploymentObject: object };
