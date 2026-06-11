@@ -148,8 +148,12 @@ pub fn spawn(
             }
         });
 
+        // Capped exponential backoff so a persistent failure (e.g. an RBAC
+        // denial) doesn't re-dial the API server every 5s forever.
+        const MAX_BACKOFF: Duration = Duration::from_secs(60);
+        let mut backoff = Duration::from_secs(1);
         loop {
-            if let Err(e) = watch_loop(
+            match watch_loop(
                 client.clone(),
                 agent_id,
                 tx.clone(),
@@ -158,9 +162,11 @@ pub fn spawn(
             )
             .await
             {
-                warn!(error = %e, "kube events tailer fell out of watch loop; restarting");
+                Ok(()) => backoff = Duration::from_secs(1),
+                Err(e) => warn!(error = %e, "kube events tailer fell out of watch loop; retrying in {:?}", backoff),
             }
-            tokio::time::sleep(Duration::from_secs(5)).await;
+            tokio::time::sleep(backoff).await;
+            backoff = (backoff * 2).min(MAX_BACKOFF);
         }
     })
 }

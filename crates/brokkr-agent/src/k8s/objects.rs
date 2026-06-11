@@ -92,7 +92,14 @@ pub fn create_k8s_objects(
             DEPLOYMENT_OBJECT_ID_LABEL.to_string(),
             deployment_object.id.to_string(),
         );
-        annotations.insert(LAST_CONFIG_ANNOTATION.to_string(), format!("{:?}", obj));
+        // Store the bounded bundle checksum, not a Debug dump of the whole
+        // object: `format!("{:?}", obj)` is unbounded and a large manifest can
+        // push total annotations past the 256 KiB limit and fail apply. The
+        // value is only ever checked for presence, never parsed.
+        annotations.insert(
+            LAST_CONFIG_ANNOTATION.to_string(),
+            deployment_object.yaml_checksum.clone(),
+        );
 
         annotations.insert(
             BROKKR_AGENT_OWNER_ANNOTATION.to_string(),

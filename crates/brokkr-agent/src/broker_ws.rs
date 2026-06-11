@@ -144,6 +144,9 @@ impl WsUplink {
     /// Try to send a message over WS. Returns `Err(msg)` (giving the
     /// caller their message back) if WS is down or the outbound lane is
     /// full or closed — that signals the caller to take the REST path.
+    // The large Err variant is intentional: returning the message itself is
+    // what lets the caller fall back to REST without re-cloning it.
+    #[allow(clippy::result_large_err)]
     pub fn try_send(&self, msg: WsMessage) -> Result<(), WsMessage> {
         if !self.is_up() {
             return Err(msg);
@@ -332,9 +335,19 @@ async fn run_socket(
                     Some(Ok(Message::Text(t))) => {
                         match serde_json::from_str::<WsMessage>(&t) {
                             Ok(msg) => {
-                                if inbound_tx.send(msg).await.is_err() {
-                                    debug!("inbound consumer dropped; closing WS");
-                                    return;
+                                // Never block the socket on a slow/absent consumer:
+                                // a push frame is only a hint to poll sooner, so a
+                                // full buffer drops it (the next periodic poll
+                                // catches up) rather than wedging run_socket.
+                                match inbound_tx.try_send(msg) {
+                                    Ok(()) => {}
+                                    Err(mpsc::error::TrySendError::Full(_)) => {
+                                        warn!("inbound WS buffer full; dropping push frame (next poll catches up)");
+                                    }
+                                    Err(mpsc::error::TrySendError::Closed(_)) => {
+                                        debug!("inbound consumer dropped; closing WS");
+                                        return;
+                                    }
                                 }
                             }
                             Err(e) => warn!(error = %e, "undecodable WS frame; dropping"),

@@ -63,6 +63,7 @@ use crate::{
     pod_logs, webhooks, work_orders,
 };
 use brokkr_utils::config::Settings;
+use brokkr_wire::WsMessage;
 use brokkr_utils::telemetry::prelude::*;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -73,6 +74,28 @@ use tokio::signal::ctrl_c;
 use tokio::sync::RwLock;
 use tokio::time::{Duration, interval};
 use uuid::Uuid;
+
+/// What an inbound broker→agent WS push frame should trigger in the control
+/// loop. Uplink-typed frames the agent emits never arrive inbound, so they map
+/// to `Ignore`.
+#[derive(Debug, PartialEq, Eq)]
+enum PushAction {
+    /// `StackChanged` / `TargetChanged` — fetch and reconcile deployment objects.
+    Reconcile,
+    /// `WorkOrder` — poll pending work orders.
+    PollWorkOrders,
+    /// Anything else (e.g. an echoed uplink frame) — no action.
+    Ignore,
+}
+
+/// Route an inbound WS frame to the control-loop action it should trigger.
+fn classify_push_frame(msg: &WsMessage) -> PushAction {
+    match msg {
+        WsMessage::StackChanged(_) | WsMessage::TargetChanged(_) => PushAction::Reconcile,
+        WsMessage::WorkOrder(_) => PushAction::PollWorkOrders,
+        _ => PushAction::Ignore,
+    }
+}
 
 pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
     // BROKKR_CONFIG_FILE adds an optional file layer between embedded
@@ -101,7 +124,7 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
     // pins the state at ForceRestOnly and no dial is ever attempted.
     // Outbound emissions still call .uplink() — try_send short-circuits
     // when the channel is not Up and the caller falls back to REST.
-    let ws_client = broker_ws::spawn(&config);
+    let mut ws_client = broker_ws::spawn(&config);
     let ws_uplink = ws_client.uplink();
 
     // Spawn telemetry tailers. They run for the lifetime of the agent
@@ -180,13 +203,30 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
     // Create channels for shutdown coordination
     let (shutdown_tx, mut shutdown_rx) = tokio::sync::broadcast::channel(1);
 
-    // Set up ctrl-c handler
+    // Shutdown on SIGINT *or* SIGTERM. Kubernetes terminates pods with
+    // SIGTERM, so handling only ctrl-c (SIGINT) meant the agent died on the
+    // default disposition with no graceful drain or telemetry flush.
     tokio::spawn(async move {
-        if let Ok(()) = ctrl_c().await {
-            info!("Received shutdown signal");
-            let _ = shutdown_tx.send(());
-            r.store(false, Ordering::SeqCst);
+        let terminate = async {
+            #[cfg(unix)]
+            match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+                Ok(mut s) => {
+                    s.recv().await;
+                }
+                Err(e) => {
+                    error!("failed to install SIGTERM handler: {}", e);
+                    std::future::pending::<()>().await;
+                }
+            }
+            #[cfg(not(unix))]
+            std::future::pending::<()>().await;
+        };
+        select! {
+            _ = ctrl_c() => info!("Received SIGINT; shutting down"),
+            _ = terminate => info!("Received SIGTERM; shutting down"),
         }
+        let _ = shutdown_tx.send(());
+        r.store(false, Ordering::SeqCst);
     });
 
     // Create interval timers for periodic tasks
@@ -224,9 +264,45 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
     // Webhook delivery configuration - poll every 10 seconds for pending webhooks
     let mut webhook_interval = interval(Duration::from_secs(10));
 
+    // Consume broker→agent push frames. A StackChanged/TargetChanged/WorkOrder
+    // pushed over the WS channel resets the relevant interval to fire now, so
+    // the agent reconciles on push instead of waiting for the next tick. Single
+    // consumer; if the WS task ends we fall back to plain interval polling.
+    let mut inbound_rx = ws_client.take_inbound();
+    let mut inbound_open = inbound_rx.is_some();
+
+    // In-flight work-order pass, if any. Keeps long builds off the select loop
+    // (see the work_order_interval arm) while ensuring only one pass runs at a
+    // time.
+    let mut work_order_task: Option<tokio::task::JoinHandle<()>> = None;
+
     // Main control loop
     while running.load(Ordering::SeqCst) {
         select! {
+            maybe_frame = async {
+                match inbound_rx.as_mut() {
+                    Some(rx) => rx.recv().await,
+                    None => std::future::pending::<Option<WsMessage>>().await,
+                }
+            }, if inbound_open => {
+                match maybe_frame {
+                    Some(frame) => match classify_push_frame(&frame) {
+                        PushAction::Reconcile => {
+                            debug!("WS push: control-plane change — reconciling immediately");
+                            deployment_check_interval.reset_immediately();
+                        }
+                        PushAction::PollWorkOrders => {
+                            debug!("WS push: work order — polling immediately");
+                            work_order_interval.reset_immediately();
+                        }
+                        PushAction::Ignore => debug!("WS push: ignoring non-control frame"),
+                    },
+                    None => {
+                        debug!("WS inbound channel closed; falling back to interval polling");
+                        inbound_open = false;
+                    }
+                }
+            }
             _ = heartbeat_interval.tick() => {
                 match broker::send_heartbeat(&config, &sdk_client, &agent, Some(&ws_uplink)).await {
                     Ok(_) => {
@@ -264,23 +340,49 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
 
                 match broker::fetch_and_process_deployment_objects(&config, &sdk_client, &agent).await {
                     Ok(objects) => {
+                        // Collect this cycle's successfully-applied ids and
+                        // replace the tracked set at the end, so superseded
+                        // deployment objects stop being health-checked and the
+                        // set can't grow without bound (was insert-only).
+                        let mut applied_ids: Vec<Uuid> = Vec::new();
                         for obj in objects {
-                            let k8s_objects = k8s::objects::create_k8s_objects(obj.clone(),agent.id)?;
+                            // A malformed bundle must not crash the agent: log it,
+                            // report a failure event, and move on. Otherwise the
+                            // `?` exits the process and the restart re-fetches the
+                            // same bad object — a permanent crash loop.
+                            let k8s_objects = match k8s::objects::create_k8s_objects(obj.clone(), agent.id) {
+                                Ok(objs) => objs,
+                                Err(e) => {
+                                    error!("Failed to parse deployment object {} into Kubernetes objects for agent '{}' (id: {}): {}",
+                                        obj.id, agent.name, agent.id, e);
+                                    if let Err(send_err) = broker::send_failure_event(
+                                        &config,
+                                        &sdk_client,
+                                        &agent,
+                                        obj.id,
+                                        e.to_string(),
+                                        Some(&ws_uplink),
+                                    ).await {
+                                        error!("Failed to send failure event for deployment {} in agent '{}' (id: {}): {}",
+                                            obj.id, agent.name, agent.id, send_err);
+                                    }
+                                    continue;
+                                }
+                            };
                             match k8s::api::reconcile_target_state(
                                 &k8s_objects,
                                 k8s_client.clone(),
                                 &obj.stack_id.to_string(),
                                 &obj.yaml_checksum,
+                                &agent.id,
+                                config.agent.watch_namespace.as_deref(),
                             ).await {
                                 Ok(_) => {
                                     info!("Successfully applied {} Kubernetes objects for deployment object {} in agent '{}' (id: {})",
                                         k8s_objects.len(), obj.id, agent.name, agent.id);
 
                                     // Track this deployment object for health checking
-                                    {
-                                        let mut tracked = tracked_deployment_objects.write().await;
-                                        tracked.insert(obj.id);
-                                    }
+                                    applied_ids.push(obj.id);
 
                                     if let Err(e) = broker::send_success_event(
                                         &config,
@@ -311,6 +413,12 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
                                 }
                             }
                         }
+                        // Rebuild the health-tracking set to exactly this
+                        // cycle's applied objects.
+                        {
+                            let mut tracked = tracked_deployment_objects.write().await;
+                            *tracked = applied_ids.into_iter().collect();
+                        }
                     }
                     Err(e) => error!("Failed to fetch deployment objects for agent '{}' (id: {}): {}",
                         agent.name, agent.id, e),
@@ -324,18 +432,33 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
                     continue;
                 }
 
-                // Process pending work orders
-                match work_orders::process_pending_work_orders(&config, &sdk_client, &k8s_client, &agent).await {
-                    Ok(count) => {
-                        if count > 0 {
-                            info!("Processed {} work orders for agent '{}' (id: {})",
-                                count, agent.name, agent.id);
+                // Work-order processing (especially image builds, up to 15 min)
+                // must not run inline: a blocked select arm starves heartbeats
+                // and deployment polling, so the broker marks a healthy agent
+                // offline. Run it in a detached task and keep the loop ticking.
+                // Only one pass runs at a time — a still-running pass means new
+                // work waits for the next tick rather than processing twice.
+                if work_order_task.as_ref().is_some_and(|h| !h.is_finished()) {
+                    debug!("Work-order pass still running; skipping this tick");
+                } else {
+                    let config = config.clone();
+                    let sdk_client = sdk_client.clone();
+                    let k8s_client = k8s_client.clone();
+                    let agent = agent.clone();
+                    work_order_task = Some(tokio::spawn(async move {
+                        match work_orders::process_pending_work_orders(&config, &sdk_client, &k8s_client, &agent).await {
+                            Ok(count) => {
+                                if count > 0 {
+                                    info!("Processed {} work orders for agent '{}' (id: {})",
+                                        count, agent.name, agent.id);
+                                }
+                            }
+                            Err(e) => {
+                                error!("Failed to process work orders for agent '{}' (id: {}): {}",
+                                    agent.name, agent.id, e);
+                            }
                         }
-                    }
-                    Err(e) => {
-                        error!("Failed to process work orders for agent '{}' (id: {}): {}",
-                            agent.name, agent.id, e);
-                    }
+                    }));
                 }
             }
             _ = health_check_interval.tick(), if health_check_enabled => {
@@ -431,16 +554,22 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
                                             // Submit an error result
                                             let error_result = diagnostics::SubmitDiagnosticResult {
                                                 pod_statuses: "[]".to_string(),
-                                                events: format!("[{{\"error\": \"{}\"}}]", e),
+                                                // Build via serde_json so an error message containing
+                                                // quotes can't produce invalid JSON.
+                                                events: serde_json::json!([{ "error": e.to_string() }])
+                                                    .to_string(),
                                                 log_tails: None,
                                                 collected_at: chrono::Utc::now(),
                                             };
-                                            let _ = broker::submit_diagnostic_result(
+                                            if let Err(submit_err) = broker::submit_diagnostic_result(
                                                 &config,
                                                 &sdk_client,
                                                 request.id,
                                                 error_result,
-                                            ).await;
+                                            ).await {
+                                                error!("Failed to submit diagnostic error result for request {}: {}",
+                                                    request.id, submit_err);
+                                            }
                                         }
                                     }
                                 }
@@ -493,4 +622,80 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
     brokkr_utils::telemetry::shutdown();
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use brokkr_models::models::{agent_targets::AgentTarget, stacks::Stack, work_orders::WorkOrder};
+    use chrono::Utc;
+
+    fn stack() -> Stack {
+        Stack {
+            id: Uuid::new_v4(),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            deleted_at: None,
+            name: "s".into(),
+            description: None,
+            generator_id: Uuid::new_v4(),
+        }
+    }
+
+    fn target() -> AgentTarget {
+        AgentTarget {
+            id: Uuid::new_v4(),
+            agent_id: Uuid::new_v4(),
+            stack_id: Uuid::new_v4(),
+        }
+    }
+
+    fn work_order() -> WorkOrder {
+        WorkOrder {
+            id: Uuid::new_v4(),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            work_type: "image_build".into(),
+            yaml_content: String::new(),
+            status: "pending".into(),
+            claimed_by: None,
+            claimed_at: None,
+            claim_timeout_seconds: 300,
+            max_retries: 3,
+            retry_count: 0,
+            backoff_seconds: 10,
+            next_retry_after: None,
+            last_error: None,
+            last_error_at: None,
+        }
+    }
+
+    #[test]
+    fn stack_and_target_changes_trigger_reconcile() {
+        assert_eq!(
+            classify_push_frame(&WsMessage::StackChanged(stack())),
+            PushAction::Reconcile
+        );
+        assert_eq!(
+            classify_push_frame(&WsMessage::TargetChanged(target())),
+            PushAction::Reconcile
+        );
+    }
+
+    #[test]
+    fn work_order_triggers_poll() {
+        assert_eq!(
+            classify_push_frame(&WsMessage::WorkOrder(work_order())),
+            PushAction::PollWorkOrders
+        );
+    }
+
+    #[test]
+    fn uplink_frames_are_ignored() {
+        let hb = WsMessage::Heartbeat(brokkr_wire::Heartbeat {
+            agent_id: Uuid::nil(),
+            sent_at: Utc::now(),
+        });
+        assert_eq!(classify_push_frame(&hb), PushAction::Ignore);
+    }
 }

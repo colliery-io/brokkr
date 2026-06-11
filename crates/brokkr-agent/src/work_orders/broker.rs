@@ -28,7 +28,7 @@ fn convert<F: Serialize, T: DeserializeOwned>(value: F) -> Result<T, serde_json:
     serde_json::from_value(v)
 }
 
-fn boxed(prefix: &str, err: BrokkrError) -> Box<dyn std::error::Error> {
+fn boxed(prefix: &str, err: BrokkrError) -> Box<dyn std::error::Error + Send + Sync> {
     let msg = match status_u16(&err) {
         Some(s) => format!("{prefix}. Status: {s}, Error: {err}"),
         None => format!("{prefix}: {err}"),
@@ -42,7 +42,7 @@ pub async fn fetch_pending_work_orders(
     client: &BrokkrClient,
     agent: &Agent,
     work_type: Option<&str>,
-) -> Result<Vec<WorkOrder>, Box<dyn std::error::Error>> {
+) -> Result<Vec<WorkOrder>, Box<dyn std::error::Error + Send + Sync>> {
     debug!(
         "Fetching pending work orders for agent {} (work_type={:?})",
         agent.name, work_type
@@ -57,7 +57,7 @@ pub async fn fetch_pending_work_orders(
         Ok(rv) => {
             let orders: Vec<WorkOrder> = convert(rv.into_inner()).map_err(|e| {
                 error!("Failed to convert work orders: {}", e);
-                Box::new(e) as Box<dyn std::error::Error>
+                Box::new(e) as Box<dyn std::error::Error + Send + Sync>
             })?;
             debug!(
                 "Successfully fetched {} pending work orders for agent {}",
@@ -88,7 +88,7 @@ pub async fn claim_work_order(
     client: &BrokkrClient,
     agent: &Agent,
     work_order_id: Uuid,
-) -> Result<WorkOrder, Box<dyn std::error::Error>> {
+) -> Result<WorkOrder, Box<dyn std::error::Error + Send + Sync>> {
     debug!(
         "Claiming work order {} for agent {}",
         work_order_id, agent.name
@@ -107,7 +107,7 @@ pub async fn claim_work_order(
         Ok(rv) => {
             let order: WorkOrder = convert(rv.into_inner()).map_err(|e| {
                 error!("Failed to convert claimed work order: {}", e);
-                Box::new(e) as Box<dyn std::error::Error>
+                Box::new(e) as Box<dyn std::error::Error + Send + Sync>
             })?;
             info!(
                 "Successfully claimed work order {} for agent {}",
@@ -159,7 +159,7 @@ pub async fn complete_work_order(
     success: bool,
     message: Option<String>,
     retryable: bool,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     debug!(
         "Completing work order {} (success: {}, retryable: {})",
         work_order_id, success, retryable
