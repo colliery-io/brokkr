@@ -446,6 +446,14 @@ async fn create_event(
 ) -> Result<(StatusCode, Json<AgentEvent>), ApiError> {
     info!("Handling request to create event for agent with ID: {}", id);
     require_admin_or_agent(&auth_payload, id)?;
+    // The path id is what was authorized; the body must not attribute the event
+    // to a different agent (these events feed the webhook bus).
+    if new_event.agent_id != id {
+        return Err(ApiError::bad_request(
+            "agent_id_mismatch",
+            "body agent_id must match the path agent id",
+        ));
+    }
 
     let event = dal
         .agent_events()
@@ -524,6 +532,12 @@ async fn add_label(
 ) -> Result<(StatusCode, Json<AgentLabel>), ApiError> {
     info!("Handling request to add label for agent with ID: {}", id);
     require_admin(&auth_payload)?;
+    if new_label.agent_id != id {
+        return Err(ApiError::bad_request(
+            "agent_id_mismatch",
+            "body agent_id must match the path agent id",
+        ));
+    }
     let label = dal
         .agent_labels()
         .create(&new_label)
@@ -634,6 +648,12 @@ async fn add_annotation(
         id
     );
     require_admin(&auth_payload)?;
+    if new_annotation.agent_id != id {
+        return Err(ApiError::bad_request(
+            "agent_id_mismatch",
+            "body agent_id must match the path agent id",
+        ));
+    }
     let annotation = dal
         .agent_annotations()
         .create(&new_annotation)
@@ -734,6 +754,12 @@ async fn add_target(
 ) -> Result<(StatusCode, Json<AgentTarget>), ApiError> {
     info!("Handling request to add target for agent with ID: {}", id);
     authorize_target_mutation(&dal, &auth_payload, new_target.stack_id)?;
+    if new_target.agent_id != id {
+        return Err(ApiError::bad_request(
+            "agent_id_mismatch",
+            "body agent_id must match the path agent id",
+        ));
+    }
     let target = dal
         .agent_targets()
         .create(&new_target)

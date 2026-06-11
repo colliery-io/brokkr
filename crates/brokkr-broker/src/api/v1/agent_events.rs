@@ -43,9 +43,17 @@ pub fn routes() -> Router<DAL> {
 )]
 async fn list_agent_events(
     State(dal): State<DAL>,
-    Extension(_auth_payload): Extension<crate::api::v1::middleware::AuthPayload>,
+    Extension(auth_payload): Extension<crate::api::v1::middleware::AuthPayload>,
 ) -> Result<Json<Vec<AgentEvent>>, ApiError> {
     info!("Handling request to list agent events");
+    // This is a cluster-wide list; only admin may enumerate every agent's
+    // events. An agent reads its own via GET /agents/{id}/events.
+    if !auth_payload.admin {
+        return Err(ApiError::forbidden(
+            "admin_required",
+            "admin access required",
+        ));
+    }
     let events = dal.agent_events().list().map_err(|e| {
         error!("Failed to fetch agent events: {:?}", e);
         ApiError::internal("failed to fetch agent events")
@@ -74,10 +82,16 @@ async fn list_agent_events(
 )]
 async fn get_agent_event(
     State(dal): State<DAL>,
-    Extension(_auth_payload): Extension<crate::api::v1::middleware::AuthPayload>,
+    Extension(auth_payload): Extension<crate::api::v1::middleware::AuthPayload>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<AgentEvent>, ApiError> {
     info!("Handling request to get agent event with ID: {}", id);
+    if !auth_payload.admin {
+        return Err(ApiError::forbidden(
+            "admin_required",
+            "admin access required",
+        ));
+    }
     let event = dal
         .agent_events()
         .get(id)

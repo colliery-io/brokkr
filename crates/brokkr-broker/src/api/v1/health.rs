@@ -134,10 +134,12 @@ async fn update_health_status(
         ));
     }
 
+    // Reject an invalid record rather than silently dropping it (the agent
+    // never learned its report was discarded under the old filter_map(.ok())).
     let health_records: Vec<NewDeploymentHealth> = update
         .deployment_objects
         .into_iter()
-        .filter_map(|update| {
+        .map(|update| {
             let summary_json = update.summary.and_then(|s| serde_json::to_string(&s).ok());
 
             NewDeploymentHealth::new(
@@ -147,9 +149,9 @@ async fn update_health_status(
                 summary_json,
                 update.checked_at,
             )
-            .ok()
+            .map_err(|e| ApiError::unprocessable("invalid_health_record", e))
         })
-        .collect();
+        .collect::<Result<Vec<_>, _>>()?;
 
     if health_records.is_empty() {
         return Ok(StatusCode::OK);

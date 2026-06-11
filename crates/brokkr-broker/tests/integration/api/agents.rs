@@ -290,6 +290,75 @@ async fn test_create_agent_event() {
 }
 
 #[tokio::test]
+async fn test_create_event_agent_id_mismatch_returns_400() {
+    // The path id is what was authorized; a body attributing the event to a
+    // different agent must be rejected (BROKKR-T-0208).
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+    let admin_pak = fixture.admin_pak.clone();
+
+    let agent_a = fixture.create_test_agent("Agent A".to_string(), "Cluster A".to_string());
+    let agent_b = fixture.create_test_agent("Agent B".to_string(), "Cluster B".to_string());
+    let test_stack =
+        fixture.create_test_stack("Mismatch Stack".to_string(), None, fixture.admin_generator.id);
+    let test_do =
+        fixture.create_test_deployment_object(test_stack.id, "DO".to_string(), false);
+
+    // Body attributes the event to agent_b, but we POST to agent_a's path.
+    let new_event = NewAgentEvent::new(
+        agent_b.id,
+        test_do.id,
+        "TEST_EVENT".to_string(),
+        "SUCCESS".to_string(),
+        None,
+    )
+    .expect("Failed to create NewAgentEvent");
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/agents/{}/events", agent_a.id))
+                .header("Content-Type", "application/json")
+                .header("Authorization", admin_pak)
+                .body(Body::from(serde_json::to_string(&new_event).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let status = response.status();
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(status, StatusCode::BAD_REQUEST, "body: {json}");
+    assert_eq!(json["code"], "agent_id_mismatch");
+}
+
+#[tokio::test]
+async fn test_list_agent_events_requires_admin() {
+    // The cluster-wide /agent-events list is admin-only; a non-admin agent PAK
+    // must be forbidden (BROKKR-T-0208).
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+    let (_agent, agent_pak) =
+        fixture.create_test_agent_with_pak("Lister".to_string(), "Cluster".to_string());
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/agent-events")
+                .header("Authorization", format!("Bearer {}", agent_pak))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
 async fn test_list_agent_labels() {
     let fixture = TestFixture::new();
     let app = fixture.create_test_router().with_state(fixture.dal.clone());
