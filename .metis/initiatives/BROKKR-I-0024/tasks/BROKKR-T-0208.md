@@ -4,7 +4,7 @@ level: task
 title: "Broker: fix path/body auth mismatches and event listing scope"
 short_code: "BROKKR-T-0208"
 created_at: 2026-06-11T11:02:07.925054+00:00
-updated_at: 2026-06-11T15:44:03.529978+00:00
+updated_at: 2026-06-11T16:21:21.421255+00:00
 parent: broker-api-correctness-error
 blocked_by: []
 archived: false
@@ -12,7 +12,7 @@ archived: false
 tags:
   - "#task"
   - "#task"
-  - "#phase/active"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -28,6 +28,8 @@ initiative_id: BROKKR-I-0024
 ## Objective
 
 Several handlers authorize against the path id but act on a body id that is never compared (or skip scoping entirely). Verified worst case: `create_event` (`agents.rs:441-453`) authorizes `require_admin_or_agent(&auth_payload, id)` for the **path** id but inserts `new_event.agent_id` from the **body** unchecked — an agent PAK can attribute events to any other agent, and these feed the webhook event bus.
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

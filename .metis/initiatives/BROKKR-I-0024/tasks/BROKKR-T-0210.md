@@ -4,7 +4,7 @@ level: task
 title: "Broker: input validation and stack_annotations unique index"
 short_code: "BROKKR-T-0210"
 created_at: 2026-06-11T11:02:08.021805+00:00
-updated_at: 2026-06-11T15:54:33.239385+00:00
+updated_at: 2026-06-11T16:21:21.524931+00:00
 parent: broker-api-correctness-error
 blocked_by: []
 archived: false
@@ -12,7 +12,7 @@ archived: false
 tags:
   - "#task"
   - "#task"
-  - "#phase/active"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -28,6 +28,8 @@ initiative_id: BROKKR-I-0024
 ## Objective
 
 Small validation and schema gaps from the sweep.
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

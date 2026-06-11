@@ -4,7 +4,7 @@ level: task
 title: "Broker: route blanket-500 DAL sites through from_diesel (15 sites)"
 short_code: "BROKKR-T-0207"
 created_at: 2026-06-11T11:02:07.878785+00:00
-updated_at: 2026-06-11T15:34:10.795175+00:00
+updated_at: 2026-06-11T16:21:21.323326+00:00
 parent: broker-api-correctness-error
 blocked_by: []
 archived: false
@@ -12,7 +12,7 @@ archived: false
 tags:
   - "#task"
   - "#task"
-  - "#phase/active"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -28,6 +28,8 @@ initiative_id: BROKKR-I-0024
 ## Objective
 
 Apply the add_label fix pattern (stacks.rs:557, BROKKR PR #44) to the 15 remaining sites where a blanket `ApiError::internal` masks a realistic constraint violation. UNIQUE → 409 `unique_violation`, FK → 422, via `ApiError::from_diesel` (error.rs:147).
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

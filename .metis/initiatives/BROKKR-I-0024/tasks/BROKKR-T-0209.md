@@ -4,7 +4,7 @@ level: task
 title: "Broker: stop panicking on DB pool exhaustion; add catch-panic layer"
 short_code: "BROKKR-T-0209"
 created_at: 2026-06-11T11:02:07.975727+00:00
-updated_at: 2026-06-11T15:50:17.533326+00:00
+updated_at: 2026-06-11T16:21:21.474124+00:00
 parent: broker-api-correctness-error
 blocked_by: []
 archived: false
@@ -12,7 +12,7 @@ archived: false
 tags:
   - "#task"
   - "#task"
-  - "#phase/active"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -28,6 +28,8 @@ initiative_id: BROKKR-I-0024
 ## Objective
 
 Every DAL method (225 sites, e.g. `dal/stacks.rs:70`) does `self.dal.pool.get().expect("Failed to get DB connection")`. Pool exhaustion or a DB outage panics inside the handler, and there is no `CatchPanicLayer` anywhere in the broker — the connection is dropped with no response, so under load the broker looks like it is hanging up on every client. The auth middleware (`middleware.rs:170-173`) already handles the same failure gracefully.
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 
