@@ -124,7 +124,7 @@ pub async fn process_pending_work_orders(
     http_client: &BrokkrClient,
     k8s_client: &K8sClient,
     agent: &Agent,
-) -> Result<usize, Box<dyn std::error::Error>> {
+) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
     // Fetch pending work orders
     let pending = broker::fetch_pending_work_orders(config, http_client, agent, None).await?;
 
@@ -172,7 +172,7 @@ async fn process_single_work_order(
     k8s_client: &K8sClient,
     agent: &Agent,
     work_order: &WorkOrder,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     info!(
         "Processing work order {} (type: {}, status: {})",
         work_order.id, work_order.work_type, work_order.status
@@ -233,14 +233,15 @@ async fn execute_build_work_order(
     k8s_client: &K8sClient,
     agent: &Agent,
     work_order: &WorkOrder,
-) -> Result<Option<String>, Box<dyn std::error::Error>> {
+) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
     info!(
         "Executing build work order {} for agent {}",
         work_order.id, agent.name
     );
 
     // Parse the YAML content to extract Build and WorkOrder resources
-    let yaml_docs = crate::utils::multidoc_deserialize(&work_order.yaml_content)?;
+    let yaml_docs = crate::utils::multidoc_deserialize(&work_order.yaml_content)
+        .map_err(|e| format!("failed to parse work order yaml: {e}"))?;
 
     if yaml_docs.is_empty() {
         return Err("Work order YAML content is empty".into());
@@ -269,7 +270,7 @@ async fn execute_custom_work_order(
     k8s_client: &K8sClient,
     agent: &Agent,
     work_order: &WorkOrder,
-) -> Result<Option<String>, Box<dyn std::error::Error>> {
+) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
     use kube::api::{DynamicObject, PatchParams};
 
     info!(
@@ -278,7 +279,8 @@ async fn execute_custom_work_order(
     );
 
     // Parse the YAML content
-    let yaml_docs = crate::utils::multidoc_deserialize(&work_order.yaml_content)?;
+    let yaml_docs = crate::utils::multidoc_deserialize(&work_order.yaml_content)
+        .map_err(|e| format!("failed to parse work order yaml: {e}"))?;
 
     if yaml_docs.is_empty() {
         return Err("Work order YAML content is empty".into());
@@ -318,7 +320,9 @@ async fn execute_custom_work_order(
 
     // Apply all resources using server-side apply
     let patch_params = PatchParams::apply("brokkr-agent").force();
-    crate::k8s::api::apply_k8s_objects(&objects, k8s_client.clone(), patch_params).await?;
+    crate::k8s::api::apply_k8s_objects(&objects, k8s_client.clone(), patch_params)
+        .await
+        .map_err(|e| format!("failed to apply work order objects: {e}"))?;
 
     Ok(Some(format!(
         "Successfully applied {} resource(s)",

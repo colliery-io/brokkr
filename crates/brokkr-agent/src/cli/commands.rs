@@ -254,6 +254,11 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
     let mut inbound_rx = ws_client.take_inbound();
     let mut inbound_open = inbound_rx.is_some();
 
+    // In-flight work-order pass, if any. Keeps long builds off the select loop
+    // (see the work_order_interval arm) while ensuring only one pass runs at a
+    // time.
+    let mut work_order_task: Option<tokio::task::JoinHandle<()>> = None;
+
     // Main control loop
     while running.load(Ordering::SeqCst) {
         select! {
@@ -402,18 +407,33 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
                     continue;
                 }
 
-                // Process pending work orders
-                match work_orders::process_pending_work_orders(&config, &sdk_client, &k8s_client, &agent).await {
-                    Ok(count) => {
-                        if count > 0 {
-                            info!("Processed {} work orders for agent '{}' (id: {})",
-                                count, agent.name, agent.id);
+                // Work-order processing (especially image builds, up to 15 min)
+                // must not run inline: a blocked select arm starves heartbeats
+                // and deployment polling, so the broker marks a healthy agent
+                // offline. Run it in a detached task and keep the loop ticking.
+                // Only one pass runs at a time — a still-running pass means new
+                // work waits for the next tick rather than processing twice.
+                if work_order_task.as_ref().is_some_and(|h| !h.is_finished()) {
+                    debug!("Work-order pass still running; skipping this tick");
+                } else {
+                    let config = config.clone();
+                    let sdk_client = sdk_client.clone();
+                    let k8s_client = k8s_client.clone();
+                    let agent = agent.clone();
+                    work_order_task = Some(tokio::spawn(async move {
+                        match work_orders::process_pending_work_orders(&config, &sdk_client, &k8s_client, &agent).await {
+                            Ok(count) => {
+                                if count > 0 {
+                                    info!("Processed {} work orders for agent '{}' (id: {})",
+                                        count, agent.name, agent.id);
+                                }
+                            }
+                            Err(e) => {
+                                error!("Failed to process work orders for agent '{}' (id: {}): {}",
+                                    agent.name, agent.id, e);
+                            }
                         }
-                    }
-                    Err(e) => {
-                        error!("Failed to process work orders for agent '{}' (id: {}): {}",
-                            agent.name, agent.id, e);
-                    }
+                    }));
                 }
             }
             _ = health_check_interval.tick(), if health_check_enabled => {

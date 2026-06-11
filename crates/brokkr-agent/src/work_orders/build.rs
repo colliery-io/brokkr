@@ -104,7 +104,7 @@ pub async fn execute_build(
     k8s_client: &K8sClient,
     yaml_content: &str,
     work_order_id: &str,
-) -> Result<Option<String>, Box<dyn std::error::Error>> {
+) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
     info!("Starting build execution for work order {}", work_order_id);
 
     // Parse YAML documents
@@ -201,13 +201,15 @@ pub async fn execute_build(
 async fn apply_shipwright_resource(
     k8s_client: &K8sClient,
     resource: &serde_yaml::Value,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Convert YAML to DynamicObject
     let k8s_object: DynamicObject = serde_yaml::from_value(resource.clone())?;
 
     // Use the existing apply_k8s_objects function which has proper retry logic
     let patch_params = PatchParams::apply("brokkr-agent").force();
-    k8s::api::apply_k8s_objects(&[k8s_object], k8s_client.clone(), patch_params).await
+    k8s::api::apply_k8s_objects(&[k8s_object], k8s_client.clone(), patch_params)
+        .await
+        .map_err(|e| format!("failed to apply build resource: {e}").into())
 }
 
 /// Creates a BuildRun resource.
@@ -217,7 +219,7 @@ async fn create_buildrun(
     build_name: &str,
     namespace: &str,
     work_order_id: &str,
-) -> Result<DynamicObject, Box<dyn std::error::Error>> {
+) -> Result<DynamicObject, Box<dyn std::error::Error + Send + Sync>> {
     // Discover the BuildRun API
     let discovery = Discovery::new(k8s_client.clone()).run().await?;
 
@@ -260,7 +262,7 @@ async fn watch_buildrun_completion(
     k8s_client: &K8sClient,
     name: &str,
     namespace: &str,
-) -> Result<Option<String>, Box<dyn std::error::Error>> {
+) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
     // Discover the BuildRun API
     let discovery = Discovery::new(k8s_client.clone()).run().await?;
 
@@ -365,7 +367,7 @@ pub(crate) struct ParsedBuildInfo {
 #[allow(dead_code)]
 pub(crate) fn parse_build_yaml(
     yaml_content: &str,
-) -> Result<ParsedBuildInfo, Box<dyn std::error::Error>> {
+) -> Result<ParsedBuildInfo, Box<dyn std::error::Error + Send + Sync>> {
     let docs: Vec<serde_yaml::Value> = serde_yaml::Deserializer::from_str(yaml_content)
         .map(serde_yaml::Value::deserialize)
         .collect::<Result<Vec<_>, _>>()?;
