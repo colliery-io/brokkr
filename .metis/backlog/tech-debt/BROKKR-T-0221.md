@@ -5,19 +5,18 @@ title: "Agent: reuse Discovery per reconcile + pod-log tail re-attach (deferred 
 short_code: "BROKKR-T-0221"
 created_at: 2026-06-11T14:45:20.568203+00:00
 updated_at: 2026-06-11T14:45:20.568203+00:00
-parent: agent-reconciler-hardening-crash
+parent:
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/todo"
+  - "#phase/backlog"
   - "#task"
-  - "#phase/todo"
+  - "#phase/backlog"
 
 
 exit_criteria_met: false
-initiative_id: BROKKR-I-0023
 ---
 
 # Agent: reuse Discovery per reconcile + pod-log tail re-attach (deferred from T-0206)

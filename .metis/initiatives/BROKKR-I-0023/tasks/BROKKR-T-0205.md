@@ -4,7 +4,7 @@ level: task
 title: "Agent: keep heartbeats alive during long work orders and apply retries"
 short_code: "BROKKR-T-0205"
 created_at: 2026-06-11T11:02:07.778531+00:00
-updated_at: 2026-06-11T14:24:41.338540+00:00
+updated_at: 2026-06-11T15:10:29.337773+00:00
 parent: agent-reconciler-hardening-crash
 blocked_by: []
 archived: false
@@ -12,7 +12,7 @@ archived: false
 tags:
   - "#task"
   - "#task"
-  - "#phase/active"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -28,6 +28,8 @@ initiative_id: BROKKR-I-0023
 ## Objective
 
 Every select arm in the control loop (`cli/commands.rs:228-485`) is awaited inline. A build work order can block up to 15 minutes (`work_orders/build.rs:41` `BUILD_TIMEOUT_SECS = 900`, polled at `build.rs:279-341`); a failing k8s apply retries up to 5 minutes (`k8s/api.rs:77` `max_elapsed_time: 300s`). During that window: no heartbeats, no health updates, no deployment polling — the broker marks the agent offline and operators page on a healthy agent.
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

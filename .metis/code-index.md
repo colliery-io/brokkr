@@ -1,6 +1,6 @@
 # Code Index
 
-> Generated: 2026-06-11T05:27:02Z | 398 files | JavaScript, Python, Rust, TypeScript
+> Generated: 2026-06-11T14:47:19Z | 398 files | JavaScript, Python, Rust, TypeScript
 
 ## Project Structure
 
@@ -536,9 +536,9 @@
 - pub `take_inbound` function L122-124 — `(&mut self) -> Option<mpsc::Receiver<WsMessage>>` — Take ownership of the inbound receiver.
 - pub `WsUplink` struct L131-134 — `{ state: watch::Receiver<WsState>, outbound: mpsc::Sender<WsMessage> }` — Send-side handle for agent components that want to prefer WS but fall
 - pub `is_up` function L140-142 — `(&self) -> bool` — True iff the WS state is currently `Up`.
-- pub `try_send` function L147-156 — `(&self, msg: WsMessage) -> Result<(), WsMessage>` — Try to send a message over WS.
-- pub `spawn` function L165-211 — `(settings: &Settings) -> WsClient` — Spawn the WS connection task and return a client handle.
-- pub `ws_url_from_broker_url` function L217-229 — `(broker_url: &str) -> String` — Convert `http(s)://broker/api/v1`-style URLs into the
+- pub `try_send` function L150-159 — `(&self, msg: WsMessage) -> Result<(), WsMessage>` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+- pub `spawn` function L168-214 — `(settings: &Settings) -> WsClient` — Spawn the WS connection task and return a client handle.
+- pub `ws_url_from_broker_url` function L220-232 — `(broker_url: &str) -> String` — Convert `http(s)://broker/api/v1`-style URLs into the
 -  `WsState` type L58-62 — `= WsState` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
 -  `OUTBOUND_CAPACITY` variable L68 — `: usize` — Capacity of the outbound queue from the agent's emitters to the WS task.
 -  `INBOUND_CAPACITY` variable L72 — `: usize` — Capacity of the inbound queue from the WS task to in-agent consumers.
@@ -546,31 +546,31 @@
 -  `BACKOFF_MAX` variable L76 — `: Duration` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
 -  `MAX_CONSECUTIVE_AUTH_REJECTIONS` variable L82 — `: u32` — Consecutive WS-upgrade auth rejections (HTTP 401/403) after which the
 -  `WsClient` type L97-125 — `= WsClient` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `WsUplink` type L136-157 — `= WsUplink` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `reconnect_loop` function L231-282 — `( url: String, pak: String, state_tx: watch::Sender<WsState>, inbound_tx: mpsc::...` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `is_auth_rejection` function L286-294 — `(err: &tokio_tungstenite::tungstenite::Error) -> bool` — True when a WS-upgrade error is a credential rejection (HTTP 401/403),
--  `dial` function L296-316 — `( url: &str, pak: &str, ) -> Result< tokio_tungstenite::WebSocketStream<tokio_tu...` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `run_socket` function L318-383 — `( socket: tokio_tungstenite::WebSocketStream< tokio_tungstenite::MaybeTlsStream<...` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `BackoffSchedule` struct L388-390 — `{ current: Duration }` — Exponential backoff with capped maximum and ±20% jitter.
--  `BackoffSchedule` type L392-410 — `= BackoffSchedule` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `new` function L393-397 — `() -> Self` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `reset` function L399-401 — `(&mut self)` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `next` function L403-409 — `(&mut self) -> Duration` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `with_jitter` function L412-421 — `(d: Duration) -> Duration` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `tests` module L424-601 — `-` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `ws_url_translates_scheme_and_appends_path` function L428-441 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `auth_rejection_detects_401_and_403_only` function L444-464 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `backoff_grows_exponentially_then_caps` function L467-484 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `backoff_reset_restores_initial` function L487-495 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `jitter_stays_within_twenty_percent` function L498-505 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `uplink_with` function L515-526 — `( state: WsState, capacity: usize, ) -> (WsUplink, watch::Sender<WsState>, mpsc:...` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `heartbeat_msg` function L528-533 — `() -> WsMessage` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `try_send_returns_message_when_down` function L536-542 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `try_send_returns_message_when_force_rest_only` function L545-549 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `try_send_delivers_when_up` function L552-558 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `try_send_returns_message_when_lane_full` function L561-568 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `ws_is_on_by_default_per_adr_0008` function L571-580 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
--  `try_send_follows_state_flip_back_to_rest` function L583-600 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `WsUplink` type L136-160 — `= WsUplink` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `reconnect_loop` function L234-285 — `( url: String, pak: String, state_tx: watch::Sender<WsState>, inbound_tx: mpsc::...` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `is_auth_rejection` function L289-297 — `(err: &tokio_tungstenite::tungstenite::Error) -> bool` — True when a WS-upgrade error is a credential rejection (HTTP 401/403),
+-  `dial` function L299-319 — `( url: &str, pak: &str, ) -> Result< tokio_tungstenite::WebSocketStream<tokio_tu...` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `run_socket` function L321-396 — `( socket: tokio_tungstenite::WebSocketStream< tokio_tungstenite::MaybeTlsStream<...` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `BackoffSchedule` struct L401-403 — `{ current: Duration }` — Exponential backoff with capped maximum and ±20% jitter.
+-  `BackoffSchedule` type L405-423 — `= BackoffSchedule` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `new` function L406-410 — `() -> Self` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `reset` function L412-414 — `(&mut self)` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `next` function L416-422 — `(&mut self) -> Duration` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `with_jitter` function L425-434 — `(d: Duration) -> Duration` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `tests` module L437-614 — `-` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `ws_url_translates_scheme_and_appends_path` function L441-454 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `auth_rejection_detects_401_and_403_only` function L457-477 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `backoff_grows_exponentially_then_caps` function L480-497 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `backoff_reset_restores_initial` function L500-508 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `jitter_stays_within_twenty_percent` function L511-518 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `uplink_with` function L528-539 — `( state: WsState, capacity: usize, ) -> (WsUplink, watch::Sender<WsState>, mpsc:...` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `heartbeat_msg` function L541-546 — `() -> WsMessage` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `try_send_returns_message_when_down` function L549-555 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `try_send_returns_message_when_force_rest_only` function L558-562 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `try_send_delivers_when_up` function L565-571 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `try_send_returns_message_when_lane_full` function L574-581 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `ws_is_on_by_default_per_adr_0008` function L584-593 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
+-  `try_send_follows_state_flip_back_to_rest` function L596-613 — `()` — state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
 
 #### crates/brokkr-agent/src/deployment_health.rs
 
@@ -644,13 +644,13 @@
 -  `BrokerStatusResponse` struct L73-77 — `{ connected: bool, last_heartbeat: Option<String> }` — Broker health status for response
 -  `healthz` function L93-95 — `() -> impl IntoResponse` — Simple liveness check endpoint
 -  `readyz` function L101-113 — `(State(state): State<HealthState>) -> impl IntoResponse` — Readiness check endpoint
--  `health` function L125-183 — `(State(state): State<HealthState>) -> impl IntoResponse` — Detailed health check endpoint
--  `metrics_handler` function L189-196 — `() -> impl IntoResponse` — Prometheus metrics endpoint
+-  `health` function L125-184 — `(State(state): State<HealthState>) -> impl IntoResponse` — Detailed health check endpoint
+-  `metrics_handler` function L190-206 — `() -> impl IntoResponse` — Prometheus metrics endpoint
 
 #### crates/brokkr-agent/src/kube_events.rs
 
 - pub `DEFAULT_UID_CACHE_CAP` variable L79 — `: usize` — Default entry cap.
-- pub `spawn` function L126-166 — `( client: Client, uplink: WsUplink, agent_id: Uuid, uid_cache_cap: usize, watch_...` — Spawn the kube-events tailer.
+- pub `spawn` function L126-172 — `( client: Client, uplink: WsUplink, agent_id: Uuid, uid_cache_cap: usize, watch_...` — Spawn the kube-events tailer.
 -  `LOOKUP_TTL` variable L55 — `: Duration` — How long to cache a UID→stack lookup before re-querying.
 -  `OUTBOUND_CAPACITY` variable L61 — `: usize` — Capacity of the bounded outbound queue we drain into the WS uplink.
 -  `CacheEntry` enum L64-67 — `Owned | NotOurs` — (WS-09) under the hard 6h retention ceiling.
@@ -661,17 +661,18 @@
 -  `get` function L96-106 — `(&mut self, uid: &str) -> Option<CacheEntry>` — (WS-09) under the hard 6h retention ceiling.
 -  `put` function L108-116 — `(&mut self, uid: String, value: CacheEntry)` — (WS-09) under the hard 6h retention ceiling.
 -  `len` function L119-121 — `(&self) -> usize` — (WS-09) under the hard 6h retention ceiling.
--  `watch_loop` function L168-188 — `( client: Client, agent_id: Uuid, tx: mpsc::Sender<WsMessage>, cache: Arc<RwLock...` — (WS-09) under the hard 6h retention ceiling.
--  `handle_event` function L190-232 — `( client: &Client, agent_id: Uuid, ev: &K8sEventResource, tx: &mpsc::Sender<WsMe...` — (WS-09) under the hard 6h retention ceiling.
--  `resolve_stack` function L234-260 — `( client: &Client, ev: &K8sEventResource, uid: &str, cache: &Arc<RwLock<UidCache...` — (WS-09) under the hard 6h retention ceiling.
--  `annotation_lookup` function L262-292 — `( client: &Client, involved: &k8s_openapi::api::core::v1::ObjectReference, ) -> ...` — (WS-09) under the hard 6h retention ceiling.
--  `tests` module L295-379 — `-` — (WS-09) under the hard 6h retention ceiling.
--  `lookup_or_miss` function L301-309 — `(cache: &mut UidCache, uid: &str, api_calls: &mut usize) -> CacheEntry` — Mirror `resolve_stack`'s cache interaction without the real API:
--  `cache_returns_owned_within_ttl` function L312-320 — `()` — (WS-09) under the hard 6h retention ceiling.
--  `cache_treats_not_ours_as_a_real_entry` function L323-327 — `()` — (WS-09) under the hard 6h retention ceiling.
--  `cache_expires_after_ttl` function L330-338 — `()` — (WS-09) under the hard 6h retention ceiling.
--  `cache_stays_bounded_under_high_unique_churn` function L341-359 — `()` — (WS-09) under the hard 6h retention ceiling.
--  `cache_serves_hot_set_without_re_hitting_the_api` function L362-378 — `()` — (WS-09) under the hard 6h retention ceiling.
+-  `MAX_BACKOFF` variable L153 — `: Duration` — (WS-09) under the hard 6h retention ceiling.
+-  `watch_loop` function L174-194 — `( client: Client, agent_id: Uuid, tx: mpsc::Sender<WsMessage>, cache: Arc<RwLock...` — (WS-09) under the hard 6h retention ceiling.
+-  `handle_event` function L196-238 — `( client: &Client, agent_id: Uuid, ev: &K8sEventResource, tx: &mpsc::Sender<WsMe...` — (WS-09) under the hard 6h retention ceiling.
+-  `resolve_stack` function L240-266 — `( client: &Client, ev: &K8sEventResource, uid: &str, cache: &Arc<RwLock<UidCache...` — (WS-09) under the hard 6h retention ceiling.
+-  `annotation_lookup` function L268-298 — `( client: &Client, involved: &k8s_openapi::api::core::v1::ObjectReference, ) -> ...` — (WS-09) under the hard 6h retention ceiling.
+-  `tests` module L301-385 — `-` — (WS-09) under the hard 6h retention ceiling.
+-  `lookup_or_miss` function L307-315 — `(cache: &mut UidCache, uid: &str, api_calls: &mut usize) -> CacheEntry` — Mirror `resolve_stack`'s cache interaction without the real API:
+-  `cache_returns_owned_within_ttl` function L318-326 — `()` — (WS-09) under the hard 6h retention ceiling.
+-  `cache_treats_not_ours_as_a_real_entry` function L329-333 — `()` — (WS-09) under the hard 6h retention ceiling.
+-  `cache_expires_after_ttl` function L336-344 — `()` — (WS-09) under the hard 6h retention ceiling.
+-  `cache_stays_bounded_under_high_unique_churn` function L347-365 — `()` — (WS-09) under the hard 6h retention ceiling.
+-  `cache_serves_hot_set_without_re_hitting_the_api` function L368-384 — `()` — (WS-09) under the hard 6h retention ceiling.
 
 #### crates/brokkr-agent/src/lib.rs
 
@@ -698,7 +699,7 @@
 - pub `kubernetes_operation_duration_seconds` function L81-96 — `() -> &'static HistogramVec` — Kubernetes operation duration histogram
 - pub `heartbeat_sent_total` function L99-112 — `() -> &'static IntCounter` — Heartbeat sent counter
 - pub `last_successful_poll_timestamp` function L115-128 — `() -> &'static Gauge` — Last successful poll timestamp (Unix timestamp)
-- pub `encode_metrics` function L135-143 — `() -> String` — Encodes all registered metrics in Prometheus text format
+- pub `encode_metrics` function L135-143 — `() -> Result<String, String>` — Encodes all registered metrics in Prometheus text format
 -  `REGISTRY` variable L19 — `: OnceLock<Registry>` — Global Prometheus registry for all agent metrics
 -  `registry` function L21-23 — `() -> &'static Registry` — It exposes metrics about broker polling, Kubernetes operations, and agent health.
 -  `COUNTER` variable L28 — `: OnceLock<CounterVec>` — It exposes metrics about broker polling, Kubernetes operations, and agent health.
@@ -707,29 +708,33 @@
 -  `HISTOGRAM` variable L82 — `: OnceLock<HistogramVec>` — It exposes metrics about broker polling, Kubernetes operations, and agent health.
 -  `COUNTER` variable L100 — `: OnceLock<IntCounter>` — It exposes metrics about broker polling, Kubernetes operations, and agent health.
 -  `GAUGE` variable L116 — `: OnceLock<Gauge>` — It exposes metrics about broker polling, Kubernetes operations, and agent health.
+-  `tests` module L146-156 — `-` — It exposes metrics about broker polling, Kubernetes operations, and agent health.
+-  `encode_metrics_succeeds` function L150-155 — `()` — It exposes metrics about broker polling, Kubernetes operations, and agent health.
 
 #### crates/brokkr-agent/src/pod_logs.rs
 
-- pub `STREAM_LOGS_ANNOTATION` variable L52 — `: &str` — Annotation that opts a workload into log streaming.
-- pub `spawn` function L62-86 — `( client: Client, uplink: WsUplink, agent_id: Uuid, watch_namespace: Option<Stri...` — bucket the right answer is "ship to Datadog", not "raise the limit".
--  `DEFAULT_LINES_PER_SEC` variable L57 — `: u64` — Default per-container line-rate ceiling.
--  `RATE_WINDOW` variable L60 — `: Duration` — Window for the token-bucket counter.
--  `watch_pods` function L88-128 — `( client: Client, uplink: WsUplink, agent_id: Uuid, active: Arc<RwLock<HashMap<S...` — bucket the right answer is "ship to Datadog", not "raise the limit".
--  `is_opted_in` function L130-137 — `(pod: &Pod) -> bool` — bucket the right answer is "ship to Datadog", not "raise the limit".
--  `pod_stack_id` function L139-143 — `(pod: &Pod) -> Option<Uuid>` — bucket the right answer is "ship to Datadog", not "raise the limit".
--  `ensure_tails` function L148-185 — `( client: &Client, uplink: &WsUplink, agent_id: Uuid, stack_id: Uuid, pod: &Pod,...` — For a given opted-in pod, ensure one tail task per container.
--  `teardown_for` function L187-194 — `(uid: &str, active: &Arc<RwLock<HashMap<String, Vec<JoinHandle<()>>>>>)` — bucket the right answer is "ship to Datadog", not "raise the limit".
--  `tail_container` function L196-287 — `( pods: Api<Pod>, uplink: WsUplink, agent_id: Uuid, stack_id: Uuid, namespace: S...` — bucket the right answer is "ship to Datadog", not "raise the limit".
--  `MAX_OPEN_ATTEMPTS` variable L222 — `: u32` — bucket the right answer is "ship to Datadog", not "raise the limit".
--  `OPEN_RETRY` variable L223 — `: Duration` — bucket the right answer is "ship to Datadog", not "raise the limit".
--  `RateLimiter` struct L291-296 — `{ lines_per_sec: u64, window_start: Instant, count_in_window: u64, dropped_in_wi...` — Minimal token-bucket: at most `lines_per_sec` lines per RATE_WINDOW.
--  `Allowance` enum L298-307 — `Allow | Drop | DropAndGap` — bucket the right answer is "ship to Datadog", not "raise the limit".
--  `RateLimiter` type L309-340 — `= RateLimiter` — bucket the right answer is "ship to Datadog", not "raise the limit".
--  `new` function L310-317 — `(lines_per_sec: u64) -> Self` — bucket the right answer is "ship to Datadog", not "raise the limit".
--  `consume` function L319-339 — `(&mut self) -> Allowance` — bucket the right answer is "ship to Datadog", not "raise the limit".
--  `tests` module L347-368 — `-` — bucket the right answer is "ship to Datadog", not "raise the limit".
--  `rate_limiter_allows_under_ceiling` function L351-356 — `()` — bucket the right answer is "ship to Datadog", not "raise the limit".
--  `rate_limiter_drops_above_ceiling_with_first_gap` function L359-367 — `()` — bucket the right answer is "ship to Datadog", not "raise the limit".
+- pub `STREAM_LOGS_ANNOTATION` variable L55 — `: &str` — Annotation that opts a workload into log streaming.
+- pub `spawn` function L65-95 — `( client: Client, uplink: WsUplink, agent_id: Uuid, watch_namespace: Option<Stri...` — bucket the right answer is "ship to Datadog", not "raise the limit".
+-  `ActiveTails` type L52 — `= Arc<RwLock<HashMap<String, Vec<JoinHandle<()>>>>>` — Per-pod (by UID) set of running log-tail tasks.
+-  `DEFAULT_LINES_PER_SEC` variable L60 — `: u64` — Default per-container line-rate ceiling.
+-  `RATE_WINDOW` variable L63 — `: Duration` — Window for the token-bucket counter.
+-  `MAX_BACKOFF` variable L76 — `: Duration` — bucket the right answer is "ship to Datadog", not "raise the limit".
+-  `watch_pods` function L97-137 — `( client: Client, uplink: WsUplink, agent_id: Uuid, active: ActiveTails, watch_n...` — bucket the right answer is "ship to Datadog", not "raise the limit".
+-  `is_opted_in` function L139-146 — `(pod: &Pod) -> bool` — bucket the right answer is "ship to Datadog", not "raise the limit".
+-  `pod_stack_id` function L148-152 — `(pod: &Pod) -> Option<Uuid>` — bucket the right answer is "ship to Datadog", not "raise the limit".
+-  `ensure_tails` function L157-194 — `( client: &Client, uplink: &WsUplink, agent_id: Uuid, stack_id: Uuid, pod: &Pod,...` — For a given opted-in pod, ensure one tail task per container.
+-  `teardown_for` function L196-203 — `(uid: &str, active: &ActiveTails)` — bucket the right answer is "ship to Datadog", not "raise the limit".
+-  `tail_container` function L205-296 — `( pods: Api<Pod>, uplink: WsUplink, agent_id: Uuid, stack_id: Uuid, namespace: S...` — bucket the right answer is "ship to Datadog", not "raise the limit".
+-  `MAX_OPEN_ATTEMPTS` variable L231 — `: u32` — bucket the right answer is "ship to Datadog", not "raise the limit".
+-  `OPEN_RETRY` variable L232 — `: Duration` — bucket the right answer is "ship to Datadog", not "raise the limit".
+-  `RateLimiter` struct L300-305 — `{ lines_per_sec: u64, window_start: Instant, count_in_window: u64, dropped_in_wi...` — Minimal token-bucket: at most `lines_per_sec` lines per RATE_WINDOW.
+-  `Allowance` enum L307-316 — `Allow | Drop | DropAndGap` — bucket the right answer is "ship to Datadog", not "raise the limit".
+-  `RateLimiter` type L318-349 — `= RateLimiter` — bucket the right answer is "ship to Datadog", not "raise the limit".
+-  `new` function L319-326 — `(lines_per_sec: u64) -> Self` — bucket the right answer is "ship to Datadog", not "raise the limit".
+-  `consume` function L328-348 — `(&mut self) -> Allowance` — bucket the right answer is "ship to Datadog", not "raise the limit".
+-  `tests` module L356-377 — `-` — bucket the right answer is "ship to Datadog", not "raise the limit".
+-  `rate_limiter_allows_under_ceiling` function L360-365 — `()` — bucket the right answer is "ship to Datadog", not "raise the limit".
+-  `rate_limiter_drops_above_ceiling_with_first_gap` function L368-376 — `()` — bucket the right answer is "ship to Datadog", not "raise the limit".
 
 #### crates/brokkr-agent/src/utils.rs
 
@@ -765,7 +770,16 @@
 
 #### crates/brokkr-agent/src/cli/commands.rs
 
-- pub `start` function L77-496 — `() -> Result<(), Box<dyn std::error::Error>>` — - Contextual information
+- pub `start` function L100-625 — `() -> Result<(), Box<dyn std::error::Error>>` — - Contextual information
+-  `PushAction` enum L82-89 — `Reconcile | PollWorkOrders | Ignore` — What an inbound broker→agent WS push frame should trigger in the control
+-  `classify_push_frame` function L92-98 — `(msg: &WsMessage) -> PushAction` — Route an inbound WS frame to the control-loop action it should trigger.
+-  `tests` module L628-701 — `-` — - Contextual information
+-  `stack` function L633-643 — `() -> Stack` — - Contextual information
+-  `target` function L645-651 — `() -> AgentTarget` — - Contextual information
+-  `work_order` function L653-671 — `() -> WorkOrder` — - Contextual information
+-  `stack_and_target_changes_trigger_reconcile` function L674-683 — `()` — - Contextual information
+-  `work_order_triggers_poll` function L686-691 — `()` — - Contextual information
+-  `uplink_frames_are_ignored` function L694-700 — `()` — - Contextual information
 
 #### crates/brokkr-agent/src/cli/mod.rs
 
@@ -782,18 +796,18 @@
 
 - pub `apply_k8s_objects` function L148-261 — `( k8s_objects: &[DynamicObject], k8s_client: K8sClient, patch_params: PatchParam...` — Applies a list of Kubernetes objects to the cluster using server-side apply.
 - pub `dynamic_api` function L274-288 — `( ar: ApiResource, caps: ApiCapabilities, client: K8sClient, namespace: Option<&...` — Creates a dynamic Kubernetes API client for a specific resource type
-- pub `get_all_objects_by_annotation` function L300-350 — `( k8s_client: &K8sClient, annotation_key: &str, annotation_value: &str, ) -> Res...` — Retrieves all Kubernetes objects with a specific annotation key-value pair.
-- pub `delete_k8s_objects` function L361-451 — `( k8s_objects: &[DynamicObject], k8s_client: K8sClient, agent_id: &Uuid, ) -> Re...` — Deletes a list of Kubernetes objects from the cluster.
-- pub `validate_k8s_objects` function L461-558 — `( k8s_objects: &[DynamicObject], k8s_client: K8sClient, ) -> Result<(), Box<dyn ...` — Validates Kubernetes objects against the API server without applying them.
-- pub `reconcile_target_state` function L687-906 — `( objects: &[DynamicObject], client: Client, stack_id: &str, checksum: &str, ) -...` — Reconciles the target state of Kubernetes objects for a stack.
-- pub `create_k8s_client` function L915-946 — `( kubeconfig_path: Option<&str>, ) -> Result<K8sClient, Box<dyn std::error::Erro...` — Creates a Kubernetes client using either a provided kubeconfig path or default configuration.
+- pub `get_all_objects_by_annotation` function L300-381 — `( k8s_client: &K8sClient, annotation_key: &str, annotation_value: &str, watch_na...` — Retrieves all Kubernetes objects with a specific annotation key-value pair.
+- pub `delete_k8s_objects` function L392-485 — `( k8s_objects: &[DynamicObject], k8s_client: K8sClient, agent_id: &Uuid, ) -> Re...` — Deletes a list of Kubernetes objects from the cluster.
+- pub `validate_k8s_objects` function L495-595 — `( k8s_objects: &[DynamicObject], k8s_client: K8sClient, ) -> Result<(), Box<dyn ...` — Validates Kubernetes objects against the API server without applying them.
+- pub `reconcile_target_state` function L724-1012 — `( objects: &[DynamicObject], client: Client, stack_id: &str, checksum: &str, age...` — Reconciles the target state of Kubernetes objects for a stack.
+- pub `create_k8s_client` function L1021-1052 — `( kubeconfig_path: Option<&str>, ) -> Result<K8sClient, Box<dyn std::error::Erro...` — Creates a Kubernetes client using either a provided kubeconfig path or default configuration.
 -  `RetryConfig` struct L67-72 — `{ max_elapsed_time: Duration, initial_interval: Duration, max_interval: Duration...` — Retry configuration for Kubernetes operations
 -  `RetryConfig` type L74-83 — `impl Default for RetryConfig` — 3.
 -  `default` function L75-82 — `() -> Self` — 3.
 -  `is_retryable_error` function L86-97 — `(error: &KubeError) -> bool` — Determines if a Kubernetes error is retryable
 -  `with_retries` function L100-136 — `( operation: F, config: RetryConfig, ) -> Result<T, Box<dyn std::error::Error>>` — Executes a Kubernetes operation with retries
--  `apply_single_object` function L567-631 — `( object: &DynamicObject, client: &Client, stack_id: &str, checksum: &str, ) -> ...` — Applies a single Kubernetes object with proper annotations.
--  `rollback_namespaces` function L638-670 — `(client: &Client, namespaces: &[String])` — Rolls back namespaces that were created during a failed reconciliation.
+-  `apply_single_object` function L604-668 — `( object: &DynamicObject, client: &Client, stack_id: &str, checksum: &str, ) -> ...` — Applies a single Kubernetes object with proper annotations.
+-  `rollback_namespaces` function L675-707 — `(client: &Client, namespaces: &[String])` — Rolls back namespaces that were created during a failed reconciliation.
 
 #### crates/brokkr-agent/src/k8s/mod.rs
 
@@ -807,21 +821,21 @@
 - pub `LAST_CONFIG_ANNOTATION` variable L49 — `: &str` — Annotation key for last applied configuration
 - pub `DEPLOYMENT_OBJECT_ID_LABEL` variable L52 — `: &str` — Label key for deployment object IDs
 - pub `BROKKR_AGENT_OWNER_ANNOTATION` variable L55 — `: &str` — Key for agent ownership
-- pub `create_k8s_objects` function L64-119 — `( deployment_object: DeploymentObject, agent_id: Uuid, ) -> Result<Vec<DynamicOb...` — Creates Kubernetes objects from a brokkr deployment object's YAML content.
-- pub `verify_object_ownership` function L122-130 — `(object: &DynamicObject, agent_id: &Uuid) -> bool` — - Object validation
--  `tests` module L133-462 — `-` — - Object validation
--  `create_test_object` function L146-158 — `(annotations: Option<BTreeMap<String, String>>) -> DynamicObject` — - Object validation
--  `test_create_k8s_objects_single_document` function L161-197 — `()` — - Object validation
--  `test_create_k8s_objects_multiple_documents` function L200-254 — `()` — - Object validation
--  `test_create_k8s_objects_with_crds` function L257-304 — `()` — - Object validation
--  `test_create_k8s_objects_invalid_yaml` function L307-332 — `()` — - Object validation
--  `test_create_k8s_objects_empty_yaml` function L335-352 — `()` — - Object validation
--  `test_create_k8s_objects_ordering` function L355-406 — `()` — - Object validation
--  `test_verify_object_ownership_matching_owner` function L409-420 — `()` — - Object validation
--  `test_verify_object_ownership_different_owner` function L423-434 — `()` — - Object validation
--  `test_verify_object_ownership_no_annotations` function L437-441 — `()` — - Object validation
--  `test_verify_object_ownership_empty_annotations` function L444-448 — `()` — - Object validation
--  `test_verify_object_ownership_invalid_uuid` function L451-461 — `()` — - Object validation
+- pub `create_k8s_objects` function L64-126 — `( deployment_object: DeploymentObject, agent_id: Uuid, ) -> Result<Vec<DynamicOb...` — Creates Kubernetes objects from a brokkr deployment object's YAML content.
+- pub `verify_object_ownership` function L129-137 — `(object: &DynamicObject, agent_id: &Uuid) -> bool` — - Object validation
+-  `tests` module L140-469 — `-` — - Object validation
+-  `create_test_object` function L153-165 — `(annotations: Option<BTreeMap<String, String>>) -> DynamicObject` — - Object validation
+-  `test_create_k8s_objects_single_document` function L168-204 — `()` — - Object validation
+-  `test_create_k8s_objects_multiple_documents` function L207-261 — `()` — - Object validation
+-  `test_create_k8s_objects_with_crds` function L264-311 — `()` — - Object validation
+-  `test_create_k8s_objects_invalid_yaml` function L314-339 — `()` — - Object validation
+-  `test_create_k8s_objects_empty_yaml` function L342-359 — `()` — - Object validation
+-  `test_create_k8s_objects_ordering` function L362-413 — `()` — - Object validation
+-  `test_verify_object_ownership_matching_owner` function L416-427 — `()` — - Object validation
+-  `test_verify_object_ownership_different_owner` function L430-441 — `()` — - Object validation
+-  `test_verify_object_ownership_no_annotations` function L444-448 — `()` — - Object validation
+-  `test_verify_object_ownership_empty_annotations` function L451-455 — `()` — - Object validation
+-  `test_verify_object_ownership_invalid_uuid` function L458-468 — `()` — - Object validation
 
 ### crates/brokkr-agent/src/work_orders
 
@@ -834,7 +848,7 @@
 - pub `complete_work_order` function L155-222 — `( _config: &Settings, client: &BrokkrClient, work_order_id: Uuid, success: bool,...` — Reports work order completion to the broker.
 -  `status_u16` function L22-24 — `(err: &BrokkrError) -> Option<u16>` — types the 200 success path (T-A1 carry-over).
 -  `convert` function L26-29 — `(value: F) -> Result<T, serde_json::Error>` — types the 200 success path (T-A1 carry-over).
--  `boxed` function L31-37 — `(prefix: &str, err: BrokkrError) -> Box<dyn std::error::Error>` — types the 200 success path (T-A1 carry-over).
+-  `boxed` function L31-37 — `(prefix: &str, err: BrokkrError) -> Box<dyn std::error::Error + Send + Sync>` — types the 200 success path (T-A1 carry-over).
 
 #### crates/brokkr-agent/src/work_orders/build.rs
 
@@ -848,35 +862,35 @@
 -  `Condition` struct L60-68 — `{ condition_type: String, status: String, reason: Option<String>, message: Optio...` — - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
 -  `BuildRunOutput` struct L73-76 — `{ digest: Option<String>, size: Option<i64> }` — - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
 -  `FailureDetails` struct L80-85 — `{ reason: Option<String>, message: Option<String> }` — - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
--  `apply_shipwright_resource` function L201-211 — `( k8s_client: &K8sClient, resource: &serde_yaml::Value, ) -> Result<(), Box<dyn ...` — Applies a Shipwright resource (Build) to the cluster using the core k8s apply logic.
--  `create_buildrun` function L214-256 — `( k8s_client: &K8sClient, name: &str, build_name: &str, namespace: &str, work_or...` — Creates a BuildRun resource.
--  `watch_buildrun_completion` function L259-342 — `( k8s_client: &K8sClient, name: &str, namespace: &str, ) -> Result<Option<String...` — Watches a BuildRun until it completes (success or failure).
--  `ParsedBuildInfo` struct L347-351 — `{ build_name: String, build_namespace: String, build_docs: Vec<serde_yaml::Value...` — Result of parsing build YAML content
--  `parse_build_yaml` function L366-427 — `( yaml_content: &str, ) -> Result<ParsedBuildInfo, Box<dyn std::error::Error>>` — Parses YAML content to extract Build resource information.
--  `interpret_buildrun_status` function L436-471 — `(status: &BuildRunStatus) -> Result<Option<String>, String>` — Interprets a BuildRun status to determine completion state.
--  `tests` module L474-883 — `-` — - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
--  `test_parse_build_yaml_with_build_resource` function L480-502 — `()` — - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
--  `test_parse_build_yaml_default_namespace` function L505-520 — `()` — - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
--  `test_parse_build_yaml_with_work_order_buildref` function L523-538 — `()` — - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
--  `test_parse_build_yaml_build_takes_precedence` function L541-567 — `()` — - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
--  `test_parse_build_yaml_empty_content` function L570-581 — `()` — - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
--  `test_parse_build_yaml_no_build_resource` function L584-602 — `()` — - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
--  `test_parse_build_yaml_invalid_yaml` function L605-609 — `()` — - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
--  `test_parse_build_yaml_multiple_builds` function L612-631 — `()` — - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
--  `test_buildrun_status_deserialization_success` function L636-659 — `()` — - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
--  `test_buildrun_status_deserialization_failure` function L662-681 — `()` — - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
--  `test_buildrun_status_deserialization_in_progress` function L684-698 — `()` — - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
--  `test_buildrun_status_deserialization_empty_conditions` function L701-707 — `()` — - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
--  `test_interpret_status_succeeded_with_digest` function L712-730 — `()` — - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
--  `test_interpret_status_succeeded_no_digest` function L733-748 — `()` — - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
--  `test_interpret_status_failed_with_details` function L751-771 — `()` — - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
--  `test_interpret_status_failed_no_details` function L774-789 — `()` — - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
--  `test_interpret_status_failed_fallback_message` function L792-807 — `()` — - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
--  `test_interpret_status_in_progress` function L810-825 — `()` — - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
--  `test_interpret_status_no_succeeded_condition` function L828-843 — `()` — - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
--  `test_interpret_status_empty_conditions` function L846-856 — `()` — - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
--  `test_buildrun_name_generation_short_id` function L861-870 — `()` — - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
--  `test_buildrun_name_generation_long_id` function L873-882 — `()` — - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
+-  `apply_shipwright_resource` function L201-213 — `( k8s_client: &K8sClient, resource: &serde_yaml::Value, ) -> Result<(), Box<dyn ...` — Applies a Shipwright resource (Build) to the cluster using the core k8s apply logic.
+-  `create_buildrun` function L216-258 — `( k8s_client: &K8sClient, name: &str, build_name: &str, namespace: &str, work_or...` — Creates a BuildRun resource.
+-  `watch_buildrun_completion` function L261-344 — `( k8s_client: &K8sClient, name: &str, namespace: &str, ) -> Result<Option<String...` — Watches a BuildRun until it completes (success or failure).
+-  `ParsedBuildInfo` struct L349-353 — `{ build_name: String, build_namespace: String, build_docs: Vec<serde_yaml::Value...` — Result of parsing build YAML content
+-  `parse_build_yaml` function L368-429 — `( yaml_content: &str, ) -> Result<ParsedBuildInfo, Box<dyn std::error::Error + S...` — Parses YAML content to extract Build resource information.
+-  `interpret_buildrun_status` function L438-473 — `(status: &BuildRunStatus) -> Result<Option<String>, String>` — Interprets a BuildRun status to determine completion state.
+-  `tests` module L476-885 — `-` — - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
+-  `test_parse_build_yaml_with_build_resource` function L482-504 — `()` — - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
+-  `test_parse_build_yaml_default_namespace` function L507-522 — `()` — - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
+-  `test_parse_build_yaml_with_work_order_buildref` function L525-540 — `()` — - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
+-  `test_parse_build_yaml_build_takes_precedence` function L543-569 — `()` — - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
+-  `test_parse_build_yaml_empty_content` function L572-583 — `()` — - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
+-  `test_parse_build_yaml_no_build_resource` function L586-604 — `()` — - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
+-  `test_parse_build_yaml_invalid_yaml` function L607-611 — `()` — - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
+-  `test_parse_build_yaml_multiple_builds` function L614-633 — `()` — - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
+-  `test_buildrun_status_deserialization_success` function L638-661 — `()` — - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
+-  `test_buildrun_status_deserialization_failure` function L664-683 — `()` — - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
+-  `test_buildrun_status_deserialization_in_progress` function L686-700 — `()` — - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
+-  `test_buildrun_status_deserialization_empty_conditions` function L703-709 — `()` — - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
+-  `test_interpret_status_succeeded_with_digest` function L714-732 — `()` — - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
+-  `test_interpret_status_succeeded_no_digest` function L735-750 — `()` — - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
+-  `test_interpret_status_failed_with_details` function L753-773 — `()` — - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
+-  `test_interpret_status_failed_no_details` function L776-791 — `()` — - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
+-  `test_interpret_status_failed_fallback_message` function L794-809 — `()` — - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
+-  `test_interpret_status_in_progress` function L812-827 — `()` — - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
+-  `test_interpret_status_no_succeeded_condition` function L830-845 — `()` — - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
+-  `test_interpret_status_empty_conditions` function L848-858 — `()` — - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
+-  `test_buildrun_name_generation_short_id` function L863-872 — `()` — - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
+-  `test_buildrun_name_generation_long_id` function L875-884 — `()` — - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
 
 #### crates/brokkr-agent/src/work_orders/mod.rs
 
@@ -885,8 +899,8 @@
 - pub `process_pending_work_orders` function L122-166 — `( config: &Settings, http_client: &BrokkrClient, k8s_client: &K8sClient, agent: ...` — Processes pending work orders for the agent.
 -  `is_error_retryable` function L50-104 — `(error: &dyn std::error::Error) -> bool` — Determines if an error is retryable by inspecting the error message.
 -  `process_single_work_order` function L169-227 — `( config: &Settings, http_client: &BrokkrClient, k8s_client: &K8sClient, agent: ...` — Processes a single work order through its complete lifecycle.
--  `execute_build_work_order` function L230-265 — `( _config: &Settings, _http_client: &BrokkrClient, k8s_client: &K8sClient, agent...` — Executes a build work order using Shipwright.
--  `execute_custom_work_order` function L268-327 — `( k8s_client: &K8sClient, agent: &Agent, work_order: &WorkOrder, ) -> Result<Opt...` — Executes a custom work order by applying YAML resources to the cluster.
+-  `execute_build_work_order` function L230-266 — `( _config: &Settings, _http_client: &BrokkrClient, k8s_client: &K8sClient, agent...` — Executes a build work order using Shipwright.
+-  `execute_custom_work_order` function L269-331 — `( k8s_client: &K8sClient, agent: &Agent, work_order: &WorkOrder, ) -> Result<Opt...` — Executes a custom work order by applying YAML resources to the cluster.
 
 ### crates/brokkr-agent/tests
 
@@ -941,7 +955,7 @@
 -  `setup` function L15-29 — `() -> K8sClient`
 -  `setup_namespace` function L31-50 — `(client: &K8sClient, namespace: &str)`
 -  `cleanup` function L52-56 — `(client: &K8sClient, namespace: &str)`
--  `test_health_pod_attribution_via_owner_references` function L59-173 — `()`
+-  `test_health_pod_attribution_via_owner_references` function L59-176 — `()`
 
 #### crates/brokkr-agent/tests/integration/diagnostics.rs
 
@@ -985,24 +999,25 @@
 -  `wait_for_deletion` function L145-161 — `(api: &Api<T>, name: &str, max_attempts: u32) -> bool`
 -  `test_reconcile_single_object` function L164-218 — `()`
 -  `test_reconcile_update_object` function L221-302 — `()`
--  `test_reconcile_invalid_object_rollback` function L305-406 — `()`
--  `test_reconcile_object_pruning` function L409-526 — `()`
--  `test_reconcile_empty_object_list` function L529-624 — `()`
--  `test_k8s_setup_and_cleanup` function L627-683 — `()`
--  `test_create_k8s_client_with_kubeconfig` function L686-699 — `()`
--  `test_create_k8s_client_with_invalid_path` function L702-708 — `()`
--  `test_create_k8s_client_default` function L711-717 — `()`
--  `test_apply_k8s_objects` function L720-791 — `()`
--  `test_validate_k8s_objects_valid` function L794-828 — `()`
--  `test_validate_k8s_objects_invalid` function L831-892 — `()`
--  `test_get_objects_by_annotation_found` function L895-953 — `()`
--  `test_get_objects_by_annotation_not_found` function L956-1002 — `()`
--  `test_delete_k8s_object_success` function L1005-1074 — `()`
--  `test_delete_k8s_object_not_found` function L1077-1117 — `()`
--  `test_reconcile_namespace_in_same_deployment` function L1120-1192 — `()`
--  `test_reconcile_rollback_spares_preexisting_namespace` function L1195-1264 — `()`
--  `test_reconcile_rollback_deletes_newly_created_namespace` function L1267-1352 — `()`
--  `test_reconcile_namespace_rollback_on_failure` function L1355-1427 — `()`
+-  `test_reconcile_invalid_object_rollback` function L305-410 — `()`
+-  `test_reconcile_object_pruning` function L413-534 — `()`
+-  `test_reconcile_does_not_prune_other_agents_objects` function L537-602 — `()`
+-  `test_reconcile_empty_object_list` function L605-700 — `()`
+-  `test_k8s_setup_and_cleanup` function L703-759 — `()`
+-  `test_create_k8s_client_with_kubeconfig` function L762-775 — `()`
+-  `test_create_k8s_client_with_invalid_path` function L778-784 — `()`
+-  `test_create_k8s_client_default` function L787-793 — `()`
+-  `test_apply_k8s_objects` function L796-867 — `()`
+-  `test_validate_k8s_objects_valid` function L870-904 — `()`
+-  `test_validate_k8s_objects_invalid` function L907-968 — `()`
+-  `test_get_objects_by_annotation_found` function L971-1029 — `()`
+-  `test_get_objects_by_annotation_not_found` function L1032-1078 — `()`
+-  `test_delete_k8s_object_success` function L1081-1150 — `()`
+-  `test_delete_k8s_object_not_found` function L1153-1193 — `()`
+-  `test_reconcile_namespace_in_same_deployment` function L1196-1269 — `()`
+-  `test_reconcile_rollback_spares_preexisting_namespace` function L1272-1341 — `()`
+-  `test_reconcile_rollback_deletes_newly_created_namespace` function L1344-1430 — `()`
+-  `test_reconcile_namespace_rollback_on_failure` function L1433-1506 — `()`
 
 #### crates/brokkr-agent/tests/integration/k8s/mod.rs
 
@@ -3442,35 +3457,35 @@
 - pub `Settings` struct L121-136 — `{ database: Database, log: Log, pak: PAK, agent: Agent, broker: Broker, cors: Co...` — Represents the main settings structure for the application
 - pub `Cors` struct L140-156 — `{ allowed_origins: Vec<String>, allowed_methods: Vec<String>, allowed_headers: V...` — Represents the CORS configuration
 - pub `Broker` struct L159-179 — `{ pak_hash: Option<String>, diagnostic_cleanup_interval_seconds: Option<u64>, di...` — Default: 60 (set to 0 to disable caching)
-- pub `Agent` struct L184-244 — `{ broker_url: String, polling_interval: u64, kubeconfig_path: Option<String>, ma...` — Represents the agent configuration
-- pub `Database` struct L249-254 — `{ url: String, schema: Option<String> }` — Represents the database configuration
-- pub `Log` struct L258-264 — `{ level: String, format: String }` — Represents the logging configuration
-- pub `Telemetry` struct L272-291 — `{ enabled: bool, otlp_endpoint: String, service_name: String, sampling_rate: f64...` — Represents the telemetry (OpenTelemetry) configuration with hierarchical overrides
-- pub `TelemetryOverride` struct L295-304 — `{ enabled: Option<bool>, otlp_endpoint: Option<String>, service_name: Option<Str...` — Component-specific telemetry overrides (all fields optional)
-- pub `ResolvedTelemetry` struct L308-313 — `{ enabled: bool, otlp_endpoint: String, service_name: String, sampling_rate: f64...` — Resolved telemetry configuration after merging base with overrides
-- pub `for_broker` function L317-332 — `(&self) -> ResolvedTelemetry` — Get resolved telemetry config for broker (base merged with broker overrides)
-- pub `for_agent` function L335-350 — `(&self) -> ResolvedTelemetry` — Get resolved telemetry config for agent (base merged with agent overrides)
-- pub `PAK` struct L367-384 — `{ prefix: Option<String>, digest: Option<String>, rng: Option<String>, short_tok...` — Represents the PAK configuration
-- pub `short_length_as_str` function L388-390 — `(&mut self)` — Convert short token length to string
-- pub `long_length_as_str` function L393-395 — `(&mut self)` — Convert long token length to string
-- pub `new` function L408-427 — `(file: Option<String>) -> Result<Self, ConfigError>` — Creates a new `Settings` instance
-- pub `DynamicConfig` struct L435-452 — `{ log_level: String, diagnostic_cleanup_interval_seconds: u64, diagnostic_max_ag...` — Dynamic configuration values that can be hot-reloaded at runtime.
-- pub `from_settings` function L456-476 — `(settings: &Settings) -> Self` — Create DynamicConfig from Settings
-- pub `ConfigChange` struct L481-488 — `{ key: String, old_value: String, new_value: String }` — Represents a configuration change detected during reload
-- pub `ReloadableConfig` struct L514-521 — `{ static_config: Settings, dynamic: Arc<RwLock<DynamicConfig>>, config_file: Opt...` — Configuration wrapper that separates static (restart-required) settings
-- pub `new` function L533-542 — `(file: Option<String>) -> Result<Self, ConfigError>` — Creates a new ReloadableConfig instance
-- pub `from_settings` function L554-562 — `(settings: Settings, config_file: Option<String>) -> Self` — Creates a ReloadableConfig from an existing Settings instance
-- pub `static_config` function L567-569 — `(&self) -> &Settings` — Get a reference to the static (immutable) settings
-- pub `reload` function L575-654 — `(&self) -> Result<Vec<ConfigChange>, ConfigError>` — Reload dynamic configuration from sources (file + environment)
-- pub `log_level` function L661-666 — `(&self) -> String` — Get current log level
-- pub `diagnostic_cleanup_interval_seconds` function L669-674 — `(&self) -> u64` — Get diagnostic cleanup interval in seconds
-- pub `diagnostic_max_age_hours` function L677-682 — `(&self) -> i64` — Get diagnostic max age in hours
-- pub `webhook_delivery_interval_seconds` function L685-690 — `(&self) -> u64` — Get webhook delivery interval in seconds
-- pub `webhook_delivery_batch_size` function L693-698 — `(&self) -> i64` — Get webhook delivery batch size
-- pub `webhook_cleanup_retention_days` function L701-706 — `(&self) -> i64` — Get webhook cleanup retention in days
-- pub `cors_allowed_origins` function L709-714 — `(&self) -> Vec<String>` — Get CORS allowed origins
-- pub `cors_max_age_seconds` function L717-722 — `(&self) -> u64` — Get CORS max age in seconds
-- pub `dynamic_snapshot` function L725-727 — `(&self) -> Option<DynamicConfig>` — Get a snapshot of all dynamic config values
+- pub `Agent` struct L184-240 — `{ broker_url: String, polling_interval: u64, kubeconfig_path: Option<String>, ma...` — Represents the agent configuration
+- pub `Database` struct L245-250 — `{ url: String, schema: Option<String> }` — Represents the database configuration
+- pub `Log` struct L254-260 — `{ level: String, format: String }` — Represents the logging configuration
+- pub `Telemetry` struct L268-287 — `{ enabled: bool, otlp_endpoint: String, service_name: String, sampling_rate: f64...` — Represents the telemetry (OpenTelemetry) configuration with hierarchical overrides
+- pub `TelemetryOverride` struct L291-300 — `{ enabled: Option<bool>, otlp_endpoint: Option<String>, service_name: Option<Str...` — Component-specific telemetry overrides (all fields optional)
+- pub `ResolvedTelemetry` struct L304-309 — `{ enabled: bool, otlp_endpoint: String, service_name: String, sampling_rate: f64...` — Resolved telemetry configuration after merging base with overrides
+- pub `for_broker` function L313-328 — `(&self) -> ResolvedTelemetry` — Get resolved telemetry config for broker (base merged with broker overrides)
+- pub `for_agent` function L331-346 — `(&self) -> ResolvedTelemetry` — Get resolved telemetry config for agent (base merged with agent overrides)
+- pub `PAK` struct L363-380 — `{ prefix: Option<String>, digest: Option<String>, rng: Option<String>, short_tok...` — Represents the PAK configuration
+- pub `short_length_as_str` function L384-386 — `(&mut self)` — Convert short token length to string
+- pub `long_length_as_str` function L389-391 — `(&mut self)` — Convert long token length to string
+- pub `new` function L404-423 — `(file: Option<String>) -> Result<Self, ConfigError>` — Creates a new `Settings` instance
+- pub `DynamicConfig` struct L431-448 — `{ log_level: String, diagnostic_cleanup_interval_seconds: u64, diagnostic_max_ag...` — Dynamic configuration values that can be hot-reloaded at runtime.
+- pub `from_settings` function L452-472 — `(settings: &Settings) -> Self` — Create DynamicConfig from Settings
+- pub `ConfigChange` struct L477-484 — `{ key: String, old_value: String, new_value: String }` — Represents a configuration change detected during reload
+- pub `ReloadableConfig` struct L510-517 — `{ static_config: Settings, dynamic: Arc<RwLock<DynamicConfig>>, config_file: Opt...` — Configuration wrapper that separates static (restart-required) settings
+- pub `new` function L529-538 — `(file: Option<String>) -> Result<Self, ConfigError>` — Creates a new ReloadableConfig instance
+- pub `from_settings` function L550-558 — `(settings: Settings, config_file: Option<String>) -> Self` — Creates a ReloadableConfig from an existing Settings instance
+- pub `static_config` function L563-565 — `(&self) -> &Settings` — Get a reference to the static (immutable) settings
+- pub `reload` function L571-650 — `(&self) -> Result<Vec<ConfigChange>, ConfigError>` — Reload dynamic configuration from sources (file + environment)
+- pub `log_level` function L657-662 — `(&self) -> String` — Get current log level
+- pub `diagnostic_cleanup_interval_seconds` function L665-670 — `(&self) -> u64` — Get diagnostic cleanup interval in seconds
+- pub `diagnostic_max_age_hours` function L673-678 — `(&self) -> i64` — Get diagnostic max age in hours
+- pub `webhook_delivery_interval_seconds` function L681-686 — `(&self) -> u64` — Get webhook delivery interval in seconds
+- pub `webhook_delivery_batch_size` function L689-694 — `(&self) -> i64` — Get webhook delivery batch size
+- pub `webhook_cleanup_retention_days` function L697-702 — `(&self) -> i64` — Get webhook cleanup retention in days
+- pub `cors_allowed_origins` function L705-710 — `(&self) -> Vec<String>` — Get CORS allowed origins
+- pub `cors_max_age_seconds` function L713-718 — `(&self) -> u64` — Get CORS max age in seconds
+- pub `dynamic_snapshot` function L721-723 — `(&self) -> Option<DynamicConfig>` — Get a snapshot of all dynamic config values
 -  `deserialize_string_or_vec` function L76-113 — `(deserializer: D) -> Result<Vec<String>, D::Error>` — Deserializes a comma-separated string or array into Vec<String>
 -  `StringOrVec` struct L83 — `-` — Default: 60 (set to 0 to disable caching)
 -  `StringOrVec` type L85-110 — `= StringOrVec` — Default: 60 (set to 0 to disable caching)
@@ -3479,33 +3494,33 @@
 -  `visit_str` function L92-98 — `(self, value: &str) -> Result<Self::Value, E>` — Default: 60 (set to 0 to disable caching)
 -  `visit_seq` function L100-109 — `(self, mut seq: A) -> Result<Self::Value, A::Error>` — Default: 60 (set to 0 to disable caching)
 -  `DEFAULT_SETTINGS` variable L116 — `: &str` — Default: 60 (set to 0 to disable caching)
--  `default_log_format` function L266-268 — `() -> String` — Default: 60 (set to 0 to disable caching)
--  `Telemetry` type L315-351 — `= Telemetry` — Default: 60 (set to 0 to disable caching)
--  `default_otlp_endpoint` function L353-355 — `() -> String` — Default: 60 (set to 0 to disable caching)
--  `default_service_name` function L357-359 — `() -> String` — Default: 60 (set to 0 to disable caching)
--  `default_sampling_rate` function L361-363 — `() -> f64` — Default: 60 (set to 0 to disable caching)
--  `PAK` type L386-396 — `= PAK` — Default: 60 (set to 0 to disable caching)
--  `Settings` type L398-428 — `= Settings` — Default: 60 (set to 0 to disable caching)
--  `DynamicConfig` type L454-477 — `= DynamicConfig` — Default: 60 (set to 0 to disable caching)
--  `ReloadableConfig` type L523-728 — `= ReloadableConfig` — Default: 60 (set to 0 to disable caching)
--  `tests` module L731-1076 — `-` — Default: 60 (set to 0 to disable caching)
--  `test_settings_default_values` function L741-750 — `()` — Test the creation of Settings with default values
--  `test_telemetry_default_values` function L753-761 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_telemetry_for_broker_no_overrides` function L764-781 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_telemetry_for_broker_full_overrides` function L784-806 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_telemetry_for_broker_partial_overrides` function L809-831 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_telemetry_for_agent_no_overrides` function L834-851 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_telemetry_for_agent_full_overrides` function L854-876 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_telemetry_broker_and_agent_independent` function L879-916 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_telemetry_override_enabled_false_overrides_base_true` function L919-940 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_telemetry_sampling_rate_extremes` function L943-965 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_reloadable_config_creation` function L972-985 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_dynamic_config_from_settings` function L988-999 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_reloadable_config_accessors_with_defaults` function L1002-1012 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_reloadable_config_dynamic_snapshot` function L1015-1027 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_reloadable_config_reload_no_changes` function L1030-1040 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_reloadable_config_is_clone` function L1043-1049 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_reloadable_config_thread_safety` function L1052-1075 — `()` — Default: 60 (set to 0 to disable caching)
+-  `default_log_format` function L262-264 — `() -> String` — Default: 60 (set to 0 to disable caching)
+-  `Telemetry` type L311-347 — `= Telemetry` — Default: 60 (set to 0 to disable caching)
+-  `default_otlp_endpoint` function L349-351 — `() -> String` — Default: 60 (set to 0 to disable caching)
+-  `default_service_name` function L353-355 — `() -> String` — Default: 60 (set to 0 to disable caching)
+-  `default_sampling_rate` function L357-359 — `() -> f64` — Default: 60 (set to 0 to disable caching)
+-  `PAK` type L382-392 — `= PAK` — Default: 60 (set to 0 to disable caching)
+-  `Settings` type L394-424 — `= Settings` — Default: 60 (set to 0 to disable caching)
+-  `DynamicConfig` type L450-473 — `= DynamicConfig` — Default: 60 (set to 0 to disable caching)
+-  `ReloadableConfig` type L519-724 — `= ReloadableConfig` — Default: 60 (set to 0 to disable caching)
+-  `tests` module L727-1072 — `-` — Default: 60 (set to 0 to disable caching)
+-  `test_settings_default_values` function L737-746 — `()` — Test the creation of Settings with default values
+-  `test_telemetry_default_values` function L749-757 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_telemetry_for_broker_no_overrides` function L760-777 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_telemetry_for_broker_full_overrides` function L780-802 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_telemetry_for_broker_partial_overrides` function L805-827 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_telemetry_for_agent_no_overrides` function L830-847 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_telemetry_for_agent_full_overrides` function L850-872 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_telemetry_broker_and_agent_independent` function L875-912 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_telemetry_override_enabled_false_overrides_base_true` function L915-936 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_telemetry_sampling_rate_extremes` function L939-961 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_reloadable_config_creation` function L968-981 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_dynamic_config_from_settings` function L984-995 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_reloadable_config_accessors_with_defaults` function L998-1008 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_reloadable_config_dynamic_snapshot` function L1011-1023 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_reloadable_config_reload_no_changes` function L1026-1036 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_reloadable_config_is_clone` function L1039-1045 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_reloadable_config_thread_safety` function L1048-1071 — `()` — Default: 60 (set to 0 to disable caching)
 
 #### crates/brokkr-utils/src/lib.rs
 

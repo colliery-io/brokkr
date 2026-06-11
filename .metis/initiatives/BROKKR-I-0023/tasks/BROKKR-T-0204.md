@@ -4,7 +4,7 @@ level: task
 title: "Agent: wire WS inbound push frames into the control loop"
 short_code: "BROKKR-T-0204"
 created_at: 2026-06-11T11:02:07.728771+00:00
-updated_at: 2026-06-11T13:46:08.672284+00:00
+updated_at: 2026-06-11T15:10:29.277502+00:00
 parent: agent-reconciler-hardening-crash
 blocked_by: []
 archived: false
@@ -12,7 +12,7 @@ archived: false
 tags:
   - "#task"
   - "#task"
-  - "#phase/active"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -28,6 +28,8 @@ initiative_id: BROKKR-I-0023
 ## Objective
 
 `broker_ws.rs:122` `take_inbound()` has no callers (grep-verified): broker→agent push frames (`WorkOrder`/`TargetChanged`/`StackChanged`, actively sent by `brokkr-broker/src/ws/push.rs` — including the post-create push added in I-0021) are never processed. Worse, after 256 buffered inbound frames, `inbound_tx.send(msg).await` (`broker_ws.rs:335`) blocks forever (receiver alive, never drained), wedging `run_socket` while state stays `Up` — up to 256 queued uplink events are accepted by `try_send` and silently lost before callers fall back to REST.
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

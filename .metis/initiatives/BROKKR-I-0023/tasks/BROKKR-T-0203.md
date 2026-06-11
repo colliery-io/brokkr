@@ -4,7 +4,7 @@ level: task
 title: "Agent: prune safety — fail closed, verify ownership, scope to watch_namespace"
 short_code: "BROKKR-T-0203"
 created_at: 2026-06-11T11:02:07.682725+00:00
-updated_at: 2026-06-11T13:09:09.813408+00:00
+updated_at: 2026-06-11T15:10:29.223518+00:00
 parent: agent-reconciler-hardening-crash
 blocked_by: []
 archived: false
@@ -12,7 +12,7 @@ archived: false
 tags:
   - "#task"
   - "#task"
-  - "#phase/active"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -28,6 +28,8 @@ initiative_id: BROKKR-I-0023
 ## Objective
 
 The prune path in `k8s/api.rs` can delete resources it shouldn't. (1) `reconcile_target_state`'s apply loop (`api.rs:809-829`) silently skips objects with missing TypeMeta or unresolvable GVK (both `if let`s have no `else`; e.g. discovery raced a just-installed CRD) — then prune (`841-902`) deletes the old copy because its checksum mismatches: delete-without-replace. (2) The prune loop never calls `verify_object_ownership` (the `brokkr.io/owner-id` check `delete_k8s_objects:377` enforces) — anything carrying the stack annotation with a stale checksum is deleted, including objects applied by a different agent. (3) `get_all_objects_by_annotation` (`300-350`) always lists cluster-wide, ignoring `agent.watch_namespace`; under namespace-scoped RBAC every list 403s, each only `warn!`ed (`:344`), so prune silently never works.
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 
