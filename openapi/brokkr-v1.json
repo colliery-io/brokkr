@@ -6252,6 +6252,16 @@
               "format": "uuid",
               "type": "string"
             }
+          },
+          {
+            "description": "Marks the submission as a deletion marker. Only consulted on the\nraw-YAML path; on the JSON path the body field wins.",
+            "in": "query",
+            "name": "deletion_marker",
+            "required": false,
+            "schema": {
+              "nullable": true,
+              "type": "boolean"
+            }
           }
         ],
         "requestBody": {

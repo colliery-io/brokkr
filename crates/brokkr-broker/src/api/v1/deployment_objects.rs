@@ -15,11 +15,45 @@ use crate::dal::DAL;
 use axum::{
     Json, Router,
     extract::{Extension, Path, State},
+    http::{HeaderMap, header::ACCEPT},
+    response::{IntoResponse, Response},
     routing::get,
 };
 use brokkr_models::models::deployment_objects::DeploymentObject;
 use tracing::{error, info, warn};
 use uuid::Uuid;
+
+/// Whether the client asked for a raw YAML representation via `Accept`
+/// (BROKKR-T-0194 round-trip). Defaults to JSON.
+fn accepts_yaml(headers: &HeaderMap) -> bool {
+    headers
+        .get(ACCEPT)
+        .and_then(|v| v.to_str().ok())
+        .map(|accept| {
+            accept.split(',').any(|part| {
+                let mime = part.split(';').next().unwrap_or("").trim();
+                matches!(
+                    mime,
+                    "application/yaml" | "text/yaml" | "application/x-yaml"
+                )
+            })
+        })
+        .unwrap_or(false)
+}
+
+/// Content-negotiated representation of a deployment object: the raw
+/// `yaml_content` as `application/yaml` when requested, else the JSON object.
+fn deployment_object_response(headers: &HeaderMap, object: DeploymentObject) -> Response {
+    if accepts_yaml(headers) {
+        (
+            [(axum::http::header::CONTENT_TYPE, "application/yaml")],
+            object.yaml_content,
+        )
+            .into_response()
+    } else {
+        Json(object).into_response()
+    }
+}
 
 /// Creates and returns the router for deployment object endpoints.
 pub fn routes() -> Router<DAL> {
@@ -58,7 +92,8 @@ async fn get_deployment_object(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
     Path(id): Path<Uuid>,
-) -> Result<Json<DeploymentObject>, ApiError> {
+    headers: HeaderMap,
+) -> Result<Response, ApiError> {
     info!("Handling request to get deployment object with ID: {}", id);
 
     let object = dal
@@ -75,7 +110,7 @@ async fn get_deployment_object(
 
     if auth_payload.admin {
         info!("Admin user accessed deployment object with ID: {}", id);
-        return Ok(Json(object));
+        return Ok(deployment_object_response(&headers, object));
     }
 
     if let Some(agent_id) = auth_payload.agent {
@@ -92,7 +127,7 @@ async fn get_deployment_object(
                 "Agent {} accessed deployment object with ID: {}",
                 agent_id, id
             );
-            return Ok(Json(object));
+            return Ok(deployment_object_response(&headers, object));
         }
 
         warn!(
@@ -130,7 +165,7 @@ async fn get_deployment_object(
                 "Generator '{}' (id: {}) accessed deployment object '{}' (id: {})",
                 stack.name, generator_id, object.yaml_content, id
             );
-            return Ok(Json(object));
+            return Ok(deployment_object_response(&headers, object));
         }
 
         warn!(

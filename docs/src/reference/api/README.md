@@ -50,7 +50,7 @@ Stacks are collections of Kubernetes resources managed as a unit.
 | POST | `/stacks/:id/annotations` | Add annotation to stack |
 | DELETE | `/stacks/:id/annotations/:key` | Remove annotation |
 | GET | `/stacks/:id/deployment-objects` | List deployment objects |
-| POST | `/stacks/:id/deployment-objects` | Create deployment object |
+| POST | `/stacks/:id/deployment-objects` | Create deployment object (`application/json` envelope, or raw `application/yaml` body with `?deletion_marker=`) |
 | POST | `/stacks/:id/deployment-objects/from-template` | Instantiate template |
 | GET | `/stacks/:id/health` | Aggregated stack health (computed on read) |
 | GET | `/stacks/:id/events` | Retained Kubernetes events (6h window; `since`, `limit`) |

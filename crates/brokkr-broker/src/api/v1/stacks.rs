@@ -14,8 +14,9 @@ use crate::utils::templating;
 use crate::ws::{ConnectionRegistry, push_stack_changed_to_targets};
 use axum::{
     Json, Router,
-    extract::{Extension, Path, State},
-    http::StatusCode,
+    body::Bytes,
+    extract::{Extension, Path, Query, State},
+    http::{HeaderMap, StatusCode, header::CONTENT_TYPE},
     routing::{delete, get, post},
 };
 use brokkr_models::models::audit_logs::{
@@ -339,11 +340,91 @@ pub struct CreateDeploymentObjectRequest {
     pub is_deletion_marker: bool,
 }
 
+/// Query parameters for the deployment-object create endpoint. Used by the
+/// raw-YAML body path (`Content-Type: application/yaml`), where the flag
+/// cannot ride in the body (BROKKR-T-0194).
+#[derive(Debug, Default, Deserialize, utoipa::IntoParams)]
+pub struct CreateDeploymentObjectQuery {
+    /// Marks the submission as a deletion marker. Only consulted on the
+    /// raw-YAML path; on the JSON path the body field wins.
+    #[serde(default)]
+    pub deletion_marker: Option<bool>,
+}
+
+/// Whether a `Content-Type` denotes a raw YAML body rather than the JSON
+/// envelope. Treats `application/yaml`, `text/yaml`, and the legacy
+/// `application/x-yaml` as YAML; everything else (including no header) is
+/// JSON, preserving backward compatibility.
+fn content_type_is_yaml(headers: &HeaderMap) -> bool {
+    headers
+        .get(CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .map(|ct| {
+            let mime = ct.split(';').next().unwrap_or("").trim();
+            matches!(
+                mime,
+                "application/yaml" | "text/yaml" | "application/x-yaml"
+            )
+        })
+        .unwrap_or(false)
+}
+
+/// Resolves the request body into `(yaml_content, is_deletion_marker)` based
+/// on the content type. Pure and unit-testable.
+fn resolve_create_body(
+    headers: &HeaderMap,
+    query: &CreateDeploymentObjectQuery,
+    body: &[u8],
+) -> Result<(String, bool), ApiError> {
+    if content_type_is_yaml(headers) {
+        let yaml_content = String::from_utf8(body.to_vec()).map_err(|_| {
+            ApiError::bad_request("invalid_deployment_object", "request body is not valid UTF-8")
+        })?;
+        Ok((yaml_content, query.deletion_marker.unwrap_or(false)))
+    } else {
+        let req: CreateDeploymentObjectRequest = serde_json::from_slice(body).map_err(|e| {
+            ApiError::bad_request("invalid_deployment_object", format!("invalid JSON body: {e}"))
+        })?;
+        Ok((req.yaml_content, req.is_deletion_marker))
+    }
+}
+
+/// Validates the manifest body at ingest so malformed YAML fails here with a
+/// clear 400 instead of late at agent apply. A deletion marker may be empty;
+/// otherwise the body must parse as one or more non-null YAML documents.
+fn validate_manifest_yaml(yaml_content: &str, is_deletion_marker: bool) -> Result<(), ApiError> {
+    if is_deletion_marker && yaml_content.trim().is_empty() {
+        return Ok(());
+    }
+    if yaml_content.trim().is_empty() {
+        return Err(ApiError::bad_request(
+            "invalid_deployment_object",
+            "YAML content cannot be empty",
+        ));
+    }
+    let mut saw_document = false;
+    for doc in serde_yaml::Deserializer::from_str(yaml_content) {
+        let value = serde_yaml::Value::deserialize(doc).map_err(|e| {
+            ApiError::bad_request("invalid_deployment_object", format!("invalid YAML: {e}"))
+        })?;
+        if !value.is_null() {
+            saw_document = true;
+        }
+    }
+    if !saw_document {
+        return Err(ApiError::bad_request(
+            "invalid_deployment_object",
+            "YAML content has no documents",
+        ));
+    }
+    Ok(())
+}
+
 #[utoipa::path(
     post,
     path = "/stacks/{id}/deployment-objects",
     tag = "stacks",
-    params(("id" = Uuid, Path, description = "Stack ID")),
+    params(("id" = Uuid, Path, description = "Stack ID"), CreateDeploymentObjectQuery),
     request_body = CreateDeploymentObjectRequest,
     responses(
         (status = 201, description = "Deployment object created", body = DeploymentObject),
@@ -359,10 +440,15 @@ pub async fn create_deployment_object(
     Extension(auth_payload): Extension<AuthPayload>,
     Extension(ws_registry): Extension<Arc<ConnectionRegistry>>,
     Path(stack_id): Path<Uuid>,
-    Json(req): Json<CreateDeploymentObjectRequest>,
+    Query(query): Query<CreateDeploymentObjectQuery>,
+    headers: HeaderMap,
+    // Body-consuming extractor must come last.
+    body: Bytes,
 ) -> Result<(StatusCode, Json<DeploymentObject>), ApiError> {
     let stack = fetch_owned_stack(&dal, &auth_payload, stack_id).await?;
-    let new_object = NewDeploymentObject::new(stack_id, req.yaml_content, req.is_deletion_marker)
+    let (yaml_content, is_deletion_marker) = resolve_create_body(&headers, &query, &body)?;
+    validate_manifest_yaml(&yaml_content, is_deletion_marker)?;
+    let new_object = NewDeploymentObject::new(stack_id, yaml_content, is_deletion_marker)
         .map_err(|e| ApiError::bad_request("invalid_deployment_object", e))?;
     let object = dal
         .deployment_objects()
@@ -920,4 +1006,113 @@ pub async fn list_telemetry_logs(
         retention: retention_info(oldest),
         lines,
     }))
+}
+
+#[cfg(test)]
+mod create_body_tests {
+    use super::*;
+    use axum::http::HeaderValue;
+
+    fn headers_with(ct: Option<&str>) -> HeaderMap {
+        let mut h = HeaderMap::new();
+        if let Some(ct) = ct {
+            h.insert(CONTENT_TYPE, HeaderValue::from_str(ct).unwrap());
+        }
+        h
+    }
+
+    #[test]
+    fn content_type_detection() {
+        assert!(content_type_is_yaml(&headers_with(Some("application/yaml"))));
+        assert!(content_type_is_yaml(&headers_with(Some("text/yaml"))));
+        assert!(content_type_is_yaml(&headers_with(Some(
+            "application/yaml; charset=utf-8"
+        ))));
+        assert!(content_type_is_yaml(&headers_with(Some("application/x-yaml"))));
+        assert!(!content_type_is_yaml(&headers_with(Some("application/json"))));
+        assert!(!content_type_is_yaml(&headers_with(None)));
+    }
+
+    #[test]
+    fn yaml_body_uses_raw_string_and_query_flag() {
+        let q = CreateDeploymentObjectQuery {
+            deletion_marker: Some(true),
+        };
+        let body = b"apiVersion: v1\nkind: Namespace\nmetadata:\n  name: foo\n";
+        let (yaml, marker) =
+            resolve_create_body(&headers_with(Some("application/yaml")), &q, body).unwrap();
+        assert_eq!(yaml, String::from_utf8(body.to_vec()).unwrap());
+        assert!(marker, "deletion_marker query flag should be honored on the YAML path");
+    }
+
+    #[test]
+    fn yaml_body_defaults_marker_false() {
+        let q = CreateDeploymentObjectQuery::default();
+        let (_, marker) =
+            resolve_create_body(&headers_with(Some("application/yaml")), &q, b"kind: ConfigMap")
+                .unwrap();
+        assert!(!marker);
+    }
+
+    #[test]
+    fn json_body_still_parses() {
+        let q = CreateDeploymentObjectQuery::default();
+        let body = br#"{"yaml_content":"kind: ConfigMap","is_deletion_marker":true}"#;
+        let (yaml, marker) =
+            resolve_create_body(&headers_with(Some("application/json")), &q, body).unwrap();
+        assert_eq!(yaml, "kind: ConfigMap");
+        assert!(marker, "JSON body field wins on the JSON path");
+    }
+
+    #[test]
+    fn json_path_query_flag_ignored() {
+        // On the JSON path the body field is authoritative, not the query.
+        let q = CreateDeploymentObjectQuery {
+            deletion_marker: Some(true),
+        };
+        let body = br#"{"yaml_content":"kind: ConfigMap"}"#;
+        let (_, marker) = resolve_create_body(&headers_with(None), &q, body).unwrap();
+        assert!(!marker);
+    }
+
+    #[test]
+    fn malformed_json_is_rejected() {
+        let q = CreateDeploymentObjectQuery::default();
+        let err =
+            resolve_create_body(&headers_with(Some("application/json")), &q, b"{not json")
+                .unwrap_err();
+        assert_eq!(err.code, "invalid_deployment_object");
+    }
+
+    #[test]
+    fn validate_accepts_multidoc_yaml() {
+        let yaml = "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: a\n---\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: b\n";
+        assert!(validate_manifest_yaml(yaml, false).is_ok());
+    }
+
+    #[test]
+    fn validate_rejects_malformed_yaml() {
+        // Unbalanced flow mapping — not parseable.
+        let err = validate_manifest_yaml("kind: : : [unbalanced", false).unwrap_err();
+        assert_eq!(err.code, "invalid_deployment_object");
+    }
+
+    #[test]
+    fn validate_rejects_empty_non_marker() {
+        let err = validate_manifest_yaml("   \n", false).unwrap_err();
+        assert_eq!(err.code, "invalid_deployment_object");
+    }
+
+    #[test]
+    fn validate_allows_empty_marker() {
+        assert!(validate_manifest_yaml("", true).is_ok());
+        assert!(validate_manifest_yaml("   \n", true).is_ok());
+    }
+
+    #[test]
+    fn validate_rejects_only_empty_documents() {
+        // A body that parses but contains no real document.
+        let err = validate_manifest_yaml("---\n---\n", false).unwrap_err();
+        assert_eq!(err.code, "invalid_deployment_object");
+    }
 }

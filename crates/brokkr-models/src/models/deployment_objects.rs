@@ -122,8 +122,10 @@ impl NewDeploymentObject {
             return Err("Invalid stack ID".to_string());
         }
 
-        // Validate yaml_content
-        if yaml_content.trim().is_empty() {
+        // Validate yaml_content. Deletion markers are allowed to be empty:
+        // the agent removes resources by the stack annotation, so a marker's
+        // body is never read (BROKKR-T-0194).
+        if !is_deletion_marker && yaml_content.trim().is_empty() {
             return Err("YAML content cannot be empty".to_string());
         }
 
@@ -195,5 +197,20 @@ mod tests {
             "YAML content cannot be empty",
             "Error message should indicate empty YAML content"
         );
+    }
+
+    #[test]
+    fn test_new_deployment_object_empty_deletion_marker_allowed() {
+        // Deletion markers may carry an empty body (BROKKR-T-0194).
+        let result = NewDeploymentObject::new(Uuid::new_v4(), "".to_string(), true);
+        assert!(
+            result.is_ok(),
+            "an empty deletion marker should be allowed"
+        );
+        let obj = result.unwrap();
+        assert!(obj.is_deletion_marker);
+        assert!(obj.yaml_content.is_empty());
+        // checksum is still computed (over the empty string)
+        assert!(!obj.yaml_checksum.is_empty());
     }
 }
