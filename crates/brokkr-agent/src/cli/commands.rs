@@ -293,6 +293,8 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
                                 k8s_client.clone(),
                                 &obj.stack_id.to_string(),
                                 &obj.yaml_checksum,
+                                &agent.id,
+                                config.agent.watch_namespace.as_deref(),
                             ).await {
                                 Ok(_) => {
                                     info!("Successfully applied {} Kubernetes objects for deployment object {} in agent '{}' (id: {})",

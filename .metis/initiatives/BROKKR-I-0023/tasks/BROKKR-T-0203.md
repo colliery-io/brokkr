@@ -4,16 +4,15 @@ level: task
 title: "Agent: prune safety — fail closed, verify ownership, scope to watch_namespace"
 short_code: "BROKKR-T-0203"
 created_at: 2026-06-11T11:02:07.682725+00:00
-updated_at: 2026-06-11T11:02:07.682725+00:00
+updated_at: 2026-06-11T13:09:09.813408+00:00
 parent: agent-reconciler-hardening-crash
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/todo"
   - "#task"
-  - "#phase/todo"
+  - "#phase/active"
 
 
 exit_criteria_met: false
@@ -32,6 +31,8 @@ The prune path in `k8s/api.rs` can delete resources it shouldn't. (1) `reconcile
 
 ## Acceptance Criteria
 
+## Acceptance Criteria
+
 - [ ] Unresolvable-GVK / missing-TypeMeta in the apply loop is an error (matching `apply_k8s_objects:230-244` behavior); reconcile aborts before prune.
 - [ ] Prune deletes are gated on `verify_object_ownership`.
 - [ ] Listing scopes to `watch_namespace` when set; all-lists-failed surfaces as an error, not a warn-and-continue.
@@ -45,3 +46,12 @@ Consider the stricter invariant: only prune when every desired object confirmed 
 ## Status Updates
 
 *To be added during implementation*
+## Status Updates
+
+- 2026-06-11: DONE (branch feat/i0023-agent-reconciler-hardening). reconcile_target_state gained `agent_id: &Uuid` + `watch_namespace: Option<&str>`. Changes in k8s/api.rs:
+  - **Fail closed**: the main apply loop's `if let Some(gvk)` / `resolve_gvk` `if let` (which silently skipped objects with no TypeMeta or an unresolvable API resource) now error and abort the reconcile BEFORE prune — no more delete-without-replace when discovery races a fresh CRD.
+  - **Ownership-gated prune**: prune now skips objects where `verify_object_ownership(&obj, agent_id)` is false, so a foreign agent (or user-annotated object) carrying the same stack annotation is never deleted. To make this consistent the apply loop now STAMPS `BROKKR_AGENT_OWNER_ANNOTATION = agent_id` on every applied object (production already does this via create_k8s_objects; stamping in reconcile makes it correct regardless of input and keeps the existing same-agent prune tests valid).
+  - **Namespace scope**: get_all_objects_by_annotation gained `watch_namespace`; namespaced lists are scoped to it (cluster-scoped resources still list cluster-wide), and if EVERY list fails it returns an error instead of an empty set that would make prune a silent no-op under namespace-scoped RBAC.
+  - **Retry + aggregate**: prune deletes wrapped in with_retries(RetryConfig::default()); a per-object delete failure is collected and the loop continues, surfacing all failures at the end (was: abort on first).
+  - Caller commands.rs passes `&agent.id` and `config.agent.watch_namespace.as_deref()`.
+  Tests: updated all integration callers (tests/integration/k8s/api.rs ×12, deployment_health.rs ×1) to the new signature; added `test_reconcile_does_not_prune_other_agents_objects` (agent B must not prune agent A's object). Compiles all targets, 70 unit tests pass, clippy clean (3 pre-existing T-0206 warnings only). The foreign-owner + existing prune/empty tests run on CI's agent integration suite (need k3s). Fail-closed and namespace-scope behaviors are implemented and reasoned; the existing rollback-on-failure integration test exercises the abort-before-prune path, and a dedicated namespace-scoped-RBAC integration case is a future addition (needs RBAC fixture).

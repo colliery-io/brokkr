@@ -38,7 +38,7 @@
 //! 3. Other resources
 
 use crate::k8s::objects::verify_object_ownership;
-use crate::k8s::objects::{CHECKSUM_ANNOTATION, STACK_LABEL};
+use crate::k8s::objects::{BROKKR_AGENT_OWNER_ANNOTATION, CHECKSUM_ANNOTATION, STACK_LABEL};
 use crate::metrics;
 use backoff::ExponentialBackoffBuilder;
 use k8s_openapi::api::core::v1::Namespace;
@@ -301,6 +301,7 @@ pub async fn get_all_objects_by_annotation(
     k8s_client: &K8sClient,
     annotation_key: &str,
     annotation_value: &str,
+    watch_namespace: Option<&str>,
 ) -> Result<Vec<DynamicObject>, Box<dyn std::error::Error>> {
     let mut results = Vec::new();
 
@@ -312,12 +313,26 @@ pub async fn get_all_objects_by_annotation(
             e
         })?;
 
+    // When the agent is scoped to a single namespace (namespace-scoped RBAC),
+    // list namespaced resources only in that namespace; cluster-scoped
+    // resources still list cluster-wide (dynamic_api ignores the namespace for
+    // Scope::Cluster). Listing all namespaces under namespace-scoped RBAC would
+    // 403 on every call, and the prune step would then silently delete nothing.
+    let (list_ns, all_ns) = match watch_namespace {
+        Some(ns) => (Some(ns), false),
+        None => (None, true),
+    };
+
+    let mut attempted = 0usize;
+    let mut failed = 0usize;
+
     // Search through all API groups and resources
     for group in discovery.groups() {
         for (ar, caps) in group.recommended_resources() {
             let api: Api<DynamicObject> =
-                dynamic_api(ar.clone(), caps.clone(), k8s_client.clone(), None, true);
+                dynamic_api(ar.clone(), caps.clone(), k8s_client.clone(), list_ns, all_ns);
 
+            attempted += 1;
             match api.list(&Default::default()).await {
                 Ok(list) => {
                     let matching_objects = list
@@ -344,9 +359,22 @@ pub async fn get_all_objects_by_annotation(
                         });
                     results.extend(matching_objects);
                 }
-                Err(e) => warn!("Error listing resources for {:?}: {:?}", ar, e),
+                Err(e) => {
+                    failed += 1;
+                    warn!("Error listing resources for {:?}: {:?}", ar, e);
+                }
             }
         }
+    }
+
+    // If every single list failed, the agent almost certainly lacks the RBAC to
+    // see its own objects. Surface that instead of returning an empty set that
+    // would make the caller's prune a silent no-op.
+    if attempted > 0 && failed == attempted {
+        return Err(format!(
+            "every resource listing failed ({failed}/{attempted}); check agent RBAC for namespace {watch_namespace:?}"
+        )
+        .into());
     }
 
     Ok(results)
@@ -698,6 +726,8 @@ pub async fn reconcile_target_state(
     client: Client,
     stack_id: &str,
     checksum: &str,
+    agent_id: &Uuid,
+    watch_namespace: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     info!(
         "Starting reconciliation with stack_id={}, checksum={}",
@@ -811,29 +841,56 @@ pub async fn reconcile_target_state(
                 .get_or_insert_with(BTreeMap::new);
             annotations.insert(STACK_LABEL.to_string(), stack_id.to_string());
             annotations.insert(CHECKSUM_ANNOTATION.to_string(), checksum.to_string());
+            // Stamp ownership so the prune step can tell this agent's objects
+            // apart from another agent's (or a user's) that merely carry the
+            // same stack annotation. In production create_k8s_objects already
+            // sets this; stamping here keeps reconcile correct regardless of
+            // how the objects were built.
+            annotations.insert(
+                BROKKR_AGENT_OWNER_ANNOTATION.to_string(),
+                agent_id.to_string(),
+            );
 
             let mut params = PatchParams::apply("brokkr-controller");
             params.force = true;
 
-            if let Some(gvk) = object.types.as_ref() {
-                let gvk = GroupVersionKind::try_from(gvk)?;
-                if let Some((ar, caps)) = Discovery::new(client.clone())
-                    .run()
-                    .await?
-                    .resolve_gvk(&gvk)
-                {
-                    let api = dynamic_api(ar, caps, client.clone(), Some(&namespace), false);
+            // Fail closed: an object with no TypeMeta, or one whose API resource
+            // can't be resolved (e.g. a CRD that hasn't established yet, or a
+            // discovery race), must abort the reconcile BEFORE the prune step.
+            // Silently skipping it here would leave the new copy unapplied and
+            // then let prune delete the old copy on checksum mismatch — a
+            // delete-without-replace.
+            let gvk_meta = match object.types.as_ref() {
+                Some(t) => t,
+                None => {
+                    error!("Object {} has no TypeMeta; aborting reconcile before prune", key);
+                    rollback_namespaces(&client, &created_namespaces).await;
+                    return Err(format!("object {} has no TypeMeta", key).into());
+                }
+            };
+            let gvk = GroupVersionKind::try_from(gvk_meta)?;
+            let Some((ar, caps)) = Discovery::new(client.clone())
+                .run()
+                .await?
+                .resolve_gvk(&gvk)
+            else {
+                error!(
+                    "Could not resolve API resource for {} ({:?}); aborting reconcile before prune",
+                    key, gvk
+                );
+                rollback_namespaces(&client, &created_namespaces).await;
+                return Err(format!("could not resolve API resource for {}", key).into());
+            };
+            let api = dynamic_api(ar, caps, client.clone(), Some(&namespace), false);
 
-                    let patch = Patch::Apply(&object);
-                    match api.patch(&name, &params, &patch).await {
-                        Ok(_) => debug!("Successfully applied {}", key),
-                        Err(e) => {
-                            error!("Failed to apply {}: {}", key, e);
-                            // Rollback: delete any namespaces we created
-                            rollback_namespaces(&client, &created_namespaces).await;
-                            return Err(Box::new(e));
-                        }
-                    }
+            let patch = Patch::Apply(&object);
+            match api.patch(&name, &params, &patch).await {
+                Ok(_) => debug!("Successfully applied {}", key),
+                Err(e) => {
+                    error!("Failed to apply {}: {}", key, e);
+                    // Rollback: delete any namespaces we created
+                    rollback_namespaces(&client, &created_namespaces).await;
+                    return Err(Box::new(e));
                 }
             }
         }
@@ -841,12 +898,18 @@ pub async fn reconcile_target_state(
         info!("No objects in desired state, will remove all existing objects in stack");
     }
 
-    // Get existing resources with this stack ID after applying changes
+    // Get existing resources with this stack ID after applying changes.
+    // Scoped to watch_namespace so the prune set is what the agent can actually
+    // manage under namespace-scoped RBAC.
     debug!("Fetching existing resources for stack {}", stack_id);
-    let existing = get_all_objects_by_annotation(&client, STACK_LABEL, stack_id).await?;
+    let existing =
+        get_all_objects_by_annotation(&client, STACK_LABEL, stack_id, watch_namespace).await?;
     debug!("Found {} existing resources", existing.len());
 
-    // Prune objects that are no longer in the desired state
+    // Prune objects that are no longer in the desired state. A single delete
+    // failure must not abort the rest of the prune, so collect errors and
+    // surface them at the end.
+    let mut prune_errors: Vec<String> = Vec::new();
     for existing_obj in existing {
         let kind = existing_obj
             .types
@@ -867,11 +930,21 @@ pub async fn reconcile_target_state(
             .to_string();
         let key = format!("{}:{}@{}", kind, name, namespace);
 
-        // Skip if object has owner references
+        // Skip if object has owner references (it is managed by another resource)
         if let Some(owner_refs) = &existing_obj.metadata.owner_references
             && !owner_refs.is_empty()
         {
             debug!("Skipping object {} with owner references", key);
+            continue;
+        }
+
+        // Only prune objects THIS agent owns. The stack annotation alone is not
+        // enough: another agent applying the same stack mid-rollout, or a
+        // user-annotated object, can carry it. Deleting those would be
+        // destroying resources we don't own (cf. delete_k8s_objects, which
+        // enforces the same check before deleting).
+        if !verify_object_ownership(&existing_obj, agent_id) {
+            debug!("Skipping object {} not owned by agent {}", key, agent_id);
             continue;
         }
 
@@ -896,11 +969,21 @@ pub async fn reconcile_target_state(
                     .resolve_gvk(&gvk)
                 {
                     let api = dynamic_api(ar, caps, client.clone(), Some(&namespace), false);
-                    match api.delete(&name, &DeleteParams::default()).await {
+                    let delete_name = name.clone();
+                    let result = with_retries(
+                        move || {
+                            let api = api.clone();
+                            let delete_name = delete_name.clone();
+                            async move { api.delete(&delete_name, &DeleteParams::default()).await }
+                        },
+                        RetryConfig::default(),
+                    )
+                    .await;
+                    match result {
                         Ok(_) => debug!("Successfully deleted {}", key),
                         Err(e) => {
                             error!("Failed to delete {}: {}", key, e);
-                            return Err(Box::new(e));
+                            prune_errors.push(format!("{key}: {e}"));
                         }
                     }
                 }
@@ -908,6 +991,15 @@ pub async fn reconcile_target_state(
         } else {
             debug!("Keeping object {} (checksum matches: {})", key, checksum);
         }
+    }
+
+    if !prune_errors.is_empty() {
+        return Err(format!(
+            "prune failed for {} object(s): {}",
+            prune_errors.len(),
+            prune_errors.join("; ")
+        )
+        .into());
     }
 
     info!("Reconciliation completed successfully");
