@@ -228,15 +228,13 @@ async fn create_work_order(
     if !agent_ids.is_empty()
         && let Err(e) = dal.work_orders().add_targets(work_order.id, &agent_ids)
     {
-        error!("Failed to add work order targets: {:?}", e);
-        targeting_failed = Some(ApiError::internal("failed to add work order targets"));
+        targeting_failed = Some(ApiError::from_diesel(e, "failed to add work order targets"));
     }
     if targeting_failed.is_none()
         && !labels.is_empty()
         && let Err(e) = dal.work_orders().add_labels(work_order.id, &labels)
     {
-        error!("Failed to add work order labels: {:?}", e);
-        targeting_failed = Some(ApiError::internal("failed to add work order labels"));
+        targeting_failed = Some(ApiError::from_diesel(e, "failed to add work order labels"));
     }
     if targeting_failed.is_none()
         && !annotations.is_empty()
@@ -244,8 +242,7 @@ async fn create_work_order(
             .work_orders()
             .add_annotations(work_order.id, &annotations)
     {
-        error!("Failed to add work order annotations: {:?}", e);
-        targeting_failed = Some(ApiError::internal("failed to add work order annotations"));
+        targeting_failed = Some(ApiError::from_diesel(e, "failed to add work order annotations"));
     }
 
     if let Some(err) = targeting_failed {

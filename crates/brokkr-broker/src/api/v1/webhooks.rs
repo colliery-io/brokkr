@@ -304,9 +304,21 @@ async fn create_webhook(
     )
     .map_err(|e| ApiError::bad_request("invalid_webhook", e))?;
     if let Some(max_retries) = request.max_retries {
+        if !(0..=10).contains(&max_retries) {
+            return Err(ApiError::unprocessable(
+                "invalid_webhook",
+                "max_retries must be between 0 and 10",
+            ));
+        }
         new_sub.max_retries = max_retries;
     }
     if let Some(timeout) = request.timeout_seconds {
+        if !(1..=300).contains(&timeout) {
+            return Err(ApiError::unprocessable(
+                "invalid_webhook",
+                "timeout_seconds must be between 1 and 300",
+            ));
+        }
         new_sub.timeout_seconds = timeout;
     }
 
@@ -430,6 +442,23 @@ async fn update_webhook(
     let target_labels = request
         .target_labels
         .map(|opt| opt.map(|labels| labels.into_iter().map(Some).collect()));
+
+    if let Some(max_retries) = request.max_retries
+        && !(0..=10).contains(&max_retries)
+    {
+        return Err(ApiError::unprocessable(
+            "invalid_webhook",
+            "max_retries must be between 0 and 10",
+        ));
+    }
+    if let Some(timeout) = request.timeout_seconds
+        && !(1..=300).contains(&timeout)
+    {
+        return Err(ApiError::unprocessable(
+            "invalid_webhook",
+            "timeout_seconds must be between 1 and 300",
+        ));
+    }
 
     let changeset = UpdateWebhookSubscription {
         name: request.name,
@@ -660,7 +689,9 @@ async fn test_webhook(
 
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(
-            subscription.timeout_seconds as u64,
+            // Clamp defensively: a row written before validation could be
+            // negative, which would sign-extend to an absurd timeout.
+            subscription.timeout_seconds.max(1) as u64,
         ))
         .build()
         .map_err(|e| {

@@ -173,6 +173,7 @@ use brokkr_utils::config::{Cors, ReloadableConfig};
 use hyper::StatusCode;
 use std::sync::Arc;
 use std::time::Instant;
+use tower_http::catch_panic::CatchPanicLayer;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 use tracing::Level;
@@ -251,6 +252,10 @@ pub fn configure_api_routes(
                     },
                 ),
         )
+        // Outermost: turn any panic in a handler or inner layer (e.g. a DB
+        // pool-acquisition failure) into a 500 response instead of dropping the
+        // connection, which under load looks like the broker hanging up.
+        .layer(CatchPanicLayer::new())
 }
 
 /// Health check endpoint handler

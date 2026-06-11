@@ -4302,6 +4302,7 @@ dependencies = [
  "base64 0.21.7",
  "bitflags 2.6.0",
  "bytes",
+ "futures-util",
  "http 1.4.0",
  "http-body 1.0.1",
  "http-body-util",

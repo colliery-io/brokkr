@@ -243,10 +243,7 @@ async fn update_generator(
     let generator = dal
         .generators()
         .update(id, &updated_generator)
-        .map_err(|e| {
-            error!("Failed to update generator with ID {}: {:?}", id, e);
-            ApiError::internal("failed to update generator")
-        })?;
+        .map_err(|e| ApiError::from_diesel(e, format!("failed to update generator {id}")))?;
     info!("Successfully updated generator with ID: {}", id);
     let (actor_type, actor_id) = audit_actor(&auth_payload);
     audit::log_action(

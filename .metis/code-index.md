@@ -1,6 +1,6 @@
 # Code Index
 
-> Generated: 2026-06-11T14:47:19Z | 398 files | JavaScript, Python, Rust, TypeScript
+> Generated: 2026-06-11T15:59:10Z | 398 files | JavaScript, Python, Rust, TypeScript
 
 ## Project Structure
 
@@ -1050,11 +1050,11 @@
 #### crates/brokkr-broker/src/api/mod.rs
 
 - pub `v1` module L157 — `-` — # API Module
-- pub `configure_api_routes` function L194-254 — `( dal: DAL, cors_config: &Cors, reloadable_config: Option<ReloadableConfig>, ) -...` — Configures and returns the main application router with all API routes
--  `healthz` function L264-266 — `() -> impl IntoResponse` — Health check endpoint handler
--  `readyz` function L276-278 — `() -> impl IntoResponse` — Ready check endpoint handler
--  `metrics_handler` function L288-295 — `() -> impl IntoResponse` — Metrics endpoint handler
--  `metrics_middleware` function L300-316 — `(request: Request<Body>, next: Next) -> Response` — Middleware to record HTTP request metrics
+- pub `configure_api_routes` function L195-259 — `( dal: DAL, cors_config: &Cors, reloadable_config: Option<ReloadableConfig>, ) -...` — Configures and returns the main application router with all API routes
+-  `healthz` function L269-271 — `() -> impl IntoResponse` — Health check endpoint handler
+-  `readyz` function L281-283 — `() -> impl IntoResponse` — Ready check endpoint handler
+-  `metrics_handler` function L293-300 — `() -> impl IntoResponse` — Metrics endpoint handler
+-  `metrics_middleware` function L305-321 — `(request: Request<Body>, next: Next) -> Response` — Middleware to record HTTP request metrics
 
 ### crates/brokkr-broker/src/api/v1
 
@@ -1073,16 +1073,16 @@
 -  `AuditLogFilter` type L84-96 — `= AuditLogFilter` — including configuration hot-reload functionality.
 -  `from` function L85-95 — `(params: AuditLogQueryParams) -> Self` — including configuration hot-reload functionality.
 -  `reload_config` function L215-285 — `( Extension(auth): Extension<AuthPayload>, Extension(config): Extension<Reloadab...` — including configuration hot-reload functionality.
--  `list_audit_logs` function L329-368 — `( State(dal): State<DAL>, Extension(auth): Extension<AuthPayload>, Query(params)...` — including configuration hot-reload functionality.
--  `tests` module L371-404 — `-` — including configuration hot-reload functionality.
--  `test_config_reload_response_serialization` function L375-391 — `()` — including configuration hot-reload functionality.
--  `test_config_change_info_serialization` function L394-403 — `()` — including configuration hot-reload functionality.
+-  `list_audit_logs` function L329-370 — `( State(dal): State<DAL>, Extension(auth): Extension<AuthPayload>, Query(params)...` — including configuration hot-reload functionality.
+-  `tests` module L373-406 — `-` — including configuration hot-reload functionality.
+-  `test_config_reload_response_serialization` function L377-393 — `()` — including configuration hot-reload functionality.
+-  `test_config_change_info_serialization` function L396-405 — `()` — including configuration hot-reload functionality.
 
 #### crates/brokkr-broker/src/api/v1/agent_events.rs
 
 - pub `routes` function L24-28 — `() -> Router<DAL>` — Creates and returns a router for agent event-related endpoints.
--  `list_agent_events` function L44-55 — `( State(dal): State<DAL>, Extension(_auth_payload): Extension<crate::api::v1::mi...` — through HTTP endpoints.
--  `get_agent_event` function L75-94 — `( State(dal): State<DAL>, Extension(_auth_payload): Extension<crate::api::v1::mi...` — through HTTP endpoints.
+-  `list_agent_events` function L44-63 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<crate::api::v1::mid...` — through HTTP endpoints.
+-  `get_agent_event` function L83-108 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<crate::api::v1::mid...` — through HTTP endpoints.
 
 #### crates/brokkr-broker/src/api/v1/agents.rs
 
@@ -1098,22 +1098,22 @@
 -  `update_agent` function L298-348 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
 -  `delete_agent` function L360-394 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Exten...` — Agent management API endpoints.
 -  `list_events` function L406-428 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `create_event` function L441-473 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `list_labels` function L487-504 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `add_label` function L519-533 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `remove_label` function L551-579 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `list_annotations` function L593-611 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `add_annotation` function L626-645 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `remove_annotation` function L663-691 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `list_targets` function L703-715 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `add_target` function L729-747 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Exten...` — Agent management API endpoints.
--  `authorize_target_mutation` function L754-785 — `( dal: &DAL, auth: &AuthPayload, stack_id: Uuid, ) -> Result<(), ApiError>` — Authorize a target create/delete operation.
--  `remove_target` function L801-829 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `record_heartbeat` function L841-867 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `TargetStateParams` struct L870-872 — `{ mode: Option<String> }` — Agent management API endpoints.
--  `get_target_state` function L887-920 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `get_associated_stacks` function L932-950 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `rotate_agent_pak` function L963-1019 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Exten...` — Agent management API endpoints.
+-  `create_event` function L441-481 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `list_labels` function L495-512 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `add_label` function L527-547 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `remove_label` function L565-593 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `list_annotations` function L607-625 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `add_annotation` function L640-664 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `remove_annotation` function L682-710 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `list_targets` function L722-734 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `add_target` function L748-772 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Exten...` — Agent management API endpoints.
+-  `authorize_target_mutation` function L779-810 — `( dal: &DAL, auth: &AuthPayload, stack_id: Uuid, ) -> Result<(), ApiError>` — Authorize a target create/delete operation.
+-  `remove_target` function L826-854 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `record_heartbeat` function L866-892 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `TargetStateParams` struct L895-897 — `{ mode: Option<String> }` — Agent management API endpoints.
+-  `get_target_state` function L912-945 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `get_associated_stacks` function L957-975 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `rotate_agent_pak` function L988-1044 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Exten...` — Agent management API endpoints.
 
 #### crates/brokkr-broker/src/api/v1/auth.rs
 
@@ -1171,9 +1171,9 @@
 -  `audit_actor` function L84-90 — `(auth_payload: &AuthPayload) -> (&'static str, Option<Uuid>)` — Resolves the audit actor for generator endpoints: the admin, or the
 -  `create_generator` function L106-169 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Json(...` — Generators API module for Brokkr.
 -  `get_generator` function L184-212 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Generators API module for Brokkr.
--  `update_generator` function L228-263 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Generators API module for Brokkr.
--  `delete_generator` function L278-320 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Generators API module for Brokkr.
--  `rotate_generator_pak` function L335-409 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Generators API module for Brokkr.
+-  `update_generator` function L228-260 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Generators API module for Brokkr.
+-  `delete_generator` function L275-317 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Generators API module for Brokkr.
+-  `rotate_generator_pak` function L332-406 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Generators API module for Brokkr.
 
 #### crates/brokkr-broker/src/api/v1/health.rs
 
@@ -1183,10 +1183,10 @@
 - pub `DeploymentHealthResponse` struct L60-67 — `{ deployment_object_id: Uuid, health_records: Vec<DeploymentHealth>, overall_sta...` — Response for deployment object health query.
 - pub `StackHealthResponse` struct L71-78 — `{ stack_id: Uuid, overall_status: String, deployment_objects: Vec<DeploymentObje...` — Response for stack health query.
 - pub `DeploymentObjectHealthSummary` struct L82-93 — `{ id: Uuid, status: String, healthy_agents: usize, degraded_agents: usize, faili...` — Summary of health for a deployment object within a stack.
--  `update_health_status` function L114-174 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — including endpoints for agents to report health and for operators to query health.
--  `get_deployment_health` function L194-230 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — including endpoints for agents to report health and for operators to query health.
--  `get_stack_health` function L250-324 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — including endpoints for agents to report health and for operators to query health.
--  `compute_overall_status` function L328-338 — `(records: &[DeploymentHealth]) -> String` — Computes the overall status from a list of health records.
+-  `update_health_status` function L114-172 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — including endpoints for agents to report health and for operators to query health.
+-  `get_deployment_health` function L192-228 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — including endpoints for agents to report health and for operators to query health.
+-  `get_stack_health` function L248-322 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — including endpoints for agents to report health and for operators to query health.
+-  `compute_overall_status` function L326-336 — `(records: &[DeploymentHealth]) -> String` — Computes the overall status from a list of health records.
 
 #### crates/brokkr-broker/src/api/v1/middleware.rs
 
@@ -1288,16 +1288,16 @@
 -  `fetch_template_or_404` function L99-107 — `(dal: &DAL, template_id: Uuid) -> Result<StackTemplate, ApiError>` — API endpoints for stack template management.
 -  `list_templates` function L120-156 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, ) -> ...` — API endpoints for stack template management.
 -  `audit_actor` function L160-166 — `(auth_payload: &AuthPayload) -> (&'static str, Option<uuid::Uuid>)` — Resolves the audit actor for template endpoints: the admin, or the
--  `create_template` function L181-235 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Json(...` — API endpoints for stack template management.
--  `get_template` function L250-260 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — API endpoints for stack template management.
--  `update_template` function L277-329 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — API endpoints for stack template management.
--  `delete_template` function L344-377 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — API endpoints for stack template management.
--  `list_labels` function L394-406 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — API endpoints for stack template management.
--  `add_label` function L425-445 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — API endpoints for stack template management.
--  `remove_label` function L465-489 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — API endpoints for stack template management.
--  `list_annotations` function L506-518 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — API endpoints for stack template management.
--  `add_annotation` function L537-557 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — API endpoints for stack template management.
--  `remove_annotation` function L577-603 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — API endpoints for stack template management.
+-  `create_template` function L181-232 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Json(...` — API endpoints for stack template management.
+-  `get_template` function L247-257 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — API endpoints for stack template management.
+-  `update_template` function L274-323 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — API endpoints for stack template management.
+-  `delete_template` function L338-371 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — API endpoints for stack template management.
+-  `list_labels` function L388-400 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — API endpoints for stack template management.
+-  `add_label` function L419-439 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — API endpoints for stack template management.
+-  `remove_label` function L459-483 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — API endpoints for stack template management.
+-  `list_annotations` function L500-512 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — API endpoints for stack template management.
+-  `add_annotation` function L531-551 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — API endpoints for stack template management.
+-  `remove_annotation` function L571-597 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — API endpoints for stack template management.
 
 #### crates/brokkr-broker/src/api/v1/webhooks.rs
 
@@ -1314,14 +1314,14 @@
 -  `decrypt_value` function L166-168 — `(encrypted: &[u8]) -> Result<String, String>` — Webhooks API module for Brokkr.
 -  `list_webhooks` function L208-228 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, ) -> ...` — Webhooks API module for Brokkr.
 -  `list_event_types` function L238-248 — `( Extension(auth_payload): Extension<AuthPayload>, ) -> Result<Json<Vec<&'static...` — Webhooks API module for Brokkr.
--  `create_webhook` function L261-337 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Json(...` — Webhooks API module for Brokkr.
--  `get_webhook` function L350-379 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Webhooks API module for Brokkr.
--  `update_webhook` function L394-477 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Webhooks API module for Brokkr.
--  `delete_webhook` function L490-532 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Webhooks API module for Brokkr.
--  `list_deliveries` function L550-596 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Webhooks API module for Brokkr.
--  `test_webhook` function L610-716 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Webhooks API module for Brokkr.
--  `get_pending_agent_webhooks` function L733-835 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Webhooks API module for Brokkr.
--  `report_delivery_result` function L849-951 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Webhooks API module for Brokkr.
+-  `create_webhook` function L261-349 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Json(...` — Webhooks API module for Brokkr.
+-  `get_webhook` function L362-391 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Webhooks API module for Brokkr.
+-  `update_webhook` function L406-506 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Webhooks API module for Brokkr.
+-  `delete_webhook` function L519-561 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Webhooks API module for Brokkr.
+-  `list_deliveries` function L579-625 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Webhooks API module for Brokkr.
+-  `test_webhook` function L639-747 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Webhooks API module for Brokkr.
+-  `get_pending_agent_webhooks` function L764-866 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Webhooks API module for Brokkr.
+-  `report_delivery_result` function L880-982 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Webhooks API module for Brokkr.
 
 #### crates/brokkr-broker/src/api/v1/work_orders.rs
 
@@ -1336,14 +1336,14 @@
 - pub `ListLogQuery` struct L116-121 — `{ work_type: Option<String>, success: Option<bool>, agent_id: Option<Uuid>, limi...` — Handles API routes and logic for work orders.
 -  `default_retryable` function L100-102 — `() -> bool` — Handles API routes and logic for work orders.
 -  `list_work_orders` function L142-165 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Query...` — Handles API routes and logic for work orders.
--  `create_work_order` function L180-279 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Exten...` — Handles API routes and logic for work orders.
--  `get_work_order` function L294-363 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Handles API routes and logic for work orders.
--  `delete_work_order` function L378-406 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Handles API routes and logic for work orders.
--  `list_pending_for_agent` function L427-463 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Handles API routes and logic for work orders.
--  `claim_work_order` function L479-531 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Handles API routes and logic for work orders.
--  `complete_work_order` function L553-656 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Handles API routes and logic for work orders.
--  `list_work_order_log` function L679-710 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Query...` — Handles API routes and logic for work orders.
--  `get_work_order_log` function L725-764 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Handles API routes and logic for work orders.
+-  `create_work_order` function L180-276 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Exten...` — Handles API routes and logic for work orders.
+-  `get_work_order` function L291-360 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Handles API routes and logic for work orders.
+-  `delete_work_order` function L375-403 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Handles API routes and logic for work orders.
+-  `list_pending_for_agent` function L424-460 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Handles API routes and logic for work orders.
+-  `claim_work_order` function L476-528 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Handles API routes and logic for work orders.
+-  `complete_work_order` function L550-653 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Handles API routes and logic for work orders.
+-  `list_work_order_log` function L676-707 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Query...` — Handles API routes and logic for work orders.
+-  `get_work_order_log` function L722-761 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Handles API routes and logic for work orders.
 
 ### crates/brokkr-broker/src
 
@@ -2241,38 +2241,42 @@
 -  `test_delete_agent` function L168-189 — `()`
 -  `test_list_agent_events` function L192-243 — `()`
 -  `test_create_agent_event` function L246-290 — `()`
--  `test_list_agent_labels` function L293-329 — `()`
--  `test_add_agent_label` function L332-362 — `()`
--  `test_remove_agent_label` function L365-398 — `()`
--  `test_list_agent_annotations` function L401-442 — `()`
--  `test_add_agent_annotation` function L445-480 — `()`
--  `test_remove_agent_annotation` function L483-520 — `()`
--  `test_list_agent_targets` function L523-568 — `()`
--  `test_add_agent_target` function L571-610 — `()`
--  `test_remove_agent_target` function L613-655 — `()`
--  `test_unauthorized_list_agent_events` function L658-673 — `()`
--  `test_unauthorized_create_agent_event` function L676-700 — `()`
--  `test_unauthorized_list_agent_labels` function L703-718 — `()`
--  `test_unauthorized_add_agent_label` function L721-739 — `()`
--  `test_unauthorized_create_agent` function L742-758 — `()`
--  `test_unauthorized_get_agent` function L761-776 — `()`
--  `test_unauthorized_update_agent` function L779-799 — `()`
--  `test_unauthorized_delete_agent` function L802-817 — `()`
--  `test_get_agent_with_mismatched_pak` function L820-842 — `()`
--  `test_update_agent_with_mismatched_pak` function L845-871 — `()`
--  `test_create_agent_event_with_mismatched_pak` function L874-906 — `()`
--  `test_list_agent_labels_with_mismatched_pak` function L909-931 — `()`
--  `test_record_heartbeat` function L934-959 — `()`
--  `test_get_target_state_incremental` function L962-1017 — `()`
--  `test_get_target_state_full` function L1020-1089 — `()`
--  `test_get_target_state_with_invalid_mode` function L1092-1143 — `()`
--  `test_get_agent_by_name_and_cluster_name` function L1146-1175 — `()`
--  `test_get_agent_stacks` function L1178-1306 — `()`
--  `test_rotate_agent_pak_admin_success` function L1309-1347 — `()`
--  `test_rotate_agent_pak_self_success` function L1350-1383 — `()`
--  `test_rotate_agent_pak_unauthorized` function L1386-1405 — `()`
--  `test_rotate_agent_pak_forbidden` function L1408-1432 — `()`
--  `test_get_target_state_with_mismatched_auth` function L1435-1473 — `()`
+-  `test_create_event_agent_id_mismatch_returns_400` function L293-335 — `()`
+-  `test_list_agent_events_requires_admin` function L338-359 — `()`
+-  `test_list_agent_labels` function L362-398 — `()`
+-  `test_add_agent_label` function L401-431 — `()`
+-  `test_add_agent_label_duplicate_returns_409` function L434-466 — `()`
+-  `test_remove_agent_label` function L469-502 — `()`
+-  `test_list_agent_annotations` function L505-546 — `()`
+-  `test_add_agent_annotation` function L549-584 — `()`
+-  `test_remove_agent_annotation` function L587-624 — `()`
+-  `test_list_agent_targets` function L627-672 — `()`
+-  `test_add_agent_target` function L675-714 — `()`
+-  `test_add_agent_target_duplicate_returns_409` function L717-756 — `()`
+-  `test_remove_agent_target` function L759-801 — `()`
+-  `test_unauthorized_list_agent_events` function L804-819 — `()`
+-  `test_unauthorized_create_agent_event` function L822-846 — `()`
+-  `test_unauthorized_list_agent_labels` function L849-864 — `()`
+-  `test_unauthorized_add_agent_label` function L867-885 — `()`
+-  `test_unauthorized_create_agent` function L888-904 — `()`
+-  `test_unauthorized_get_agent` function L907-922 — `()`
+-  `test_unauthorized_update_agent` function L925-945 — `()`
+-  `test_unauthorized_delete_agent` function L948-963 — `()`
+-  `test_get_agent_with_mismatched_pak` function L966-988 — `()`
+-  `test_update_agent_with_mismatched_pak` function L991-1017 — `()`
+-  `test_create_agent_event_with_mismatched_pak` function L1020-1052 — `()`
+-  `test_list_agent_labels_with_mismatched_pak` function L1055-1077 — `()`
+-  `test_record_heartbeat` function L1080-1105 — `()`
+-  `test_get_target_state_incremental` function L1108-1163 — `()`
+-  `test_get_target_state_full` function L1166-1235 — `()`
+-  `test_get_target_state_with_invalid_mode` function L1238-1289 — `()`
+-  `test_get_agent_by_name_and_cluster_name` function L1292-1321 — `()`
+-  `test_get_agent_stacks` function L1324-1452 — `()`
+-  `test_rotate_agent_pak_admin_success` function L1455-1493 — `()`
+-  `test_rotate_agent_pak_self_success` function L1496-1529 — `()`
+-  `test_rotate_agent_pak_unauthorized` function L1532-1551 — `()`
+-  `test_rotate_agent_pak_forbidden` function L1554-1578 — `()`
+-  `test_get_target_state_with_mismatched_auth` function L1581-1619 — `()`
 
 #### crates/brokkr-broker/tests/integration/api/audit_logs.rs
 
@@ -2402,16 +2406,17 @@
 -  `test_update_template_creates_new_version` function L213-255 — `()`
 -  `test_delete_template` function L258-300 — `()`
 -  `test_add_template_label` function L303-337 — `()`
--  `test_list_template_labels` function L340-374 — `()`
--  `test_remove_template_label` function L377-408 — `()`
--  `test_add_template_annotation` function L411-449 — `()`
--  `test_list_template_annotations` function L452-486 — `()`
--  `test_remove_template_annotation` function L489-520 — `()`
--  `test_instantiate_template` function L523-575 — `()`
--  `test_instantiate_template_invalid_parameters` function L578-628 — `()`
--  `test_instantiate_template_label_mismatch` function L631-674 — `()`
--  `test_instantiate_template_with_matching_labels` function L677-719 — `()`
--  `test_generator_cannot_access_other_generator_template` function L722-753 — `()`
+-  `test_add_template_label_duplicate_returns_409` function L340-375 — `()`
+-  `test_list_template_labels` function L378-412 — `()`
+-  `test_remove_template_label` function L415-446 — `()`
+-  `test_add_template_annotation` function L449-487 — `()`
+-  `test_list_template_annotations` function L490-524 — `()`
+-  `test_remove_template_annotation` function L527-558 — `()`
+-  `test_instantiate_template` function L561-613 — `()`
+-  `test_instantiate_template_invalid_parameters` function L616-666 — `()`
+-  `test_instantiate_template_label_mismatch` function L669-712 — `()`
+-  `test_instantiate_template_with_matching_labels` function L715-757 — `()`
+-  `test_generator_cannot_access_other_generator_template` function L760-791 — `()`
 
 #### crates/brokkr-broker/tests/integration/api/webhooks.rs
 
@@ -2419,18 +2424,19 @@
 -  `test_list_webhooks_non_admin_forbidden` function L44-63 — `()`
 -  `test_list_webhooks_unauthorized` function L66-82 — `()`
 -  `test_create_webhook_admin_success` function L89-123 — `()`
--  `test_create_webhook_with_wildcard_events` function L126-151 — `()`
--  `test_create_webhook_invalid_url` function L154-179 — `()`
--  `test_create_webhook_non_admin_forbidden` function L182-208 — `()`
--  `test_get_webhook_admin_success` function L215-257 — `()`
--  `test_get_webhook_not_found` function L260-279 — `()`
--  `test_update_webhook_admin_success` function L286-335 — `()`
--  `test_delete_webhook_admin_success` function L342-389 — `()`
--  `test_delete_webhook_not_found` function L392-411 — `()`
--  `test_list_event_types_admin_success` function L418-444 — `()`
--  `test_list_deliveries_admin_success` function L451-493 — `()`
--  `test_list_deliveries_with_status_filter` function L496-554 — `()`
--  `test_list_deliveries_subscription_not_found` function L557-576 — `()`
+-  `test_create_webhook_rejects_invalid_timeout` function L126-158 — `()`
+-  `test_create_webhook_with_wildcard_events` function L161-186 — `()`
+-  `test_create_webhook_invalid_url` function L189-214 — `()`
+-  `test_create_webhook_non_admin_forbidden` function L217-243 — `()`
+-  `test_get_webhook_admin_success` function L250-292 — `()`
+-  `test_get_webhook_not_found` function L295-314 — `()`
+-  `test_update_webhook_admin_success` function L321-370 — `()`
+-  `test_delete_webhook_admin_success` function L377-424 — `()`
+-  `test_delete_webhook_not_found` function L427-446 — `()`
+-  `test_list_event_types_admin_success` function L453-479 — `()`
+-  `test_list_deliveries_admin_success` function L486-528 — `()`
+-  `test_list_deliveries_with_status_filter` function L531-589 — `()`
+-  `test_list_deliveries_subscription_not_found` function L592-611 — `()`
 
 #### crates/brokkr-broker/tests/integration/api/work_orders.rs
 

@@ -242,10 +242,10 @@ async fn update_stack(
         ));
     }
 
-    let stack = dal.stacks().update(id, &updated_stack).map_err(|e| {
-        error!("Failed to update stack with ID {}: {:?}", id, e);
-        ApiError::internal("failed to update stack")
-    })?;
+    let stack = dal
+        .stacks()
+        .update(id, &updated_stack)
+        .map_err(|e| ApiError::from_diesel(e, format!("failed to update stack {id}")))?;
     info!("Successfully updated stack with ID: {}", id);
 
     audit::log_action(
