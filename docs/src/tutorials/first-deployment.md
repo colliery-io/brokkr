@@ -220,6 +220,7 @@ curl -s -X DELETE "http://localhost:3000/api/v1/stacks/${STACK_ID}" \
 
 ## Next Steps
 
+- [Submitting a Folder of Manifests (CLI)](../how-to/cli-apply.md) — `brokkr apply -f ./manifests` instead of hand-escaping a `yaml_content` string
 - [Multi-Cluster Targeting](./multi-cluster-targeting.md) — direct deployments to specific clusters using labels
 - [CI/CD with Generators](./cicd-generators.md) — automate deployment pushes from a CI pipeline
 - [Managing Stacks](../how-to/managing-stacks.md) — deeper guide on stack lifecycle management
