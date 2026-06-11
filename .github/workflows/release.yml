@@ -161,6 +161,53 @@ jobs:
         run: |
           docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ github.repository_owner }}/brokkr-${{ matrix.component }}:${{ steps.meta.outputs.version }}
 
+  build-cli-binaries:
+    needs: [unit_tests, e2e_tests]
+    name: Build CLI Binaries
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            runner: ubuntu-latest
+          - target: aarch64-unknown-linux-gnu
+            runner: ubuntu-24.04-arm
+          - target: x86_64-apple-darwin
+            runner: macos-13
+          - target: aarch64-apple-darwin
+            runner: macos-14
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@1.90
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build brokkr CLI
+        run: cargo build --release --locked -p brokkr-cli --target ${{ matrix.target }}
+
+      - name: Package tarball
+        id: package
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          NAME="brokkr-${VERSION}-${{ matrix.target }}"
+          mkdir -p "dist/${NAME}"
+          cp "target/${{ matrix.target }}/release/brokkr" "dist/${NAME}/"
+          cp README.md LICENSE.txt "dist/${NAME}/" 2>/dev/null || true
+          tar -czf "dist/${NAME}.tar.gz" -C dist "${NAME}"
+          echo "artifact=dist/${NAME}.tar.gz" >> "$GITHUB_OUTPUT"
+
+      - name: Upload CLI artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: brokkr-cli-${{ matrix.target }}
+          path: ${{ steps.package.outputs.artifact }}
+          if-no-files-found: error
+          retention-days: 1
+
   publish-helm-charts:
     name: Publish Helm Charts
     needs: publish-container-images
@@ -209,5 +256,29 @@ jobs:
         with:
           files: '*.tgz'
           generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-beta') || contains(github.ref_name, '-alpha') }}
+
+  publish-cli-binaries:
+    name: Publish CLI Binaries
+    needs: [build-cli-binaries, publish-helm-charts]
+    runs-on: ubuntu-latest
+    environment:
+      name: release
+      url: https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}
+    permissions:
+      contents: write
+    steps:
+      - name: Download CLI artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: brokkr-cli-*
+          path: /tmp/cli
+          merge-multiple: true
+
+      - name: Attach CLI binaries to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: /tmp/cli/*.tar.gz
           draft: false
           prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-beta') || contains(github.ref_name, '-alpha') }}

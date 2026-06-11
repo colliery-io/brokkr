@@ -185,6 +185,57 @@ See the [Configuration Guide](../getting-started/configuration.md) for all avail
 
 ---
 
+## brokkr
+
+`brokkr` is the control-plane client. It submits a folder of Kubernetes manifests as a stack's desired state. It is built from the `brokkr-cli` crate (`crates/brokkr-cli`) and wraps the Rust SDK's `BrokkrClient::apply`.
+
+### Connection settings
+
+Every command resolves a broker URL and a PAK from three sources, in precedence order: **command-line flag → environment variable → config file**. A blank value in one source is treated as unset and falls through to the next (`crates/brokkr-cli/src/config.rs`, `resolve`).
+
+| Setting | Flag | Environment variable | Config-file key |
+|---------|------|----------------------|-----------------|
+| Broker URL | `--broker-url <URL>` | `BROKKR_BROKER_URL` | `broker_url` |
+| PAK | `--pak <PAK>` | `BROKKR_PAK` | `pak` |
+| Config-file path | `--config <PATH>` | — | — |
+
+The config file is TOML at `~/.brokkr/config` by default (override with `--config`). A missing file is not an error; a present-but-malformed file is. Example:
+
+```toml
+broker_url = "https://broker.example.com"
+pak = "brokkr_BRabcd1234_GeneratorTokenExample0001"
+```
+
+The broker URL may be given with or without the `/api/v1` suffix — it is appended when absent and never doubled (`normalize_base_url`). The flags are global and may appear before or after the subcommand.
+
+### `brokkr apply`
+
+Makes a folder of manifests the desired state of a stack, creating the stack if it does not exist. Idempotent: a re-run with an unchanged bundle submits no new revision and reports `unchanged`.
+
+```bash
+brokkr apply -f ./manifests --stack payments --target-label env:prod
+```
+
+**Flags:**
+
+| Flag | Required | Description |
+|------|----------|-------------|
+| `-f`, `--filename <PATH>` | yes | Folder of manifests (top-level `*.yaml`/`*.yml`, sorted) or a single file. |
+| `--stack <NAME>` | yes | Stack name; created if absent. |
+| `--target-label <LABEL>` | no | Targeting label for agent fan-out (e.g. `env:prod`). Repeatable. |
+
+`apply` requires a **generator** PAK — the stack is owned by the generator the PAK resolves to. It prints one of three lines and exits `0`:
+
+| Output | Meaning |
+|--------|---------|
+| `created stack "<name>": first revision (sequence <n>)` | Stack and its first deployment object were created. |
+| `updated stack "<name>": new revision (sequence <n>)` | Bundle changed; a new deployment object was submitted. |
+| `unchanged: stack "<name>" already current` | Latest deployment object already matches the bundle; nothing submitted. |
+
+On any error (no connection settings, malformed config, unreadable bundle, broker rejection) the command prints `error: <message>` to stderr and exits `1`.
+
+---
+
 ## Examples
 
 ```bash
