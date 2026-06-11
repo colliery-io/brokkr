@@ -419,12 +419,12 @@ async fn list_events(
         events.len(),
         id
     );
-    Ok(Json(
-        events
-            .into_iter()
-            .map(|e| serde_json::to_value(e).unwrap())
-            .collect(),
-    ))
+    let values = events
+        .into_iter()
+        .map(serde_json::to_value)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| ApiError::internal(format!("failed to serialize agent events: {e}")))?;
+    Ok(Json(values))
 }
 
 #[utoipa::path(
