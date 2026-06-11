@@ -4,7 +4,7 @@ level: task
 title: "CI: flake hardening and efficiency (retries, registry auth, cache keys)"
 short_code: "BROKKR-T-0218"
 created_at: 2026-06-11T11:02:08.427026+00:00
-updated_at: 2026-06-11T19:53:03.546611+00:00
+updated_at: 2026-06-11T21:08:02.855059+00:00
 parent: docs-and-ci-hygiene-staleness
 blocked_by: []
 archived: false
@@ -12,7 +12,7 @@ archived: false
 tags:
   - "#task"
   - "#task"
-  - "#phase/active"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -28,6 +28,8 @@ initiative_id: BROKKR-I-0026
 ## Objective
 
 Harden the two flake classes that bit us this week (Docker Hub pull timeout during `imagetools create`; artifact-upload `Failed to CreateArtifact: ETIMEDOUT`) and stop paying for CI work nobody uses.
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

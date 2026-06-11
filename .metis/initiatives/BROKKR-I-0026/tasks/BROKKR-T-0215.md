@@ -4,7 +4,7 @@ level: task
 title: "Docs: staleness sweep (binary count, versions, container tags, rustdoc tags)"
 short_code: "BROKKR-T-0215"
 created_at: 2026-06-11T11:02:08.276101+00:00
-updated_at: 2026-06-11T19:55:49.241149+00:00
+updated_at: 2026-06-11T21:08:02.661727+00:00
 parent: docs-and-ci-hygiene-staleness
 blocked_by: []
 archived: false
@@ -12,7 +12,7 @@ archived: false
 tags:
   - "#task"
   - "#task"
-  - "#phase/active"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -28,6 +28,8 @@ initiative_id: BROKKR-I-0026
 ## Objective
 
 Fix every stale-claim finding from the docs sweep (excluding submission-example modernization — that is T-0216).
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

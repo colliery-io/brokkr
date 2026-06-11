@@ -4,7 +4,7 @@ level: initiative
 title: "Docs and CI hygiene: staleness, coverage gaps, flake hardening"
 short_code: "BROKKR-I-0026"
 created_at: 2026-06-11T11:01:39.530373+00:00
-updated_at: 2026-06-11T19:45:26.793326+00:00
+updated_at: 2026-06-11T21:29:00.157997+00:00
 parent: brokkr-environment-aware
 blocked_by: []
 archived: false
@@ -12,7 +12,7 @@ archived: false
 tags:
   - "#initiative"
   - "#initiative"
-  - "#phase/active"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
