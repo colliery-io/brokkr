@@ -55,7 +55,7 @@ When a release git tag (e.g., `v1.2.3`) is pushed, the workflow publishes image 
 
 ### Commit SHA Tags
 
-Every commit that triggers a build gets a SHA-based tag in the form `{branch}-{short-sha}` (e.g., `develop-abc1234`; pull requests use `pr-{number}-{short-sha}`).
+Every commit that triggers a build gets a SHA-based tag in the form `{branch}-{short-sha}` (e.g., `main-abc1234`; pull requests use `pr-{number}-{short-sha}`).
 
 **Rationale**:
 - Enables exact reproducibility
@@ -89,7 +89,7 @@ Not all tags are created equal. Understanding mutability is critical for product
 
 These tags never change once created:
 - Full semantic version: `1.2.3`
-- SHA tags: `develop-abc1234` (branch + commit short SHA)
+- SHA tags: `main-abc1234` (branch + commit short SHA)
 - Digest references: `@sha256:...`
 
 ### Mutable Tags

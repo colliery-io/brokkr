@@ -4,7 +4,7 @@ Practical guides for accomplishing specific tasks with Brokkr. These are goal-or
 
 **Install & operate:** [Installing, Upgrading & Uninstalling](./install-operations.md) · [Setting Up Monitoring](./monitoring-setup.md) · [Network Configuration](./network-configuration.md) · [Security Hardening](./security-hardening.md) · [Setting Up Multi-Tenant Isolation](./multi-tenant-setup.md)
 
-**Deploy & manage:** [Managing Stacks](./managing-stacks.md) · [Using Stack Templates](./templates.md) · [Working with Generators](./generators.md) · [Managing PAKs](./pak-management.md)
+**Deploy & manage:** [Managing Stacks](./managing-stacks.md) · [Submitting a Folder of Manifests (CLI)](./cli-apply.md) · [Using Stack Templates](./templates.md) · [Working with Generators](./generators.md) · [Managing PAKs](./pak-management.md)
 
 **Build:** [Container Builds with Shipwright](./shipwright-builds.md) · [Building & Publishing Images](./build-and-publish-images.md)
 

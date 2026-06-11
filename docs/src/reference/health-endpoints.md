@@ -160,7 +160,7 @@ curl http://brokkr-agent:8080/health
     "last_heartbeat": "2024-01-15T10:29:55Z"
   },
   "uptime_seconds": 3600,
-  "version": "0.5.0",
+  "version": "0.6.0",
   "timestamp": "2024-01-15T10:30:00Z"
 }
 ```
@@ -179,7 +179,7 @@ curl http://brokkr-agent:8080/health
     "last_heartbeat": "2024-01-15T10:29:55Z"
   },
   "uptime_seconds": 3600,
-  "version": "0.5.0",
+  "version": "0.6.0",
   "timestamp": "2024-01-15T10:30:00Z"
 }
 ```
@@ -196,7 +196,7 @@ curl http://brokkr-agent:8080/health
     "connected": false
   },
   "uptime_seconds": 3600,
-  "version": "0.5.0",
+  "version": "0.6.0",
   "timestamp": "2024-01-15T10:30:00Z"
 }
 ```

@@ -4,16 +4,15 @@ level: task
 title: "Docs: staleness sweep (binary count, versions, container tags, rustdoc tags)"
 short_code: "BROKKR-T-0215"
 created_at: 2026-06-11T11:02:08.276101+00:00
-updated_at: 2026-06-11T11:02:08.276101+00:00
+updated_at: 2026-06-11T19:55:49.241149+00:00
 parent: docs-and-ci-hygiene-staleness
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/todo"
   - "#task"
-  - "#phase/todo"
+  - "#phase/active"
 
 
 exit_criteria_met: false
@@ -32,6 +31,8 @@ Fix every stale-claim finding from the docs sweep (excluding submission-example 
 
 ## Acceptance Criteria
 
+## Acceptance Criteria
+
 - [ ] `reference/cli.md`: intro (line 3) says "two command-line binaries" — now three; scope the `## Configuration` (line 166: "Both binaries…", line 172: "no command-line flag for loading a configuration file" — false for `brokkr --config`) and Exit Codes sections explicitly to brokkr-broker/brokkr-agent.
 - [ ] `how-to/sdks/rust.md:15`: `brokkr-client = "0.5"` → `"0.6"` (the page's own apply examples need 0.6.x to compile).
 - [ ] `reference/health-endpoints.md:163,182,199`: example `"version": "0.5.0"` → 0.6.0.
@@ -47,3 +48,14 @@ Fix every stale-claim finding from the docs sweep (excluding submission-example 
 ## Status Updates
 
 *To be added during implementation*
+## Status Updates
+
+- 2026-06-11: DONE (high-value fixes; a few lower-impact items noted). Branch feat/i0026-docs-ci-hygiene.
+  - **rust.md** install snippet `brokkr-client = "0.5"` → `"0.6"` (the 0.5 pin couldn't compile the page's own apply examples).
+  - **reference/cli.md**: intro "two command-line binaries" → three (adds `brokkr`); scoped the `## Configuration` section ("Both binaries…", "no command-line flag…") to the two SERVER binaries, noting `brokkr` is configured separately / takes `--config`.
+  - **health-endpoints.md**: example `"version": "0.5.0"` → 0.6.0 (×3).
+  - **Rustdoc unclosed-HTML mangling**: backticked `Api<DynamicObject>` (k8s/api.rs:273) and `Vec<String>` (config.rs:73) in the source doc comments — these generated the two mdbook "unclosed HTML tag" warnings and the type names vanished from rendered output. (The generated api/rust/*.md regenerate from these in the docs pipeline.)
+  - **container-images.md**: caveated the unpublished `brokkr-ui` row (no CI builds it), replaced `develop-*`/`:develop` examples with `main`, added the `:nightly` tag row.
+  - **explanation/publishing-strategy.md**: `develop-abc1234` → `main-abc1234`.
+  - **how-to/README.md**: added the cli-apply.md link to the Deploy & manage row.
+  REMAINING (lower impact, follow-on): install-operations.md dev-build pattern (`0.0.0-develop.*` → `0.0.0-main.*`/`-pr<N>.*`) + `1.x` version examples → 0.6.0; architecture.md C4 L1/L2 (add CLI/SDKs as the front door); sdks/README.md shared folder-helper bullet. SUMMARY↔disk and cross-links were verified clean in the original sweep.
