@@ -63,6 +63,6 @@ export function createBrokkrClient(options: ClientOptions = {}) {
 export type BrokkrApi = ReturnType<typeof createBrokkrClient>;
 
 // Ergonomic wrapper layer (T-C4).
-export { BrokkrClient } from "./client.js";
-export type { BrokkrClientOptions } from "./client.js";
+export { BrokkrClient, readManifests, sha256Hex } from "./client.js";
+export type { ApplyResult, BrokkrClientOptions } from "./client.js";
 export { BrokkrError } from "./error.js";
