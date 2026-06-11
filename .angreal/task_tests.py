@@ -11,7 +11,10 @@ def get_crates():
     """Get all crates in the workspace."""
     return {
         "integration_tests": ["brokkr-agent", "brokkr-broker"],
-        "unit_tests": ["brokkr-agent", "brokkr-broker", "brokkr-models", "brokkr-utils", "brokkr-wire"]
+        # brokkr-cli is bin-only (no lib target), so it can't run under the
+        # `cargo test --lib` model here — its tests run via a dedicated step in
+        # unit_tests.yml (`cargo test -p brokkr-cli`).
+        "unit_tests": ["brokkr-agent", "brokkr-broker", "brokkr-models", "brokkr-utils", "brokkr-wire", "brokkr-client"]
     }
 
 def run_unit_tests(crate_name: str = "", test_filter: str = ""):
