@@ -339,8 +339,10 @@ async fn list_audit_logs(
         ));
     }
 
-    let limit = params.limit.unwrap_or(100).min(1000);
-    let offset = params.offset.unwrap_or(0);
+    // Clamp to valid ranges: a negative limit/offset reaches Postgres as
+    // `LIMIT must not be negative` and 500s.
+    let limit = params.limit.unwrap_or(100).clamp(1, 1000);
+    let offset = params.offset.unwrap_or(0).max(0);
     let filter: AuditLogFilter = params.into();
 
     let total = dal.audit_logs().count(Some(&filter)).map_err(|e| {

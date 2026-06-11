@@ -290,6 +290,75 @@ async fn test_create_agent_event() {
 }
 
 #[tokio::test]
+async fn test_create_event_agent_id_mismatch_returns_400() {
+    // The path id is what was authorized; a body attributing the event to a
+    // different agent must be rejected (BROKKR-T-0208).
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+    let admin_pak = fixture.admin_pak.clone();
+
+    let agent_a = fixture.create_test_agent("Agent A".to_string(), "Cluster A".to_string());
+    let agent_b = fixture.create_test_agent("Agent B".to_string(), "Cluster B".to_string());
+    let test_stack =
+        fixture.create_test_stack("Mismatch Stack".to_string(), None, fixture.admin_generator.id);
+    let test_do =
+        fixture.create_test_deployment_object(test_stack.id, "DO".to_string(), false);
+
+    // Body attributes the event to agent_b, but we POST to agent_a's path.
+    let new_event = NewAgentEvent::new(
+        agent_b.id,
+        test_do.id,
+        "TEST_EVENT".to_string(),
+        "SUCCESS".to_string(),
+        None,
+    )
+    .expect("Failed to create NewAgentEvent");
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/agents/{}/events", agent_a.id))
+                .header("Content-Type", "application/json")
+                .header("Authorization", admin_pak)
+                .body(Body::from(serde_json::to_string(&new_event).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let status = response.status();
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(status, StatusCode::BAD_REQUEST, "body: {json}");
+    assert_eq!(json["code"], "agent_id_mismatch");
+}
+
+#[tokio::test]
+async fn test_list_agent_events_requires_admin() {
+    // The cluster-wide /agent-events list is admin-only; a non-admin agent PAK
+    // must be forbidden (BROKKR-T-0208).
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+    let (_agent, agent_pak) =
+        fixture.create_test_agent_with_pak("Lister".to_string(), "Cluster".to_string());
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/agent-events")
+                .header("Authorization", format!("Bearer {}", agent_pak))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
 async fn test_list_agent_labels() {
     let fixture = TestFixture::new();
     let app = fixture.create_test_router().with_state(fixture.dal.clone());
@@ -359,6 +428,41 @@ async fn test_add_agent_label() {
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
 
     assert_eq!(json["label"], "new_label");
+}
+
+#[tokio::test]
+async fn test_add_agent_label_duplicate_returns_409() {
+    // Re-adding an existing label hits UNIQUE (agent_id, label) and must
+    // surface as 409 unique_violation, not a blanket 500 — idempotent SDK
+    // apply flows re-add targeting labels and rely on the 409 (BROKKR-T-0207).
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+    let admin_pak = fixture.admin_pak.clone();
+
+    let test_agent =
+        fixture.create_test_agent("Dup Agent".to_string(), "Dup Cluster".to_string());
+    fixture.create_test_agent_label(test_agent.id, "dup_label".to_string());
+
+    let new_label = NewAgentLabel::new(test_agent.id, "dup_label".to_string())
+        .expect("Failed to create NewAgentLabel");
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/agents/{}/labels", test_agent.id))
+                .header("Content-Type", "application/json")
+                .header("Authorization", admin_pak)
+                .body(Body::from(serde_json::to_string(&new_label).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let status = response.status();
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(status, StatusCode::CONFLICT, "body: {json}");
+    assert_eq!(json["code"], "unique_violation");
 }
 
 #[tokio::test]
@@ -607,6 +711,48 @@ async fn test_add_agent_target() {
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
 
     assert_eq!(json["stack_id"], stack.id.to_string());
+}
+
+#[tokio::test]
+async fn test_add_agent_target_duplicate_returns_409() {
+    // Re-targeting the same (agent, stack) hits UNIQUE (agent_id, stack_id) and
+    // must be 409, not 500 — this is exactly the idempotent-apply path
+    // (BROKKR-T-0207).
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+    let admin_pak = fixture.admin_pak.clone();
+
+    let test_agent =
+        fixture.create_test_agent("Dup Agent".to_string(), "Dup Cluster".to_string());
+    let new_stack = NewStack::new("Dup Stack".to_string(), None, fixture.admin_generator.id)
+        .expect("Failed to create NewStack");
+    let stack = fixture
+        .dal
+        .stacks()
+        .create(&new_stack)
+        .expect("Failed to create stack");
+    fixture.create_test_agent_target(test_agent.id, stack.id);
+
+    let new_target =
+        NewAgentTarget::new(test_agent.id, stack.id).expect("Failed to create NewAgentTarget");
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/agents/{}/targets", test_agent.id))
+                .header("Content-Type", "application/json")
+                .header("Authorization", admin_pak)
+                .body(Body::from(serde_json::to_string(&new_target).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let status = response.status();
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(status, StatusCode::CONFLICT, "body: {json}");
+    assert_eq!(json["code"], "unique_violation");
 }
 
 #[tokio::test]

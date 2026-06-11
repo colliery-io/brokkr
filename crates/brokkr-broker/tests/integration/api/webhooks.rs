@@ -123,6 +123,41 @@ async fn test_create_webhook_admin_success() {
 }
 
 #[tokio::test]
+async fn test_create_webhook_rejects_invalid_timeout() {
+    // An out-of-range timeout_seconds must be rejected with 422, not stored
+    // (a negative would later sign-extend to an absurd timeout) (BROKKR-T-0210).
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+    let admin_pak = fixture.admin_pak.clone();
+
+    let new_webhook = json!({
+        "name": "Bad Timeout",
+        "url": "https://example.com/webhook",
+        "event_types": ["deployment.applied"],
+        "timeout_seconds": 0
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/webhooks")
+                .header("Authorization", format!("Bearer {}", admin_pak))
+                .header("Content-Type", "application/json")
+                .body(Body::from(serde_json::to_string(&new_webhook).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let status = response.status();
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let json_body: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "body: {json_body}");
+    assert_eq!(json_body["code"], "invalid_webhook");
+}
+
+#[tokio::test]
 async fn test_create_webhook_with_wildcard_events() {
     let fixture = TestFixture::new();
     let app = fixture.create_test_router().with_state(fixture.dal.clone());

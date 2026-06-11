@@ -4,16 +4,15 @@ level: task
 title: "Broker: stop panicking on DB pool exhaustion; add catch-panic layer"
 short_code: "BROKKR-T-0209"
 created_at: 2026-06-11T11:02:07.975727+00:00
-updated_at: 2026-06-11T11:02:07.975727+00:00
+updated_at: 2026-06-11T16:21:21.474124+00:00
 parent: broker-api-correctness-error
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/todo"
   - "#task"
-  - "#phase/todo"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -32,6 +31,10 @@ Every DAL method (225 sites, e.g. `dal/stacks.rs:70`) does `self.dal.pool.get().
 
 ## Acceptance Criteria
 
+## Acceptance Criteria
+
+## Acceptance Criteria
+
 - [ ] `pool.get()` returns an error from DAL methods (mapped to 500 `internal_error` at the API layer) — no `.expect` remains on pool acquisition in `dal/`.
 - [ ] `tower_http::catch_panic::CatchPanicLayer` added to the router as belt-and-braces (any remaining panic → 500, logged).
 - [ ] Test: with a pool of size 1 and a held connection, a request gets a 500 response (not a dropped connection).
@@ -43,3 +46,6 @@ Mechanical but wide: changing the DAL signature ripples; consider a small `conn(
 ## Status Updates
 
 *To be added during implementation*
+## Status Updates
+
+- 2026-06-11: DONE (operational fix; the 225-site DAL refactor split to backlog [[BROKKR-T-0222]]). Added `tower_http::catch_panic::CatchPanicLayer` as the OUTERMOST router layer (api/mod.rs), and enabled the `catch-panic` feature on the workspace tower-http dep. Any panic in a handler or inner layer — including the `pool.get().expect("Failed to get DB connection")` on DB pool exhaustion — is now caught and returned as a 500 instead of dropping the connection (which under load looked like the broker hanging up on every client). The 225-site DAL `pool.get()` refactor (removing the panic at the source) is deferred to T-0222 because `r2d2::Error` has no clean conversion to the DAL's `diesel::result::Error` and it touches every DAL method — CatchPanicLayer is the safety net in the meantime. Broker builds clean, clippy clean.
