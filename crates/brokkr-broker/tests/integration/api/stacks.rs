@@ -349,6 +349,50 @@ async fn test_add_stack_annotation() {
     assert_eq!(json["value"], "test_value");
 }
 
+// BROKKR-T-0223: adding the same (stack_id, key) twice must 409 via the
+// stack_annotations UNIQUE (stack_id, key) constraint, routed through
+// ApiError::from_diesel — previously it silently inserted a duplicate.
+#[tokio::test]
+async fn test_add_stack_annotation_duplicate_key_conflicts() {
+    let fixture = TestFixture::new();
+    let admin_pak = fixture.admin_pak.clone();
+
+    let generator = fixture.create_test_generator(
+        "Test Generator".to_string(),
+        None,
+        "test_api_key_hash".to_string(),
+    );
+    let stack = fixture.create_test_stack("Test Stack".to_string(), None, generator.id);
+
+    let post = |value: &str| {
+        let annotation = NewStackAnnotation {
+            stack_id: stack.id,
+            key: "dup_key".to_string(),
+            value: value.to_string(),
+        };
+        fixture
+            .create_test_router()
+            .with_state(fixture.dal.clone())
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/api/v1/stacks/{}/annotations", stack.id))
+                    .header("Content-Type", "application/json")
+                    .header("Authorization", &admin_pak)
+                    .body(Body::from(serde_json::to_string(&annotation).unwrap()))
+                    .unwrap(),
+            )
+    };
+
+    // First insert succeeds.
+    let response = post("first").await.unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    // Same (stack_id, key) again -> 409 Conflict from the UNIQUE constraint.
+    let response = post("second").await.unwrap();
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+}
+
 #[tokio::test]
 async fn test_remove_stack_annotation() {
     let fixture = TestFixture::new();
