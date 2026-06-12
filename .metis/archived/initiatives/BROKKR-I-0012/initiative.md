@@ -7,7 +7,7 @@ created_at: 2025-12-29T14:23:21.913231+00:00
 updated_at: 2025-12-29T14:23:21.913231+00:00
 parent: BROKKR-V-0001
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#initiative"
@@ -16,7 +16,6 @@ tags:
 
 exit_criteria_met: false
 estimated_complexity: S
-strategy_id: NULL
 initiative_id: ui-search-and-filter-capabilities
 ---
 
@@ -204,3 +203,10 @@ Add comprehensive search and filter capabilities to the admin UI to support envi
 ## Implementation Plan **[REQUIRED]**
 
 {Phases and timeline for execution}
+
+## Cancellation
+
+- 2026-06-12: Cancelled / dropped (maintainer decision). The brokkr UI is a demo
+  surface for consumers, not a production console, so search/filter capabilities
+  aren't warranted. Archived without decomposition. Revisit only if the UI ever
+  becomes a supported product surface.
