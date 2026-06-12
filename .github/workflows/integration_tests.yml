@@ -7,6 +7,8 @@ env:
 jobs:
   integration_tests:
     runs-on: ubuntu-latest
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
     strategy:
       matrix:
         crate: [brokkr-agent, brokkr-broker]
@@ -42,6 +44,12 @@ jobs:
         run: |
           mkdir -p /tmp/brokkr-keys
           chmod 777 /tmp/brokkr-keys
+      - name: Log in to Docker Hub (raise base-image pull rate limit)
+        if: ${{ env.DOCKERHUB_USERNAME != '' }}
+        uses: docker/login-action@v4.2.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: docker compose up
         uses: hoverkraft-tech/compose-action@v3.0.0
         with:

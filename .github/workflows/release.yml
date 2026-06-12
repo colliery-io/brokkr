@@ -78,9 +78,11 @@ jobs:
   integration_tests:
     needs: setup
     uses: ./.github/workflows/integration_tests.yml
+    secrets: inherit
   e2e_tests:
     needs: integration_tests
     uses: ./.github/workflows/e2e_tests.yml
+    secrets: inherit
 
   build-release-images:
     needs: [unit_tests, e2e_tests]
@@ -94,6 +96,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -104,6 +108,13 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4.1.0
+
+      - name: Log in to Docker Hub (raise base-image pull rate limit)
+        if: ${{ env.DOCKERHUB_USERNAME != '' }}
+        uses: docker/login-action@v4.2.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Log in to Container Registry
         uses: docker/login-action@v4.2.0
