@@ -1,6 +1,6 @@
 # Code Index
 
-> Generated: 2026-06-12T02:27:54Z | 399 files | JavaScript, Python, Rust, TypeScript
+> Generated: 2026-06-12T11:25:54Z | 399 files | JavaScript, Python, Rust, TypeScript
 
 ## Project Structure
 
@@ -6708,13 +6708,13 @@
 
 #### sdks/python/brokkr-client/brokkr_broker_client/api/stacks/stacks_add_annotation.py
 
-- pub `sync_detailed` function L83-112 — `def sync_detailed( id: UUID, *, client: AuthenticatedClient, body: NewStackAnnot...` — Args:
-- pub `sync` function L115-139 — `def sync( id: UUID, *, client: AuthenticatedClient, body: NewStackAnnotation, ) ...` — Args:
-- pub `asyncio_detailed` function L142-169 — `def asyncio_detailed( id: UUID, *, client: AuthenticatedClient, body: NewStackAn...` — Args:
-- pub `asyncio` function L172-198 — `def asyncio( id: UUID, *, client: AuthenticatedClient, body: NewStackAnnotation,...` — Args:
+- pub `sync_detailed` function L88-117 — `def sync_detailed( id: UUID, *, client: AuthenticatedClient, body: NewStackAnnot...` — Args:
+- pub `sync` function L120-144 — `def sync( id: UUID, *, client: AuthenticatedClient, body: NewStackAnnotation, ) ...` — Args:
+- pub `asyncio_detailed` function L147-174 — `def asyncio_detailed( id: UUID, *, client: AuthenticatedClient, body: NewStackAn...` — Args:
+- pub `asyncio` function L177-203 — `def asyncio( id: UUID, *, client: AuthenticatedClient, body: NewStackAnnotation,...` — Args:
 -  `_get_kwargs` function L16-35 — `def _get_kwargs( id: UUID, *, body: NewStackAnnotation, ) -> dict[str, Any]`
--  `_parse_response` function L38-69 — `def _parse_response( *, client: AuthenticatedClient | Client, response: httpx.Re...`
--  `_build_response` function L72-80 — `def _build_response( *, client: AuthenticatedClient | Client, response: httpx.Re...`
+-  `_parse_response` function L38-74 — `def _parse_response( *, client: AuthenticatedClient | Client, response: httpx.Re...`
+-  `_build_response` function L77-85 — `def _build_response( *, client: AuthenticatedClient | Client, response: httpx.Re...`
 
 #### sdks/python/brokkr-client/brokkr_broker_client/api/stacks/stacks_add_label.py
 
@@ -7870,7 +7870,7 @@
 - pub `webhooks` type L1072 — `= Record<string, never>`
 - pub `components` interface L1073-2525 — `{ schemas: : { AddAnnotationRequest: { key: string; value: string; }; /** @descr...`
 - pub `$defs` type L2526 — `= Record<string, never>`
-- pub `operations` interface L2527-6886 — `{ list_audit_logs: : { parameters: { query?: { /** * @description Filter by acto...`
+- pub `operations` interface L2527-6895 — `{ list_audit_logs: : { parameters: { query?: { /** * @description Filter by acto...`
 
 #### sdks/typescript/brokkr-client/src/wrapper.test.ts
 
@@ -7969,23 +7969,24 @@
 - pub `test_build_work_orders` function L423-574 — `(client: &Client) -> Result<()>` — Test build work orders using Shipwright.
 - pub `test_health_diagnostics` function L580-617 — `(client: &Client) -> Result<()>` — Each scenario tests a complete user workflow through the system.
 - pub `test_webhooks` function L623-801 — `(client: &Client, webhook_catcher_url: Option<&str>) -> Result<()>` — Each scenario tests a complete user workflow through the system.
-- pub `test_agent_reconciliation_existing_deployments` function L812-956 — `(client: &Client) -> Result<()>` — Test that agents can reconcile pre-existing deployments when targeted to a stack.
-- pub `test_audit_logs` function L962-1014 — `(client: &Client) -> Result<()>` — Each scenario tests a complete user workflow through the system.
-- pub `test_metrics` function L1020-1096 — `(client: &Client) -> Result<()>` — Each scenario tests a complete user workflow through the system.
-- pub `test_ws_smoke` function L1116-1263 — `(client: &Client) -> Result<()>` — I-0019 / I-0020 A1 smoke test.
-- pub `test_ws_chaos` function L1314-1473 — `(client: &Client) -> Result<()>` — I-0019 / I-0020 A2 chaos test — Pass 1 (infrastructure validation).
-- pub `test_ws_workorders` function L1485-1621 — `(client: &Client) -> Result<()>` — Prove the full work-order lifecycle survives a WS outage: with the WS
-- pub `test_ws_telemetry` function L1786-2037 — `(client: &Client) -> Result<()>` — I-0019 / I-0020 A3 telemetry-tailer test against real k3s.
+- pub `test_agent_reconciliation_existing_deployments` function L826-970 — `(client: &Client) -> Result<()>` — Test that agents can reconcile pre-existing deployments when targeted to a stack.
+- pub `test_audit_logs` function L976-1028 — `(client: &Client) -> Result<()>` — Each scenario tests a complete user workflow through the system.
+- pub `test_metrics` function L1034-1110 — `(client: &Client) -> Result<()>` — Each scenario tests a complete user workflow through the system.
+- pub `test_ws_smoke` function L1130-1277 — `(client: &Client) -> Result<()>` — I-0019 / I-0020 A1 smoke test.
+- pub `test_ws_chaos` function L1328-1487 — `(client: &Client) -> Result<()>` — I-0019 / I-0020 A2 chaos test — Pass 1 (infrastructure validation).
+- pub `test_ws_workorders` function L1499-1635 — `(client: &Client) -> Result<()>` — Prove the full work-order lifecycle survives a WS outage: with the WS
+- pub `test_ws_telemetry` function L1800-2051 — `(client: &Client) -> Result<()>` — I-0019 / I-0020 A3 telemetry-tailer test against real k3s.
 -  `DEMO_DEPLOYMENT_YAML` variable L16-53 — `: &str` — Sample deployment YAML for testing
 -  `MICROSERVICE_TEMPLATE` variable L56-76 — `: &str` — Microservice template for testing
 -  `MICROSERVICE_SCHEMA` variable L78-88 — `: &str` — Each scenario tests a complete user workflow through the system.
 -  `JOB_YAML` variable L91-105 — `: &str` — Job YAML for work order testing
 -  `BUILD_YAML` variable L110-127 — `: &str` — Shipwright Build YAML for build work order testing
--  `toxiproxy_set_enabled` function L1274-1298 — `( toxiproxy_url: &str, proxy_name: &str, enabled: bool, ) -> Result<()>` — Toggle a toxiproxy proxy's `enabled` flag via the admin API.
--  `N` variable L1486 — `: usize` — Each scenario tests a complete user workflow through the system.
--  `k3s_apply` function L1631-1668 — `(compose_file: &str, manifest: &str) -> Result<()>` — Apply a Kubernetes manifest by piping it through `docker compose exec k3s
--  `dump_diagnostics` function L1672-1739 — `(compose_file: &str, pod_name: &str)` — On A3 Pass 2 failure, dump pod status + agent logs so the next iteration
--  `k3s_delete_best_effort` function L1743-1765 — `(compose_file: &str, args: &[&str])` — Run `kubectl delete` against the k3s cluster.
+-  `RECONCILE_PLACEHOLDER_YAML` variable L812-819 — `: &str` — Minimal valid manifest for the Part 7b reconciliation tests.
+-  `toxiproxy_set_enabled` function L1288-1312 — `( toxiproxy_url: &str, proxy_name: &str, enabled: bool, ) -> Result<()>` — Toggle a toxiproxy proxy's `enabled` flag via the admin API.
+-  `N` variable L1500 — `: usize` — Each scenario tests a complete user workflow through the system.
+-  `k3s_apply` function L1645-1682 — `(compose_file: &str, manifest: &str) -> Result<()>` — Apply a Kubernetes manifest by piping it through `docker compose exec k3s
+-  `dump_diagnostics` function L1686-1753 — `(compose_file: &str, pod_name: &str)` — On A3 Pass 2 failure, dump pod status + agent logs so the next iteration
+-  `k3s_delete_best_effort` function L1757-1779 — `(compose_file: &str, args: &[&str])` — Run `kubectl delete` against the k3s cluster.
 
 ### tests/sdk-contract/python
 
