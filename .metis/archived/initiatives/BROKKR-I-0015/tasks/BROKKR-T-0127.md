@@ -92,6 +92,8 @@ Verify that each Architecture Decision Record (ADR) accurately reflects the curr
 
 ## Acceptance Criteria
 
+## Acceptance Criteria
+
 - [ ] Every ADR read and every technical claim verified against the codebase
 - [ ] Status annotations verified as current or updated
 - [ ] Implementation state of each decision accurately reflected

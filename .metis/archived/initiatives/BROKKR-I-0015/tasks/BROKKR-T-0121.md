@@ -77,6 +77,8 @@ For work order state machine:
 
 ## Acceptance Criteria
 
+## Acceptance Criteria
+
 - [ ] Every entity and field documented has been traced to `schema.rs` and model structs
 - [ ] Every ER diagram has been validated node-by-node and edge-by-edge against the schema
 - [ ] Every soft deletion claim has been verified against the implementation

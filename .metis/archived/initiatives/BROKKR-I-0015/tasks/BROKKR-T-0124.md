@@ -93,6 +93,8 @@ For each documented RBAC rule:
 
 ## Acceptance Criteria
 
+## Acceptance Criteria
+
 - [ ] Every documented env var traced to parsing code and verified
 - [ ] Every Helm value traced to `values.yaml` and at least one template usage
 - [ ] RBAC ClusterRole template verified against documentation
