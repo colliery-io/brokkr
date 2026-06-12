@@ -1,6 +1,6 @@
 # Code Index
 
-> Generated: 2026-06-12T14:27:39Z | 399 files | JavaScript, Python, Rust, TypeScript
+> Generated: 2026-06-12T20:20:03Z | 399 files | JavaScript, Python, Rust, TypeScript
 
 ## Project Structure
 
@@ -1384,39 +1384,36 @@
 - pub `REGISTRY` variable L19 — `: Lazy<Registry>` — Global Prometheus registry for all broker metrics
 - pub `HTTP_REQUESTS_TOTAL` variable L23-34 — `: Lazy<CounterVec>` — HTTP request counter
 - pub `HTTP_REQUEST_DURATION_SECONDS` variable L38-52 — `: Lazy<HistogramVec>` — HTTP request duration histogram
-- pub `DATABASE_QUERIES_TOTAL` variable L56-67 — `: Lazy<CounterVec>` — Database query counter
-- pub `DATABASE_QUERY_DURATION_SECONDS` variable L71-85 — `: Lazy<HistogramVec>` — Database query duration histogram
-- pub `ACTIVE_AGENTS` variable L88-95 — `: Lazy<IntGauge>` — Number of active agents
-- pub `AGENT_HEARTBEAT_AGE_SECONDS` variable L99-110 — `: Lazy<GaugeVec>` — Agent heartbeat age gauge
-- pub `STACKS_TOTAL` variable L113-120 — `: Lazy<IntGauge>` — Total number of stacks
-- pub `DEPLOYMENT_OBJECTS_TOTAL` variable L123-133 — `: Lazy<IntGauge>` — Total number of deployment objects
-- pub `WS_CONNECTED_AGENTS` variable L145-155 — `: Lazy<IntGauge>` — Currently-connected agents on the internal WS channel.
-- pub `WS_MESSAGES_TOTAL` variable L159-169 — `: Lazy<IntCounterVec>` — WS frames flowing in/out of the broker, labelled by direction and type.
-- pub `WS_LIVE_SUBSCRIBERS` variable L172-182 — `: Lazy<IntGauge>` — Subscribers on the live fan-out hub (WS-11), aggregated across stacks.
-- pub `WS_LOG_EVICTION_RUNS_TOTAL` variable L185-195 — `: Lazy<IntCounter>` — Eviction passes executed by the retention worker (WS-09).
-- pub `WS_TELEMETRY_EVICTED_TOTAL` variable L199-209 — `: Lazy<IntCounterVec>` — Total telemetry rows evicted (events + logs).
-- pub `ws_connected_agents` function L213-215 — `() -> &'static IntGauge` — Convenience accessors keep call sites short and avoid the static names
-- pub `ws_messages_total` function L217-219 — `(direction: &str, variant: &str) -> prometheus::IntCounter` — It exposes metrics about HTTP requests, database queries, and system state.
-- pub `ws_live_subscribers` function L221-223 — `() -> &'static IntGauge` — It exposes metrics about HTTP requests, database queries, and system state.
-- pub `ws_log_eviction_runs_total` function L225-227 — `() -> &'static IntCounter` — It exposes metrics about HTTP requests, database queries, and system state.
-- pub `ws_telemetry_evicted_total` function L229-231 — `(table: &str) -> prometheus::IntCounter` — It exposes metrics about HTTP requests, database queries, and system state.
-- pub `init` function L237-252 — `()` — Initializes all metrics by forcing lazy static evaluation
-- pub `encode_metrics` function L259-270 — `() -> String` — Encodes all registered metrics in Prometheus text format
-- pub `record_http_request` function L283-295 — `(endpoint: &str, method: &str, status: u16, duration_seconds: f64)` — Records an HTTP request metric
-- pub `record_db_query` function L322-330 — `(query_type: &str, duration_seconds: f64)` — Records a database query metric
-- pub `set_active_agents` function L333-335 — `(count: i64)` — Updates the active agents gauge
-- pub `set_stacks_total` function L338-340 — `(count: i64)` — Updates the total stacks gauge
-- pub `set_deployment_objects_total` function L343-345 — `(count: i64)` — Updates the total deployment objects gauge
-- pub `set_agent_heartbeat_age` function L348-352 — `(agent_id: &str, agent_name: &str, age_seconds: f64)` — Updates the heartbeat age for a specific agent
--  `normalize_endpoint` function L299-315 — `(path: &str) -> String` — Normalizes an endpoint path to reduce cardinality
--  `tests` module L355-472 — `-` — It exposes metrics about HTTP requests, database queries, and system state.
--  `test_init_registers_all_metrics` function L359-405 — `()` — It exposes metrics about HTTP requests, database queries, and system state.
--  `test_normalize_endpoint_replaces_uuids` function L408-412 — `()` — It exposes metrics about HTTP requests, database queries, and system state.
--  `test_normalize_endpoint_replaces_numeric_ids` function L415-419 — `()` — It exposes metrics about HTTP requests, database queries, and system state.
--  `test_normalize_endpoint_preserves_regular_paths` function L422-430 — `()` — It exposes metrics about HTTP requests, database queries, and system state.
--  `test_record_http_request_increments_counter` function L433-447 — `()` — It exposes metrics about HTTP requests, database queries, and system state.
--  `test_set_active_agents` function L450-459 — `()` — It exposes metrics about HTTP requests, database queries, and system state.
--  `test_set_stacks_total` function L462-471 — `()` — It exposes metrics about HTTP requests, database queries, and system state.
+- pub `ACTIVE_AGENTS` variable L55-62 — `: Lazy<IntGauge>` — Number of active agents
+- pub `AGENT_HEARTBEAT_AGE_SECONDS` variable L66-77 — `: Lazy<GaugeVec>` — Agent heartbeat age gauge
+- pub `STACKS_TOTAL` variable L80-87 — `: Lazy<IntGauge>` — Total number of stacks
+- pub `DEPLOYMENT_OBJECTS_TOTAL` variable L90-100 — `: Lazy<IntGauge>` — Total number of deployment objects
+- pub `WS_CONNECTED_AGENTS` variable L112-122 — `: Lazy<IntGauge>` — Currently-connected agents on the internal WS channel.
+- pub `WS_MESSAGES_TOTAL` variable L126-136 — `: Lazy<IntCounterVec>` — WS frames flowing in/out of the broker, labelled by direction and type.
+- pub `WS_LIVE_SUBSCRIBERS` variable L139-149 — `: Lazy<IntGauge>` — Subscribers on the live fan-out hub (WS-11), aggregated across stacks.
+- pub `WS_LOG_EVICTION_RUNS_TOTAL` variable L152-162 — `: Lazy<IntCounter>` — Eviction passes executed by the retention worker (WS-09).
+- pub `WS_TELEMETRY_EVICTED_TOTAL` variable L166-176 — `: Lazy<IntCounterVec>` — Total telemetry rows evicted (events + logs).
+- pub `ws_connected_agents` function L180-182 — `() -> &'static IntGauge` — Convenience accessors keep call sites short and avoid the static names
+- pub `ws_messages_total` function L184-186 — `(direction: &str, variant: &str) -> prometheus::IntCounter` — It exposes metrics about HTTP requests and system state.
+- pub `ws_live_subscribers` function L188-190 — `() -> &'static IntGauge` — It exposes metrics about HTTP requests and system state.
+- pub `ws_log_eviction_runs_total` function L192-194 — `() -> &'static IntCounter` — It exposes metrics about HTTP requests and system state.
+- pub `ws_telemetry_evicted_total` function L196-198 — `(table: &str) -> prometheus::IntCounter` — It exposes metrics about HTTP requests and system state.
+- pub `init` function L204-217 — `()` — Initializes all metrics by forcing lazy static evaluation
+- pub `encode_metrics` function L224-235 — `() -> String` — Encodes all registered metrics in Prometheus text format
+- pub `record_http_request` function L248-260 — `(endpoint: &str, method: &str, status: u16, duration_seconds: f64)` — Records an HTTP request metric
+- pub `set_active_agents` function L283-285 — `(count: i64)` — Updates the active agents gauge
+- pub `set_stacks_total` function L288-290 — `(count: i64)` — Updates the total stacks gauge
+- pub `set_deployment_objects_total` function L293-295 — `(count: i64)` — Updates the total deployment objects gauge
+- pub `set_agent_heartbeat_age` function L298-302 — `(agent_id: &str, agent_name: &str, age_seconds: f64)` — Updates the heartbeat age for a specific agent
+-  `normalize_endpoint` function L264-280 — `(path: &str) -> String` — Normalizes an endpoint path to reduce cardinality
+-  `tests` module L305-413 — `-` — It exposes metrics about HTTP requests and system state.
+-  `test_init_registers_all_metrics` function L309-346 — `()` — It exposes metrics about HTTP requests and system state.
+-  `test_normalize_endpoint_replaces_uuids` function L349-353 — `()` — It exposes metrics about HTTP requests and system state.
+-  `test_normalize_endpoint_replaces_numeric_ids` function L356-360 — `()` — It exposes metrics about HTTP requests and system state.
+-  `test_normalize_endpoint_preserves_regular_paths` function L363-371 — `()` — It exposes metrics about HTTP requests and system state.
+-  `test_record_http_request_increments_counter` function L374-388 — `()` — It exposes metrics about HTTP requests and system state.
+-  `test_set_active_agents` function L391-400 — `()` — It exposes metrics about HTTP requests and system state.
+-  `test_set_stacks_total` function L403-412 — `()` — It exposes metrics about HTTP requests and system state.
 
 ### crates/brokkr-broker/src/cli
 
@@ -2355,7 +2352,7 @@
 -  `test_readyz_endpoint` function L40-61 — `()`
 -  `test_metrics_endpoint` function L64-88 — `()`
 -  `test_metrics_records_http_requests` function L91-140 — `()`
--  `test_metrics_contains_all_defined_metrics` function L143-181 — `()`
+-  `test_metrics_contains_all_defined_metrics` function L143-180 — `()`
 
 #### crates/brokkr-broker/tests/integration/api/mod.rs
 
@@ -7971,22 +7968,22 @@
 - pub `test_webhooks` function L623-801 — `(client: &Client, webhook_catcher_url: Option<&str>) -> Result<()>` — Each scenario tests a complete user workflow through the system.
 - pub `test_agent_reconciliation_existing_deployments` function L826-970 — `(client: &Client) -> Result<()>` — Test that agents can reconcile pre-existing deployments when targeted to a stack.
 - pub `test_audit_logs` function L976-1028 — `(client: &Client) -> Result<()>` — Each scenario tests a complete user workflow through the system.
-- pub `test_metrics` function L1034-1110 — `(client: &Client) -> Result<()>` — Each scenario tests a complete user workflow through the system.
-- pub `test_ws_smoke` function L1130-1277 — `(client: &Client) -> Result<()>` — I-0019 / I-0020 A1 smoke test.
-- pub `test_ws_chaos` function L1328-1487 — `(client: &Client) -> Result<()>` — I-0019 / I-0020 A2 chaos test — Pass 1 (infrastructure validation).
-- pub `test_ws_workorders` function L1499-1635 — `(client: &Client) -> Result<()>` — Prove the full work-order lifecycle survives a WS outage: with the WS
-- pub `test_ws_telemetry` function L1800-2051 — `(client: &Client) -> Result<()>` — I-0019 / I-0020 A3 telemetry-tailer test against real k3s.
+- pub `test_metrics` function L1034-1100 — `(client: &Client) -> Result<()>` — Each scenario tests a complete user workflow through the system.
+- pub `test_ws_smoke` function L1120-1267 — `(client: &Client) -> Result<()>` — I-0019 / I-0020 A1 smoke test.
+- pub `test_ws_chaos` function L1318-1477 — `(client: &Client) -> Result<()>` — I-0019 / I-0020 A2 chaos test — Pass 1 (infrastructure validation).
+- pub `test_ws_workorders` function L1489-1625 — `(client: &Client) -> Result<()>` — Prove the full work-order lifecycle survives a WS outage: with the WS
+- pub `test_ws_telemetry` function L1790-2041 — `(client: &Client) -> Result<()>` — I-0019 / I-0020 A3 telemetry-tailer test against real k3s.
 -  `DEMO_DEPLOYMENT_YAML` variable L16-53 — `: &str` — Sample deployment YAML for testing
 -  `MICROSERVICE_TEMPLATE` variable L56-76 — `: &str` — Microservice template for testing
 -  `MICROSERVICE_SCHEMA` variable L78-88 — `: &str` — Each scenario tests a complete user workflow through the system.
 -  `JOB_YAML` variable L91-105 — `: &str` — Job YAML for work order testing
 -  `BUILD_YAML` variable L110-127 — `: &str` — Shipwright Build YAML for build work order testing
 -  `RECONCILE_PLACEHOLDER_YAML` variable L812-819 — `: &str` — Minimal valid manifest for the Part 7b reconciliation tests.
--  `toxiproxy_set_enabled` function L1288-1312 — `( toxiproxy_url: &str, proxy_name: &str, enabled: bool, ) -> Result<()>` — Toggle a toxiproxy proxy's `enabled` flag via the admin API.
--  `N` variable L1500 — `: usize` — Each scenario tests a complete user workflow through the system.
--  `k3s_apply` function L1645-1682 — `(compose_file: &str, manifest: &str) -> Result<()>` — Apply a Kubernetes manifest by piping it through `docker compose exec k3s
--  `dump_diagnostics` function L1686-1753 — `(compose_file: &str, pod_name: &str)` — On A3 Pass 2 failure, dump pod status + agent logs so the next iteration
--  `k3s_delete_best_effort` function L1757-1779 — `(compose_file: &str, args: &[&str])` — Run `kubectl delete` against the k3s cluster.
+-  `toxiproxy_set_enabled` function L1278-1302 — `( toxiproxy_url: &str, proxy_name: &str, enabled: bool, ) -> Result<()>` — Toggle a toxiproxy proxy's `enabled` flag via the admin API.
+-  `N` variable L1490 — `: usize` — Each scenario tests a complete user workflow through the system.
+-  `k3s_apply` function L1635-1672 — `(compose_file: &str, manifest: &str) -> Result<()>` — Apply a Kubernetes manifest by piping it through `docker compose exec k3s
+-  `dump_diagnostics` function L1676-1743 — `(compose_file: &str, pod_name: &str)` — On A3 Pass 2 failure, dump pod status + agent logs so the next iteration
+-  `k3s_delete_best_effort` function L1747-1769 — `(compose_file: &str, args: &[&str])` — Run `kubectl delete` against the k3s cluster.
 
 ### tests/sdk-contract/python
 
