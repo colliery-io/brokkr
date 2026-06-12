@@ -204,3 +204,4 @@
     - [brokkr-utils::config](./api/rust/brokkr-utils/config.md)
     - [brokkr-utils::logging](./api/rust/brokkr-utils/logging.md)
     - [brokkr-utils::telemetry](./api/rust/brokkr-utils/telemetry.md)
+- [Client SDKs](./api/sdks.md)
