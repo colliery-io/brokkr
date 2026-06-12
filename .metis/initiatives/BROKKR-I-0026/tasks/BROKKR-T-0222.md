@@ -11,9 +11,9 @@ archived: false
 
 tags:
   - "#task"
-  - "#phase/backlog"
+  - "#phase/active"
   - "#task"
-  - "#phase/backlog"
+  - "#phase/active"
 
 
 exit_criteria_met: false
@@ -50,3 +50,7 @@ Coordinate with T-0207's files (same handlers/DAL). Mechanical but wide; the mai
 ## Status Updates
 
 *To be added during implementation*
+
+## Status Updates
+
+- 2026-06-11: IMPLEMENTED on the T-0224 branch (folded into PR #51). Added DAL::conn() in dal/mod.rs returning Result<PooledConnection, diesel::result::Error>, mapping the r2d2 pool error to a diesel DatabaseError(UnableToSendCommand, ...) (no From impl exists). Replaced all 225 `self.dal.pool.get().expect("Failed to get DB connection")` sites across 24 dal/ files with `self.dal.conn()?` via sed (all were the identical line). Every DAL method already returned Result<_, diesel::result::Error>, so the `?` compiled everywhere with no per-method fixups. conn() preserves the search_path behavior (delegates to ConnectionPool::get). Net effect: pool exhaustion / DB outage is now a normal 500 (via ApiError::from_diesel) instead of an unwind caught by T-0209's CatchPanicLayer. New integration test dal/connection.rs::test_conn_pool_exhaustion_returns_error_not_panic builds a size-1 pool with a 2s connection_timeout, holds the only connection, and asserts a DAL op returns Err (not panic) then works again after release. broker build + integration target compile + clippy all clean.

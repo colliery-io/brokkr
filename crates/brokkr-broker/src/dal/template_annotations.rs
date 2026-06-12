@@ -39,7 +39,7 @@ impl TemplateAnnotationsDAL<'_> {
         &self,
         new_annotation: &NewTemplateAnnotation,
     ) -> Result<TemplateAnnotation, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::insert_into(template_annotations::table)
             .values(new_annotation)
             .get_result(conn)
@@ -62,7 +62,7 @@ impl TemplateAnnotationsDAL<'_> {
         &self,
         annotation_id: Uuid,
     ) -> Result<Option<TemplateAnnotation>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         template_annotations::table
             .filter(template_annotations::id.eq(annotation_id))
             .first(conn)
@@ -86,7 +86,7 @@ impl TemplateAnnotationsDAL<'_> {
         &self,
         template_id: Uuid,
     ) -> Result<Vec<TemplateAnnotation>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         template_annotations::table
             .filter(template_annotations::template_id.eq(template_id))
             .load::<TemplateAnnotation>(conn)
@@ -106,7 +106,7 @@ impl TemplateAnnotationsDAL<'_> {
     ///
     /// Returns a `diesel::result::Error` if the database operation fails.
     pub fn delete(&self, annotation_id: Uuid) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::delete(
             template_annotations::table.filter(template_annotations::id.eq(annotation_id)),
         )
@@ -130,7 +130,7 @@ impl TemplateAnnotationsDAL<'_> {
         &self,
         template_id: Uuid,
     ) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::delete(
             template_annotations::table.filter(template_annotations::template_id.eq(template_id)),
         )

@@ -56,8 +56,10 @@ jobs:
     needs: [setup, changes]
     if: needs.changes.outputs.code == 'true'
     uses: ./.github/workflows/integration_tests.yml
+    secrets: inherit
 
   sdk_contract_tests:
     needs: [setup, changes]
     if: needs.changes.outputs.sdk_contract == 'true'
     uses: ./.github/workflows/sdk_contract_tests.yml
+    secrets: inherit

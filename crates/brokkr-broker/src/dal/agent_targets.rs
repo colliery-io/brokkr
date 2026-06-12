@@ -35,7 +35,7 @@ impl AgentTargetsDAL<'_> {
         &self,
         new_target: &NewAgentTarget,
     ) -> Result<AgentTarget, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::insert_into(agent_targets::table)
             .values(new_target)
             .get_result(conn)
@@ -51,7 +51,7 @@ impl AgentTargetsDAL<'_> {
     ///
     /// An `Option<AgentTarget>` if found, or a `diesel::result::Error` on failure.
     pub fn get(&self, target_id: Uuid) -> Result<Option<AgentTarget>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         agent_targets::table
             .filter(agent_targets::id.eq(target_id))
             .first(conn)
@@ -64,7 +64,7 @@ impl AgentTargetsDAL<'_> {
     ///
     /// A `Vec<AgentTarget>` containing all agent targets, or a `diesel::result::Error` on failure.
     pub fn list(&self) -> Result<Vec<AgentTarget>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         agent_targets::table.load::<AgentTarget>(conn)
     }
 
@@ -81,7 +81,7 @@ impl AgentTargetsDAL<'_> {
         &self,
         agent_id: Uuid,
     ) -> Result<Vec<AgentTarget>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         agent_targets::table
             .filter(agent_targets::agent_id.eq(agent_id))
             .load::<AgentTarget>(conn)
@@ -100,7 +100,7 @@ impl AgentTargetsDAL<'_> {
         &self,
         stack_id: Uuid,
     ) -> Result<Vec<AgentTarget>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         agent_targets::table
             .filter(agent_targets::stack_id.eq(stack_id))
             .load::<AgentTarget>(conn)
@@ -116,7 +116,7 @@ impl AgentTargetsDAL<'_> {
     ///
     /// The number of affected rows (0 or 1) on success, or a `diesel::result::Error` on failure.
     pub fn delete(&self, target_id: Uuid) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::delete(agent_targets::table.filter(agent_targets::id.eq(target_id))).execute(conn)
     }
 
@@ -130,7 +130,7 @@ impl AgentTargetsDAL<'_> {
     ///
     /// The number of affected rows on success, or a `diesel::result::Error` on failure.
     pub fn delete_for_agent(&self, agent_id: Uuid) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::delete(agent_targets::table.filter(agent_targets::agent_id.eq(agent_id)))
             .execute(conn)
     }
@@ -145,7 +145,7 @@ impl AgentTargetsDAL<'_> {
     ///
     /// The number of affected rows on success, or a `diesel::result::Error` on failure.
     pub fn delete_for_stack(&self, stack_id: Uuid) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::delete(agent_targets::table.filter(agent_targets::stack_id.eq(stack_id)))
             .execute(conn)
     }
@@ -167,7 +167,7 @@ impl AgentTargetsDAL<'_> {
         agent_id: Uuid,
         stack_id: Uuid,
     ) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::delete(
             agent_targets::table
                 .filter(agent_targets::agent_id.eq(agent_id))

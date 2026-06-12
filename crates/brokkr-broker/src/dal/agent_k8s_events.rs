@@ -23,7 +23,7 @@ impl AgentK8sEventsDAL<'_> {
         &self,
         new_event: &NewAgentK8sEvent,
     ) -> Result<AgentK8sEvent, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::insert_into(agent_k8s_events::table)
             .values(new_event)
             .get_result(conn)
@@ -37,7 +37,7 @@ impl AgentK8sEventsDAL<'_> {
         since: DateTime<Utc>,
         limit: i64,
     ) -> Result<Vec<AgentK8sEvent>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         agent_k8s_events::table
             .filter(agent_k8s_events::stack_id.eq(stack_id))
             .filter(agent_k8s_events::created_at.ge(since))
@@ -48,14 +48,14 @@ impl AgentK8sEventsDAL<'_> {
 
     /// Delete rows older than `cutoff`. Returns row count.
     pub fn evict_older_than(&self, cutoff: DateTime<Utc>) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::delete(agent_k8s_events::table.filter(agent_k8s_events::created_at.lt(cutoff)))
             .execute(conn)
     }
 
     /// Total row count (diagnostics / metrics).
     pub fn count(&self) -> Result<i64, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         agent_k8s_events::table.count().get_result(conn)
     }
 }

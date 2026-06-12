@@ -35,7 +35,7 @@ impl TemplateTargetsDAL<'_> {
         &self,
         new_target: &NewTemplateTarget,
     ) -> Result<TemplateTarget, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::insert_into(template_targets::table)
             .values(new_target)
             .get_result(conn)
@@ -51,7 +51,7 @@ impl TemplateTargetsDAL<'_> {
     ///
     /// An `Option<TemplateTarget>` if found, or a `diesel::result::Error` on failure.
     pub fn get(&self, target_id: Uuid) -> Result<Option<TemplateTarget>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         template_targets::table
             .filter(template_targets::id.eq(target_id))
             .first(conn)
@@ -64,7 +64,7 @@ impl TemplateTargetsDAL<'_> {
     ///
     /// A `Vec<TemplateTarget>` containing all template targets, or a `diesel::result::Error` on failure.
     pub fn list(&self) -> Result<Vec<TemplateTarget>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         template_targets::table.load::<TemplateTarget>(conn)
     }
 
@@ -81,7 +81,7 @@ impl TemplateTargetsDAL<'_> {
         &self,
         template_id: Uuid,
     ) -> Result<Vec<TemplateTarget>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         template_targets::table
             .filter(template_targets::template_id.eq(template_id))
             .load::<TemplateTarget>(conn)
@@ -100,7 +100,7 @@ impl TemplateTargetsDAL<'_> {
         &self,
         stack_id: Uuid,
     ) -> Result<Vec<TemplateTarget>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         template_targets::table
             .filter(template_targets::stack_id.eq(stack_id))
             .load::<TemplateTarget>(conn)
@@ -117,7 +117,7 @@ impl TemplateTargetsDAL<'_> {
     ///
     /// `true` if the association exists, `false` otherwise.
     pub fn exists(&self, template_id: Uuid, stack_id: Uuid) -> Result<bool, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         let count: i64 = template_targets::table
             .filter(template_targets::template_id.eq(template_id))
             .filter(template_targets::stack_id.eq(stack_id))
@@ -136,7 +136,7 @@ impl TemplateTargetsDAL<'_> {
     ///
     /// The number of affected rows (0 or 1) on success, or a `diesel::result::Error` on failure.
     pub fn delete(&self, target_id: Uuid) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::delete(template_targets::table.filter(template_targets::id.eq(target_id)))
             .execute(conn)
     }
@@ -151,7 +151,7 @@ impl TemplateTargetsDAL<'_> {
     ///
     /// The number of affected rows on success, or a `diesel::result::Error` on failure.
     pub fn delete_for_template(&self, template_id: Uuid) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::delete(
             template_targets::table.filter(template_targets::template_id.eq(template_id)),
         )
@@ -168,7 +168,7 @@ impl TemplateTargetsDAL<'_> {
     ///
     /// The number of affected rows on success, or a `diesel::result::Error` on failure.
     pub fn delete_for_stack(&self, stack_id: Uuid) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::delete(template_targets::table.filter(template_targets::stack_id.eq(stack_id)))
             .execute(conn)
     }

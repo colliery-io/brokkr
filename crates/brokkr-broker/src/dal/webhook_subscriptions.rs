@@ -37,7 +37,7 @@ impl WebhookSubscriptionsDAL<'_> {
         &self,
         new_subscription: &NewWebhookSubscription,
     ) -> Result<WebhookSubscription, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         diesel::insert_into(webhook_subscriptions::table)
             .values(new_subscription)
@@ -54,7 +54,7 @@ impl WebhookSubscriptionsDAL<'_> {
     ///
     /// Returns the subscription if found.
     pub fn get(&self, id: Uuid) -> Result<Option<WebhookSubscription>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         webhook_subscriptions::table
             .filter(webhook_subscriptions::id.eq(id))
@@ -75,7 +75,7 @@ impl WebhookSubscriptionsDAL<'_> {
         &self,
         enabled_only: bool,
     ) -> Result<Vec<WebhookSubscription>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         let mut query = webhook_subscriptions::table.into_boxed();
 
@@ -101,7 +101,7 @@ impl WebhookSubscriptionsDAL<'_> {
         &self,
         event_type: &str,
     ) -> Result<Vec<WebhookSubscription>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         // Get all enabled subscriptions
         let subscriptions: Vec<WebhookSubscription> = webhook_subscriptions::table
@@ -140,7 +140,7 @@ impl WebhookSubscriptionsDAL<'_> {
         id: Uuid,
         update: &UpdateWebhookSubscription,
     ) -> Result<WebhookSubscription, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         diesel::update(webhook_subscriptions::table.filter(webhook_subscriptions::id.eq(id)))
             .set(update)
@@ -157,7 +157,7 @@ impl WebhookSubscriptionsDAL<'_> {
     ///
     /// Returns the number of deleted rows.
     pub fn delete(&self, id: Uuid) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         diesel::delete(webhook_subscriptions::table.filter(webhook_subscriptions::id.eq(id)))
             .execute(conn)
@@ -178,7 +178,7 @@ impl WebhookSubscriptionsDAL<'_> {
         id: Uuid,
         enabled: bool,
     ) -> Result<WebhookSubscription, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         diesel::update(webhook_subscriptions::table.filter(webhook_subscriptions::id.eq(id)))
             .set(webhook_subscriptions::enabled.eq(enabled))

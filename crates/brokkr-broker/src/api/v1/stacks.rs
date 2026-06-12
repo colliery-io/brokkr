@@ -643,6 +643,7 @@ pub async fn list_annotations(
         (status = 400, description = "Invalid annotation", body = ErrorResponse),
         (status = 403, description = "Forbidden", body = ErrorResponse),
         (status = 404, description = "Stack not found", body = ErrorResponse),
+        (status = 409, description = "Annotation key already exists for this stack", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse),
     ),
     security(("admin_pak" = []), ("generator_pak" = []))
@@ -663,7 +664,7 @@ pub async fn add_annotation(
     let annotation = dal
         .stack_annotations()
         .create(&new_annotation)
-        .map_err(|_| ApiError::internal("failed to add stack annotation"))?;
+        .map_err(|e| ApiError::from_diesel(e, "failed to add stack annotation"))?;
     Ok((StatusCode::CREATED, Json(annotation)))
 }
 

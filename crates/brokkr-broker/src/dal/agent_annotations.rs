@@ -39,7 +39,7 @@ impl AgentAnnotationsDAL<'_> {
         &self,
         new_annotation: &NewAgentAnnotation,
     ) -> Result<AgentAnnotation, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::insert_into(agent_annotations::table)
             .values(new_annotation)
             .get_result(conn)
@@ -62,7 +62,7 @@ impl AgentAnnotationsDAL<'_> {
         &self,
         annotation_id: Uuid,
     ) -> Result<Option<AgentAnnotation>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         agent_annotations::table
             .filter(agent_annotations::id.eq(annotation_id))
             .first(conn)
@@ -86,7 +86,7 @@ impl AgentAnnotationsDAL<'_> {
         &self,
         agent_id: Uuid,
     ) -> Result<Vec<AgentAnnotation>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         agent_annotations::table
             .filter(agent_annotations::agent_id.eq(agent_id))
             .load::<AgentAnnotation>(conn)
@@ -102,7 +102,7 @@ impl AgentAnnotationsDAL<'_> {
     ///
     /// Returns a `diesel::result::Error` if the database operation fails.
     pub fn list(&self) -> Result<Vec<AgentAnnotation>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         agent_annotations::table.load::<AgentAnnotation>(conn)
     }
 
@@ -125,7 +125,7 @@ impl AgentAnnotationsDAL<'_> {
         annotation_id: Uuid,
         updated_annotation: &AgentAnnotation,
     ) -> Result<AgentAnnotation, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::update(agent_annotations::table.filter(agent_annotations::id.eq(annotation_id)))
             .set(updated_annotation)
             .get_result(conn)
@@ -145,7 +145,7 @@ impl AgentAnnotationsDAL<'_> {
     ///
     /// Returns a `diesel::result::Error` if the database operation fails.
     pub fn delete(&self, annotation_id: Uuid) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::delete(agent_annotations::table.filter(agent_annotations::id.eq(annotation_id)))
             .execute(conn)
     }
@@ -164,7 +164,7 @@ impl AgentAnnotationsDAL<'_> {
     ///
     /// Returns a `diesel::result::Error` if the database operation fails.
     pub fn delete_all_for_agent(&self, agent_id: Uuid) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::delete(agent_annotations::table.filter(agent_annotations::agent_id.eq(agent_id)))
             .execute(conn)
     }
@@ -190,7 +190,7 @@ impl AgentAnnotationsDAL<'_> {
         agent_id: Uuid,
         key: &str,
     ) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::delete(
             agent_annotations::table
                 .filter(agent_annotations::agent_id.eq(agent_id))

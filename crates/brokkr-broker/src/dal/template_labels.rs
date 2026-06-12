@@ -39,7 +39,7 @@ impl TemplateLabelsDAL<'_> {
         &self,
         new_label: &NewTemplateLabel,
     ) -> Result<TemplateLabel, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::insert_into(template_labels::table)
             .values(new_label)
             .get_result(conn)
@@ -59,7 +59,7 @@ impl TemplateLabelsDAL<'_> {
     ///
     /// Returns a `diesel::result::Error` if the database operation fails.
     pub fn get(&self, label_id: Uuid) -> Result<Option<TemplateLabel>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         template_labels::table
             .filter(template_labels::id.eq(label_id))
             .first(conn)
@@ -83,7 +83,7 @@ impl TemplateLabelsDAL<'_> {
         &self,
         template_id: Uuid,
     ) -> Result<Vec<TemplateLabel>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         template_labels::table
             .filter(template_labels::template_id.eq(template_id))
             .load::<TemplateLabel>(conn)
@@ -103,7 +103,7 @@ impl TemplateLabelsDAL<'_> {
     ///
     /// Returns a `diesel::result::Error` if the database operation fails.
     pub fn delete(&self, label_id: Uuid) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::delete(template_labels::table.filter(template_labels::id.eq(label_id)))
             .execute(conn)
     }
@@ -125,7 +125,7 @@ impl TemplateLabelsDAL<'_> {
         &self,
         template_id: Uuid,
     ) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::delete(template_labels::table.filter(template_labels::template_id.eq(template_id)))
             .execute(conn)
     }

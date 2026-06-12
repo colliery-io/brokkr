@@ -40,7 +40,7 @@ impl StacksDAL<'_> {
     ///
     /// Returns a Result containing the created Stack on success, or a diesel::result::Error on failure.
     pub fn create(&self, new_stack: &NewStack) -> Result<Stack, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         let stack: Stack = diesel::insert_into(stacks::table)
             .values(new_stack)
             .get_result(conn)?;
@@ -67,7 +67,7 @@ impl StacksDAL<'_> {
     ///
     /// Returns a Result containing a Vec<Stack> of found non-deleted stacks, or a diesel::result::Error on failure.
     pub fn get(&self, stack_uuids: Vec<Uuid>) -> Result<Vec<Stack>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         stacks::table
             .filter(stacks::id.eq_any(stack_uuids))
             .filter(stacks::deleted_at.is_null())
@@ -87,7 +87,7 @@ impl StacksDAL<'_> {
         &self,
         stack_uuid: Uuid,
     ) -> Result<Option<Stack>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         stacks::table
             .filter(stacks::id.eq(stack_uuid))
             .first(conn)
@@ -100,7 +100,7 @@ impl StacksDAL<'_> {
     ///
     /// Returns a Result containing a Vec of all non-deleted Stacks on success, or a diesel::result::Error on failure.
     pub fn list(&self) -> Result<Vec<Stack>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         stacks::table
             .filter(stacks::deleted_at.is_null())
             .load::<Stack>(conn)
@@ -120,7 +120,7 @@ impl StacksDAL<'_> {
         &self,
         generator_id: Uuid,
     ) -> Result<Vec<Stack>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         stacks::table
             .filter(stacks::deleted_at.is_null())
             .filter(stacks::generator_id.eq(generator_id))
@@ -133,7 +133,7 @@ impl StacksDAL<'_> {
     ///
     /// Returns a Result containing a Vec of all Stacks (including deleted ones) on success, or a diesel::result::Error on failure.
     pub fn list_all(&self) -> Result<Vec<Stack>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         stacks::table.load::<Stack>(conn)
     }
 
@@ -152,7 +152,7 @@ impl StacksDAL<'_> {
         stack_uuid: Uuid,
         updated_stack: &Stack,
     ) -> Result<Stack, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::update(stacks::table.filter(stacks::id.eq(stack_uuid)))
             .set(updated_stack)
             .get_result(conn)
@@ -168,7 +168,7 @@ impl StacksDAL<'_> {
     ///
     /// Returns a Result containing the number of affected rows (0 or 1) on success, or a diesel::result::Error on failure.
     pub fn soft_delete(&self, stack_uuid: Uuid) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         let rows = diesel::update(stacks::table.filter(stacks::id.eq(stack_uuid)))
             .set(stacks::deleted_at.eq(Utc::now()))
             .execute(conn)?;
@@ -195,7 +195,7 @@ impl StacksDAL<'_> {
     ///
     /// Returns a Result containing the number of affected rows (0 or 1) on success, or a diesel::result::Error on failure.
     pub fn hard_delete(&self, stack_uuid: Uuid) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::delete(stacks::table.filter(stacks::id.eq(stack_uuid))).execute(conn)
     }
 
@@ -214,7 +214,7 @@ impl StacksDAL<'_> {
         labels: Vec<String>,
         filter_type: FilterType,
     ) -> Result<Vec<Stack>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         match filter_type {
             FilterType::And => {
@@ -259,7 +259,7 @@ impl StacksDAL<'_> {
         annotations: Vec<(String, String)>,
         filter_type: FilterType,
     ) -> Result<Vec<Stack>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         match filter_type {
             FilterType::Or => {
@@ -321,7 +321,7 @@ impl StacksDAL<'_> {
         &self,
         agent_id: Uuid,
     ) -> Result<Vec<Stack>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         // Get agent labels
         let labels: Vec<String> = agent_labels::table

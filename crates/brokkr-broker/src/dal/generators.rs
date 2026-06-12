@@ -32,7 +32,7 @@ impl GeneratorsDAL<'_> {
     ///
     /// A Result containing the created Generator on success, or a diesel::result::Error on failure.
     pub fn create(&self, new_generator: &NewGenerator) -> Result<Generator, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::insert_into(generators::table)
             .values(new_generator)
             .get_result(conn)
@@ -48,7 +48,7 @@ impl GeneratorsDAL<'_> {
     ///
     /// A Result containing an Option<Generator> if found (and not deleted), or a diesel::result::Error on failure.
     pub fn get(&self, generator_uuid: Uuid) -> Result<Option<Generator>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         generators::table
             .filter(generators::id.eq(generator_uuid))
             .filter(generators::deleted_at.is_null())
@@ -69,7 +69,7 @@ impl GeneratorsDAL<'_> {
         &self,
         generator_uuid: Uuid,
     ) -> Result<Option<Generator>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         generators::table
             .filter(generators::id.eq(generator_uuid))
             .first(conn)
@@ -82,7 +82,7 @@ impl GeneratorsDAL<'_> {
     ///
     /// A Result containing a Vec of all non-deleted Generators on success, or a diesel::result::Error on failure.
     pub fn list(&self) -> Result<Vec<Generator>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         generators::table
             .filter(generators::deleted_at.is_null())
             .load::<Generator>(conn)
@@ -94,7 +94,7 @@ impl GeneratorsDAL<'_> {
     ///
     /// A Result containing a Vec of all Generators (including deleted ones) on success, or a diesel::result::Error on failure.
     pub fn list_all(&self) -> Result<Vec<Generator>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         generators::table.load::<Generator>(conn)
     }
 
@@ -113,7 +113,7 @@ impl GeneratorsDAL<'_> {
         generator_uuid: Uuid,
         updated_generator: &Generator,
     ) -> Result<Generator, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::update(generators::table.filter(generators::id.eq(generator_uuid)))
             .set(updated_generator)
             .get_result(conn)
@@ -129,7 +129,7 @@ impl GeneratorsDAL<'_> {
     ///
     /// A Result containing the number of affected rows (0 or 1) on success, or a diesel::result::Error on failure.
     pub fn soft_delete(&self, generator_id: Uuid) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::update(generators::table.filter(generators::id.eq(generator_id)))
             .set(generators::deleted_at.eq(Utc::now()))
             .execute(conn)
@@ -145,7 +145,7 @@ impl GeneratorsDAL<'_> {
     ///
     /// A Result containing the number of affected rows (0 or 1) on success, or a diesel::result::Error on failure.
     pub fn hard_delete(&self, generator_uuid: Uuid) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::delete(generators::table.filter(generators::id.eq(generator_uuid))).execute(conn)
     }
 
@@ -164,7 +164,7 @@ impl GeneratorsDAL<'_> {
         generator_uuid: Uuid,
         new_pak_hash: String,
     ) -> Result<Generator, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::update(generators::table.filter(generators::id.eq(generator_uuid)))
             .set(generators::pak_hash.eq(new_pak_hash))
             .get_result(conn)
@@ -183,7 +183,7 @@ impl GeneratorsDAL<'_> {
         &self,
         generator_uuid: Uuid,
     ) -> Result<Generator, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::update(generators::table.filter(generators::id.eq(generator_uuid)))
             .set((
                 generators::last_active_at.eq(Utc::now()),
@@ -205,7 +205,7 @@ impl GeneratorsDAL<'_> {
         &self,
         generator_name: &str,
     ) -> Result<Option<Generator>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         generators::table
             .filter(generators::name.eq(generator_name))
             .filter(generators::deleted_at.is_null())
@@ -226,7 +226,7 @@ impl GeneratorsDAL<'_> {
         &self,
         active: bool,
     ) -> Result<Vec<Generator>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         generators::table
             .filter(generators::is_active.eq(active))
             .filter(generators::deleted_at.is_null())
@@ -250,7 +250,7 @@ impl GeneratorsDAL<'_> {
         &self,
         pak_hash: &str,
     ) -> Result<Option<Generator>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         generators::table
             .filter(generators::pak_hash.eq(pak_hash))
             .filter(generators::deleted_at.is_null())

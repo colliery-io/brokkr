@@ -20,7 +20,7 @@ pub struct AgentPodLogsDAL<'a> {
 
 impl AgentPodLogsDAL<'_> {
     pub fn create(&self, new_line: &NewAgentPodLog) -> Result<AgentPodLog, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::insert_into(agent_pod_logs::table)
             .values(new_line)
             .get_result(conn)
@@ -32,7 +32,7 @@ impl AgentPodLogsDAL<'_> {
         since: DateTime<Utc>,
         limit: i64,
     ) -> Result<Vec<AgentPodLog>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         agent_pod_logs::table
             .filter(agent_pod_logs::stack_id.eq(stack_id))
             .filter(agent_pod_logs::created_at.ge(since))
@@ -42,13 +42,13 @@ impl AgentPodLogsDAL<'_> {
     }
 
     pub fn evict_older_than(&self, cutoff: DateTime<Utc>) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::delete(agent_pod_logs::table.filter(agent_pod_logs::created_at.lt(cutoff)))
             .execute(conn)
     }
 
     pub fn count(&self) -> Result<i64, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         agent_pod_logs::table.count().get_result(conn)
     }
 }

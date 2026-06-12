@@ -35,7 +35,7 @@ impl DiagnosticResultsDAL<'_> {
         &self,
         new_result: &NewDiagnosticResult,
     ) -> Result<DiagnosticResult, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         diesel::insert_into(diagnostic_results::table)
             .values(new_result)
@@ -52,7 +52,7 @@ impl DiagnosticResultsDAL<'_> {
     ///
     /// Returns the diagnostic result if found.
     pub fn get(&self, id: Uuid) -> Result<Option<DiagnosticResult>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         diagnostic_results::table
             .filter(diagnostic_results::id.eq(id))
@@ -73,7 +73,7 @@ impl DiagnosticResultsDAL<'_> {
         &self,
         request_id: Uuid,
     ) -> Result<Option<DiagnosticResult>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         diagnostic_results::table
             .filter(diagnostic_results::request_id.eq(request_id))
@@ -91,7 +91,7 @@ impl DiagnosticResultsDAL<'_> {
     ///
     /// Returns the number of records deleted.
     pub fn delete(&self, id: Uuid) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         diesel::delete(diagnostic_results::table.filter(diagnostic_results::id.eq(id)))
             .execute(conn)
@@ -107,7 +107,7 @@ impl DiagnosticResultsDAL<'_> {
     ///
     /// Returns the number of records deleted.
     pub fn delete_by_request(&self, request_id: Uuid) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         diesel::delete(
             diagnostic_results::table.filter(diagnostic_results::request_id.eq(request_id)),

@@ -56,7 +56,7 @@ impl WebhookDeliveriesDAL<'_> {
         &self,
         new_delivery: &NewWebhookDelivery,
     ) -> Result<WebhookDelivery, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         diesel::insert_into(webhook_deliveries::table)
             .values(new_delivery)
@@ -73,7 +73,7 @@ impl WebhookDeliveriesDAL<'_> {
     ///
     /// Returns the delivery if found.
     pub fn get(&self, id: Uuid) -> Result<Option<WebhookDelivery>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         webhook_deliveries::table
             .filter(webhook_deliveries::id.eq(id))
@@ -103,7 +103,7 @@ impl WebhookDeliveriesDAL<'_> {
         limit: i64,
         ttl_seconds: Option<i64>,
     ) -> Result<Vec<WebhookDelivery>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         let now = Utc::now();
         let ttl = ttl_seconds.unwrap_or(DEFAULT_CLAIM_TTL_SECONDS);
         let acquired_until = now + Duration::seconds(ttl);
@@ -160,7 +160,7 @@ impl WebhookDeliveriesDAL<'_> {
         limit: i64,
         ttl_seconds: Option<i64>,
     ) -> Result<Vec<WebhookDelivery>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         let now = Utc::now();
         let ttl = ttl_seconds.unwrap_or(DEFAULT_CLAIM_TTL_SECONDS);
         let acquired_until = now + Duration::seconds(ttl);
@@ -217,7 +217,7 @@ impl WebhookDeliveriesDAL<'_> {
     ///
     /// Returns the number of released deliveries.
     pub fn release_expired(&self) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         let now = Utc::now();
 
         diesel::update(
@@ -241,7 +241,7 @@ impl WebhookDeliveriesDAL<'_> {
     ///
     /// Returns the number of deliveries moved to pending.
     pub fn process_retries(&self) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         let now = Utc::now();
 
         diesel::update(
@@ -270,7 +270,7 @@ impl WebhookDeliveriesDAL<'_> {
     ///
     /// Returns the updated delivery.
     pub fn mark_success(&self, id: Uuid) -> Result<WebhookDelivery, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         let now = Utc::now();
 
         diesel::update(webhook_deliveries::table.filter(webhook_deliveries::id.eq(id)))
@@ -303,7 +303,7 @@ impl WebhookDeliveriesDAL<'_> {
         error: &str,
         max_retries: i32,
     ) -> Result<WebhookDelivery, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         // Get current delivery to check attempt count
         let delivery: WebhookDelivery = webhook_deliveries::table
@@ -369,7 +369,7 @@ impl WebhookDeliveriesDAL<'_> {
         limit: i64,
         offset: i64,
     ) -> Result<Vec<WebhookDelivery>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         let mut query = webhook_deliveries::table
             .filter(webhook_deliveries::subscription_id.eq(subscription_id))
@@ -396,7 +396,7 @@ impl WebhookDeliveriesDAL<'_> {
     ///
     /// Returns the updated delivery, or None if not found or not retriable.
     pub fn retry(&self, id: Uuid) -> Result<Option<WebhookDelivery>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         // Only retry failed or dead deliveries
         let result = diesel::update(
@@ -431,7 +431,7 @@ impl WebhookDeliveriesDAL<'_> {
     ///
     /// Returns the number of deleted records.
     pub fn cleanup_old(&self, retention_days: i64) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         let cutoff = Utc::now() - Duration::days(retention_days);
 
@@ -457,7 +457,7 @@ impl WebhookDeliveriesDAL<'_> {
     ///
     /// Returns counts of deliveries by status.
     pub fn get_stats(&self, subscription_id: Uuid) -> Result<DeliveryStats, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         let deliveries: Vec<WebhookDelivery> = webhook_deliveries::table
             .filter(webhook_deliveries::subscription_id.eq(subscription_id))

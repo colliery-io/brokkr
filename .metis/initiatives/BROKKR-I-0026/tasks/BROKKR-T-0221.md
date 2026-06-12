@@ -11,9 +11,9 @@ archived: false
 
 tags:
   - "#task"
-  - "#phase/backlog"
+  - "#phase/active"
   - "#task"
-  - "#phase/backlog"
+  - "#phase/active"
 
 
 exit_criteria_met: false
@@ -41,3 +41,9 @@ Both are in the agent crate; the integration tests run on CI's agent suite (k3s)
 ## Status Updates
 
 *To be added during implementation*
+
+## Status Updates
+
+- 2026-06-11: IMPLEMENTED on the T-0224 branch (folded into PR #51). Both items:
+  1. Discovery reuse (k8s/api.rs): reconcile_target_state held a fresh Discovery::new(client).run() per object in BOTH the apply and prune loops. Added a function-scoped `let mut discovery: Option<Discovery>` and a resolve_gvk_cached(discovery, client, gvk) helper that builds the snapshot lazily on first resolve (i.e. after the priority CRD pre-apply) and reuses it, refreshing exactly once on a miss before the caller concludes a GVK is unresolvable — preserving T-0203's fail-closed behavior for a CRD+CR-in-one-bundle (the CR's first resolve misses, triggers one re-discover, then resolves). Common case is now one discovery sweep per reconcile instead of one per object.
+  2. Pod-log re-attach (pod_logs.rs): ensure_tails did `if guard.contains_key(uid) { return }`, so once a uid was recorded it never re-attached even after every tail finished (tail_container gives up after MAX_OPEN_ATTEMPTS or first EOF) — a pod that became loggable later was never tailed again. Extracted take_if_attachable(map, uid): returns false while any tail is_finished()==false; when all are finished it removes the stale entry and returns true so ensure_tails re-attaches on the next watcher Apply. Race-free vs teardown_for (both under the `active` write lock). Unit test take_if_attachable_reattaches_only_after_all_tails_finish covers no-entry/running/all-finished. agent build + clippy + all 74 lib tests pass. The end-to-end re-tail and the CRD-bundle reconcile are exercised by the agent k3s integration/e2e suite on CI.

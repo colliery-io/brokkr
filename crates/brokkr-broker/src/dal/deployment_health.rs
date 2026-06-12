@@ -41,7 +41,7 @@ impl DeploymentHealthDAL<'_> {
         &self,
         new_health: &NewDeploymentHealth,
     ) -> Result<DeploymentHealth, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         diesel::insert_into(deployment_health::table)
             .values(new_health)
@@ -75,7 +75,7 @@ impl DeploymentHealthDAL<'_> {
             return Ok(0);
         }
 
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         diesel::insert_into(deployment_health::table)
             .values(health_records)
@@ -107,7 +107,7 @@ impl DeploymentHealthDAL<'_> {
         agent_id: Uuid,
         deployment_object_id: Uuid,
     ) -> Result<Option<DeploymentHealth>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         deployment_health::table
             .filter(deployment_health::agent_id.eq(agent_id))
@@ -126,7 +126,7 @@ impl DeploymentHealthDAL<'_> {
     ///
     /// Returns the health record if found.
     pub fn get(&self, id: Uuid) -> Result<Option<DeploymentHealth>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         deployment_health::table
             .filter(deployment_health::id.eq(id))
@@ -147,7 +147,7 @@ impl DeploymentHealthDAL<'_> {
         &self,
         deployment_object_id: Uuid,
     ) -> Result<Vec<DeploymentHealth>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         deployment_health::table
             .filter(deployment_health::deployment_object_id.eq(deployment_object_id))
@@ -168,7 +168,7 @@ impl DeploymentHealthDAL<'_> {
         &self,
         agent_id: Uuid,
     ) -> Result<Vec<DeploymentHealth>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         deployment_health::table
             .filter(deployment_health::agent_id.eq(agent_id))
@@ -189,7 +189,7 @@ impl DeploymentHealthDAL<'_> {
         &self,
         stack_id: Uuid,
     ) -> Result<Vec<DeploymentHealth>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         deployment_health::table
             .inner_join(deployment_objects::table)
@@ -213,7 +213,7 @@ impl DeploymentHealthDAL<'_> {
         &self,
         status: &str,
     ) -> Result<Vec<DeploymentHealth>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         deployment_health::table
             .filter(deployment_health::status.eq(status))
@@ -236,7 +236,7 @@ impl DeploymentHealthDAL<'_> {
         agent_id: Uuid,
         deployment_object_id: Uuid,
     ) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         diesel::delete(
             deployment_health::table
@@ -256,7 +256,7 @@ impl DeploymentHealthDAL<'_> {
     ///
     /// Returns the number of records deleted.
     pub fn delete_by_agent(&self, agent_id: Uuid) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         diesel::delete(deployment_health::table.filter(deployment_health::agent_id.eq(agent_id)))
             .execute(conn)

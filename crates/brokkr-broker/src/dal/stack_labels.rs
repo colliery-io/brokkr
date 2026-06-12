@@ -36,7 +36,7 @@ impl StackLabelsDAL<'_> {
     ///
     /// Returns a `diesel::result::Error` if the database operation fails.
     pub fn create(&self, new_label: &NewStackLabel) -> Result<StackLabel, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::insert_into(stack_labels::table)
             .values(new_label)
             .get_result(conn)
@@ -56,7 +56,7 @@ impl StackLabelsDAL<'_> {
     ///
     /// Returns a `diesel::result::Error` if the database operation fails.
     pub fn get(&self, label_id: Uuid) -> Result<Option<StackLabel>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         stack_labels::table
             .filter(stack_labels::id.eq(label_id))
             .first(conn)
@@ -77,7 +77,7 @@ impl StackLabelsDAL<'_> {
     ///
     /// Returns a `diesel::result::Error` if the database operation fails.
     pub fn list_for_stack(&self, stack_id: Uuid) -> Result<Vec<StackLabel>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         stack_labels::table
             .filter(stack_labels::stack_id.eq(stack_id))
             .load::<StackLabel>(conn)
@@ -97,7 +97,7 @@ impl StackLabelsDAL<'_> {
     ///
     /// Returns a `diesel::result::Error` if the database operation fails.
     pub fn delete(&self, label_id: Uuid) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::delete(stack_labels::table.filter(stack_labels::id.eq(label_id))).execute(conn)
     }
 
@@ -115,7 +115,7 @@ impl StackLabelsDAL<'_> {
     ///
     /// Returns a `diesel::result::Error` if the database operation fails.
     pub fn delete_all_for_stack(&self, stack_id: Uuid) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::delete(stack_labels::table.filter(stack_labels::stack_id.eq(stack_id)))
             .execute(conn)
     }
@@ -141,7 +141,7 @@ impl StackLabelsDAL<'_> {
         stack_id: Uuid,
         label: &str,
     ) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::delete(
             stack_labels::table
                 .filter(stack_labels::stack_id.eq(stack_id))

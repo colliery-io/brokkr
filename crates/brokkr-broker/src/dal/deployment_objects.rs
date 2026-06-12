@@ -42,7 +42,7 @@ impl DeploymentObjectsDAL<'_> {
         &self,
         new_deployment_object: &NewDeploymentObject,
     ) -> Result<DeploymentObject, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         let deployment_object: DeploymentObject = diesel::insert_into(deployment_objects::table)
             .values(new_deployment_object)
             .get_result(conn)?;
@@ -75,7 +75,7 @@ impl DeploymentObjectsDAL<'_> {
         &self,
         deployment_object_uuid: Uuid,
     ) -> Result<Option<DeploymentObject>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         deployment_objects::table
             .filter(deployment_objects::id.eq(deployment_object_uuid))
             .filter(deployment_objects::deleted_at.is_null())
@@ -96,7 +96,7 @@ impl DeploymentObjectsDAL<'_> {
         &self,
         deployment_object_uuid: Uuid,
     ) -> Result<Option<DeploymentObject>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         deployment_objects::table
             .filter(deployment_objects::id.eq(deployment_object_uuid))
             .first(conn)
@@ -116,7 +116,7 @@ impl DeploymentObjectsDAL<'_> {
         &self,
         stack_id: Uuid,
     ) -> Result<Vec<DeploymentObject>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         deployment_objects::table
             .filter(deployment_objects::stack_id.eq(stack_id))
             .filter(deployment_objects::deleted_at.is_null())
@@ -137,7 +137,7 @@ impl DeploymentObjectsDAL<'_> {
         &self,
         stack_id: Uuid,
     ) -> Result<Vec<DeploymentObject>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         deployment_objects::table
             .filter(deployment_objects::stack_id.eq(stack_id))
             .order(deployment_objects::sequence_id.desc())
@@ -157,7 +157,7 @@ impl DeploymentObjectsDAL<'_> {
         &self,
         deployment_object_uuid: Uuid,
     ) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         // Get the deployment object first for event data
         let deployment_object: Option<DeploymentObject> = deployment_objects::table
@@ -200,7 +200,7 @@ impl DeploymentObjectsDAL<'_> {
         &self,
         stack_id: Uuid,
     ) -> Result<Option<DeploymentObject>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         deployment_objects::table
             .filter(deployment_objects::stack_id.eq(stack_id))
             .filter(deployment_objects::deleted_at.is_null())
@@ -280,7 +280,7 @@ impl DeploymentObjectsDAL<'_> {
         &self,
         yaml_checksum: &str,
     ) -> Result<Vec<DeploymentObject>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         deployment_objects::table
             .filter(deployment_objects::yaml_checksum.eq(yaml_checksum))
             .filter(deployment_objects::deleted_at.is_null())
@@ -305,7 +305,7 @@ impl DeploymentObjectsDAL<'_> {
         &self,
         agent_id: Uuid,
     ) -> Result<Vec<DeploymentObject>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         let agent_targets = agent_targets::table
             .filter(agent_targets::agent_id.eq(agent_id))

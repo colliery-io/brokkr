@@ -69,7 +69,7 @@ impl WorkOrdersDAL<'_> {
         &self,
         new_work_order: &NewWorkOrder,
     ) -> Result<WorkOrder, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         let work_order: WorkOrder = diesel::insert_into(work_orders::table)
             .values(new_work_order)
             .get_result(conn)?;
@@ -99,7 +99,7 @@ impl WorkOrdersDAL<'_> {
     ///
     /// Returns an Option<WorkOrder> if found, or a diesel::result::Error on failure.
     pub fn get(&self, work_order_id: Uuid) -> Result<Option<WorkOrder>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         work_orders::table
             .filter(work_orders::id.eq(work_order_id))
             .first(conn)
@@ -112,7 +112,7 @@ impl WorkOrdersDAL<'_> {
     ///
     /// Returns a Vec of all WorkOrders on success, or a diesel::result::Error on failure.
     pub fn list(&self) -> Result<Vec<WorkOrder>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         work_orders::table
             .order(work_orders::created_at.desc())
             .load::<WorkOrder>(conn)
@@ -133,7 +133,7 @@ impl WorkOrdersDAL<'_> {
         status: Option<&str>,
         work_type: Option<&str>,
     ) -> Result<Vec<WorkOrder>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         let mut query = work_orders::table.into_boxed();
 
@@ -162,7 +162,7 @@ impl WorkOrdersDAL<'_> {
     ///
     /// Returns the number of affected rows on success, or a diesel::result::Error on failure.
     pub fn delete(&self, work_order_id: Uuid) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::delete(work_orders::table.filter(work_orders::id.eq(work_order_id))).execute(conn)
     }
 
@@ -192,7 +192,7 @@ impl WorkOrdersDAL<'_> {
         agent_id: Uuid,
         work_type: Option<&str>,
     ) -> Result<Vec<WorkOrder>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         // Get agent's labels
         let agent_label_list: Vec<String> = agent_labels::table
@@ -290,7 +290,7 @@ impl WorkOrdersDAL<'_> {
         work_order_id: Uuid,
         agent_id: Uuid,
     ) -> Result<WorkOrder, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         // Check if agent is authorized via any targeting mechanism (OR logic)
         let is_authorized =
@@ -410,7 +410,7 @@ impl WorkOrdersDAL<'_> {
         work_order_id: Uuid,
         agent_id: Uuid,
     ) -> Result<WorkOrder, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         diesel::update(
             work_orders::table
@@ -445,7 +445,7 @@ impl WorkOrdersDAL<'_> {
         work_order_id: Uuid,
         result_message: Option<String>,
     ) -> Result<WorkOrderLog, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         let log_result: WorkOrderLog = conn.transaction(|conn| {
             // Get the work order
@@ -516,7 +516,7 @@ impl WorkOrdersDAL<'_> {
         error_message: String,
         retryable: bool,
     ) -> Result<Option<WorkOrderLog>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         let result: Option<WorkOrderLog> = conn.transaction(|conn| {
             // Get the work order
@@ -584,7 +584,7 @@ impl WorkOrdersDAL<'_> {
     ///
     /// Returns the number of work orders reset on success, or a diesel::result::Error on failure.
     pub fn process_retry_pending(&self) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         let now = Utc::now();
 
         diesel::update(
@@ -609,7 +609,7 @@ impl WorkOrdersDAL<'_> {
     ///
     /// Returns the number of work orders reset on success, or a diesel::result::Error on failure.
     pub fn process_stale_claims(&self) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         let now = Utc::now();
 
         // We need to use raw SQL for this because Diesel doesn't support
@@ -641,7 +641,7 @@ impl WorkOrdersDAL<'_> {
         &self,
         new_target: &NewWorkOrderTarget,
     ) -> Result<WorkOrderTarget, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::insert_into(work_order_targets::table)
             .values(new_target)
             .get_result(conn)
@@ -662,7 +662,7 @@ impl WorkOrdersDAL<'_> {
         work_order_id: Uuid,
         agent_ids: &[Uuid],
     ) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         let targets: Vec<NewWorkOrderTarget> = agent_ids
             .iter()
@@ -687,7 +687,7 @@ impl WorkOrdersDAL<'_> {
         &self,
         work_order_id: Uuid,
     ) -> Result<Vec<WorkOrderTarget>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         work_order_targets::table
             .filter(work_order_targets::work_order_id.eq(work_order_id))
             .load::<WorkOrderTarget>(conn)
@@ -708,7 +708,7 @@ impl WorkOrdersDAL<'_> {
         work_order_id: Uuid,
         agent_id: Uuid,
     ) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::delete(
             work_order_targets::table
                 .filter(work_order_targets::work_order_id.eq(work_order_id))
@@ -731,7 +731,7 @@ impl WorkOrdersDAL<'_> {
     ///
     /// Returns an Option<WorkOrderLog> if found, or a diesel::result::Error on failure.
     pub fn get_log(&self, log_id: Uuid) -> Result<Option<WorkOrderLog>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         work_order_log::table
             .filter(work_order_log::id.eq(log_id))
             .first(conn)
@@ -757,7 +757,7 @@ impl WorkOrdersDAL<'_> {
         agent_id: Option<Uuid>,
         limit: Option<i64>,
     ) -> Result<Vec<WorkOrderLog>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         let mut query = work_order_log::table.into_boxed();
 
@@ -799,7 +799,7 @@ impl WorkOrdersDAL<'_> {
         &self,
         new_label: &NewWorkOrderLabel,
     ) -> Result<WorkOrderLabel, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::insert_into(work_order_labels::table)
             .values(new_label)
             .get_result(conn)
@@ -820,7 +820,7 @@ impl WorkOrdersDAL<'_> {
         work_order_id: Uuid,
         labels: &[String],
     ) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         let new_labels: Vec<NewWorkOrderLabel> = labels
             .iter()
@@ -845,7 +845,7 @@ impl WorkOrdersDAL<'_> {
         &self,
         work_order_id: Uuid,
     ) -> Result<Vec<WorkOrderLabel>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         work_order_labels::table
             .filter(work_order_labels::work_order_id.eq(work_order_id))
             .load::<WorkOrderLabel>(conn)
@@ -866,7 +866,7 @@ impl WorkOrdersDAL<'_> {
         work_order_id: Uuid,
         label: &str,
     ) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::delete(
             work_order_labels::table
                 .filter(work_order_labels::work_order_id.eq(work_order_id))
@@ -892,7 +892,7 @@ impl WorkOrdersDAL<'_> {
         &self,
         new_annotation: &NewWorkOrderAnnotation,
     ) -> Result<WorkOrderAnnotation, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::insert_into(work_order_annotations::table)
             .values(new_annotation)
             .get_result(conn)
@@ -913,7 +913,7 @@ impl WorkOrdersDAL<'_> {
         work_order_id: Uuid,
         annotations: &std::collections::HashMap<String, String>,
     ) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         let new_annotations: Vec<NewWorkOrderAnnotation> = annotations
             .iter()
@@ -940,7 +940,7 @@ impl WorkOrdersDAL<'_> {
         &self,
         work_order_id: Uuid,
     ) -> Result<Vec<WorkOrderAnnotation>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         work_order_annotations::table
             .filter(work_order_annotations::work_order_id.eq(work_order_id))
             .load::<WorkOrderAnnotation>(conn)
@@ -963,7 +963,7 @@ impl WorkOrdersDAL<'_> {
         key: &str,
         value: &str,
     ) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::delete(
             work_order_annotations::table
                 .filter(work_order_annotations::work_order_id.eq(work_order_id))

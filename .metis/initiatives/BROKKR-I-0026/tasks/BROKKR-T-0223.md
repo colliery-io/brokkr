@@ -11,9 +11,9 @@ archived: false
 
 tags:
   - "#task"
-  - "#phase/backlog"
+  - "#phase/active"
   - "#task"
-  - "#phase/backlog"
+  - "#phase/active"
 
 
 exit_criteria_met: false
@@ -48,3 +48,7 @@ Couple the migration and the from_diesel routing — the 409 only works once the
 ## Status Updates
 
 *To be added during implementation*
+
+## Status Updates
+
+- 2026-06-11: IMPLEMENTED on the T-0224 branch (folded into PR #51). New migration crates/brokkr-models/migrations/19_stack_annotations_unique/{up,down}.sql: up dedupes existing rows on (stack_id, key) keeping the greatest id (documented tie-break; no created_at column exists), then ADD CONSTRAINT unique_stack_annotation UNIQUE (stack_id, key) (mirrors agent_annotations); down drops it. stacks.rs add_annotation now routes the create through ApiError::from_diesel (was ApiError::internal), so a duplicate key returns 409; added the 409 to the OpenAPI responses. New integration test test_add_stack_annotation_duplicate_key_conflicts (201 then 409). schema.rs unchanged (a UNIQUE constraint doesn't alter diesel table! defs). Local `angreal models migrations` is blocked by a diesel_cli built without the postgres feature (env, not the migration) — CI's broker integration suite applies migrations and runs the 409 test. broker build + integration target compile + clippy all clean locally.
