@@ -110,6 +110,8 @@ All existing ad-hoc Mermaid architecture diagrams must be replaced with C4 diagr
 
 ## Acceptance Criteria
 
+## Acceptance Criteria
+
 - [ ] Every architectural claim in the 5 files has been verified against source code
 - [ ] Every existing Mermaid architecture diagram has been migrated to C4
 - [ ] System Context (L1), Container (L2), and Component (L3) diagrams are produced

@@ -83,6 +83,8 @@ For metrics catalog completeness:
 
 ## Acceptance Criteria
 
+## Acceptance Criteria
+
 - [ ] Every health endpoint documented has been traced to its handler function
 - [ ] Every health check response field has been verified against the response struct
 - [ ] Every Prometheus metric has been verified: name, type, labels, help text

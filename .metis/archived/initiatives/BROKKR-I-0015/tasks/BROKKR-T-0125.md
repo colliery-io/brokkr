@@ -156,6 +156,8 @@ For each documented stack operation:
 
 ## Acceptance Criteria
 
+## Acceptance Criteria
+
 - [ ] Every Tera syntax claim verified against the Tera version and custom extensions in use
 - [ ] Every template example verified for correctness
 - [ ] Every JSON Schema claim verified against validation code

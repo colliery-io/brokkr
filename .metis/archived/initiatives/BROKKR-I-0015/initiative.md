@@ -4,14 +4,14 @@ level: initiative
 title: "Documentation Validation Against Implementation"
 short_code: "BROKKR-I-0015"
 created_at: 2026-03-13T13:52:00.558381+00:00
-updated_at: 2026-03-13T14:06:23.749111+00:00
+updated_at: 2026-06-12T18:38:41.795534+00:00
 parent: BROKKR-V-0001
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#initiative"
-  - "#phase/active"
+  - "#phase/completed"
 
 
 exit_criteria_met: false

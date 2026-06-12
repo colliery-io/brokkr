@@ -236,6 +236,8 @@ For each content file:
 
 ## Acceptance Criteria
 
+## Acceptance Criteria
+
 - [ ] Every internal link verified as resolving or flagged as broken
 - [ ] Every external link checked for reachability
 - [ ] Complete inventory of referenced-but-missing pages produced

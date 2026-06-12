@@ -76,6 +76,8 @@ For each documented curl/API example:
 
 ## Acceptance Criteria
 
+## Acceptance Criteria
+
 - [ ] Every API endpoint documented in the 9 files above has been traced to its handler function
 - [ ] Every request/response field documented has been verified against the Rust struct
 - [ ] Every curl example has been verified for correctness of URL, method, body, and headers
