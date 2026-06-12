@@ -93,3 +93,26 @@ Alternative: Create a macro or wrapper function to reduce boilerplate.
 
 ### 2025-12-30: Created as backlog item
 Deferred during BROKKR-T-0087 implementation. Core metrics (HTTP, agent operations) completed; DAL instrumentation provides marginal additional value for current use cases.
+
+## Check-in 2026-06-12
+
+Still open and still P3, but partially scaffolded — clarifying remaining scope:
+
+- **Already present** (from the T-0087 metrics era): `DATABASE_QUERIES_TOTAL`
+  (CounterVec by `query_type`) and `DATABASE_QUERY_DURATION_SECONDS`
+  (HistogramVec by `query_type`) are defined + registered in
+  crates/brokkr-broker/src/metrics.rs, and a `record_db_query(query_type,
+  duration_seconds)` helper exists (metrics.rs:322).
+- **Not done**: nothing in `crates/brokkr-broker/src/dal/` calls `record_db_query`.
+  The only references are the lazy-init touch (metrics.rs:241-242) and a unit
+  test (metrics.rs:364). So the metrics are exposed on /metrics but **always
+  read zero** — mildly misleading to operators (looks like "no queries" rather
+  than "not instrumented").
+- **Remaining work** = the original bulk: wrap each query call site across the
+  ~24 dal/ modules to time + classify (select/insert/update/delete) and call
+  `record_db_query`. The metric + helper half is free; only the per-site wiring
+  remains. T-0222's `DAL::conn()` is connection acquisition, not query
+  execution, so it is NOT a usable chokepoint for this.
+- P3 rationale unchanged (HTTP duration already captures end-to-end DB time;
+  Postgres native metrics are richer). Lowest-friction partial win if ever
+  wanted: remove the unwired metrics, or instrument just the hottest paths.
