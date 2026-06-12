@@ -71,6 +71,8 @@ def _rewrite_summary_api_section():
     # API Documentation section covers both the broker internals and the client
     # libraries (BROKKR-T-0129). ./api/sdks.md is a static bridge page that
     # links to the full How-To SDK guides.
+    # KEEP IN SYNC with the inlined rewrite in .github/workflows/docs.yml
+    # ("Update SUMMARY.md with API entries") — the deployed site uses that copy.
     api_section += "- [Client SDKs](./api/sdks.md)\n"
 
     # Replace from the marker to end of file
