@@ -1083,16 +1083,6 @@ pub async fn test_metrics(client: &Client) -> Result<()> {
     }
     println!("    System metrics present ✓");
 
-    // Verify database metrics are defined
-    println!("  → Verifying database metrics...");
-    // Note: DB metrics may not have data yet if no DB queries were instrumented
-    // We just check they're defined (will appear after first use)
-    if metrics.contains("brokkr_database_queries_total") {
-        println!("    Database query metrics present ✓");
-    } else {
-        println!("    ⚠ Database metrics not yet populated (expected if DAL not instrumented)");
-    }
-
     // Print all brokkr metrics (not histogram buckets to keep it readable)
     println!("  → Brokkr metrics:");
     for line in metrics.lines() {

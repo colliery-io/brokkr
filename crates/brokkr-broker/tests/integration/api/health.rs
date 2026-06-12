@@ -160,9 +160,8 @@ async fn test_metrics_contains_all_defined_metrics() {
 
     // Verify metric types that are always present in the output.
     // Note: CounterVec/HistogramVec metrics only appear after at least one value
-    // is recorded. Database metrics (brokkr_database_queries_total, etc.) are
-    // defined but not yet instrumented in the DAL layer, so they won't appear.
-    // GaugeVec metrics like agent_heartbeat_age_seconds also need data first.
+    // is recorded. GaugeVec metrics like agent_heartbeat_age_seconds also need
+    // data first.
     let expected_metrics = [
         "brokkr_http_requests_total",
         "brokkr_http_request_duration_seconds",

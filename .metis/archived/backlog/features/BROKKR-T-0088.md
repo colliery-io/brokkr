@@ -5,9 +5,9 @@ title: "DAL query instrumentation for Prometheus metrics"
 short_code: "BROKKR-T-0088"
 created_at: 2025-12-30T14:15:11.801469+00:00
 updated_at: 2025-12-30T14:15:11.801469+00:00
-parent:
+parent: 
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -16,7 +16,6 @@ tags:
 
 
 exit_criteria_met: false
-strategy_id: NULL
 initiative_id: NULL
 ---
 
@@ -60,6 +59,8 @@ Add Prometheus metrics instrumentation to DAL (Data Access Layer) methods to tra
 Until one of these conditions is met, this remains a "nice to have" that doesn't justify the implementation effort.
 
 **Effort Estimate**: M (touches many files, repetitive but straightforward)
+
+## Acceptance Criteria
 
 ## Acceptance Criteria **[REQUIRED]**
 
@@ -116,3 +117,22 @@ Still open and still P3, but partially scaffolded — clarifying remaining scope
 - P3 rationale unchanged (HTTP duration already captures end-to-end DB time;
   Postgres native metrics are richer). Lowest-friction partial win if ever
   wanted: remove the unwired metrics, or instrument just the hottest paths.
+
+## Closed: won't-do 2026-06-12
+
+Closing as won't-do (maintainer decision). The task as scoped is only "call the
+existing record_db_query helper from each DAL method, bucketed into 4 query
+types (select/insert/update/delete)". That is pure boilerplate across ~24 dal/
+modules for thin observability value — 4 coarse buckets tell you "selects are
+slow" but not which query; HTTP request-duration already captures end-to-end DB
+time and Postgres native metrics (pg_stat_statements) are richer. If real
+per-query insight is ever needed it should be rescoped with useful labels
+(per-method/per-table on hot paths), not this.
+
+Also removed the always-zero scaffolding so /metrics isn't misleading:
+- crates/brokkr-broker/src/metrics.rs: dropped DATABASE_QUERIES_TOTAL,
+  DATABASE_QUERY_DURATION_SECONDS, the record_db_query() helper, their init()
+  touches, and the test assertions.
+- docs/grafana/brokkr-broker-dashboard.json: removed the "Database Query Rate"
+  and "Database Query Latency" panels (they queried the dead metrics).
+- Fixed the stale comment in tests/integration/api/health.rs.
