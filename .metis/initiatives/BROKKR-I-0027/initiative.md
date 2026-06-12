@@ -4,14 +4,14 @@ level: initiative
 title: "Agent Fleet Legibility"
 short_code: "BROKKR-I-0027"
 created_at: 2026-06-12T21:20:39.756079+00:00
-updated_at: 2026-06-12T21:20:39.756079+00:00
+updated_at: 2026-06-12T21:39:43.510414+00:00
 parent: brokkr-environment-aware
 blocked_by: []
 archived: false
 
 tags:
   - "#initiative"
-  - "#phase/discovery"
+  - "#phase/design"
 
 
 exit_criteria_met: false
