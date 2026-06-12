@@ -129,39 +129,69 @@ addition — but sequencing is a design-phase concern.
   and work-orders and assumes poll-only with "no real-time streaming"; cleaner to
   re-discover than retrofit.
 
-## Open Questions (Discovery → Design)
+## Resolved Decisions (Discovery)
 
-To be resolved before/within the design phase:
-1. **Surface shape** — per-agent endpoint + a fleet rollup (one call returns all
-   agents + signals)? Pull-only, or push fleet-state changes over the existing WS
-   channel?
-2. **Liveness source of truth** — reconcile WS connection state (precise, but
-   only for WS-connected agents) with heartbeat-age (works for any agent). Which
-   wins, and how are they combined?
-3. **"Activity silence" definition** — what window counts as silent, and what
-   counts as "activity" (events only? events + successful reconciles?).
-4. **Backpressure definition** — pending deployment objects, work-order backlog,
-   or both; how "draining vs piling up" is measured.
-5. **K8s-connectivity reporting** — agent self-report mechanism and heartbeat
-   payload extension; sequencing relative to the broker-computed signals.
-6. **"Recent" window/retention** for the activity feed (ties into the existing
-   6h telemetry ceiling and agent-events retention).
-7. **Staleness freshness** — fix the existing pull-triggered gauge staleness
-   (`active_agents` / `heartbeat_age` only refresh on `GET /agents`) so the
-   signals are accurate independent of who is polling.
+Grounded against the existing data model. Key finding: **every v1 signal except
+K8s connectivity is computable from data the broker already has, as measured
+values** — so Slice 1 needs no migrations and no agent changes.
+
+- **Surface (Q1):** Pull-first `GET /api/v1/fleet` returning a per-agent record
+  array (the "this is your fleet" table) plus a per-agent detail view with the
+  recent-events feed. WS *push* of fleet-state deltas is a later, optional
+  enhancement — not a v1 dependency.
+- **Liveness (Q2):** Surface BOTH as distinct fields — never a single `is_live`
+  verdict: `ws_connected` + `connected_since` (real-time, WS-only) AND
+  `heartbeat_age_seconds` (any agent). The consumer decides which matters.
+- **Backpressure (Q4):** Surface BOTH as separate feeds — `pending_object_count`
+  (target-state objects with no agent_event yet) and the work-order backlog
+  (`pending_work_orders` / `claimed_work_orders` per agent). A per-agent
+  applied-sequence lag is deferred (needs new tracking).
+- **Activity silence (Q3):** Return `last_event_at` + `seconds_since_last_event`
+  as measured values; the consumer derives "alive but silent." Brokkr computes
+  no "silent" boolean.
+- **Staleness freshness (Q7):** The `/fleet` surface computes `heartbeat_age` on
+  read (always fresh). The pre-existing Prometheus gauge-staleness bug
+  (`active_agents` / `agent_heartbeat_age_seconds` only refresh on
+  `GET /agents`) is **folded into this initiative** — fixed via a small
+  background refresh task in Slice 1.
+- **K8s connectivity (Q5):** Kept as **Slice 2** — a standalone agent-reported
+  signal (heartbeat-payload extension + a stored column), surfaced in `/fleet`.
+  Self-contained; sequenced after Slice 1 proves the surface.
+- **Recent window / retention (Q6):** Activity feed = latest N agent_events per
+  agent. NOTE: `agent_events` currently has **no eviction** (grows unbounded) —
+  tracked as an orthogonal follow-up task, not a legibility blocker.
+
+## v1 Fleet Record (per agent)
+
+`GET /api/v1/fleet` returns an array of these — all measured values, no verdicts:
+
+| Field | Meaning | Source |
+|-------|---------|--------|
+| `agent_id`, `name` | identity | `agents` |
+| `status` | the agent's self-set status string | `agents.status` |
+| `ws_connected`, `connected_since` | live WS connectivity | WS registry (`is_connected`) |
+| `last_heartbeat`, `heartbeat_age_seconds` | heartbeat liveness | `agents.last_heartbeat` (computed on read) |
+| `pending_object_count` | deployment objects targeted but not yet acted on | target-state minus `agent_events` |
+| `pending_work_orders`, `claimed_work_orders` | work-order backlog | `work_orders` by agent |
+| `last_event_at`, `seconds_since_last_event` | activity recency | `max(agent_events.created_at)` |
+| `health_failing`, `health_degraded` | reconciliation trouble counts | `deployment_health` by status |
+| `k8s_reachable` *(Slice 2)* | agent can reach its cluster API | agent-reported |
 
 ## Implementation Plan
 
-*Provisional — to be refined during the design phase once the open questions
-above are settled.* The likely shape, given the broker/agent data seam:
-
-- **Slice 1 (broker-computed, no agent changes):** backpressure, heartbeat
-  staleness, and activity-silence signals + the per-agent/fleet read surface;
-  also address the pull-triggered staleness gauge.
-- **Slice 2 (agent-reported):** K8s-connectivity signal via a heartbeat-payload
-  extension.
-- **Slice 3 (activity feed):** consolidate "recent events per agent" into the
-  surface, reconciled with existing agent-events + telemetry.
+- **Slice 1 — Broker-computed fleet surface** *(no migrations, no agent changes)*:
+  `GET /api/v1/fleet` (rollup) + per-agent detail with the recent-events feed,
+  surfacing every field in the v1 record above except `k8s_reachable`. Fold in
+  the Prometheus gauge-staleness fix (a background refresh of `active_agents` /
+  `agent_heartbeat_age_seconds` so they're correct independent of who polls
+  `GET /agents`).
+- **Slice 2 — K8s connectivity** *(standalone, agent-reported)*: extend the
+  heartbeat payload with `k8s_reachable` (+ optional API latency), store the
+  latest per agent (migration), surface it in `/fleet`.
+- **Later / optional — WS push:** push fleet-state-change deltas over the
+  existing WS channel for consumers that want live updates instead of polling.
+- **Orthogonal follow-up (separate task):** an `agent_events` retention/eviction
+  policy (the table currently grows unbounded).
 
 ## Status Updates
 
@@ -169,3 +199,11 @@ above are settled.* The likely shape, given the broker/agent data seam:
   Goals/Non-Goals and the v1 signal set agreed with the maintainer (surface
   signals, consumer owns severity). Design phase deferred pending the open
   questions above.
+
+- 2026-06-12: Open questions worked through and resolved with the maintainer
+  (see Resolved Decisions). Grounded against the data model — Slice 1 is a pure
+  read/aggregation feature (no migrations, no agent changes). Decisions: fold in
+  the Prometheus gauge-staleness fix; surface object-pending AND work-order
+  backlog as separate feeds; K8s connectivity is Slice 2 (standalone); pull-first
+  `GET /fleet` with WS push deferred. Ready to consider discovery → design and
+  decomposition into Slice 1 / Slice 2 / follow-up tasks.
