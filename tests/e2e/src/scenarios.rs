@@ -804,6 +804,20 @@ pub async fn test_webhooks(client: &Client, webhook_catcher_url: Option<&str>) -
 // Part 7b: Agent Reconciliation of Existing Deployments (BROKKR-T-0094)
 // =============================================================================
 
+/// Minimal valid manifest for the Part 7b reconciliation tests. The broker
+/// rejects document-less YAML (T-0194's `invalid_deployment_object` check), and
+/// these tests only assert that a targeted agent *sees* the deployment in its
+/// target state (they never apply it to a cluster), so any single valid
+/// document works.
+const RECONCILE_PLACEHOLDER_YAML: &str = r#"apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: e2e-reconcile-placeholder
+  namespace: default
+data:
+  marker: reconcile
+"#;
+
 /// Test that agents can reconcile pre-existing deployments when targeted to a stack.
 /// This tests the scenario where:
 /// 1. Stack exists with deployment object
@@ -826,7 +840,7 @@ pub async fn test_agent_reconciliation_existing_deployments(client: &Client) -> 
         .await?;
     let stack1_id: Uuid = stack1["id"].as_str().unwrap().parse()?;
     let deployment1 = client
-        .create_deployment(stack1_id, "# Direct targeting test", false)
+        .create_deployment(stack1_id, RECONCILE_PLACEHOLDER_YAML, false)
         .await?;
     let deployment1_id: Uuid = deployment1["id"].as_str().unwrap().parse()?;
     println!("    Created stack and deployment: {}", deployment1_id);
@@ -869,7 +883,7 @@ pub async fn test_agent_reconciliation_existing_deployments(client: &Client) -> 
         .add_stack_label(stack2_id, "reconcile-test-label")
         .await?;
     let deployment2 = client
-        .create_deployment(stack2_id, "# Label targeting test", false)
+        .create_deployment(stack2_id, RECONCILE_PLACEHOLDER_YAML, false)
         .await?;
     let deployment2_id: Uuid = deployment2["id"].as_str().unwrap().parse()?;
     println!(
@@ -917,7 +931,7 @@ pub async fn test_agent_reconciliation_existing_deployments(client: &Client) -> 
         .add_stack_annotation(stack3_id, "reconcile-key", "reconcile-value")
         .await?;
     let deployment3 = client
-        .create_deployment(stack3_id, "# Annotation targeting test", false)
+        .create_deployment(stack3_id, RECONCILE_PLACEHOLDER_YAML, false)
         .await?;
     let deployment3_id: Uuid = deployment3["id"].as_str().unwrap().parse()?;
     println!(

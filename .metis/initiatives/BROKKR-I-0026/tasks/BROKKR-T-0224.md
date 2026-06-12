@@ -4,19 +4,19 @@ level: task
 title: "CI: Docker Hub auth + upload-artifact retry + cache efficiency (deferred from T-0218)"
 short_code: "BROKKR-T-0224"
 created_at: 2026-06-11T20:16:07.862693+00:00
-updated_at: 2026-06-11T20:16:07.862693+00:00
-parent:
+updated_at: 2026-06-12T03:02:43.744469+00:00
+parent: 
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/active"
   - "#task"
-  - "#phase/active"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
+initiative_id: NULL
 ---
 
 # CI: Docker Hub auth + upload-artifact retry + cache efficiency (deferred from T-0218)
@@ -33,6 +33,8 @@ The contained flake fixes from [[BROKKR-T-0218]] (imagetools retries, node 22, p
 
 ### Type
 - [x] Tech Debt
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

@@ -4,19 +4,19 @@ level: task
 title: "Broker DAL: stop panicking on pool.get() (225 sites) — deferred from T-0209"
 short_code: "BROKKR-T-0222"
 created_at: 2026-06-11T15:53:18.843524+00:00
-updated_at: 2026-06-11T15:53:18.843524+00:00
-parent:
+updated_at: 2026-06-12T03:02:43.649890+00:00
+parent: 
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/active"
   - "#task"
-  - "#phase/active"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
+initiative_id: NULL
 ---
 
 # Broker DAL: stop panicking on pool.get() (225 sites) — deferred from T-0209
@@ -36,6 +36,8 @@ Every DAL method does `self.dal.pool.get().expect("Failed to get DB connection")
 
 ### Priority
 - [x] P2 - Medium (CatchPanicLayer already covers the user-facing symptom)
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 
