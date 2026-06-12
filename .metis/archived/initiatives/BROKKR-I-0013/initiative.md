@@ -1,5 +1,5 @@
 ---
-id: operational-observability-metrics
+id: agent-fleet-operational-data
 level: initiative
 title: "Agent Fleet Operational Data"
 short_code: "BROKKR-I-0013"
@@ -7,7 +7,7 @@ created_at: 2025-12-30T13:55:33.567012+00:00
 updated_at: 2025-12-30T13:55:33.567012+00:00
 parent: BROKKR-V-0001
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#initiative"
@@ -16,8 +16,7 @@ tags:
 
 exit_criteria_met: false
 estimated_complexity: M
-strategy_id: NULL
-initiative_id: operational-observability-metrics
+initiative_id: agent-fleet-operational-data
 ---
 
 # Agent Fleet Operational Data Initiative
@@ -156,3 +155,25 @@ Rejected: Agents in constrained environments may not have access to cluster metr
 ### Phase 4: Fleet Summary
 - Aggregate endpoint for fleet-wide view
 - Summary statistics across all agents
+
+## Retired 2026-06-12
+
+Archived from discovery WITHOUT decomposition (maintainer decision). The design
+above predates two things that have since shipped and materially change the
+problem space:
+
+- The internal broker↔agent **WebSocket channel** (I-0019/I-0020). This design
+  assumes poll-only and lists "real-time streaming" as a Non-Goal, but live
+  agent connectivity (`ws_connected_agents`, live subscriptions,
+  `/admin/ws-connections`) now exists. Delivery-latency and live-liveness
+  assumptions need rethinking.
+- The expanded **work-orders** system and existing deployment-health endpoints,
+  which overlap Phase 1 (queue/backlog) and Phase 3 (reconciliation status).
+
+Rather than retrofit, the topic (operator/orchestrator visibility into agent
+fleet health + resource availability) will be re-taken fresh through
+discovery → design as a new initiative. This document is retained as reference
+for that effort — the use cases (debugging failed deploys, fleet capacity,
+stuck reconciliations) and the agent-reported/broker-computed data split are
+still good starting material. Open question to settle next time: whether active
+staleness detection / alerting is in scope (it was explicitly out here).
