@@ -6073,6 +6073,16 @@
             },
             "description": "Stack not found"
           },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Annotation key already exists for this stack"
+          },
           "500": {
             "content": {
               "application/json": {
