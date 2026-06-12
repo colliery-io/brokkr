@@ -39,7 +39,7 @@ impl StackAnnotationsDAL<'_> {
         &self,
         new_annotation: &NewStackAnnotation,
     ) -> Result<StackAnnotation, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::insert_into(stack_annotations::table)
             .values(new_annotation)
             .get_result(conn)
@@ -62,7 +62,7 @@ impl StackAnnotationsDAL<'_> {
         &self,
         annotation_id: Uuid,
     ) -> Result<Option<StackAnnotation>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         stack_annotations::table
             .filter(stack_annotations::id.eq(annotation_id))
             .first(conn)
@@ -86,7 +86,7 @@ impl StackAnnotationsDAL<'_> {
         &self,
         stack_id: Uuid,
     ) -> Result<Vec<StackAnnotation>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         stack_annotations::table
             .filter(stack_annotations::stack_id.eq(stack_id))
             .load::<StackAnnotation>(conn)
@@ -111,7 +111,7 @@ impl StackAnnotationsDAL<'_> {
         annotation_id: Uuid,
         updated_annotation: &StackAnnotation,
     ) -> Result<StackAnnotation, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::update(stack_annotations::table.filter(stack_annotations::id.eq(annotation_id)))
             .set(updated_annotation)
             .get_result(conn)
@@ -131,7 +131,7 @@ impl StackAnnotationsDAL<'_> {
     ///
     /// Returns a `diesel::result::Error` if the database operation fails.
     pub fn delete(&self, annotation_id: Uuid) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::delete(stack_annotations::table.filter(stack_annotations::id.eq(annotation_id)))
             .execute(conn)
     }
@@ -150,7 +150,7 @@ impl StackAnnotationsDAL<'_> {
     ///
     /// Returns a `diesel::result::Error` if the database operation fails.
     pub fn delete_all_for_stack(&self, stack_id: Uuid) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::delete(stack_annotations::table.filter(stack_annotations::stack_id.eq(stack_id)))
             .execute(conn)
     }
@@ -176,7 +176,7 @@ impl StackAnnotationsDAL<'_> {
         stack_id: Uuid,
         key: &str,
     ) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::delete(
             stack_annotations::table
                 .filter(stack_annotations::stack_id.eq(stack_id))

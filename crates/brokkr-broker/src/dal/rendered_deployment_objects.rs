@@ -38,7 +38,7 @@ impl RenderedDeploymentObjectsDAL<'_> {
         &self,
         new_record: &NewRenderedDeploymentObject,
     ) -> Result<RenderedDeploymentObject, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::insert_into(rendered_deployment_objects::table)
             .values(new_record)
             .get_result(conn)
@@ -57,7 +57,7 @@ impl RenderedDeploymentObjectsDAL<'_> {
         &self,
         record_id: Uuid,
     ) -> Result<Option<RenderedDeploymentObject>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         rendered_deployment_objects::table
             .filter(rendered_deployment_objects::id.eq(record_id))
             .first(conn)
@@ -77,7 +77,7 @@ impl RenderedDeploymentObjectsDAL<'_> {
         &self,
         deployment_object_id: Uuid,
     ) -> Result<Option<RenderedDeploymentObject>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         rendered_deployment_objects::table
             .filter(rendered_deployment_objects::deployment_object_id.eq(deployment_object_id))
             .first(conn)
@@ -99,7 +99,7 @@ impl RenderedDeploymentObjectsDAL<'_> {
         template_id: Uuid,
         version: Option<i32>,
     ) -> Result<Vec<RenderedDeploymentObject>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         let mut query = rendered_deployment_objects::table
             .filter(rendered_deployment_objects::template_id.eq(template_id))
@@ -120,7 +120,7 @@ impl RenderedDeploymentObjectsDAL<'_> {
     ///
     /// A `Vec<RenderedDeploymentObject>` containing all records, or a `diesel::result::Error` on failure.
     pub fn list(&self) -> Result<Vec<RenderedDeploymentObject>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         rendered_deployment_objects::table
             .order(rendered_deployment_objects::created_at.desc())
             .load::<RenderedDeploymentObject>(conn)
@@ -136,7 +136,7 @@ impl RenderedDeploymentObjectsDAL<'_> {
     ///
     /// The number of affected rows (0 or 1) on success, or a `diesel::result::Error` on failure.
     pub fn delete(&self, record_id: Uuid) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::delete(
             rendered_deployment_objects::table
                 .filter(rendered_deployment_objects::id.eq(record_id)),
@@ -157,7 +157,7 @@ impl RenderedDeploymentObjectsDAL<'_> {
         &self,
         deployment_object_id: Uuid,
     ) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::delete(
             rendered_deployment_objects::table
                 .filter(rendered_deployment_objects::deployment_object_id.eq(deployment_object_id)),
@@ -175,7 +175,7 @@ impl RenderedDeploymentObjectsDAL<'_> {
     ///
     /// The number of affected rows on success, or a `diesel::result::Error` on failure.
     pub fn delete_for_template(&self, template_id: Uuid) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::delete(
             rendered_deployment_objects::table
                 .filter(rendered_deployment_objects::template_id.eq(template_id)),

@@ -33,7 +33,7 @@ impl AuditLogsDAL<'_> {
     ///
     /// Returns the created AuditLog record.
     pub fn create(&self, new_log: &NewAuditLog) -> Result<AuditLog, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         diesel::insert_into(audit_logs::table)
             .values(new_log)
@@ -54,7 +54,7 @@ impl AuditLogsDAL<'_> {
             return Ok(0);
         }
 
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         diesel::insert_into(audit_logs::table)
             .values(logs)
@@ -71,7 +71,7 @@ impl AuditLogsDAL<'_> {
     ///
     /// Returns the audit log if found.
     pub fn get(&self, id: Uuid) -> Result<Option<AuditLog>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         audit_logs::table
             .filter(audit_logs::id.eq(id))
@@ -96,7 +96,7 @@ impl AuditLogsDAL<'_> {
         limit: Option<i64>,
         offset: Option<i64>,
     ) -> Result<Vec<AuditLog>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         let mut query = audit_logs::table.into_boxed();
 
@@ -152,7 +152,7 @@ impl AuditLogsDAL<'_> {
     ///
     /// Returns the count of matching audit logs.
     pub fn count(&self, filter: Option<&AuditLogFilter>) -> Result<i64, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         let mut query = audit_logs::table.into_boxed();
 
@@ -199,7 +199,7 @@ impl AuditLogsDAL<'_> {
     ///
     /// Returns the number of deleted rows.
     pub fn cleanup_old_logs(&self, retention_days: i64) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         let cutoff = Utc::now() - Duration::days(retention_days);
 
@@ -223,7 +223,7 @@ impl AuditLogsDAL<'_> {
         resource_id: Uuid,
         limit: i64,
     ) -> Result<Vec<AuditLog>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         audit_logs::table
             .filter(audit_logs::resource_type.eq(resource_type))
@@ -250,7 +250,7 @@ impl AuditLogsDAL<'_> {
         actor_id: Uuid,
         limit: i64,
     ) -> Result<Vec<AuditLog>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         audit_logs::table
             .filter(audit_logs::actor_type.eq(actor_type))
@@ -277,7 +277,7 @@ impl AuditLogsDAL<'_> {
     ) -> Result<Vec<AuditLog>, diesel::result::Error> {
         use brokkr_models::models::audit_logs::ACTION_AUTH_FAILED;
 
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         let mut query = audit_logs::table
             .filter(audit_logs::action.eq(ACTION_AUTH_FAILED))

@@ -57,7 +57,7 @@ impl AgentsDAL<'_> {
     /// let created_agent = dal.agents().create(&new_agent).expect("Failed to create agent");
     /// ```
     pub fn create(&self, new_agent: &NewAgent) -> Result<Agent, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         let agent: Agent = diesel::insert_into(agents::table)
             .values(new_agent)
             .get_result(conn)?;
@@ -89,7 +89,7 @@ impl AgentsDAL<'_> {
     /// Returns a `Result` containing an `Option<Agent>` if found (and not deleted),
     /// or a `diesel::result::Error` on failure.
     pub fn get(&self, agent_uuid: Uuid) -> Result<Option<Agent>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         agents::table
             .filter(agents::id.eq(agent_uuid))
             .filter(agents::deleted_at.is_null())
@@ -111,7 +111,7 @@ impl AgentsDAL<'_> {
         &self,
         agent_uuid: Uuid,
     ) -> Result<Option<Agent>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         agents::table
             .filter(agents::id.eq(agent_uuid))
             .first(conn)
@@ -125,7 +125,7 @@ impl AgentsDAL<'_> {
     /// Returns a `Result` containing a `Vec` of all non-deleted `Agent`s on success,
     /// or a `diesel::result::Error` on failure.
     pub fn list(&self) -> Result<Vec<Agent>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         agents::table
             .filter(agents::deleted_at.is_null())
             .load::<Agent>(conn)
@@ -138,7 +138,7 @@ impl AgentsDAL<'_> {
     /// Returns a `Result` containing a `Vec` of all `Agent`s (including deleted ones) on success,
     /// or a `diesel::result::Error` on failure.
     pub fn list_all(&self) -> Result<Vec<Agent>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         agents::table.load::<Agent>(conn)
     }
 
@@ -158,7 +158,7 @@ impl AgentsDAL<'_> {
         agent_uuid: Uuid,
         updated_agent: &Agent,
     ) -> Result<Agent, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::update(agents::table.filter(agents::id.eq(agent_uuid)))
             .set(updated_agent)
             .get_result(conn)
@@ -175,7 +175,7 @@ impl AgentsDAL<'_> {
     /// Returns a `Result` containing the number of affected rows (0 or 1) on success,
     /// or a `diesel::result::Error` on failure.
     pub fn soft_delete(&self, agent_uuid: Uuid) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         let rows = diesel::update(agents::table.filter(agents::id.eq(agent_uuid)))
             .set(agents::deleted_at.eq(Utc::now()))
             .execute(conn)?;
@@ -206,7 +206,7 @@ impl AgentsDAL<'_> {
     /// Returns a `Result` containing the number of affected rows (0 or 1) on success,
     /// or a `diesel::result::Error` on failure.
     pub fn hard_delete(&self, agent_uuid: Uuid) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::delete(agents::table.filter(agents::id.eq(agent_uuid))).execute(conn)
     }
 
@@ -247,7 +247,7 @@ impl AgentsDAL<'_> {
         labels: Vec<String>,
         filter_type: FilterType,
     ) -> Result<Vec<Agent>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         match filter_type {
             FilterType::And => {
@@ -319,7 +319,7 @@ impl AgentsDAL<'_> {
         annotations: Vec<(String, String)>,
         filter_type: FilterType,
     ) -> Result<Vec<Agent>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         match filter_type {
             FilterType::Or => {
@@ -393,7 +393,7 @@ impl AgentsDAL<'_> {
         &self,
         agent_target_id: Uuid,
     ) -> Result<Option<Agent>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         agents::table
             .inner_join(agent_targets::table)
             .filter(agents::deleted_at.is_null())
@@ -419,7 +419,7 @@ impl AgentsDAL<'_> {
         agent_id: Uuid,
     ) -> Result<(Vec<AgentLabel>, Vec<AgentTarget>, Vec<AgentAnnotation>), diesel::result::Error>
     {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         let labels = agent_labels::table
             .filter(agent_labels::agent_id.eq(agent_id))
@@ -446,7 +446,7 @@ impl AgentsDAL<'_> {
     ///
     /// Returns a `Result<()>` on success, or a `diesel::result::Error` on failure.
     pub fn record_heartbeat(&self, agent_id: Uuid) -> Result<(), diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         diesel::update(agents::table.filter(agents::id.eq(agent_id)))
             .set(agents::last_heartbeat.eq(diesel::dsl::now))
@@ -471,7 +471,7 @@ impl AgentsDAL<'_> {
         agent_uuid: Uuid,
         new_pak_hash: String,
     ) -> Result<Agent, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::update(agents::table.filter(agents::id.eq(agent_uuid)))
             .set(agents::pak_hash.eq(new_pak_hash))
             .get_result(conn)
@@ -493,7 +493,7 @@ impl AgentsDAL<'_> {
         name: String,
         cluster_name: String,
     ) -> Result<Option<Agent>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         let query = agents::table
             .filter(agents::name.eq(&name))
             .filter(agents::cluster_name.eq(&cluster_name))
@@ -516,7 +516,7 @@ impl AgentsDAL<'_> {
     /// Returns a `Result` containing an `Option<Agent>` if found,
     /// or a `diesel::result::Error` on failure.
     pub fn get_by_pak_hash(&self, pak_hash: &str) -> Result<Option<Agent>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         agents::table
             .filter(agents::pak_hash.eq(pak_hash))
             .filter(agents::deleted_at.is_null())

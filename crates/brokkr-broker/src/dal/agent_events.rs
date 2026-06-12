@@ -35,7 +35,7 @@ impl AgentEventsDAL<'_> {
     ///
     /// Returns a Result containing the created AgentEvent on success, or a diesel::result::Error on failure.
     pub fn create(&self, new_event: &NewAgentEvent) -> Result<AgentEvent, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::insert_into(agent_events::table)
             .values(new_event)
             .get_result(conn)
@@ -51,7 +51,7 @@ impl AgentEventsDAL<'_> {
     ///
     /// Returns a Result containing an Option<AgentEvent> if found (and not deleted), or a diesel::result::Error on failure.
     pub fn get(&self, event_uuid: Uuid) -> Result<Option<AgentEvent>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         agent_events::table
             .filter(agent_events::id.eq(event_uuid))
             .filter(agent_events::deleted_at.is_null())
@@ -72,7 +72,7 @@ impl AgentEventsDAL<'_> {
         &self,
         event_uuid: Uuid,
     ) -> Result<Option<AgentEvent>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         agent_events::table
             .filter(agent_events::id.eq(event_uuid))
             .first(conn)
@@ -85,7 +85,7 @@ impl AgentEventsDAL<'_> {
     ///
     /// Returns a Result containing a Vec of all non-deleted AgentEvents on success, or a diesel::result::Error on failure.
     pub fn list(&self) -> Result<Vec<AgentEvent>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         agent_events::table
             .filter(agent_events::deleted_at.is_null())
             .load::<AgentEvent>(conn)
@@ -97,7 +97,7 @@ impl AgentEventsDAL<'_> {
     ///
     /// Returns a Result containing a Vec of all AgentEvents (including deleted ones) on success, or a diesel::result::Error on failure.
     pub fn list_all(&self) -> Result<Vec<AgentEvent>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         agent_events::table.load::<AgentEvent>(conn)
     }
 
@@ -116,7 +116,7 @@ impl AgentEventsDAL<'_> {
         stack_id: Option<Uuid>,
         agent_id: Option<Uuid>,
     ) -> Result<Vec<AgentEvent>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         let mut query = agent_events::table
             .inner_join(deployment_objects::table)
@@ -154,7 +154,7 @@ impl AgentEventsDAL<'_> {
         event_uuid: Uuid,
         updated_event: &AgentEvent,
     ) -> Result<AgentEvent, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::update(agent_events::table.filter(agent_events::id.eq(event_uuid)))
             .set(updated_event)
             .get_result(conn)
@@ -170,7 +170,7 @@ impl AgentEventsDAL<'_> {
     ///
     /// Returns a Result containing the number of affected rows (0 or 1) on success, or a diesel::result::Error on failure.
     pub fn soft_delete(&self, event_uuid: Uuid) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::update(agent_events::table.filter(agent_events::id.eq(event_uuid)))
             .set(agent_events::deleted_at.eq(Utc::now()))
             .execute(conn)
@@ -186,7 +186,7 @@ impl AgentEventsDAL<'_> {
     ///
     /// Returns a Result containing the number of affected rows (0 or 1) on success, or a diesel::result::Error on failure.
     pub fn hard_delete(&self, event_uuid: Uuid) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::delete(agent_events::table.filter(agent_events::id.eq(event_uuid))).execute(conn)
     }
 }

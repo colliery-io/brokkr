@@ -38,7 +38,7 @@ impl DiagnosticRequestsDAL<'_> {
         &self,
         new_request: &NewDiagnosticRequest,
     ) -> Result<DiagnosticRequest, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         diesel::insert_into(diagnostic_requests::table)
             .values(new_request)
@@ -55,7 +55,7 @@ impl DiagnosticRequestsDAL<'_> {
     ///
     /// Returns the diagnostic request if found.
     pub fn get(&self, id: Uuid) -> Result<Option<DiagnosticRequest>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         diagnostic_requests::table
             .filter(diagnostic_requests::id.eq(id))
@@ -76,7 +76,7 @@ impl DiagnosticRequestsDAL<'_> {
         &self,
         agent_id: Uuid,
     ) -> Result<Vec<DiagnosticRequest>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         diagnostic_requests::table
             .filter(diagnostic_requests::agent_id.eq(agent_id))
@@ -96,7 +96,7 @@ impl DiagnosticRequestsDAL<'_> {
     ///
     /// Returns the updated diagnostic request if successful.
     pub fn claim(&self, id: Uuid) -> Result<DiagnosticRequest, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         let update = UpdateDiagnosticRequest {
             status: Some("claimed".to_string()),
@@ -119,7 +119,7 @@ impl DiagnosticRequestsDAL<'_> {
     ///
     /// Returns the updated diagnostic request if successful.
     pub fn complete(&self, id: Uuid) -> Result<DiagnosticRequest, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         let update = UpdateDiagnosticRequest {
             status: Some("completed".to_string()),
@@ -142,7 +142,7 @@ impl DiagnosticRequestsDAL<'_> {
     ///
     /// Returns the updated diagnostic request if successful.
     pub fn fail(&self, id: Uuid) -> Result<DiagnosticRequest, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         let update = UpdateDiagnosticRequest {
             status: Some("failed".to_string()),
@@ -168,7 +168,7 @@ impl DiagnosticRequestsDAL<'_> {
         &self,
         deployment_object_id: Uuid,
     ) -> Result<Vec<DiagnosticRequest>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         diagnostic_requests::table
             .filter(diagnostic_requests::deployment_object_id.eq(deployment_object_id))
@@ -182,7 +182,7 @@ impl DiagnosticRequestsDAL<'_> {
     ///
     /// Returns the number of requests expired.
     pub fn expire_old_requests(&self) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         diesel::update(
             diagnostic_requests::table
@@ -203,7 +203,7 @@ impl DiagnosticRequestsDAL<'_> {
     ///
     /// Returns the number of requests deleted.
     pub fn cleanup_old_requests(&self, max_age_hours: i64) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         let cutoff = Utc::now() - chrono::Duration::hours(max_age_hours);
 
@@ -230,7 +230,7 @@ impl DiagnosticRequestsDAL<'_> {
     ///
     /// Returns the number of records deleted.
     pub fn delete(&self, id: Uuid) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         diesel::delete(diagnostic_requests::table.filter(diagnostic_requests::id.eq(id)))
             .execute(conn)

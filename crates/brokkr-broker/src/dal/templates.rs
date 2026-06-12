@@ -38,7 +38,7 @@ impl TemplatesDAL<'_> {
         &self,
         new_template: &NewStackTemplate,
     ) -> Result<StackTemplate, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::insert_into(stack_templates::table)
             .values(new_template)
             .get_result(conn)
@@ -68,7 +68,7 @@ impl TemplatesDAL<'_> {
         template_content: String,
         parameters_schema: String,
     ) -> Result<StackTemplate, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         // Get the current max version for this template name and generator
         let max_version: Option<i32> = match generator_id {
@@ -113,7 +113,7 @@ impl TemplatesDAL<'_> {
     ///
     /// Returns a Result containing an Option<StackTemplate> if found, or a diesel::result::Error on failure.
     pub fn get(&self, template_id: Uuid) -> Result<Option<StackTemplate>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         stack_templates::table
             .filter(stack_templates::id.eq(template_id))
             .filter(stack_templates::deleted_at.is_null())
@@ -134,7 +134,7 @@ impl TemplatesDAL<'_> {
         &self,
         template_id: Uuid,
     ) -> Result<Option<StackTemplate>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         stack_templates::table
             .filter(stack_templates::id.eq(template_id))
             .first(conn)
@@ -148,7 +148,7 @@ impl TemplatesDAL<'_> {
     /// Returns a Result containing a Vec of all non-deleted StackTemplates on success,
     /// or a diesel::result::Error on failure.
     pub fn list(&self) -> Result<Vec<StackTemplate>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         stack_templates::table
             .filter(stack_templates::deleted_at.is_null())
             .load::<StackTemplate>(conn)
@@ -161,7 +161,7 @@ impl TemplatesDAL<'_> {
     /// Returns a Result containing a Vec of all StackTemplates on success,
     /// or a diesel::result::Error on failure.
     pub fn list_all(&self) -> Result<Vec<StackTemplate>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         stack_templates::table.load::<StackTemplate>(conn)
     }
 
@@ -179,7 +179,7 @@ impl TemplatesDAL<'_> {
         &self,
         generator_id: Uuid,
     ) -> Result<Vec<StackTemplate>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         stack_templates::table
             .filter(stack_templates::deleted_at.is_null())
             .filter(stack_templates::generator_id.eq(Some(generator_id)))
@@ -202,7 +202,7 @@ impl TemplatesDAL<'_> {
         generator_id: Option<Uuid>,
         name: &str,
     ) -> Result<Option<StackTemplate>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         match generator_id {
             Some(gid) => stack_templates::table
                 .filter(stack_templates::deleted_at.is_null())
@@ -237,7 +237,7 @@ impl TemplatesDAL<'_> {
         generator_id: Option<Uuid>,
         name: &str,
     ) -> Result<Vec<StackTemplate>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         match generator_id {
             Some(gid) => stack_templates::table
                 .filter(stack_templates::deleted_at.is_null())
@@ -267,7 +267,7 @@ impl TemplatesDAL<'_> {
         &self,
         generator_id: Uuid,
     ) -> Result<Vec<StackTemplate>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         stack_templates::table
             .filter(stack_templates::deleted_at.is_null())
             .filter(stack_templates::generator_id.eq(Some(generator_id)))
@@ -280,7 +280,7 @@ impl TemplatesDAL<'_> {
     ///
     /// Returns a Result containing a Vec of system templates.
     pub fn list_system_templates(&self) -> Result<Vec<StackTemplate>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         stack_templates::table
             .filter(stack_templates::deleted_at.is_null())
             .filter(stack_templates::generator_id.is_null())
@@ -297,7 +297,7 @@ impl TemplatesDAL<'_> {
     ///
     /// Returns a Result containing the number of affected rows (0 or 1).
     pub fn soft_delete(&self, template_id: Uuid) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::update(stack_templates::table.filter(stack_templates::id.eq(template_id)))
             .set(stack_templates::deleted_at.eq(Utc::now()))
             .execute(conn)
@@ -313,7 +313,7 @@ impl TemplatesDAL<'_> {
     ///
     /// Returns a Result containing the number of affected rows (0 or 1).
     pub fn hard_delete(&self, template_id: Uuid) -> Result<usize, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
         diesel::delete(stack_templates::table.filter(stack_templates::id.eq(template_id)))
             .execute(conn)
     }
@@ -333,7 +333,7 @@ impl TemplatesDAL<'_> {
         labels: Vec<String>,
         filter_type: FilterType,
     ) -> Result<Vec<StackTemplate>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         match filter_type {
             FilterType::And => {
@@ -378,7 +378,7 @@ impl TemplatesDAL<'_> {
         annotations: Vec<(String, String)>,
         filter_type: FilterType,
     ) -> Result<Vec<StackTemplate>, diesel::result::Error> {
-        let conn = &mut self.dal.pool.get().expect("Failed to get DB connection");
+        let conn = &mut self.dal.conn()?;
 
         match filter_type {
             FilterType::Or => {

@@ -212,6 +212,29 @@ impl DAL {
         DAL { pool, auth_cache }
     }
 
+    /// Borrows a pooled database connection (with the schema search_path set).
+    ///
+    /// Returns the r2d2 pool error mapped to a `diesel::result::Error` so DAL
+    /// methods can `?` it on their existing `Result<_, diesel::result::Error>`
+    /// surface instead of panicking. There is no `From<r2d2::Error>` for the
+    /// diesel error, so it is wrapped as an `UnableToSendCommand` database
+    /// error. Pool exhaustion / DB outage thus becomes a normal 500 result
+    /// (via `ApiError::from_diesel`) rather than an unwind caught by the
+    /// outer `CatchPanicLayer`.
+    pub fn conn(
+        &self,
+    ) -> Result<
+        diesel::r2d2::PooledConnection<diesel::r2d2::ConnectionManager<diesel::PgConnection>>,
+        diesel::result::Error,
+    > {
+        self.pool.get().map_err(|e| {
+            diesel::result::Error::DatabaseError(
+                diesel::result::DatabaseErrorKind::UnableToSendCommand,
+                Box::new(format!("failed to get DB connection from pool: {e}")),
+            )
+        })
+    }
+
     /// Invalidates a specific entry in the auth cache by PAK hash.
     pub fn invalidate_auth_cache(&self, pak_hash: &str) {
         if let Some(cache) = &self.auth_cache {
