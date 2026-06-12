@@ -7,7 +7,7 @@
 //! # Metrics Module
 //!
 //! This module provides Prometheus metrics for the Brokkr Broker.
-//! It exposes metrics about HTTP requests, database queries, and system state.
+//! It exposes metrics about HTTP requests and system state.
 
 use once_cell::sync::Lazy;
 use prometheus::{
@@ -48,39 +48,6 @@ pub static HTTP_REQUEST_DURATION_SECONDS: Lazy<HistogramVec> = Lazy::new(|| {
     REGISTRY
         .register(Box::new(histogram.clone()))
         .expect("Failed to register HTTP request duration histogram");
-    histogram
-});
-
-/// Database query counter
-/// Labels: query_type
-pub static DATABASE_QUERIES_TOTAL: Lazy<CounterVec> = Lazy::new(|| {
-    let opts = Opts::new(
-        "brokkr_database_queries_total",
-        "Total number of database queries by type",
-    );
-    let counter =
-        CounterVec::new(opts, &["query_type"]).expect("Failed to create database queries counter");
-    REGISTRY
-        .register(Box::new(counter.clone()))
-        .expect("Failed to register database queries counter");
-    counter
-});
-
-/// Database query duration histogram
-/// Labels: query_type
-pub static DATABASE_QUERY_DURATION_SECONDS: Lazy<HistogramVec> = Lazy::new(|| {
-    let opts = HistogramOpts::new(
-        "brokkr_database_query_duration_seconds",
-        "Database query latency distribution in seconds",
-    )
-    .buckets(vec![
-        0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0,
-    ]);
-    let histogram = HistogramVec::new(opts, &["query_type"])
-        .expect("Failed to create database query duration histogram");
-    REGISTRY
-        .register(Box::new(histogram.clone()))
-        .expect("Failed to register database query duration histogram");
     histogram
 });
 
@@ -238,8 +205,6 @@ pub fn init() {
     // Force initialization of all lazy static metrics by accessing them
     let _ = &*HTTP_REQUESTS_TOTAL;
     let _ = &*HTTP_REQUEST_DURATION_SECONDS;
-    let _ = &*DATABASE_QUERIES_TOTAL;
-    let _ = &*DATABASE_QUERY_DURATION_SECONDS;
     let _ = &*WS_CONNECTED_AGENTS;
     let _ = &*WS_MESSAGES_TOTAL;
     let _ = &*WS_LIVE_SUBSCRIBERS;
@@ -314,21 +279,6 @@ fn normalize_endpoint(path: &str) -> String {
     normalized.join("/")
 }
 
-/// Records a database query metric
-///
-/// # Arguments
-/// * `query_type` - The type of query (select, insert, update, delete)
-/// * `duration_seconds` - The query duration in seconds
-pub fn record_db_query(query_type: &str, duration_seconds: f64) {
-    DATABASE_QUERIES_TOTAL
-        .with_label_values(&[query_type])
-        .inc();
-
-    DATABASE_QUERY_DURATION_SECONDS
-        .with_label_values(&[query_type])
-        .observe(duration_seconds);
-}
-
 /// Updates the active agents gauge
 pub fn set_active_agents(count: i64) {
     ACTIVE_AGENTS.set(count);
@@ -361,7 +311,6 @@ mod tests {
 
         // Record at least one value for each counter/histogram to make them visible
         record_http_request("/test", "GET", 200, 0.01);
-        record_db_query("select", 0.001);
         set_active_agents(0);
         set_agent_heartbeat_age("test-id", "test-agent", 0.0);
         set_stacks_total(0);
@@ -377,14 +326,6 @@ mod tests {
         assert!(
             output.contains("brokkr_http_request_duration_seconds"),
             "Should contain HTTP request duration histogram"
-        );
-        assert!(
-            output.contains("brokkr_database_queries_total"),
-            "Should contain database queries counter"
-        );
-        assert!(
-            output.contains("brokkr_database_query_duration_seconds"),
-            "Should contain database query duration histogram"
         );
         assert!(
             output.contains("brokkr_active_agents"),
