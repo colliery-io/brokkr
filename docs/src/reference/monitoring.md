@@ -63,38 +63,6 @@ rate(brokkr_http_request_duration_seconds_sum[5m])
   / rate(brokkr_http_request_duration_seconds_count[5m])
 ```
 
-### Database Metrics
-
-#### `brokkr_database_queries_total`
-- **Type:** Counter
-- **Description:** Total number of database queries by type
-- **Labels:**
-  - `query_type` - Type of query (select, insert, update, delete)
-
-**Example PromQL:**
-```promql
-# Query rate by type
-rate(brokkr_database_queries_total[5m])
-
-# Total queries per second
-sum(rate(brokkr_database_queries_total[5m]))
-```
-
-#### `brokkr_database_query_duration_seconds`
-- **Type:** Histogram
-- **Description:** Database query latency distribution in seconds
-- **Labels:**
-  - `query_type` - Type of query
-- **Buckets:** 0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0 seconds
-
-**Example PromQL:**
-```promql
-# 95th percentile query latency
-histogram_quantile(0.95,
-  sum(rate(brokkr_database_query_duration_seconds_bucket[5m])) by (le, query_type)
-)
-```
-
 ### System State Metrics
 
 #### `brokkr_active_agents`
@@ -292,8 +260,6 @@ The broker dashboard includes:
 - **Deployment Objects** - Total deployment objects
 - **HTTP Request Rate** - Requests per second by endpoint
 - **HTTP Request Latency** - p50, p95, p99 latencies by endpoint
-- **Database Query Rate** - Queries per second by type
-- **Database Query Latency** - p50, p95, p99 query latencies
 - **Agent Heartbeat Age** - Time since last heartbeat per agent
 
 ### Agent Dashboard Features
