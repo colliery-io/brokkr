@@ -706,6 +706,34 @@ async fn rollback_namespaces(client: &Client, namespaces: &[String]) {
     }
 }
 
+/// Resolves a `GroupVersionKind` against a lazily-built, reused `Discovery`
+/// snapshot, refreshing it once on a miss.
+///
+/// `reconcile_target_state` previously rebuilt `Discovery::new(client).run()`
+/// for every object in both the apply and prune loops — a full discovery sweep
+/// (dozens of API calls) per object. This builds the snapshot once and reuses
+/// it across the whole reconcile. The single refresh-on-miss preserves
+/// T-0203's fail-closed correctness: a CRD applied as a priority object earlier
+/// in the *same* reconcile may not have been served yet when the snapshot was
+/// first built, so a miss re-runs discovery before the caller concludes the GVK
+/// is unresolvable.
+async fn resolve_gvk_cached(
+    discovery: &mut Option<Discovery>,
+    client: &Client,
+    gvk: &GroupVersionKind,
+) -> Result<Option<(ApiResource, ApiCapabilities)>, kube::Error> {
+    if let Some(d) = discovery.as_ref()
+        && let Some(hit) = d.resolve_gvk(gvk)
+    {
+        return Ok(Some(hit));
+    }
+    // No snapshot yet, or a miss: (re)build discovery once and retry.
+    let fresh = Discovery::new(client.clone()).run().await?;
+    let resolved = fresh.resolve_gvk(gvk);
+    *discovery = Some(fresh);
+    Ok(resolved)
+}
+
 /// Reconciles the target state of Kubernetes objects for a stack.
 ///
 /// This function:
@@ -733,6 +761,11 @@ pub async fn reconcile_target_state(
         "Starting reconciliation with stack_id={}, checksum={}",
         stack_id, checksum
     );
+
+    // One API-discovery snapshot reused across the apply and prune loops
+    // (built lazily on first resolve, after any priority CRDs are applied),
+    // instead of a fresh Discovery::new().run() per object.
+    let mut discovery: Option<Discovery> = None;
 
     // If we have objects to apply, handle them in dependency order
     if !objects.is_empty() {
@@ -873,11 +906,7 @@ pub async fn reconcile_target_state(
                 }
             };
             let gvk = GroupVersionKind::try_from(gvk_meta)?;
-            let Some((ar, caps)) = Discovery::new(client.clone())
-                .run()
-                .await?
-                .resolve_gvk(&gvk)
-            else {
+            let Some((ar, caps)) = resolve_gvk_cached(&mut discovery, &client, &gvk).await? else {
                 error!(
                     "Could not resolve API resource for {} ({:?}); aborting reconcile before prune",
                     key, gvk
@@ -968,10 +997,8 @@ pub async fn reconcile_target_state(
             );
             if let Some(gvk) = existing_obj.types.as_ref() {
                 let gvk = GroupVersionKind::try_from(gvk)?;
-                if let Some((ar, caps)) = Discovery::new(client.clone())
-                    .run()
-                    .await?
-                    .resolve_gvk(&gvk)
+                if let Some((ar, caps)) =
+                    resolve_gvk_cached(&mut discovery, &client, &gvk).await?
                 {
                     let api = dynamic_api(ar, caps, client.clone(), Some(&namespace), false);
                     let delete_name = name.clone();

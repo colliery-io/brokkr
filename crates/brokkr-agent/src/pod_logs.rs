@@ -151,9 +151,33 @@ fn pod_stack_id(pod: &Pod) -> Option<Uuid> {
     Uuid::parse_str(raw).ok()
 }
 
-/// For a given opted-in pod, ensure one tail task per container. Existing
-/// tasks are preserved across watcher re-emits; missing tasks are
-/// started.
+/// For a given opted-in pod, ensure one tail task per container. While any
+/// tail for the pod is still running it is preserved across watcher re-emits;
+/// once every tail for the pod has finished (EOF or gave up), the next re-emit
+/// re-attaches fresh tails so a pod that becomes loggable later is picked up.
+/// Decide whether `ensure_tails` should (re)attach tails for `uid`.
+///
+/// Returns `true` when there is no entry, or when every existing tail for the
+/// uid has finished — in the finished case the stale entry is removed so the
+/// caller re-attaches. Returns `false` (leaving the entry intact) while any
+/// tail is still running. Pulling this out of `ensure_tails` keeps the
+/// re-attach decision unit-testable without a live cluster.
+fn take_if_attachable(map: &mut HashMap<String, Vec<JoinHandle<()>>>, uid: &str) -> bool {
+    match map.get(uid) {
+        // At least one tail still running — keep it, do not re-attach.
+        Some(existing) if existing.iter().any(|h| !h.is_finished()) => false,
+        // All tails finished (EOF, or gave up before the container produced
+        // logs). Drop the stale entry so the caller re-attaches; a pod that
+        // becomes loggable later is otherwise never tailed again. Race-free
+        // against teardown_for — both run under the `active` write lock.
+        Some(_) => {
+            map.remove(uid);
+            true
+        }
+        None => true,
+    }
+}
+
 async fn ensure_tails(
     client: &Client,
     uplink: &WsUplink,
@@ -164,8 +188,8 @@ async fn ensure_tails(
     active: &ActiveTails,
 ) {
     let mut guard = active.write().await;
-    if guard.contains_key(uid) {
-        return; // already tailing
+    if !take_if_attachable(&mut guard, uid) {
+        return; // still actively tailing
     }
 
     let namespace = pod.namespace().unwrap_or_else(|| "default".to_string());
@@ -373,5 +397,37 @@ mod tests {
         assert!(matches!(r.consume(), Allowance::DropAndGap(1)));
         // 4th in this window: still over budget → dropped silently, no gap.
         assert!(matches!(r.consume(), Allowance::Drop));
+    }
+
+    // BROKKR-T-0221: a uid is only re-attachable once all its tails finish, and
+    // the stale entry is dropped at that point so ensure_tails re-tails on the
+    // next watcher Apply (a pod that becomes loggable later is otherwise never
+    // tailed again).
+    #[tokio::test]
+    async fn take_if_attachable_reattaches_only_after_all_tails_finish() {
+        let mut map: HashMap<String, Vec<JoinHandle<()>>> = HashMap::new();
+
+        // No entry yet -> attach.
+        assert!(take_if_attachable(&mut map, "u"));
+
+        // A still-running tail -> not attachable, entry preserved.
+        let running = tokio::spawn(async {
+            tokio::time::sleep(std::time::Duration::from_secs(3600)).await;
+        });
+        map.insert("u".to_string(), vec![running]);
+        assert!(!take_if_attachable(&mut map, "u"));
+        assert!(map.contains_key("u"));
+
+        // Replace with a finished tail (abort the long-running one first).
+        map.get("u").unwrap()[0].abort();
+        let finished = tokio::spawn(async {});
+        while !finished.is_finished() {
+            tokio::task::yield_now().await;
+        }
+        map.insert("u".to_string(), vec![finished]);
+
+        // All tails finished -> attach, and the stale entry is removed.
+        assert!(take_if_attachable(&mut map, "u"));
+        assert!(!map.contains_key("u"));
     }
 }
