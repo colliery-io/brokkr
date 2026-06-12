@@ -67,6 +67,11 @@ def _rewrite_summary_api_section():
     # Build the new API section
     api_section = f"{marker}\n\n- [Rust API Reference](./api/README.md)\n"
     api_section += "".join(entries)
+    # Surface the client SDK docs alongside the generated Rust internals so the
+    # API Documentation section covers both the broker internals and the client
+    # libraries (BROKKR-T-0129). ./api/sdks.md is a static bridge page that
+    # links to the full How-To SDK guides.
+    api_section += "- [Client SDKs](./api/sdks.md)\n"
 
     # Replace from the marker to end of file
     new_summary = summary[:idx] + api_section

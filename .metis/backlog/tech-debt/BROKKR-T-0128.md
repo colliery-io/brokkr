@@ -98,3 +98,7 @@ Introduce a TTL-based in-memory cache for PAK-to-identity lookups in the auth mi
 - All 84 brokkr-broker unit tests pass
 - All 24 brokkr-utils unit tests pass
 - Cache can be disabled by setting `auth_cache_ttl_seconds = 0`
+
+### 2026-06-12 — Verified on current (post-0.7.0) tree
+- auth_cache wired and intact: config `auth_cache_ttl_seconds` (default 60, `0` disables) in brokkr-utils/default.toml; middleware checks cache on entry and populates on miss for all three lookup paths (admin/agent/generator); invalidation hooks present in agents.rs + generators.rs (rotate/delete) + dal/mod.rs.
+- 108 brokkr-broker unit tests pass (was 84 in March). Marking completed.

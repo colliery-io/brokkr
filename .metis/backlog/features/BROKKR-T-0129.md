@@ -105,3 +105,7 @@ Plissken generates a standalone mdBook project (book.toml + SUMMARY.md + content
 - Added `.plissken/` and `docs/src/api/rust/` to `.gitignore`
 - mdBook builds cleanly with all 101 generated API reference pages
 - 4 crate root pages + full module hierarchy rendered in sidebar
+
+### 2026-06-12 — Verified + SDK docs linked into the API section
+- `angreal docs build` runs end-to-end on the current tree: plissken renders, integrates into docs/src/api/rust/, rewrites the SUMMARY API section (now 117 entries, was 101 — reflects the new 0.7.0 modules), mdbook builds clean.
+- SDK link-in (the requested addition): docs/src/api/README.md gained a "Client SDKs" section; new static bridge page docs/src/api/sdks.md; task_docs.py `_rewrite_summary_api_section` now emits `- [Client SDKs](./api/sdks.md)` under "# API Documentation", so the API Documentation nav group surfaces both the generated Rust internals and the client SDK guides. Verified api/sdks.html builds. Marking completed.
