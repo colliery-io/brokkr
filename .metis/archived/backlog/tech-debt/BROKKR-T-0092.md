@@ -5,18 +5,17 @@ title: "Investigate ttl.sh for intermediate testing builds"
 short_code: "BROKKR-T-0092"
 created_at: 2025-12-31T22:55:50.925951+00:00
 updated_at: 2025-12-31T22:55:50.925951+00:00
-parent:
+parent: 
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
-  - "#phase/backlog"
+  - "#phase/completed"
   - "#tech-debt"
 
 
-exit_criteria_met: false
-strategy_id: NULL
+exit_criteria_met: true
 initiative_id: NULL
 ---
 
@@ -76,6 +75,8 @@ Investigate using ttl.sh as an ephemeral OCI registry for intermediate testing b
 - **Current Problems**: {What's difficult/slow/buggy now}
 - **Benefits of Fixing**: {What improves after refactoring}
 - **Risk Assessment**: {Risks of not addressing this}
+
+## Acceptance Criteria
 
 ## Acceptance Criteria **[REQUIRED]**
 
@@ -147,3 +148,16 @@ Investigate using ttl.sh as an ephemeral OCI registry for intermediate testing b
 ## Status Updates **[REQUIRED]**
 
 *To be added during implementation*
+
+## Resolution
+
+- 2026-06-12: DONE — investigation concluded and both approaches are implemented
+  in the test infra:
+  - Local registry (`registry:2` in .angreal/files/docker-compose.yaml, seen as
+    `registry:5000` by k3s via .angreal/files/k3s-registries.yaml) backs the main
+    build → push → k3s-pull flow (.angreal/task_helm.py).
+  - ttl.sh is used for the ephemeral Helm e2e builds — kaniko pushes to
+    `ttl.sh/brokkr-helm-e2e-test:1h` with no credentials (.angreal/task_helm.py
+    ~1504/1557/1575).
+  The spike's question (ttl.sh vs local registry) is answered: local registry for
+  the steady-state flow, ttl.sh for credential-free ephemeral e2e images.
