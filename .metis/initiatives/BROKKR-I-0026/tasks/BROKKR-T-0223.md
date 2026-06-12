@@ -4,19 +4,19 @@ level: task
 title: "Broker: stack_annotations UNIQUE (stack_id, key) migration + 409 routing — deferred from T-0210"
 short_code: "BROKKR-T-0223"
 created_at: 2026-06-11T15:58:13.624382+00:00
-updated_at: 2026-06-11T15:58:13.624382+00:00
-parent:
+updated_at: 2026-06-12T03:02:43.697229+00:00
+parent: 
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/active"
   - "#task"
-  - "#phase/active"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
+initiative_id: NULL
 ---
 
 # Broker: stack_annotations UNIQUE (stack_id, key) migration + 409 routing — deferred from T-0210
@@ -33,6 +33,8 @@ exit_criteria_met: false
 
 ### Type
 - [x] Tech Debt (low severity)
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

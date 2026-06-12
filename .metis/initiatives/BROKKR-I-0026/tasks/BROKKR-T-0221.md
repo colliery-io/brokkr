@@ -4,19 +4,19 @@ level: task
 title: "Agent: reuse Discovery per reconcile + pod-log tail re-attach (deferred from T-0206)"
 short_code: "BROKKR-T-0221"
 created_at: 2026-06-11T14:45:20.568203+00:00
-updated_at: 2026-06-11T14:45:20.568203+00:00
-parent:
+updated_at: 2026-06-12T03:02:43.543672+00:00
+parent: 
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/active"
   - "#task"
-  - "#phase/active"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
+initiative_id: NULL
 ---
 
 # Agent: reuse Discovery per reconcile + pod-log tail re-attach (deferred from T-0206)
@@ -28,6 +28,8 @@ exit_criteria_met: false
 ## Objective
 
 Two items split out of [[BROKKR-T-0206]] because each is larger/riskier than the rest of that checklist and benefits from its own change + test.
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

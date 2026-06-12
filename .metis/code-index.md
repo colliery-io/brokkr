@@ -1,6 +1,6 @@
 # Code Index
 
-> Generated: 2026-06-11T18:57:34Z | 398 files | JavaScript, Python, Rust, TypeScript
+> Generated: 2026-06-12T02:27:54Z | 399 files | JavaScript, Python, Rust, TypeScript
 
 ## Project Structure
 
@@ -145,6 +145,7 @@
 │   │           │   ├── agent_labels.rs
 │   │           │   ├── agent_targets.rs
 │   │           │   ├── agents.rs
+│   │           │   ├── connection.rs
 │   │           │   ├── deployment_health.rs
 │   │           │   ├── deployment_objects.rs
 │   │           │   ├── diagnostic_requests.rs
@@ -722,19 +723,21 @@
 -  `watch_pods` function L97-137 — `( client: Client, uplink: WsUplink, agent_id: Uuid, active: ActiveTails, watch_n...` — bucket the right answer is "ship to Datadog", not "raise the limit".
 -  `is_opted_in` function L139-146 — `(pod: &Pod) -> bool` — bucket the right answer is "ship to Datadog", not "raise the limit".
 -  `pod_stack_id` function L148-152 — `(pod: &Pod) -> Option<Uuid>` — bucket the right answer is "ship to Datadog", not "raise the limit".
--  `ensure_tails` function L157-194 — `( client: &Client, uplink: &WsUplink, agent_id: Uuid, stack_id: Uuid, pod: &Pod,...` — For a given opted-in pod, ensure one tail task per container.
--  `teardown_for` function L196-203 — `(uid: &str, active: &ActiveTails)` — bucket the right answer is "ship to Datadog", not "raise the limit".
--  `tail_container` function L205-296 — `( pods: Api<Pod>, uplink: WsUplink, agent_id: Uuid, stack_id: Uuid, namespace: S...` — bucket the right answer is "ship to Datadog", not "raise the limit".
--  `MAX_OPEN_ATTEMPTS` variable L231 — `: u32` — bucket the right answer is "ship to Datadog", not "raise the limit".
--  `OPEN_RETRY` variable L232 — `: Duration` — bucket the right answer is "ship to Datadog", not "raise the limit".
--  `RateLimiter` struct L300-305 — `{ lines_per_sec: u64, window_start: Instant, count_in_window: u64, dropped_in_wi...` — Minimal token-bucket: at most `lines_per_sec` lines per RATE_WINDOW.
--  `Allowance` enum L307-316 — `Allow | Drop | DropAndGap` — bucket the right answer is "ship to Datadog", not "raise the limit".
--  `RateLimiter` type L318-349 — `= RateLimiter` — bucket the right answer is "ship to Datadog", not "raise the limit".
--  `new` function L319-326 — `(lines_per_sec: u64) -> Self` — bucket the right answer is "ship to Datadog", not "raise the limit".
--  `consume` function L328-348 — `(&mut self) -> Allowance` — bucket the right answer is "ship to Datadog", not "raise the limit".
--  `tests` module L356-377 — `-` — bucket the right answer is "ship to Datadog", not "raise the limit".
--  `rate_limiter_allows_under_ceiling` function L360-365 — `()` — bucket the right answer is "ship to Datadog", not "raise the limit".
--  `rate_limiter_drops_above_ceiling_with_first_gap` function L368-376 — `()` — bucket the right answer is "ship to Datadog", not "raise the limit".
+-  `take_if_attachable` function L165-179 — `(map: &mut HashMap<String, Vec<JoinHandle<()>>>, uid: &str) -> bool` — For a given opted-in pod, ensure one tail task per container.
+-  `ensure_tails` function L181-218 — `( client: &Client, uplink: &WsUplink, agent_id: Uuid, stack_id: Uuid, pod: &Pod,...` — bucket the right answer is "ship to Datadog", not "raise the limit".
+-  `teardown_for` function L220-227 — `(uid: &str, active: &ActiveTails)` — bucket the right answer is "ship to Datadog", not "raise the limit".
+-  `tail_container` function L229-320 — `( pods: Api<Pod>, uplink: WsUplink, agent_id: Uuid, stack_id: Uuid, namespace: S...` — bucket the right answer is "ship to Datadog", not "raise the limit".
+-  `MAX_OPEN_ATTEMPTS` variable L255 — `: u32` — bucket the right answer is "ship to Datadog", not "raise the limit".
+-  `OPEN_RETRY` variable L256 — `: Duration` — bucket the right answer is "ship to Datadog", not "raise the limit".
+-  `RateLimiter` struct L324-329 — `{ lines_per_sec: u64, window_start: Instant, count_in_window: u64, dropped_in_wi...` — Minimal token-bucket: at most `lines_per_sec` lines per RATE_WINDOW.
+-  `Allowance` enum L331-340 — `Allow | Drop | DropAndGap` — bucket the right answer is "ship to Datadog", not "raise the limit".
+-  `RateLimiter` type L342-373 — `= RateLimiter` — bucket the right answer is "ship to Datadog", not "raise the limit".
+-  `new` function L343-350 — `(lines_per_sec: u64) -> Self` — bucket the right answer is "ship to Datadog", not "raise the limit".
+-  `consume` function L352-372 — `(&mut self) -> Allowance` — bucket the right answer is "ship to Datadog", not "raise the limit".
+-  `tests` module L380-433 — `-` — bucket the right answer is "ship to Datadog", not "raise the limit".
+-  `rate_limiter_allows_under_ceiling` function L384-389 — `()` — bucket the right answer is "ship to Datadog", not "raise the limit".
+-  `rate_limiter_drops_above_ceiling_with_first_gap` function L392-400 — `()` — bucket the right answer is "ship to Datadog", not "raise the limit".
+-  `take_if_attachable_reattaches_only_after_all_tails_finish` function L407-432 — `()` — bucket the right answer is "ship to Datadog", not "raise the limit".
 
 #### crates/brokkr-agent/src/utils.rs
 
@@ -799,8 +802,8 @@
 - pub `get_all_objects_by_annotation` function L300-381 — `( k8s_client: &K8sClient, annotation_key: &str, annotation_value: &str, watch_na...` — Retrieves all Kubernetes objects with a specific annotation key-value pair.
 - pub `delete_k8s_objects` function L392-485 — `( k8s_objects: &[DynamicObject], k8s_client: K8sClient, agent_id: &Uuid, ) -> Re...` — Deletes a list of Kubernetes objects from the cluster.
 - pub `validate_k8s_objects` function L495-595 — `( k8s_objects: &[DynamicObject], k8s_client: K8sClient, ) -> Result<(), Box<dyn ...` — Validates Kubernetes objects against the API server without applying them.
-- pub `reconcile_target_state` function L724-1012 — `( objects: &[DynamicObject], client: Client, stack_id: &str, checksum: &str, age...` — Reconciles the target state of Kubernetes objects for a stack.
-- pub `create_k8s_client` function L1021-1052 — `( kubeconfig_path: Option<&str>, ) -> Result<K8sClient, Box<dyn std::error::Erro...` — Creates a Kubernetes client using either a provided kubeconfig path or default configuration.
+- pub `reconcile_target_state` function L752-1039 — `( objects: &[DynamicObject], client: Client, stack_id: &str, checksum: &str, age...` — Reconciles the target state of Kubernetes objects for a stack.
+- pub `create_k8s_client` function L1048-1079 — `( kubeconfig_path: Option<&str>, ) -> Result<K8sClient, Box<dyn std::error::Erro...` — Creates a Kubernetes client using either a provided kubeconfig path or default configuration.
 -  `RetryConfig` struct L67-72 — `{ max_elapsed_time: Duration, initial_interval: Duration, max_interval: Duration...` — Retry configuration for Kubernetes operations
 -  `RetryConfig` type L74-83 — `impl Default for RetryConfig` — 3.
 -  `default` function L75-82 — `() -> Self` — 3.
@@ -808,6 +811,7 @@
 -  `with_retries` function L100-136 — `( operation: F, config: RetryConfig, ) -> Result<T, Box<dyn std::error::Error>>` — Executes a Kubernetes operation with retries
 -  `apply_single_object` function L604-668 — `( object: &DynamicObject, client: &Client, stack_id: &str, checksum: &str, ) -> ...` — Applies a single Kubernetes object with proper annotations.
 -  `rollback_namespaces` function L675-707 — `(client: &Client, namespaces: &[String])` — Rolls back namespaces that were created during a failed reconciliation.
+-  `resolve_gvk_cached` function L720-735 — `( discovery: &mut Option<Discovery>, client: &Client, gvk: &GroupVersionKind, ) ...` — Resolves a `GroupVersionKind` against a lazily-built, reused `Discovery`
 
 #### crates/brokkr-agent/src/k8s/mod.rs
 
@@ -1218,14 +1222,17 @@
 #### crates/brokkr-broker/src/api/v1/openapi.rs
 
 - pub `ApiDoc` struct L264 — `-`
-- pub `configure_openapi` function L298-302 — `() -> Router<DAL>`
+- pub `configure_openapi` function L316-320 — `() -> Router<DAL>`
 -  `SecurityAddon` struct L266 — `-`
 -  `SecurityAddon` type L268-285 — `= SecurityAddon`
 -  `modify` function L269-284 — `(&self, openapi: &mut utoipa::openapi::OpenApi)`
 -  `ServersAddon` struct L290 — `-` — Declares the API base URL.
 -  `ServersAddon` type L292-296 — `= ServersAddon`
 -  `modify` function L293-295 — `(&self, openapi: &mut utoipa::openapi::OpenApi)`
--  `serve_openapi` function L304-306 — `() -> Json<utoipa::openapi::OpenApi>`
+-  `LicenseAddon` struct L303 — `-` — Normalizes `info.license` to a name+URL form.
+-  `LicenseAddon` type L305-314 — `= LicenseAddon`
+-  `modify` function L306-313 — `(&self, openapi: &mut utoipa::openapi::OpenApi)`
+-  `serve_openapi` function L322-324 — `() -> Json<utoipa::openapi::OpenApi>`
 
 #### crates/brokkr-broker/src/api/v1/stacks.rs
 
@@ -1238,15 +1245,15 @@
 - pub `add_label` function L545-563 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
 - pub `remove_label` function L582-600 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
 - pub `list_annotations` function L616-632 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
-- pub `add_annotation` function L650-668 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
-- pub `remove_annotation` function L687-705 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
-- pub `TemplateInstantiationRequest` struct L708-711 — `{ template_id: Uuid, parameters: serde_json::Value }`
-- pub `TelemetryHistoryQuery` struct L878-887 — `{ since: Option<chrono::DateTime<chrono::Utc>>, limit: Option<i64> }`
-- pub `RetentionInfo` struct L890-901 — `{ retention_ceiling_seconds: u64, effective_retention_seconds: u64, oldest_avail...`
-- pub `K8sEventHistoryResponse` struct L904-907 — `{ retention: RetentionInfo, events: Vec<AgentK8sEvent> }`
-- pub `PodLogHistoryResponse` struct L910-913 — `{ retention: RetentionInfo, lines: Vec<AgentPodLog> }`
-- pub `list_telemetry_events` function L954-975 — `( State(dal): State<DAL>, Extension(auth): Extension<AuthPayload>, Path(stack_id...`
-- pub `list_telemetry_logs` function L992-1013 — `( State(dal): State<DAL>, Extension(auth): Extension<AuthPayload>, Path(stack_id...`
+- pub `add_annotation` function L651-669 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
+- pub `remove_annotation` function L688-706 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
+- pub `TemplateInstantiationRequest` struct L709-712 — `{ template_id: Uuid, parameters: serde_json::Value }`
+- pub `TelemetryHistoryQuery` struct L879-888 — `{ since: Option<chrono::DateTime<chrono::Utc>>, limit: Option<i64> }`
+- pub `RetentionInfo` struct L891-902 — `{ retention_ceiling_seconds: u64, effective_retention_seconds: u64, oldest_avail...`
+- pub `K8sEventHistoryResponse` struct L905-908 — `{ retention: RetentionInfo, events: Vec<AgentK8sEvent> }`
+- pub `PodLogHistoryResponse` struct L911-914 — `{ retention: RetentionInfo, lines: Vec<AgentPodLog> }`
+- pub `list_telemetry_events` function L955-976 — `( State(dal): State<DAL>, Extension(auth): Extension<AuthPayload>, Path(stack_id...`
+- pub `list_telemetry_logs` function L993-1014 — `( State(dal): State<DAL>, Extension(auth): Extension<AuthPayload>, Path(stack_id...`
 -  `fetch_owned_stack` function L67-89 — `( dal: &DAL, auth: &AuthPayload, stack_id: Uuid, ) -> Result<Stack, ApiError>` — Fetch a stack or return 404; also enforces admin-or-generator-owner access.
 -  `list_stacks` function L103-134 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, ) -> ...`
 -  `create_stack` function L148-190 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Json(...`
@@ -1257,25 +1264,25 @@
 -  `resolve_create_body` function L374-390 — `( headers: &HeaderMap, query: &CreateDeploymentObjectQuery, body: &[u8], ) -> Re...` — Resolves the request body into `(yaml_content, is_deletion_marker)` based
 -  `validate_manifest_yaml` function L395-421 — `(yaml_content: &str, is_deletion_marker: bool) -> Result<(), ApiError>` — Validates the manifest body at ingest so malformed YAML fails here with a
 -  `is_authorized_for_stack` function L466-495 — `( dal: &DAL, auth_payload: &AuthPayload, stack_id: Uuid, ) -> Result<bool, ApiEr...`
--  `instantiate_template` function L729-857 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
--  `TELEMETRY_DEFAULT_LIMIT` variable L873 — `: i64` — Default page size for the telemetry history endpoints.
--  `TELEMETRY_MAX_LIMIT` variable L875 — `: i64` — Maximum page size — protect the broker from "give me everything" callers.
--  `retention_info` function L915-923 — `(oldest: Option<chrono::DateTime<chrono::Utc>>) -> RetentionInfo`
--  `clamp_since` function L925-932 — `(since: Option<chrono::DateTime<chrono::Utc>>) -> chrono::DateTime<chrono::Utc>`
--  `clamp_limit` function L934-937 — `(limit: Option<i64>) -> i64`
--  `create_body_tests` module L1016-1122 — `-`
--  `headers_with` function L1020-1026 — `(ct: Option<&str>) -> HeaderMap`
--  `content_type_detection` function L1029-1038 — `()`
--  `yaml_body_uses_raw_string_and_query_flag` function L1041-1050 — `()`
--  `yaml_body_defaults_marker_false` function L1053-1059 — `()`
--  `json_body_still_parses` function L1062-1069 — `()`
--  `json_path_query_flag_ignored` function L1072-1080 — `()`
--  `malformed_json_is_rejected` function L1083-1089 — `()`
--  `validate_accepts_multidoc_yaml` function L1092-1095 — `()`
--  `validate_rejects_malformed_yaml` function L1098-1102 — `()`
--  `validate_rejects_empty_non_marker` function L1105-1108 — `()`
--  `validate_allows_empty_marker` function L1111-1114 — `()`
--  `validate_rejects_only_empty_documents` function L1117-1121 — `()`
+-  `instantiate_template` function L730-858 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
+-  `TELEMETRY_DEFAULT_LIMIT` variable L874 — `: i64` — Default page size for the telemetry history endpoints.
+-  `TELEMETRY_MAX_LIMIT` variable L876 — `: i64` — Maximum page size — protect the broker from "give me everything" callers.
+-  `retention_info` function L916-924 — `(oldest: Option<chrono::DateTime<chrono::Utc>>) -> RetentionInfo`
+-  `clamp_since` function L926-933 — `(since: Option<chrono::DateTime<chrono::Utc>>) -> chrono::DateTime<chrono::Utc>`
+-  `clamp_limit` function L935-938 — `(limit: Option<i64>) -> i64`
+-  `create_body_tests` module L1017-1123 — `-`
+-  `headers_with` function L1021-1027 — `(ct: Option<&str>) -> HeaderMap`
+-  `content_type_detection` function L1030-1039 — `()`
+-  `yaml_body_uses_raw_string_and_query_flag` function L1042-1051 — `()`
+-  `yaml_body_defaults_marker_false` function L1054-1060 — `()`
+-  `json_body_still_parses` function L1063-1070 — `()`
+-  `json_path_query_flag_ignored` function L1073-1081 — `()`
+-  `malformed_json_is_rejected` function L1084-1090 — `()`
+-  `validate_accepts_multidoc_yaml` function L1093-1096 — `()`
+-  `validate_rejects_malformed_yaml` function L1099-1103 — `()`
+-  `validate_rejects_empty_non_marker` function L1106-1109 — `()`
+-  `validate_allows_empty_marker` function L1112-1115 — `()`
+-  `validate_rejects_only_empty_documents` function L1118-1122 — `()`
 
 #### crates/brokkr-broker/src/api/v1/templates.rs
 
@@ -1639,33 +1646,34 @@
 - pub `DAL` struct L171-176 — `{ pool: ConnectionPool, auth_cache: Option<Cache<String, AuthPayload>> }` — The main Data Access Layer struct.
 - pub `new` function L188-193 — `(pool: ConnectionPool) -> Self` — Creates a new DAL instance with the given connection pool.
 - pub `new_with_auth_cache` function L201-213 — `(pool: ConnectionPool, auth_cache_ttl_seconds: u64) -> Self` — Creates a new DAL instance with an auth cache.
-- pub `invalidate_auth_cache` function L216-220 — `(&self, pak_hash: &str)` — Invalidates a specific entry in the auth cache by PAK hash.
-- pub `invalidate_all_auth_cache` function L223-227 — `(&self)` — Invalidates all entries in the auth cache.
-- pub `agents` function L234-236 — `(&self) -> AgentsDAL<'_>` — Provides access to the Agents Data Access Layer.
-- pub `agent_annotations` function L243-245 — `(&self) -> AgentAnnotationsDAL<'_>` — Provides access to the Agent Annotations Data Access Layer.
-- pub `agent_events` function L252-254 — `(&self) -> AgentEventsDAL<'_>` — Provides access to the Agent Events Data Access Layer.
-- pub `agent_k8s_events` function L259-261 — `(&self) -> AgentK8sEventsDAL<'_>` — Provides access to the agent kube-Events telemetry buffer
-- pub `agent_pod_logs` function L266-268 — `(&self) -> AgentPodLogsDAL<'_>` — Provides access to the agent pod-logs telemetry buffer
-- pub `agent_labels` function L275-277 — `(&self) -> AgentLabelsDAL<'_>` — Provides access to the Agent Labels Data Access Layer.
-- pub `agent_targets` function L284-286 — `(&self) -> AgentTargetsDAL<'_>` — Provides access to the Agent Targets Data Access Layer.
-- pub `stack_labels` function L293-295 — `(&self) -> StackLabelsDAL<'_>` — Provides access to the Stack Labels Data Access Layer.
-- pub `stack_annotations` function L302-304 — `(&self) -> StackAnnotationsDAL<'_>` — Provides access to the Stack Annotations Data Access Layer.
-- pub `stacks` function L311-313 — `(&self) -> StacksDAL<'_>` — Provides access to the Stacks Data Access Layer.
-- pub `deployment_health` function L320-322 — `(&self) -> DeploymentHealthDAL<'_>` — Provides access to the Deployment Health Data Access Layer.
-- pub `deployment_objects` function L329-331 — `(&self) -> DeploymentObjectsDAL<'_>` — Provides access to the Deployment Objects Data Access Layer.
-- pub `generators` function L338-340 — `(&self) -> GeneratorsDAL<'_>` — Provides access to the Generators Data Access Layer.
-- pub `templates` function L347-349 — `(&self) -> TemplatesDAL<'_>` — Provides access to the Templates Data Access Layer.
-- pub `template_labels` function L356-358 — `(&self) -> TemplateLabelsDAL<'_>` — Provides access to the Template Labels Data Access Layer.
-- pub `template_annotations` function L365-367 — `(&self) -> TemplateAnnotationsDAL<'_>` — Provides access to the Template Annotations Data Access Layer.
-- pub `template_targets` function L374-376 — `(&self) -> TemplateTargetsDAL<'_>` — Provides access to the Template Targets Data Access Layer.
-- pub `rendered_deployment_objects` function L383-385 — `(&self) -> RenderedDeploymentObjectsDAL<'_>` — Provides access to the Rendered Deployment Objects Data Access Layer.
-- pub `work_orders` function L392-394 — `(&self) -> WorkOrdersDAL<'_>` — Provides access to the Work Orders Data Access Layer.
-- pub `diagnostic_requests` function L401-403 — `(&self) -> DiagnosticRequestsDAL<'_>` — Provides access to the Diagnostic Requests Data Access Layer.
-- pub `diagnostic_results` function L410-412 — `(&self) -> DiagnosticResultsDAL<'_>` — Provides access to the Diagnostic Results Data Access Layer.
-- pub `webhook_subscriptions` function L419-421 — `(&self) -> WebhookSubscriptionsDAL<'_>` — Provides access to the Webhook Subscriptions Data Access Layer.
-- pub `webhook_deliveries` function L428-430 — `(&self) -> WebhookDeliveriesDAL<'_>` — Provides access to the Webhook Deliveries Data Access Layer.
-- pub `audit_logs` function L437-439 — `(&self) -> AuditLogsDAL<'_>` — Provides access to the Audit Logs Data Access Layer.
-- pub `FilterType` enum L443-446 — `And | Or` — ```
+- pub `conn` function L224-236 — `( &self, ) -> Result< diesel::r2d2::PooledConnection<diesel::r2d2::ConnectionMan...` — Borrows a pooled database connection (with the schema search_path set).
+- pub `invalidate_auth_cache` function L239-243 — `(&self, pak_hash: &str)` — Invalidates a specific entry in the auth cache by PAK hash.
+- pub `invalidate_all_auth_cache` function L246-250 — `(&self)` — Invalidates all entries in the auth cache.
+- pub `agents` function L257-259 — `(&self) -> AgentsDAL<'_>` — Provides access to the Agents Data Access Layer.
+- pub `agent_annotations` function L266-268 — `(&self) -> AgentAnnotationsDAL<'_>` — Provides access to the Agent Annotations Data Access Layer.
+- pub `agent_events` function L275-277 — `(&self) -> AgentEventsDAL<'_>` — Provides access to the Agent Events Data Access Layer.
+- pub `agent_k8s_events` function L282-284 — `(&self) -> AgentK8sEventsDAL<'_>` — Provides access to the agent kube-Events telemetry buffer
+- pub `agent_pod_logs` function L289-291 — `(&self) -> AgentPodLogsDAL<'_>` — Provides access to the agent pod-logs telemetry buffer
+- pub `agent_labels` function L298-300 — `(&self) -> AgentLabelsDAL<'_>` — Provides access to the Agent Labels Data Access Layer.
+- pub `agent_targets` function L307-309 — `(&self) -> AgentTargetsDAL<'_>` — Provides access to the Agent Targets Data Access Layer.
+- pub `stack_labels` function L316-318 — `(&self) -> StackLabelsDAL<'_>` — Provides access to the Stack Labels Data Access Layer.
+- pub `stack_annotations` function L325-327 — `(&self) -> StackAnnotationsDAL<'_>` — Provides access to the Stack Annotations Data Access Layer.
+- pub `stacks` function L334-336 — `(&self) -> StacksDAL<'_>` — Provides access to the Stacks Data Access Layer.
+- pub `deployment_health` function L343-345 — `(&self) -> DeploymentHealthDAL<'_>` — Provides access to the Deployment Health Data Access Layer.
+- pub `deployment_objects` function L352-354 — `(&self) -> DeploymentObjectsDAL<'_>` — Provides access to the Deployment Objects Data Access Layer.
+- pub `generators` function L361-363 — `(&self) -> GeneratorsDAL<'_>` — Provides access to the Generators Data Access Layer.
+- pub `templates` function L370-372 — `(&self) -> TemplatesDAL<'_>` — Provides access to the Templates Data Access Layer.
+- pub `template_labels` function L379-381 — `(&self) -> TemplateLabelsDAL<'_>` — Provides access to the Template Labels Data Access Layer.
+- pub `template_annotations` function L388-390 — `(&self) -> TemplateAnnotationsDAL<'_>` — Provides access to the Template Annotations Data Access Layer.
+- pub `template_targets` function L397-399 — `(&self) -> TemplateTargetsDAL<'_>` — Provides access to the Template Targets Data Access Layer.
+- pub `rendered_deployment_objects` function L406-408 — `(&self) -> RenderedDeploymentObjectsDAL<'_>` — Provides access to the Rendered Deployment Objects Data Access Layer.
+- pub `work_orders` function L415-417 — `(&self) -> WorkOrdersDAL<'_>` — Provides access to the Work Orders Data Access Layer.
+- pub `diagnostic_requests` function L424-426 — `(&self) -> DiagnosticRequestsDAL<'_>` — Provides access to the Diagnostic Requests Data Access Layer.
+- pub `diagnostic_results` function L433-435 — `(&self) -> DiagnosticResultsDAL<'_>` — Provides access to the Diagnostic Results Data Access Layer.
+- pub `webhook_subscriptions` function L442-444 — `(&self) -> WebhookSubscriptionsDAL<'_>` — Provides access to the Webhook Subscriptions Data Access Layer.
+- pub `webhook_deliveries` function L451-453 — `(&self) -> WebhookDeliveriesDAL<'_>` — Provides access to the Webhook Deliveries Data Access Layer.
+- pub `audit_logs` function L460-462 — `(&self) -> AuditLogsDAL<'_>` — Provides access to the Audit Logs Data Access Layer.
+- pub `FilterType` enum L466-469 — `And | Or` — ```
 -  `DalError` type L52-60 — `= DalError` — ```
 -  `fmt` function L53-59 — `(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result` — ```
 -  `DalError` type L62 — `= DalError` — ```
@@ -1675,7 +1683,7 @@
 -  `from` function L71-76 — `(e: diesel::result::Error) -> Self` — ```
 -  `DalError` type L79-91 — `impl IntoResponse for DalError` — ```
 -  `into_response` function L80-90 — `(self) -> Response` — ```
--  `DAL` type L178-440 — `= DAL` — ```
+-  `DAL` type L178-463 — `= DAL` — ```
 
 #### crates/brokkr-broker/src/dal/rendered_deployment_objects.rs
 
@@ -2376,23 +2384,24 @@
 -  `test_update_stack` function L226-264 — `()`
 -  `test_soft_delete_stack` function L267-309 — `()`
 -  `test_add_stack_annotation` function L312-350 — `()`
--  `test_remove_stack_annotation` function L353-379 — `()`
--  `test_list_stack_annotations` function L382-414 — `()`
--  `test_add_stack_label` function L417-457 — `()`
--  `test_add_stack_label_duplicate_returns_409` function L460-501 — `()`
--  `test_remove_stack_label` function L504-530 — `()`
--  `test_list_stack_labels` function L533-565 — `()`
--  `test_create_deployment_object` function L568-606 — `()`
--  `test_create_stack_with_generator_pak` function L609-647 — `()`
--  `test_create_stack_with_wrong_generator_pak` function L650-693 — `()`
--  `test_update_stack_with_wrong_generator_pak` function L696-740 — `()`
--  `test_delete_stack_with_wrong_generator_pak` function L743-780 — `()`
--  `test_add_stack_annotation_with_wrong_generator_pak` function L783-827 — `()`
--  `test_create_deployment_object_yaml_body` function L832-861 — `()`
--  `test_create_deployment_object_yaml_deletion_marker_empty` function L864-897 — `()`
--  `test_create_deployment_object_malformed_yaml_rejected` function L900-922 — `()`
--  `test_get_deployment_object_accept_yaml_roundtrip` function L925-978 — `()`
--  `test_create_deployment_object_json_still_works` function L981-1006 — `()`
+-  `test_add_stack_annotation_duplicate_key_conflicts` function L356-394 — `()`
+-  `test_remove_stack_annotation` function L397-423 — `()`
+-  `test_list_stack_annotations` function L426-458 — `()`
+-  `test_add_stack_label` function L461-501 — `()`
+-  `test_add_stack_label_duplicate_returns_409` function L504-545 — `()`
+-  `test_remove_stack_label` function L548-574 — `()`
+-  `test_list_stack_labels` function L577-609 — `()`
+-  `test_create_deployment_object` function L612-650 — `()`
+-  `test_create_stack_with_generator_pak` function L653-691 — `()`
+-  `test_create_stack_with_wrong_generator_pak` function L694-737 — `()`
+-  `test_update_stack_with_wrong_generator_pak` function L740-784 — `()`
+-  `test_delete_stack_with_wrong_generator_pak` function L787-824 — `()`
+-  `test_add_stack_annotation_with_wrong_generator_pak` function L827-871 — `()`
+-  `test_create_deployment_object_yaml_body` function L876-905 — `()`
+-  `test_create_deployment_object_yaml_deletion_marker_empty` function L908-941 — `()`
+-  `test_create_deployment_object_malformed_yaml_rejected` function L944-966 — `()`
+-  `test_get_deployment_object_accept_yaml_roundtrip` function L969-1022 — `()`
+-  `test_create_deployment_object_json_still_works` function L1025-1050 — `()`
 
 #### crates/brokkr-broker/tests/integration/api/templates.rs
 
@@ -2590,6 +2599,10 @@
 -  `test_get_agent_by_name_and_cluster_name` function L657-684 — `()`
 -  `test_recreate_agent_after_soft_delete` function L687-735 — `()`
 
+#### crates/brokkr-broker/tests/integration/dal/connection.rs
+
+-  `test_conn_pool_exhaustion_returns_error_not_panic` function L20-47 — `()` — exhausted pool or a DB outage unwound inside the handler.
+
 #### crates/brokkr-broker/tests/integration/dal/deployment_health.rs
 
 -  `test_upsert_deployment_health` function L12-66 — `()`
@@ -2677,19 +2690,20 @@
 -  `agent_labels` module L9 — `-`
 -  `agent_targets` module L10 — `-`
 -  `agents` module L11 — `-`
--  `deployment_health` module L12 — `-`
--  `deployment_objects` module L13 — `-`
--  `diagnostic_requests` module L14 — `-`
--  `diagnostic_results` module L15 — `-`
--  `event_emission` module L16 — `-`
--  `generators` module L17 — `-`
--  `stack_annotations` module L18 — `-`
--  `stack_labels` module L19 — `-`
--  `stacks` module L20 — `-`
--  `templates` module L21 — `-`
--  `webhook_deliveries` module L22 — `-`
--  `webhook_subscriptions` module L23 — `-`
--  `work_orders` module L24 — `-`
+-  `connection` module L12 — `-`
+-  `deployment_health` module L13 — `-`
+-  `deployment_objects` module L14 — `-`
+-  `diagnostic_requests` module L15 — `-`
+-  `diagnostic_results` module L16 — `-`
+-  `event_emission` module L17 — `-`
+-  `generators` module L18 — `-`
+-  `stack_annotations` module L19 — `-`
+-  `stack_labels` module L20 — `-`
+-  `stacks` module L21 — `-`
+-  `templates` module L22 — `-`
+-  `webhook_deliveries` module L23 — `-`
+-  `webhook_subscriptions` module L24 — `-`
+-  `work_orders` module L25 — `-`
 
 #### crates/brokkr-broker/tests/integration/dal/stack_annotations.rs
 
@@ -3492,7 +3506,7 @@
 - pub `cors_allowed_origins` function L705-710 — `(&self) -> Vec<String>` — Get CORS allowed origins
 - pub `cors_max_age_seconds` function L713-718 — `(&self) -> u64` — Get CORS max age in seconds
 - pub `dynamic_snapshot` function L721-723 — `(&self) -> Option<DynamicConfig>` — Get a snapshot of all dynamic config values
--  `deserialize_string_or_vec` function L76-113 — `(deserializer: D) -> Result<Vec<String>, D::Error>` — Deserializes a comma-separated string or array into Vec<String>
+-  `deserialize_string_or_vec` function L76-113 — `(deserializer: D) -> Result<Vec<String>, D::Error>` — Deserializes a comma-separated string or array into `Vec<String>`
 -  `StringOrVec` struct L83 — `-` — Default: 60 (set to 0 to disable caching)
 -  `StringOrVec` type L85-110 — `= StringOrVec` — Default: 60 (set to 0 to disable caching)
 -  `Value` type L86 — `= Vec<String>` — Default: 60 (set to 0 to disable caching)
