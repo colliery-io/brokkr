@@ -4,14 +4,14 @@ level: initiative
 title: "Agent Fleet Legibility"
 short_code: "BROKKR-I-0027"
 created_at: 2026-06-12T21:20:39.756079+00:00
-updated_at: 2026-06-12T21:39:43.510414+00:00
+updated_at: 2026-06-13T13:59:19.142159+00:00
 parent: brokkr-environment-aware
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#initiative"
-  - "#phase/design"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -207,3 +207,19 @@ values** — so Slice 1 needs no migrations and no agent changes.
   backlog as separate feeds; K8s connectivity is Slice 2 (standalone); pull-first
   `GET /fleet` with WS push deferred. Ready to consider discovery → design and
   decomposition into Slice 1 / Slice 2 / follow-up tasks.
+## Closeout 2026-06-13
+
+Completed. All decomposed slices shipped (merged in PR #64):
+- T-0226 — GET /api/v1/fleet broker-computed fleet surface (+ Prometheus gauge-staleness fix).
+- T-0227 — agent-reported K8s connectivity signal (migration 20, WS heartbeat wire extension, surfaced in /fleet).
+- T-0228 — agent_events retention/eviction.
+
+The goal is met: a platform embedding Brokkr can hit one endpoint and get the
+whole fleet's connectivity, backpressure, heartbeat staleness, activity recency,
+health-status counts, and k8s reachability as measured values — severity left to
+the consumer.
+
+DEFERRED (not pursued in this initiative): the optional **WS push** of
+fleet-state-change deltas. Pull-first GET /fleet was the v1 surface and is
+sufficient. If real-time push demand appears, open it as a fresh task/initiative
+rather than reviving this one.

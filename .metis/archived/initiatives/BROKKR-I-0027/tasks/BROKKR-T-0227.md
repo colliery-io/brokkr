@@ -4,15 +4,15 @@ level: task
 title: "Slice 2: agent-reported K8s connectivity signal in /fleet"
 short_code: "BROKKR-T-0227"
 created_at: 2026-06-12T21:39:43.724081+00:00
-updated_at: 2026-06-13T11:39:42.934491+00:00
+updated_at: 2026-06-13T13:49:12.810336+00:00
 parent: agent-fleet-legibility
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
   - "#task"
-  - "#phase/active"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -31,6 +31,10 @@ Add the one fleet signal the broker cannot compute on its own: whether each agen
 can reach its own Kubernetes API. The agent self-reports it; the broker stores the
 latest per agent and surfaces it in the fleet record. Depends on Slice 1
 ([[BROKKR-T-0226]]) for the surface.
+
+## Acceptance Criteria
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 
