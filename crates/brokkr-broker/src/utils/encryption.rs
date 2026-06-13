@@ -409,9 +409,14 @@ mod tests {
         let key = EncryptionKey::generate();
         let plaintext = b"legacy data";
 
-        // Manually create legacy XOR encrypted data
-        let mut nonce = [0u8; LEGACY_XOR_NONCE_SIZE];
-        rand::thread_rng().fill_bytes(&mut nonce);
+        // Manually create legacy XOR encrypted data. The nonce is deterministic
+        // and its first byte deliberately avoids the version markers (0x00 =
+        // legacy, 0x01 = AES-GCM): decrypt() routes a *headerless* legacy blob on
+        // data[0], so a nonce starting with 0x00/0x01 would be mis-routed. A
+        // random nonce here made this test flaky (~0.78%, when nonce[0] hit a
+        // marker). The legacy-format ambiguity itself is documented in
+        // docs/src/explanation/security-model.md.
+        let nonce = [0x42u8; LEGACY_XOR_NONCE_SIZE];
 
         let mut hasher = Sha256::new();
         hasher.update(key.key);
