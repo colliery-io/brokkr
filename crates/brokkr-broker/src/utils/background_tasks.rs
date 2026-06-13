@@ -645,9 +645,141 @@ pub fn start_agent_events_cleanup_task(dal: DAL, config: AgentEventsCleanupConfi
     });
 }
 
+// ---------------------------------------------------------------------------
+// Fleet live-push sweep (BROKKR-T-0230 / I-0028 Slice 2)
+//
+// Slice 1's producers push on discrete events (WS connect/disconnect,
+// heartbeat). The *computed* signals — backpressure and health counts — aren't
+// tied to an event, so this periodic sweep recomputes the fleet and
+// re-broadcasts only the agents whose computed signals changed since last tick.
+// ---------------------------------------------------------------------------
+
+/// The computed (non-event-driven) fleet signals compared between sweep ticks:
+/// pending objects, pending + claimed work orders, failing + degraded health.
+type FleetComputedSignals = (i64, i64, i64, i64, i64);
+
+fn fleet_computed_signals(r: &crate::api::v1::fleet::FleetAgentRecord) -> FleetComputedSignals {
+    (
+        r.pending_object_count,
+        r.pending_work_orders,
+        r.claimed_work_orders,
+        r.health_failing,
+        r.health_degraded,
+    )
+}
+
+/// Returns the records whose computed signals changed versus `prev`, updating
+/// `prev` to the latest signals. An agent absent from `prev` counts as changed.
+/// Pure — unit-testable without a DB or timing.
+fn select_changed_fleet_records<'a>(
+    prev: &mut std::collections::HashMap<uuid::Uuid, FleetComputedSignals>,
+    records: &'a [crate::api::v1::fleet::FleetAgentRecord],
+) -> Vec<&'a crate::api::v1::fleet::FleetAgentRecord> {
+    let mut changed = Vec::new();
+    for r in records {
+        let sig = fleet_computed_signals(r);
+        if prev.get(&r.agent_id) != Some(&sig) {
+            changed.push(r);
+        }
+        prev.insert(r.agent_id, sig);
+    }
+    changed
+}
+
+/// Starts the periodic fleet live-push sweep (the computed-signal half of the
+/// I-0028 hybrid trigger). Every `interval_seconds` it recomputes all fleet
+/// records and broadcasts a `FleetUpdate` for each agent whose computed signals
+/// changed. The first tick only seeds the baseline (no broadcast) so startup
+/// doesn't blast the whole fleet to subscribers.
+pub fn start_fleet_sweep_task(
+    dal: DAL,
+    registry: std::sync::Arc<crate::ws::ConnectionRegistry>,
+    fleet: std::sync::Arc<crate::ws::FleetBroadcaster>,
+    interval_seconds: u64,
+) {
+    info!(
+        "Starting fleet live-push sweep task (interval: {}s)",
+        interval_seconds
+    );
+    tokio::spawn(async move {
+        let mut ticker = interval(Duration::from_secs(interval_seconds));
+        let mut last: std::collections::HashMap<uuid::Uuid, FleetComputedSignals> =
+            std::collections::HashMap::new();
+        let mut seeded = false;
+        loop {
+            ticker.tick().await;
+            let records = match crate::api::v1::fleet::build_all_fleet_records(&dal, &registry) {
+                Ok(records) => records,
+                Err(e) => {
+                    warn!("fleet sweep: failed to build fleet records: {:?}", e);
+                    continue;
+                }
+            };
+            let changed = select_changed_fleet_records(&mut last, &records);
+            if !seeded {
+                // First pass only populates the baseline — no broadcast.
+                seeded = true;
+                continue;
+            }
+            for record in changed {
+                fleet.broadcast(brokkr_wire::WsMessage::FleetUpdate(record.to_wire()));
+            }
+        }
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Minimal fleet record for the sweep diff test — only the computed fields
+    /// matter; the rest default.
+    fn fleet_rec(
+        agent_id: uuid::Uuid,
+        pending_objects: i64,
+        failing: i64,
+    ) -> crate::api::v1::fleet::FleetAgentRecord {
+        crate::api::v1::fleet::FleetAgentRecord {
+            agent_id,
+            name: "a".to_string(),
+            status: "ACTIVE".to_string(),
+            ws_connected: false,
+            connected_since: None,
+            last_heartbeat: None,
+            heartbeat_age_seconds: None,
+            pending_object_count: pending_objects,
+            pending_work_orders: 0,
+            claimed_work_orders: 0,
+            last_event_at: None,
+            seconds_since_last_event: None,
+            health_failing: failing,
+            health_degraded: 0,
+            k8s_reachable: None,
+            k8s_api_latency_ms: None,
+        }
+    }
+
+    #[test]
+    fn fleet_sweep_selects_only_changed_computed_signals() {
+        let a = uuid::Uuid::new_v4();
+        let b = uuid::Uuid::new_v4();
+        let mut prev: std::collections::HashMap<uuid::Uuid, FleetComputedSignals> =
+            std::collections::HashMap::new();
+
+        // First call: both agents are new → both count as changed (seeding).
+        let recs = vec![fleet_rec(a, 1, 0), fleet_rec(b, 0, 0)];
+        assert_eq!(select_changed_fleet_records(&mut prev, &recs).len(), 2);
+
+        // Identical signals → nothing changed → no frames.
+        let recs = vec![fleet_rec(a, 1, 0), fleet_rec(b, 0, 0)];
+        assert!(select_changed_fleet_records(&mut prev, &recs).is_empty());
+
+        // a's backpressure rises → only a is returned.
+        let recs = vec![fleet_rec(a, 5, 0), fleet_rec(b, 0, 0)];
+        let changed = select_changed_fleet_records(&mut prev, &recs);
+        assert_eq!(changed.len(), 1);
+        assert_eq!(changed[0].agent_id, a);
+    }
 
     #[test]
     fn test_default_agent_events_cleanup_config() {

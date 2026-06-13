@@ -289,6 +289,25 @@ pub fn broadcast_agent_fleet_update(
     }
 }
 
+/// Builds the full per-agent fleet record set (the `GET /fleet` rollup payload).
+/// Shared by the pull handler and the periodic live-push sweep (I-0028 Slice 2).
+/// Bounded grouped queries — no per-agent N+1.
+pub fn build_all_fleet_records(
+    dal: &DAL,
+    registry: &ConnectionRegistry,
+) -> Result<Vec<FleetAgentRecord>, ApiError> {
+    let agents = dal.agents().list().map_err(|e| {
+        error!("Failed to fetch agents for fleet rollup: {:?}", e);
+        ApiError::internal("failed to fetch agents")
+    })?;
+    let aggregates = FleetAggregates::load(dal, registry)?;
+    let now = Utc::now();
+    Ok(agents
+        .iter()
+        .map(|agent| aggregates.build_record(agent, now))
+        .collect())
+}
+
 fn require_admin(auth: &AuthPayload) -> Result<(), ApiError> {
     if auth.admin {
         Ok(())
@@ -317,18 +336,7 @@ pub async fn list_fleet(
     info!("Handling request to list fleet records");
     require_admin(&auth_payload)?;
 
-    let agents = dal.agents().list().map_err(|e| {
-        error!("Failed to fetch agents for fleet rollup: {:?}", e);
-        ApiError::internal("failed to fetch agents")
-    })?;
-
-    let aggregates = FleetAggregates::load(&dal, &registry)?;
-    let now = Utc::now();
-    let records = agents
-        .iter()
-        .map(|agent| aggregates.build_record(agent, now))
-        .collect::<Vec<_>>();
-
+    let records = build_all_fleet_records(&dal, &registry)?;
     info!("Successfully assembled {} fleet records", records.len());
     Ok(Json(records))
 }

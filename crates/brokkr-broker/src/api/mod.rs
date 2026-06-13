@@ -207,6 +207,16 @@ pub fn configure_api_routes(
     let live_broadcaster: Arc<LiveBroadcaster> = LiveBroadcaster::new();
     let fleet_broadcaster: Arc<FleetBroadcaster> = FleetBroadcaster::new();
 
+    // Periodic fleet live-push sweep (I-0028 Slice 2): the computed-signal half
+    // of the hybrid trigger — re-broadcast agents whose backpressure/health
+    // changed, complementing the event-driven producers. 20s cadence for v1.
+    crate::utils::background_tasks::start_fleet_sweep_task(
+        dal.clone(),
+        ws_registry.clone(),
+        fleet_broadcaster.clone(),
+        20,
+    );
+
     // Continuous eviction for the agent telemetry buffers. Hard 6h cap
     // per project_log_retention_stance; the worker is intentionally
     // fire-and-forget — production drops the JoinHandle and it runs for
