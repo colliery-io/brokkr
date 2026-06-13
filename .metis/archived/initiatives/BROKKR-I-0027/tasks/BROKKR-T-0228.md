@@ -4,15 +4,15 @@ level: task
 title: "Follow-up: agent_events retention/eviction policy (unbounded growth)"
 short_code: "BROKKR-T-0228"
 created_at: 2026-06-12T21:39:43.790408+00:00
-updated_at: 2026-06-13T11:39:43.008477+00:00
+updated_at: 2026-06-13T13:49:12.871519+00:00
 parent: agent-fleet-legibility
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
   - "#task"
-  - "#phase/active"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -36,6 +36,10 @@ scale. Add a retention policy.
 
 ### Type
 - [x] Tech Debt
+
+## Acceptance Criteria
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

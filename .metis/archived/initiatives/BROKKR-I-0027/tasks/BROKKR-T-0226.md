@@ -4,15 +4,15 @@ level: task
 title: "Slice 1: GET /api/v1/fleet broker-computed fleet surface + gauge-staleness fix"
 short_code: "BROKKR-T-0226"
 created_at: 2026-06-12T21:39:43.651317+00:00
-updated_at: 2026-06-12T21:44:10.857505+00:00
+updated_at: 2026-06-13T13:49:12.678450+00:00
 parent: agent-fleet-legibility
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
   - "#task"
-  - "#phase/active"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -31,6 +31,10 @@ Ship the broker-computed fleet legibility surface: a pull endpoint that returns,
 per agent, the measured signals defined in the I-0027 v1 fleet record — using
 only data the broker already has (no migrations, no agent changes). Also fold in
 the pre-existing Prometheus gauge-staleness fix.
+
+## Acceptance Criteria
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 
