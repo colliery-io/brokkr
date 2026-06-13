@@ -12,6 +12,31 @@
 use crate::fixtures::TestFixture;
 use brokkr_models::models::webhooks::{EVENT_WORKORDER_COMPLETED, NewWebhookSubscription};
 use brokkr_models::models::work_orders::NewWorkOrder;
+use brokkr_models::schema::{webhook_deliveries, webhook_subscriptions};
+use diesel::prelude::*;
+
+/// Isolate a webhook-emission test from leftover state.
+///
+/// `emit_event` matches subscriptions GLOBALLY (every enabled subscription in
+/// the DB), and the shared integration DB is never reset between tests
+/// (`TestFixture::new` only runs migrations). Subscriptions left enabled by
+/// other tests make `emit_event` fan out a delivery to each of them, so the
+/// per-test delivery count becomes non-deterministic and the assertions race
+/// the accumulated state. Clearing the webhook tables at the start of each test
+/// makes the emission deterministic. Fixes the flaky
+/// `test_work_order_completion_emits_event`. Safe under the suite's
+/// `--test-threads=1` (sequential) execution; each test then sets up its own
+/// subscriptions.
+fn clear_webhook_state(fixture: &TestFixture) {
+    let conn = &mut fixture.dal.conn().expect("get db connection");
+    // Deliveries reference subscriptions (FK), so delete them first.
+    diesel::delete(webhook_deliveries::table)
+        .execute(conn)
+        .expect("clear webhook_deliveries");
+    diesel::delete(webhook_subscriptions::table)
+        .execute(conn)
+        .expect("clear webhook_subscriptions");
+}
 
 fn create_subscription_for_event(name: &str, event_type: &str) -> NewWebhookSubscription {
     NewWebhookSubscription {
@@ -89,6 +114,7 @@ fn create_subscription_with_agent_filter(
 #[test]
 fn test_work_order_completion_emits_event() {
     let fixture = TestFixture::new();
+    clear_webhook_state(&fixture);
 
     // Create subscription for workorder.completed events
     let sub = create_subscription_for_event("WO Completion Sub", EVENT_WORKORDER_COMPLETED);
@@ -159,6 +185,7 @@ fn test_work_order_completion_emits_event() {
 #[test]
 fn test_wildcard_subscription_matches_events() {
     let fixture = TestFixture::new();
+    clear_webhook_state(&fixture);
 
     // Create agent and work order first (these emit workorder.created and workorder.claimed)
     let (agent, _) = fixture
@@ -215,6 +242,7 @@ fn test_wildcard_subscription_matches_events() {
 #[test]
 fn test_disabled_subscription_receives_no_deliveries() {
     let fixture = TestFixture::new();
+    clear_webhook_state(&fixture);
 
     // Create DISABLED subscription
     let sub = create_disabled_subscription("Disabled Sub", EVENT_WORKORDER_COMPLETED);
@@ -271,6 +299,7 @@ fn test_disabled_subscription_receives_no_deliveries() {
 #[test]
 fn test_delivery_inherits_target_labels_from_subscription() {
     let fixture = TestFixture::new();
+    clear_webhook_state(&fixture);
 
     // Create subscription with target labels
     let sub = create_subscription_with_target_labels(
@@ -336,6 +365,7 @@ fn test_delivery_inherits_target_labels_from_subscription() {
 #[test]
 fn test_no_delivery_when_no_matching_subscription() {
     let fixture = TestFixture::new();
+    clear_webhook_state(&fixture);
 
     // Create agent FIRST so we can filter by it
     let (agent, _) = fixture.create_test_agent_with_pak(
@@ -395,6 +425,7 @@ fn test_no_delivery_when_no_matching_subscription() {
 #[test]
 fn test_multiple_subscriptions_receive_same_event() {
     let fixture = TestFixture::new();
+    clear_webhook_state(&fixture);
 
     // Create two subscriptions for the same event
     let sub1 = create_subscription_for_event("Sub 1", EVENT_WORKORDER_COMPLETED);
