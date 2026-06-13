@@ -7,7 +7,7 @@ created_at: 2025-10-23T01:46:25.523842+00:00
 updated_at: 2026-06-13T15:47:11.397599+00:00
 parent: 
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -67,6 +67,8 @@ Fix angreal exit status codes to ensure that CI/CD pipelines appropriately “go
 - **Current Problems**: {What's difficult/slow/buggy now}
 - **Benefits of Fixing**: {What improves after refactoring}
 - **Risk Assessment**: {Risks of not addressing this}
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 
