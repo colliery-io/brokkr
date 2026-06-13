@@ -178,6 +178,27 @@
         ],
         "type": "object"
       },
+      "AgentFleetStatusResponse": {
+        "description": "Response body for the per-agent fleet-status detail view: the agent's fleet\nrecord plus its most recent events (newest first).",
+        "properties": {
+          "recent_events": {
+            "description": "The agent's most recent events, newest first (up to 20).",
+            "items": {
+              "$ref": "#/components/schemas/AgentEvent"
+            },
+            "type": "array"
+          },
+          "record": {
+            "$ref": "#/components/schemas/FleetAgentRecord",
+            "description": "The per-agent fleet record (same shape as the rollup entries)."
+          }
+        },
+        "required": [
+          "record",
+          "recent_events"
+        ],
+        "type": "object"
+      },
       "AgentK8sEvent": {
         "properties": {
           "agent_id": {
@@ -1130,6 +1151,95 @@
         "required": [
           "code",
           "message"
+        ],
+        "type": "object"
+      },
+      "FleetAgentRecord": {
+        "description": "A per-agent fleet record: measured signals only, no health verdicts.\n\nAll time-relative fields (`heartbeat_age_seconds`, `seconds_since_last_event`)\nare computed on read as `now - timestamp`, clamped to be non-negative.",
+        "properties": {
+          "agent_id": {
+            "description": "The agent's unique identifier.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "claimed_work_orders": {
+            "description": "Number of work orders currently CLAIMED by this agent.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "connected_since": {
+            "description": "When the current WebSocket connection was established, if connected.",
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "health_degraded": {
+            "description": "Count of this agent's deployment-health records with status `degraded`.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "health_failing": {
+            "description": "Count of this agent's deployment-health records with status `failing`.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "heartbeat_age_seconds": {
+            "description": "Seconds since the last heartbeat (`now - last_heartbeat`, clamped >= 0).",
+            "format": "int64",
+            "nullable": true,
+            "type": "integer"
+          },
+          "last_event_at": {
+            "description": "Timestamp of this agent's most recent (non-deleted) event, if any.",
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "last_heartbeat": {
+            "description": "The agent's last recorded heartbeat timestamp.",
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "name": {
+            "description": "The agent's name.",
+            "type": "string"
+          },
+          "pending_object_count": {
+            "description": "Number of pending (not-yet-acknowledged) deployment objects targeted at\nthis agent.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "pending_work_orders": {
+            "description": "Number of PENDING work orders this agent is eligible to claim.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "seconds_since_last_event": {
+            "description": "Seconds since the last event (`now - last_event_at`, clamped >= 0).",
+            "format": "int64",
+            "nullable": true,
+            "type": "integer"
+          },
+          "status": {
+            "description": "The agent's lifecycle status (e.g. \"ACTIVE\").",
+            "type": "string"
+          },
+          "ws_connected": {
+            "description": "Whether the agent currently holds a broker↔agent WebSocket connection.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "agent_id",
+          "name",
+          "status",
+          "ws_connected",
+          "pending_object_count",
+          "pending_work_orders",
+          "claimed_work_orders",
+          "health_failing",
+          "health_degraded"
         ],
         "type": "object"
       },
@@ -3963,6 +4073,73 @@
         ]
       }
     },
+    "/agents/{id}/fleet-status": {
+      "get": {
+        "operationId": "get_agent_fleet_status",
+        "parameters": [
+          {
+            "description": "ID of the agent",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentFleetStatusResponse"
+                }
+              }
+            },
+            "description": "Fleet record plus recent events for the agent"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Agent not found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "admin_pak": []
+          }
+        ],
+        "tags": [
+          "fleet"
+        ]
+      }
+    },
     "/agents/{id}/health-status": {
       "patch": {
         "description": "# Authorization\nRequires matching agent ID.",
@@ -5204,6 +5381,54 @@
         ],
         "tags": [
           "diagnostics"
+        ]
+      }
+    },
+    "/fleet": {
+      "get": {
+        "operationId": "list_fleet",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FleetAgentRecord"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Per-agent fleet records (measured values only)"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "admin_pak": []
+          }
+        ],
+        "tags": [
+          "fleet"
         ]
       }
     },
@@ -8912,6 +9137,10 @@
     {
       "description": "Core Agent management API",
       "name": "agents"
+    },
+    {
+      "description": "Agent fleet legibility API (measured signals)",
+      "name": "fleet"
     },
     {
       "description": "Deployment Objects management API",

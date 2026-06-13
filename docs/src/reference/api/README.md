@@ -86,6 +86,25 @@ Agents run in Kubernetes clusters and apply deployment objects.
 | GET | `/agents/:agent_id/webhooks/pending` | Pending webhook deliveries (auto-claims) |
 | GET | `/agents/` | Search agents by query string |
 
+#### Fleet Legibility
+
+Broker-computed, read-only fleet surface returning **measured signals only**
+(no health verdicts). Admin PAK only — agent and generator PAKs cannot read the
+fleet. Every field is computed on read from data the broker already holds; the
+rollup is assembled with bounded grouped queries (no per-agent fan-out).
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/fleet` | Per-agent fleet records for all agents (rollup) |
+| GET | `/agents/:id/fleet-status` | One agent's fleet record plus its 20 most recent events |
+
+Each fleet record carries: `agent_id`, `name`, `status`, `ws_connected`,
+`connected_since`, `last_heartbeat`, `heartbeat_age_seconds`,
+`pending_object_count`, `pending_work_orders`, `claimed_work_orders`,
+`last_event_at`, `seconds_since_last_event`, `health_failing`, and
+`health_degraded`. The `*_age_seconds` / `seconds_since_*` fields are
+`now - timestamp`, clamped to be non-negative.
+
 #### Templates
 Reusable stack templates with Tera templating and JSON Schema validation.
 

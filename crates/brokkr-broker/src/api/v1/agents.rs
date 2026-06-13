@@ -59,6 +59,12 @@ pub fn routes() -> Router<DAL> {
         .route("/agents/:id/targets", get(list_targets).post(add_target))
         .route("/agents/:id/targets/:stack_id", delete(remove_target))
         .route("/agents/:id/heartbeat", post(record_heartbeat))
+        // Fleet legibility (BROKKR-I-0027): broker-computed fleet surface.
+        .route("/fleet", get(crate::api::v1::fleet::list_fleet))
+        .route(
+            "/agents/:id/fleet-status",
+            get(crate::api::v1::fleet::get_agent_fleet_status),
+        )
         .route("/agents/:id/target-state", get(get_target_state))
         .route("/agents/:id/stacks", get(get_associated_stacks))
         .route("/agents/:id/rotate-pak", post(rotate_agent_pak))

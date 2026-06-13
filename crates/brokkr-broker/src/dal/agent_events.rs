@@ -139,6 +139,30 @@ impl AgentEventsDAL<'_> {
             .load::<AgentEvent>(conn)
     }
 
+    /// Returns the most recent non-deleted event timestamp per agent in a
+    /// single grouped query (no per-agent fan-out).
+    ///
+    /// Computes `MAX(created_at)` grouped by `agent_id` over all non-deleted
+    /// agent events. Agents with no events are simply absent from the result.
+    ///
+    /// # Returns
+    ///
+    /// Returns a Vec of `(agent_id, last_event_at)` pairs, or a
+    /// diesel::result::Error on failure.
+    pub fn last_event_at_by_agent(
+        &self,
+    ) -> Result<Vec<(Uuid, chrono::DateTime<Utc>)>, diesel::result::Error> {
+        let conn = &mut self.dal.conn()?;
+        agent_events::table
+            .filter(agent_events::deleted_at.is_null())
+            .group_by(agent_events::agent_id)
+            .select((
+                agent_events::agent_id,
+                diesel::dsl::max(agent_events::created_at).assume_not_null(),
+            ))
+            .load::<(Uuid, chrono::DateTime<Utc>)>(conn)
+    }
+
     /// Updates an existing agent event in the database.
     ///
     /// # Arguments

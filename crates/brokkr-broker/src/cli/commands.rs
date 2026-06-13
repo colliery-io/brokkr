@@ -134,6 +134,15 @@ pub async fn serve(config: &Settings) -> Result<(), Box<dyn std::error::Error>> 
     let work_order_config = utils::background_tasks::WorkOrderMaintenanceConfig::default();
     utils::background_tasks::start_work_order_maintenance_task(dal.clone(), work_order_config);
 
+    // Start agent metrics refresh task (keeps the active-agent and
+    // heartbeat-age gauges fresh independent of GET /agents traffic).
+    let agent_metrics_refresh_config =
+        utils::background_tasks::AgentMetricsRefreshConfig::default();
+    utils::background_tasks::start_agent_metrics_refresh_task(
+        dal.clone(),
+        agent_metrics_refresh_config,
+    );
+
     // Start webhook delivery worker
     let webhook_delivery_config = utils::background_tasks::WebhookDeliveryConfig {
         interval_seconds: config.broker.webhook_delivery_interval_seconds.unwrap_or(5),

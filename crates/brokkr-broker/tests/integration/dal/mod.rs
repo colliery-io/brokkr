@@ -15,6 +15,7 @@ mod deployment_objects;
 mod diagnostic_requests;
 mod diagnostic_results;
 mod event_emission;
+mod fleet;
 mod generators;
 mod stack_annotations;
 mod stack_labels;
