@@ -135,6 +135,11 @@ sum(rate(brokkr_ws_messages_total{direction="in"}[5m])) by (type)
 - **Description:** Total live-tail subscribers across all stacks (`GET /api/v1/stacks/{id}/live`)
 - **Labels:** None
 
+#### `brokkr_fleet_live_subscribers`
+- **Type:** Gauge
+- **Description:** Consumer-facing fleet live-push subscribers (`GET /api/v1/fleet/live`)
+- **Labels:** None
+
 #### `brokkr_ws_log_eviction_runs_total`
 - **Type:** Counter
 - **Description:** Telemetry eviction passes executed by the retention worker

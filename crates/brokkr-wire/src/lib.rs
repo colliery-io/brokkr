@@ -115,6 +115,51 @@ pub struct LogGap {
     pub reason: GapReason,
 }
 
+/// A per-agent fleet record: measured signals only, no health verdicts
+/// (BROKKR-I-0028, the live-push twin of the broker's REST `FleetAgentRecord`).
+///
+/// This is the **wire** representation, intentionally a plain serde struct so
+/// `brokkr-wire` stays free of `utoipa`/`diesel`. The broker owns the
+/// authoritative `utoipa::ToSchema` version (`api/v1/fleet.rs:FleetAgentRecord`,
+/// which is what the OpenAPI surface exposes) and converts it into this twin
+/// before broadcasting. The two must stay field-for-field identical.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FleetAgentRecord {
+    /// The agent's unique identifier.
+    pub agent_id: Uuid,
+    /// The agent's name.
+    pub name: String,
+    /// The agent's lifecycle status (e.g. "ACTIVE").
+    pub status: String,
+    /// Whether the agent currently holds a broker↔agent WebSocket connection.
+    pub ws_connected: bool,
+    /// When the current WebSocket connection was established, if connected.
+    pub connected_since: Option<DateTime<Utc>>,
+    /// The agent's last recorded heartbeat timestamp.
+    pub last_heartbeat: Option<DateTime<Utc>>,
+    /// Seconds since the last heartbeat (`now - last_heartbeat`, clamped >= 0).
+    pub heartbeat_age_seconds: Option<i64>,
+    /// Number of pending (not-yet-acknowledged) deployment objects targeted at
+    /// this agent.
+    pub pending_object_count: i64,
+    /// Number of PENDING work orders this agent is eligible to claim.
+    pub pending_work_orders: i64,
+    /// Number of work orders currently CLAIMED by this agent.
+    pub claimed_work_orders: i64,
+    /// Timestamp of this agent's most recent (non-deleted) event, if any.
+    pub last_event_at: Option<DateTime<Utc>>,
+    /// Seconds since the last event (`now - last_event_at`, clamped >= 0).
+    pub seconds_since_last_event: Option<i64>,
+    /// Count of this agent's deployment-health records with status `failing`.
+    pub health_failing: i64,
+    /// Count of this agent's deployment-health records with status `degraded`.
+    pub health_degraded: i64,
+    /// Latest agent-reported reachability of its own Kubernetes API.
+    pub k8s_reachable: Option<bool>,
+    /// Latest agent-reported latency (milliseconds) of the reachability probe.
+    pub k8s_api_latency_ms: Option<i64>,
+}
+
 /// The canonical message envelope on the broker↔agent WebSocket. JSON-encoded
 /// with an external tag so additions are forward-compatible.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -134,6 +179,10 @@ pub enum WsMessage {
     K8sEvent(K8sEvent),
     PodLogLine(PodLogLine),
     LogGap(LogGap),
+
+    // Consumer-facing fleet live-push — broker → consumer (BROKKR-I-0028).
+    // Carries one agent's full fleet record; the consumer replaces its row.
+    FleetUpdate(FleetAgentRecord),
 }
 
 /// Wire-protocol version. Matches the crate version, which matches the

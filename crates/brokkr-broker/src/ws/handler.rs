@@ -49,7 +49,7 @@ use crate::api::v1::middleware::{self as v1_middleware, AuthPayload};
 use crate::dal::DAL;
 use crate::metrics;
 
-use super::broadcaster::LiveBroadcaster;
+use super::broadcaster::{FleetBroadcaster, LiveBroadcaster};
 use super::registry::{ConnectionHandle, ConnectionRegistry};
 
 /// Public path of the internal WS endpoint. Exposed as a constant so tests
@@ -77,11 +77,13 @@ pub fn internal_routes(
     dal: DAL,
     registry: Arc<ConnectionRegistry>,
     broadcaster: Arc<LiveBroadcaster>,
+    fleet: Arc<FleetBroadcaster>,
 ) -> Router<DAL> {
     Router::new()
         .route(INTERNAL_WS_PATH, get(ws_upgrade))
         .layer(Extension(registry))
         .layer(Extension(broadcaster))
+        .layer(Extension(fleet))
         .layer(from_fn_with_state(
             dal,
             v1_middleware::auth_middleware::<Body>,
@@ -93,6 +95,7 @@ async fn ws_upgrade(
     State(dal): State<DAL>,
     Extension(registry): Extension<Arc<ConnectionRegistry>>,
     Extension(broadcaster): Extension<Arc<LiveBroadcaster>>,
+    Extension(fleet): Extension<Arc<FleetBroadcaster>>,
     request: Request<Body>,
 ) -> Result<axum::response::Response, StatusCode> {
     // The auth middleware ran upstream and inserted an AuthPayload. The WS
@@ -115,8 +118,9 @@ async fn ws_upgrade(
     };
 
     info!(%agent_id, "agent WS upgrade accepted");
-    Ok(upgrade
-        .on_upgrade(move |socket| run_connection(socket, agent_id, registry, broadcaster, dal)))
+    Ok(upgrade.on_upgrade(move |socket| {
+        run_connection(socket, agent_id, registry, broadcaster, fleet, dal)
+    }))
 }
 
 async fn run_connection(
@@ -124,6 +128,7 @@ async fn run_connection(
     agent_id: uuid::Uuid,
     registry: Arc<ConnectionRegistry>,
     broadcaster: Arc<LiveBroadcaster>,
+    fleet: Arc<FleetBroadcaster>,
     dal: DAL,
 ) {
     let connected_since = Utc::now();
@@ -143,6 +148,11 @@ async fn run_connection(
     });
     metrics::ws_connected_agents().inc();
 
+    // BROKKR-I-0028: event-driven fleet live-push on connect. Best-effort —
+    // a push failure must never affect the connection lifecycle. The record
+    // now reflects ws_connected=true via the registry snapshot.
+    crate::api::v1::fleet::broadcast_agent_fleet_update(&dal, &registry, &fleet, agent_id);
+
     let (sender, receiver) = socket.split();
 
     let writer_messages_out = messages_out.clone();
@@ -152,6 +162,9 @@ async fn run_connection(
         telemetry_rx,
         writer_messages_out,
     ));
+    // Keep a handle to the DAL for the post-disconnect fleet broadcast below;
+    // the reader task takes its own clone (DAL clones are cheap pool handles).
+    let disconnect_dal = dal.clone();
     let reader = tokio::spawn(reader_task(
         receiver,
         agent_id,
@@ -169,6 +182,16 @@ async fn run_connection(
 
     registry.unregister_if_matches(agent_id, connected_since);
     metrics::ws_connected_agents().dec();
+
+    // BROKKR-I-0028: event-driven fleet live-push on disconnect. Best-effort;
+    // the record now reflects ws_connected=false (registry entry removed).
+    crate::api::v1::fleet::broadcast_agent_fleet_update(
+        &disconnect_dal,
+        &registry,
+        &fleet,
+        agent_id,
+    );
+
     info!(%agent_id, "agent WS connection closed");
 }
 
@@ -321,8 +344,12 @@ fn dispatch_uplink(msg: WsMessage, agent_id: uuid::Uuid, dal: &DAL, broadcaster:
             // subscribers but don't persist (per WS-09 decision).
             broadcaster.broadcast(gap.stack_id, WsMessage::LogGap(gap));
         }
-        // Anything else is broker → agent shape; agent should never send.
-        WsMessage::WorkOrder(_) | WsMessage::TargetChanged(_) | WsMessage::StackChanged(_) => {
+        // Anything else is broker → agent / broker → consumer shape; an agent
+        // should never send these on the uplink.
+        WsMessage::WorkOrder(_)
+        | WsMessage::TargetChanged(_)
+        | WsMessage::StackChanged(_)
+        | WsMessage::FleetUpdate(_) => {
             warn!(
                 %agent_id,
                 "dropping broker→agent message variant received on agent uplink"
@@ -345,6 +372,7 @@ fn ws_variant_name(msg: &WsMessage) -> &'static str {
         WsMessage::K8sEvent(_) => "k8s_event",
         WsMessage::PodLogLine(_) => "pod_log_line",
         WsMessage::LogGap(_) => "log_gap",
+        WsMessage::FleetUpdate(_) => "fleet_update",
     }
 }
 

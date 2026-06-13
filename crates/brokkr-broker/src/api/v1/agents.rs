@@ -887,6 +887,8 @@ pub struct HeartbeatReport {
 async fn record_heartbeat(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
+    Extension(ws_registry): Extension<Arc<ConnectionRegistry>>,
+    Extension(fleet_broadcaster): Extension<Arc<crate::ws::FleetBroadcaster>>,
     Path(id): Path<Uuid>,
     report: Option<Json<HeartbeatReport>>,
 ) -> Result<StatusCode, ApiError> {
@@ -928,6 +930,18 @@ async fn record_heartbeat(
     if let Ok(Some(agent)) = dal.agents().get(id) {
         metrics::set_agent_heartbeat_age(&id.to_string(), &agent.name, 0.0);
     }
+
+    // BROKKR-I-0028: event-driven fleet live-push on heartbeat. Best-effort,
+    // after the heartbeat + T-0227 k8s fields are persisted, so the pushed
+    // record reflects the just-recorded values. A push failure must never
+    // affect the heartbeat response.
+    crate::api::v1::fleet::broadcast_agent_fleet_update(
+        &dal,
+        &ws_registry,
+        &fleet_broadcaster,
+        id,
+    );
+
     Ok(StatusCode::NO_CONTENT)
 }
 

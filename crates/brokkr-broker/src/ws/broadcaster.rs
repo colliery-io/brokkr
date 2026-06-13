@@ -77,10 +77,63 @@ impl LiveBroadcaster {
     }
 }
 
+/// Fleet-wide broadcast capacity. A single channel fans every per-agent
+/// `FleetUpdate` out to every `/api/v1/fleet/live` subscriber. Sized for a
+/// burst of fleet churn (many agents connecting/heartbeating at once); over
+/// this, a slow subscriber sees a `Lagged` and the handler simply continues
+/// — there is no per-agent gap concept for fleet records (the consumer holds
+/// the latest record per agent_id, so a missed update is superseded by the
+/// next one for that agent).
+const FLEET_CHANNEL_CAPACITY: usize = 1024;
+
+/// In-memory fleet-wide fan-out of per-agent `FleetUpdate` frames
+/// (BROKKR-I-0028).
+///
+/// Unlike [`LiveBroadcaster`], this is a *single* channel, not keyed per
+/// stack: every `/api/v1/fleet/live` subscriber receives every agent's
+/// updates. Same slow-subscriber policy as the per-stack hub (ADR-0008): a
+/// lagging subscriber gets `RecvError::Lagged` and the handler drops/continues
+/// — broadcasting never blocks the triggering operation.
+pub struct FleetBroadcaster {
+    tx: broadcast::Sender<WsMessage>,
+}
+
+impl Default for FleetBroadcaster {
+    fn default() -> Self {
+        Self {
+            tx: broadcast::channel(FLEET_CHANNEL_CAPACITY).0,
+        }
+    }
+}
+
+impl FleetBroadcaster {
+    pub fn new() -> Arc<Self> {
+        Arc::new(Self::default())
+    }
+
+    /// Broadcast one frame to every fleet subscriber. No-op when nobody is
+    /// subscribed (`broadcast::Sender::send` returns `SendError`, swallowed).
+    /// Never blocks — this is called from producer hot paths where a push
+    /// failure must never affect the triggering operation.
+    pub fn broadcast(&self, msg: WsMessage) {
+        let _ = self.tx.send(msg);
+    }
+
+    /// Subscribe to all future fleet frames.
+    pub fn subscribe(&self) -> broadcast::Receiver<WsMessage> {
+        self.tx.subscribe()
+    }
+
+    /// Diagnostics: current number of fleet-live subscribers.
+    pub fn subscriber_count(&self) -> usize {
+        self.tx.receiver_count()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use brokkr_wire::{Heartbeat, K8sEvent, ObjectRef};
+    use brokkr_wire::{FleetAgentRecord, Heartbeat, K8sEvent, ObjectRef};
     use chrono::Utc;
 
     fn evt(stack_id: Uuid) -> WsMessage {
@@ -154,5 +207,64 @@ mod tests {
             }),
         );
         assert!(matches!(rx.recv().await.unwrap(), WsMessage::Heartbeat(_)));
+    }
+
+    fn fleet_record(agent_id: Uuid) -> WsMessage {
+        WsMessage::FleetUpdate(FleetAgentRecord {
+            agent_id,
+            name: "a".into(),
+            status: "ACTIVE".into(),
+            ws_connected: true,
+            connected_since: Some(Utc::now()),
+            last_heartbeat: Some(Utc::now()),
+            heartbeat_age_seconds: Some(0),
+            pending_object_count: 0,
+            pending_work_orders: 0,
+            claimed_work_orders: 0,
+            last_event_at: None,
+            seconds_since_last_event: None,
+            health_failing: 0,
+            health_degraded: 0,
+            k8s_reachable: None,
+            k8s_api_latency_ms: None,
+        })
+    }
+
+    #[tokio::test]
+    async fn fleet_live_broadcast_with_no_subscribers_is_a_noop() {
+        let b = FleetBroadcaster::default();
+        b.broadcast(fleet_record(Uuid::new_v4())); // no panic
+        assert_eq!(b.subscriber_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn fleet_live_subscriber_receives_fleet_update() {
+        let b = FleetBroadcaster::default();
+        let mut rx = b.subscribe();
+        let id = Uuid::new_v4();
+        b.broadcast(fleet_record(id));
+        let m = rx.recv().await.unwrap();
+        let WsMessage::FleetUpdate(rec) = m else {
+            panic!("wrong variant")
+        };
+        assert_eq!(rec.agent_id, id);
+    }
+
+    // ADR-0008: a slow fleet subscriber must not stall the producer. We fill
+    // the channel past capacity without draining; broadcast() still returns
+    // immediately and the lagged receiver observes a Lagged error rather than
+    // blocking anyone.
+    #[tokio::test]
+    async fn fleet_live_slow_subscriber_does_not_stall_producer() {
+        let b = FleetBroadcaster::default();
+        let mut rx = b.subscribe();
+        for _ in 0..(FLEET_CHANNEL_CAPACITY + 16) {
+            b.broadcast(fleet_record(Uuid::new_v4())); // never blocks
+        }
+        // The slow subscriber that fell behind sees Lagged, not a hang.
+        match rx.recv().await {
+            Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
+            other => panic!("expected Lagged, got {other:?}"),
+        }
     }
 }

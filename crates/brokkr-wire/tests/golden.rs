@@ -120,6 +120,24 @@ fn sample_messages() -> Vec<WsMessage> {
             dropped_count: 42,
             reason: GapReason::RateLimit,
         }),
+        WsMessage::FleetUpdate(FleetAgentRecord {
+            agent_id,
+            name: "demo-agent".to_string(),
+            status: "ACTIVE".to_string(),
+            ws_connected: true,
+            connected_since: Some(ts),
+            last_heartbeat: Some(ts),
+            heartbeat_age_seconds: Some(0),
+            pending_object_count: 0,
+            pending_work_orders: 0,
+            claimed_work_orders: 0,
+            last_event_at: Some(ts),
+            seconds_since_last_event: Some(0),
+            health_failing: 0,
+            health_degraded: 0,
+            k8s_reachable: Some(true),
+            k8s_api_latency_ms: Some(12),
+        }),
     ]
 }
 
@@ -152,6 +170,7 @@ fn variant_tags_are_snake_case() {
         "k8s_event",
         "pod_log_line",
         "log_gap",
+        "fleet_update",
     ];
 
     let actual_tags: Vec<String> = sample_messages()

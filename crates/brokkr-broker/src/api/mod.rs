@@ -158,8 +158,8 @@ pub mod v1;
 use crate::dal::DAL;
 use crate::metrics;
 use crate::ws::{
-    ConnectionRegistry, LiveBroadcaster, RetentionConfig, internal_routes, spawn_eviction,
-    subscribe_routes,
+    ConnectionRegistry, FleetBroadcaster, LiveBroadcaster, RetentionConfig, fleet_subscribe_routes,
+    internal_routes, spawn_eviction, subscribe_routes,
 };
 use axum::{
     Router,
@@ -205,6 +205,17 @@ pub fn configure_api_routes(
 
     let ws_registry: Arc<ConnectionRegistry> = ConnectionRegistry::new();
     let live_broadcaster: Arc<LiveBroadcaster> = LiveBroadcaster::new();
+    let fleet_broadcaster: Arc<FleetBroadcaster> = FleetBroadcaster::new();
+
+    // Periodic fleet live-push sweep (I-0028 Slice 2): the computed-signal half
+    // of the hybrid trigger — re-broadcast agents whose backpressure/health
+    // changed, complementing the event-driven producers. 20s cadence for v1.
+    crate::utils::background_tasks::start_fleet_sweep_task(
+        dal.clone(),
+        ws_registry.clone(),
+        fleet_broadcaster.clone(),
+        20,
+    );
 
     // Continuous eviction for the agent telemetry buffers. Hard 6h cap
     // per project_log_retention_stance; the worker is intentionally
@@ -218,12 +229,16 @@ pub fn configure_api_routes(
             dal.clone(),
             ws_registry.clone(),
             live_broadcaster.clone(),
+            fleet_broadcaster.clone(),
         ))
         .merge(subscribe_routes(dal.clone(), live_broadcaster.clone()))
-        // Make the registry + broadcaster available to v1 handlers
-        // (post-commit push helpers in `ws::push`; future WS-13 metrics).
+        .merge(fleet_subscribe_routes(dal.clone(), fleet_broadcaster.clone()))
+        // Make the registry + broadcasters available to v1 handlers
+        // (post-commit push helpers in `ws::push`; fleet live-push producers
+        // in `record_heartbeat`; future WS-13 metrics).
         .layer(axum::Extension(ws_registry))
         .layer(axum::Extension(live_broadcaster))
+        .layer(axum::Extension(fleet_broadcaster))
         .route("/healthz", get(healthz))
         .route("/readyz", get(readyz))
         .route("/metrics", get(metrics_handler))

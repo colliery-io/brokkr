@@ -17,13 +17,15 @@
 
 pub mod broadcaster;
 pub mod eviction;
+pub mod fleet_subscribe;
 pub mod handler;
 pub mod push;
 pub mod registry;
 pub mod subscribe;
 
-pub use broadcaster::LiveBroadcaster;
+pub use broadcaster::{FleetBroadcaster, LiveBroadcaster};
 pub use eviction::{HARD_RETENTION_CEILING, RetentionConfig, spawn as spawn_eviction};
+pub use fleet_subscribe::{FLEET_LIVE_SUBSCRIPTION_PATH_TEMPLATE, fleet_subscribe_routes};
 pub use handler::{INTERNAL_WS_PATH, internal_routes};
 pub use push::{push_stack_changed_to_targets, push_target_changed, push_work_order};
 pub use registry::{ConnectionHandle, ConnectionInfo, ConnectionRegistry, SendError};
