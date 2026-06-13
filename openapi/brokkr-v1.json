@@ -39,6 +39,23 @@
             "format": "uuid",
             "type": "string"
           },
+          "k8s_api_latency_ms": {
+            "description": "Latest agent-reported latency (milliseconds) of the Kubernetes API\nreachability probe, if the agent measured one. `None` when unreported.",
+            "format": "int32",
+            "nullable": true,
+            "type": "integer"
+          },
+          "k8s_reachable": {
+            "description": "Latest agent-reported reachability of its own Kubernetes API\n(BROKKR-T-0227). `None` when the agent has never reported. The broker\ntrusts this value as-is (it cannot compute it itself).",
+            "nullable": true,
+            "type": "boolean"
+          },
+          "k8s_reported_at": {
+            "description": "Server-side ingestion time of the most recent K8s connectivity report,\nso readers can judge the freshness of `k8s_reachable` /\n`k8s_api_latency_ms`. `None` when the agent has never reported.",
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
           "last_heartbeat": {
             "description": "Timestamp of the last heartbeat received from the agent.",
             "format": "date-time",
@@ -175,6 +192,27 @@
           "deployment_object_id",
           "event_type",
           "status"
+        ],
+        "type": "object"
+      },
+      "AgentFleetStatusResponse": {
+        "description": "Response body for the per-agent fleet-status detail view: the agent's fleet\nrecord plus its most recent events (newest first).",
+        "properties": {
+          "recent_events": {
+            "description": "The agent's most recent events, newest first (up to 20).",
+            "items": {
+              "$ref": "#/components/schemas/AgentEvent"
+            },
+            "type": "array"
+          },
+          "record": {
+            "$ref": "#/components/schemas/FleetAgentRecord",
+            "description": "The per-agent fleet record (same shape as the rollup entries)."
+          }
+        },
+        "required": [
+          "record",
+          "recent_events"
         ],
         "type": "object"
       },
@@ -1133,6 +1171,106 @@
         ],
         "type": "object"
       },
+      "FleetAgentRecord": {
+        "description": "A per-agent fleet record: measured signals only, no health verdicts.\n\nAll time-relative fields (`heartbeat_age_seconds`, `seconds_since_last_event`)\nare computed on read as `now - timestamp`, clamped to be non-negative.",
+        "properties": {
+          "agent_id": {
+            "description": "The agent's unique identifier.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "claimed_work_orders": {
+            "description": "Number of work orders currently CLAIMED by this agent.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "connected_since": {
+            "description": "When the current WebSocket connection was established, if connected.",
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "health_degraded": {
+            "description": "Count of this agent's deployment-health records with status `degraded`.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "health_failing": {
+            "description": "Count of this agent's deployment-health records with status `failing`.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "heartbeat_age_seconds": {
+            "description": "Seconds since the last heartbeat (`now - last_heartbeat`, clamped >= 0).",
+            "format": "int64",
+            "nullable": true,
+            "type": "integer"
+          },
+          "k8s_api_latency_ms": {
+            "description": "Latest agent-reported latency (milliseconds) of the Kubernetes API\nreachability probe. `null` when unreported or not measured.",
+            "format": "int64",
+            "nullable": true,
+            "type": "integer"
+          },
+          "k8s_reachable": {
+            "description": "Latest agent-reported reachability of its own Kubernetes API\n(BROKKR-T-0227). `null` when the agent has never reported. The broker\ntrusts this value as-is — it is the one fleet signal it cannot compute.",
+            "nullable": true,
+            "type": "boolean"
+          },
+          "last_event_at": {
+            "description": "Timestamp of this agent's most recent (non-deleted) event, if any.",
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "last_heartbeat": {
+            "description": "The agent's last recorded heartbeat timestamp.",
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "name": {
+            "description": "The agent's name.",
+            "type": "string"
+          },
+          "pending_object_count": {
+            "description": "Number of pending (not-yet-acknowledged) deployment objects targeted at\nthis agent.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "pending_work_orders": {
+            "description": "Number of PENDING work orders this agent is eligible to claim.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "seconds_since_last_event": {
+            "description": "Seconds since the last event (`now - last_event_at`, clamped >= 0).",
+            "format": "int64",
+            "nullable": true,
+            "type": "integer"
+          },
+          "status": {
+            "description": "The agent's lifecycle status (e.g. \"ACTIVE\").",
+            "type": "string"
+          },
+          "ws_connected": {
+            "description": "Whether the agent currently holds a broker↔agent WebSocket connection.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "agent_id",
+          "name",
+          "status",
+          "ws_connected",
+          "pending_object_count",
+          "pending_work_orders",
+          "claimed_work_orders",
+          "health_failing",
+          "health_degraded"
+        ],
+        "type": "object"
+      },
       "Generator": {
         "description": "Represents a generator in the Brokkr system.",
         "properties": {
@@ -1236,6 +1374,23 @@
           "pods_total",
           "conditions"
         ],
+        "type": "object"
+      },
+      "HeartbeatReport": {
+        "description": "Optional heartbeat report body (BROKKR-T-0227).\n\nA plain heartbeat carries no body; agents that probe their own Kubernetes\nAPI attach this to self-report reachability. Both fields are optional so a\nbody may carry only what the agent could measure, and the entire body may\nbe omitted (legacy/no-body heartbeats still work).",
+        "properties": {
+          "k8s_api_latency_ms": {
+            "description": "Measured latency (milliseconds) of the reachability probe, if any.",
+            "format": "int32",
+            "nullable": true,
+            "type": "integer"
+          },
+          "k8s_reachable": {
+            "description": "Whether the agent can reach its own Kubernetes API.",
+            "nullable": true,
+            "type": "boolean"
+          }
+        },
         "type": "object"
       },
       "K8sEventHistoryResponse": {
@@ -3963,6 +4118,73 @@
         ]
       }
     },
+    "/agents/{id}/fleet-status": {
+      "get": {
+        "operationId": "get_agent_fleet_status",
+        "parameters": [
+          {
+            "description": "ID of the agent",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentFleetStatusResponse"
+                }
+              }
+            },
+            "description": "Fleet record plus recent events for the agent"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Agent not found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "admin_pak": []
+          }
+        ],
+        "tags": [
+          "fleet"
+        ]
+      }
+    },
     "/agents/{id}/health-status": {
       "patch": {
         "description": "# Authorization\nRequires matching agent ID.",
@@ -4040,6 +4262,17 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HeartbeatReport"
+              }
+            }
+          },
+          "description": "Optional agent-reported K8s connectivity",
+          "required": true
+        },
         "responses": {
           "204": {
             "description": "Successfully recorded agent heartbeat"
@@ -5204,6 +5437,54 @@
         ],
         "tags": [
           "diagnostics"
+        ]
+      }
+    },
+    "/fleet": {
+      "get": {
+        "operationId": "list_fleet",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FleetAgentRecord"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Per-agent fleet records (measured values only)"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "admin_pak": []
+          }
+        ],
+        "tags": [
+          "fleet"
         ]
       }
     },
@@ -8912,6 +9193,10 @@
     {
       "description": "Core Agent management API",
       "name": "agents"
+    },
+    {
+      "description": "Agent fleet legibility API (measured signals)",
+      "name": "fleet"
     },
     {
       "description": "Deployment Objects management API",

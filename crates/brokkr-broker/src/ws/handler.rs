@@ -213,9 +213,18 @@ async fn reader_task(
 fn dispatch_uplink(msg: WsMessage, agent_id: uuid::Uuid, dal: &DAL, broadcaster: &LiveBroadcaster) {
     metrics::ws_messages_total("in", ws_variant_name(&msg)).inc();
     match msg {
-        WsMessage::Heartbeat(_) => {
+        WsMessage::Heartbeat(hb) => {
             if let Err(e) = dal.agents().record_heartbeat(agent_id) {
                 warn!(%agent_id, error = %e, "failed to record WS heartbeat");
+            }
+            // BROKKR-T-0227: persist agent-reported K8s connectivity when the
+            // heartbeat carries it. Absent fields leave the columns untouched.
+            if let Some(reachable) = hb.k8s_reachable
+                && let Err(e) =
+                    dal.agents()
+                        .record_k8s_connectivity(agent_id, reachable, hb.k8s_api_latency_ms)
+            {
+                warn!(%agent_id, error = %e, "failed to record WS K8s connectivity");
             }
         }
         WsMessage::AgentEvent(ev) => {

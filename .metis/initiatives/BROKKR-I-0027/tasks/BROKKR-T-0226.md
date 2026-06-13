@@ -4,16 +4,15 @@ level: task
 title: "Slice 1: GET /api/v1/fleet broker-computed fleet surface + gauge-staleness fix"
 short_code: "BROKKR-T-0226"
 created_at: 2026-06-12T21:39:43.651317+00:00
-updated_at: 2026-06-12T21:39:43.651317+00:00
+updated_at: 2026-06-12T21:44:10.857505+00:00
 parent: agent-fleet-legibility
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/todo"
   - "#task"
-  - "#phase/todo"
+  - "#phase/active"
 
 
 exit_criteria_met: false
@@ -32,6 +31,8 @@ Ship the broker-computed fleet legibility surface: a pull endpoint that returns,
 per agent, the measured signals defined in the I-0027 v1 fleet record — using
 only data the broker already has (no migrations, no agent changes). Also fold in
 the pre-existing Prometheus gauge-staleness fix.
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 
@@ -83,3 +84,18 @@ the pre-existing Prometheus gauge-staleness fix.
 ## Status Updates
 
 *To be added during implementation*
+## Status Updates
+
+- 2026-06-13: IMPLEMENTED + verified. `GET /api/v1/fleet` (rollup) and
+  `GET /api/v1/agents/{id}/fleet-status` (detail + recent events), admin-gated
+  (matches list_agents). All v1 measured fields assembled O(N) from bounded
+  grouped queries — NO N+1: new DAL methods last_event_at_by_agent,
+  status_counts_by_agent, claimed_counts_by_agent, and set-based
+  pending_counts_by_agent (deployment objects + work orders) that replicate the
+  per-agent target/matching semantics. Prometheus gauge-staleness fix folded in
+  (background refresh of active_agents + agent_heartbeat_age_seconds in
+  background_tasks.rs). OpenAPI + Python/TS SDKs regenerated (all 3 drift checks
+  pass). Correctness anchor: integration test
+  test_fleet_grouped_methods_match_per_agent_ground_truth asserts the grouped
+  methods == get_target_state_for_agent / list_pending_for_agent per agent —
+  PASSES against a real DB. cargo build + clippy (warning-free) clean.

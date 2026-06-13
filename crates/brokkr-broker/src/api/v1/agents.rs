@@ -59,6 +59,12 @@ pub fn routes() -> Router<DAL> {
         .route("/agents/:id/targets", get(list_targets).post(add_target))
         .route("/agents/:id/targets/:stack_id", delete(remove_target))
         .route("/agents/:id/heartbeat", post(record_heartbeat))
+        // Fleet legibility (BROKKR-I-0027): broker-computed fleet surface.
+        .route("/fleet", get(crate::api::v1::fleet::list_fleet))
+        .route(
+            "/agents/:id/fleet-status",
+            get(crate::api::v1::fleet::get_agent_fleet_status),
+        )
         .route("/agents/:id/target-state", get(get_target_state))
         .route("/agents/:id/stacks", get(get_associated_stacks))
         .route("/agents/:id/rotate-pak", post(rotate_agent_pak))
@@ -853,9 +859,24 @@ async fn remove_target(
     }
 }
 
+/// Optional heartbeat report body (BROKKR-T-0227).
+///
+/// A plain heartbeat carries no body; agents that probe their own Kubernetes
+/// API attach this to self-report reachability. Both fields are optional so a
+/// body may carry only what the agent could measure, and the entire body may
+/// be omitted (legacy/no-body heartbeats still work).
+#[derive(Debug, Deserialize, Default, ToSchema)]
+pub struct HeartbeatReport {
+    /// Whether the agent can reach its own Kubernetes API.
+    pub k8s_reachable: Option<bool>,
+    /// Measured latency (milliseconds) of the reachability probe, if any.
+    pub k8s_api_latency_ms: Option<i32>,
+}
+
 #[utoipa::path(
     post, path = "/agents/{id}/heartbeat", tag = "agents",
     params(("id" = Uuid, Path, description = "ID of the agent")),
+    request_body(content = HeartbeatReport, description = "Optional agent-reported K8s connectivity"),
     responses(
         (status = 204, description = "Successfully recorded agent heartbeat"),
         (status = 403, description = "Forbidden", body = ErrorResponse),
@@ -867,6 +888,7 @@ async fn record_heartbeat(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
     Path(id): Path<Uuid>,
+    report: Option<Json<HeartbeatReport>>,
 ) -> Result<StatusCode, ApiError> {
     info!(
         "Handling request to record heartbeat for agent with ID: {}",
@@ -885,6 +907,24 @@ async fn record_heartbeat(
         );
         ApiError::internal("failed to record agent heartbeat")
     })?;
+
+    // BROKKR-T-0227: persist agent-reported K8s connectivity when present.
+    // Absent body / field leaves the columns untouched (NULL for agents that
+    // never report).
+    if let Some(Json(report)) = report
+        && let Some(reachable) = report.k8s_reachable
+    {
+        dal.agents()
+            .record_k8s_connectivity(id, reachable, report.k8s_api_latency_ms)
+            .map_err(|e| {
+                error!(
+                    "Failed to record K8s connectivity for agent with ID {}: {:?}",
+                    id, e
+                );
+                ApiError::internal("failed to record agent K8s connectivity")
+            })?;
+    }
+
     if let Ok(Some(agent)) = dal.agents().get(id) {
         metrics::set_agent_heartbeat_age(&id.to_string(), &agent.name, 0.0);
     }

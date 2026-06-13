@@ -8,11 +8,12 @@ use crate::api::v1::admin::{
     AuditLogListResponse, ConfigChangeInfo, ConfigReloadResponse, WsConnectionInfo,
     WsConnectionsResponse,
 };
-use crate::api::v1::agents::CreateAgentResponse;
+use crate::api::v1::agents::{CreateAgentResponse, HeartbeatReport};
 use crate::api::v1::diagnostics::{
     CreateDiagnosticRequest, DiagnosticResponse, SubmitDiagnosticResult,
 };
 use crate::api::v1::error::ErrorResponse;
+use crate::api::v1::fleet::{AgentFleetStatusResponse, FleetAgentRecord};
 use crate::api::v1::generators::CreateGeneratorResponse;
 use crate::api::v1::health::{
     DeploymentHealthResponse, DeploymentObjectHealthSummary, DeploymentObjectHealthUpdate,
@@ -34,8 +35,8 @@ use crate::api::v1::work_orders::{
     ClaimWorkOrderRequest, CompleteWorkOrderRequest, CreateWorkOrderRequest, WorkOrderTargeting,
 };
 use crate::api::v1::{
-    admin, agent_events, agents, auth, deployment_objects, diagnostics, generators, health, stacks,
-    templates, webhooks, work_orders,
+    admin, agent_events, agents, auth, deployment_objects, diagnostics, fleet, generators, health,
+    stacks, templates, webhooks, work_orders,
 };
 use crate::dal::DAL;
 use axum::{Router, response::Json, routing::get};
@@ -103,6 +104,8 @@ use utoipa_swagger_ui::SwaggerUi;
         agents::record_heartbeat,
         agents::get_associated_stacks,
         agents::rotate_agent_pak,
+        fleet::list_fleet,
+        fleet::get_agent_fleet_status,
         deployment_objects::get_deployment_object,
         stacks::list_stacks,
         stacks::create_stack,
@@ -178,6 +181,9 @@ use utoipa_swagger_ui::SwaggerUi;
             Agent,
             NewAgent,
             CreateAgentResponse,
+            HeartbeatReport,
+            FleetAgentRecord,
+            AgentFleetStatusResponse,
             DeploymentObject,
             NewDeploymentObject,
             CreateDeploymentObjectRequest,
@@ -248,6 +254,7 @@ use utoipa_swagger_ui::SwaggerUi;
         (name = "agent-annotations", description = "Agent Annotations management API"),
         (name = "agent-targets", description = "Agent Targets management API"),
         (name = "agents", description = "Core Agent management API"),
+        (name = "fleet", description = "Agent fleet legibility API (measured signals)"),
         (name = "deployment-objects", description = "Deployment Objects management API"),
         (name = "stacks", description = "Stack management API"),
         (name = "templates", description = "Stack Templates management API"),

@@ -4,6 +4,7 @@ from .add_annotation_request import AddAnnotationRequest
 from .agent import Agent
 from .agent_annotation import AgentAnnotation
 from .agent_event import AgentEvent
+from .agent_fleet_status_response import AgentFleetStatusResponse
 from .agent_k8s_event import AgentK8SEvent
 from .agent_label import AgentLabel
 from .agent_pod_log import AgentPodLog
@@ -33,9 +34,11 @@ from .diagnostic_response import DiagnosticResponse
 from .diagnostic_result import DiagnosticResult
 from .error_response import ErrorResponse
 from .error_response_details_type_0 import ErrorResponseDetailsType0
+from .fleet_agent_record import FleetAgentRecord
 from .generator import Generator
 from .health_status_update import HealthStatusUpdate
 from .health_summary import HealthSummary
+from .heartbeat_report import HeartbeatReport
 from .k8s_event_history_response import K8SEventHistoryResponse
 from .list_deliveries_query import ListDeliveriesQuery
 from .new_agent import NewAgent
@@ -83,6 +86,7 @@ __all__ = (
     "Agent",
     "AgentAnnotation",
     "AgentEvent",
+    "AgentFleetStatusResponse",
     "AgentK8SEvent",
     "AgentLabel",
     "AgentPodLog",
@@ -112,9 +116,11 @@ __all__ = (
     "DiagnosticResult",
     "ErrorResponse",
     "ErrorResponseDetailsType0",
+    "FleetAgentRecord",
     "Generator",
     "HealthStatusUpdate",
     "HealthSummary",
+    "HeartbeatReport",
     "K8SEventHistoryResponse",
     "ListDeliveriesQuery",
     "NewAgent",

@@ -150,6 +150,75 @@ pub fn start_work_order_maintenance_task(dal: DAL, config: WorkOrderMaintenanceC
     });
 }
 
+/// Configuration for the agent-metrics refresh task.
+pub struct AgentMetricsRefreshConfig {
+    /// How often to refresh the agent gauges (in seconds).
+    pub interval_seconds: u64,
+}
+
+impl Default for AgentMetricsRefreshConfig {
+    fn default() -> Self {
+        Self {
+            interval_seconds: 30, // Refresh every 30 seconds
+        }
+    }
+}
+
+/// Starts the agent-metrics refresh background task (BROKKR-T-0226).
+///
+/// Periodically refreshes the `brokkr_active_agents` and
+/// `brokkr_agent_heartbeat_age_seconds` Prometheus gauges from the database so
+/// they stay correct independent of who calls `GET /agents`. Previously those
+/// gauges only updated inside the `list_agents` handler, so without scrape
+/// traffic on that path the heartbeat-age gauge would go stale and never grow.
+///
+/// # Arguments
+/// * `dal` - The Data Access Layer instance
+/// * `config` - Configuration for the refresh task
+pub fn start_agent_metrics_refresh_task(dal: DAL, config: AgentMetricsRefreshConfig) {
+    info!(
+        "Starting agent metrics refresh task (interval: {}s)",
+        config.interval_seconds
+    );
+
+    tokio::spawn(async move {
+        let mut ticker = interval(Duration::from_secs(config.interval_seconds));
+
+        loop {
+            ticker.tick().await;
+            refresh_agent_metrics(&dal);
+        }
+    });
+}
+
+/// Recomputes the active-agent and per-agent heartbeat-age gauges from the DB.
+///
+/// Split out from the spawn loop so it can be unit-tested directly.
+fn refresh_agent_metrics(dal: &DAL) {
+    let agents = match dal.agents().list() {
+        Ok(agents) => agents,
+        Err(e) => {
+            error!("Failed to list agents for metrics refresh: {:?}", e);
+            return;
+        }
+    };
+
+    let active_count = agents.iter().filter(|a| a.status == "ACTIVE").count();
+    crate::metrics::set_active_agents(active_count as i64);
+
+    let now = chrono::Utc::now();
+    for agent in &agents {
+        if let Some(last_hb) = agent.last_heartbeat {
+            let age_seconds = (now - last_hb).num_seconds().max(0) as f64;
+            crate::metrics::set_agent_heartbeat_age(
+                &agent.id.to_string(),
+                &agent.name,
+                age_seconds,
+            );
+        }
+    }
+}
+
 /// Configuration for webhook delivery worker.
 pub struct WebhookDeliveryConfig {
     /// How often to poll for pending deliveries (in seconds).
@@ -515,9 +584,87 @@ pub fn start_audit_log_cleanup_task(dal: DAL, config: AuditLogCleanupConfig) {
     });
 }
 
+/// Configuration for the agent-events cleanup task (BROKKR-T-0228).
+pub struct AgentEventsCleanupConfig {
+    /// How often to run the cleanup (in seconds).
+    pub interval_seconds: u64,
+    /// Number of days to retain agent events before hard-deletion.
+    pub retention_days: i64,
+}
+
+impl Default for AgentEventsCleanupConfig {
+    fn default() -> Self {
+        Self {
+            interval_seconds: 3600, // Hourly
+            retention_days: 30,     // 30 days default
+        }
+    }
+}
+
+/// Starts the agent-events cleanup background task (BROKKR-T-0228).
+///
+/// `agent_events` has no eviction of its own — rows are only soft-deleted on
+/// agent-delete cascade — so the table grows without bound at fleet scale.
+/// This task periodically hard-deletes events whose `created_at` is older than
+/// the configured retention window, keeping the table bounded while leaving the
+/// fleet activity feed (which serves the most recent N) intact.
+///
+/// The caller is responsible for only spawning this when `retention_days > 0`;
+/// a window of `0` disables eviction (the historical behavior).
+///
+/// # Arguments
+/// * `dal` - The Data Access Layer instance
+/// * `config` - Configuration for the cleanup task
+pub fn start_agent_events_cleanup_task(dal: DAL, config: AgentEventsCleanupConfig) {
+    info!(
+        "Starting agent events cleanup task (interval: {}s, retention: {}d)",
+        config.interval_seconds, config.retention_days
+    );
+
+    tokio::spawn(async move {
+        let mut ticker = interval(Duration::from_secs(config.interval_seconds));
+
+        loop {
+            ticker.tick().await;
+
+            let cutoff = chrono::Utc::now() - chrono::Duration::days(config.retention_days);
+            match dal.agent_events().delete_older_than(cutoff) {
+                Ok(deleted) => {
+                    if deleted > 0 {
+                        info!(
+                            "Cleaned up {} old agent events (age > {}d)",
+                            deleted, config.retention_days
+                        );
+                    }
+                }
+                Err(e) => {
+                    error!("Failed to cleanup old agent events: {:?}", e);
+                }
+            }
+        }
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_default_agent_events_cleanup_config() {
+        let config = AgentEventsCleanupConfig::default();
+        assert_eq!(config.interval_seconds, 3600);
+        assert_eq!(config.retention_days, 30);
+    }
+
+    #[test]
+    fn test_custom_agent_events_cleanup_config() {
+        let config = AgentEventsCleanupConfig {
+            interval_seconds: 1800,
+            retention_days: 14,
+        };
+        assert_eq!(config.interval_seconds, 1800);
+        assert_eq!(config.retention_days, 14);
+    }
 
     #[test]
     fn test_default_diagnostic_config() {
@@ -548,6 +695,20 @@ mod tests {
             interval_seconds: 30,
         };
         assert_eq!(config.interval_seconds, 30);
+    }
+
+    #[test]
+    fn test_default_agent_metrics_refresh_config() {
+        let config = AgentMetricsRefreshConfig::default();
+        assert_eq!(config.interval_seconds, 30);
+    }
+
+    #[test]
+    fn test_custom_agent_metrics_refresh_config() {
+        let config = AgentMetricsRefreshConfig {
+            interval_seconds: 15,
+        };
+        assert_eq!(config.interval_seconds, 15);
     }
 
     #[test]

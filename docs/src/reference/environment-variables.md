@@ -33,6 +33,7 @@ The log level is **hot-reloadable** — changes take effect without restarting.
 | `BROKKR__BROKER__WEBHOOK_CLEANUP_RETENTION_DAYS` | Integer | `7` | How long to keep completed/dead webhook deliveries (days) |
 | `BROKKR__BROKER__AUDIT_LOG_RETENTION_DAYS` | Integer | `90` | How long to keep audit log entries (days) |
 | `BROKKR__BROKER__AUTH_CACHE_TTL_SECONDS` | Integer | `60` | TTL for PAK authentication cache (seconds). Set to `0` to disable caching. |
+| `BROKKR__BROKER__AGENT_EVENTS_RETENTION_DAYS` | Integer | `30` | How long to keep agent events before hard-deletion (days). Set to `0` (or leave unset) to disable eviction and retain all agent events indefinitely. |
 
 A fresh admin PAK is generated (and written to `/tmp/brokkr-keys/key.txt`) only when `BROKKR__BROKER__PAK_HASH` is explicitly set to an empty value; when left at the default, the embedded development hash — and its corresponding publicly known development PAK — remain in effect.
 

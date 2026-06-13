@@ -64,6 +64,8 @@ fn sample_messages() -> Vec<WsMessage> {
         WsMessage::Heartbeat(Heartbeat {
             agent_id,
             sent_at: ts,
+            k8s_reachable: None,
+            k8s_api_latency_ms: None,
         }),
         WsMessage::AgentEvent(AgentEvent {
             id: event_id,

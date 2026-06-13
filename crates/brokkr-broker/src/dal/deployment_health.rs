@@ -221,6 +221,30 @@ impl DeploymentHealthDAL<'_> {
             .load(conn)
     }
 
+    /// Returns deployment-health record counts grouped by `(agent_id, status)`
+    /// in a single query (no per-agent fan-out).
+    ///
+    /// Useful for the fleet rollup, which needs per-agent counts of `failing`
+    /// and `degraded` health records without issuing one query per agent.
+    ///
+    /// # Returns
+    ///
+    /// Returns a Vec of `(agent_id, status, count)` tuples, or a
+    /// diesel::result::Error on failure.
+    pub fn status_counts_by_agent(
+        &self,
+    ) -> Result<Vec<(Uuid, String, i64)>, diesel::result::Error> {
+        let conn = &mut self.dal.conn()?;
+        deployment_health::table
+            .group_by((deployment_health::agent_id, deployment_health::status))
+            .select((
+                deployment_health::agent_id,
+                deployment_health::status,
+                diesel::dsl::count_star(),
+            ))
+            .load::<(Uuid, String, i64)>(conn)
+    }
+
     /// Deletes the health record for a specific agent and deployment object.
     ///
     /// # Arguments

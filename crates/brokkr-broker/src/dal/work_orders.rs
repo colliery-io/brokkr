@@ -266,6 +266,100 @@ impl WorkOrdersDAL<'_> {
             .load::<WorkOrder>(conn)
     }
 
+    /// Returns the number of CLAIMED work orders per claiming agent in a single
+    /// grouped query (no per-agent fan-out).
+    ///
+    /// Counts rows `WHERE status='CLAIMED' AND claimed_by IS NOT NULL` grouped
+    /// by `claimed_by`. Agents with no claims are absent from the result.
+    ///
+    /// # Returns
+    ///
+    /// Returns a Vec of `(agent_id, claimed_count)` pairs, or a
+    /// diesel::result::Error on failure.
+    pub fn claimed_counts_by_agent(&self) -> Result<Vec<(Uuid, i64)>, diesel::result::Error> {
+        let conn = &mut self.dal.conn()?;
+        work_orders::table
+            .filter(work_orders::status.eq(WORK_ORDER_STATUS_CLAIMED))
+            .filter(work_orders::claimed_by.is_not_null())
+            .group_by(work_orders::claimed_by)
+            .select((
+                work_orders::claimed_by.assume_not_null(),
+                diesel::dsl::count_star(),
+            ))
+            .load::<(Uuid, i64)>(conn)
+    }
+
+    /// Returns, per agent, the number of distinct PENDING work orders that agent
+    /// is eligible to claim — computed with a handful of bounded set-based
+    /// queries rather than calling [`list_pending_for_agent`] once per agent.
+    ///
+    /// The matching semantics exactly mirror [`list_pending_for_agent`] (the
+    /// per-agent ground truth): an agent matches a PENDING work order if ANY of
+    /// the following hold (OR logic):
+    /// - the agent is a hard target (`work_order_targets`), OR
+    /// - the agent shares a label with the work order, OR
+    /// - the agent shares a `(key, value)` annotation with the work order.
+    ///
+    /// Each matched `(agent_id, work_order_id)` pair is de-duplicated before
+    /// counting so a work order matched by multiple mechanisms is counted once
+    /// per agent.
+    ///
+    /// # Returns
+    ///
+    /// Returns a Vec of `(agent_id, pending_count)` pairs, or a
+    /// diesel::result::Error on failure.
+    pub fn pending_counts_by_agent(&self) -> Result<Vec<(Uuid, i64)>, diesel::result::Error> {
+        let conn = &mut self.dal.conn()?;
+
+        // Accumulate the distinct set of (agent_id, work_order_id) matches.
+        let mut matches: HashSet<(Uuid, Uuid)> = HashSet::new();
+
+        // 1. Hard targets: every (agent, pending work order) target pair.
+        let target_pairs: Vec<(Uuid, Uuid)> = work_order_targets::table
+            .inner_join(work_orders::table)
+            .filter(work_orders::status.eq(WORK_ORDER_STATUS_PENDING))
+            .select((work_order_targets::agent_id, work_orders::id))
+            .load::<(Uuid, Uuid)>(conn)?;
+        matches.extend(target_pairs);
+
+        // 2. Label matches: join agent_labels to work_order_labels on equal
+        //    label text, restricted to pending work orders.
+        let label_pairs: Vec<(Uuid, Uuid)> = agent_labels::table
+            .inner_join(
+                work_order_labels::table.on(work_order_labels::label.eq(agent_labels::label)),
+            )
+            .inner_join(work_orders::table.on(work_orders::id.eq(work_order_labels::work_order_id)))
+            .filter(work_orders::status.eq(WORK_ORDER_STATUS_PENDING))
+            .select((agent_labels::agent_id, work_orders::id))
+            .load::<(Uuid, Uuid)>(conn)?;
+        matches.extend(label_pairs);
+
+        // 3. Annotation matches: join agent_annotations to
+        //    work_order_annotations on equal (key, value), restricted to
+        //    pending work orders.
+        let annotation_pairs: Vec<(Uuid, Uuid)> = agent_annotations::table
+            .inner_join(
+                work_order_annotations::table.on(work_order_annotations::key
+                    .eq(agent_annotations::key)
+                    .and(work_order_annotations::value.eq(agent_annotations::value))),
+            )
+            .inner_join(
+                work_orders::table.on(work_orders::id.eq(work_order_annotations::work_order_id)),
+            )
+            .filter(work_orders::status.eq(WORK_ORDER_STATUS_PENDING))
+            .select((agent_annotations::agent_id, work_orders::id))
+            .load::<(Uuid, Uuid)>(conn)?;
+        matches.extend(annotation_pairs);
+
+        // Aggregate distinct matches into per-agent counts.
+        let mut counts: std::collections::HashMap<Uuid, i64> = std::collections::HashMap::new();
+        for (agent_id, _work_order_id) in matches {
+            *counts.entry(agent_id).or_insert(0) += 1;
+        }
+
+        Ok(counts.into_iter().collect())
+    }
+
     /// Atomically claims a work order for an agent.
     ///
     /// This operation will only succeed if:

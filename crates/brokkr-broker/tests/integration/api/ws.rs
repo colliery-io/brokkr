@@ -201,6 +201,8 @@ async fn ws_upgrade_with_agent_pak_round_trips_messages() {
     let heartbeat = WsMessage::Heartbeat(Heartbeat {
         agent_id: agent.id,
         sent_at: chrono::Utc::now(),
+        k8s_reachable: None,
+        k8s_api_latency_ms: None,
     });
     socket
         .send(Message::Text(serde_json::to_string(&heartbeat).unwrap()))
@@ -521,6 +523,8 @@ async fn ws_uplink_persists_heartbeat_event_and_health() {
             serde_json::to_string(&WsMessage::Heartbeat(Heartbeat {
                 agent_id: agent.id,
                 sent_at: now,
+                k8s_reachable: None,
+                k8s_api_latency_ms: None,
             }))
             .unwrap(),
         ))

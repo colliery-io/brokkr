@@ -176,6 +176,10 @@ pub struct Broker {
     pub audit_log_retention_days: Option<i64>,
     /// Auth cache TTL in seconds (default: 60). Set to 0 to disable caching.
     pub auth_cache_ttl_seconds: Option<u64>,
+    /// Agent-events retention in days (default: 30). Events older than this are
+    /// hard-deleted by the eviction worker. Set to 0 (or leave unset) to
+    /// DISABLE eviction and retain all agent events indefinitely.
+    pub agent_events_retention_days: Option<i64>,
 }
 
 /// Represents the agent configuration

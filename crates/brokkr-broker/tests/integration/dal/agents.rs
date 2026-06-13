@@ -733,3 +733,53 @@ fn test_recreate_agent_after_soft_delete() {
         .expect("Failed to list all agents");
     assert_eq!(all_agents.len(), 2);
 }
+
+/// BROKKR-T-0227: `record_k8s_connectivity` stores the latest agent-reported
+/// snapshot and stamps `k8s_reported_at`; a never-reported agent keeps NULLs.
+#[test]
+fn test_record_k8s_connectivity() {
+    let fixture = TestFixture::new();
+
+    let agent = fixture.create_test_agent("k8s_reporter".to_string(), "c".to_string());
+
+    // Fresh agent has not reported: all three columns are NULL.
+    assert_eq!(agent.k8s_reachable, None);
+    assert_eq!(agent.k8s_api_latency_ms, None);
+    assert_eq!(agent.k8s_reported_at, None);
+
+    // Report reachable = false with a latency sample.
+    fixture
+        .dal
+        .agents()
+        .record_k8s_connectivity(agent.id, false, Some(17))
+        .expect("Failed to record k8s connectivity");
+
+    let updated = fixture
+        .dal
+        .agents()
+        .get(agent.id)
+        .expect("Failed to get agent")
+        .expect("agent missing");
+    assert_eq!(updated.k8s_reachable, Some(false));
+    assert_eq!(updated.k8s_api_latency_ms, Some(17));
+    assert!(
+        updated.k8s_reported_at.is_some(),
+        "k8s_reported_at should be stamped"
+    );
+
+    // A later report (reachable, no latency) overwrites the snapshot.
+    fixture
+        .dal
+        .agents()
+        .record_k8s_connectivity(agent.id, true, None)
+        .expect("Failed to record k8s connectivity");
+
+    let updated = fixture
+        .dal
+        .agents()
+        .get(agent.id)
+        .expect("Failed to get agent")
+        .expect("agent missing");
+    assert_eq!(updated.k8s_reachable, Some(true));
+    assert_eq!(updated.k8s_api_latency_ms, None);
+}

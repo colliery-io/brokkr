@@ -19,6 +19,8 @@ webhook_delivery_batch_size = 50           # Process up to 50 deliveries per bat
 webhook_cleanup_retention_days = 7         # Keep completed/dead deliveries for 7 days
 # Auth cache configuration
 auth_cache_ttl_seconds = 60               # Cache PAK auth results for 60 seconds (0 to disable)
+# Agent-events retention configuration
+agent_events_retention_days = 30          # Hard-delete agent events older than 30 days (0 or unset disables eviction)
 
 [pak]
 prefix = "brokkr"

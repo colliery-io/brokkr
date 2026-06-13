@@ -384,16 +384,25 @@ pub async fn send_failure_event(
 }
 
 /// Sends a heartbeat to the broker for the given agent.
+///
+/// `k8s_reachable` / `k8s_api_latency_ms` carry the agent's self-reported
+/// Kubernetes API connectivity (BROKKR-T-0227). They are optional: when the
+/// agent could not probe its cluster, pass `None` and the fields are omitted
+/// from the report (the broker leaves the columns untouched / NULL).
 pub async fn send_heartbeat(
     _config: &Settings,
     client: &BrokkrClient,
     agent: &Agent,
     ws_uplink: Option<&WsUplink>,
+    k8s_reachable: Option<bool>,
+    k8s_api_latency_ms: Option<i32>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     if try_ws_send(ws_uplink, || {
         WsMessage::Heartbeat(Heartbeat {
             agent_id: agent.id,
             sent_at: Utc::now(),
+            k8s_reachable,
+            k8s_api_latency_ms,
         })
     }) {
         trace!("Heartbeat sent via WS for agent {}", agent.name);
@@ -407,7 +416,18 @@ pub async fn send_heartbeat(
         return Ok(());
     }
 
-    match client.api().record_heartbeat().id(agent.id).send().await {
+    let report = brokkr_client::types::HeartbeatReport {
+        k8s_reachable,
+        k8s_api_latency_ms,
+    };
+    match client
+        .api()
+        .record_heartbeat()
+        .id(agent.id)
+        .body(report)
+        .send()
+        .await
+    {
         Ok(_) => {
             trace!("Heartbeat sent successfully for agent {}", agent.name);
             metrics::heartbeat_sent_total().inc();

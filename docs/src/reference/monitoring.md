@@ -85,6 +85,9 @@ brokkr_active_agents == 0
 - **Labels:**
   - `agent_id` - Agent UUID
   - `agent_name` - Human-readable agent name
+- **Freshness:** A broker background task refreshes this gauge (and
+  `brokkr_active_agents`) from the database every ~30 seconds, so the values
+  stay correct without depending on `GET /agents` traffic.
 
 **Example PromQL:**
 ```promql

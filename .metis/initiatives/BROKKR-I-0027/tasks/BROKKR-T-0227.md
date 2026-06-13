@@ -4,16 +4,15 @@ level: task
 title: "Slice 2: agent-reported K8s connectivity signal in /fleet"
 short_code: "BROKKR-T-0227"
 created_at: 2026-06-12T21:39:43.724081+00:00
-updated_at: 2026-06-12T21:39:43.724081+00:00
+updated_at: 2026-06-13T11:39:42.934491+00:00
 parent: agent-fleet-legibility
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/todo"
   - "#task"
-  - "#phase/todo"
+  - "#phase/active"
 
 
 exit_criteria_met: false
@@ -32,6 +31,8 @@ Add the one fleet signal the broker cannot compute on its own: whether each agen
 can reach its own Kubernetes API. The agent self-reports it; the broker stores the
 latest per agent and surfaces it in the fleet record. Depends on Slice 1
 ([[BROKKR-T-0226]]) for the surface.
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 
@@ -58,3 +59,6 @@ latest per agent and surfaces it in the fleet record. Depends on Slice 1
 ## Status Updates
 
 *To be added during implementation*
+## Status Updates
+
+- 2026-06-13: IMPLEMENTED + verified (folded into PR #64 with T-0226). Build (broker+agent+models) + clippy (workspace, warning-free) + all 3 OpenAPI/SDK drift checks pass; integration test passes against a real DB. Migration #20 (T-0227) is additive nullable columns (trivially reversible). NOTE: the implementation agent hung on `angreal models migrations` (full-stack --wait); verification was completed by hand via build/clippy/drift + targeted integration tests (which apply the migration).

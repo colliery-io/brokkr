@@ -273,6 +273,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/agents/{id}/fleet-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_agent_fleet_status"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/agents/{id}/health-status": {
         parameters: {
             query?: never;
@@ -545,6 +561,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["submit_diagnostic_result"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/fleet": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_fleet"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1096,6 +1128,25 @@ export interface components {
              */
             id: string;
             /**
+             * Format: int32
+             * @description Latest agent-reported latency (milliseconds) of the Kubernetes API
+             *     reachability probe, if the agent measured one. `None` when unreported.
+             */
+            k8s_api_latency_ms?: number | null;
+            /**
+             * @description Latest agent-reported reachability of its own Kubernetes API
+             *     (BROKKR-T-0227). `None` when the agent has never reported. The broker
+             *     trusts this value as-is (it cannot compute it itself).
+             */
+            k8s_reachable?: boolean | null;
+            /**
+             * Format: date-time
+             * @description Server-side ingestion time of the most recent K8s connectivity report,
+             *     so readers can judge the freshness of `k8s_reachable` /
+             *     `k8s_api_latency_ms`. `None` when the agent has never reported.
+             */
+            k8s_reported_at?: string | null;
+            /**
              * Format: date-time
              * @description Timestamp of the last heartbeat received from the agent.
              */
@@ -1193,6 +1244,16 @@ export interface components {
              * @example 2023-01-01T00:00:00Z
              */
             updated_at: string;
+        };
+        /**
+         * @description Response body for the per-agent fleet-status detail view: the agent's fleet
+         *     record plus its most recent events (newest first).
+         */
+        AgentFleetStatusResponse: {
+            /** @description The agent's most recent events, newest first (up to 20). */
+            recent_events: components["schemas"]["AgentEvent"][];
+            /** @description The per-agent fleet record (same shape as the rollup entries). */
+            record: components["schemas"]["FleetAgentRecord"];
         };
         AgentK8sEvent: {
             /** Format: uuid */
@@ -1686,6 +1747,88 @@ export interface components {
             /** @description Human-readable message; not stable and may change between versions. */
             message: string;
         };
+        /**
+         * @description A per-agent fleet record: measured signals only, no health verdicts.
+         *
+         *     All time-relative fields (`heartbeat_age_seconds`, `seconds_since_last_event`)
+         *     are computed on read as `now - timestamp`, clamped to be non-negative.
+         */
+        FleetAgentRecord: {
+            /**
+             * Format: uuid
+             * @description The agent's unique identifier.
+             */
+            agent_id: string;
+            /**
+             * Format: int64
+             * @description Number of work orders currently CLAIMED by this agent.
+             */
+            claimed_work_orders: number;
+            /**
+             * Format: date-time
+             * @description When the current WebSocket connection was established, if connected.
+             */
+            connected_since?: string | null;
+            /**
+             * Format: int64
+             * @description Count of this agent's deployment-health records with status `degraded`.
+             */
+            health_degraded: number;
+            /**
+             * Format: int64
+             * @description Count of this agent's deployment-health records with status `failing`.
+             */
+            health_failing: number;
+            /**
+             * Format: int64
+             * @description Seconds since the last heartbeat (`now - last_heartbeat`, clamped >= 0).
+             */
+            heartbeat_age_seconds?: number | null;
+            /**
+             * Format: int64
+             * @description Latest agent-reported latency (milliseconds) of the Kubernetes API
+             *     reachability probe. `null` when unreported or not measured.
+             */
+            k8s_api_latency_ms?: number | null;
+            /**
+             * @description Latest agent-reported reachability of its own Kubernetes API
+             *     (BROKKR-T-0227). `null` when the agent has never reported. The broker
+             *     trusts this value as-is — it is the one fleet signal it cannot compute.
+             */
+            k8s_reachable?: boolean | null;
+            /**
+             * Format: date-time
+             * @description Timestamp of this agent's most recent (non-deleted) event, if any.
+             */
+            last_event_at?: string | null;
+            /**
+             * Format: date-time
+             * @description The agent's last recorded heartbeat timestamp.
+             */
+            last_heartbeat?: string | null;
+            /** @description The agent's name. */
+            name: string;
+            /**
+             * Format: int64
+             * @description Number of pending (not-yet-acknowledged) deployment objects targeted at
+             *     this agent.
+             */
+            pending_object_count: number;
+            /**
+             * Format: int64
+             * @description Number of PENDING work orders this agent is eligible to claim.
+             */
+            pending_work_orders: number;
+            /**
+             * Format: int64
+             * @description Seconds since the last event (`now - last_event_at`, clamped >= 0).
+             */
+            seconds_since_last_event?: number | null;
+            /** @description The agent's lifecycle status (e.g. "ACTIVE"). */
+            status: string;
+            /** @description Whether the agent currently holds a broker↔agent WebSocket connection. */
+            ws_connected: boolean;
+        };
         /** @description Represents a generator in the Brokkr system. */
         Generator: {
             /**
@@ -1741,6 +1884,23 @@ export interface components {
             pods_total: number;
             /** @description Optional detailed resource status. */
             resources?: components["schemas"]["ResourceHealth"][] | null;
+        };
+        /**
+         * @description Optional heartbeat report body (BROKKR-T-0227).
+         *
+         *     A plain heartbeat carries no body; agents that probe their own Kubernetes
+         *     API attach this to self-report reachability. Both fields are optional so a
+         *     body may carry only what the agent could measure, and the entire body may
+         *     be omitted (legacy/no-body heartbeats still work).
+         */
+        HeartbeatReport: {
+            /**
+             * Format: int32
+             * @description Measured latency (milliseconds) of the reachability probe, if any.
+             */
+            k8s_api_latency_ms?: number | null;
+            /** @description Whether the agent can reach its own Kubernetes API. */
+            k8s_reachable?: boolean | null;
         };
         K8sEventHistoryResponse: {
             events: components["schemas"]["AgentK8sEvent"][];
@@ -3393,6 +3553,56 @@ export interface operations {
             };
         };
     };
+    get_agent_fleet_status: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description ID of the agent */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Fleet record plus recent events for the agent */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentFleetStatusResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Agent not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     update_health_status: {
         parameters: {
             query?: never;
@@ -3446,7 +3656,12 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        /** @description Optional agent-reported K8s connectivity */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HeartbeatReport"];
+            };
+        };
         responses: {
             /** @description Successfully recorded agent heartbeat */
             204: {
@@ -4246,6 +4461,44 @@ export interface operations {
             };
             /** @description Conflict - result already submitted */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_fleet: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Per-agent fleet records (measured values only) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FleetAgentRecord"][];
+                };
+            };
+            /** @description Forbidden */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

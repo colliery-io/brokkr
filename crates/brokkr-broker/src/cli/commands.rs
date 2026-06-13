@@ -134,6 +134,15 @@ pub async fn serve(config: &Settings) -> Result<(), Box<dyn std::error::Error>> 
     let work_order_config = utils::background_tasks::WorkOrderMaintenanceConfig::default();
     utils::background_tasks::start_work_order_maintenance_task(dal.clone(), work_order_config);
 
+    // Start agent metrics refresh task (keeps the active-agent and
+    // heartbeat-age gauges fresh independent of GET /agents traffic).
+    let agent_metrics_refresh_config =
+        utils::background_tasks::AgentMetricsRefreshConfig::default();
+    utils::background_tasks::start_agent_metrics_refresh_task(
+        dal.clone(),
+        agent_metrics_refresh_config,
+    );
+
     // Start webhook delivery worker
     let webhook_delivery_config = utils::background_tasks::WebhookDeliveryConfig {
         interval_seconds: config.broker.webhook_delivery_interval_seconds.unwrap_or(5),
@@ -154,6 +163,22 @@ pub async fn serve(config: &Settings) -> Result<(), Box<dyn std::error::Error>> 
         retention_days: config.broker.audit_log_retention_days.unwrap_or(90),
     };
     utils::background_tasks::start_audit_log_cleanup_task(dal.clone(), audit_cleanup_config);
+
+    // Start agent-events cleanup task (BROKKR-T-0228). Gated on a positive
+    // retention window: 0 or unset disables eviction (historical behavior).
+    let agent_events_retention_days = config.broker.agent_events_retention_days.unwrap_or(30);
+    if agent_events_retention_days > 0 {
+        let agent_events_cleanup_config = utils::background_tasks::AgentEventsCleanupConfig {
+            interval_seconds: 3600, // Every hour
+            retention_days: agent_events_retention_days,
+        };
+        utils::background_tasks::start_agent_events_cleanup_task(
+            dal.clone(),
+            agent_events_cleanup_config,
+        );
+    } else {
+        info!("Agent-events retention disabled (agent_events_retention_days = 0); skipping eviction task");
+    }
 
     // Create reloadable configuration for hot-reload support
     info!("Initializing reloadable configuration");

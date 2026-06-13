@@ -17,6 +17,7 @@ pub mod auth;
 pub mod deployment_objects;
 pub mod diagnostics;
 pub mod error;
+pub mod fleet;
 pub mod generators;
 pub mod health;
 pub mod middleware;
