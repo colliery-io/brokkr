@@ -248,6 +248,12 @@ The current version byte (`0x01`) indicates AES-256-GCM encryption. The 12-byte 
 
 The encryption key is configured via the `BROKKR__BROKER__WEBHOOK_ENCRYPTION_KEY` environment variable as a 64-character hexadecimal string (representing 32 bytes). If no key is configured, the broker generates a random key at startup and logs a warning. Production deployments should always configure an explicit key to ensure encrypted data survives broker restarts.
 
+#### Legacy format and its inherent ambiguity (read-only)
+
+Data written before the versioned format is a **headerless** `nonce (16 bytes) || ciphertext` XOR blob, supported **read-only** for one-time migration (a leading version byte `0x00` also routes to this path). Because a headerless blob has no version header, the decryptor falls back to the legacy path whenever the first byte is not a known version marker.
+
+This leaves a small, inherent ambiguity: a legacy blob whose nonce happens to begin with `0x00` (legacy marker) or `0x01` (AES-GCM marker) is mis-routed and fails to decrypt. The window is tiny — roughly `2/256` (~0.78%) of legacy blobs — and is **bounded entirely to the read-only migration path**. It cannot affect new data: AES-256-GCM ciphertext always carries the `0x01` version byte and is dispatched unambiguously. The ambiguity is not fixable without a format change (headerless data is inherently undistinguishable from versioned data in that one byte), so the resolution is operational: let the migration re-encrypt legacy values into the versioned (`0x01`) format, after which the ambiguity no longer applies.
+
 ### PAK Rotation
 
 PAK rotation replaces an entity's authentication credential without disrupting its identity or permissions. The `POST /api/v1/agents/{id}/rotate-pak` endpoint (and similar endpoints for generators) generates a new PAK and invalidates the previous one atomically.
