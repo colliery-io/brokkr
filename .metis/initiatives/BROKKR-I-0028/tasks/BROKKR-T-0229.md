@@ -4,16 +4,15 @@ level: task
 title: "Slice 1: /api/v1/fleet/live WS endpoint + FleetUpdate fan-out + event-driven push"
 short_code: "BROKKR-T-0229"
 created_at: 2026-06-13T14:07:52.201407+00:00
-updated_at: 2026-06-13T14:07:52.201407+00:00
+updated_at: 2026-06-13T14:32:05.617824+00:00
 parent: fleet-live-push
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/todo"
   - "#task"
-  - "#phase/todo"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -31,6 +30,10 @@ initiative_id: BROKKR-I-0028
 The consumer-facing live stream + the instant (event-driven) half of the hybrid
 trigger: push a per-agent FleetAgentRecord whenever the broker observes a WS
 connect/disconnect or a heartbeat.
+
+## Acceptance Criteria
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 
@@ -61,4 +64,26 @@ connect/disconnect or a heartbeat.
 
 ## Status Updates
 
-*To be added during implementation*
+- 2026-06-13: Slice 1 implemented on `feat/i0028-fleet-live-push` (not committed).
+  - Wire: added `WsMessage::FleetUpdate(FleetAgentRecord)` + a plain-serde
+    `FleetAgentRecord` **wire twin** in `brokkr-wire` (keeps wire free of
+    utoipa/diesel; broker's `api/v1/fleet.rs::FleetAgentRecord` keeps its
+    `ToSchema` and converts via `to_wire()`). Golden fixture extended; drift
+    checks (rust/python/typescript) all pass.
+  - Fan-out: `FleetBroadcaster` (single fleet-wide `broadcast::Sender`) in
+    `ws/broadcaster.rs`; Lagged → drop/continue (no gap concept).
+  - Endpoint: `GET /api/v1/fleet/live` in new `ws/fleet_subscribe.rs`,
+    admin-gated (`AuthPayload.admin`), subprotocol PAK supported; mounted in
+    `api/mod.rs`. Metric `brokkr_fleet_live_subscribers`.
+  - Single-agent builder + best-effort producer
+    `fleet::broadcast_agent_fleet_update` reused by all producers.
+  - Producers: WS connect/disconnect (`ws/handler.rs::run_connection`) and
+    `record_heartbeat` (`api/v1/agents.rs`), both best-effort.
+  - Tests: broadcaster unit tests + `fleet_live_*` integration tests (admin
+    gate 403, heartbeat→FleetUpdate, slow subscriber doesn't stall). Docs
+    updated (`reference/ws-protocol.md`, `reference/monitoring.md`).
+  - Verified: build + clippy --tests warning-free; wire/broadcaster unit tests
+    pass; 3 openapi drift checks pass; integration binary compiles. The
+    DB-backed `fleet_live` integration run was NOT executed (brokkr Postgres
+    stack on :5433 not up; anti-hang rules forbid docker compose up / the
+    interactive angreal path) — flagged for maintainer to run.

@@ -55,11 +55,13 @@ async fn spawn_broker(fixture: &TestFixture) -> (std::net::SocketAddr, Arc<Conne
     // Mount only the internal WS router for these tests — we don't need the
     // full v1 surface, and skipping it keeps the harness lean.
     let broadcaster = LiveBroadcaster::new();
+    let fleet_broadcaster = brokkr_broker::ws::FleetBroadcaster::new();
     let app = axum::Router::new()
         .merge(internal_routes(
             fixture.dal.clone(),
             registry.clone(),
             broadcaster,
+            fleet_broadcaster,
         ))
         .layer(axum::extract::Extension(cors))
         .with_state(fixture.dal.clone());
@@ -282,6 +284,7 @@ async fn spawn_full_broker(
 
     let registry = ConnectionRegistry::new();
     let broadcaster = LiveBroadcaster::new();
+    let fleet_broadcaster = brokkr_broker::ws::FleetBroadcaster::new();
     let cors = Cors {
         allowed_origins: vec!["*".to_string()],
         allowed_methods: vec![
@@ -294,19 +297,25 @@ async fn spawn_full_broker(
         max_age_seconds: 60,
     };
 
-    // Mirror `api::configure_api_routes`: the v1 routes need the registry
-    // as an Extension so the post-commit push helpers (`ws::push`) can
-    // reach it.
+    // Mirror `api::configure_api_routes`: the v1 routes need the registry +
+    // broadcasters as Extensions so the post-commit push helpers (`ws::push`)
+    // and the fleet live-push producer (`record_heartbeat`) can reach them.
     let app = axum::Router::new()
         .merge(api::v1::routes(fixture.dal.clone(), &cors, None))
         .merge(internal_routes(
             fixture.dal.clone(),
             registry.clone(),
             broadcaster.clone(),
+            fleet_broadcaster.clone(),
         ))
         .merge(subscribe_routes(fixture.dal.clone(), broadcaster.clone()))
+        .merge(brokkr_broker::ws::fleet_subscribe_routes(
+            fixture.dal.clone(),
+            fleet_broadcaster.clone(),
+        ))
         .layer(axum::extract::Extension(registry.clone()))
         .layer(axum::extract::Extension(broadcaster))
+        .layer(axum::extract::Extension(fleet_broadcaster))
         .with_state(fixture.dal.clone());
 
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -1544,6 +1553,116 @@ async fn deleting_agent_closes_its_open_ws() {
         await_socket_close(&mut socket).await,
         "socket should close within 1s of agent deletion"
     );
+}
+
+// =============================================================================
+// BROKKR-I-0028: consumer-facing fleet live-push (/api/v1/fleet/live)
+// =============================================================================
+
+fn fleet_live_url(addr: std::net::SocketAddr) -> String {
+    format!("ws://{}/api/v1/fleet/live", addr)
+}
+
+/// The fleet-live endpoint is admin-gated exactly like `GET /fleet`. A
+/// non-admin PAK (here: an agent PAK) must be rejected with 403 before upgrade.
+#[tokio::test]
+async fn fleet_live_rejects_non_admin_pak() {
+    let fixture = TestFixture::new();
+    let (addr, _registry) = spawn_full_broker(&fixture).await;
+
+    // An agent PAK is neither admin nor generator.
+    let (_agent, agent_pak) =
+        fixture.create_test_agent_with_pak("fleet-live gate".into(), "cluster".into());
+
+    let request = ws_request_with_pak(&fleet_live_url(addr), &agent_pak);
+    let err = tokio_tungstenite::connect_async(request)
+        .await
+        .expect_err("non-admin PAK must not be allowed to subscribe to fleet live");
+
+    match err {
+        tokio_tungstenite::tungstenite::Error::Http(resp) => {
+            assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+        }
+        other => panic!("expected HTTP 403 rejection, got {other:?}"),
+    }
+}
+
+/// An admin subscriber on `/api/v1/fleet/live` receives a `FleetUpdate` frame
+/// for the agent that just heartbeated (the event-driven producer in
+/// `record_heartbeat`).
+#[tokio::test]
+async fn fleet_live_pushes_fleet_update_on_heartbeat() {
+    use reqwest::Client;
+
+    let fixture = TestFixture::new();
+    let (addr, _registry) = spawn_full_broker(&fixture).await;
+    let http = Client::new();
+    let base = format!("http://{}", addr);
+
+    let (agent, agent_pak) =
+        fixture.create_test_agent_with_pak("fleet-live hb".into(), "cluster".into());
+
+    // Subscribe FIRST (admin PAK) so the fleet channel has a receiver before
+    // the heartbeat fires.
+    let sub_req = ws_request_with_pak(&fleet_live_url(addr), &fixture.admin_pak);
+    let (mut subscriber, sub_resp) = tokio_tungstenite::connect_async(sub_req)
+        .await
+        .expect("admin fleet-live subscribe should upgrade");
+    assert_eq!(sub_resp.status(), StatusCode::SWITCHING_PROTOCOLS);
+
+    // Agent heartbeats over REST → record_heartbeat broadcasts its record.
+    let resp = http
+        .post(format!("{base}/api/v1/agents/{}/heartbeat", agent.id))
+        .header("Authorization", format!("Bearer {}", agent_pak))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status().as_u16(), 204);
+
+    let got = await_message(&mut subscriber, |m| matches!(m, WsMessage::FleetUpdate(_))).await;
+    if let WsMessage::FleetUpdate(rec) = got {
+        assert_eq!(rec.agent_id, agent.id, "pushed record is for the heartbeating agent");
+        assert_eq!(rec.name, "fleet-live hb");
+        assert!(rec.last_heartbeat.is_some(), "heartbeat just recorded");
+    }
+}
+
+/// A slow fleet subscriber that never reads must not stall the producer
+/// (heartbeat ingestion). We connect a subscriber, never drain it, and fire
+/// many heartbeats; every REST heartbeat must still succeed promptly.
+#[tokio::test]
+async fn fleet_live_slow_subscriber_does_not_stall_heartbeats() {
+    use reqwest::Client;
+
+    let fixture = TestFixture::new();
+    let (addr, _registry) = spawn_full_broker(&fixture).await;
+    let http = Client::new();
+    let base = format!("http://{}", addr);
+
+    let (agent, agent_pak) =
+        fixture.create_test_agent_with_pak("fleet-live slow".into(), "cluster".into());
+
+    // Subscribe but NEVER read from `_subscriber` — it falls behind.
+    let sub_req = ws_request_with_pak(&fleet_live_url(addr), &fixture.admin_pak);
+    let (_subscriber, sub_resp) = tokio_tungstenite::connect_async(sub_req)
+        .await
+        .expect("admin fleet-live subscribe should upgrade");
+    assert_eq!(sub_resp.status(), StatusCode::SWITCHING_PROTOCOLS);
+
+    // Fire a burst of heartbeats; each must return 204 within a tight bound,
+    // proving the never-draining subscriber never back-pressures ingestion.
+    for _ in 0..50u32 {
+        let resp = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            http.post(format!("{base}/api/v1/agents/{}/heartbeat", agent.id))
+                .header("Authorization", format!("Bearer {}", agent_pak))
+                .send(),
+        )
+        .await
+        .expect("heartbeat must not stall behind a slow fleet subscriber")
+        .unwrap();
+        assert_eq!(resp.status().as_u16(), 204);
+    }
 }
 
 /// Repeatedly poll `predicate` until it returns true or `timeout` elapses.

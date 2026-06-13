@@ -76,6 +76,32 @@ pub struct FleetAgentRecord {
     pub k8s_api_latency_ms: Option<i64>,
 }
 
+impl FleetAgentRecord {
+    /// Convert into the `brokkr-wire` twin used for live-push frames
+    /// (BROKKR-I-0028). The wire struct is intentionally `utoipa`/`diesel`-free;
+    /// this is the single conversion point, so the two must stay field-aligned.
+    pub fn to_wire(&self) -> brokkr_wire::FleetAgentRecord {
+        brokkr_wire::FleetAgentRecord {
+            agent_id: self.agent_id,
+            name: self.name.clone(),
+            status: self.status.clone(),
+            ws_connected: self.ws_connected,
+            connected_since: self.connected_since,
+            last_heartbeat: self.last_heartbeat,
+            heartbeat_age_seconds: self.heartbeat_age_seconds,
+            pending_object_count: self.pending_object_count,
+            pending_work_orders: self.pending_work_orders,
+            claimed_work_orders: self.claimed_work_orders,
+            last_event_at: self.last_event_at,
+            seconds_since_last_event: self.seconds_since_last_event,
+            health_failing: self.health_failing,
+            health_degraded: self.health_degraded,
+            k8s_reachable: self.k8s_reachable,
+            k8s_api_latency_ms: self.k8s_api_latency_ms,
+        }
+    }
+}
+
 /// Response body for the per-agent fleet-status detail view: the agent's fleet
 /// record plus its most recent events (newest first).
 #[derive(Debug, Clone, Serialize, ToSchema)]
@@ -207,6 +233,59 @@ impl FleetAggregates {
             k8s_reachable: agent.k8s_reachable,
             k8s_api_latency_ms: agent.k8s_api_latency_ms.map(i64::from),
         }
+    }
+}
+
+/// Build a single agent's fleet record, or `None` if the agent no longer
+/// exists. Used by the event-driven live-push producers (BROKKR-I-0028) on WS
+/// connect/disconnect and heartbeat. Reuses the same `FleetAggregates`
+/// assembly as `get_agent_fleet_status` so a pushed record is identical to the
+/// pull surface. The aggregate queries are whole-fleet grouped queries (bounded,
+/// no per-agent N+1), so this is cheap enough for the event cadence.
+pub fn build_agent_fleet_record(
+    dal: &DAL,
+    registry: &ConnectionRegistry,
+    agent_id: Uuid,
+) -> Option<FleetAgentRecord> {
+    let agent = match dal.agents().get(agent_id) {
+        Ok(Some(agent)) => agent,
+        Ok(None) => return None,
+        Err(e) => {
+            error!(
+                "Failed to fetch agent {} for fleet live-push: {:?}",
+                agent_id, e
+            );
+            return None;
+        }
+    };
+
+    let aggregates = match FleetAggregates::load(dal, registry) {
+        Ok(aggregates) => aggregates,
+        Err(e) => {
+            error!(
+                "Failed to load fleet aggregates for live-push (agent {}): {:?}",
+                agent_id, e
+            );
+            return None;
+        }
+    };
+
+    Some(aggregates.build_record(&agent, Utc::now()))
+}
+
+/// Best-effort: recompute one agent's fleet record and broadcast it as a
+/// `FleetUpdate` to every `/api/v1/fleet/live` subscriber. **Never returns an
+/// error and never panics** — a push failure (agent gone, DB hiccup, no
+/// subscribers) must not affect the triggering operation (heartbeat,
+/// connect/disconnect). This is the single producer entry point.
+pub fn broadcast_agent_fleet_update(
+    dal: &DAL,
+    registry: &ConnectionRegistry,
+    fleet: &crate::ws::FleetBroadcaster,
+    agent_id: Uuid,
+) {
+    if let Some(record) = build_agent_fleet_record(dal, registry, agent_id) {
+        fleet.broadcast(brokkr_wire::WsMessage::FleetUpdate(record.to_wire()));
     }
 }
 

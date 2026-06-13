@@ -115,5 +115,26 @@
       "dropped_count": 42,
       "reason": "rate_limit"
     }
+  },
+  {
+    "type": "fleet_update",
+    "body": {
+      "agent_id": "11111111-1111-1111-1111-111111111111",
+      "name": "demo-agent",
+      "status": "ACTIVE",
+      "ws_connected": true,
+      "connected_since": "2026-01-01T00:00:00Z",
+      "last_heartbeat": "2026-01-01T00:00:00Z",
+      "heartbeat_age_seconds": 0,
+      "pending_object_count": 0,
+      "pending_work_orders": 0,
+      "claimed_work_orders": 0,
+      "last_event_at": "2026-01-01T00:00:00Z",
+      "seconds_since_last_event": 0,
+      "health_failing": 0,
+      "health_degraded": 0,
+      "k8s_reachable": true,
+      "k8s_api_latency_ms": 12
+    }
   }
 ]

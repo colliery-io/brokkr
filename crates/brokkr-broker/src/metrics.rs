@@ -148,6 +148,20 @@ pub static WS_LIVE_SUBSCRIBERS: Lazy<IntGauge> = Lazy::new(|| {
     g
 });
 
+/// Subscribers on the consumer-facing fleet live-push hub (BROKKR-I-0028).
+/// A single fleet-wide channel, so no per-stack label.
+pub static FLEET_LIVE_SUBSCRIBERS: Lazy<IntGauge> = Lazy::new(|| {
+    let opts = Opts::new(
+        "brokkr_fleet_live_subscribers",
+        "Subscribers on the consumer-facing /api/v1/fleet/live push hub",
+    );
+    let g = IntGauge::with_opts(opts).expect("fleet live subs gauge");
+    REGISTRY
+        .register(Box::new(g.clone()))
+        .expect("register fleet_live_subscribers");
+    g
+});
+
 /// Eviction passes executed by the retention worker (WS-09).
 pub static WS_LOG_EVICTION_RUNS_TOTAL: Lazy<IntCounter> = Lazy::new(|| {
     let opts = Opts::new(
@@ -189,6 +203,10 @@ pub fn ws_live_subscribers() -> &'static IntGauge {
     &WS_LIVE_SUBSCRIBERS
 }
 
+pub fn fleet_live_subscribers() -> &'static IntGauge {
+    &FLEET_LIVE_SUBSCRIBERS
+}
+
 pub fn ws_log_eviction_runs_total() -> &'static IntCounter {
     &WS_LOG_EVICTION_RUNS_TOTAL
 }
@@ -208,6 +226,7 @@ pub fn init() {
     let _ = &*WS_CONNECTED_AGENTS;
     let _ = &*WS_MESSAGES_TOTAL;
     let _ = &*WS_LIVE_SUBSCRIBERS;
+    let _ = &*FLEET_LIVE_SUBSCRIBERS;
     let _ = &*WS_LOG_EVICTION_RUNS_TOTAL;
     let _ = &*WS_TELEMETRY_EVICTED_TOTAL;
     let _ = &*ACTIVE_AGENTS;
