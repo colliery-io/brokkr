@@ -4,15 +4,15 @@ level: initiative
 title: "Fleet Live Push"
 short_code: "BROKKR-I-0028"
 created_at: 2026-06-13T14:07:20.432841+00:00
-updated_at: 2026-06-13T14:08:19.811437+00:00
+updated_at: 2026-06-13T15:01:26.803465+00:00
 parent: brokkr-environment-aware
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#initiative"
   - "#initiative"
-  - "#phase/design"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -101,3 +101,14 @@ Brokkr already has the consumer-facing live-push machinery to reuse:
 
 - 2026-06-13: Created from the I-0027 closeout's deferred WS-push. Trigger model
   = hybrid (maintainer). Design grounded in the existing ws/broadcaster fan-out.
+## Closeout 2026-06-13
+
+Completed. Both slices shipped in PR #66:
+- T-0229 — GET /api/v1/fleet/live WS stream + FleetUpdate fan-out + event-driven
+  push (connect/disconnect + heartbeat).
+- T-0230 — periodic 20s recompute-and-diff sweep for the computed signals
+  (backpressure/health).
+
+The hybrid trigger is complete: instant pushes on discrete events + the sweep
+for computed signals. A consumer pulls GET /fleet for the baseline, then
+subscribes to /fleet/live and replaces records by agent_id. No deferred work.

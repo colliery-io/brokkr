@@ -7,7 +7,7 @@ created_at: 2026-06-13T14:07:52.252307+00:00
 updated_at: 2026-06-13T14:38:48.137895+00:00
 parent: fleet-live-push
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -31,6 +31,8 @@ The second half of the hybrid trigger: catch changes in the *computed* signals
 (backpressure, health counts) that aren't tied to a discrete event, by
 periodically recomputing and re-broadcasting only the agents whose computed
 fields changed. Depends on Slice 1 ([[BROKKR-T-0229]]).
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

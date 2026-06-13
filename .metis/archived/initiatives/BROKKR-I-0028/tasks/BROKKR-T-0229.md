@@ -7,7 +7,7 @@ created_at: 2026-06-13T14:07:52.201407+00:00
 updated_at: 2026-06-13T14:32:05.617824+00:00
 parent: fleet-live-push
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -30,6 +30,8 @@ initiative_id: BROKKR-I-0028
 The consumer-facing live stream + the instant (event-driven) half of the hybrid
 trigger: push a per-agent FleetAgentRecord whenever the broker observes a WS
 connect/disconnect or a heartbeat.
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 
