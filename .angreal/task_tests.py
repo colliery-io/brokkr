@@ -95,14 +95,15 @@ CRATES = get_crates()
 def unit_tests(crate_name: str, test_filter: str = ""):
     """Run unit tests for a specific crate."""
     return_codes = []
-    rc = None
+    rc = 0
     if crate_name == "all":
         for crate in CRATES["unit_tests"]:
-            return_code = run_unit_tests(crate, test_filter)
-            return_codes.append((crate,return_code))
-        if any(code != 0 for _, code in return_codes):
-            rc =   max(code for _, code in return_codes)
-            print(f"Unit tests failed for {crate} with return code {rc}")
+            return_codes.append((crate, run_unit_tests(crate, test_filter)))
+        failed = [(c, code) for c, code in return_codes if code != 0]
+        if failed:
+            for c, code in failed:
+                print(f"Unit tests failed for {c} with return code {code}")
+            rc = max(code for _, code in failed)
     else:
         rc = run_unit_tests(crate_name, test_filter)
 
@@ -123,16 +124,17 @@ def integration_tests(crate_name: str, test_filter: str = "", skip_docker: bool 
     print("Sleeping for 30 seconds, waiting for services to stabilize - get some coffee")
     time.sleep(30)
 
-    rc = None
+    rc = 0
     return_codes = []
     try:
         if crate_name == "all":
             for crate in CRATES["integration_tests"]:
-                return_code = run_integration_tests(crate, test_filter)
-                return_codes.append((crate,return_code))
-            if any(code != 0 for _, code in return_codes):
-                rc =   max(code for _, code in return_codes)
-                print(f"Integration tests failed for {crate} with return code {rc}")
+                return_codes.append((crate, run_integration_tests(crate, test_filter)))
+            failed = [(c, code) for c, code in return_codes if code != 0]
+            if failed:
+                for c, code in failed:
+                    print(f"Integration tests failed for {c} with return code {code}")
+                rc = max(code for _, code in failed)
         else:
             rc = run_integration_tests(crate_name, test_filter)
         if not skip_docker:
@@ -141,7 +143,10 @@ def integration_tests(crate_name: str, test_filter: str = "", skip_docker: bool 
         if not skip_docker:
             docker_down()
             docker_clean()
-        return rc
+    # Return OUTSIDE the finally: a `return` in `finally` swallows any exception
+    # from the try and masks it as exit 0. Cleanup belongs in finally; the exit
+    # status must reflect real failures (BROKKR-T-0027).
+    return rc
 
 
 def _sdk_contract_env():
@@ -355,7 +360,9 @@ def sdk_contract_tests(language: str, skip_docker: bool = False):
         if not skip_docker:
             docker_down()
             docker_clean()
-        return rc
+    # Return OUTSIDE the finally (BROKKR-T-0027): a `return` in `finally`
+    # swallows exceptions from the try and masks them as exit 0.
+    return rc
 
 
 @test()
@@ -379,7 +386,7 @@ def e2e_tests(skip_docker: bool = False, scenario: str = ""):
     print("Sleeping for 30 seconds, waiting for services to stabilize - get some coffee")
     time.sleep(30)
 
-    rc = None
+    rc = 0
     try:
         rc = run_e2e_tests(scenario=scenario)
         if not skip_docker:
@@ -388,4 +395,6 @@ def e2e_tests(skip_docker: bool = False, scenario: str = ""):
         if not skip_docker:
             docker_down()
             docker_clean()
-        return rc
+    # Return OUTSIDE the finally (BROKKR-T-0027): a `return` in `finally`
+    # swallows exceptions from the try and masks them as exit 0.
+    return rc

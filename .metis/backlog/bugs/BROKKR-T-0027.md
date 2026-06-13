@@ -4,20 +4,19 @@ level: task
 title: "Angreal Task Exit Status"
 short_code: "BROKKR-T-0027"
 created_at: 2025-10-23T01:46:25.523842+00:00
-updated_at: 2025-10-23T01:46:25.523842+00:00
-parent:
+updated_at: 2026-06-13T15:47:11.397599+00:00
+parent: 
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/backlog"
   - "#bug"
+  - "#bug"
+  - "#phase/completed"
 
 
-  - "#bug"
 exit_criteria_met: false
-strategy_id: NULL
 initiative_id: NULL
 ---
 
@@ -68,6 +67,12 @@ Fix angreal exit status codes to ensure that CI/CD pipelines appropriately “go
 - **Current Problems**: {What's difficult/slow/buggy now}
 - **Benefits of Fixing**: {What improves after refactoring}
 - **Risk Assessment**: {Risks of not addressing this}
+
+## Acceptance Criteria
+
+## Acceptance Criteria
+
+## Acceptance Criteria
 
 ## Acceptance Criteria **\[REQUIRED\]**
 
@@ -156,3 +161,23 @@ None - this is a standalone bug fix
 ## Status Updates **\[REQUIRED\]**
 
 *To be added during implementation*
+## Status Updates
+
+- 2026-06-13: Root cause = `return` inside `finally` in .angreal/task_tests.py
+  (integration_tests, sdk_contract_tests, e2e_tests). A return in finally
+  swallows any exception raised in the try and returns `rc` (default None →
+  angreal exit 0), so a setup/infra error or any Python-level failure during a
+  test run silently exits green. (Plain cargo-test failures already propagate via
+  rc.) Fix: cleanup stays in finally; the `return rc` moves out to function
+  scope so exceptions propagate (angreal exit 56) and rc is returned on failure.
+  Also default rc to 0 and fix the leaked loop-variable in the failure prints.
+
+- 2026-06-13: FIXED + verified. .angreal/task_tests.py: moved `return rc` out of
+  the finally blocks in integration_tests / sdk_contract_tests / e2e_tests
+  (cleanup stays in finally); defaulted rc to 0; fixed the leaked loop-variable
+  in the failure prints (unit + integration). Verified: `angreal tests unit
+  nonexistent-crate` -> exit 101; `angreal tests integration nonexistent-crate
+  --skip-docker` -> exit 101; passing run -> exit 0. py_compile OK; a scan
+  confirms no `return` remains inside any `finally`. The exception-swallowing
+  path is closed (demonstrated: old pattern returns None on a raised exception,
+  new pattern propagates it).
