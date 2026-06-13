@@ -1,5 +1,6 @@
 import angreal # type: ignore
 import subprocess
+import sys
 from utils import docker_up, docker_down, cwd, docker_clean
 import time
 test = angreal.command_group(name="tests", about="commands for test suites")
@@ -137,7 +138,11 @@ def integration_tests(crate_name: str, test_filter: str = "", skip_docker: bool 
                 rc = max(code for _, code in failed)
         else:
             rc = run_integration_tests(crate_name, test_filter)
-        if not skip_docker:
+        # Only prompt when attached to a TTY. Non-interactive runs (CI, scripts,
+        # background shells) would otherwise raise EOFError on input(), which —
+        # now that BROKKR-T-0027 stopped swallowing exceptions in finally —
+        # surfaces as a task failure even when the tests passed.
+        if not skip_docker and sys.stdin.isatty():
             input("Press Enter to shutdown containers and clean up...")
     finally:
         if not skip_docker:
@@ -354,7 +359,11 @@ def sdk_contract_tests(language: str, skip_docker: bool = False):
             else:
                 rc = runner()
 
-        if not skip_docker:
+        # Only prompt when attached to a TTY. Non-interactive runs (CI, scripts,
+        # background shells) would otherwise raise EOFError on input(), which —
+        # now that BROKKR-T-0027 stopped swallowing exceptions in finally —
+        # surfaces as a task failure even when the tests passed.
+        if not skip_docker and sys.stdin.isatty():
             input("Press Enter to shutdown containers and clean up...")
     finally:
         if not skip_docker:
@@ -389,7 +398,11 @@ def e2e_tests(skip_docker: bool = False, scenario: str = ""):
     rc = 0
     try:
         rc = run_e2e_tests(scenario=scenario)
-        if not skip_docker:
+        # Only prompt when attached to a TTY. Non-interactive runs (CI, scripts,
+        # background shells) would otherwise raise EOFError on input(), which —
+        # now that BROKKR-T-0027 stopped swallowing exceptions in finally —
+        # surfaces as a task failure even when the tests passed.
+        if not skip_docker and sys.stdin.isatty():
             input("Press Enter to shutdown containers and clean up...")
     finally:
         if not skip_docker:
