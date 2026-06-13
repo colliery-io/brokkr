@@ -542,6 +542,8 @@ mod tests {
         WsMessage::Heartbeat(brokkr_wire::Heartbeat {
             agent_id: uuid::Uuid::nil(),
             sent_at: chrono::Utc::now(),
+            k8s_reachable: None,
+            k8s_api_latency_ms: None,
         })
     }
 

@@ -584,9 +584,87 @@ pub fn start_audit_log_cleanup_task(dal: DAL, config: AuditLogCleanupConfig) {
     });
 }
 
+/// Configuration for the agent-events cleanup task (BROKKR-T-0228).
+pub struct AgentEventsCleanupConfig {
+    /// How often to run the cleanup (in seconds).
+    pub interval_seconds: u64,
+    /// Number of days to retain agent events before hard-deletion.
+    pub retention_days: i64,
+}
+
+impl Default for AgentEventsCleanupConfig {
+    fn default() -> Self {
+        Self {
+            interval_seconds: 3600, // Hourly
+            retention_days: 30,     // 30 days default
+        }
+    }
+}
+
+/// Starts the agent-events cleanup background task (BROKKR-T-0228).
+///
+/// `agent_events` has no eviction of its own — rows are only soft-deleted on
+/// agent-delete cascade — so the table grows without bound at fleet scale.
+/// This task periodically hard-deletes events whose `created_at` is older than
+/// the configured retention window, keeping the table bounded while leaving the
+/// fleet activity feed (which serves the most recent N) intact.
+///
+/// The caller is responsible for only spawning this when `retention_days > 0`;
+/// a window of `0` disables eviction (the historical behavior).
+///
+/// # Arguments
+/// * `dal` - The Data Access Layer instance
+/// * `config` - Configuration for the cleanup task
+pub fn start_agent_events_cleanup_task(dal: DAL, config: AgentEventsCleanupConfig) {
+    info!(
+        "Starting agent events cleanup task (interval: {}s, retention: {}d)",
+        config.interval_seconds, config.retention_days
+    );
+
+    tokio::spawn(async move {
+        let mut ticker = interval(Duration::from_secs(config.interval_seconds));
+
+        loop {
+            ticker.tick().await;
+
+            let cutoff = chrono::Utc::now() - chrono::Duration::days(config.retention_days);
+            match dal.agent_events().delete_older_than(cutoff) {
+                Ok(deleted) => {
+                    if deleted > 0 {
+                        info!(
+                            "Cleaned up {} old agent events (age > {}d)",
+                            deleted, config.retention_days
+                        );
+                    }
+                }
+                Err(e) => {
+                    error!("Failed to cleanup old agent events: {:?}", e);
+                }
+            }
+        }
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_default_agent_events_cleanup_config() {
+        let config = AgentEventsCleanupConfig::default();
+        assert_eq!(config.interval_seconds, 3600);
+        assert_eq!(config.retention_days, 30);
+    }
+
+    #[test]
+    fn test_custom_agent_events_cleanup_config() {
+        let config = AgentEventsCleanupConfig {
+            interval_seconds: 1800,
+            retention_days: 14,
+        };
+        assert_eq!(config.interval_seconds, 1800);
+        assert_eq!(config.retention_days, 14);
+    }
 
     #[test]
     fn test_default_diagnostic_config() {

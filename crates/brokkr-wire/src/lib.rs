@@ -35,10 +35,22 @@ pub use brokkr_models::models::work_orders::WorkOrder;
 
 /// Heartbeat from agent to broker. Sent on a tick while the WS connection is
 /// up; absence drives broker-side liveness for diagnostics.
+///
+/// `k8s_reachable` / `k8s_api_latency_ms` carry the one fleet signal the
+/// broker cannot compute itself (BROKKR-T-0227): whether the agent can reach
+/// its own Kubernetes API. Both are optional and `#[serde(default)]` so older
+/// agents that omit them still deserialize, and agents that cannot determine
+/// reachability simply leave them `None` (graceful degradation).
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Heartbeat {
     pub agent_id: Uuid,
     pub sent_at: DateTime<Utc>,
+    /// Whether the agent can reach its own Kubernetes API, if it probed.
+    #[serde(default)]
+    pub k8s_reachable: Option<bool>,
+    /// Measured latency (milliseconds) of the reachability probe, if any.
+    #[serde(default)]
+    pub k8s_api_latency_ms: Option<i32>,
 }
 
 /// Kubernetes object reference for events and log lines. Mirrors the fields

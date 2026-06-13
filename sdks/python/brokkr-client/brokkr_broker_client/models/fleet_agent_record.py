@@ -36,6 +36,11 @@ class FleetAgentRecord:
                 connected.
             heartbeat_age_seconds (int | None | Unset): Seconds since the last heartbeat (`now - last_heartbeat`, clamped >=
                 0).
+            k8s_api_latency_ms (int | None | Unset): Latest agent-reported latency (milliseconds) of the Kubernetes API
+                reachability probe. `null` when unreported or not measured.
+            k8s_reachable (bool | None | Unset): Latest agent-reported reachability of its own Kubernetes API
+                (BROKKR-T-0227). `null` when the agent has never reported. The broker
+                trusts this value as-is — it is the one fleet signal it cannot compute.
             last_event_at (datetime.datetime | None | Unset): Timestamp of this agent's most recent (non-deleted) event, if
                 any.
             last_heartbeat (datetime.datetime | None | Unset): The agent's last recorded heartbeat timestamp.
@@ -54,6 +59,8 @@ class FleetAgentRecord:
     ws_connected: bool
     connected_since: datetime.datetime | None | Unset = UNSET
     heartbeat_age_seconds: int | None | Unset = UNSET
+    k8s_api_latency_ms: int | None | Unset = UNSET
+    k8s_reachable: bool | None | Unset = UNSET
     last_event_at: datetime.datetime | None | Unset = UNSET
     last_heartbeat: datetime.datetime | None | Unset = UNSET
     seconds_since_last_event: int | None | Unset = UNSET
@@ -91,6 +98,18 @@ class FleetAgentRecord:
             heartbeat_age_seconds = UNSET
         else:
             heartbeat_age_seconds = self.heartbeat_age_seconds
+
+        k8s_api_latency_ms: int | None | Unset
+        if isinstance(self.k8s_api_latency_ms, Unset):
+            k8s_api_latency_ms = UNSET
+        else:
+            k8s_api_latency_ms = self.k8s_api_latency_ms
+
+        k8s_reachable: bool | None | Unset
+        if isinstance(self.k8s_reachable, Unset):
+            k8s_reachable = UNSET
+        else:
+            k8s_reachable = self.k8s_reachable
 
         last_event_at: None | str | Unset
         if isinstance(self.last_event_at, Unset):
@@ -133,6 +152,10 @@ class FleetAgentRecord:
             field_dict["connected_since"] = connected_since
         if heartbeat_age_seconds is not UNSET:
             field_dict["heartbeat_age_seconds"] = heartbeat_age_seconds
+        if k8s_api_latency_ms is not UNSET:
+            field_dict["k8s_api_latency_ms"] = k8s_api_latency_ms
+        if k8s_reachable is not UNSET:
+            field_dict["k8s_reachable"] = k8s_reachable
         if last_event_at is not UNSET:
             field_dict["last_event_at"] = last_event_at
         if last_heartbeat is not UNSET:
@@ -189,6 +212,24 @@ class FleetAgentRecord:
 
         heartbeat_age_seconds = _parse_heartbeat_age_seconds(d.pop("heartbeat_age_seconds", UNSET))
 
+        def _parse_k8s_api_latency_ms(data: object) -> int | None | Unset:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            return cast(int | None | Unset, data)
+
+        k8s_api_latency_ms = _parse_k8s_api_latency_ms(d.pop("k8s_api_latency_ms", UNSET))
+
+        def _parse_k8s_reachable(data: object) -> bool | None | Unset:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            return cast(bool | None | Unset, data)
+
+        k8s_reachable = _parse_k8s_reachable(d.pop("k8s_reachable", UNSET))
+
         def _parse_last_event_at(data: object) -> datetime.datetime | None | Unset:
             if data is None:
                 return data
@@ -244,6 +285,8 @@ class FleetAgentRecord:
             ws_connected=ws_connected,
             connected_since=connected_since,
             heartbeat_age_seconds=heartbeat_age_seconds,
+            k8s_api_latency_ms=k8s_api_latency_ms,
+            k8s_reachable=k8s_reachable,
             last_event_at=last_event_at,
             last_heartbeat=last_heartbeat,
             seconds_since_last_event=seconds_since_last_event,

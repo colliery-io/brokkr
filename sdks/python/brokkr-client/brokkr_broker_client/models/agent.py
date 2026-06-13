@@ -26,6 +26,15 @@ class Agent:
         status (str): Current status of the agent.
         updated_at (datetime.datetime): Timestamp when the agent was last updated.
         deleted_at (datetime.datetime | None | Unset): Timestamp for soft deletion, if applicable.
+        k8s_api_latency_ms (int | None | Unset): Latest agent-reported latency (milliseconds) of the Kubernetes API
+            reachability probe, if the agent measured one. `None` when unreported.
+        k8s_reachable (bool | None | Unset): Latest agent-reported reachability of its own Kubernetes API
+            (BROKKR-T-0227). `None` when the agent has never reported. The broker
+            trusts this value as-is (it cannot compute it itself).
+        k8s_reported_at (datetime.datetime | None | Unset): Server-side ingestion time of the most recent K8s
+            connectivity report,
+            so readers can judge the freshness of `k8s_reachable` /
+            `k8s_api_latency_ms`. `None` when the agent has never reported.
         last_heartbeat (datetime.datetime | None | Unset): Timestamp of the last heartbeat received from the agent.
     """
 
@@ -36,6 +45,9 @@ class Agent:
     status: str
     updated_at: datetime.datetime
     deleted_at: datetime.datetime | None | Unset = UNSET
+    k8s_api_latency_ms: int | None | Unset = UNSET
+    k8s_reachable: bool | None | Unset = UNSET
+    k8s_reported_at: datetime.datetime | None | Unset = UNSET
     last_heartbeat: datetime.datetime | None | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
@@ -60,6 +72,26 @@ class Agent:
         else:
             deleted_at = self.deleted_at
 
+        k8s_api_latency_ms: int | None | Unset
+        if isinstance(self.k8s_api_latency_ms, Unset):
+            k8s_api_latency_ms = UNSET
+        else:
+            k8s_api_latency_ms = self.k8s_api_latency_ms
+
+        k8s_reachable: bool | None | Unset
+        if isinstance(self.k8s_reachable, Unset):
+            k8s_reachable = UNSET
+        else:
+            k8s_reachable = self.k8s_reachable
+
+        k8s_reported_at: None | str | Unset
+        if isinstance(self.k8s_reported_at, Unset):
+            k8s_reported_at = UNSET
+        elif isinstance(self.k8s_reported_at, datetime.datetime):
+            k8s_reported_at = self.k8s_reported_at.isoformat()
+        else:
+            k8s_reported_at = self.k8s_reported_at
+
         last_heartbeat: None | str | Unset
         if isinstance(self.last_heartbeat, Unset):
             last_heartbeat = UNSET
@@ -82,6 +114,12 @@ class Agent:
         )
         if deleted_at is not UNSET:
             field_dict["deleted_at"] = deleted_at
+        if k8s_api_latency_ms is not UNSET:
+            field_dict["k8s_api_latency_ms"] = k8s_api_latency_ms
+        if k8s_reachable is not UNSET:
+            field_dict["k8s_reachable"] = k8s_reachable
+        if k8s_reported_at is not UNSET:
+            field_dict["k8s_reported_at"] = k8s_reported_at
         if last_heartbeat is not UNSET:
             field_dict["last_heartbeat"] = last_heartbeat
 
@@ -119,6 +157,41 @@ class Agent:
 
         deleted_at = _parse_deleted_at(d.pop("deleted_at", UNSET))
 
+        def _parse_k8s_api_latency_ms(data: object) -> int | None | Unset:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            return cast(int | None | Unset, data)
+
+        k8s_api_latency_ms = _parse_k8s_api_latency_ms(d.pop("k8s_api_latency_ms", UNSET))
+
+        def _parse_k8s_reachable(data: object) -> bool | None | Unset:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            return cast(bool | None | Unset, data)
+
+        k8s_reachable = _parse_k8s_reachable(d.pop("k8s_reachable", UNSET))
+
+        def _parse_k8s_reported_at(data: object) -> datetime.datetime | None | Unset:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            try:
+                if not isinstance(data, str):
+                    raise TypeError()
+                k8s_reported_at_type_0 = isoparse(data)
+
+                return k8s_reported_at_type_0
+            except (TypeError, ValueError, AttributeError, KeyError):
+                pass
+            return cast(datetime.datetime | None | Unset, data)
+
+        k8s_reported_at = _parse_k8s_reported_at(d.pop("k8s_reported_at", UNSET))
+
         def _parse_last_heartbeat(data: object) -> datetime.datetime | None | Unset:
             if data is None:
                 return data
@@ -144,6 +217,9 @@ class Agent:
             status=status,
             updated_at=updated_at,
             deleted_at=deleted_at,
+            k8s_api_latency_ms=k8s_api_latency_ms,
+            k8s_reachable=k8s_reachable,
+            k8s_reported_at=k8s_reported_at,
             last_heartbeat=last_heartbeat,
         )
 

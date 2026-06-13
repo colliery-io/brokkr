@@ -43,7 +43,9 @@
     "type": "heartbeat",
     "body": {
       "agent_id": "11111111-1111-1111-1111-111111111111",
-      "sent_at": "2026-01-01T00:00:00Z"
+      "sent_at": "2026-01-01T00:00:00Z",
+      "k8s_reachable": null,
+      "k8s_api_latency_ms": null
     }
   },
   {

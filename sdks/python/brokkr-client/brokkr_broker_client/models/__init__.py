@@ -38,6 +38,7 @@ from .fleet_agent_record import FleetAgentRecord
 from .generator import Generator
 from .health_status_update import HealthStatusUpdate
 from .health_summary import HealthSummary
+from .heartbeat_report import HeartbeatReport
 from .k8s_event_history_response import K8SEventHistoryResponse
 from .list_deliveries_query import ListDeliveriesQuery
 from .new_agent import NewAgent
@@ -119,6 +120,7 @@ __all__ = (
     "Generator",
     "HealthStatusUpdate",
     "HealthSummary",
+    "HeartbeatReport",
     "K8SEventHistoryResponse",
     "ListDeliveriesQuery",
     "NewAgent",

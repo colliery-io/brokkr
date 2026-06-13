@@ -11,6 +11,7 @@ mod audit_logs;
 mod auth;
 mod deployment_objects;
 mod diagnostics;
+mod fleet;
 mod generators;
 mod health;
 mod stacks;

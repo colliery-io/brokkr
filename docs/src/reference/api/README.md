@@ -101,9 +101,18 @@ rollup is assembled with bounded grouped queries (no per-agent fan-out).
 Each fleet record carries: `agent_id`, `name`, `status`, `ws_connected`,
 `connected_since`, `last_heartbeat`, `heartbeat_age_seconds`,
 `pending_object_count`, `pending_work_orders`, `claimed_work_orders`,
-`last_event_at`, `seconds_since_last_event`, `health_failing`, and
-`health_degraded`. The `*_age_seconds` / `seconds_since_*` fields are
-`now - timestamp`, clamped to be non-negative.
+`last_event_at`, `seconds_since_last_event`, `health_failing`,
+`health_degraded`, `k8s_reachable`, and `k8s_api_latency_ms`. The
+`*_age_seconds` / `seconds_since_*` fields are `now - timestamp`, clamped to be
+non-negative.
+
+`k8s_reachable` (and the optional `k8s_api_latency_ms`, in milliseconds) is the
+one fleet signal the broker cannot compute itself: whether each agent can reach
+its own Kubernetes API. The agent self-reports it on the heartbeat cycle (a
+lightweight `GET /version` probe carried in the heartbeat body / WS heartbeat
+frame), and the broker stores and trusts the latest snapshot per agent. Both
+are `null` until an agent first reports — an agent that never reports leaves
+them `null` without affecting the rest of the rollup.
 
 #### Templates
 Reusable stack templates with Tera templating and JSON Schema validation.

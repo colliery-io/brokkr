@@ -39,6 +39,23 @@
             "format": "uuid",
             "type": "string"
           },
+          "k8s_api_latency_ms": {
+            "description": "Latest agent-reported latency (milliseconds) of the Kubernetes API\nreachability probe, if the agent measured one. `None` when unreported.",
+            "format": "int32",
+            "nullable": true,
+            "type": "integer"
+          },
+          "k8s_reachable": {
+            "description": "Latest agent-reported reachability of its own Kubernetes API\n(BROKKR-T-0227). `None` when the agent has never reported. The broker\ntrusts this value as-is (it cannot compute it itself).",
+            "nullable": true,
+            "type": "boolean"
+          },
+          "k8s_reported_at": {
+            "description": "Server-side ingestion time of the most recent K8s connectivity report,\nso readers can judge the freshness of `k8s_reachable` /\n`k8s_api_latency_ms`. `None` when the agent has never reported.",
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
           "last_heartbeat": {
             "description": "Timestamp of the last heartbeat received from the agent.",
             "format": "date-time",
@@ -1189,6 +1206,17 @@
             "nullable": true,
             "type": "integer"
           },
+          "k8s_api_latency_ms": {
+            "description": "Latest agent-reported latency (milliseconds) of the Kubernetes API\nreachability probe. `null` when unreported or not measured.",
+            "format": "int64",
+            "nullable": true,
+            "type": "integer"
+          },
+          "k8s_reachable": {
+            "description": "Latest agent-reported reachability of its own Kubernetes API\n(BROKKR-T-0227). `null` when the agent has never reported. The broker\ntrusts this value as-is — it is the one fleet signal it cannot compute.",
+            "nullable": true,
+            "type": "boolean"
+          },
           "last_event_at": {
             "description": "Timestamp of this agent's most recent (non-deleted) event, if any.",
             "format": "date-time",
@@ -1346,6 +1374,23 @@
           "pods_total",
           "conditions"
         ],
+        "type": "object"
+      },
+      "HeartbeatReport": {
+        "description": "Optional heartbeat report body (BROKKR-T-0227).\n\nA plain heartbeat carries no body; agents that probe their own Kubernetes\nAPI attach this to self-report reachability. Both fields are optional so a\nbody may carry only what the agent could measure, and the entire body may\nbe omitted (legacy/no-body heartbeats still work).",
+        "properties": {
+          "k8s_api_latency_ms": {
+            "description": "Measured latency (milliseconds) of the reachability probe, if any.",
+            "format": "int32",
+            "nullable": true,
+            "type": "integer"
+          },
+          "k8s_reachable": {
+            "description": "Whether the agent can reach its own Kubernetes API.",
+            "nullable": true,
+            "type": "boolean"
+          }
+        },
         "type": "object"
       },
       "K8sEventHistoryResponse": {
@@ -4217,6 +4262,17 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HeartbeatReport"
+              }
+            }
+          },
+          "description": "Optional agent-reported K8s connectivity",
+          "required": true
+        },
         "responses": {
           "204": {
             "description": "Successfully recorded agent heartbeat"

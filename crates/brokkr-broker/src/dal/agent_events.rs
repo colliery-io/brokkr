@@ -14,7 +14,7 @@ use crate::dal::DAL;
 use brokkr_models::models::agent_events::{AgentEvent, NewAgentEvent};
 use brokkr_models::schema::agent_events;
 use brokkr_models::schema::deployment_objects;
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use diesel::prelude::*;
 use uuid::Uuid;
 
@@ -212,5 +212,30 @@ impl AgentEventsDAL<'_> {
     pub fn hard_delete(&self, event_uuid: Uuid) -> Result<usize, diesel::result::Error> {
         let conn = &mut self.dal.conn()?;
         diesel::delete(agent_events::table.filter(agent_events::id.eq(event_uuid))).execute(conn)
+    }
+
+    /// Hard-deletes all agent events with `created_at` older than `cutoff`.
+    ///
+    /// This is the eviction primitive behind the `agent_events` retention
+    /// policy (BROKKR-T-0228). Unlike [`soft_delete`](Self::soft_delete), rows
+    /// are physically removed so the table does not grow without bound. The
+    /// filter uses `created_at` (server-side ingestion time), so an agent that
+    /// backdates an event cannot keep ancient rows alive past the window.
+    ///
+    /// # Arguments
+    ///
+    /// * `cutoff` - Events strictly older than this timestamp are deleted.
+    ///
+    /// # Returns
+    ///
+    /// Returns a Result containing the number of rows deleted on success, or a
+    /// diesel::result::Error on failure.
+    pub fn delete_older_than(
+        &self,
+        cutoff: DateTime<Utc>,
+    ) -> Result<usize, diesel::result::Error> {
+        let conn = &mut self.dal.conn()?;
+        diesel::delete(agent_events::table.filter(agent_events::created_at.lt(cutoff)))
+            .execute(conn)
     }
 }

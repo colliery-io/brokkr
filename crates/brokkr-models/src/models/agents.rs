@@ -77,6 +77,17 @@ pub struct Agent {
     /// Hash of the agent's Pre-shared Authentication Key (PAK).
     #[serde(skip_serializing, skip_deserializing)]
     pub pak_hash: String,
+    /// Latest agent-reported reachability of its own Kubernetes API
+    /// (BROKKR-T-0227). `None` when the agent has never reported. The broker
+    /// trusts this value as-is (it cannot compute it itself).
+    pub k8s_reachable: Option<bool>,
+    /// Latest agent-reported latency (milliseconds) of the Kubernetes API
+    /// reachability probe, if the agent measured one. `None` when unreported.
+    pub k8s_api_latency_ms: Option<i32>,
+    /// Server-side ingestion time of the most recent K8s connectivity report,
+    /// so readers can judge the freshness of `k8s_reachable` /
+    /// `k8s_api_latency_ms`. `None` when the agent has never reported.
+    pub k8s_reported_at: Option<DateTime<Utc>>,
 }
 
 /// Represents a new agent to be inserted into the database.

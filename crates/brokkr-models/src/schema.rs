@@ -102,6 +102,9 @@ diesel::table! {
         #[max_length = 50]
         status -> Varchar,
         pak_hash -> Text,
+        k8s_reachable -> Nullable<Bool>,
+        k8s_api_latency_ms -> Nullable<Int4>,
+        k8s_reported_at -> Nullable<Timestamptz>,
     }
 }
 

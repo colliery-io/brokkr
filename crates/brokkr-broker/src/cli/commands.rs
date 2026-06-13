@@ -164,6 +164,22 @@ pub async fn serve(config: &Settings) -> Result<(), Box<dyn std::error::Error>> 
     };
     utils::background_tasks::start_audit_log_cleanup_task(dal.clone(), audit_cleanup_config);
 
+    // Start agent-events cleanup task (BROKKR-T-0228). Gated on a positive
+    // retention window: 0 or unset disables eviction (historical behavior).
+    let agent_events_retention_days = config.broker.agent_events_retention_days.unwrap_or(30);
+    if agent_events_retention_days > 0 {
+        let agent_events_cleanup_config = utils::background_tasks::AgentEventsCleanupConfig {
+            interval_seconds: 3600, // Every hour
+            retention_days: agent_events_retention_days,
+        };
+        utils::background_tasks::start_agent_events_cleanup_task(
+            dal.clone(),
+            agent_events_cleanup_config,
+        );
+    } else {
+        info!("Agent-events retention disabled (agent_events_retention_days = 0); skipping eviction task");
+    }
+
     // Create reloadable configuration for hot-reload support
     info!("Initializing reloadable configuration");
     let reloadable_config =

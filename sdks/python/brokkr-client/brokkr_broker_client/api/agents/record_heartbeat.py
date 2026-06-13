@@ -8,12 +8,16 @@ import httpx
 from ... import errors
 from ...client import AuthenticatedClient, Client
 from ...models.error_response import ErrorResponse
+from ...models.heartbeat_report import HeartbeatReport
 from ...types import Response
 
 
 def _get_kwargs(
     id: UUID,
+    *,
+    body: HeartbeatReport,
 ) -> dict[str, Any]:
+    headers: dict[str, Any] = {}
 
     _kwargs: dict[str, Any] = {
         "method": "post",
@@ -22,6 +26,11 @@ def _get_kwargs(
         ),
     }
 
+    _kwargs["json"] = body.to_dict()
+
+    headers["Content-Type"] = "application/json"
+
+    _kwargs["headers"] = headers
     return _kwargs
 
 
@@ -59,10 +68,17 @@ def sync_detailed(
     id: UUID,
     *,
     client: AuthenticatedClient,
+    body: HeartbeatReport,
 ) -> Response[Any | ErrorResponse]:
     """
     Args:
         id (UUID):
+        body (HeartbeatReport): Optional heartbeat report body (BROKKR-T-0227).
+
+            A plain heartbeat carries no body; agents that probe their own Kubernetes
+            API attach this to self-report reachability. Both fields are optional so a
+            body may carry only what the agent could measure, and the entire body may
+            be omitted (legacy/no-body heartbeats still work).
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -74,6 +90,7 @@ def sync_detailed(
 
     kwargs = _get_kwargs(
         id=id,
+        body=body,
     )
 
     response = client.get_httpx_client().request(
@@ -87,10 +104,17 @@ def sync(
     id: UUID,
     *,
     client: AuthenticatedClient,
+    body: HeartbeatReport,
 ) -> Any | ErrorResponse | None:
     """
     Args:
         id (UUID):
+        body (HeartbeatReport): Optional heartbeat report body (BROKKR-T-0227).
+
+            A plain heartbeat carries no body; agents that probe their own Kubernetes
+            API attach this to self-report reachability. Both fields are optional so a
+            body may carry only what the agent could measure, and the entire body may
+            be omitted (legacy/no-body heartbeats still work).
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -103,6 +127,7 @@ def sync(
     return sync_detailed(
         id=id,
         client=client,
+        body=body,
     ).parsed
 
 
@@ -110,10 +135,17 @@ async def asyncio_detailed(
     id: UUID,
     *,
     client: AuthenticatedClient,
+    body: HeartbeatReport,
 ) -> Response[Any | ErrorResponse]:
     """
     Args:
         id (UUID):
+        body (HeartbeatReport): Optional heartbeat report body (BROKKR-T-0227).
+
+            A plain heartbeat carries no body; agents that probe their own Kubernetes
+            API attach this to self-report reachability. Both fields are optional so a
+            body may carry only what the agent could measure, and the entire body may
+            be omitted (legacy/no-body heartbeats still work).
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -125,6 +157,7 @@ async def asyncio_detailed(
 
     kwargs = _get_kwargs(
         id=id,
+        body=body,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -136,10 +169,17 @@ async def asyncio(
     id: UUID,
     *,
     client: AuthenticatedClient,
+    body: HeartbeatReport,
 ) -> Any | ErrorResponse | None:
     """
     Args:
         id (UUID):
+        body (HeartbeatReport): Optional heartbeat report body (BROKKR-T-0227).
+
+            A plain heartbeat carries no body; agents that probe their own Kubernetes
+            API attach this to self-report reachability. Both fields are optional so a
+            body may carry only what the agent could measure, and the entire body may
+            be omitted (legacy/no-body heartbeats still work).
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -153,5 +193,6 @@ async def asyncio(
         await asyncio_detailed(
             id=id,
             client=client,
+            body=body,
         )
     ).parsed

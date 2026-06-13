@@ -67,6 +67,13 @@ pub struct FleetAgentRecord {
     pub health_failing: i64,
     /// Count of this agent's deployment-health records with status `degraded`.
     pub health_degraded: i64,
+    /// Latest agent-reported reachability of its own Kubernetes API
+    /// (BROKKR-T-0227). `null` when the agent has never reported. The broker
+    /// trusts this value as-is — it is the one fleet signal it cannot compute.
+    pub k8s_reachable: Option<bool>,
+    /// Latest agent-reported latency (milliseconds) of the Kubernetes API
+    /// reachability probe. `null` when unreported or not measured.
+    pub k8s_api_latency_ms: Option<i64>,
 }
 
 /// Response body for the per-agent fleet-status detail view: the agent's fleet
@@ -197,6 +204,8 @@ impl FleetAggregates {
             seconds_since_last_event: last_event_at.map(|e| (now - e).num_seconds().max(0)),
             health_failing: self.health_failing.get(&agent.id).copied().unwrap_or(0),
             health_degraded: self.health_degraded.get(&agent.id).copied().unwrap_or(0),
+            k8s_reachable: agent.k8s_reachable,
+            k8s_api_latency_ms: agent.k8s_api_latency_ms.map(i64::from),
         }
     }
 }

@@ -455,6 +455,43 @@ impl AgentsDAL<'_> {
         Ok(())
     }
 
+    /// Stores the latest agent-reported Kubernetes connectivity snapshot
+    /// (BROKKR-T-0227).
+    ///
+    /// Sets `k8s_reachable`, `k8s_api_latency_ms` and stamps `k8s_reported_at`
+    /// with the server-side ingestion time so readers can judge freshness. The
+    /// broker trusts the agent-reported values as-is (it cannot compute them
+    /// itself); `latency_ms` is optional because an agent may know reachability
+    /// without a usable latency measurement.
+    ///
+    /// # Arguments
+    ///
+    /// * `agent_id` - The UUID of the reporting agent.
+    /// * `reachable` - Whether the agent can reach its own Kubernetes API.
+    /// * `latency_ms` - Optional measured probe latency in milliseconds.
+    ///
+    /// # Returns
+    ///
+    /// Returns a `Result<()>` on success, or a `diesel::result::Error` on failure.
+    pub fn record_k8s_connectivity(
+        &self,
+        agent_id: Uuid,
+        reachable: bool,
+        latency_ms: Option<i32>,
+    ) -> Result<(), diesel::result::Error> {
+        let conn = &mut self.dal.conn()?;
+
+        diesel::update(agents::table.filter(agents::id.eq(agent_id)))
+            .set((
+                agents::k8s_reachable.eq(Some(reachable)),
+                agents::k8s_api_latency_ms.eq(latency_ms),
+                agents::k8s_reported_at.eq(Some(Utc::now())),
+            ))
+            .execute(conn)?;
+
+        Ok(())
+    }
+
     /// Updates the pak_hash for an agent.
     ///
     /// # Arguments

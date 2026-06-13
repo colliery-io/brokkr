@@ -4,16 +4,15 @@ level: task
 title: "Follow-up: agent_events retention/eviction policy (unbounded growth)"
 short_code: "BROKKR-T-0228"
 created_at: 2026-06-12T21:39:43.790408+00:00
-updated_at: 2026-06-12T21:39:43.790408+00:00
+updated_at: 2026-06-13T11:39:43.008477+00:00
 parent: agent-fleet-legibility
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/todo"
   - "#task"
-  - "#phase/todo"
+  - "#phase/active"
 
 
 exit_criteria_met: false
@@ -40,6 +39,8 @@ scale. Add a retention policy.
 
 ## Acceptance Criteria
 
+## Acceptance Criteria
+
 - [ ] A retention policy for `agent_events` (configurable window; choose a sane
       default — note this is operator history, so likely a longer window than the
       6h telemetry ceiling, e.g. days/weeks). Decide hard-delete vs soft-delete.
@@ -58,3 +59,6 @@ scale. Add a retention policy.
 ## Status Updates
 
 *To be added during implementation*
+## Status Updates
+
+- 2026-06-13: IMPLEMENTED + verified (folded into PR #64 with T-0226). Build (broker+agent+models) + clippy (workspace, warning-free) + all 3 OpenAPI/SDK drift checks pass; integration test passes against a real DB. Migration #20 (T-0227) is additive nullable columns (trivially reversible). NOTE: the implementation agent hung on `angreal models migrations` (full-stack --wait); verification was completed by hand via build/clippy/drift + targeted integration tests (which apply the migration).

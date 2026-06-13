@@ -8,7 +8,7 @@ use crate::api::v1::admin::{
     AuditLogListResponse, ConfigChangeInfo, ConfigReloadResponse, WsConnectionInfo,
     WsConnectionsResponse,
 };
-use crate::api::v1::agents::CreateAgentResponse;
+use crate::api::v1::agents::{CreateAgentResponse, HeartbeatReport};
 use crate::api::v1::diagnostics::{
     CreateDiagnosticRequest, DiagnosticResponse, SubmitDiagnosticResult,
 };
@@ -181,6 +181,7 @@ use utoipa_swagger_ui::SwaggerUi;
             Agent,
             NewAgent,
             CreateAgentResponse,
+            HeartbeatReport,
             FleetAgentRecord,
             AgentFleetStatusResponse,
             DeploymentObject,

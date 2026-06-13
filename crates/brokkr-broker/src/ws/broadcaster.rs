@@ -149,6 +149,8 @@ mod tests {
             WsMessage::Heartbeat(Heartbeat {
                 agent_id: Uuid::nil(),
                 sent_at: Utc::now(),
+                k8s_reachable: None,
+                k8s_api_latency_ms: None,
             }),
         );
         assert!(matches!(rx.recv().await.unwrap(), WsMessage::Heartbeat(_)));

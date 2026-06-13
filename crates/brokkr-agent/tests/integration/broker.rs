@@ -224,6 +224,8 @@ async fn test_send_heartbeat() {
         &fixture_guard.sdk_client,
         fixture_guard.agent.as_ref().unwrap(),
         None,
+        None,
+        None,
     )
     .await;
 

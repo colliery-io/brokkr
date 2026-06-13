@@ -700,3 +700,123 @@ fn test_get_events_filtered() {
         deployment_object1.id
     );
 }
+
+/// BROKKR-T-0228: `delete_older_than` hard-deletes events whose `created_at`
+/// precedes the cutoff and retains everything at or after it.
+#[test]
+fn test_delete_older_than_retention() {
+    use chrono::{Duration, Utc};
+
+    let fixture = TestFixture::new();
+
+    let generator = fixture.create_test_generator(
+        "Retention Generator".to_string(),
+        None,
+        "retention_api_key_hash".to_string(),
+    );
+
+    let stack = fixture
+        .dal
+        .stacks()
+        .create(
+            &NewStack::new("Stack for retention".to_string(), None, generator.id)
+                .expect("Failed to create NewStack"),
+        )
+        .expect("Failed to create stack");
+
+    let agent = fixture
+        .dal
+        .agents()
+        .create(
+            &NewAgent::new(
+                "Agent for retention".to_string(),
+                "TestCluster".to_string(),
+            )
+            .expect("Failed to create NewAgent"),
+        )
+        .expect("Failed to create agent");
+
+    let deployment_object = fixture
+        .dal
+        .deployment_objects()
+        .create(
+            &NewDeploymentObject::new(
+                stack.id,
+                "test: deployment for retention".to_string(),
+                false,
+            )
+            .expect("Failed to create NewDeploymentObject"),
+        )
+        .expect("Failed to create deployment object");
+
+    // Create two events, then backdate one to be "old".
+    let mut old_event = fixture
+        .dal
+        .agent_events()
+        .create(
+            &NewAgentEvent::new(
+                agent.id,
+                deployment_object.id,
+                "OLD_EVENT".to_string(),
+                "SUCCESS".to_string(),
+                Some("old".to_string()),
+            )
+            .expect("Failed to create NewAgentEvent"),
+        )
+        .expect("Failed to create old event");
+
+    let recent_event = fixture
+        .dal
+        .agent_events()
+        .create(
+            &NewAgentEvent::new(
+                agent.id,
+                deployment_object.id,
+                "RECENT_EVENT".to_string(),
+                "SUCCESS".to_string(),
+                Some("recent".to_string()),
+            )
+            .expect("Failed to create NewAgentEvent"),
+        )
+        .expect("Failed to create recent event");
+
+    // Backdate the old event 45 days into the past.
+    old_event.created_at = Utc::now() - Duration::days(45);
+    fixture
+        .dal
+        .agent_events()
+        .update(old_event.id, &old_event)
+        .expect("Failed to backdate old event");
+
+    // Evict everything older than 30 days.
+    let cutoff = Utc::now() - Duration::days(30);
+    let deleted = fixture
+        .dal
+        .agent_events()
+        .delete_older_than(cutoff)
+        .expect("Failed to delete old events");
+
+    assert_eq!(deleted, 1, "exactly the backdated event should be deleted");
+
+    // Old event is gone (hard-deleted, not visible even including deleted).
+    assert!(
+        fixture
+            .dal
+            .agent_events()
+            .get_including_deleted(old_event.id)
+            .expect("query failed")
+            .is_none(),
+        "old event should be hard-deleted"
+    );
+
+    // Recent event survives.
+    assert!(
+        fixture
+            .dal
+            .agent_events()
+            .get(recent_event.id)
+            .expect("query failed")
+            .is_some(),
+        "recent event should be retained"
+    );
+}

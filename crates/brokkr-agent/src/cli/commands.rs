@@ -304,7 +304,17 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
             _ = heartbeat_interval.tick() => {
-                match broker::send_heartbeat(&config, &sdk_client, &agent, Some(&ws_uplink)).await {
+                // BROKKR-T-0227: probe whether we can reach our own K8s API and
+                // self-report it on the heartbeat. Probe failure → reachable=false.
+                let reachability = k8s::api::probe_k8s_reachability(&k8s_client).await;
+                match broker::send_heartbeat(
+                    &config,
+                    &sdk_client,
+                    &agent,
+                    Some(&ws_uplink),
+                    Some(reachability.reachable),
+                    reachability.latency_ms,
+                ).await {
                     Ok(_) => {
                         debug!("Successfully sent heartbeat for agent '{}' (id: {})", agent.name, agent.id);
                         // Update broker status for health endpoints
@@ -695,6 +705,8 @@ mod tests {
         let hb = WsMessage::Heartbeat(brokkr_wire::Heartbeat {
             agent_id: Uuid::nil(),
             sent_at: Utc::now(),
+            k8s_reachable: None,
+            k8s_api_latency_ms: None,
         });
         assert_eq!(classify_push_frame(&hb), PushAction::Ignore);
     }

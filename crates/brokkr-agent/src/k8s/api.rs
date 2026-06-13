@@ -1077,3 +1077,42 @@ pub async fn create_k8s_client(
 
     Ok(client)
 }
+
+/// Result of a lightweight Kubernetes API reachability probe (BROKKR-T-0227).
+#[derive(Debug, Clone, Copy)]
+pub struct K8sReachability {
+    /// Whether the API server responded successfully.
+    pub reachable: bool,
+    /// Round-trip latency of the probe in milliseconds, when reachable.
+    pub latency_ms: Option<i32>,
+}
+
+/// Probes whether the agent can reach its own Kubernetes API server.
+///
+/// Issues a `GET /version` (via [`Client::apiserver_version`]) — a cheap,
+/// unauthenticated-equivalent call that requires no RBAC permissions — and
+/// measures round-trip latency. This is the one fleet signal the broker cannot
+/// compute itself; the agent self-reports it on the heartbeat cycle.
+///
+/// Any failure (network, auth, timeout) is treated as `reachable = false`
+/// rather than propagated, so a probe failure degrades the reported signal
+/// without disrupting the heartbeat.
+pub async fn probe_k8s_reachability(client: &K8sClient) -> K8sReachability {
+    let start = Instant::now();
+    match client.apiserver_version().await {
+        Ok(_) => {
+            let latency_ms = i32::try_from(start.elapsed().as_millis()).unwrap_or(i32::MAX);
+            K8sReachability {
+                reachable: true,
+                latency_ms: Some(latency_ms),
+            }
+        }
+        Err(e) => {
+            warn!("Kubernetes API reachability probe failed: {}", e);
+            K8sReachability {
+                reachable: false,
+                latency_ms: None,
+            }
+        }
+    }
+}
