@@ -75,7 +75,8 @@ First, get the agent ID:
 
 ```bash
 AGENT_ID=$(curl -s http://localhost:3000/api/v1/agents \
-  -H "Authorization: Bearer <your-admin-pak>" | jq -r '.[0].id')
+  -H "Authorization: Bearer <your-admin-pak>" \
+  | jq -r '.[] | select(.name=="brokkr-integration-test-agent") | .id')
 
 echo "Agent ID: $AGENT_ID"
 ```

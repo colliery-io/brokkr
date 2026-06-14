@@ -11,7 +11,7 @@ Both paths end with an agent reconciling a real Kubernetes resource onto a clust
 
 ## Path A — Fastest look (`angreal local up`)
 
-This path builds Brokkr from source and runs the full broker + agent + k3s + local registry stack in Docker. It is the quickest way to a working playground, but it does build container images from the repo, so the first run takes a while.
+This path builds Brokkr from source and runs the full broker + agent + k3s + local registry stack in Docker. It is the quickest way to a working playground, but it builds container images from the repo, so the first run usually takes 5–15 minutes depending on your machine and Docker cache.
 
 ### Prerequisites
 
@@ -20,7 +20,7 @@ This path builds Brokkr from source and runs the full broker + agent + k3s + loc
 - **[Angreal](https://pypi.org/project/angreal/)**, the project's task runner: `pip install angreal`
 - **`curl`** and **`jq`** — the verification steps below use both
 
-The first `angreal local up` builds the broker and agent images from source, so expect it to take a few minutes the first time.
+The first `angreal local up` compiles the broker and agent from source — usually 5–15 minutes depending on your machine and Docker cache. Docker streams the build output to your terminal as it works, so you can watch it make progress (subsequent runs are much faster once layers are cached).
 
 ### 1. Clone and start the stack
 
@@ -137,7 +137,7 @@ This path installs the **published `v0.8.0` images** with Helm onto a local Kube
 - A local Kubernetes cluster via **[kind](https://kind.sigs.k8s.io/)** or **[k3d](https://k3d.io/)**
 - **kubectl** configured to reach that cluster
 - **Helm** 3.8 or later
-- **jq** (for parsing API responses)
+- **`curl`** and **`jq`** — the steps below use both
 
 ### 1. Create a local cluster
 
