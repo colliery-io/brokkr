@@ -375,7 +375,7 @@ dependencies = [
 
 [[package]]
 name = "brokkr-agent"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "aquamarine",
  "axum",
@@ -410,7 +410,7 @@ dependencies = [
 
 [[package]]
 name = "brokkr-broker"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "aes-gcm",
  "axum",
@@ -460,7 +460,7 @@ dependencies = [
 
 [[package]]
 name = "brokkr-cli"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "brokkr-client",
  "clap",
@@ -473,7 +473,7 @@ dependencies = [
 
 [[package]]
 name = "brokkr-client"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "bytes",
  "chrono",
@@ -492,7 +492,7 @@ dependencies = [
 
 [[package]]
 name = "brokkr-models"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "brokkr-utils",
  "chrono",
@@ -511,7 +511,7 @@ dependencies = [
 
 [[package]]
 name = "brokkr-utils"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "chrono",
  "config",
@@ -533,7 +533,7 @@ dependencies = [
 
 [[package]]
 name = "brokkr-wire"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "brokkr-models",
  "chrono",
