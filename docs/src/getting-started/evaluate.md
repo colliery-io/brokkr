@@ -18,6 +18,9 @@ This path builds Brokkr from source and runs the full broker + agent + k3s + loc
 - **Docker** with Docker Compose
 - **Git**
 - **[Angreal](https://pypi.org/project/angreal/)**, the project's task runner: `pip install angreal`
+- **`curl`** and **`jq`** — the verification steps below use both
+
+The first `angreal local up` builds the broker and agent images from source, so expect it to take a few minutes the first time.
 
 ### 1. Clone and start the stack
 

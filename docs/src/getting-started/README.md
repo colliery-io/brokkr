@@ -4,12 +4,13 @@ Welcome to Brokkr! This section will guide you through the process of installing
 
 ## Prerequisites
 
-Before you begin, ensure you have:
+Prerequisites depend on which path you take — each page lists its own. The fastest way to try Brokkr, [Evaluate Brokkr Locally](./evaluate.md), needs only Docker (its one-command path bundles its own Kubernetes, so you do **not** need a cluster or the Rust toolchain).
 
-- Kubernetes cluster access
-- `kubectl` installed and configured
-- Rust toolchain (for building from source)
+For a real install or to build from source, you'll typically want:
+
+- Kubernetes cluster access and `kubectl` (for [Installation](./installation.md))
 - Docker (for container deployments)
+- The Rust toolchain (only if building from source)
 
 ## Quick Navigation
 
