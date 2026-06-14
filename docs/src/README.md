@@ -38,3 +38,22 @@ Every agent runs its own reconciliation loop, continuously pulling its target st
 ### Built for Dynamic Workloads
 
 Where GitOps tools work best with a known, static set of manifests, Brokkr is designed for environments where the set of applications changes frequently — multi-tenant platforms, on-demand infrastructure, and systems where what needs to run is determined at runtime, not at commit time.
+
+## When to Use Brokkr — and When Not To
+
+**Brokkr is a good fit when:**
+
+- What needs to run is decided at **runtime, by an API call** — multi-tenant platforms, on-demand provisioning from CI or an internal portal, or any system that programmatically creates workloads.
+- You're pushing the same workloads to **many clusters** and want label/annotation-based targeting from one control plane.
+- Your agents live in **restricted or firewalled networks** — the pull model means each agent needs only outbound connectivity to the broker, and an offline agent catches up when it reconnects.
+
+**Brokkr is probably not the right tool when:**
+
+- You have a **known, static set of manifests** you're happy syncing from a Git repository. Tools like ArgoCD and Flux are purpose-built for that and will fit better.
+- You want **Git to be the source of truth** for desired state — with pull-request review and Git history of every change. Brokkr's source of truth is the broker (an API plus its database), so you trade Git's review/history workflow for programmatic, runtime-driven control. Brokkr records changes in an [audit log](./reference/audit-logs.md) rather than in Git.
+
+In short: Brokkr complements GitOps rather than replacing it. Reach for it when deployments are driven by systems and events, not by commits.
+
+## Working with Brokkr Day to Day
+
+Once Brokkr is running, the recommended everyday workflow is the **`brokkr` CLI**: point it at a folder of manifests and run [`brokkr apply`](./how-to/cli-apply.md) — it's idempotent and CI-safe. For programmatic use, the [SDKs](./how-to/sdks/README.md) (Rust, Python, TypeScript) expose the same operations. The raw [REST API](./reference/api/README.md) sits underneath both.

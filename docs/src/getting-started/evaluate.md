@@ -36,6 +36,8 @@ This starts the `brokkr-dev` Docker Compose project: PostgreSQL, a local contain
 
 When it finishes, the broker is on `http://localhost:3000` and the stack has already created an agent named `brokkr-integration-test-agent` (cluster `brokkr-dev-integration-cluster`) and started an agent container for it.
 
+> **If `angreal local up` fails:** make sure Docker is running and you have enough free disk for the source build, and that ports `3000`, `3001`, and `5433` aren't already in use. To start clean, run `angreal local down --hard` (removes volumes) and try again. The same stack is documented in more depth in [Local Development Environment](./development.md).
+
 ### 2. Set your admin key and confirm the broker is up
 
 The dev broker runs with the default configuration, so the publicly known dev admin PAK (Prefixed API Key) works against it — fine for this throwaway environment, **never for production**.
