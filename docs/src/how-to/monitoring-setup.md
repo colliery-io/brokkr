@@ -603,4 +603,5 @@ watch -n 1 'curl -i http://localhost:8080/readyz'
 
 - [Monitoring & Observability Reference](../reference/monitoring.md) - Metrics catalogs and dashboard inventory
 - [Health Check Endpoints](../reference/health-endpoints.md) - Endpoint and response catalogs
+- [Monitoring Your Agent Fleet](./fleet-monitoring.md) - Application/fleet observability via the fleet API (agent connectivity, backpressure, and health signals), as distinct from this page's Prometheus/infra metrics
 - [Installation Guide](../getting-started/installation.md) - Helm chart installation

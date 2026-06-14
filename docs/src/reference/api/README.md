@@ -205,7 +205,7 @@ Most list endpoints return the full collection without pagination. The exception
 
 ### WebSocket Endpoints
 
-The broker also serves two WebSocket upgrade endpoints — the internal agent channel (`/internal/ws/agent`) and the per-stack live tail (`/api/v1/stacks/:id/live`). These are not part of the OpenAPI spec; see the [WebSocket Protocol reference](../ws-protocol.md).
+The broker also serves three WebSocket upgrade endpoints — the internal agent channel (`/internal/ws/agent`), the per-stack live tail (`/api/v1/stacks/:id/live`), and the admin-only consumer-facing fleet live stream (`/api/v1/fleet/live`, which pushes per-agent fleet records). These are not part of the OpenAPI spec; see the [WebSocket Protocol reference](../ws-protocol.md) and the [Fleet Reference](../fleet.md).
 
 ## Health Endpoints
 

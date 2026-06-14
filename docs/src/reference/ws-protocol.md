@@ -1,6 +1,6 @@
 # WebSocket Protocol
 
-This page catalogs Brokkr's two WebSocket surfaces and the wire messages they carry. For the design rationale, lane prioritization, and operating guidance, see [Internal Broker↔Agent WS Channel](../explanation/internal-ws-channel.md).
+This page catalogs Brokkr's three WebSocket surfaces and the wire messages they carry. For the design rationale, lane prioritization, and operating guidance, see [Internal Broker↔Agent WS Channel](../explanation/internal-ws-channel.md).
 
 The wire types are defined in the `brokkr-wire` crate (`crates/brokkr-wire/src/lib.rs`). They are **not** part of the OpenAPI surface and are not generated into the SDKs; external integrators use the REST API. `WIRE_VERSION` equals the crate version, which is released in lockstep with the broker and SDKs.
 
@@ -102,7 +102,7 @@ Body shapes for the telemetry-only types:
 
 ### Broker → consumer (fleet live-push)
 
-Carried only on `GET /api/v1/fleet/live` (BROKKR-I-0028). The broker pushes one frame whenever it observes a discrete fleet event for an agent — a broker↔agent WebSocket connect/disconnect, or a heartbeat receipt. The consumer pulls `GET /fleet` once for the baseline, then replaces a row in place keyed by `agent_id`.
+Carried only on `GET /api/v1/fleet/live` (BROKKR-I-0028). The broker pushes one frame whenever it observes a discrete fleet event for an agent — a broker↔agent WebSocket connect/disconnect, or a heartbeat receipt. It also pushes a frame from a periodic ~20-second sweep when an agent's computed signals (deployment-object backpressure counts or deployment-health counts) have changed since the last tick. See [Fleet Reference](./fleet.md) for the complete trigger model. The consumer pulls `GET /fleet` once for the baseline, then replaces a row in place keyed by `agent_id`.
 
 | `type` | Body | Meaning |
 |--------|------|---------|

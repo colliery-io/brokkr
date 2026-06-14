@@ -135,8 +135,8 @@ lookup.
 ## Telemetry track — short-lived buffer, not a log store
 
 Brokkr streams Kubernetes Events and pod logs for objects an agent
-manages, persists them, and lets the UI tail them live. **It is not a
-log warehouse.** A hard 6-hour retention ceiling is enforced in-process
+manages, persists them, and lets a consumer (such as the `ui-slim`
+demo) tail them live. **It is not a log warehouse.** A hard 6-hour retention ceiling is enforced in-process
 by a continuous eviction worker. There is no user-facing retention
 setting: the window is fixed at the 6-hour ceiling and cannot be
 shortened or extended through configuration.
@@ -214,7 +214,7 @@ nginx-ingress, Traefik, and AWS ALB are in the
   during which WS is down.
 - Subscriber lag: when a live-tail subscriber falls behind the
   per-stack buffer (1024 frames), the broker delivers a
-  `log_gap{reason: BufferFull, dropped_count}` so the UI renders a
+  `log_gap{reason: BufferFull, dropped_count}` so a consumer renders a
   visible gap rather than silently dropping data.
 
 ### Credential revocation closes the socket
@@ -249,9 +249,10 @@ normal auth path and echoes back only the non-secret `brokkr.v1` marker.
 This is additive: clients that can set headers (agents, SDKs, the Node
 `ws` package) keep using `Authorization: Bearer` unchanged — the
 subprotocol PAK is consulted only when no auth header is present. See the
-the "Browser WS auth" amendment in [ADR-0008](https://github.com/colliery-io/brokkr/blob/main/.metis/adrs/BROKKR-A-0008.md). `ui-slim`'s Telemetry panel uses
+"Browser WS auth" amendment in [ADR-0008](https://github.com/colliery-io/brokkr/blob/main/.metis/adrs/BROKKR-A-0008.md). The `ui-slim` demo's Telemetry panel uses
 this for its **Go Live** toggle, streaming `k8s_event` / `pod_log_line`
-frames (and rendering `log_gap` markers) into the same events/logs tabs.
+frames (and rendering `log_gap` markers) into the same events/logs tabs —
+one illustration of what a consumer can build on the stream.
 
 ### When NOT to use the live tail
 
