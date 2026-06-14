@@ -13,8 +13,8 @@ Before you begin, ensure you have:
 
 ## Quick Navigation
 
-1. [Installation](./installation.md) - Install Brokkr on your system
-2. [Quick Start](./quick-start.md) - Get up and running quickly
+1. [Evaluate Brokkr Locally](./evaluate.md) - Get a working Brokkr in front of you fast
+2. [Installation](./installation.md) - Install Brokkr on your system
 3. [Configuration](./configuration.md) - Configure Brokkr for your environment
 
 ## What's Next?

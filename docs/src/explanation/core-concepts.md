@@ -176,7 +176,7 @@ PAKs are generated using secure random generation and stored as hashes in the da
 
 With an understanding of Brokkr's core concepts, you can explore further:
 
-- Follow the [Quick Start Guide](../getting-started/quick-start.md) to deploy your first application
+- Follow the [Deploy Your First Application](../tutorials/first-deployment.md) tutorial to deploy your first application
 - Study the [Technical Architecture](./architecture.md) for implementation details
 - Explore the [Data Model](./data-model.md) to understand entity relationships
 - Read the [Security Model](./security-model.md) for comprehensive authentication and authorization details

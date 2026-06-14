@@ -318,7 +318,7 @@ Generators can only access stacks they created. This scoping ensures pipelines c
 
 ## Related Documentation
 
-- [Quick Start Guide](../getting-started/quick-start.md) - First deployment walkthrough
+- [Deploy Your First Application](../tutorials/first-deployment.md) - First deployment walkthrough
 - [Core Concepts](../explanation/core-concepts.md) - Understanding Brokkr's architecture
 - [Generators](./generators.md) - CI/CD integration
 - [Templates](./templates.md) - Standardized deployments

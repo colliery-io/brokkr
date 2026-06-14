@@ -4,7 +4,7 @@ This reference documents Brokkr's container images, repository locations, tag fo
 
 ## Image Repositories
 
-All Brokkr images are published to GitHub Container Registry (GHCR) under the `colliery-io` organization.
+The broker and agent images are published to GitHub Container Registry (GHCR) under the `colliery-io` organization; the UI is a local-only demo build.
 
 ### Available Images
 
@@ -12,7 +12,7 @@ All Brokkr images are published to GitHub Container Registry (GHCR) under the `c
 |-----------|------------|---------|
 | Broker | `ghcr.io/colliery-io/brokkr-broker` | Central management service |
 | Agent | `ghcr.io/colliery-io/brokkr-agent` | Kubernetes cluster agent |
-| UI | `ghcr.io/colliery-io/brokkr-ui` | Administrative web interface — demo only; **not currently built or published by CI** |
+| UI | `n/a — local build only (docker/Dockerfile.ui-slim)` | Administrative web interface — demo only; **not currently built or published by CI** |
 
 ### Supported Architectures
 
@@ -125,17 +125,22 @@ Brokkr images use multi-stage builds optimized for size and security.
 
 ### UI Image
 
-1. **Single stage**: Node.js Alpine (`node:18-alpine`) with npm install and application start
+The `ui-slim` image (`examples/ui-slim`) is a **demo** of what a consumer can
+build against the broker API — it is not a supported product surface and is
+**not built or published by CI**. Its Dockerfile is a single Node.js Alpine
+(`node:18-alpine`) stage (npm install and application start), provided only for
+the local development stack; the sizes below are illustrative of a local build,
+not a released artifact.
 
 ## Image Size Reference
 
-Approximate compressed image sizes:
+Approximate compressed image sizes (Broker and Agent are the released, CI-published images; UI is the local-only demo build):
 
 | Component | AMD64 | ARM64 |
 |-----------|-------|-------|
 | Broker | ~60 MB | ~58 MB |
 | Agent | ~65 MB | ~62 MB |
-| UI | ~40 MB | ~38 MB |
+| UI (demo, not published) | ~40 MB | ~38 MB |
 
 *Note: Sizes vary by release and dependency versions*
 
