@@ -252,7 +252,7 @@ async fn get_agent(
         (status = 404, description = "Agent not found", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse),
     ),
-    security(("admin_pak" = []))
+    security(("admin_pak" = []), ("agent_pak" = []))
 )]
 async fn search_agent(
     State(dal): State<DAL>,

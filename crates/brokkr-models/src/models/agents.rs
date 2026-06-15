@@ -22,6 +22,9 @@
 //! - `last_heartbeat`: TIMESTAMP, last time the agent sent a heartbeat
 //! - `status`: VARCHAR(50), current status of the agent
 //! - `pak_hash`: VARCHAR(255), hash of the agent's PAK (Pre-shared Authentication Key)
+//! - `k8s_reachable`: BOOLEAN, nullable; agent's self-reported Kubernetes API reachability
+//! - `k8s_api_latency_ms`: INTEGER, nullable; agent's self-reported Kubernetes API latency
+//! - `k8s_reported_at`: TIMESTAMPTZ, nullable; server-side ingestion time of the latest k8s report
 //!
 //! ## Usage
 //!

@@ -37,8 +37,6 @@ pub fn routes() -> Router<DAL> {
     tag = "agent-events",
     security(
         ("admin_pak" = []),
-        ("agent_pak" = []),
-        ("generator_pak" = []),
     )
 )]
 async fn list_agent_events(
@@ -76,8 +74,6 @@ async fn list_agent_events(
     tag = "agent-events",
     security(
         ("admin_pak" = []),
-        ("agent_pak" = []),
-        ("generator_pak" = []),
     )
 )]
 async fn get_agent_event(
