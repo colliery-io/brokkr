@@ -206,6 +206,7 @@ pub async fn list_ws_connections(
         (status = 200, description = "Configuration reloaded successfully", body = ConfigReloadResponse),
         (status = 401, description = "Missing or invalid authentication", body = ErrorResponse),
         (status = 403, description = "Not authorized (admin only)", body = ErrorResponse),
+        (status = 503, description = "Configuration hot-reload is not enabled on this broker", body = ErrorResponse),
         (status = 500, description = "Failed to reload configuration", body = ErrorResponse)
     ),
     security(
@@ -214,7 +215,10 @@ pub async fn list_ws_connections(
 )]
 async fn reload_config(
     Extension(auth): Extension<AuthPayload>,
-    Extension(config): Extension<ReloadableConfig>,
+    // Optional so the auth check below runs first: when hot-reload is disabled the
+    // ReloadableConfig extension is not layered (see api/v1/mod.rs). Extracting it as
+    // a required Extension would 500 before the admin check; this returns a clean 503.
+    config: Option<Extension<ReloadableConfig>>,
 ) -> Result<impl IntoResponse, ApiError> {
     if !auth.admin {
         warn!("Non-admin attempted to reload configuration");
@@ -223,6 +227,14 @@ async fn reload_config(
             "admin access required",
         ));
     }
+
+    let Extension(config) = config.ok_or_else(|| {
+        warn!("Configuration reload requested but hot-reload is not enabled");
+        ApiError::service_unavailable(
+            "config_reload_disabled",
+            "configuration hot-reload is not enabled on this broker",
+        )
+    })?;
 
     info!("Admin initiated configuration reload");
 

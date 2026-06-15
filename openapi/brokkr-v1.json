@@ -3050,6 +3050,16 @@
               }
             },
             "description": "Failed to reload configuration"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Configuration hot-reload is not enabled on this broker"
           }
         },
         "security": [
@@ -3129,12 +3139,6 @@
         "security": [
           {
             "admin_pak": []
-          },
-          {
-            "agent_pak": []
-          },
-          {
-            "generator_pak": []
           }
         ],
         "tags": [
@@ -3192,12 +3196,6 @@
         "security": [
           {
             "admin_pak": []
-          },
-          {
-            "agent_pak": []
-          },
-          {
-            "generator_pak": []
           }
         ],
         "tags": [
@@ -3384,6 +3382,9 @@
         "security": [
           {
             "admin_pak": []
+          },
+          {
+            "agent_pak": []
           }
         ],
         "tags": [
