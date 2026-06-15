@@ -11,7 +11,7 @@ Both paths end with an agent reconciling a real Kubernetes resource onto a clust
 
 ## Path A — Fastest look (`angreal local up`)
 
-This path builds Brokkr from source and runs the full broker + agent + k3s + local registry stack in Docker. It is the quickest way to a working playground, but it builds container images from the repo, so the first run usually takes 5–15 minutes depending on your machine and Docker cache.
+This path builds Brokkr from source and runs the full broker + agent + k3s + local registry stack in Docker. It is the quickest way to a working playground, building container images from the repo.
 
 ### Prerequisites
 
@@ -90,7 +90,7 @@ STACK_ID=$(curl -s -X POST http://localhost:3000/api/v1/stacks \
   -d "{\"name\": \"evaluate\", \"description\": \"Evaluation stack\", \"generator_id\": \"$GEN_ID\"}" \
   | jq -r '.id')
 
-# Target the agent to the stack (tell the broker this agent should receive this stack's objects) so it receives the deployment
+# Target the agent to the stack so it receives the deployment
 # The body `agent_id` must match the agent id in the path — the broker rejects a mismatch with 400.
 curl -s -X POST http://localhost:3000/api/v1/agents/$AGENT_ID/targets \
   -H "Authorization: Bearer $ADMIN_PAK" \

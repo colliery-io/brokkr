@@ -118,7 +118,7 @@ BROKKR__BROKER__WEBHOOK_DELIVERY_INTERVAL_SECONDS=5
 
 ### Background Tasks Module
 
-The broker runs several background tasks for maintenance operations:
+The broker runs a set of background tasks for maintenance operations:
 
 **Diagnostic Cleanup** runs every 15 minutes (configurable) to remove diagnostic results older than 1 hour (configurable).
 
@@ -129,6 +129,10 @@ The broker runs several background tasks for maintenance operations:
 **Webhook Cleanup** runs hourly to remove delivery records older than 7 days (configurable).
 
 **Audit Log Cleanup** runs daily to remove audit entries older than 90 days (configurable).
+
+**Agent Metrics Refresh** and **Agent Events Cleanup** keep agent telemetry current and prune old event history on their own intervals.
+
+**Fleet Sweep** and **WebSocket Eviction** maintain fleet liveness and reap stale internal WebSocket connections.
 
 ### Utils Module
 
@@ -336,7 +340,7 @@ The broker supports hot-reloading a limited set of values without a restart: the
 4. **Encryption Initialization** - Load or generate webhook encryption key
 5. **Event Emission Setup** - Database-centric: events are matched against subscriptions and inserted directly into `webhook_deliveries`; no in-memory event bus exists
 6. **Audit Logger Initialization** - Start background writer with batching
-7. **Background Tasks** - Spawn diagnostic cleanup, work order, webhook, and audit tasks
+7. **Background Tasks** - Spawn the maintenance task set (diagnostic, work order, webhook delivery/cleanup, audit, agent-metrics-refresh, agent-events-cleanup, fleet-sweep, and WebSocket-eviction)
 8. **API Server** - Bind to configured port and start accepting requests
 
 ### Agent Startup Sequence

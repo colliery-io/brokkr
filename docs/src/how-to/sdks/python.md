@@ -40,7 +40,7 @@ The constructor also accepts keyword-only tuning knobs:
 | `max_retries` | `3` | Maximum retries used by `client.retry()` |
 | `initial_backoff` | `0.2` | First backoff in seconds; doubles per attempt, capped at 10 s |
 
-The `brokkr` package exports four names: `BrokkrClient`, `BrokkrError`, `ErrorResponse` (the typed error body, re-exported from the generated package), and `TemplateGenerator` (the generated `Generator` model, re-exported under a clearer name to avoid clashing with `typing.Generator`).
+The `brokkr` package exports five names: `BrokkrClient`, `BrokkrError`, `ApplyResult`, `ErrorResponse` (the typed error body, re-exported from the generated package), and `TemplateGenerator` (the generated `Generator` model, re-exported under a clearer name to avoid clashing with `typing.Generator`).
 
 ## Call one endpoint
 

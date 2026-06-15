@@ -4,7 +4,7 @@ This guide covers running Brokkr from source on your own machine — for contrib
 
 ## Prerequisites
 
-- **Rust 1.85 or later** (the workspace uses edition 2024)
+- **Rust 1.90 or later** (the workspace uses edition 2024)
 - **PostgreSQL** client tooling (the database itself runs in Docker)
 - **Docker** with Docker Compose
 - **Angreal**, the project's task runner: `pip install angreal`

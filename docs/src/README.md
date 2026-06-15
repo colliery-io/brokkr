@@ -4,13 +4,15 @@ Brokkr is a control plane for Kubernetes that lets you dynamically create and ma
 
 ## Use Cases
 
+While tools like FluxCD and ArgoCD excel at GitOps-based state management, Brokkr takes a different approach — it's built for dynamic, on-demand application lifecycle management rather than static manifest synchronization.
+
 ### On-Demand Application Provisioning
 
-A customer needs a new service spun up? A new tenant needs their own stack? Just create the deployment through Brokkr and it flows through the controller loop to your clusters. No manual kubectl, no waiting on CI pipelines — your infrastructure adapts to your needs in real time.
+A customer needs a new service spun up? A new tenant needs their own stack? Just create the deployment through Brokkr and it flows through the controller loop to your clusters. No manual kubectl, no CI round-trip. Brokkr's generators and templates let external systems — CI/CD pipelines, customer provisioning systems, or internal tools — programmatically create Kubernetes resources through an API, without touching git repos or manifest files.
 
 ### Dynamic Service Management
 
-As your requirements change, Brokkr lets you define, reconfigure, and scale the services running across your clusters. Generators can programmatically create deployment objects, templates let you stamp out standardized configurations, and the agent reconciliation loop keeps everything in the desired state.
+As your requirements change, Brokkr lets you define, reconfigure, and scale the services running across your clusters. Templates let you stamp out standardized configurations, and every agent runs its own reconciliation loop, continuously pulling its target state from the broker and applying it to its cluster. Resources drift? The agent corrects it. New deployment object pushed? The agent picks it up on the next poll. This suits environments where the set of applications changes frequently — multi-tenant platforms, on-demand infrastructure, and systems where what needs to run is determined at runtime, not at commit time.
 
 ### Multi-Cluster Orchestration
 
@@ -22,22 +24,6 @@ Manage applications across multiple Kubernetes clusters from a single control pl
 - **[How-To Guides](./how-to/README.md)** — Practical guides for common tasks
 - **[Explanation](./explanation/README.md)** — Architecture, concepts, and design decisions
 - **[Reference](./reference/README.md)** — API reference and technical details
-
-## What Makes Brokkr Different?
-
-While tools like FluxCD and ArgoCD excel at GitOps-based state management, Brokkr takes a different approach — it's built for dynamic, on-demand application lifecycle management rather than static manifest synchronization.
-
-### Programmatic Resource Creation
-
-Brokkr's generators and templates let external systems programmatically create Kubernetes resources through an API. CI/CD pipelines, customer provisioning systems, or internal tools can fire off deployments without touching git repos or manifest files.
-
-### Controller Loop Reconciliation
-
-Every agent runs its own reconciliation loop, continuously pulling its target state from the broker and applying it to its cluster. Resources drift? The agent corrects it. New deployment object pushed? The agent picks it up on the next poll.
-
-### Built for Dynamic Workloads
-
-Where GitOps tools work best with a known, static set of manifests, Brokkr is designed for environments where the set of applications changes frequently — multi-tenant platforms, on-demand infrastructure, and systems where what needs to run is determined at runtime, not at commit time.
 
 ## When to Use Brokkr — and When Not To
 
@@ -51,8 +37,6 @@ Where GitOps tools work best with a known, static set of manifests, Brokkr is de
 
 - You have a **known, static set of manifests** you're happy syncing from a Git repository. Tools like ArgoCD and Flux are purpose-built for that and will fit better.
 - You want **Git to be the source of truth** for desired state — with pull-request review and Git history of every change. Brokkr's source of truth is the broker (an API plus its database), so you trade Git's review/history workflow for programmatic, runtime-driven control. Brokkr records changes in an [audit log](./reference/audit-logs.md) rather than in Git.
-
-In short: Brokkr complements GitOps rather than replacing it. Reach for it when deployments are driven by systems and events, not by commits.
 
 ## Working with Brokkr Day to Day
 

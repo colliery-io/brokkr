@@ -178,7 +178,7 @@ You should see `3/3` in the READY column.
 
 ## Step 7: Clean Up
 
-To remove the deployed resources, create a **deletion marker** — a special deployment object with `is_deletion_marker: true`. This tells the agent to delete **all resources previously applied for this stack** from the cluster. The agent finds them by the `k8s.brokkr.io/stack` annotation it stamped on every object it applied, so the marker's YAML body plays no part in deciding what gets removed. The API still requires a non-empty `yaml_content`, so use a placeholder comment:
+To remove the deployed resources, create a **deletion marker** — a special deployment object with `is_deletion_marker: true`. This tells the agent to delete **all resources previously applied for this stack** from the cluster. The agent finds them by the `k8s.brokkr.io/stack` annotation it stamped on every object it applied, so the marker's YAML body plays no part in deciding what gets removed. The body may be empty for a deletion marker; a placeholder comment like the one below is optional:
 
 ```bash
 curl -s -X POST "http://localhost:3000/api/v1/stacks/${STACK_ID}/deployment-objects" \

@@ -1,6 +1,6 @@
 # Network Flows
 
-Understanding the network architecture of a distributed system is essential for proper deployment, security hardening, and troubleshooting. This document explains the network traffic patterns between Brokkr components and the reasoning behind them. For the exact port-by-port connection matrix and firewall tables, see the [Network Ports reference](../reference/network-ports.md); for hands-on TLS, NetworkPolicy, and firewall setup, see the [Network Configuration how-to](../how-to/network-configuration.md).
+This document explains the network traffic patterns between Brokkr components and the reasoning behind them. For the exact port-by-port connection matrix and firewall tables, see the [Network Ports reference](../reference/network-ports.md); for hands-on TLS, NetworkPolicy, and firewall setup, see the [Network Configuration how-to](../how-to/network-configuration.md).
 
 ## Network Topology
 
@@ -37,7 +37,7 @@ C4Context
     Rel(agent, otlp, "Traces", "gRPC :4317")
 ```
 
-The diagram above illustrates the three primary network zones in a typical Brokkr deployment. External traffic from administrators and generators enters through an ingress controller, which terminates TLS and forwards requests to the broker service. The broker maintains persistent connectivity to its PostgreSQL database and sends outbound webhook deliveries to configured external endpoints. Meanwhile, agents in target clusters poll the broker for deployment instructions and interact with their local Kubernetes API servers to apply resources.
+The three zones above are the broker cluster (ingress, broker, database), the target clusters (agents and their local Kubernetes API), and the external endpoints the broker reaches outbound (webhooks, OTLP). All agent traffic is outbound to the broker; no connection is ever initiated toward an agent.
 
 ## Broker Network Profile
 

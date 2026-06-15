@@ -6,7 +6,7 @@ This guide covers the hands-on network setup for a Brokkr deployment: TLS termin
 
 ### Broker TLS Options
 
-The broker supports three TLS configuration approaches, each suited to different deployment scenarios.
+The broker supports three TLS configuration approaches.
 
 **Ingress TLS Termination** is the recommended approach for most production deployments. TLS terminates at the ingress controller, and internal traffic between the ingress and broker uses plain HTTP. This approach centralizes certificate management and integrates smoothly with cert-manager:
 

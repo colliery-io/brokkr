@@ -48,8 +48,6 @@ A fresh admin PAK is generated (and written to `/tmp/brokkr-keys/key.txt`) only 
 | `BROKKR__AGENT__PAK` | String | *(required)* | Agent's PAK for broker authentication |
 | `BROKKR__AGENT__AGENT_NAME` | String | `DEFAULT` | Agent name (must match broker registration) |
 | `BROKKR__AGENT__CLUSTER_NAME` | String | `DEFAULT` | Cluster name (must match broker registration) |
-| `BROKKR__AGENT__MAX_EVENT_MESSAGE_RETRIES` | Integer | `2` | Max retries for event message delivery |
-| `BROKKR__AGENT__EVENT_MESSAGE_RETRY_DELAY` | Integer | `5` | Delay between event message retries (seconds) |
 | `BROKKR__AGENT__HEALTH_PORT` | Integer | `8080` | Port for agent health check HTTP server |
 | `BROKKR__AGENT__DEPLOYMENT_HEALTH_ENABLED` | Boolean | `true` | Enable deployment health checking |
 | `BROKKR__AGENT__DEPLOYMENT_HEALTH_INTERVAL` | Integer | `60` | Interval for deployment health checks (seconds) |

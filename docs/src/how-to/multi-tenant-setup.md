@@ -168,7 +168,7 @@ Each broker instance uses a connection pool (default: 50 connections). With mult
 
 ## Schema Naming
 
-Use a consistent pattern like `tenant_{name}` (e.g., `tenant_acme`). Schema names allow only alphanumeric characters and underscores, max 63 characters. See [Multi-Tenancy Reference](../reference/multi-tenancy.md#schema-name-constraints) for full constraints.
+Use a consistent pattern like `tenant_{name}` (e.g., `tenant_acme`). Brokkr requires schema names to start with a letter and contain only letters, numbers, and underscores. (PostgreSQL caps identifiers at 63 characters; Brokkr itself does not validate length.) See [Multi-Tenancy Reference](../reference/multi-tenancy.md#schema-name-constraints) for full constraints.
 
 ## Related Documentation
 

@@ -104,17 +104,7 @@ stateDiagram-v2
     Deleted --> [*]: Soft delete (retained)
 ```
 
-**Created** indicates a deployment object exists in the database. There is no separate "targeting" step: which agents are responsible for the object is computed dynamically each time an agent polls, by unioning the agent's explicit targets (`agent_targets` rows, written only via `POST /api/v1/agents/{id}/targets`) with stacks matching any of the agent's labels or annotations.
-
-**Fetched** means at least one agent's poll has resolved an association to the object's stack and received the object in its target state.
-
-**Applied** indicates the agent has successfully applied the resource to its cluster and reported an event confirming the operation. The agent event records the deployment object ID, timestamp, and outcome.
-
-**Updated** represents a transitional state where a new deployment object with a higher sequence ID has been created for the same logical resource. The agent detects this during reconciliation and applies the update.
-
-**MarkedForDeletion** occurs when a deletion marker deployment object is created. Deletion markers are deployment objects with a special flag indicating the agent should delete the referenced resource rather than apply it.
-
-**Deleted** indicates the agent has removed the resource from the cluster. Both the original deployment object and the deletion marker remain in the database with `deleted_at` timestamps for audit purposes.
+The states map to the diagram as follows. **Created** — the object exists in the database (which agents receive it is resolved at poll time, as described above). **Fetched** — at least one agent's poll resolved an association to the object's stack and received it. **Applied** — an agent applied the resource and reported a confirming event (recording the deployment object ID, timestamp, and outcome). **Updated** — a new object with a higher sequence ID supersedes it for the same logical resource, and the agent applies the update on its next reconcile. **MarkedForDeletion** — a deletion-marker object (a deployment object flagged to delete rather than apply) was created. **Deleted** — the agent removed the resource; both the original and the marker remain with `deleted_at` timestamps for audit.
 
 ### Deletion Flow
 
@@ -148,7 +138,7 @@ sequenceDiagram
     Note over DB: Both original and marker<br/>remain for audit trail
 ```
 
-This approach has several advantages over immediate deletion. First, it provides reliable cleanup even when agents are offline—when they reconnect, they process accumulated deletion markers. Second, it maintains a complete history of what was deployed and when it was removed. Third, it allows for rollback by creating new deployment objects that restore deleted resources.
+This marker approach beats immediate deletion: offline agents process accumulated markers when they reconnect, the full history of what was deployed and removed is preserved, and rollback is possible by creating new deployment objects that restore deleted resources.
 
 ## Event Flow
 
@@ -478,7 +468,7 @@ Brokkr maintains extensive data for auditing, debugging, and compliance purposes
 
 ### Immutability Pattern
 
-Deployment objects use an append-only pattern that preserves complete history. Objects are never modified after creation—updates create new objects with higher sequence IDs, and deletions create deletion markers rather than removing data. This approach enables precise audit trails and potential rollback to any previous state.
+As established above, deployment objects are append-only: updates create new objects with higher sequence IDs and deletions create markers, so nothing is mutated in place.
 
 The `deleted_at` timestamp implements soft deletion across most entity types. Queries filter by `deleted_at IS NULL` by default, hiding deleted records from normal operations while preserving them for auditing. Special "include deleted" query variants provide access to the full history when needed.
 

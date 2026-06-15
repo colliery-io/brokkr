@@ -56,13 +56,10 @@ So the broker draws the line at *measurement* and hands *severity* to the
 consumer. **The broker computes; the consumer decides.** A consumer — an
 operator's script, a Datadog monitor fed from the API, or the `ui-slim`
 demo that ships in `examples/ui-slim` — is where the thresholds live,
-because that is where the deployment-specific knowledge lives. This keeps
-the broker honest (it never claims to know something it can't) and keeps
-it stable (operators tune their own alerting without asking the broker to
-grow another config knob). It is the same restraint the telemetry track
-shows in [the internal WS channel](./internal-ws-channel.md): surface the
-signal, point at the right tool for the verdict, refuse to grow into a
-role that belongs elsewhere.
+because that is where the deployment-specific knowledge lives. It is the
+same restraint the telemetry track shows in [the internal WS
+channel](./internal-ws-channel.md): surface the signal, point at the right
+tool for the verdict, refuse to grow into a role that belongs elsewhere.
 
 ## Why most signals are computed but one is reported
 
@@ -179,19 +176,13 @@ misses three updates for an agent and then receives a fourth, the fourth
 snapshots of intermediate states that no longer exist. Dropping a
 superseded frame loses nothing that matters.
 
-Contrast this deliberately with the **stack log-tail** described in [the
-internal WS channel](./internal-ws-channel.md). There, every line matters:
-a log line is not superseded by the next line, it stands on its own, and a
-silently dropped line is lost information. So that path takes the opposite
-stance — when a log subscriber lags, the broker emits a visible `log_gap`
-marker so the consumer can *see* that data went missing rather than being
-quietly misled into thinking it saw everything. The two streams make
-opposite trade-offs because the data has opposite semantics: cumulative,
-order-sensitive log lines demand gap-marking; self-superseding state
-snapshots can be dropped without ceremony. Both are the same underlying
-rule from [ADR-0008](https://github.com/colliery-io/brokkr/blob/main/.metis/adrs/BROKKR-A-0008.md)
-— *a slow subscriber must never slow ingestion* — applied honestly to
-data with different meaning.
+The **stack log-tail** described in [the internal WS
+channel](./internal-ws-channel.md) makes the opposite trade-off: log lines
+are cumulative and order-sensitive, so a lagging log subscriber gets a
+visible `log_gap` marker instead of silent drops. Both paths follow the
+same [ADR-0008](https://github.com/colliery-io/brokkr/blob/main/.metis/adrs/BROKKR-A-0008.md)
+rule — *a slow subscriber must never slow ingestion* — applied honestly to
+data with opposite semantics.
 
 There is a second, related guarantee: a fleet broadcast **never blocks the
 operation that triggered it.** The push is fired from producer hot paths —

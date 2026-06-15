@@ -114,23 +114,7 @@ docker image inspect ghcr.io/colliery-io/brokkr-broker:1.2.3 | grep Architecture
 
 ## Image Layer Structure
 
-Brokkr images use multi-stage builds optimized for size and security.
-
-### Broker and Agent Images
-
-1. **Planner stage**: Generates cargo-chef recipe
-2. **Cacher stage**: Builds dependencies (cached layer)
-3. **Builder stage**: Compiles Rust binaries
-4. **Final stage**: Minimal Debian slim with runtime dependencies
-
-### UI Image
-
-The `ui-slim` image (`examples/ui-slim`) is a **demo** of what a consumer can
-build against the broker API — it is not a supported product surface and is
-**not built or published by CI**. Its Dockerfile is a single Node.js Alpine
-(`node:18-alpine`) stage (npm install and application start), provided only for
-the local development stack; the sizes below are illustrative of a local build,
-not a released artifact.
+The broker and agent images use cargo-chef multi-stage builds producing a minimal Debian slim runtime; build internals are covered in [Building and Publishing Images](../how-to/build-and-publish-images.md). The `ui-slim` image (`examples/ui-slim`) is a single-stage Node.js Alpine demo build, **not built or published by CI**.
 
 ## Image Size Reference
 

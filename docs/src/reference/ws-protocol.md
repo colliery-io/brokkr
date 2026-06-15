@@ -56,7 +56,7 @@ Control pushes are hints: they are fire-and-forget, sent after the database comm
 
 | `type` | Body | Meaning |
 |--------|------|---------|
-| `heartbeat` | `{ agent_id, sent_at }` | Liveness signal sent on the agent's poll tick while the connection is up |
+| `heartbeat` | `{ agent_id, sent_at }` plus optional `k8s_reachable` and `k8s_api_latency_ms` (the source of the fleet record's k8s signals) | Liveness signal sent on the agent's poll tick while the connection is up |
 | `agent_event` | `AgentEvent` (same shape as REST) | Deployment SUCCESS/FAILURE event |
 | `agent_health` | `DeploymentHealth` (same shape as REST) | Health status for one deployment object |
 

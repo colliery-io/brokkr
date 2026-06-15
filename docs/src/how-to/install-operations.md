@@ -11,7 +11,7 @@ To pin an installation to a specific release version:
 ```bash
 # Install a specific release version
 helm install brokkr-broker oci://ghcr.io/colliery-io/charts/brokkr-broker \
-  --version 0.6.0 \
+  --version 0.8.0 \
   --set postgresql.enabled=true
 
 # List available versions
@@ -36,12 +36,12 @@ To upgrade an existing installation to a newer version while keeping your curren
 ```bash
 # Upgrade broker
 helm upgrade brokkr-broker oci://ghcr.io/colliery-io/charts/brokkr-broker \
-  --version 0.6.0 \
+  --version 0.8.0 \
   --reuse-values
 
 # Upgrade agent
 helm upgrade brokkr-agent oci://ghcr.io/colliery-io/charts/brokkr-agent \
-  --version 0.6.0 \
+  --version 0.8.0 \
   --reuse-values
 ```
 

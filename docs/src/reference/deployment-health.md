@@ -14,8 +14,6 @@ Standard controller-managed workloads submitted through Brokkr are therefore att
 
 Discovery is implemented in `crates/brokkr-agent/src/deployment_health.rs` (`discover_pods`).
 
-If zero pods carry the label, the deployment object reports `unknown`.
-
 ## Status Values
 
 | Status | Meaning |
@@ -77,7 +75,7 @@ Each health report carries a structured summary:
 | Field | Type | Description |
 |-------|------|-------------|
 | `pods_ready` | integer | Number of discovered pods in Ready state |
-| `pods_total` | integer | Total number of pods discovered by the label query |
+| `pods_total` | integer | Total number of pods discovered/attributed |
 | `conditions` | array of strings | De-duplicated list of detected problematic conditions |
 | `resources` | array | Per-resource details for pods with degraded waiting conditions |
 

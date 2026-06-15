@@ -1,6 +1,6 @@
 # Monitoring Deployment Health
 
-Brokkr agents continuously monitor the health of deployed Kubernetes resources and report status back to the broker. This provides centralized visibility into deployment health across all clusters without requiring direct cluster access. This guide covers configuring health monitoring, interpreting health status, and troubleshooting common issues.
+Brokkr agents continuously monitor the health of deployed Kubernetes resources and report status back to the broker. This guide covers configuring health monitoring, interpreting health status, and troubleshooting common issues.
 
 ## How Health Monitoring Works
 
@@ -63,7 +63,7 @@ agent:
     enabled: false
 ```
 
-Note that disabling health monitoring means the broker will not have visibility into deployment status.
+Disabling it removes broker visibility into deployment status.
 
 ## Viewing Health Status
 
