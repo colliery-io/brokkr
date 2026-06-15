@@ -4,16 +4,7 @@ Brokkr provides a comprehensive REST API for managing deployments, agents, stack
 
 ## Interactive API Documentation
 
-The Brokkr broker includes an interactive Swagger UI that provides complete API documentation with:
-
-- All available endpoints with request/response schemas
-- Authentication requirements for each endpoint
-- Try-it-out functionality for testing endpoints
-- Example requests and responses
-
-**Access Swagger UI at:** `http://<broker-url>/swagger-ui`
-
-**OpenAPI spec available at:** `http://<broker-url>/docs/openapi.json`
+The broker serves an interactive Swagger UI (with request/response schemas, auth requirements, and try-it-out testing) at `http://<broker-url>/swagger-ui`, and the OpenAPI spec at `http://<broker-url>/docs/openapi.json`.
 
 ## API Overview
 

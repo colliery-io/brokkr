@@ -482,8 +482,7 @@ Deliveries in terminal states (`success`, `dead`) are retained for the full 7-da
 ### Agent Delivery
 
 - Polling interval: 10 seconds
-- Batch size: 50 deliveries per poll
-- Concurrent delivery: single-threaded per agent
+- Batch size and single-threaded delivery as for broker delivery, but per agent
 - TTL: 60 seconds for acquired deliveries
 
 ### Scaling Considerations

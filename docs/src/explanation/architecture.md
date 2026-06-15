@@ -55,7 +55,7 @@ C4Container
 
 The broker and database form the control plane and typically run together; each agent runs inside the cluster it manages, reaching the broker over outbound connections only. Alongside REST polling, the agent maintains an internal WebSocket channel to the broker for low-latency pushes and telemetry streaming — REST remains the load-bearing path (see [Internal Broker↔Agent WS Channel](./internal-ws-channel.md)).
 
-This pull-based model was chosen deliberately over a push-based approach for several reasons. First, it simplifies network topology since agents only need outbound connectivity to the broker rather than requiring the broker to reach into potentially firewalled cluster networks. Second, it provides natural resilience since agents can continue operating with their cached state during temporary broker unavailability. Third, it allows agents to control their own reconciliation pace based on their cluster's capabilities and load.
+This pull-based model was chosen deliberately: agents need only outbound connectivity (no inbound path into firewalled clusters), they keep operating from cached state during temporary broker unavailability, and they control their own reconciliation pace based on cluster capacity and load.
 
 ## Broker Service Architecture
 
@@ -63,13 +63,13 @@ The broker is implemented as an asynchronous Rust service built on the Axum web 
 
 ### Initialization Sequence
 
-The broker follows a carefully ordered startup sequence to ensure all dependencies are properly initialized before accepting requests. First, the configuration is loaded from environment variables and configuration files, establishing database connection parameters, authentication settings, and operational parameters like polling intervals.
+The broker follows an ordered startup sequence so every dependency is ready before it accepts requests. Configuration is loaded first from environment variables and files, establishing database connection parameters, authentication settings, and operational parameters like polling intervals.
 
-Next, a PostgreSQL connection pool is established using the r2d2 connection manager with Diesel as the ORM layer. The pool is configured with a default of 50 connections to accommodate background tasks, middleware, and concurrent request handling. If multi-tenant mode is enabled, the broker sets up the appropriate PostgreSQL schema to isolate tenant data.
+A PostgreSQL connection pool is then established via the r2d2 connection manager with Diesel as the ORM, defaulting to 50 connections to cover background tasks, middleware, and concurrent requests. In multi-tenant mode, the broker sets up the appropriate PostgreSQL schema to isolate tenant data.
 
-After the database connection is established, Diesel migrations run automatically to ensure the schema is up to date. The broker then checks the `app_initialization` table to determine if this is a first-time startup. On first run, it creates the admin role and an associated admin generator, writing the initial admin PAK (Prefixed API Key) to a temporary file for retrieval.
+Diesel migrations then run automatically to bring the schema up to date, and the broker checks the `app_initialization` table for a first-time startup. On first run it creates the admin role and an associated admin generator, writing the initial admin PAK (Prefixed API Key) to a temporary file for retrieval.
 
-With the database ready, the broker initializes its runtime subsystems in sequence: the Data Access Layer (DAL), the encryption subsystem for webhook secrets, the event emission system for webhook dispatch, the audit logger for compliance tracking, and finally the five background task workers. If a configuration file is specified, it also starts a filesystem watcher for hot-reload capability.
+With the database ready, the broker initializes its runtime subsystems in sequence: the Data Access Layer (DAL), the encryption subsystem for webhook secrets, the event emission system for webhook dispatch, the audit logger for compliance tracking, and finally a set of background maintenance tasks. If a configuration file is specified, it also starts a filesystem watcher for hot-reload capability.
 
 ### API Layer
 
@@ -102,7 +102,7 @@ The API is organized into resource-specific modules: agents, generators, stacks,
 
 ### Data Access Layer
 
-The DAL provides a clean abstraction over database operations, exposing specialized accessor types for each entity in the system. Rather than having a monolithic data access object, the DAL struct provides factory methods that return purpose-built accessor types: `dal.agents()` returns an `AgentsDAL`, `dal.stacks()` returns a `StacksDAL`, and so on for all twenty-two entity types in the system.
+The DAL provides a clean abstraction over database operations, exposing specialized accessor types for each entity in the system. Rather than having a monolithic data access object, the DAL struct provides factory methods that return purpose-built accessor types: `dal.agents()` returns an `AgentsDAL`, `dal.stacks()` returns a `StacksDAL`, and so on for the system's two dozen entity types.
 
 Each accessor type implements the standard CRUD operations appropriate for its entity, along with any specialized queries needed. For example, the `AgentsDAL` provides not only basic `create`, `get`, `update`, and `delete` operations, but also `get_by_pak_hash` for authentication lookups and filtered listing methods that support complex queries combining label and annotation filters.
 
@@ -118,17 +118,19 @@ When an event occurs (such as a deployment being applied or a work order complet
 
 ### Background Tasks
 
-The broker runs five concurrent background tasks that handle various maintenance and processing duties:
+The broker runs a set of concurrent background maintenance tasks:
 
-**Diagnostic Cleanup Task** runs on a configurable interval (default: every 15 minutes) to expire pending diagnostic requests that have exceeded their timeout and delete completed, expired, or failed diagnostic records older than the configured maximum age (default: 1 hour). This prevents the database from accumulating stale diagnostic data.
+**Diagnostic Cleanup Task** (default: every 15 minutes) expires timed-out diagnostic requests and deletes completed, expired, or failed records older than the configured maximum age (default: 1 hour).
 
-**Work Order Maintenance Task** runs frequently (default: every 10 seconds) to handle work order lifecycle transitions. It moves work orders from RETRY_PENDING status back to PENDING when their backoff period has elapsed, allowing them to be claimed again. It also reclaims work orders that were claimed but never completed within the timeout period, returning them to PENDING for another agent to attempt.
+**Work Order Maintenance Task** (default: every 10 seconds) drives work order lifecycle transitions: it returns RETRY_PENDING orders to PENDING once their backoff elapses, and reclaims orders that were claimed but never completed within the timeout.
 
-**Webhook Delivery Worker** runs on a short interval (default: every 5 seconds) to process pending webhook deliveries. It fetches a batch of pending deliveries (default: 50), retrieves and decrypts the webhook URL and authentication header for each subscription, performs an HTTP POST with a 30-second timeout, and records the result. Failed deliveries are scheduled for retry with exponential backoff until they exceed the maximum retry count, at which point they are marked as dead.
+**Webhook Delivery Worker** (default: every 5 seconds) processes a batch of pending deliveries (default: 50) — decrypting each subscription's URL and auth header, issuing an HTTP POST with a 30-second timeout, and recording the result. Failures retry with exponential backoff until the maximum count, then are marked dead.
 
-**Webhook Cleanup Task** runs less frequently (default: hourly) to delete completed and dead webhook deliveries older than the retention period (default: 7 days), preventing unbounded growth of delivery history.
+**Webhook Cleanup Task** (default: hourly) deletes completed and dead deliveries older than the retention period (default: 7 days).
 
-**Audit Log Cleanup Task** runs daily to delete audit log entries older than the configured retention period (default: 90 days), balancing compliance requirements against storage costs.
+**Audit Log Cleanup Task** (default: daily) deletes audit entries older than the configured retention period (default: 90 days).
+
+**Additional workers** — agent-metrics-refresh, agent-events-cleanup, the fleet-sweep, and WebSocket-eviction tasks — run on their own intervals to keep agent telemetry, event history, fleet liveness, and stale WS connections in order.
 
 ### Audit Logger
 
@@ -274,7 +276,7 @@ sequenceDiagram
     end
 ```
 
-On the agent side, the deployment check timer fires and requests the agent's target state from the broker. The broker resolves the agent's associated stacks at that moment and returns their deployment objects, along with sequence IDs that establish ordering. The agent compares this desired state against what it has applied, performs the necessary create, update, or delete operations in Kubernetes, and reports events back to the broker.
+On the agent side, the deployment check timer requests the target state; the broker returns the resolved stacks' deployment objects with sequence IDs that establish ordering. The agent compares this desired state against what it has applied, performs the necessary create, update, or delete operations in Kubernetes, and reports events back to the broker.
 
 ### Event and Webhook Flow
 
@@ -288,11 +290,13 @@ This decoupled architecture ensures that webhook delivery proceeds asynchronousl
 
 The broker is designed to handle substantial load with modest resources. The API layer uses Axum's async request handling to efficiently multiplex many concurrent connections onto a small number of OS threads. Connection pooling minimizes database connection overhead.
 
-**API Performance**: Under typical conditions, API requests complete in under 50 milliseconds at the 95th percentile, with the broker capable of handling over 1,000 requests per second on a single instance.
+The figures below are illustrative design targets, not measured guarantees; real numbers depend on hardware, dataset size, and load.
 
-**Database Performance**: Query latency is typically under 20 milliseconds, with indexed lookups for authentication completing in single-digit milliseconds. The connection pool defaults to 50 connections.
+**API Performance**: The async request path and connection pooling are designed for low-latency reads and high request throughput on a single instance, with authentication lookups served from partial indexes.
 
-**Agent Performance**: Resource application completes in under 100 milliseconds per resource, with the reconciliation loop typically completing in under 1 second. Event reporting has sub-50ms latency to the broker.
+**Database Performance**: Most queries are indexed for fast lookups, and PAK authentication uses partial indexes on `pak_hash`. The connection pool defaults to 50 connections.
+
+**Agent Performance**: Reconciliation applies resources via server-side apply and is designed to converge a poll's worth of changes promptly, with low-latency event reporting back to the broker.
 
 For larger deployments, the broker can be horizontally scaled behind a load balancer since it maintains no in-memory state beyond caches—all persistent state lives in PostgreSQL.
 

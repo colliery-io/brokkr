@@ -1,12 +1,6 @@
 # Working with Generators
 
-Generators are identity principals that enable external systems to interact with Brokkr. They provide a way for CI/CD pipelines, automation tools, and other services to authenticate and manage resources within defined boundaries. This guide covers creating generators, integrating them with CI/CD systems, and managing their lifecycle.
-
-## Understanding Generators
-
-A generator represents an external system that creates and manages Brokkr resources. Each generator receives a Prefixed API Key (PAK) that grants it permission to create stacks, templates, and deployment objects. Resources created by a generator are scoped to that generator, providing natural isolation between different automation pipelines or teams.
-
-Generators differ from the admin PAK in important ways. The admin PAK has full access to all resources and administrative functions. Generator PAKs can only access resources they created and cannot perform administrative operations like creating other generators or managing agents.
+A generator is an external identity principal — a CI/CD pipeline, automation tool, or service — that creates and manages Brokkr resources. Each generator receives a Prefixed API Key (PAK) scoped to itself: it can create stacks, templates, and deployment objects, but can only access resources it created, providing natural isolation between pipelines or teams. Unlike the admin PAK, a generator PAK cannot perform administrative operations such as creating other generators or managing agents. This guide covers creating generators, integrating them with CI/CD systems, and managing their lifecycle.
 
 ## Prerequisites
 
@@ -242,21 +236,11 @@ Generators operate under a scoped permission model: a generator PAK can manage t
 
 ### One Generator Per Pipeline
 
-Create separate generators for each deployment pipeline or team. This provides:
-
-- Clear ownership of resources
-- Independent PAK rotation
-- Easier auditing and troubleshooting
-- Isolation between environments
+Create a separate generator for each deployment pipeline or team, giving you clear resource ownership, independent PAK rotation, environment isolation, and easier auditing.
 
 ### Naming Conventions
 
-Use descriptive names that identify the purpose and scope:
-
-- `github-actions-prod` - Production pipeline in GitHub Actions
-- `gitlab-ci-staging` - Staging pipeline in GitLab CI
-- `jenkins-nightly-builds` - Nightly build automation
-- `team-platform-prod` - Platform team's production deployments
+Use descriptive names that identify purpose and scope, e.g. `github-actions-prod`, `gitlab-ci-staging`, or `team-platform-prod`.
 
 ## Troubleshooting
 

@@ -1,6 +1,6 @@
 # Getting Started with Brokkr
 
-Welcome to Brokkr! This section will guide you through the process of installing and setting up Brokkr for your environment.
+This section covers installing and configuring Brokkr.
 
 ## Prerequisites
 

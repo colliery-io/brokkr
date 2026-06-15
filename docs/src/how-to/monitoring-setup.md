@@ -225,7 +225,7 @@ Prometheus alert rules for the WebSocket channel ship alongside the dashboards a
 
 ## Configure Kubernetes probes
 
-Use `/healthz` for liveness probes and `/readyz` for readiness probes. The `/health` endpoint performs multiple dependency checks and is intended for monitoring systems rather than Kubernetes probes.
+Use `/healthz` for liveness probes and `/readyz` for readiness probes. The agent's `/health` endpoint performs multiple dependency checks and is intended for monitoring systems rather than Kubernetes probes.
 
 ### Broker deployment
 
@@ -301,13 +301,13 @@ spec:
           failureThreshold: 3
 ```
 
-With these defaults, a container restarts after roughly 30 seconds of consecutive liveness failures and is removed from service endpoints after roughly 15 seconds of consecutive readiness failures. Tighter intervals detect failures faster at the cost of more probe traffic; longer `initialDelaySeconds` accommodates slower startup (for example, database connection on broker startup).
+Tighter intervals detect failures faster at the cost of more probe traffic; longer `initialDelaySeconds` accommodates slower startup (for example, database connection on broker startup).
 
 ## Monitor health endpoints externally
 
 ### Prometheus Blackbox Exporter
 
-While health endpoints are primarily for Kubernetes probes, they can also be monitored with Prometheus using the Blackbox Exporter:
+Health endpoints can also be monitored via the Blackbox Exporter:
 
 ```yaml
 # Prometheus scrape config for blackbox exporter

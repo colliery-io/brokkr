@@ -1,6 +1,6 @@
 # Audit Logs
 
-Brokkr maintains an immutable audit trail of administrative and security-sensitive operations. Every PAK creation, resource modification, authentication attempt, and significant system event is recorded with details about who performed the action, what was affected, and when it occurred. This documentation covers the audit log schema, available actions, query patterns, and retention policies.
+Brokkr maintains an immutable audit trail of administrative and security-sensitive operations. Every PAK creation, resource modification, authentication attempt, and significant system event is recorded with details about who performed the action, what was affected, and when it occurred.
 
 ## Schema
 
@@ -150,20 +150,6 @@ curl "http://localhost:3000/api/v1/admin/audit-logs?action=agent.created" \
   -H "Authorization: Bearer $ADMIN_PAK"
 ```
 
-**All actions by a specific generator:**
-
-```bash
-curl "http://localhost:3000/api/v1/admin/audit-logs?actor_type=generator&actor_id=$GENERATOR_ID" \
-  -H "Authorization: Bearer $ADMIN_PAK"
-```
-
-**Failed authentication attempts in the last hour:**
-
-```bash
-curl "http://localhost:3000/api/v1/admin/audit-logs?action=auth.failed&from=$(date -u -d '1 hour ago' +%Y-%m-%dT%H:%M:%SZ)" \
-  -H "Authorization: Bearer $ADMIN_PAK"
-```
-
 **All webhook-related actions (using prefix matching):**
 
 ```bash
@@ -171,12 +157,7 @@ curl "http://localhost:3000/api/v1/admin/audit-logs?action=webhook.*" \
   -H "Authorization: Bearer $ADMIN_PAK"
 ```
 
-**History of a specific resource:**
-
-```bash
-curl "http://localhost:3000/api/v1/admin/audit-logs?resource_type=stack&resource_id=$STACK_ID" \
-  -H "Authorization: Bearer $ADMIN_PAK"
-```
+For more worked query patterns, see [Working with Audit Logs](../how-to/audit-logs.md).
 
 ## Details Field
 

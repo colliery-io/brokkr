@@ -37,25 +37,22 @@ C4Context
     Rel(agent, k8s, "Manage resources", "HTTPS :6443")
 ```
 
-The **Untrusted Zone** encompasses all external entities: internet traffic, administrator clients, and CI/CD generators. Nothing in this zone receives implicit trust—every request must authenticate before accessing protected resources.
-
-The **DMZ** provides the transition layer where external traffic enters the system. The ingress controller terminates TLS connections, validating certificates and establishing encrypted channels. This layer handles the initial security negotiation before traffic reaches application components.
-
-The **Trusted Zone** contains the broker service and its PostgreSQL database. Components in this zone communicate over internal networks with mutual trust. The database accepts connections only from the broker, and the broker applies authentication and authorization before exposing data to external zones.
-
-The **Semi-Trusted Zone** exists in each target cluster where agents operate. Agents receive scoped trust: they can access resources targeted specifically to them but cannot see resources belonging to other agents. This isolation prevents a compromised agent from affecting deployments on other clusters.
+- **Untrusted Zone** — all external entities (internet traffic, admin clients, CI/CD generators); nothing is implicitly trusted and every request must authenticate.
+- **DMZ** — the edge where the ingress controller terminates TLS before traffic reaches application components.
+- **Trusted Zone** — the broker and its PostgreSQL database, communicating over internal networks; the database accepts connections only from the broker.
+- **Semi-Trusted Zone** — each target cluster's agent, scoped to resources targeted to it and unable to see other agents' resources, so a compromised agent can't reach other clusters.
 
 ### Security Principles
 
 Four principles guide Brokkr's security architecture:
 
-**Zero Trust by Default** requires all external requests to authenticate. The broker's API middleware rejects any request without valid credentials before route handlers execute. There are no anonymous endpoints except the health checks (`/healthz`, `/readyz`) and the Prometheus `/metrics` endpoint, which sit outside the authentication middleware.
+**Zero Trust by Default** requires all external requests to authenticate; the middleware rejects uncredentialed requests before any handler runs. The only anonymous endpoints are the health checks (`/healthz`, `/readyz`) and Prometheus `/metrics`, which sit outside the auth middleware.
 
-**Least Privilege** restricts each identity to the minimum permissions necessary. Agents can only access deployment objects from stacks associated with them—explicit targets plus stacks matching their labels or annotations. Generators can only manage stacks they created. This scoping limits the blast radius of credential compromise.
+**Least Privilege** restricts each identity to the minimum permissions necessary — agents to their associated stacks (explicit targets plus label/annotation matches), generators to stacks they created.
 
-**Defense in Depth** implements multiple overlapping security controls. Even if an attacker bypasses network security, they face application-level authentication. Even with valid credentials, authorization limits accessible resources. Even with resource access, audit logging records all actions.
+**Defense in Depth** layers overlapping controls: network security, then application-level authentication, then authorization, then audit logging.
 
-**Immutable Audit Trail** records every significant action in the system. Audit logs support only create and read operations—no updates or deletions are possible. This immutability ensures forensic evidence remains intact regardless of what an attacker does after gaining access.
+**Immutable Audit Trail** records every significant action and supports only create and read — no updates or deletions — so forensic evidence stays intact.
 
 ## Authentication Mechanisms
 
@@ -78,9 +75,7 @@ brokkr_BR{short_token}_{long_token}
        +------------------ Prefix (identifies key type)
 ```
 
-The prefix `brokkr_BR` identifies this as a Brokkr PAK, distinguishing it from other credentials. The short token serves as an identifier that can appear in logs and error messages without compromising security. The long token is the secret component—it proves the holder possesses the original PAK.
-
-A typical PAK looks like `brokkr_BRabc123_xyzSecretTokenHere...`. In this example, `abc123` is the short token (identifier) and `xyzSecretTokenHere...` is the long token (secret).
+A typical PAK looks like `brokkr_BRabc123_xyzSecretTokenHere...`, where `abc123` is the short token (a loggable identifier) and `xyzSecretTokenHere...` is the long token (the secret used for verification).
 
 #### Generation Process
 
@@ -94,9 +89,7 @@ PAK generation occurs when creating agents, generators, or admin credentials. Th
 
 4. The database stores only the hash. The original long token exists only in the complete PAK string returned to the caller.
 
-5. The complete PAK is returned exactly once. If the caller loses it, a new PAK must be generated—the original cannot be recovered.
-
-This design means the broker never stores information sufficient to reconstruct a PAK. A database breach reveals only hashes, which cannot authenticate without the original long tokens.
+5. The complete PAK is returned exactly once. If the caller loses it, a new PAK must be generated—the original cannot be recovered. Because only the hash is stored, a database breach reveals nothing that can authenticate without the original long tokens.
 
 #### Verification Process
 
@@ -381,19 +374,7 @@ Operational hardening guidance—the production deployment checklist, security m
 
 ## Compliance Considerations
 
-### Data Protection
-
-Brokkr implements several controls relevant to data protection regulations:
-
-**Access logging** records all API access with actor identification, supporting accountability requirements.
-
-**Encryption at rest** protects sensitive webhook data using AES-256-GCM.
-
-**Encryption in transit** via TLS protects all external communications.
-
-**Data minimization** ensures PAK secrets are never stored, only their hashes.
-
-**Retention controls** automatically remove old audit logs after the configured period.
+Brokkr implements several controls relevant to data protection regulations, summarized in the mapping below.
 
 ### Regulatory Mapping
 

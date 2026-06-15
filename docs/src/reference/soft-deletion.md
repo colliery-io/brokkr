@@ -154,6 +154,7 @@ Soft deletion cascades are implemented as PostgreSQL trigger functions:
 |---------|-------|-------|----------|
 | `trigger_handle_stack_soft_delete` | stacks | AFTER UPDATE of deleted_at | `handle_stack_soft_delete()` |
 | `cascade_soft_delete_generators` | generators | AFTER UPDATE | `cascade_soft_delete_generators()` |
+| `cascade_soft_delete_agents` | agents | AFTER UPDATE | `cascade_soft_delete_agents()` |
 | `trigger_stack_hard_delete` | stacks | BEFORE DELETE | `handle_stack_hard_delete()` |
 
 ## Performance Characteristics

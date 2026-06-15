@@ -68,7 +68,7 @@ GET /api/v1/templates
 POST /api/v1/templates
 ```
 
-**Auth:** Admin only (creates system templates). Generators can also create templates (owned by the generator).
+**Auth:** Admin (creates system templates) or generator (owns the template).
 
 **Request body:**
 

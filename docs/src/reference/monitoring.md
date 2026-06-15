@@ -1,6 +1,6 @@
 # Monitoring and Observability
 
-Brokkr provides comprehensive Prometheus metrics for monitoring both the broker and agent components. This reference catalogs the available metrics and the shipped Grafana dashboards. For scrape configuration, alerting rules, dashboard import, and integration with external monitoring systems, see [Setting Up Monitoring](../how-to/monitoring-setup.md).
+This reference catalogs the Prometheus metrics exposed by the broker and agent and the shipped Grafana dashboards. For scrape configuration, alerting rules, dashboard import, and integration with external monitoring systems, see [Setting Up Monitoring](../how-to/monitoring-setup.md).
 
 ## Metrics Endpoints
 
@@ -10,13 +10,9 @@ Both broker and agent expose Prometheus metrics in standard text exposition form
 
 **Endpoint:** `http://<broker-host>:3000/metrics`
 
-The broker exposes metrics about HTTP requests, database operations, and system state.
-
 ### Agent Metrics
 
 **Endpoint:** `http://<agent-host>:8080/metrics`
-
-The agent exposes metrics about broker polling, Kubernetes operations, and agent health.
 
 ## Broker Metrics Catalog
 
@@ -280,16 +276,6 @@ The agent dashboard includes:
 - **Kubernetes Operation Latency** - p50, p95, p99 operation latencies
 - **Heartbeat Send Rate** - Heartbeats sent per second
 - **Time Since Last Successful Poll** - Gauge showing polling health
-
-## Performance Impact
-
-Metrics collection has minimal performance overhead:
-
-- **CPU:** <1% per component
-- **Memory:** ~10MB for metrics registry
-- **Network:** ~5KB per scrape (30s intervals = ~170KB/min)
-
-Metrics are collected lazily and only computed when scraped by Prometheus.
 
 ## Related Documentation
 

@@ -53,7 +53,7 @@ spec:
           image: myapp:1.2.3
 ```
 
-The stack UUID is known before you author the manifest (the stack is created first). The deployment object UUID is generated when the deployment object is created, so labeling pods with it requires a second deployment object revision after the first one's ID is known — which is why health attribution walks ownerReferences automatically and the label is needed only for diagnostics.
+The stack UUID is known before you author the manifest (the stack is created first), but the deployment object UUID is generated at creation time, so labeling pods with it requires a second revision once the first one's ID is known.
 
 ## Pruning Semantics
 

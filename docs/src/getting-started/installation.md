@@ -25,7 +25,7 @@ kubectl cluster-info
 
 ## Quick Start
 
-Get Brokkr up and running in under 10 minutes with a broker and agent in your Kubernetes cluster.
+Get a broker and agent running in your cluster in under 10 minutes.
 
 ### 1. Install the Broker
 
@@ -161,20 +161,11 @@ helm install brokkr-broker oci://ghcr.io/colliery-io/charts/brokkr-broker \
 
 #### Using Provided Values Files
 
-Brokkr includes pre-configured values files for different environments:
+Brokkr includes pre-configured values files for different environments — development (bundled PostgreSQL, minimal resources), staging (external PostgreSQL, moderate resources), and production (external PostgreSQL, production-grade resources). Install with the one for your environment:
 
 ```bash
-# Development (bundled PostgreSQL, minimal resources)
 helm install brokkr-broker oci://ghcr.io/colliery-io/charts/brokkr-broker \
-  -f https://raw.githubusercontent.com/colliery-io/brokkr/main/charts/brokkr-broker/values/development.yaml
-
-# Staging (external PostgreSQL, moderate resources)
-helm install brokkr-broker oci://ghcr.io/colliery-io/charts/brokkr-broker \
-  -f https://raw.githubusercontent.com/colliery-io/brokkr/main/charts/brokkr-broker/values/staging.yaml
-
-# Production (external PostgreSQL, production-grade resources)
-helm install brokkr-broker oci://ghcr.io/colliery-io/charts/brokkr-broker \
-  -f https://raw.githubusercontent.com/colliery-io/brokkr/main/charts/brokkr-broker/values/production.yaml
+  -f https://raw.githubusercontent.com/colliery-io/brokkr/main/charts/brokkr-broker/values/<environment>.yaml
 ```
 
 You can also download these files and customize them:
@@ -214,26 +205,13 @@ helm install brokkr-agent oci://ghcr.io/colliery-io/charts/brokkr-agent \
 
 #### Using Provided Values Files
 
-Brokkr includes pre-configured values files for agents:
+Brokkr includes pre-configured values files for agents — development (minimal resources, cluster-wide RBAC), staging (moderate resources), and production (production-grade resources). Install with the one for your environment:
 
 ```bash
-# Development (minimal resources, cluster-wide RBAC)
 helm install brokkr-agent oci://ghcr.io/colliery-io/charts/brokkr-agent \
   --set broker.url=http://brokkr-broker:3000 \
   --set broker.pak="<PAK>" \
-  -f https://raw.githubusercontent.com/colliery-io/brokkr/main/charts/brokkr-agent/values/development.yaml
-
-# Staging (moderate resources)
-helm install brokkr-agent oci://ghcr.io/colliery-io/charts/brokkr-agent \
-  --set broker.url=http://brokkr-broker:3000 \
-  --set broker.pak="<PAK>" \
-  -f https://raw.githubusercontent.com/colliery-io/brokkr/main/charts/brokkr-agent/values/staging.yaml
-
-# Production (production-grade resources)
-helm install brokkr-agent oci://ghcr.io/colliery-io/charts/brokkr-agent \
-  --set broker.url=http://brokkr-broker:3000 \
-  --set broker.pak="<PAK>" \
-  -f https://raw.githubusercontent.com/colliery-io/brokkr/main/charts/brokkr-agent/values/production.yaml
+  -f https://raw.githubusercontent.com/colliery-io/brokkr/main/charts/brokkr-agent/values/<environment>.yaml
 ```
 
 View all available agent values files:
@@ -247,32 +225,7 @@ For pinning chart versions, installing development builds, upgrading, and uninst
 
 ## Verifying the Installation
 
-### Health Checks
-
-```bash
-# Broker health endpoint
-kubectl exec deploy/brokkr-broker -- wget -qO- http://localhost:3000/healthz
-
-# Agent health endpoint
-kubectl exec deploy/brokkr-agent -- wget -qO- http://localhost:8080/healthz
-```
-
-Both should return "OK".
-
-### Connectivity Tests
-
-```bash
-# Check agent registration in broker
-kubectl logs deploy/brokkr-broker | grep "agent registered"
-
-# Check agent connection to broker
-kubectl logs deploy/brokkr-agent | grep "connected to broker"
-
-# List registered agents via API
-kubectl port-forward svc/brokkr-broker 3000:3000 &
-curl http://localhost:3000/api/v1/agents \
-  -H "Authorization: Bearer $ADMIN_PAK"
-```
+For the broker/agent health checks and connectivity verification, see [Quick Start step 6](#6-verify-installation).
 
 ### Test Deployment
 

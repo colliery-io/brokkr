@@ -10,8 +10,6 @@ Brokkr implements a three-tier health check system:
 2. **`/readyz`** - Readiness probe: Validates that the service is ready to accept traffic
 3. **`/health`** - Detailed diagnostics: Comprehensive JSON status for monitoring and debugging
 
-The three tiers map to Kubernetes liveness probes, readiness probes, and external monitoring respectively.
-
 ## Broker Health Endpoints
 
 The broker exposes health check endpoints on port 3000.
@@ -160,7 +158,7 @@ curl http://brokkr-agent:8080/health
     "last_heartbeat": "2024-01-15T10:29:55Z"
   },
   "uptime_seconds": 3600,
-  "version": "0.6.0",
+  "version": "0.8.0",
   "timestamp": "2024-01-15T10:30:00Z"
 }
 ```
@@ -179,7 +177,7 @@ curl http://brokkr-agent:8080/health
     "last_heartbeat": "2024-01-15T10:29:55Z"
   },
   "uptime_seconds": 3600,
-  "version": "0.6.0",
+  "version": "0.8.0",
   "timestamp": "2024-01-15T10:30:00Z"
 }
 ```
@@ -196,7 +194,7 @@ curl http://brokkr-agent:8080/health
     "connected": false
   },
   "uptime_seconds": 3600,
-  "version": "0.6.0",
+  "version": "0.8.0",
   "timestamp": "2024-01-15T10:30:00Z"
 }
 ```
@@ -224,33 +222,6 @@ The Helm charts ship with these probe defaults for both broker and agent:
 | `failureThreshold` | 3 | 3 |
 
 Probe manifests, tuning, and troubleshooting are covered in [Setting Up Monitoring](../how-to/monitoring-setup.md#configure-kubernetes-probes).
-
-## Performance Considerations
-
-### Endpoint Latency
-
-Health check endpoints are designed to be lightweight:
-
-**Broker Endpoints:**
-- `/healthz`: <1ms (no checks, immediate response)
-- `/readyz`: <5ms (lightweight readiness validation)
-
-**Agent Endpoints:**
-- `/healthz`: <1ms (no checks, immediate response)
-- `/readyz`: 5-50ms (depends on Kubernetes API latency)
-- `/health`: 10-100ms (multiple checks including K8s API call)
-
-### Probe Frequency Impact
-
-With default probe configurations:
-- **Liveness probes:** Every 10 seconds = 6 requests/minute per pod
-- **Readiness probes:** Every 5 seconds = 12 requests/minute per pod
-- **Total per pod:** ~18 health check requests/minute
-
-This generates minimal load:
-- **CPU:** <0.1% per probe
-- **Memory:** Negligible
-- **Network:** <1KB per probe
 
 ## Related Documentation
 

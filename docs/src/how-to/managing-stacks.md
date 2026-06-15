@@ -1,6 +1,6 @@
 # Managing Stacks
 
-Stacks are the fundamental organizational unit in Brokkr, representing collections of related Kubernetes resources that belong together. This guide covers creating stacks, configuring them with labels and annotations for targeting, managing their lifecycle, and understanding how they connect to agents and deployment objects.
+Stacks are Brokkr's fundamental organizational unit: collections of related Kubernetes resources that belong together. This guide covers creating stacks, configuring labels and annotations for targeting, managing their lifecycle, and connecting them to agents and deployment objects.
 
 ## Understanding Stacks
 
@@ -46,13 +46,7 @@ The response includes the stack's UUID which you'll use for all subsequent opera
 
 ### Stack Naming Conventions
 
-Stack names must be non-empty strings up to 255 characters. While Brokkr doesn't enforce naming conventions, consistent patterns make your infrastructure easier to navigate. Consider including:
-
-- The application or service name
-- The environment (if not using labels)
-- A version or variant indicator for parallel deployments
-
-Examples: `frontend-app`, `database-cluster`, `monitoring-stack`, `api-gateway-v2`
+Stack names must be non-empty strings up to 255 characters. Brokkr enforces nothing beyond that, but a consistent pattern (e.g. `api-gateway-v2`) makes infrastructure easier to navigate.
 
 ## Configuring Labels and Annotations
 
@@ -156,7 +150,7 @@ curl -X POST http://localhost:3000/api/v1/agents/$AGENT_ID/targets \
   }"
 ```
 
-Direct assignment is appropriate when you have explicit control over which agents manage which stacks and the relationship is stable.
+Use direct assignment when the stack-agent mapping is fixed and explicit.
 
 ### Label-Based Targeting
 

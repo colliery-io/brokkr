@@ -52,7 +52,9 @@ Authorization: Bearer <admin_pak>
     "description": "Production deployment pipeline",
     "created_at": "2025-01-02T10:00:00Z",
     "updated_at": "2025-01-02T10:00:00Z",
-    "deleted_at": null
+    "deleted_at": null,
+    "last_active_at": null,
+    "is_active": true
   }
 ]
 ```
@@ -100,7 +102,9 @@ Content-Type: application/json
     "description": "Production deployment pipeline",
     "created_at": "2025-01-02T10:00:00Z",
     "updated_at": "2025-01-02T10:00:00Z",
-    "deleted_at": null
+    "deleted_at": null,
+    "last_active_at": null,
+    "is_active": true
   },
   "pak": "brokkr_BRgen12ab_GeneratorLongTokenExample01"
 }
@@ -143,7 +147,9 @@ Authorization: Bearer <admin_pak | generator_pak>
   "description": "Production deployment pipeline",
   "created_at": "2025-01-02T10:00:00Z",
   "updated_at": "2025-01-02T10:00:00Z",
-  "deleted_at": null
+  "deleted_at": null,
+  "last_active_at": null,
+  "is_active": true
 }
 ```
 
@@ -194,7 +200,9 @@ All fields from the Generator object can be provided, though `id`, `created_at`,
   "description": "Updated description",
   "created_at": "2025-01-02T10:00:00Z",
   "updated_at": "2025-01-02T11:00:00Z",
-  "deleted_at": null
+  "deleted_at": null,
+  "last_active_at": "2025-01-02T10:45:00Z",
+  "is_active": true
 }
 ```
 
@@ -262,7 +270,9 @@ Authorization: Bearer <admin_pak | generator_pak>
     "description": "Production deployment pipeline",
     "created_at": "2025-01-02T10:00:00Z",
     "updated_at": "2025-01-02T12:00:00Z",
-    "deleted_at": null
+    "deleted_at": null,
+    "last_active_at": "2025-01-02T11:30:00Z",
+    "is_active": true
   },
   "pak": "brokkr_BRnew34cd_GeneratorLongTokenExample02"
 }

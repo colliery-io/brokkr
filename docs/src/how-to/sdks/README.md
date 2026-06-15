@@ -24,7 +24,7 @@ Detailed walkthroughs:
 
 ## Versioning and compatibility
 
-SDK versions track the broker version in **lockstep**. The git tag `vX.Y.Z` drives the version stamped into the broker container images, helm charts, and all three SDKs in the same release. An SDK at `0.3.x` is the canonical client for broker `0.3.x`; mixing major versions is not supported.
+SDK versions track the broker version in **lockstep**. The git tag `vX.Y.Z` drives the version stamped into the broker container images, helm charts, and all three SDKs in the same release. An SDK at `0.8.x` is the canonical client for broker `0.8.x`; mixing major versions is not supported.
 
 There is no separate SDK-only release cadence. If the broker API changes, the SDKs are regenerated and republished in the same tag.
 

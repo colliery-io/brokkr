@@ -1,6 +1,6 @@
 ## What is Brokkr?
 
-Brokkr is an environment-aware control plane for dynamically distributing Kubernetes objects. Think of it as a smart traffic controller for your Kubernetes resources—it knows not just what to deploy, but where and when to deploy it based on your environment's specific needs and policies.
+Brokkr is an environment-aware control plane for dynamically distributing Kubernetes objects. It tracks not just what to deploy, but where and when, based on each environment's specific needs and policies.
 
 ```mermaid
 graph LR
@@ -29,9 +29,9 @@ graph LR
 
 ### The Broker: The Source of Truth
 
-The Broker serves as the central source of truth for Brokkr. It records the desired state of your applications and environments while providing APIs for users and agents to interact with this state. Importantly, the broker does not directly control clusters or push deployments. Instead, it maintains the authoritative record of what should exist and lets agents pull that information on their own schedule.
+The Broker is Brokkr's central source of truth. It records the desired state of your applications and environments and exposes a REST API for users and agents to interact with that state. It does not control clusters or push deployments; instead it maintains the authoritative record of what should exist and lets agents pull that information on their own schedule.
 
-When users create or update resources, the broker records these changes and makes them available via its REST API. It handles authentication and authorization for all requests, ensuring that agents and generators can only access resources they're permitted to see. As agents report back their activities, the broker records these events to maintain a complete audit trail of what has happened across your infrastructure.
+The broker handles authentication and authorization for every request, ensuring agents and generators only access resources they're permitted to see. As agents report their activities, it records those events to maintain a complete audit trail across your infrastructure.
 
 ### The Agent: The Executor
 
@@ -61,7 +61,7 @@ An Agent represents a Brokkr process running in a specific environment. Agents h
 
 ### Agent Targets
 
-An Agent Target connects an Agent to a Stack, defining which agents are responsible for managing which stacks. This mapping layer allows Brokkr to distribute workloads across multiple clusters and environments. A single stack might be targeted by multiple agents (for multi-cluster deployments), and a single agent might be responsible for multiple stacks.
+An Agent Target is an *explicit* association between an Agent and a Stack, created only via `POST /api/v1/agents/{id}/targets`. Most agent-to-stack associations are not stored as rows at all — they are resolved at read time on each poll from label and annotation matches (see Targeting Mechanisms below). Agent Targets exist for cases where you want to pin a specific agent to a specific stack regardless of labels; a stack may be targeted by multiple agents and an agent may target multiple stacks.
 
 ### Agent Events
 
@@ -89,9 +89,9 @@ Brokkr provides flexible mechanisms for associating agents with stacks, allowing
 
 ## How These Pieces Fit Together
 
-The data entities connect to form a complete deployment workflow. Users create Stacks to group their Kubernetes resources. Each Stack accumulates Deployment Objects as its contents change over time. Agents register with the broker and are assigned responsibility for one or more Stacks via Agent Targets.
+The data entities connect to form a complete deployment workflow. Users create Stacks to group their Kubernetes resources. Each Stack accumulates Deployment Objects as its contents change over time. Agents register with the broker and become responsible for Stacks through label/annotation matches resolved at read time, plus any explicit Agent Targets.
 
-When an Agent polls the broker, it receives the latest Deployment Objects for its assigned Stacks. The Agent validates and applies these resources to its Kubernetes cluster, then reports the outcome as Agent Events. This cycle repeats continuously, keeping all clusters aligned with the desired state recorded in the broker.
+When an Agent polls the broker, it receives the latest Deployment Objects for its associated Stacks. The Agent validates and applies these resources to its Kubernetes cluster, then reports the outcome as Agent Events. This cycle repeats continuously, keeping all clusters aligned with the desired state recorded in the broker.
 
 ```mermaid
 erDiagram
@@ -108,11 +108,7 @@ This architecture provides a clear, auditable, and scalable foundation for manag
 
 ## The Deployment Journey
 
-The deployment process follows a pull-based model where agents take responsibility for fetching, validating, and applying their assigned target state. The broker maintains the source of truth and records events but never pushes deployments or performs environment-specific validation.
-
-The journey begins when a user creates or updates a stack, which results in a new deployment object being created in the broker. Each agent then polls the broker on its regular interval, receiving the latest deployment objects for its assigned stacks. The agent validates these locally—checking YAML syntax, resource constraints, and any environment-specific rules—before applying the resources to its Kubernetes cluster.
-
-After applying resources, the agent reports the outcome back to the broker as an event. Whether the application succeeded or failed, this information becomes part of the permanent audit trail. Over time, the broker accumulates a complete history of every deployment attempt across all your environments.
+The deployment process is pull-based: agents fetch, validate, and apply their assigned target state, while the broker holds the source of truth and records events without ever pushing deployments or performing environment-specific validation. The sequence below traces a single update from a stack change through apply to the reported event:
 
 ```mermaid
 sequenceDiagram

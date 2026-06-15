@@ -139,6 +139,12 @@ These come from the database classifier (`ApiError::from_diesel`) on create/upda
 | `work_order_not_claimed_by_agent` | 403 | Work order is not claimed by the agent attempting to complete it. |
 | `work_order_log_entry_not_found` | 404 | No work order log entry with the given ID. |
 
+## Admin
+
+| Code | Status | Meaning |
+|------|--------|---------|
+| `config_reload_disabled` | 503 | Configuration hot-reload is not enabled on this broker. |
+
 ## Stability
 
 Codes are short, lowercase, snake_case strings and are stable across releases; new broker error paths add new codes rather than repurposing existing ones. This catalog is maintained by hand alongside broker changes.
