@@ -46,6 +46,8 @@ A **stack** is a named container that groups related Kubernetes resources. Think
 
 Stacks are always owned by a **generator** (the entity that manages deployments, typically a CI/CD pipeline). The broker creates an `admin-generator` at first startup, linked to the admin PAK — as an admin, you'll create the stack under it. Look up its ID first:
 
+> **Admin PAK vs. generator PAK.** This tutorial uses the **admin** PAK for everything because it's the simplest way to learn the workflow. In real use, the admin PAK is a privileged break-glass credential — day-to-day, each CI pipeline or tenant gets its own **generator** (with its own PAK) that owns the stacks it manages. See [Working with Generators](../how-to/generators.md) for the production pattern.
+
 ```bash
 GEN_ID=$(curl -s http://localhost:3000/api/v1/generators \
   -H "Authorization: Bearer <your-admin-pak>" \
@@ -73,7 +75,8 @@ First, get the agent ID:
 
 ```bash
 AGENT_ID=$(curl -s http://localhost:3000/api/v1/agents \
-  -H "Authorization: Bearer <your-admin-pak>" | jq -r '.[0].id')
+  -H "Authorization: Bearer <your-admin-pak>" \
+  | jq -r '.[] | select(.name=="brokkr-integration-test-agent") | .id')
 
 echo "Agent ID: $AGENT_ID"
 ```

@@ -392,7 +392,7 @@ See the [Configuration Guide](./configuration.md) for details on each setting.
 
 ## Next Steps
 
-- Follow our [Quick Start Guide](./quick-start.md) to deploy your first application
+- Follow the [Deploy Your First Application](../tutorials/first-deployment.md) tutorial to deploy your first application
 - Learn about [Basic Concepts](../explanation/core-concepts.md) in Brokkr
 - Explore [Configuration Guide](./configuration.md)
 

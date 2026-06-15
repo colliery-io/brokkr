@@ -4,7 +4,7 @@ Brokkr agents continuously monitor the health of deployed Kubernetes resources a
 
 ## How Health Monitoring Works
 
-When an agent applies deployment objects to a Kubernetes cluster, it tracks those resources and periodically checks their health. The agent examines pod status, container states, and Kubernetes conditions to determine overall health. This information is reported to the broker, where it can be viewed through the API or UI.
+When an agent applies deployment objects to a Kubernetes cluster, it tracks those resources and periodically checks their health. The agent examines pod status, container states, and Kubernetes conditions to determine overall health. This information is reported to the broker, where it can be queried through the API (or any UI you build on top of it).
 
 Health monitoring runs as a background process on each agent. On each check interval, the agent lists pods across all namespaces, attributes each pod to its deployment object — by the `brokkr.io/deployment-object-id` label or annotation when present, otherwise by walking the pod's ownerReference chain up to the Brokkr-applied top-level object — analyzes pod status, and sends a consolidated health report to the broker. Standard controller-managed workloads are attributed automatically; see the [Deployment Health Reference](../reference/deployment-health.md) for the exact discovery rules.
 

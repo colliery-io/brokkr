@@ -5,8 +5,8 @@
 # Getting Started
 
 - [Overview](./getting-started/README.md)
+  - [Evaluate Brokkr Locally](./getting-started/evaluate.md)
   - [Installation](./getting-started/installation.md)
-  - [Quick Start](./getting-started/quick-start.md)
   - [Configuration](./getting-started/configuration.md)
   - [Local Development Environment](./getting-started/development.md)
 
@@ -21,29 +21,30 @@
 # How-To Guides
 
 - [Overview](./how-to/README.md)
-  - [Installing, Upgrading & Uninstalling](./how-to/install-operations.md)
-  - [Container Builds with Shipwright](./how-to/shipwright-builds.md)
-  - [Building & Publishing Images](./how-to/build-and-publish-images.md)
-  - [Configuring Webhooks](./how-to/webhooks.md)
-  - [Managing Stacks](./how-to/managing-stacks.md)
   - [Submitting a Folder of Manifests (CLI)](./how-to/cli-apply.md)
+  - [Managing Stacks](./how-to/managing-stacks.md)
+  - [Using Stack Templates](./how-to/templates.md)
   - [Working with Generators](./how-to/generators.md)
+  - [Managing PAKs (Key Rotation)](./how-to/pak-management.md)
+  - [Monitoring Your Agent Fleet](./how-to/fleet-monitoring.md)
   - [Monitoring Deployment Health](./how-to/deployment-health.md)
   - [Streaming Pod Logs & Live Tail](./how-to/log-streaming.md)
-  - [Troubleshooting Reconciliation](./how-to/troubleshoot-reconciliation.md)
-  - [Using Stack Templates](./how-to/templates.md)
   - [Running On-Demand Diagnostics](./how-to/diagnostics.md)
-  - [Managing PAKs (Key Rotation)](./how-to/pak-management.md)
-  - [Setting Up Multi-Tenant Isolation](./how-to/multi-tenant-setup.md)
+  - [Troubleshooting Reconciliation](./how-to/troubleshoot-reconciliation.md)
   - [Querying Audit Logs](./how-to/audit-logs.md)
-  - [Setting Up Monitoring](./how-to/monitoring-setup.md)
-  - [Network Configuration](./how-to/network-configuration.md)
-  - [Security Hardening](./how-to/security-hardening.md)
+  - [Configuring Webhooks](./how-to/webhooks.md)
   - [Using the SDKs](./how-to/sdks/README.md)
     - [Rust SDK](./how-to/sdks/rust.md)
     - [Python SDK](./how-to/sdks/python.md)
     - [TypeScript SDK](./how-to/sdks/typescript.md)
     - [Regenerating SDKs](./how-to/sdks/regeneration.md)
+  - [Installing, Upgrading & Uninstalling](./how-to/install-operations.md)
+  - [Setting Up Monitoring](./how-to/monitoring-setup.md)
+  - [Network Configuration](./how-to/network-configuration.md)
+  - [Security Hardening](./how-to/security-hardening.md)
+  - [Setting Up Multi-Tenant Isolation](./how-to/multi-tenant-setup.md)
+  - [Container Builds with Shipwright](./how-to/shipwright-builds.md)
+  - [Building & Publishing Images](./how-to/build-and-publish-images.md)
 
 # Explanation
 
@@ -60,6 +61,7 @@
   - [Template Matching & Rendering](./explanation/template-system.md)
   - [Reconciliation Model](./explanation/reconciliation.md)
   - [Internal Broker↔Agent WS Channel](./explanation/internal-ws-channel.md)
+  - [Fleet Legibility](./explanation/fleet-legibility.md)
 
 # Reference
 
@@ -78,6 +80,7 @@
   - [Audit Logs](./reference/audit-logs.md)
   - [Health Endpoints](./reference/health-endpoints.md)
   - [Deployment Health](./reference/deployment-health.md)
+  - [Fleet Observability](./reference/fleet.md)
   - [WebSocket Protocol](./reference/ws-protocol.md)
   - [Agent Annotations & Labels](./reference/agent-annotations.md)
   - [Network Ports](./reference/network-ports.md)
@@ -118,6 +121,7 @@
         - [brokkr-broker::api::v1::deployment_objects](./api/rust/brokkr-broker/api/v1/deployment_objects.md)
         - [brokkr-broker::api::v1::diagnostics](./api/rust/brokkr-broker/api/v1/diagnostics.md)
         - [brokkr-broker::api::v1::error](./api/rust/brokkr-broker/api/v1/error.md)
+        - [brokkr-broker::api::v1::fleet](./api/rust/brokkr-broker/api/v1/fleet.md)
         - [brokkr-broker::api::v1::generators](./api/rust/brokkr-broker/api/v1/generators.md)
         - [brokkr-broker::api::v1::health](./api/rust/brokkr-broker/api/v1/health.md)
         - [brokkr-broker::api::v1::middleware](./api/rust/brokkr-broker/api/v1/middleware.md)
@@ -168,6 +172,7 @@
     - [brokkr-broker::ws](./api/rust/brokkr-broker/ws.md)
       - [brokkr-broker::ws::broadcaster](./api/rust/brokkr-broker/ws/broadcaster.md)
       - [brokkr-broker::ws::eviction](./api/rust/brokkr-broker/ws/eviction.md)
+      - [brokkr-broker::ws::fleet_subscribe](./api/rust/brokkr-broker/ws/fleet_subscribe.md)
       - [brokkr-broker::ws::handler](./api/rust/brokkr-broker/ws/handler.md)
       - [brokkr-broker::ws::push](./api/rust/brokkr-broker/ws/push.md)
       - [brokkr-broker::ws::registry](./api/rust/brokkr-broker/ws/registry.md)
