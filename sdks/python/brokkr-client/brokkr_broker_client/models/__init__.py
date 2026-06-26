@@ -5,9 +5,11 @@ from .agent import Agent
 from .agent_annotation import AgentAnnotation
 from .agent_event import AgentEvent
 from .agent_fleet_status_response import AgentFleetStatusResponse
+from .agent_generator_registration import AgentGeneratorRegistration
 from .agent_k8s_event import AgentK8SEvent
 from .agent_label import AgentLabel
 from .agent_pod_log import AgentPodLog
+from .agent_registration_body import AgentRegistrationBody
 from .agent_target import AgentTarget
 from .audit_log import AuditLog
 from .audit_log_list_response import AuditLogListResponse
@@ -16,6 +18,7 @@ from .claim_work_order_request import ClaimWorkOrderRequest
 from .complete_work_order_request import CompleteWorkOrderRequest
 from .config_change_info import ConfigChangeInfo
 from .config_reload_response import ConfigReloadResponse
+from .create_agent_request import CreateAgentRequest
 from .create_agent_response import CreateAgentResponse
 from .create_deployment_object_request import CreateDeploymentObjectRequest
 from .create_diagnostic_request import CreateDiagnosticRequest
@@ -87,9 +90,11 @@ __all__ = (
     "AgentAnnotation",
     "AgentEvent",
     "AgentFleetStatusResponse",
+    "AgentGeneratorRegistration",
     "AgentK8SEvent",
     "AgentLabel",
     "AgentPodLog",
+    "AgentRegistrationBody",
     "AgentTarget",
     "AuditLog",
     "AuditLogListResponse",
@@ -98,6 +103,7 @@ __all__ = (
     "CompleteWorkOrderRequest",
     "ConfigChangeInfo",
     "ConfigReloadResponse",
+    "CreateAgentRequest",
     "CreateAgentResponse",
     "CreateDeploymentObjectRequest",
     "CreateDiagnosticRequest",

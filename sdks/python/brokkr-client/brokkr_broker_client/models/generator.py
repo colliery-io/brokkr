@@ -22,6 +22,7 @@ class Generator:
         created_at (datetime.datetime): Timestamp of when the generator was created.
         id (UUID): Unique identifier for the generator.
         is_active (bool): Indicates whether the generator is currently active.
+        is_system (bool): Reserved: true for the singleton system generator provisioned at broker startup.
         name (str): Name of the generator.
         updated_at (datetime.datetime): Timestamp of when the generator was last updated.
         deleted_at (datetime.datetime | None | Unset): Timestamp of when the generator was deleted, if applicable.
@@ -32,6 +33,7 @@ class Generator:
     created_at: datetime.datetime
     id: UUID
     is_active: bool
+    is_system: bool
     name: str
     updated_at: datetime.datetime
     deleted_at: datetime.datetime | None | Unset = UNSET
@@ -45,6 +47,8 @@ class Generator:
         id = str(self.id)
 
         is_active = self.is_active
+
+        is_system = self.is_system
 
         name = self.name
 
@@ -79,6 +83,7 @@ class Generator:
                 "created_at": created_at,
                 "id": id,
                 "is_active": is_active,
+                "is_system": is_system,
                 "name": name,
                 "updated_at": updated_at,
             }
@@ -100,6 +105,8 @@ class Generator:
         id = UUID(d.pop("id"))
 
         is_active = d.pop("is_active")
+
+        is_system = d.pop("is_system")
 
         name = d.pop("name")
 
@@ -152,6 +159,7 @@ class Generator:
             created_at=created_at,
             id=id,
             is_active=is_active,
+            is_system=is_system,
             name=name,
             updated_at=updated_at,
             deleted_at=deleted_at,

@@ -1,25 +1,29 @@
 from http import HTTPStatus
-from typing import Any
+from typing import Any, cast
+from urllib.parse import quote
+from uuid import UUID
 
 import httpx
 
 from ... import errors
 from ...client import AuthenticatedClient, Client
-from ...models.create_agent_request import CreateAgentRequest
-from ...models.create_agent_response import CreateAgentResponse
+from ...models.agent_registration_body import AgentRegistrationBody
 from ...models.error_response import ErrorResponse
 from ...types import Response
 
 
 def _get_kwargs(
+    id: UUID,
     *,
-    body: CreateAgentRequest,
+    body: AgentRegistrationBody,
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
 
     _kwargs: dict[str, Any] = {
-        "method": "post",
-        "url": "/agents",
+        "method": "delete",
+        "url": "/generators/{id}/register".format(
+            id=quote(str(id), safe=""),
+        ),
     }
 
     _kwargs["json"] = body.to_dict()
@@ -30,23 +34,20 @@ def _get_kwargs(
     return _kwargs
 
 
-def _parse_response(
-    *, client: AuthenticatedClient | Client, response: httpx.Response
-) -> CreateAgentResponse | ErrorResponse | None:
-    if response.status_code == 201:
-        response_201 = CreateAgentResponse.from_dict(response.json())
-
-        return response_201
-
-    if response.status_code == 400:
-        response_400 = ErrorResponse.from_dict(response.json())
-
-        return response_400
+def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Any | ErrorResponse | None:
+    if response.status_code == 204:
+        response_204 = cast(Any, None)
+        return response_204
 
     if response.status_code == 403:
         response_403 = ErrorResponse.from_dict(response.json())
 
         return response_403
+
+    if response.status_code == 404:
+        response_404 = ErrorResponse.from_dict(response.json())
+
+        return response_404
 
     if response.status_code == 500:
         response_500 = ErrorResponse.from_dict(response.json())
@@ -59,9 +60,7 @@ def _parse_response(
         return None
 
 
-def _build_response(
-    *, client: AuthenticatedClient | Client, response: httpx.Response
-) -> Response[CreateAgentResponse | ErrorResponse]:
+def _build_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Response[Any | ErrorResponse]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -71,26 +70,28 @@ def _build_response(
 
 
 def sync_detailed(
+    id: UUID,
     *,
     client: AuthenticatedClient,
-    body: CreateAgentRequest,
-) -> Response[CreateAgentResponse | ErrorResponse]:
+    body: AgentRegistrationBody,
+) -> Response[Any | ErrorResponse]:
     """
     Args:
-        body (CreateAgentRequest): Request body for [`create_agent`]. Extends `NewAgent` with an
-            optional list
-            of generator UUIDs the new agent should be registered with at creation time.
-            The system generator is always added automatically; this field is additive.
+        id (UUID):
+        body (AgentRegistrationBody): Optional body used when an admin registers or deregisters a
+            specific agent.
+            Agent callers omit this (the calling agent is implied by their PAK).
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[CreateAgentResponse | ErrorResponse]
+        Response[Any | ErrorResponse]
     """
 
     kwargs = _get_kwargs(
+        id=id,
         body=body,
     )
 
@@ -102,52 +103,56 @@ def sync_detailed(
 
 
 def sync(
+    id: UUID,
     *,
     client: AuthenticatedClient,
-    body: CreateAgentRequest,
-) -> CreateAgentResponse | ErrorResponse | None:
+    body: AgentRegistrationBody,
+) -> Any | ErrorResponse | None:
     """
     Args:
-        body (CreateAgentRequest): Request body for [`create_agent`]. Extends `NewAgent` with an
-            optional list
-            of generator UUIDs the new agent should be registered with at creation time.
-            The system generator is always added automatically; this field is additive.
+        id (UUID):
+        body (AgentRegistrationBody): Optional body used when an admin registers or deregisters a
+            specific agent.
+            Agent callers omit this (the calling agent is implied by their PAK).
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        CreateAgentResponse | ErrorResponse
+        Any | ErrorResponse
     """
 
     return sync_detailed(
+        id=id,
         client=client,
         body=body,
     ).parsed
 
 
 async def asyncio_detailed(
+    id: UUID,
     *,
     client: AuthenticatedClient,
-    body: CreateAgentRequest,
-) -> Response[CreateAgentResponse | ErrorResponse]:
+    body: AgentRegistrationBody,
+) -> Response[Any | ErrorResponse]:
     """
     Args:
-        body (CreateAgentRequest): Request body for [`create_agent`]. Extends `NewAgent` with an
-            optional list
-            of generator UUIDs the new agent should be registered with at creation time.
-            The system generator is always added automatically; this field is additive.
+        id (UUID):
+        body (AgentRegistrationBody): Optional body used when an admin registers or deregisters a
+            specific agent.
+            Agent callers omit this (the calling agent is implied by their PAK).
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[CreateAgentResponse | ErrorResponse]
+        Response[Any | ErrorResponse]
     """
 
     kwargs = _get_kwargs(
+        id=id,
         body=body,
     )
 
@@ -157,27 +162,29 @@ async def asyncio_detailed(
 
 
 async def asyncio(
+    id: UUID,
     *,
     client: AuthenticatedClient,
-    body: CreateAgentRequest,
-) -> CreateAgentResponse | ErrorResponse | None:
+    body: AgentRegistrationBody,
+) -> Any | ErrorResponse | None:
     """
     Args:
-        body (CreateAgentRequest): Request body for [`create_agent`]. Extends `NewAgent` with an
-            optional list
-            of generator UUIDs the new agent should be registered with at creation time.
-            The system generator is always added automatically; this field is additive.
+        id (UUID):
+        body (AgentRegistrationBody): Optional body used when an admin registers or deregisters a
+            specific agent.
+            Agent callers omit this (the calling agent is implied by their PAK).
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        CreateAgentResponse | ErrorResponse
+        Any | ErrorResponse
     """
 
     return (
         await asyncio_detailed(
+            id=id,
             client=client,
             body=body,
         )

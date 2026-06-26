@@ -152,6 +152,13 @@ describe("brokkr SDK contract — TypeScript", () => {
       expect(depRes.error, `create_deployment_object error: ${JSON.stringify(depRes.error)}`).toBeUndefined();
       expect(depRes.response.status).toBe(201);
 
+      // Step 6.5: register agent with generator before targeting
+      const regRes = await admin.POST("/generators/{id}/register", {
+        params: { path: { id: generatorId } },
+        body: { agent_id: agentId },
+      });
+      expect(regRes.error, `register_agent error: ${JSON.stringify(regRes.error)}`).toBeUndefined();
+
       // Step 7: target stack to agent (BROKKR-T-0153 — generator PAK allowed)
       const targetRes = await gen.POST("/agents/{id}/targets", {
         params: { path: { id: agentId } },
@@ -227,6 +234,13 @@ describe("brokkr SDK contract — TypeScript", () => {
     const agentId = agentRes.data!.agent.id;
 
     const genAClient = clientFor(genA.data!.pak);
+
+    // Register agent with Gen A so the mismatch check fires (not the registration check).
+    const regRes = await admin.POST("/generators/{id}/register", {
+      params: { path: { id: genA.data!.generator.id } },
+      body: { agent_id: agentId },
+    });
+    expect(regRes.error, `register_agent error: ${JSON.stringify(regRes.error)}`).toBeUndefined();
 
     try {
       const targetRes = await genAClient.POST("/agents/{id}/targets", {
