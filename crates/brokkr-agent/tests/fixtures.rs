@@ -207,6 +207,32 @@ impl TestFixture {
 
         self.generator = Some(generator);
         self.generator_pak = Some(pak);
+
+        // Register the agent with this generator so targets can be created.
+        if let Some(agent) = &self.agent {
+            let agent_id = agent.id;
+            let generator_id = self.generator.as_ref().unwrap().id;
+            let register_response = self
+                .client
+                .post(format!(
+                    "{}/api/v1/generators/{}/register",
+                    self.admin_settings.agent.broker_url, generator_id
+                ))
+                .header("Content-Type", "application/json")
+                .header(
+                    "Authorization",
+                    format!("Bearer {}", self.admin_settings.agent.pak),
+                )
+                .json(&serde_json::json!({ "agent_id": agent_id }))
+                .send()
+                .await
+                .expect("Failed to send registration request");
+            assert!(
+                register_response.status().is_success(),
+                "Failed to register agent with generator: {}",
+                register_response.status()
+            );
+        }
     }
 
     /// Creates a new stack resource
