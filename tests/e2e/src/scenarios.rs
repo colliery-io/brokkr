@@ -266,6 +266,11 @@ pub async fn test_targeting(client: &Client) -> Result<()> {
     assert!(has_stack, "Agent should see stack via label matching");
     println!("    Agent sees stack via label matching ✓");
 
+    // Register agent with generator before explicit targeting.
+    client
+        .register_agent_with_generator(generator_id, agent_id)
+        .await?;
+
     // Test explicit targeting
     println!("  → Testing explicit targeting...");
     let stack2 = client
@@ -855,7 +860,10 @@ pub async fn test_agent_reconciliation_existing_deployments(client: &Client) -> 
         .await?;
     println!("    Created agent: {}", agent1_id);
 
-    // 1c. NOW target agent to stack (after deployment exists)
+    // 1c. Register agent with generator, then target agent to stack (after deployment exists).
+    client
+        .register_agent_with_generator(generator_id, agent1_id)
+        .await?;
     client.add_agent_target(agent1_id, stack1_id).await?;
     println!("    Targeted agent to stack");
 
