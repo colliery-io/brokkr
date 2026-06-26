@@ -115,6 +115,14 @@ pub async fn serve(config: &Settings) -> Result<(), Box<dyn std::error::Error>> 
     utils::encryption::init_encryption_key(config.broker.webhook_encryption_key.as_deref())
         .expect("Failed to initialize encryption key");
 
+    // Provision system generator (idempotent — creates it on first run, no-op thereafter)
+    info!("Provisioning system generator");
+    let system_generator_id = dal
+        .generators()
+        .provision_system_generator()
+        .expect("Failed to provision system generator");
+    info!(%system_generator_id, "system generator ready");
+
     // Initialize audit logger for compliance tracking
     info!("Initializing audit logger");
     utils::audit::init_audit_logger(dal.clone()).expect("Failed to initialize audit logger");

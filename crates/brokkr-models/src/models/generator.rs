@@ -77,6 +77,8 @@ pub struct Generator {
     pub last_active_at: Option<DateTime<Utc>>,
     /// Indicates whether the generator is currently active.
     pub is_active: bool,
+    /// Reserved: true for the singleton system generator provisioned at broker startup.
+    pub is_system: bool,
 }
 
 /// Represents the data required to create a new generator.

@@ -8,7 +8,7 @@ use crate::api::v1::admin::{
     AuditLogListResponse, ConfigChangeInfo, ConfigReloadResponse, WsConnectionInfo,
     WsConnectionsResponse,
 };
-use crate::api::v1::agents::{CreateAgentResponse, HeartbeatReport};
+use crate::api::v1::agents::{CreateAgentRequest, CreateAgentResponse, HeartbeatReport};
 use crate::api::v1::diagnostics::{
     CreateDiagnosticRequest, DiagnosticResponse, SubmitDiagnosticResult,
 };
@@ -40,6 +40,7 @@ use crate::api::v1::{
 };
 use crate::dal::DAL;
 use axum::{Router, response::Json, routing::get};
+use brokkr_models::models::agent_generator_registrations::AgentGeneratorRegistration;
 use brokkr_models::models::{
     agent_annotations::{AgentAnnotation, NewAgentAnnotation},
     agent_events::{AgentEvent, NewAgentEvent},
@@ -83,6 +84,10 @@ use utoipa_swagger_ui::SwaggerUi;
         generators::update_generator,
         generators::delete_generator,
         generators::rotate_generator_pak,
+        generators::register_agent,
+        generators::deregister_agent,
+        generators::list_generator_registered_agents,
+        agents::list_agent_registrations,
         agents::list_labels,
         agents::add_label,
         agents::remove_label,
@@ -181,6 +186,8 @@ use utoipa_swagger_ui::SwaggerUi;
             Agent,
             NewAgent,
             CreateAgentResponse,
+            CreateAgentRequest,
+            AgentGeneratorRegistration,
             HeartbeatReport,
             FleetAgentRecord,
             AgentFleetStatusResponse,

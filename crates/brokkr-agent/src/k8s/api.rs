@@ -484,6 +484,31 @@ pub async fn delete_k8s_objects(
     Ok(())
 }
 
+/// Deletes all Kubernetes resources belonging to a stack that are owned by
+/// this agent. Called when gap detection in the control loop finds a stack
+/// that was in the previous reconcile cycle but is absent from the current
+/// one — i.e., the agent's target for that stack was removed (e.g. via
+/// generator deregistration). No broker call is made; this is agent-local.
+pub async fn delete_stack_resources(
+    stack_id: &str,
+    client: K8sClient,
+    agent_id: &Uuid,
+    watch_namespace: Option<&str>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let objects =
+        get_all_objects_by_annotation(&client, STACK_LABEL, stack_id, watch_namespace).await?;
+    let owned: Vec<_> = objects
+        .into_iter()
+        .filter(|o| verify_object_ownership(o, agent_id))
+        .collect();
+    if owned.is_empty() {
+        info!(%stack_id, "no owned resources to clean up for removed stack");
+        return Ok(());
+    }
+    info!(%stack_id, count = owned.len(), "cleaning up owned resources for removed stack");
+    delete_k8s_objects(&owned, client, agent_id).await
+}
+
 /// Validates Kubernetes objects against the API server without applying them.
 ///
 /// # Arguments

@@ -114,6 +114,9 @@ use agent_labels::AgentLabelsDAL;
 pub mod agent_targets;
 use agent_targets::AgentTargetsDAL;
 
+pub mod agent_generator_registrations;
+use agent_generator_registrations::AgentGeneratorRegistrationsDAL;
+
 pub mod stacks;
 use stacks::StacksDAL;
 
@@ -306,6 +309,11 @@ impl DAL {
     /// An instance of AgentTargetssDAL.
     pub fn agent_targets(&self) -> AgentTargetsDAL<'_> {
         AgentTargetsDAL { dal: self }
+    }
+
+    /// Provides access to the Agent Generator Registrations Data Access Layer.
+    pub fn agent_generator_registrations(&self) -> AgentGeneratorRegistrationsDAL<'_> {
+        AgentGeneratorRegistrationsDAL { dal: self }
     }
 
     /// Provides access to the Stack Labels Data Access Layer.

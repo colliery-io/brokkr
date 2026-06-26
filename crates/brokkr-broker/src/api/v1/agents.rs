@@ -21,6 +21,7 @@ use axum::{
 use brokkr_models::models::agent_annotations::{AgentAnnotation, NewAgentAnnotation};
 use brokkr_models::models::agent_events::{AgentEvent, NewAgentEvent};
 use brokkr_models::models::agent_labels::{AgentLabel, NewAgentLabel};
+use brokkr_models::models::agent_generator_registrations::AgentGeneratorRegistration;
 use brokkr_models::models::agent_targets::{AgentTarget, NewAgentTarget};
 use brokkr_models::models::agents::{Agent, NewAgent};
 use brokkr_models::models::audit_logs::{
@@ -68,6 +69,7 @@ pub fn routes() -> Router<DAL> {
         .route("/agents/:id/target-state", get(get_target_state))
         .route("/agents/:id/stacks", get(get_associated_stacks))
         .route("/agents/:id/rotate-pak", post(rotate_agent_pak))
+        .route("/agents/:id/registrations", get(list_agent_registrations))
 }
 
 fn require_admin(auth: &AuthPayload) -> Result<(), ApiError> {
@@ -126,6 +128,17 @@ async fn list_agents(
     Ok(Json(agents))
 }
 
+/// Request body for [`create_agent`]. Extends `NewAgent` with an optional list
+/// of generator UUIDs the new agent should be registered with at creation time.
+/// The system generator is always added automatically; this field is additive.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct CreateAgentRequest {
+    pub name: String,
+    pub cluster_name: String,
+    #[serde(default)]
+    pub generator_ids: Vec<Uuid>,
+}
+
 /// Response body for [`create_agent`]: the newly-created agent plus the
 /// one-time initial PAK shown only at creation.
 #[derive(Debug, Serialize, ToSchema)]
@@ -136,9 +149,10 @@ pub struct CreateAgentResponse {
 
 #[utoipa::path(
     post, path = "/agents", tag = "agents",
-    request_body = NewAgent,
+    request_body = CreateAgentRequest,
     responses(
         (status = 201, description = "Successfully created agent", body = CreateAgentResponse),
+        (status = 400, description = "Invalid generator ID", body = ErrorResponse),
         (status = 403, description = "Forbidden", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse),
     ),
@@ -147,10 +161,26 @@ pub struct CreateAgentResponse {
 async fn create_agent(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
-    Json(new_agent): Json<NewAgent>,
+    Json(req): Json<CreateAgentRequest>,
 ) -> Result<(StatusCode, Json<CreateAgentResponse>), ApiError> {
     info!("Handling request to create a new agent");
     require_admin(&auth_payload)?;
+
+    // Validate all requested generator_ids before touching the DB.
+    for gid in &req.generator_ids {
+        dal.generators()
+            .get(*gid)
+            .map_err(|e| ApiError::from_diesel(e, "failed to look up generator"))?
+            .ok_or_else(|| {
+                ApiError::bad_request(
+                    "invalid_generator_id",
+                    &format!("generator {} does not exist", gid),
+                )
+            })?;
+    }
+
+    let new_agent = NewAgent::new(req.name.clone(), req.cluster_name.clone())
+        .map_err(|e| ApiError::bad_request("invalid_agent", &e))?;
 
     let agent = dal.agents().create(&new_agent).map_err(|e| {
         warn!("Failed to create agent: {:?}", e);
@@ -170,6 +200,24 @@ async fn create_agent(
             error!("Failed to update agent PAK hash: {:?}", e);
             ApiError::internal("failed to update agent PAK hash")
         })?;
+
+    // Register with system generator (always).
+    if let Some(system_id) = dal
+        .generators()
+        .get_system_generator_id()
+        .map_err(|e| ApiError::from_diesel(e, "failed to look up system generator"))?
+    {
+        dal.agent_generator_registrations()
+            .create(agent.id, system_id)
+            .map_err(|e| ApiError::from_diesel(e, "failed to register agent with system generator"))?;
+    }
+
+    // Register with any additional generators supplied in the request.
+    for gid in &req.generator_ids {
+        dal.agent_generator_registrations()
+            .create(agent.id, *gid)
+            .map_err(|e| ApiError::from_diesel(e, "failed to register agent with generator"))?;
+    }
 
     audit::log_action(
         ACTOR_TYPE_ADMIN,
@@ -759,7 +807,7 @@ async fn add_target(
     Json(new_target): Json<NewAgentTarget>,
 ) -> Result<(StatusCode, Json<AgentTarget>), ApiError> {
     info!("Handling request to add target for agent with ID: {}", id);
-    authorize_target_mutation(&dal, &auth_payload, new_target.stack_id)?;
+    authorize_target_mutation(&dal, &auth_payload, id, new_target.stack_id)?;
     if new_target.agent_id != id {
         return Err(ApiError::bad_request(
             "agent_id_mismatch",
@@ -780,39 +828,52 @@ async fn add_target(
 /// Authorize a target create/delete operation.
 ///
 /// Allowed when:
-/// - caller is admin, OR
-/// - caller is a generator PAK and owns the stack being targeted.
+/// - caller is admin OR a generator PAK that owns the stack, AND
+/// - the agent is registered with the stack's generator.
 fn authorize_target_mutation(
     dal: &DAL,
     auth: &AuthPayload,
+    agent_id: Uuid,
     stack_id: Uuid,
 ) -> Result<(), ApiError> {
-    if auth.admin {
-        return Ok(());
-    }
-    if let Some(generator_id) = auth.generator {
-        let mut stacks = dal.stacks().get(vec![stack_id]).map_err(|e| {
-            error!(
-                "Failed to fetch stack {} for target auth: {:?}",
-                stack_id, e
-            );
-            ApiError::internal("failed to fetch stack")
-        })?;
-        let stack = stacks
-            .pop()
-            .ok_or_else(|| ApiError::not_found("stack_not_found", "stack not found"))?;
-        if stack.generator_id == generator_id {
-            return Ok(());
+    let mut stacks = dal.stacks().get(vec![stack_id]).map_err(|e| {
+        error!("Failed to fetch stack {} for target auth: {:?}", stack_id, e);
+        ApiError::internal("failed to fetch stack")
+    })?;
+    let stack = stacks
+        .pop()
+        .ok_or_else(|| ApiError::not_found("stack_not_found", "stack not found"))?;
+
+    // Auth: admin passes; generator must own the stack.
+    if !auth.admin {
+        if let Some(generator_id) = auth.generator {
+            if stack.generator_id != generator_id {
+                return Err(ApiError::forbidden(
+                    "target_generator_mismatch",
+                    "generator can only target its own stacks",
+                ));
+            }
+        } else {
+            return Err(ApiError::forbidden(
+                "target_create_denied",
+                "admin or owning generator required",
+            ));
         }
+    }
+
+    // Registration gate: agent must be registered with the stack's generator.
+    let registered = dal
+        .agent_generator_registrations()
+        .is_registered(agent_id, stack.generator_id)
+        .map_err(|e| ApiError::from_diesel(e, "failed to check generator registration"))?;
+    if !registered {
         return Err(ApiError::forbidden(
-            "target_generator_mismatch",
-            "generator can only target its own stacks",
+            "agent_not_registered",
+            "agent must be registered with this generator before stacks can be targeted at it",
         ));
     }
-    Err(ApiError::forbidden(
-        "target_create_denied",
-        "admin or owning generator required",
-    ))
+
+    Ok(())
 }
 
 #[utoipa::path(
@@ -838,7 +899,7 @@ async fn remove_target(
         "Handling request to remove target for stack {} from agent with ID: {}",
         stack_id, id
     );
-    authorize_target_mutation(&dal, &auth_payload, stack_id)?;
+    authorize_target_mutation(&dal, &auth_payload, id, stack_id)?;
     let deleted = dal
         .agent_targets()
         .delete_by_agent_and_stack(id, stack_id)
@@ -1095,4 +1156,32 @@ async fn rotate_agent_pak(
         "agent": updated_agent,
         "pak": pak_value
     })))
+}
+
+#[utoipa::path(
+    get, path = "/agents/{id}/registrations", tag = "agents",
+    params(("id" = Uuid, Path, description = "Agent ID")),
+    responses(
+        (status = 200, description = "Generator registrations for agent", body = Vec<AgentGeneratorRegistration>),
+        (status = 403, description = "Forbidden", body = ErrorResponse),
+        (status = 404, description = "Agent not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
+    ),
+    security(("admin_pak" = []), ("agent_pak" = []))
+)]
+async fn list_agent_registrations(
+    State(dal): State<DAL>,
+    Extension(auth_payload): Extension<AuthPayload>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<Vec<AgentGeneratorRegistration>>, ApiError> {
+    require_admin_or_agent(&auth_payload, id)?;
+    dal.agents()
+        .get(id)
+        .map_err(|e| ApiError::from_diesel(e, "failed to look up agent"))?
+        .ok_or_else(|| ApiError::not_found("agent_not_found", "agent not found"))?;
+    let registrations = dal
+        .agent_generator_registrations()
+        .list_for_agent(id)
+        .map_err(|e| ApiError::from_diesel(e, "failed to list registrations"))?;
+    Ok(Json(registrations))
 }

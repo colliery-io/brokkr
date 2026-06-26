@@ -1,9 +1,3 @@
-/*
- * Copyright (c) 2025-2026 Dylan Storey
- * Licensed under the Elastic License 2.0.
- * See LICENSE file in the project root for full license text.
- */
-
 // @generated automatically by Diesel CLI.
 
 diesel::table! {
@@ -27,35 +21,6 @@ diesel::table! {
 }
 
 diesel::table! {
-    agent_k8s_events (id) {
-        id -> Uuid,
-        agent_id -> Uuid,
-        stack_id -> Uuid,
-        observed_at -> Timestamptz,
-        reason -> Text,
-        message -> Text,
-        event_type -> Text,
-        source -> Nullable<Text>,
-        involved_object -> Jsonb,
-        created_at -> Timestamptz,
-    }
-}
-
-diesel::table! {
-    agent_pod_logs (id) {
-        id -> Uuid,
-        agent_id -> Uuid,
-        stack_id -> Uuid,
-        namespace -> Text,
-        pod -> Text,
-        container -> Text,
-        ts -> Timestamptz,
-        line -> Text,
-        created_at -> Timestamptz,
-    }
-}
-
-diesel::table! {
     agent_events (id) {
         id -> Uuid,
         created_at -> Timestamptz,
@@ -72,11 +37,49 @@ diesel::table! {
 }
 
 diesel::table! {
+    agent_generator_registrations (id) {
+        id -> Uuid,
+        agent_id -> Uuid,
+        generator_id -> Uuid,
+        registered_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    agent_k8s_events (id) {
+        id -> Uuid,
+        agent_id -> Uuid,
+        stack_id -> Uuid,
+        observed_at -> Timestamptz,
+        reason -> Text,
+        message -> Text,
+        event_type -> Text,
+        source -> Nullable<Text>,
+        involved_object -> Jsonb,
+        created_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
     agent_labels (id) {
         id -> Uuid,
         agent_id -> Uuid,
         #[max_length = 64]
         label -> Varchar,
+    }
+}
+
+diesel::table! {
+    agent_pod_logs (id) {
+        id -> Uuid,
+        agent_id -> Uuid,
+        stack_id -> Uuid,
+        namespace -> Text,
+        pod -> Text,
+        container -> Text,
+        ts -> Timestamptz,
+        line -> Text,
+        created_at -> Timestamptz,
     }
 }
 
@@ -116,6 +119,25 @@ diesel::table! {
 }
 
 diesel::table! {
+    audit_logs (id) {
+        id -> Uuid,
+        timestamp -> Timestamptz,
+        #[max_length = 20]
+        actor_type -> Varchar,
+        actor_id -> Nullable<Uuid>,
+        #[max_length = 100]
+        action -> Varchar,
+        #[max_length = 50]
+        resource_type -> Varchar,
+        resource_id -> Nullable<Uuid>,
+        details -> Nullable<Jsonb>,
+        ip_address -> Nullable<Text>,
+        user_agent -> Nullable<Text>,
+        created_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
     deployment_health (id) {
         id -> Uuid,
         agent_id -> Uuid,
@@ -141,183 +163,6 @@ diesel::table! {
         yaml_checksum -> Text,
         submitted_at -> Timestamptz,
         is_deletion_marker -> Bool,
-    }
-}
-
-diesel::table! {
-    generators (id) {
-        id -> Uuid,
-        created_at -> Timestamptz,
-        updated_at -> Timestamptz,
-        deleted_at -> Nullable<Timestamptz>,
-        #[max_length = 255]
-        name -> Varchar,
-        description -> Nullable<Text>,
-        pak_hash -> Nullable<Text>,
-        last_active_at -> Nullable<Timestamptz>,
-        is_active -> Bool,
-    }
-}
-
-diesel::table! {
-    stack_annotations (id) {
-        id -> Uuid,
-        stack_id -> Uuid,
-        #[max_length = 64]
-        key -> Varchar,
-        #[max_length = 64]
-        value -> Varchar,
-    }
-}
-
-diesel::table! {
-    stack_labels (id) {
-        id -> Uuid,
-        stack_id -> Uuid,
-        #[max_length = 64]
-        label -> Varchar,
-    }
-}
-
-diesel::table! {
-    stacks (id) {
-        id -> Uuid,
-        created_at -> Timestamptz,
-        updated_at -> Timestamptz,
-        deleted_at -> Nullable<Timestamptz>,
-        #[max_length = 255]
-        name -> Varchar,
-        description -> Nullable<Text>,
-        generator_id -> Uuid,
-    }
-}
-
-diesel::table! {
-    stack_templates (id) {
-        id -> Uuid,
-        created_at -> Timestamptz,
-        updated_at -> Timestamptz,
-        deleted_at -> Nullable<Timestamptz>,
-        generator_id -> Nullable<Uuid>,
-        #[max_length = 255]
-        name -> Varchar,
-        description -> Nullable<Text>,
-        version -> Int4,
-        template_content -> Text,
-        parameters_schema -> Text,
-        #[max_length = 64]
-        checksum -> Varchar,
-    }
-}
-
-diesel::table! {
-    template_labels (id) {
-        id -> Uuid,
-        template_id -> Uuid,
-        #[max_length = 64]
-        label -> Varchar,
-        created_at -> Timestamptz,
-    }
-}
-
-diesel::table! {
-    template_annotations (id) {
-        id -> Uuid,
-        template_id -> Uuid,
-        #[max_length = 64]
-        key -> Varchar,
-        #[max_length = 64]
-        value -> Varchar,
-        created_at -> Timestamptz,
-    }
-}
-
-diesel::table! {
-    template_targets (id) {
-        id -> Uuid,
-        template_id -> Uuid,
-        stack_id -> Uuid,
-        created_at -> Timestamptz,
-    }
-}
-
-diesel::table! {
-    rendered_deployment_objects (id) {
-        id -> Uuid,
-        deployment_object_id -> Uuid,
-        template_id -> Uuid,
-        template_version -> Int4,
-        template_parameters -> Text,
-        created_at -> Timestamptz,
-    }
-}
-
-diesel::table! {
-    work_orders (id) {
-        id -> Uuid,
-        created_at -> Timestamptz,
-        updated_at -> Timestamptz,
-        #[max_length = 50]
-        work_type -> Varchar,
-        yaml_content -> Text,
-        #[max_length = 20]
-        status -> Varchar,
-        claimed_by -> Nullable<Uuid>,
-        claimed_at -> Nullable<Timestamptz>,
-        claim_timeout_seconds -> Int4,
-        max_retries -> Int4,
-        retry_count -> Int4,
-        backoff_seconds -> Int4,
-        next_retry_after -> Nullable<Timestamptz>,
-        last_error -> Nullable<Text>,
-        last_error_at -> Nullable<Timestamptz>,
-    }
-}
-
-diesel::table! {
-    work_order_log (id) {
-        id -> Uuid,
-        #[max_length = 50]
-        work_type -> Varchar,
-        created_at -> Timestamptz,
-        claimed_at -> Nullable<Timestamptz>,
-        completed_at -> Timestamptz,
-        claimed_by -> Nullable<Uuid>,
-        success -> Bool,
-        retries_attempted -> Int4,
-        result_message -> Nullable<Text>,
-        yaml_content -> Text,
-    }
-}
-
-diesel::table! {
-    work_order_targets (id) {
-        id -> Uuid,
-        work_order_id -> Uuid,
-        agent_id -> Uuid,
-        created_at -> Timestamptz,
-    }
-}
-
-diesel::table! {
-    work_order_labels (id) {
-        id -> Uuid,
-        work_order_id -> Uuid,
-        #[max_length = 64]
-        label -> Varchar,
-        created_at -> Timestamptz,
-    }
-}
-
-diesel::table! {
-    work_order_annotations (id) {
-        id -> Uuid,
-        work_order_id -> Uuid,
-        #[max_length = 64]
-        key -> Varchar,
-        #[max_length = 64]
-        value -> Varchar,
-        created_at -> Timestamptz,
     }
 }
 
@@ -350,22 +195,111 @@ diesel::table! {
 }
 
 diesel::table! {
-    webhook_subscriptions (id) {
+    generators (id) {
         id -> Uuid,
-        #[max_length = 255]
-        name -> Varchar,
-        url_encrypted -> Bytea,
-        auth_header_encrypted -> Nullable<Bytea>,
-        event_types -> Array<Nullable<Text>>,
-        filters -> Nullable<Text>,
-        target_labels -> Nullable<Array<Nullable<Text>>>,
-        enabled -> Bool,
-        max_retries -> Int4,
-        timeout_seconds -> Int4,
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
+        deleted_at -> Nullable<Timestamptz>,
         #[max_length = 255]
-        created_by -> Nullable<Varchar>,
+        name -> Varchar,
+        description -> Nullable<Text>,
+        pak_hash -> Nullable<Text>,
+        last_active_at -> Nullable<Timestamptz>,
+        is_active -> Bool,
+        is_system -> Bool,
+    }
+}
+
+diesel::table! {
+    rendered_deployment_objects (id) {
+        id -> Uuid,
+        deployment_object_id -> Uuid,
+        template_id -> Uuid,
+        template_version -> Int4,
+        template_parameters -> Text,
+        created_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    stack_annotations (id) {
+        id -> Uuid,
+        stack_id -> Uuid,
+        #[max_length = 64]
+        key -> Varchar,
+        #[max_length = 64]
+        value -> Varchar,
+    }
+}
+
+diesel::table! {
+    stack_labels (id) {
+        id -> Uuid,
+        stack_id -> Uuid,
+        #[max_length = 64]
+        label -> Varchar,
+    }
+}
+
+diesel::table! {
+    stack_templates (id) {
+        id -> Uuid,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
+        deleted_at -> Nullable<Timestamptz>,
+        generator_id -> Nullable<Uuid>,
+        #[max_length = 255]
+        name -> Varchar,
+        description -> Nullable<Text>,
+        version -> Int4,
+        template_content -> Text,
+        parameters_schema -> Text,
+        #[max_length = 64]
+        checksum -> Varchar,
+    }
+}
+
+diesel::table! {
+    stacks (id) {
+        id -> Uuid,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
+        deleted_at -> Nullable<Timestamptz>,
+        #[max_length = 255]
+        name -> Varchar,
+        description -> Nullable<Text>,
+        generator_id -> Uuid,
+    }
+}
+
+diesel::table! {
+    template_annotations (id) {
+        id -> Uuid,
+        template_id -> Uuid,
+        #[max_length = 64]
+        key -> Varchar,
+        #[max_length = 64]
+        value -> Varchar,
+        created_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    template_labels (id) {
+        id -> Uuid,
+        template_id -> Uuid,
+        #[max_length = 64]
+        label -> Varchar,
+        created_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    template_targets (id) {
+        id -> Uuid,
+        template_id -> Uuid,
+        stack_id -> Uuid,
+        created_at -> Timestamptz,
     }
 }
 
@@ -392,58 +326,136 @@ diesel::table! {
 }
 
 diesel::table! {
-    audit_logs (id) {
+    webhook_subscriptions (id) {
         id -> Uuid,
-        timestamp -> Timestamptz,
-        #[max_length = 20]
-        actor_type -> Varchar,
-        actor_id -> Nullable<Uuid>,
-        #[max_length = 100]
-        action -> Varchar,
-        #[max_length = 50]
-        resource_type -> Varchar,
-        resource_id -> Nullable<Uuid>,
-        details -> Nullable<Jsonb>,
-        ip_address -> Nullable<Text>,
-        user_agent -> Nullable<Text>,
+        #[max_length = 255]
+        name -> Varchar,
+        url_encrypted -> Bytea,
+        auth_header_encrypted -> Nullable<Bytea>,
+        event_types -> Array<Nullable<Text>>,
+        filters -> Nullable<Text>,
+        target_labels -> Nullable<Array<Nullable<Text>>>,
+        enabled -> Bool,
+        max_retries -> Int4,
+        timeout_seconds -> Int4,
         created_at -> Timestamptz,
+        updated_at -> Timestamptz,
+        #[max_length = 255]
+        created_by -> Nullable<Varchar>,
+    }
+}
+
+diesel::table! {
+    work_order_annotations (id) {
+        id -> Uuid,
+        work_order_id -> Uuid,
+        #[max_length = 64]
+        key -> Varchar,
+        #[max_length = 64]
+        value -> Varchar,
+        created_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    work_order_labels (id) {
+        id -> Uuid,
+        work_order_id -> Uuid,
+        #[max_length = 64]
+        label -> Varchar,
+        created_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    work_order_log (id) {
+        id -> Uuid,
+        #[max_length = 50]
+        work_type -> Varchar,
+        created_at -> Timestamptz,
+        claimed_at -> Nullable<Timestamptz>,
+        completed_at -> Timestamptz,
+        claimed_by -> Nullable<Uuid>,
+        success -> Bool,
+        retries_attempted -> Int4,
+        result_message -> Nullable<Text>,
+        yaml_content -> Text,
+    }
+}
+
+diesel::table! {
+    work_order_targets (id) {
+        id -> Uuid,
+        work_order_id -> Uuid,
+        agent_id -> Uuid,
+        created_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    work_orders (id) {
+        id -> Uuid,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
+        #[max_length = 50]
+        work_type -> Varchar,
+        yaml_content -> Text,
+        #[max_length = 20]
+        status -> Varchar,
+        claimed_by -> Nullable<Uuid>,
+        claimed_at -> Nullable<Timestamptz>,
+        claim_timeout_seconds -> Int4,
+        max_retries -> Int4,
+        retry_count -> Int4,
+        backoff_seconds -> Int4,
+        next_retry_after -> Nullable<Timestamptz>,
+        last_error -> Nullable<Text>,
+        last_error_at -> Nullable<Timestamptz>,
     }
 }
 
 diesel::joinable!(agent_annotations -> agents (agent_id));
 diesel::joinable!(agent_events -> agents (agent_id));
 diesel::joinable!(agent_events -> deployment_objects (deployment_object_id));
-diesel::joinable!(deployment_health -> agents (agent_id));
-diesel::joinable!(deployment_health -> deployment_objects (deployment_object_id));
+diesel::joinable!(agent_generator_registrations -> agents (agent_id));
+diesel::joinable!(agent_generator_registrations -> generators (generator_id));
+diesel::joinable!(agent_k8s_events -> agents (agent_id));
+diesel::joinable!(agent_k8s_events -> stacks (stack_id));
 diesel::joinable!(agent_labels -> agents (agent_id));
+diesel::joinable!(agent_pod_logs -> agents (agent_id));
+diesel::joinable!(agent_pod_logs -> stacks (stack_id));
 diesel::joinable!(agent_targets -> agents (agent_id));
 diesel::joinable!(agent_targets -> stacks (stack_id));
+diesel::joinable!(deployment_health -> agents (agent_id));
+diesel::joinable!(deployment_health -> deployment_objects (deployment_object_id));
 diesel::joinable!(deployment_objects -> stacks (stack_id));
-diesel::joinable!(stack_annotations -> stacks (stack_id));
-diesel::joinable!(stack_labels -> stacks (stack_id));
-diesel::joinable!(stacks -> generators (generator_id));
-diesel::joinable!(stack_templates -> generators (generator_id));
-diesel::joinable!(template_labels -> stack_templates (template_id));
-diesel::joinable!(template_annotations -> stack_templates (template_id));
-diesel::joinable!(template_targets -> stack_templates (template_id));
-diesel::joinable!(template_targets -> stacks (stack_id));
-diesel::joinable!(rendered_deployment_objects -> deployment_objects (deployment_object_id));
-diesel::joinable!(rendered_deployment_objects -> stack_templates (template_id));
-diesel::joinable!(work_orders -> agents (claimed_by));
-diesel::joinable!(work_order_log -> agents (claimed_by));
-diesel::joinable!(work_order_targets -> work_orders (work_order_id));
-diesel::joinable!(work_order_targets -> agents (agent_id));
-diesel::joinable!(work_order_labels -> work_orders (work_order_id));
-diesel::joinable!(work_order_annotations -> work_orders (work_order_id));
 diesel::joinable!(diagnostic_requests -> agents (agent_id));
 diesel::joinable!(diagnostic_requests -> deployment_objects (deployment_object_id));
 diesel::joinable!(diagnostic_results -> diagnostic_requests (request_id));
+diesel::joinable!(rendered_deployment_objects -> deployment_objects (deployment_object_id));
+diesel::joinable!(rendered_deployment_objects -> stack_templates (template_id));
+diesel::joinable!(stack_annotations -> stacks (stack_id));
+diesel::joinable!(stack_labels -> stacks (stack_id));
+diesel::joinable!(stack_templates -> generators (generator_id));
+diesel::joinable!(stacks -> generators (generator_id));
+diesel::joinable!(template_annotations -> stack_templates (template_id));
+diesel::joinable!(template_labels -> stack_templates (template_id));
+diesel::joinable!(template_targets -> stack_templates (template_id));
+diesel::joinable!(template_targets -> stacks (stack_id));
+diesel::joinable!(webhook_deliveries -> agents (acquired_by));
 diesel::joinable!(webhook_deliveries -> webhook_subscriptions (subscription_id));
+diesel::joinable!(work_order_annotations -> work_orders (work_order_id));
+diesel::joinable!(work_order_labels -> work_orders (work_order_id));
+diesel::joinable!(work_order_log -> agents (claimed_by));
+diesel::joinable!(work_order_targets -> agents (agent_id));
+diesel::joinable!(work_order_targets -> work_orders (work_order_id));
+diesel::joinable!(work_orders -> agents (claimed_by));
 
 diesel::allow_tables_to_appear_in_same_query!(
     admin_role,
     agent_annotations,
     agent_events,
+    agent_generator_registrations,
     agent_k8s_events,
     agent_labels,
     agent_pod_logs,
@@ -464,11 +476,11 @@ diesel::allow_tables_to_appear_in_same_query!(
     template_annotations,
     template_labels,
     template_targets,
-    work_orders,
+    webhook_deliveries,
+    webhook_subscriptions,
     work_order_annotations,
     work_order_labels,
     work_order_log,
     work_order_targets,
-    webhook_subscriptions,
-    webhook_deliveries,
+    work_orders,
 );

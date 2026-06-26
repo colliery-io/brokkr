@@ -18,6 +18,7 @@ use brokkr_broker::utils::pak;
 use brokkr_models::models::{
     agent_annotations::{AgentAnnotation, NewAgentAnnotation},
     agent_events::{AgentEvent, NewAgentEvent},
+    agent_generator_registrations::AgentGeneratorRegistration,
     agent_labels::{AgentLabel, NewAgentLabel},
     agent_targets::{AgentTarget, NewAgentTarget},
     agents::{Agent, NewAgent},
@@ -134,6 +135,12 @@ impl TestFixture {
             .expect("Failed to get admin generator")
             .expect("Admin generator not found");
 
+        // Provision the system generator so that registration enforcement
+        // (T-0246) does not break tests that pre-date the feature.
+        dal.generators()
+            .provision_system_generator()
+            .expect("Failed to provision system generator");
+
         TestFixture {
             dal,
             settings,
@@ -181,10 +188,15 @@ impl TestFixture {
     /// Returns the created Agent on success, or panics on failure.
     pub fn create_test_agent(&self, name: String, cluster_name: String) -> Agent {
         let new_agent = NewAgent::new(name, cluster_name).expect("Failed to create NewAgent");
-        self.dal
+        let agent = self
+            .dal
             .agents()
             .create(&new_agent)
-            .expect("Failed to create agent")
+            .expect("Failed to create agent");
+        // Register with system generator and admin_generator so that the
+        // registration enforcement (T-0246) doesn't break pre-existing tests.
+        self.register_agent_with_defaults(agent.id);
+        agent
     }
 
     /// Creates a new deployment object for testing purposes.
@@ -423,7 +435,54 @@ impl TestFixture {
             .agents()
             .update_pak_hash(agent.id, hash)
             .expect("Failed to update PAK hash");
+        self.register_agent_with_defaults(agent.id);
         (agent, pak)
+    }
+
+    /// Registers an agent with the system generator and the admin_generator.
+    /// Called by agent-creation helpers so that pre-existing tests remain
+    /// compatible with the registration enforcement added in T-0246.
+    pub fn register_agent_with_defaults(&self, agent_id: Uuid) {
+        if let Ok(Some(sys_id)) = self.dal.generators().get_system_generator_id() {
+            let _ = self.dal.agent_generator_registrations().create(agent_id, sys_id);
+        }
+        let _ = self
+            .dal
+            .agent_generator_registrations()
+            .create(agent_id, self.admin_generator.id);
+    }
+
+    /// Creates an agent WITHOUT any default registrations, useful for testing
+    /// the unregistered case in registration enforcement tests.
+    pub fn create_bare_agent_with_pak(
+        &self,
+        name: String,
+        cluster_name: String,
+    ) -> (Agent, String) {
+        let (pak, hash) = pak::create_pak().expect("Failed to create PAK");
+        let new_agent = NewAgent::new(name, cluster_name).expect("Failed to create NewAgent");
+        let agent = self
+            .dal
+            .agents()
+            .create(&new_agent)
+            .expect("Failed to create agent");
+        self.dal
+            .agents()
+            .update_pak_hash(agent.id, hash)
+            .expect("Failed to update PAK hash");
+        (agent, pak)
+    }
+
+    /// Registers an agent with a specific generator via the DAL.
+    pub fn register_agent_with_generator(
+        &self,
+        agent_id: Uuid,
+        generator_id: Uuid,
+    ) -> AgentGeneratorRegistration {
+        self.dal
+            .agent_generator_registrations()
+            .create(agent_id, generator_id)
+            .expect("Failed to register agent with generator")
     }
 
     /// Creates a new stack template for testing purposes.
