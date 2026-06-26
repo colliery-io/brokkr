@@ -7,6 +7,7 @@
 mod admin;
 mod agent_events;
 mod agents;
+mod generator_registration;
 mod audit_logs;
 mod auth;
 mod deployment_objects;

@@ -12,7 +12,8 @@ from uuid import UUID
 
 from brokkr_broker_client.api.agent_targets import add_target, remove_target
 from brokkr_broker_client.api.agents import create_agent, delete_agent
-from brokkr_broker_client.api.generators import create_generator, delete_generator
+from brokkr_broker_client.api.generators import create_generator, delete_generator, register_agent
+from brokkr_broker_client.models.agent_registration_body import AgentRegistrationBody
 from brokkr_broker_client.api.stacks import (
     create_deployment_object,
     create_stack,
@@ -112,6 +113,13 @@ def test_uat_walkthrough(admin_client, base_url):
         )
         print(f"    deployment_id={dep.id}")
 
+        # ----- Step 6.5: register agent with generator before targeting -----
+        register_agent.sync(
+            generator_id,
+            client=admin_client,
+            body=AgentRegistrationBody(agent_id=agent_id),
+        )
+
         # ----- Step 7: target stack to agent (BROKKR-T-0153 — generator PAK now allowed) -----
         tgt = add_target.sync(
             agent_id,
@@ -184,6 +192,14 @@ def test_target_generator_mismatch_returns_typed_403(admin_client, base_url):
     agent_id: UUID = agent_resp.agent.id
 
     gen_a_client = make_client(base_url, gen_a.pak)
+
+    # Register agent with Gen A so the mismatch check (not the registration
+    # check) is what fires when targeting Gen B's stack.
+    register_agent.sync(
+        gen_a.generator.id,
+        client=admin_client,
+        body=AgentRegistrationBody(agent_id=agent_id),
+    )
 
     try:
         # `sync_detailed` gives us status_code + parsed body, both typed.

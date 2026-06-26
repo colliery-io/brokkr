@@ -23,8 +23,8 @@ use std::time::Duration;
 
 use anyhow::{anyhow, Context, Result};
 use brokkr_client::types::{
-    CreateAgentResponse, CreateDeploymentObjectRequest, ErrorResponse, NewAgent, NewAgentTarget,
-    NewGenerator, NewStack, NewStackAnnotation,
+    CreateAgentRequest, CreateAgentResponse, CreateDeploymentObjectRequest, ErrorResponse,
+    NewAgentTarget, NewGenerator, NewStack, NewStackAnnotation,
 };
 use brokkr_client::{ApplyOutcome, BrokkrClient, BrokkrError, Client as RawClient};
 use uuid::Uuid;
@@ -191,7 +191,7 @@ async fn scenario_uat_walkthrough(base_url: &str, admin_pak: &str) -> Result<()>
         .api()
         .create_agent()
         .body(
-            NewAgent::builder()
+            CreateAgentRequest::builder()
                 .name(agent_name.clone())
                 .cluster_name("sdk-contract-rust-cluster".to_string()),
         )
@@ -280,6 +280,18 @@ async fn scenario_uat_walkthrough(base_url: &str, admin_pak: &str) -> Result<()>
         .into_inner();
     let deployment_id = dep.id;
     println!("    deployment_id={}", deployment_id);
+
+    // Step 6.5: register agent with generator before targeting
+    println!("  → [admin] register agent with generator");
+    admin
+        .api()
+        .register_agent()
+        .id(generator_id)
+        .body(brokkr_client::types::AgentRegistrationBody::builder().agent_id(agent_id))
+        .send()
+        .await
+        .map_err(berr)
+        .context("register_agent")?;
 
     // Step 7: generator targets the stack to the agent (BROKKR-T-0153 — generator PAK allowed for own stacks)
     println!("  → [generator] add agent target");
@@ -405,7 +417,7 @@ async fn scenario_target_mismatch(base_url: &str, admin_pak: &str) -> Result<()>
         .api()
         .create_agent()
         .body(
-            NewAgent::builder()
+            CreateAgentRequest::builder()
                 .name(unique("sdk-contract-rust-agent-x"))
                 .cluster_name("sdk-contract-rust-cluster".to_string()),
         )
@@ -414,6 +426,17 @@ async fn scenario_target_mismatch(base_url: &str, admin_pak: &str) -> Result<()>
         .map_err(berr)?
         .into_inner();
     let agent_id: Uuid = agent_resp.agent.id;
+
+    // Register agent with Gen A so the mismatch check fires (not the registration check).
+    admin
+        .api()
+        .register_agent()
+        .id(gen_a.generator.id)
+        .body(brokkr_client::types::AgentRegistrationBody::builder().agent_id(agent_id))
+        .send()
+        .await
+        .map_err(berr)
+        .context("register_agent for mismatch test")?;
 
     // Generator A tries to target Generator B's stack.
     println!("  → [generator A] add target for stack owned by generator B (expect 403)");

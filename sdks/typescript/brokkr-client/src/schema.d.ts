@@ -358,6 +358,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/agents/{id}/registrations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_agent_registrations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/agents/{id}/rotate-pak": {
         parameters: {
             query?: never;
@@ -610,6 +626,38 @@ export interface paths {
         put: operations["update_generator"];
         post?: never;
         delete: operations["delete_generator"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/generators/{id}/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["register_agent"];
+        delete: operations["deregister_agent"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/generators/{id}/registered-agents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_generator_registered_agents"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1255,6 +1303,17 @@ export interface components {
             /** @description The per-agent fleet record (same shape as the rollup entries). */
             record: components["schemas"]["FleetAgentRecord"];
         };
+        /** @description A registration linking an agent to a generator scope. */
+        AgentGeneratorRegistration: {
+            /** Format: uuid */
+            agent_id: string;
+            /** Format: uuid */
+            generator_id: string;
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            registered_at: string;
+        };
         AgentK8sEvent: {
             /** Format: uuid */
             agent_id: string;
@@ -1302,6 +1361,14 @@ export interface components {
             stack_id: string;
             /** Format: date-time */
             ts: string;
+        };
+        /**
+         * @description Optional body used when an admin registers or deregisters a specific agent.
+         *     Agent callers omit this (the calling agent is implied by their PAK).
+         */
+        AgentRegistrationBody: {
+            /** Format: uuid */
+            agent_id?: string | null;
         };
         /** @description Represents an agent target in the database. */
         AgentTarget: {
@@ -1423,6 +1490,16 @@ export interface components {
             reloaded_at: string;
             /** @description Indicates whether the reload was successful. */
             success: boolean;
+        };
+        /**
+         * @description Request body for [`create_agent`]. Extends `NewAgent` with an optional list
+         *     of generator UUIDs the new agent should be registered with at creation time.
+         *     The system generator is always added automatically; this field is additive.
+         */
+        CreateAgentRequest: {
+            cluster_name: string;
+            generator_ids?: string[];
+            name: string;
         };
         /**
          * @description Response body for [`create_agent`]: the newly-created agent plus the
@@ -1850,6 +1927,8 @@ export interface components {
             id: string;
             /** @description Indicates whether the generator is currently active. */
             is_active: boolean;
+            /** @description Reserved: true for the singleton system generator provisioned at broker startup. */
+            is_system: boolean;
             /**
              * Format: date-time
              * @description Timestamp of when the generator was last active.
@@ -2968,7 +3047,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["NewAgent"];
+                "application/json": components["schemas"]["CreateAgentRequest"];
             };
         };
         responses: {
@@ -2979,6 +3058,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CreateAgentResponse"];
+                };
+            };
+            /** @description Invalid generator ID */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description Forbidden */
@@ -3816,6 +3904,56 @@ export interface operations {
                 };
             };
             /** @description Label not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_agent_registrations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Agent ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Generator registrations for agent */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentGeneratorRegistration"][];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Agent not found */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -4748,6 +4886,171 @@ export interface operations {
                 content?: never;
             };
             /** @description Forbidden - Unauthorized access */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Generator not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    register_agent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Generator ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentRegistrationBody"];
+            };
+        };
+        responses: {
+            /** @description Agent registered */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentGeneratorRegistration"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Generator not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Already registered */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deregister_agent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Generator ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentRegistrationBody"];
+            };
+        };
+        responses: {
+            /** @description Agent deregistered */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Generator not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_generator_registered_agents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Generator ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Registered agents */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentGeneratorRegistration"][];
+                };
+            };
+            /** @description Forbidden */
             403: {
                 headers: {
                     [name: string]: unknown;

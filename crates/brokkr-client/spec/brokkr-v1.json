@@ -216,6 +216,34 @@
         ],
         "type": "object"
       },
+      "AgentGeneratorRegistration": {
+        "description": "A registration linking an agent to a generator scope.",
+        "properties": {
+          "agent_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "generator_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "registered_at": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "agent_id",
+          "generator_id",
+          "registered_at"
+        ],
+        "type": "object"
+      },
       "AgentK8sEvent": {
         "properties": {
           "agent_id": {
@@ -337,6 +365,17 @@
           "line",
           "created_at"
         ],
+        "type": "object"
+      },
+      "AgentRegistrationBody": {
+        "description": "Optional body used when an admin registers or deregisters a specific agent.\nAgent callers omit this (the calling agent is implied by their PAK).",
+        "properties": {
+          "agent_id": {
+            "format": "uuid",
+            "nullable": true,
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "AgentTarget": {
@@ -576,6 +615,29 @@
           "reloaded_at",
           "changes",
           "success"
+        ],
+        "type": "object"
+      },
+      "CreateAgentRequest": {
+        "description": "Request body for [`create_agent`]. Extends `NewAgent` with an optional list\nof generator UUIDs the new agent should be registered with at creation time.\nThe system generator is always added automatically; this field is additive.",
+        "properties": {
+          "cluster_name": {
+            "type": "string"
+          },
+          "generator_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "cluster_name"
         ],
         "type": "object"
       },
@@ -1299,6 +1361,10 @@
             "description": "Indicates whether the generator is currently active.",
             "type": "boolean"
           },
+          "is_system": {
+            "description": "Reserved: true for the singleton system generator provisioned at broker startup.",
+            "type": "boolean"
+          },
           "last_active_at": {
             "description": "Timestamp of when the generator was last active.",
             "format": "date-time",
@@ -1320,7 +1386,8 @@
           "created_at",
           "updated_at",
           "name",
-          "is_active"
+          "is_active",
+          "is_system"
         ],
         "type": "object"
       },
@@ -2842,7 +2909,7 @@
       "url": "https://www.elastic.co/licensing/elastic-license"
     },
     "title": "brokkr-broker",
-    "version": "0.8.1"
+    "version": "0.8.2"
   },
   "openapi": "3.0.3",
   "paths": {
@@ -3256,7 +3323,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/NewAgent"
+                "$ref": "#/components/schemas/CreateAgentRequest"
               }
             }
           },
@@ -3272,6 +3339,16 @@
               }
             },
             "description": "Successfully created agent"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid generator ID"
           },
           "403": {
             "content": {
@@ -4503,6 +4580,79 @@
         ],
         "tags": [
           "agent-labels"
+        ]
+      }
+    },
+    "/agents/{id}/registrations": {
+      "get": {
+        "operationId": "list_agent_registrations",
+        "parameters": [
+          {
+            "description": "Agent ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AgentGeneratorRegistration"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Generator registrations for agent"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Agent not found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "admin_pak": []
+          },
+          {
+            "agent_pak": []
+          }
+        ],
+        "tags": [
+          "agents"
         ]
       }
     },
@@ -5784,6 +5934,240 @@
               }
             },
             "description": "Forbidden - Unauthorized access"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Generator not found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "admin_pak": []
+          },
+          {
+            "generator_pak": []
+          }
+        ],
+        "tags": [
+          "generators"
+        ]
+      }
+    },
+    "/generators/{id}/register": {
+      "delete": {
+        "operationId": "deregister_agent",
+        "parameters": [
+          {
+            "description": "Generator ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentRegistrationBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Agent deregistered"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Generator not found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "admin_pak": []
+          },
+          {
+            "agent_pak": []
+          }
+        ],
+        "tags": [
+          "generators"
+        ]
+      },
+      "post": {
+        "operationId": "register_agent",
+        "parameters": [
+          {
+            "description": "Generator ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentRegistrationBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentGeneratorRegistration"
+                }
+              }
+            },
+            "description": "Agent registered"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Generator not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Already registered"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "admin_pak": []
+          },
+          {
+            "agent_pak": []
+          }
+        ],
+        "tags": [
+          "generators"
+        ]
+      }
+    },
+    "/generators/{id}/registered-agents": {
+      "get": {
+        "operationId": "list_generator_registered_agents",
+        "parameters": [
+          {
+            "description": "Generator ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AgentGeneratorRegistration"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Registered agents"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
           },
           "404": {
             "content": {

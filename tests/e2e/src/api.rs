@@ -195,6 +195,18 @@ impl Client {
         self.get(&format!("/api/v1/agents/{}/targets", id)).await
     }
 
+    pub async fn register_agent_with_generator(
+        &self,
+        generator_id: Uuid,
+        agent_id: Uuid,
+    ) -> Result<Value> {
+        self.post(
+            &format!("/api/v1/generators/{}/register", generator_id),
+            json!({ "agent_id": agent_id }),
+        )
+        .await
+    }
+
     pub async fn get_agent_stacks(&self, id: Uuid) -> Result<Vec<Value>> {
         self.get(&format!("/api/v1/agents/{}/stacks", id)).await
     }

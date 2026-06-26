@@ -5,8 +5,9 @@
  */
 
 use crate::dal::DAL;
+use brokkr_models::models::agent_generator_registrations::NewAgentGeneratorRegistration;
 use brokkr_models::models::generator::{Generator, NewGenerator};
-use brokkr_models::schema::generators;
+use brokkr_models::schema::{agent_generator_registrations, agents, generators};
 use chrono::Utc;
 use diesel::prelude::*;
 use uuid::Uuid;
@@ -76,26 +77,24 @@ impl GeneratorsDAL<'_> {
             .optional()
     }
 
-    /// Lists all non-deleted generators from the database.
+    /// Lists all non-deleted, non-system generators.
     ///
-    /// # Returns
-    ///
-    /// A Result containing a Vec of all non-deleted Generators on success, or a diesel::result::Error on failure.
+    /// The system generator is an internal implementation detail and is excluded
+    /// from the public listing. Use `get_system_generator_id()` to retrieve it.
     pub fn list(&self) -> Result<Vec<Generator>, diesel::result::Error> {
         let conn = &mut self.dal.conn()?;
         generators::table
             .filter(generators::deleted_at.is_null())
+            .filter(generators::is_system.eq(false))
             .load::<Generator>(conn)
     }
 
-    /// Lists all generators from the database, including deleted ones.
-    ///
-    /// # Returns
-    ///
-    /// A Result containing a Vec of all Generators (including deleted ones) on success, or a diesel::result::Error on failure.
+    /// Lists all non-system generators from the database, including deleted ones.
     pub fn list_all(&self) -> Result<Vec<Generator>, diesel::result::Error> {
         let conn = &mut self.dal.conn()?;
-        generators::table.load::<Generator>(conn)
+        generators::table
+            .filter(generators::is_system.eq(false))
+            .load::<Generator>(conn)
     }
 
     /// Updates an existing generator in the database.
@@ -230,7 +229,71 @@ impl GeneratorsDAL<'_> {
         generators::table
             .filter(generators::is_active.eq(active))
             .filter(generators::deleted_at.is_null())
+            .filter(generators::is_system.eq(false))
             .load::<Generator>(conn)
+    }
+
+    /// Provisions the system generator idempotently.
+    ///
+    /// If no system generator exists, creates one and registers all current agents
+    /// with it. If one already exists, returns its UUID immediately. Safe to call
+    /// on every broker startup.
+    pub fn provision_system_generator(&self) -> Result<Uuid, diesel::result::Error> {
+        let conn = &mut self.dal.conn()?;
+
+        // Check for an existing system generator.
+        let existing: Option<Uuid> = generators::table
+            .filter(generators::is_system.eq(true))
+            .filter(generators::deleted_at.is_null())
+            .select(generators::id)
+            .first(conn)
+            .optional()?;
+
+        if let Some(id) = existing {
+            return Ok(id);
+        }
+
+        // Create the system generator.
+        let system_id: Uuid = diesel::insert_into(generators::table)
+            .values((
+                generators::name.eq("__system__"),
+                generators::description
+                    .eq("System generator — reserved for fleet-management stacks"),
+                generators::is_system.eq(true),
+            ))
+            .returning(generators::id)
+            .get_result(conn)?;
+
+        // Register every existing agent with the new system generator.
+        let agent_ids: Vec<Uuid> = agents::table.select(agents::id).load(conn)?;
+        let registrations: Vec<NewAgentGeneratorRegistration> = agent_ids
+            .into_iter()
+            .map(|agent_id| NewAgentGeneratorRegistration {
+                agent_id,
+                generator_id: system_id,
+            })
+            .collect();
+
+        if !registrations.is_empty() {
+            diesel::insert_into(agent_generator_registrations::table)
+                .values(&registrations)
+                .on_conflict_do_nothing()
+                .execute(conn)?;
+        }
+
+        tracing::info!(system_generator_id = %system_id, "system generator provisioned");
+        Ok(system_id)
+    }
+
+    /// Returns the system generator UUID, or None if not yet provisioned.
+    pub fn get_system_generator_id(&self) -> Result<Option<Uuid>, diesel::result::Error> {
+        let conn = &mut self.dal.conn()?;
+        generators::table
+            .filter(generators::is_system.eq(true))
+            .filter(generators::deleted_at.is_null())
+            .select(generators::id)
+            .first(conn)
+            .optional()
     }
 
     /// Retrieves a generator by its PAK hash.

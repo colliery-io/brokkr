@@ -5,15 +5,15 @@ import httpx
 
 from ... import errors
 from ...client import AuthenticatedClient, Client
+from ...models.create_agent_request import CreateAgentRequest
 from ...models.create_agent_response import CreateAgentResponse
 from ...models.error_response import ErrorResponse
-from ...models.new_agent import NewAgent
 from ...types import Response
 
 
 def _get_kwargs(
     *,
-    body: NewAgent,
+    body: CreateAgentRequest,
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
 
@@ -37,6 +37,11 @@ def _parse_response(
         response_201 = CreateAgentResponse.from_dict(response.json())
 
         return response_201
+
+    if response.status_code == 400:
+        response_400 = ErrorResponse.from_dict(response.json())
+
+        return response_400
 
     if response.status_code == 403:
         response_403 = ErrorResponse.from_dict(response.json())
@@ -68,11 +73,14 @@ def _build_response(
 def sync_detailed(
     *,
     client: AuthenticatedClient,
-    body: NewAgent,
+    body: CreateAgentRequest,
 ) -> Response[CreateAgentResponse | ErrorResponse]:
     """
     Args:
-        body (NewAgent): Represents a new agent to be inserted into the database.
+        body (CreateAgentRequest): Request body for [`create_agent`]. Extends `NewAgent` with an
+            optional list
+            of generator UUIDs the new agent should be registered with at creation time.
+            The system generator is always added automatically; this field is additive.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -96,11 +104,14 @@ def sync_detailed(
 def sync(
     *,
     client: AuthenticatedClient,
-    body: NewAgent,
+    body: CreateAgentRequest,
 ) -> CreateAgentResponse | ErrorResponse | None:
     """
     Args:
-        body (NewAgent): Represents a new agent to be inserted into the database.
+        body (CreateAgentRequest): Request body for [`create_agent`]. Extends `NewAgent` with an
+            optional list
+            of generator UUIDs the new agent should be registered with at creation time.
+            The system generator is always added automatically; this field is additive.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -119,11 +130,14 @@ def sync(
 async def asyncio_detailed(
     *,
     client: AuthenticatedClient,
-    body: NewAgent,
+    body: CreateAgentRequest,
 ) -> Response[CreateAgentResponse | ErrorResponse]:
     """
     Args:
-        body (NewAgent): Represents a new agent to be inserted into the database.
+        body (CreateAgentRequest): Request body for [`create_agent`]. Extends `NewAgent` with an
+            optional list
+            of generator UUIDs the new agent should be registered with at creation time.
+            The system generator is always added automatically; this field is additive.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -145,11 +159,14 @@ async def asyncio_detailed(
 async def asyncio(
     *,
     client: AuthenticatedClient,
-    body: NewAgent,
+    body: CreateAgentRequest,
 ) -> CreateAgentResponse | ErrorResponse | None:
     """
     Args:
-        body (NewAgent): Represents a new agent to be inserted into the database.
+        body (CreateAgentRequest): Request body for [`create_agent`]. Extends `NewAgent` with an
+            optional list
+            of generator UUIDs the new agent should be registered with at creation time.
+            The system generator is always added automatically; this field is additive.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.

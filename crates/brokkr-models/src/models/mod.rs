@@ -5,6 +5,7 @@
  */
 
 pub mod agent_annotations;
+pub mod agent_generator_registrations;
 pub mod agent_events;
 pub mod agent_k8s_events;
 pub mod agent_labels;

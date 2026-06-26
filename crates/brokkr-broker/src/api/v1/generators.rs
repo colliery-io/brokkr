@@ -10,19 +10,24 @@ use crate::api::v1::error::{ApiError, ErrorResponse};
 use crate::api::v1::middleware::AuthPayload;
 use crate::dal::DAL;
 use crate::utils::{audit, pak};
+use crate::ws::{ConnectionRegistry, push_target_changed};
 use axum::http::StatusCode;
 use axum::{
     Json, Router,
     extract::{Extension, Path, State},
     routing::{delete, get, post, put},
 };
+use brokkr_models::models::agent_targets::AgentTarget;
+use std::sync::Arc;
+use brokkr_models::models::agent_generator_registrations::AgentGeneratorRegistration;
 use brokkr_models::models::audit_logs::{
-    ACTION_GENERATOR_CREATED, ACTION_GENERATOR_DELETED, ACTION_GENERATOR_UPDATED,
-    ACTION_PAK_CREATED, ACTION_PAK_ROTATED, ACTOR_TYPE_ADMIN, ACTOR_TYPE_GENERATOR,
+    ACTION_AGENT_DEREGISTERED, ACTION_AGENT_REGISTERED, ACTION_GENERATOR_CREATED,
+    ACTION_GENERATOR_DELETED, ACTION_GENERATOR_UPDATED, ACTION_PAK_CREATED, ACTION_PAK_ROTATED,
+    ACTOR_TYPE_ADMIN, ACTOR_TYPE_AGENT, ACTOR_TYPE_GENERATOR, RESOURCE_TYPE_AGENT,
     RESOURCE_TYPE_GENERATOR, RESOURCE_TYPE_PAK,
 };
 use brokkr_models::models::generator::{Generator, NewGenerator};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tracing::{error, info, warn};
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -45,6 +50,21 @@ pub fn routes() -> Router<DAL> {
         .route("/generators/:id", put(update_generator))
         .route("/generators/:id", delete(delete_generator))
         .route("/generators/:id/rotate-pak", post(rotate_generator_pak))
+        .route(
+            "/generators/:id/register",
+            post(register_agent).delete(deregister_agent),
+        )
+        .route(
+            "/generators/:id/registered-agents",
+            get(list_generator_registered_agents),
+        )
+}
+
+/// Optional body used when an admin registers or deregisters a specific agent.
+/// Agent callers omit this (the calling agent is implied by their PAK).
+#[derive(Debug, Deserialize, ToSchema)]
+struct AgentRegistrationBody {
+    agent_id: Option<Uuid>,
 }
 
 #[utoipa::path(
@@ -168,6 +188,8 @@ async fn create_generator(
     ))
 }
 
+// (create_generator ends here)
+
 #[utoipa::path(
     get,
     path = "/generators/{id}",
@@ -286,12 +308,21 @@ async fn delete_generator(
         ));
     }
 
-    let old_pak_hash = dal
+    let generator = dal
         .generators()
         .get(id)
         .ok()
         .flatten()
-        .and_then(|g| g.pak_hash);
+        .ok_or_else(|| ApiError::not_found("generator_not_found", "generator not found"))?;
+
+    if generator.is_system {
+        return Err(ApiError::forbidden(
+            "cannot_delete_system_generator",
+            "the system generator cannot be deleted",
+        ));
+    }
+
+    let old_pak_hash = generator.pak_hash.clone();
 
     dal.generators().soft_delete(id).map_err(|e| {
         error!("Failed to delete generator with ID {}: {:?}", id, e);
@@ -403,4 +434,190 @@ async fn rotate_generator_pak(
             pak: pak_value,
         }),
     ))
+}
+
+// ---------------------------------------------------------------------------
+// Registration endpoints
+// ---------------------------------------------------------------------------
+
+fn resolve_registration_agent(
+    auth: &AuthPayload,
+    body: &AgentRegistrationBody,
+) -> Result<Uuid, ApiError> {
+    if let Some(agent_id) = auth.agent {
+        return Ok(agent_id);
+    }
+    if auth.admin {
+        return body.agent_id.ok_or_else(|| {
+            ApiError::bad_request(
+                "missing_agent_id",
+                "admin callers must supply agent_id in the request body",
+            )
+        });
+    }
+    Err(ApiError::forbidden(
+        "forbidden",
+        "only agents or admins may call this endpoint",
+    ))
+}
+
+#[utoipa::path(
+    post, path = "/generators/{id}/register", tag = "generators",
+    params(("id" = Uuid, Path, description = "Generator ID")),
+    request_body = AgentRegistrationBody,
+    responses(
+        (status = 201, description = "Agent registered", body = AgentGeneratorRegistration),
+        (status = 403, description = "Forbidden", body = ErrorResponse),
+        (status = 404, description = "Generator not found", body = ErrorResponse),
+        (status = 409, description = "Already registered", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
+    ),
+    security(("admin_pak" = []), ("agent_pak" = []))
+)]
+async fn register_agent(
+    State(dal): State<DAL>,
+    Extension(auth_payload): Extension<AuthPayload>,
+    Path(generator_id): Path<Uuid>,
+    Json(body): Json<AgentRegistrationBody>,
+) -> Result<(StatusCode, Json<AgentGeneratorRegistration>), ApiError> {
+    let agent_id = resolve_registration_agent(&auth_payload, &body)?;
+
+    dal.generators()
+        .get(generator_id)
+        .map_err(|e| ApiError::from_diesel(e, "failed to look up generator"))?
+        .ok_or_else(|| ApiError::not_found("generator_not_found", "generator not found"))?;
+
+    let registration = dal
+        .agent_generator_registrations()
+        .create(agent_id, generator_id)
+        .map_err(|e| {
+            use diesel::result::{DatabaseErrorKind, Error as DE};
+            match &e {
+                DE::DatabaseError(DatabaseErrorKind::UniqueViolation, _) => ApiError::conflict(
+                    "already_registered",
+                    "agent is already registered with this generator",
+                ),
+                _ => ApiError::from_diesel(e, "failed to create registration"),
+            }
+        })?;
+
+    let (actor_type, actor_id) = if auth_payload.admin {
+        (ACTOR_TYPE_ADMIN, None)
+    } else {
+        (ACTOR_TYPE_AGENT, auth_payload.agent)
+    };
+    audit::log_action(
+        actor_type,
+        actor_id,
+        ACTION_AGENT_REGISTERED,
+        RESOURCE_TYPE_AGENT,
+        Some(agent_id),
+        Some(serde_json::json!({ "generator_id": generator_id })),
+        None,
+        None,
+    );
+
+    Ok((StatusCode::CREATED, Json(registration)))
+}
+
+#[utoipa::path(
+    delete, path = "/generators/{id}/register", tag = "generators",
+    params(("id" = Uuid, Path, description = "Generator ID")),
+    request_body = AgentRegistrationBody,
+    responses(
+        (status = 204, description = "Agent deregistered"),
+        (status = 403, description = "Forbidden", body = ErrorResponse),
+        (status = 404, description = "Generator not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
+    ),
+    security(("admin_pak" = []), ("agent_pak" = []))
+)]
+async fn deregister_agent(
+    State(dal): State<DAL>,
+    Extension(auth_payload): Extension<AuthPayload>,
+    Extension(ws_registry): Extension<Arc<ConnectionRegistry>>,
+    Path(generator_id): Path<Uuid>,
+    Json(body): Json<AgentRegistrationBody>,
+) -> Result<StatusCode, ApiError> {
+    let agent_id = resolve_registration_agent(&auth_payload, &body)?;
+
+    dal.generators()
+        .get(generator_id)
+        .map_err(|e| ApiError::from_diesel(e, "failed to look up generator"))?
+        .ok_or_else(|| ApiError::not_found("generator_not_found", "generator not found"))?;
+
+    dal.agent_generator_registrations()
+        .delete_agent_targets_for_generator(agent_id, generator_id)
+        .map_err(|e| {
+            ApiError::from_diesel(e, "failed to cascade agent targets on deregistration")
+        })?;
+
+    dal.agent_generator_registrations()
+        .delete(agent_id, generator_id)
+        .map_err(|e| ApiError::from_diesel(e, "failed to remove registration"))?;
+
+    // Notify the departing agent immediately so it can clean up without
+    // waiting for its next polling interval. The content is synthetic (nil
+    // stack_id) — the agent only inspects the variant, not the payload.
+    push_target_changed(
+        &ws_registry,
+        &AgentTarget {
+            id: Uuid::nil(),
+            agent_id,
+            stack_id: Uuid::nil(),
+        },
+    );
+
+    let (actor_type, actor_id) = if auth_payload.admin {
+        (ACTOR_TYPE_ADMIN, None)
+    } else {
+        (ACTOR_TYPE_AGENT, auth_payload.agent)
+    };
+    audit::log_action(
+        actor_type,
+        actor_id,
+        ACTION_AGENT_DEREGISTERED,
+        RESOURCE_TYPE_AGENT,
+        Some(agent_id),
+        Some(serde_json::json!({ "generator_id": generator_id })),
+        None,
+        None,
+    );
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[utoipa::path(
+    get, path = "/generators/{id}/registered-agents", tag = "generators",
+    params(("id" = Uuid, Path, description = "Generator ID")),
+    responses(
+        (status = 200, description = "Registered agents", body = Vec<AgentGeneratorRegistration>),
+        (status = 403, description = "Forbidden", body = ErrorResponse),
+        (status = 404, description = "Generator not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
+    ),
+    security(("admin_pak" = []), ("generator_pak" = []))
+)]
+async fn list_generator_registered_agents(
+    State(dal): State<DAL>,
+    Extension(auth_payload): Extension<AuthPayload>,
+    Path(generator_id): Path<Uuid>,
+) -> Result<Json<Vec<AgentGeneratorRegistration>>, ApiError> {
+    let is_admin = auth_payload.admin;
+    let is_own_generator = auth_payload.generator == Some(generator_id);
+    if !is_admin && !is_own_generator {
+        return Err(ApiError::forbidden(
+            "not_authorized",
+            "admin or matching generator PAK required",
+        ));
+    }
+    dal.generators()
+        .get(generator_id)
+        .map_err(|e| ApiError::from_diesel(e, "failed to look up generator"))?
+        .ok_or_else(|| ApiError::not_found("generator_not_found", "generator not found"))?;
+    let registrations = dal
+        .agent_generator_registrations()
+        .list_for_generator(generator_id)
+        .map_err(|e| ApiError::from_diesel(e, "failed to list registrations"))?;
+    Ok(Json(registrations))
 }

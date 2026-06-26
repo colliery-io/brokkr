@@ -140,6 +140,47 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
         agent.name
     );
 
+    // Register with any generators listed in BROKKR_GENERATOR_IDS (comma-separated UUIDs).
+    // 409 = already registered (idempotent). Other errors are logged but non-fatal.
+    let generator_ids_raw = std::env::var("BROKKR_GENERATOR_IDS").unwrap_or_default();
+    if !generator_ids_raw.trim().is_empty() {
+        let mut registered = vec![];
+        let mut failed = vec![];
+        for part in generator_ids_raw.split(',') {
+            let part = part.trim();
+            match Uuid::parse_str(part) {
+                Err(_) => warn!(%part, "BROKKR_GENERATOR_IDS: skipping malformed UUID"),
+                Ok(gid) => {
+                    let result = sdk_client
+                        .api()
+                        .register_agent()
+                        .id(gid)
+                        .body_map(|b| b)
+                        .send()
+                        .await;
+                    match result {
+                        Ok(_) => registered.push(gid),
+                        Err(e) => {
+                            let status = e.status().map(|s| s.as_u16());
+                            if status == Some(409) {
+                                // Already registered — treat as success.
+                                registered.push(gid);
+                            } else {
+                                error!(%gid, ?status, "failed to register with generator");
+                                failed.push(gid);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        info!(
+            registered = ?registered,
+            failed = ?failed,
+            "generator registration complete"
+        );
+    }
+
     // Initialize Kubernetes client
     info!("Initializing Kubernetes client");
     let k8s_client = k8s::api::create_k8s_client(config.agent.kubeconfig_path.as_deref())
@@ -243,6 +284,10 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
     // Track deployment objects we've applied for health checking
     let tracked_deployment_objects: Arc<RwLock<HashSet<Uuid>>> =
         Arc::new(RwLock::new(HashSet::new()));
+
+    // Track stack IDs from the previous reconcile cycle. Used for gap detection:
+    // if a stack disappears between cycles its K8s resources must be cleaned up.
+    let mut previous_stack_ids: HashSet<Uuid> = HashSet::new();
 
     // Create health checker
     let health_checker = deployment_health::HealthChecker::new(k8s_client.clone())
@@ -350,6 +395,30 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
 
                 match broker::fetch_and_process_deployment_objects(&config, &sdk_client, &agent).await {
                     Ok(objects) => {
+                        // Gap detection: find stacks present last cycle but absent now.
+                        // Their agent_targets were removed (e.g. generator deregistration)
+                        // so we must clean up their K8s resources locally — no broker call.
+                        let current_stack_ids: HashSet<Uuid> =
+                            objects.iter().map(|o| o.stack_id).collect();
+                        let removed_stacks: Vec<Uuid> = previous_stack_ids
+                            .difference(&current_stack_ids)
+                            .copied()
+                            .collect();
+                        for stack_id in &removed_stacks {
+                            info!(%stack_id, "stack removed from targets; cleaning up K8s resources");
+                            if let Err(e) = k8s::api::delete_stack_resources(
+                                &stack_id.to_string(),
+                                k8s_client.clone(),
+                                &agent.id,
+                                config.agent.watch_namespace.as_deref(),
+                            )
+                            .await
+                            {
+                                error!(%stack_id, "failed to clean up resources for removed stack: {}", e);
+                            }
+                        }
+                        previous_stack_ids = current_stack_ids;
+
                         // Collect this cycle's successfully-applied ids and
                         // replace the tracked set at the end, so superseded
                         // deployment objects stop being health-checked and the
