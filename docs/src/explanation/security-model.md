@@ -174,8 +174,10 @@ Brokkr implements implicit role-based access control (RBAC) where roles are dete
 |------|----------------|--------------|
 | **Agent** | PAK via agents table | Read targeted deployments, report events, claim work orders |
 | **Generator** | PAK via generators table | Manage own stacks and deployment objects |
-| **Admin** | PAK via admin_role table | Full system access including configuration and audit logs |
+| **Admin** | PAK via admin_role table | Full system access including configuration and audit logs; cannot bypass generator registration when targeting stacks |
 | **System** | Internal only | Background tasks, automated cleanup |
+
+Registration enforcement — the requirement that an agent be registered with a generator before explicit targets can be created within that generator's stacks — applies uniformly to all identities, including admins. There is no bypass or force flag. See [Generator Registration and Application Scopes](#generator-registration-and-application-scopes) below.
 
 ### Endpoint Authorization
 
@@ -186,6 +188,9 @@ The following table summarizes which roles can access each API endpoint category
 | `/api/v1/agents/{id}/target-state` | Own ID only | No | Yes |
 | `/api/v1/agents/{id}/events` | Own ID only | No | Yes |
 | `/api/v1/agents/{id}/work-orders/*` | Own ID only | No | Yes |
+| `/api/v1/agents/{id}/registrations` | Own ID only | No | Yes |
+| `/api/v1/generators/{id}/register` (POST/DELETE) | Own ID only | No | Yes |
+| `/api/v1/generators/{id}/registered-agents` | No | Own ID only | Yes |
 | `/api/v1/stacks/*` | No | Own stacks | Yes |
 | `/api/v1/agents/*` (management) | No | No | Yes |
 | `/api/v1/admin/*` | No | No | Yes |
@@ -203,6 +208,8 @@ Beyond endpoint-level authorization, Brokkr enforces resource-level access contr
 
 This resolution happens server-side on every request, so agents can never see deployment objects from stacks outside that union, regardless of what parameters they provide in API requests.
 
+The read-time union above governs what an agent *sees*; a separate gate governs what explicit targets can be *created*. An explicit target can only be created when the agent is registered with the stack's owning generator — an attempt to target a stack whose generator the agent is not registered with fails with `agent_not_registered` (HTTP 403). Label and annotation matching operate purely at read time and require no registration, so an agent may read stacks from generators it is not registered with via label/annotation matches, yet still cannot create explicit targets within them. See [Generator Registration and Application Scopes](#generator-registration-and-application-scopes).
+
 **Generator Scope** restricts generators to stacks they created:
 
 ```sql
@@ -212,6 +219,21 @@ WHERE generator_id = :requesting_generator_id
 ```
 
 Generators cannot list, read, or modify stacks created by other generators or through admin operations.
+
+### Generator Registration and Application Scopes
+
+Generator ownership scopes what a generator can touch; *registration* scopes which agents a generator's stacks can reach. A generator is an application scope, and an agent must be **registered** with that generator before any stack the generator owns can be targeted at the agent. Registration is the agent's opt-in consent boundary — it prevents one application from accidentally (or maliciously) scheduling its workloads onto agents that never agreed to run them, an application-level tenancy boundary inside a single broker.
+
+Registration gates the *creation* of explicit targets, not read-time resolution. Adding a target (`POST /agents/{id}/targets`) or removing one (`DELETE /agents/{id}/targets/{stack_id}`) is rejected with `agent_not_registered` (HTTP 403) when the agent is not registered with the stack's owning generator. This check is enforced uniformly across every identity — there is no admin override or force flag. The read path (`GET /agents/{id}/target-state`) is unchanged: an agent's served-stack set remains the union of explicit targets, label matches, and annotation matches, so label- and annotation-based reach never requires registration.
+
+Two scopes deserve special mention:
+
+- **System generator** (`__system__`, `is_system=true`) — provisioned at broker startup and excluded from the public `GET /generators` listing. Every agent is automatically registered with it at creation, so the fleet/system stacks it carries reach all agents without per-agent opt-in. It is *not* the admin generator.
+- **Admin generator** — a separate entity tied to the admin role and its PAK. Agents are **not** auto-registered with it; an admin-owned stack still requires explicit registration before it can be targeted, which is why admins cannot bypass the registration gate.
+
+Agents can be pre-registered when they are created (`POST /agents` accepts an optional list of generator IDs) in addition to the automatic system-generator registration, or registered later by the agent acting on itself or by an admin. Deregistration is destructive and cascades: removing a registration deletes the agent's explicit targets for that generator's stacks and pushes a `TargetChanged` frame over the agent's WebSocket, so the agent prunes the corresponding Kubernetes resources on its next reconcile.
+
+Operational steps for registering and deregistering agents live in the [Agent Registration how-to guide](../how-to/agent-registration.md). This application-level isolation is complementary to, and distinct from, the deployment-level [schema-per-tenant](../reference/multi-tenancy.md) isolation that separates whole brokers — registration partitions agents within a single broker, while a per-tenant schema partitions the data store itself.
 
 ## Credential Management
 

@@ -136,6 +136,32 @@ Prints the new PAK to stdout (shown once). The REST endpoint `POST /api/v1/gener
 
 ---
 
+#### `brokkr-broker generate-pak`
+
+Mints an admin PAK and its SHA-256 hash offline, for day-zero bootstrap. Contacts neither the database nor a keyfile.
+
+```bash
+brokkr-broker generate-pak
+```
+
+Prints the PAK (the admin credential — store securely) and its hash. Set the hash as `BROKKR__BROKER__PAK_HASH` before the broker's first startup; the broker stores it on the admin role at boot.
+
+**Output:**
+
+```
+Minted admin PAK (offline — nothing was written to the database):
+
+  PAK (secret — send as `Authorization: Bearer <PAK>`):
+    brokkr_BRx9y2Kq_A1B2C3D4E5F6G7H8I9J0K1L2
+
+  PAK hash (set as BROKKR__BROKER__PAK_HASH before first startup):
+    sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+```
+
+See the [Environment Variables Reference](./environment-variables.md) for `BROKKR__BROKER__PAK_HASH`.
+
+---
+
 ## brokkr-agent
 
 The agent binary runs in each target Kubernetes cluster and polls the broker for deployment objects to apply.
@@ -158,6 +184,18 @@ brokkr-agent start
 | `/readyz` | Readiness probe (checks Kubernetes API connectivity only) |
 | `/health` | Detailed health status (JSON) |
 | `/metrics` | Prometheus metrics |
+
+**Generator scope self-registration (optional):**
+
+On startup the agent registers itself with the generator scopes it resolves, in precedence order:
+
+| Precedence | Source | Notes |
+|------------|--------|-------|
+| 1 | `--generator-ids <csv>` flag | Comma-separated UUIDs. |
+| 2 | `BROKKR__AGENT__GENERATOR_IDS` (config key `agent.generator_ids`) | Comma-separated UUIDs, or a YAML list in the config file. |
+| 3 | `BROKKR_GENERATOR_IDS` | Deprecated legacy bare variable; still honored, logs a warning. |
+
+Malformed UUIDs are skipped with a warning. An agent must be registered with a generator before any of that generator's stacks can be targeted at it. Every agent is auto-registered with the system generator regardless of this setting; if no scopes are set the agent has the system/fleet scope only. See [Generator Registration](../explanation/security-model.md#generator-registration-and-application-scopes) and [`BROKKR__AGENT__GENERATOR_IDS`](./environment-variables.md).
 
 ---
 
@@ -234,6 +272,61 @@ brokkr apply -f ./manifests --stack payments --target-label env:prod
 
 On any error (no connection settings, malformed config, unreadable bundle, broker rejection) the command prints `error: <message>` to stderr and exits `1`.
 
+### `brokkr register`
+
+Registers an agent with a generator scope on the agent's behalf. An agent must be registered with a generator before any of that generator's stacks can be targeted at it. Agents normally self-register on startup (see [`brokkr-agent start`](#brokkr-agent-start)); use this to register an agent before it is live, or to add a scope. Requires an admin PAK. Re-registering an already-registered pair returns `409 already_registered` and exits `1` (only the agent's own startup self-registration treats that as success).
+
+```bash
+brokkr register --agent <agent-id> --generator <generator-id>
+```
+
+**Flags:**
+
+| Flag | Required | Description |
+|------|----------|-------------|
+| `--agent <UUID>` | yes | The agent to register. |
+| `--generator <UUID>` | yes | The generator scope to register it with. |
+
+See [Generator Registration](../explanation/security-model.md#generator-registration-and-application-scopes) for the model and [Agent registration](../how-to/agent-registration.md) for the operational guide.
+
+### `brokkr deregister`
+
+Removes an agent's registration from a generator scope. Requires an admin PAK.
+
+```bash
+brokkr deregister --agent <agent-id> --generator <generator-id>
+```
+
+**Flags:**
+
+| Flag | Required | Description |
+|------|----------|-------------|
+| `--agent <UUID>` | yes | The agent to deregister. |
+| `--generator <UUID>` | yes | The generator scope to remove. |
+
+Destructive: the broker also removes the agent's `agent_targets` for that generator's stacks and pushes a target-changed frame to the agent, which prunes the corresponding Kubernetes resources on its next reconcile.
+
+### `brokkr registrations`
+
+Lists the generator scopes one agent is registered with, or the agents registered with one generator. Exactly one of `--agent` or `--generator` is required. Cross-entity queries require an admin PAK.
+
+```bash
+# Generator scopes an agent is registered with
+brokkr registrations --agent <agent-id>
+
+# Agents registered with a generator
+brokkr registrations --generator <generator-id>
+```
+
+**Flags:**
+
+| Flag | Required | Description |
+|------|----------|-------------|
+| `--agent <UUID>` | one of¹ | List the agent's generator registrations. |
+| `--generator <UUID>` | one of¹ | List the generator's registered agents. |
+
+¹ Exactly one of `--agent` or `--generator` must be given (mutually exclusive).
+
 ---
 
 ## Examples
@@ -253,5 +346,13 @@ BROKKR__AGENT__BROKER_URL=https://broker.example.com \
 BROKKR__AGENT__PAK=brokkr_BRx9y2Kq_A1B2C3D4E5F6G7H8I9J0K1L2 \
 BROKKR__AGENT__AGENT_NAME=prod-1 \
 BROKKR__AGENT__CLUSTER_NAME=us-east-1 \
+  brokkr-agent start
+
+# Start agent and self-register with a generator scope
+BROKKR__AGENT__BROKER_URL=https://broker.example.com \
+BROKKR__AGENT__PAK=brokkr_BRx9y2Kq_A1B2C3D4E5F6G7H8I9J0K1L2 \
+BROKKR__AGENT__AGENT_NAME=prod-1 \
+BROKKR__AGENT__CLUSTER_NAME=us-east-1 \
+BROKKR__AGENT__GENERATOR_IDS=f8e7d6c5-b4a3-2109-8765-432109876543 \
   brokkr-agent start
 ```

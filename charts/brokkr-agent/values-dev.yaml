@@ -20,6 +20,8 @@ broker:
   agentName: brokkr-integration-test-agent
   clusterName: brokkr-dev-integration-cluster
   # pak: set via --set flag at install time
+  # generatorIds: set via --set flag when a test needs application-generator scope;
+  # empty default = system/fleet scope only.
 
 # No hostAliases needed - broker is in k8s now
 

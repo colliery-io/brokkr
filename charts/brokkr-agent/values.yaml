@@ -67,6 +67,22 @@ broker:
   agentName: ""
   clusterName: ""
   pak: ""
+  # Generator scopes this agent serves. Each entry is a generator UUID; the agent
+  # self-registers with each on startup so the broker will only target it with
+  # stacks owned by these generators (see ADR-0009, BROKKR-I-0030).
+  #
+  # Leave empty (the default) for system/fleet scope only: the broker auto-registers
+  # every agent with the built-in "__system__" generator at creation, so an empty
+  # list still receives fleet-management stacks — it just won't serve any application
+  # generator's stacks until you list their UUIDs here. NOTE: this is the system/fleet
+  # generator, NOT the admin generator.
+  #
+  # Accepts a YAML list (preferred) or a comma-separated string.
+  # Example:
+  #   generatorIds:
+  #     - 1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed
+  #     - 7c9e6679-7425-40de-944b-e07fc1f90ae7
+  generatorIds: []
 
 agent:
   pollingInterval: 30

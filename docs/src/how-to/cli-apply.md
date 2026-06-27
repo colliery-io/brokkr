@@ -44,6 +44,8 @@ brokkr apply -f ./manifests --stack payments \
 
 Labels are additive and applied every run; a label that already exists is left as-is.
 
+`--target-label` is **label-based fan-out**: any agent whose labels match reconciles the stack, and label/annotation matching does **not** consult generator registration. Registration is enforced separately, only when an admin creates an *explicit* per-agent target (`POST /agents/{id}/targets`): the agent must be registered with the stack's owning generator or the request is rejected with HTTP `403` / `agent_not_registered`. So `brokkr apply --target-label` is unaffected by registration; if you instead bind a specific agent explicitly, register it first with `brokkr register --agent <id> --generator <id>` (admin PAK) or by setting `BROKKR__AGENT__GENERATOR_IDS` on the agent at startup. See [Registering agents with generators](./agent-registration.md) and the [error code reference](../reference/error-codes.md).
+
 ## Re-run safely in CI
 
 `apply` is idempotent — it compares a checksum of the bundle against the stack's current latest deployment object and submits a new revision **only when the folder changed**. That makes it safe to run on every push:

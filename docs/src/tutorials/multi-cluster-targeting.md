@@ -19,16 +19,23 @@ In this tutorial, you'll deploy different configurations to different clusters u
 
 In a real deployment, each agent runs in a different Kubernetes cluster. For this tutorial, we'll create two agent records in the broker to simulate a multi-cluster setup. (You can also create agents with the `brokkr-broker` CLI — see the [CLI Reference](../reference/cli.md); in docker-based setups the CLI lives inside the broker container, e.g. `docker compose exec broker brokkr-broker create agent --name staging-agent --cluster-name staging-cluster`.)
 
+We pass `generator_ids` so each agent is **registered** with the `admin-generator` at creation time. Registration is the agent's opt-in consent boundary: before you can create an explicit target (Step 4) for a stack, the agent must be registered with that stack's owning generator. (Every agent is also auto-registered with the system generator for fleet-wide stacks.) See [agent registration](../how-to/agent-registration.md) for the full operational picture.
+
 ```bash
+# The admin-generator owns the stacks we'll create in Step 3
+GEN_ID=$(curl -s http://localhost:3000/api/v1/generators \
+  -H "Authorization: Bearer <your-admin-pak>" \
+  | jq -r '.[] | select(.name=="admin-generator") | .id')
+
 STAGING=$(curl -s -X POST http://localhost:3000/api/v1/agents \
   -H "Authorization: Bearer <your-admin-pak>" \
   -H "Content-Type: application/json" \
-  -d '{"name": "staging-agent", "cluster_name": "staging-cluster"}' | jq -r '.agent.id')
+  -d "{\"name\": \"staging-agent\", \"cluster_name\": \"staging-cluster\", \"generator_ids\": [\"${GEN_ID}\"]}" | jq -r '.agent.id')
 
 PROD=$(curl -s -X POST http://localhost:3000/api/v1/agents \
   -H "Authorization: Bearer <your-admin-pak>" \
   -H "Content-Type: application/json" \
-  -d '{"name": "prod-agent", "cluster_name": "prod-cluster"}' | jq -r '.agent.id')
+  -d "{\"name\": \"prod-agent\", \"cluster_name\": \"prod-cluster\", \"generator_ids\": [\"${GEN_ID}\"]}" | jq -r '.agent.id')
 
 echo "Staging agent: $STAGING"
 echo "Production agent: $PROD"
@@ -80,14 +87,12 @@ curl -s "http://localhost:3000/api/v1/agents/${PROD}/labels" \
 Now create two stacks — one for staging, one for production — and label them to match the agents.
 
 > **How association works:** Agents are associated with stacks two ways, OR-ed together: (1) **dynamic matching** — a stack that shares any label string or any annotation key+value with the agent is associated at query time (no target records are created), and (2) **explicit agent targets** (Step 4) — unconditional bindings that hold regardless of labels. Once the `env:staging` label below is in place, the staging agent is already associated with the staging stack.
+>
+> Note that creating an explicit target (Step 4) additionally requires the agent to be **registered** with the stack's owning generator — we satisfied that in Step 1 via `generator_ids`. An existing agent can be registered later with the registration API; see [agent registration](../how-to/agent-registration.md).
 
-Stacks need an owning generator; as in the first tutorial, use the `admin-generator`:
+Stacks need an owning generator; we already captured the `admin-generator` ID as `GEN_ID` in Step 1:
 
 ```bash
-GEN_ID=$(curl -s http://localhost:3000/api/v1/generators \
-  -H "Authorization: Bearer <your-admin-pak>" \
-  | jq -r '.[] | select(.name=="admin-generator") | .id')
-
 # Create staging stack
 STAGING_STACK=$(curl -s -X POST http://localhost:3000/api/v1/stacks \
   -H "Authorization: Bearer <your-admin-pak>" \
@@ -117,7 +122,7 @@ curl -s -X POST "http://localhost:3000/api/v1/stacks/${PROD_STACK}/labels" \
 
 ## Step 4: Target Agents to Stacks
 
-The matching `env:*` labels already associate each agent with its stack. You can additionally pin each pairing with an **explicit agent target** — an unconditional binding that keeps working even if labels are later changed or removed. The body requires both `agent_id` and `stack_id`:
+The matching `env:*` labels already associate each agent with its stack. You can additionally pin each pairing with an **explicit agent target** — an unconditional binding that keeps working even if labels are later changed or removed. To create a target, the agent must be registered with the stack's owning generator (which we ensured by passing the admin-generator ID in `generator_ids` when creating the agents in Step 1); otherwise the broker rejects the request with a `403 agent_not_registered` error. The body requires both `agent_id` and `stack_id`:
 
 ```bash
 # Staging agent targets staging stack

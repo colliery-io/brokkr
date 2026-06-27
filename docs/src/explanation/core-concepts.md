@@ -49,7 +49,11 @@ Brokkr's data model tracks what should be deployed, where, and by whom, while ma
 
 ### Stacks
 
-A Stack is a collection of related Kubernetes objects managed as a unit. Stacks provide the organizational boundary for grouping resources that belong together—perhaps all the components of a microservice, or all the infrastructure for a particular application. Beyond this grouping, Brokkr imposes no particular structure or semantics on stacks.
+A Stack is a collection of related Kubernetes objects managed as a unit. Stacks provide the organizational boundary for grouping resources that belong together—perhaps all the components of a microservice, or all the infrastructure for a particular application. Beyond this grouping, Brokkr imposes no particular structure or semantics on stacks. Every Stack is owned by a generator, specified at stack creation time.
+
+### Generators
+
+A Generator represents an application scope, or tenant, within a Brokkr broker. Each Stack is owned by exactly one generator. Generators provide the organizational boundary for application-level multi-tenancy: multiple independent applications can coexist within a single broker, each isolated to its own generator and to the agents that have explicitly registered with it. A special system generator is provisioned at broker startup and carries fleet-wide stacks; every agent is automatically registered with it at creation. For why registration is the consent boundary that makes cross-application targeting structurally impossible, see the [Security Model](./security-model.md#generator-registration-and-application-scopes).
 
 ### Deployment Objects
 
@@ -57,11 +61,13 @@ A Deployment Object is a versioned snapshot of all Kubernetes resources in a Sta
 
 ### Agents
 
-An Agent represents a Brokkr process running in a specific environment. Agents have unique identities, authentication credentials, and metadata describing their capabilities and characteristics. The broker tracks which agents are registered, their current status, and their assignment to various stacks.
+An Agent represents a Brokkr process running in a specific environment. Agents have unique identities, authentication credentials, and metadata describing their capabilities and characteristics. Importantly, each agent maintains a set of generator registrations—the application scopes it is permitted to serve. The broker tracks these registrations and their current status, and uses them to enforce which stacks an agent can target. Every agent is automatically registered with the system generator when it is created.
 
 ### Agent Targets
 
 An Agent Target is an *explicit* association between an Agent and a Stack, created only via `POST /api/v1/agents/{id}/targets`. Most agent-to-stack associations are not stored as rows at all — they are resolved at read time on each poll from label and annotation matches (see Targeting Mechanisms below). Agent Targets exist for cases where you want to pin a specific agent to a specific stack regardless of labels; a stack may be targeted by multiple agents and an agent may target multiple stacks.
+
+Before a target can be created, however, the agent must first be registered with the stack's owning generator (see Generators above). This registration requirement ensures agents opt into the application scopes they serve, making cross-application targeting structurally impossible. The requirement is enforced when a target is written; existing targets resolved at read time are unaffected by it.
 
 ### Agent Events
 
@@ -85,16 +91,21 @@ Brokkr provides flexible mechanisms for associating agents with stacks, allowing
 | Label-Based          | All "prod" agents manage all "prod" stacks |
 | Annotation-Based     | Agents with region=us-east manage stacks with region=us-east |
 
+Direct Assignment creates an explicit Agent Target, and that write is gated by generator registration: the broker rejects an attempt to pin an agent to a stack whose owning generator the agent is not registered with, and this gate cannot be bypassed by an administrator. Registration is therefore the deliberate opt-in by which an agent enters a generator's application scope. For the operational steps, see [Agent Registration](../how-to/agent-registration.md); for the authorization rationale, see the [Security Model](./security-model.md#generator-registration-and-application-scopes).
+
 ---
 
 ## How These Pieces Fit Together
 
-The data entities connect to form a complete deployment workflow. Users create Stacks to group their Kubernetes resources. Each Stack accumulates Deployment Objects as its contents change over time. Agents register with the broker and become responsible for Stacks through label/annotation matches resolved at read time, plus any explicit Agent Targets.
+The data entities connect to form a complete deployment workflow. Users create Stacks—each owned by a generator—to group their Kubernetes resources. Each Stack accumulates Deployment Objects as its contents change over time. Agents register with specific generators, and then become responsible for those generators' Stacks through label/annotation matches resolved at read time, plus any explicit Agent Targets. Every agent is automatically registered with the system generator at creation, which carries fleet-wide stacks that reach all agents.
 
 When an Agent polls the broker, it receives the latest Deployment Objects for its associated Stacks. The Agent validates and applies these resources to its Kubernetes cluster, then reports the outcome as Agent Events. This cycle repeats continuously, keeping all clusters aligned with the desired state recorded in the broker.
 
 ```mermaid
 erDiagram
+    GENERATOR ||--o{ STACK : owns
+    GENERATOR ||--o{ AGENT_GENERATOR_REGISTRATION : scopes
+    AGENT ||--o{ AGENT_GENERATOR_REGISTRATION : has
     STACK ||--o{ DEPLOYMENT_OBJECT : has
     AGENT ||--o{ AGENT_TARGET : assigned_to
     STACK ||--o{ AGENT_TARGET : targeted_by
@@ -143,6 +154,8 @@ When a request arrives, the API middleware extracts the PAK from the Authorizati
 Beyond authentication, Brokkr enforces role-based access control at every endpoint. Certain operations require admin privileges: creating agents, listing all resources, managing system configuration. Agent endpoints ensure that each agent can only access its own target state and report its own events. Generator endpoints similarly restrict access to each generator's own resources.
 
 The system also enforces row-based access control within endpoints. After authenticating a request, the API verifies that the requesting entity has permission to access each specific resource. An agent fetching deployment objects receives only those for stacks it's assigned to. A generator creating a stack can only access stacks it created. This fine-grained control ensures that even authenticated entities can only see and modify what they're supposed to.
+
+Beyond role and ownership checks, Brokkr enforces a registration-based access boundary: an agent can only have explicit targets created for stacks owned by generators it is registered with. This check runs at target-write time and cannot be bypassed by an administrator. All agents are automatically registered with the system generator upon creation, enabling fleet-wide system stacks to reach every agent; any additional generator registrations must be configured explicitly, allowing agents to opt into application-specific scopes. See the [Security Model](./security-model.md#generator-registration-and-application-scopes) for the full treatment.
 
 ```mermaid
 sequenceDiagram

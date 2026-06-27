@@ -44,7 +44,32 @@ broker:
   agentName: ""                    # Optional agent identifier (auto-generated if empty)
   clusterName: ""                  # Cluster identifier for broker
   pak: ""                          # Pre-Authenticated Key for agent authentication
+  generatorIds: []                 # Generator scopes this agent serves (see below)
 ```
+
+#### Generator scope (`broker.generatorIds`)
+
+`generatorIds` is the agent's deploy-time **generator-registration scope** (ADR-0009,
+BROKKR-I-0030). Each entry is a generator UUID; the agent self-registers with each on
+startup, and the broker will only target it with stacks owned by those generators.
+
+- **Empty (the default) = system/fleet scope only.** The broker auto-registers every
+  agent with the built-in `__system__` generator at creation, so an empty list still
+  reconciles fleet-management stacks — it just will **not** serve any application
+  generator's stacks until you list their UUIDs. This is the system/fleet generator,
+  **not** the admin generator.
+- Accepts a YAML list (preferred) or a comma-separated string.
+
+```bash
+helm install my-agent charts/brokkr-agent \
+  --set broker.url=http://my-broker:3000 \
+  --set broker.clusterName=production \
+  --set "broker.generatorIds={1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed,7c9e6679-7425-40de-944b-e07fc1f90ae7}"
+```
+
+Rendered into the agent ConfigMap as the `BROKKR__AGENT__GENERATOR_IDS` environment
+variable (equivalently settable via `agent.generator_ids` in a config file or the
+`--generator-ids` CLI flag).
 
 **Security Note**: The PAK is a sensitive credential. In production, use Kubernetes secrets:
 
@@ -192,6 +217,7 @@ securityContext:
 | `broker.agentName` | string | `""` | Agent identifier (auto-generated if empty) |
 | `broker.clusterName` | string | `""` | Cluster identifier |
 | `broker.pak` | string | `""` | Pre-Authenticated Key for authentication |
+| `broker.generatorIds` | list/string | `[]` | Generator UUIDs the agent self-registers with on startup (`BROKKR__AGENT__GENERATOR_IDS`). Empty = system/fleet scope only. |
 | `agent.pollingInterval` | int | `30` | Polling interval in seconds |
 | `rbac.create` | bool | `true` | Create RBAC resources |
 | `rbac.clusterWide` | bool | `true` | Use ClusterRole (true) or Role (false) |

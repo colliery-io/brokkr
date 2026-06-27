@@ -27,13 +27,18 @@ pub mod pak;
 pub mod templating;
 use brokkr_utils::config::Settings;
 
+/// Path of the bootstrap key file written when the broker generates an admin
+/// PAK itself (i.e. no `pak_hash` was configured). Defined once so the write in
+/// `upsert_admin` and the cleanup in `shutdown` can never drift apart.
+const BOOTSTRAP_KEY_FILE: &str = "/tmp/brokkr-keys/key.txt";
+
 /// Handles the shutdown process for the broker.
 ///
 /// This function waits for a shutdown signal and then performs cleanup tasks.
 pub async fn shutdown(shutdown_rx: oneshot::Receiver<()>) {
     let _ = shutdown_rx.await;
-    // Remove the temporary key file
-    let _ = fs::remove_file("/tmp/key.txt");
+    // Remove the bootstrap key file dropped by `upsert_admin` on first startup.
+    let _ = fs::remove_file(BOOTSTRAP_KEY_FILE);
 }
 
 /// Represents an admin key in the database.
@@ -100,7 +105,7 @@ pub fn upsert_admin(
 
             // Write PAK to temporary file
             info!("Writing PAK to temporary file");
-            let key_path = Path::new("/tmp/brokkr-keys/key.txt");
+            let key_path = Path::new(BOOTSTRAP_KEY_FILE);
             fs::create_dir_all(key_path.parent().unwrap())?;
             fs::write(key_path, pak)?;
 
@@ -164,4 +169,27 @@ fn validate_pak_hash(hash: &str) -> bool {
     // Implement hash validation logic here
     // For example, check if it's a valid SHA-256 hash
     hash.len() == 64 && hash.chars().all(|c| c.is_ascii_hexdigit())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The offline `generate-pak` day-zero flow only works if the hash it mints
+    /// is accepted by `upsert_admin`'s configured-hash branch. Guard that
+    /// contract directly: a freshly minted hash must satisfy `validate_pak_hash`
+    /// so an operator can feed it back via `BROKKR__BROKER__PAK_HASH`.
+    #[test]
+    fn minted_hash_passes_config_validation() {
+        let config = Settings::new(None).expect("Failed to load configuration");
+        pak::create_pak_controller(Some(&config)).expect("Failed to init PAK controller");
+
+        let (_pak, hash) = pak::create_pak().expect("Failed to mint PAK");
+
+        assert!(
+            validate_pak_hash(&hash),
+            "minted hash {hash:?} must satisfy validate_pak_hash so the \
+             BROKKR__BROKER__PAK_HASH bootstrap path accepts it"
+        );
+    }
 }

@@ -21,7 +21,14 @@ pub struct Cli {
 #[derive(Subcommand)]
 pub enum Commands {
     /// Start the Brokkr agent
-    Start,
+    Start {
+        /// Comma-separated generator UUIDs to self-register with on startup.
+        /// Overrides `BROKKR__AGENT__GENERATOR_IDS` / the config file; when
+        /// omitted, falls back to config and then the legacy
+        /// `BROKKR_GENERATOR_IDS` env var. Empty = system/fleet scope only.
+        #[arg(long, value_name = "UUID,UUID,...")]
+        generator_ids: Option<String>,
+    },
 }
 
 /// Parses command-line arguments into the Cli structure.

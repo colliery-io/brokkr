@@ -2,6 +2,8 @@
 
 This guide walks through configuring Brokkr for multi-tenant operation using PostgreSQL schema isolation. Each tenant gets a fully isolated dataset while sharing a single database server.
 
+This approach uses deployment-level isolation: one broker per tenant, all sharing a single database server. For application-level isolation — a single broker serving multiple applications, where each agent opts in to the generators it serves — see generator registration in the [Security Model](../explanation/security-model.md#generator-registration-and-application-scopes). The two mechanisms are complementary, not interchangeable.
+
 ## Goal
 
 Set up two tenants (`acme` and `globex`) on a shared PostgreSQL instance, each with their own broker instance and complete data isolation.
@@ -85,7 +87,20 @@ On first startup, each broker instance:
 2. Runs all database migrations within the schema
 3. Creates the admin role and an admin PAK
 
-By default, `broker.pak_hash` is set to a publicly-known development hash, which would give **both tenants the same well-known dev PAK**. For any real multi-tenant setup, override it per tenant: either supply your own per-tenant hash, or set it empty to force the broker to generate a fresh PAK:
+By default, `broker.pak_hash` is set to a publicly-known development hash, which would give **both tenants the same well-known dev PAK**. For any real multi-tenant setup, override it per tenant. There are two approaches:
+
+**Recommended (production):** Mint a PAK and its hash offline with `brokkr-broker generate-pak`, then set `BROKKR__BROKER__PAK_HASH` to the generated hash before first startup. This is the day-zero bootstrap flow — it touches no database and writes no keyfile, so you control the PAK from the start:
+
+```bash
+# Generate an admin PAK + SHA-256 hash offline (one run per tenant)
+brokkr-broker generate-pak
+# Then set the hash for that tenant's broker
+BROKKR__BROKER__PAK_HASH="<generated-hash>" \
+BROKKR__DATABASE__SCHEMA=tenant_acme \
+... brokkr-broker serve
+```
+
+**Alternative:** Set `BROKKR__BROKER__PAK_HASH` empty to force the broker to generate a fresh PAK on first startup:
 
 ```bash
 # Force per-tenant PAK generation
@@ -104,7 +119,7 @@ kubectl exec -n brokkr-acme <acme-broker-pod> -- cat /tmp/brokkr-keys/key.txt
 cat /tmp/brokkr-keys/key.txt
 ```
 
-## Step 4: Register Agents Per Tenant
+## Step 4: Create Agents Per Tenant
 
 Each tenant's agents connect to their tenant's broker instance:
 
@@ -143,6 +158,14 @@ helm install brokkr-agent-globex oci://ghcr.io/colliery-io/charts/brokkr-agent \
   --set broker.agentName=globex-prod \
   --set broker.clusterName=eu-west-1
 ```
+
+Schema-per-tenant isolation does not require generators, so no generator configuration is shown above. If you also use application-specific generators within a tenant, register the agent with them via `broker.generatorIds` (a YAML list or comma-separated string, rendered to `BROKKR__AGENT__GENERATOR_IDS`):
+
+```bash
+  --set broker.generatorIds="{<generator-uuid>,<generator-uuid>}"
+```
+
+See [Agent Registration](agent-registration.md) for the operational steps.
 
 ## Step 6: Verify Isolation
 

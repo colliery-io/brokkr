@@ -15,6 +15,8 @@ In this tutorial, you'll deploy an nginx web server to a Kubernetes cluster thro
 - The admin PAK (Prefixed API Key). The PAK itself is never logged. The development environment uses the default configuration, whose embedded `broker.pak_hash` corresponds to the publicly known dev PAK `brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8` — use that here. (If a broker runs with `broker.pak_hash` unset or empty, it generates a fresh PAK at first startup and writes it to `/tmp/brokkr-keys/key.txt` inside the broker container.)
 - `curl` and `jq` installed
 
+The development environment automatically creates a test agent (`brokkr-integration-test-agent`) that is registered only with the **system generator**. You'll register it with the `admin-generator` in Step 3 before targeting it to your stack — see [Registering Agents with Generators](../how-to/agent-registration.md) for the operational details.
+
 ## Step 1: Verify the Environment
 
 First, confirm the broker is running and healthy:
@@ -67,9 +69,11 @@ echo "Stack ID: $STACK_ID"
 
 The response contains the new stack with its ID. The `generator_id` field ties the stack to its owning generator — we'll explore generators in a [later tutorial](./cicd-generators.md).
 
-## Step 3: Target the Agent to the Stack
+## Step 3: Register and Target the Agent
 
-Agents don't automatically receive every stack's resources. You need to explicitly **target** an agent to a stack, telling it "you are responsible for deploying this stack's resources."
+Agents receive a stack's resources in two ways: via **agent targets** — explicit assignments that require the agent to be registered with the stack's owning generator first — or via label/annotation matching, when the stack's selectors match the agent's labels or annotations. In this tutorial you'll use an agent target.
+
+Registration is the agent's opt-in consent boundary: an agent must be registered with a generator before any stack that generator owns can be targeted at it. The development environment's test agent is registered only with the system generator, so you must register it with the `admin-generator` before targeting. For the operational details, see [Registering Agents with Generators](../how-to/agent-registration.md).
 
 First, get the agent ID:
 
@@ -80,6 +84,17 @@ AGENT_ID=$(curl -s http://localhost:3000/api/v1/agents \
 
 echo "Agent ID: $AGENT_ID"
 ```
+
+Register the agent with the `admin-generator` (the `$GEN_ID` you looked up in Step 2):
+
+```bash
+curl -s -X POST "http://localhost:3000/api/v1/generators/${GEN_ID}/register" \
+  -H "Authorization: Bearer <your-admin-pak>" \
+  -H "Content-Type: application/json" \
+  -d "{\"agent_id\": \"${AGENT_ID}\"}" | jq .
+```
+
+Registration gates which generators an agent can serve, ensuring agents opt in to application scopes before receiving their deployments. Without it, the next request fails with a `403 agent_not_registered` error — and admins cannot bypass the gate.
 
 Now target the agent to your stack:
 

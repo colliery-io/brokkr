@@ -136,6 +136,25 @@ curl -X DELETE http://localhost:3000/api/v1/stacks/$STACK_ID/annotations/cost-ce
 
 Targeting establishes the relationship between stacks and the agents that should manage them. Without either an explicit target or a shared label/annotation, an agent won't receive deployment objects from a stack regardless of other configuration.
 
+An agent can only be **explicitly targeted** at a stack (via direct assignment) once it is registered with that stack's owning generator. Registration is the agent's opt-in consent boundary; without it, the broker rejects the target with `403 agent_not_registered` (admins cannot bypass this). Label- and annotation-based matching is unaffected. See [Register Agents with Generators](./agent-registration.md) for the full operational guide and [the security model](../explanation/security-model.md#generator-registration-and-application-scopes) for why this boundary exists.
+
+### Registration (Prerequisite)
+
+Before creating a direct target, confirm the agent is registered with the stack's generator. List an agent's registrations:
+
+```bash
+curl http://localhost:3000/api/v1/agents/$AGENT_ID/registrations \
+  -H "Authorization: Bearer $ADMIN_PAK"
+```
+
+If the stack's generator is missing from that list, register the agent (admin PAK required):
+
+```bash
+brokkr register --agent $AGENT_ID --generator $GENERATOR_ID
+```
+
+To remove the agent's scope later, `brokkr deregister --agent $AGENT_ID --generator $GENERATOR_ID` (destructive: it also drops the agent's targets for that generator's stacks and prunes those resources on the next reconcile). See [Register Agents with Generators](./agent-registration.md) for self-registration at startup, Helm configuration, and the REST API equivalents.
+
 ### Direct Assignment
 
 Create a targeting relationship by associating an agent with a specific stack:
@@ -150,7 +169,7 @@ curl -X POST http://localhost:3000/api/v1/agents/$AGENT_ID/targets \
   }"
 ```
 
-Use direct assignment when the stack-agent mapping is fixed and explicit.
+Use direct assignment when the stack-agent mapping is fixed and explicit. If the broker returns `403 agent_not_registered`, the agent is not registered with the stack's generator—register it first (see [Registration (Prerequisite)](#registration-prerequisite) above).
 
 ### Label-Based Targeting
 
@@ -314,5 +333,6 @@ Generators can only access stacks they created. This scoping ensures pipelines c
 
 - [Deploy Your First Application](../tutorials/first-deployment.md) - First deployment walkthrough
 - [Core Concepts](../explanation/core-concepts.md) - Understanding Brokkr's architecture
+- [Register Agents with Generators](./agent-registration.md) - Registration prerequisite for direct targeting
 - [Generators](./generators.md) - CI/CD integration
 - [Templates](./templates.md) - Standardized deployments

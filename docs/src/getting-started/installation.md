@@ -58,7 +58,17 @@ kubectl port-forward svc/brokkr-broker 3000:3000 &
 
 ### 3. Get the Admin PAK
 
-Every `/api/v1` request must carry a PAK (Prefixed API Key) in the `Authorization` header. On first startup the broker creates the admin role:
+Every `/api/v1` request must carry a PAK (Prefixed API Key) in the `Authorization` header. On first startup the broker creates the admin role.
+
+**For production (recommended)**, generate the admin PAK offline before deployment:
+
+```bash
+brokkr-broker generate-pak
+```
+
+This prints both the PAK value and its SHA-256 hash without touching a database or keyfile. Set the hash as `broker.pakHash` in your Helm values before first startup; the broker stores it on the admin role at initialization. Keep the PAK value secret and export it for the steps below.
+
+For a throwaway dev cluster you can instead rely on how the broker provisions the admin role at first startup:
 
 - **If you installed with the commands above** (no `broker.pakHash` chart value), the broker's embedded default configuration supplies a publicly known hash, and the admin PAK is `brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8` — fine for a throwaway dev cluster, **never for production**.
 - **If you explicitly set `broker.pakHash` to an empty value**, the broker generates a fresh admin PAK at first startup and writes it to `/tmp/brokkr-keys/key.txt` inside the broker container (the file does not exist otherwise):
@@ -88,6 +98,8 @@ curl -X POST http://localhost:3000/api/v1/agents \
     "cluster_name": "development"
   }'
 ```
+
+You can optionally pre-register the agent with application generators at creation by adding `"generator_ids": ["<uuid>", ...]` to the request body. If omitted, the agent is registered only with the system/fleet generator and must be registered with an application generator separately before stacks owned by that generator can be targeted at it. See [Registering Agents with Generators](../how-to/agent-registration.md).
 
 The response wraps the agent record and the one-time PAK in `initial_pak`:
 ```json
@@ -252,6 +264,15 @@ STACK_ID=$(curl -s -X POST http://localhost:3000/api/v1/stacks \
 AGENT_ID=$(curl -s http://localhost:3000/api/v1/agents \
   -H "Authorization: Bearer $ADMIN_PAK" | jq -r '.[0].id')
 
+# Register the agent with the admin-generator first. Targeting a stack at an
+# agent that is not registered with the stack's owning generator returns
+# 403 agent_not_registered. (Skip this if you passed generator_ids at
+# agent creation.) See ../how-to/agent-registration.md.
+curl -X POST http://localhost:3000/api/v1/generators/$GEN_ID/register \
+  -H "Authorization: Bearer $ADMIN_PAK" \
+  -H "Content-Type: application/json" \
+  -d "{\"agent_id\": \"$AGENT_ID\"}"
+
 curl -X POST http://localhost:3000/api/v1/agents/$AGENT_ID/targets \
   -H "Authorization: Bearer $ADMIN_PAK" \
   -H "Content-Type: application/json" \
@@ -315,6 +336,7 @@ Key configuration options for the agent chart:
 |-----------|-------------|---------|
 | `broker.url` | Broker URL | `http://brokkr-broker:3000` |
 | `broker.pak` | Agent PAK (Prefixed API Key) | **Required** |
+| `broker.generatorIds` | Generator UUIDs (YAML list or comma string) this agent self-registers with at startup. The agent is always auto-registered with the system/fleet generator; application generators must be listed here to serve their stacks. See [Registering Agents with Generators](../how-to/agent-registration.md) | `[]` |
 | `broker.agentName` | Human-readable agent name | `""` |
 | `broker.clusterName` | Name of the managed cluster | `""` |
 | `agent.pollingInterval` | Seconds between broker polls (the agent binary's own default is `10`) | `30` |

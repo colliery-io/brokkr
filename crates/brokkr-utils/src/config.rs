@@ -241,6 +241,17 @@ pub struct Agent {
     /// downward API when `rbac.clusterWide: false`.
     #[serde(default)]
     pub watch_namespace: Option<String>,
+
+    /// Generator scopes this agent serves, as a comma-separated list of
+    /// generator UUIDs. On startup the agent self-registers with each so the
+    /// broker only targets it with stacks owned by these generators (ADR-0009 /
+    /// BROKKR-I-0030). Resolvable via `BROKKR__AGENT__GENERATOR_IDS` or a config
+    /// file. When unset, the agent serves system/fleet scope only — the broker
+    /// auto-registers every agent with the system generator regardless. A
+    /// `--generator-ids` CLI flag overrides this; the legacy bare
+    /// `BROKKR_GENERATOR_IDS` env var is still honored (deprecated) as a fallback.
+    #[serde(default)]
+    pub generator_ids: Option<String>,
 }
 
 /// Represents the database configuration

@@ -31,6 +31,13 @@ pub enum Commands {
 
     /// Rotate keys
     Rotate(RotateCommands),
+
+    /// Mint a PAK + hash pair offline for day-zero admin bootstrap
+    ///
+    /// Generates a key and its hash without contacting the database or writing
+    /// a key file. Set the printed hash as `BROKKR__BROKER__PAK_HASH` before the
+    /// first startup and keep the printed PAK as the admin credential.
+    GeneratePak,
 }
 
 #[derive(Args)]

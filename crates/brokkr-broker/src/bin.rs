@@ -58,6 +58,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 commands::rotate_generator_key(&config, uuid)?;
             }
         },
+        Commands::GeneratePak => commands::generate_pak(&config)?,
     }
 
     // Shutdown telemetry on exit
