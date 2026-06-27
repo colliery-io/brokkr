@@ -15,6 +15,11 @@ data:
   BROKKR__AGENT__WS_URL: {{ .Values.agent.wsUrl | quote }}
   {{- end }}
   BROKKR__AGENT__PAK: {{ .Values.broker.pak | quote }}
+  {{- with .Values.broker.generatorIds }}
+  # Generator scopes the agent self-registers with on startup (BROKKR-I-0030).
+  # Comma-separated generator UUIDs; unset/empty = system/fleet scope only.
+  BROKKR__AGENT__GENERATOR_IDS: {{ if kindIs "slice" . }}{{ join "," . | quote }}{{ else }}{{ . | quote }}{{ end }}
+  {{- end }}
   BROKKR__AGENT__DEPLOYMENT_HEALTH_ENABLED: {{ .Values.agent.deploymentHealth.enabled | quote }}
   BROKKR__AGENT__DEPLOYMENT_HEALTH_INTERVAL: {{ .Values.agent.deploymentHealth.intervalSeconds | quote }}
   # Telemetry configuration

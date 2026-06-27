@@ -69,6 +69,8 @@ A PostgreSQL connection pool is then established via the r2d2 connection manager
 
 Diesel migrations then run automatically to bring the schema up to date, and the broker checks the `app_initialization` table for a first-time startup. On first run it creates the admin role and an associated admin generator, writing the initial admin PAK (Prefixed API Key) to a temporary file for retrieval.
 
+The broker also provisions a system generator (named `__system__`), which serves as the default application scope for fleet-level and system stacks that reach every agent without per-agent opt-in. Every agent is automatically registered with the system generator when it is created, so it can always receive system-level deployments; this registration is excluded from the public generator listing. The admin generator is a separate entity tied to administrative operations, and agents are *not* automatically registered with it. The system generator is the foundation of Brokkr's application-level tenancy model — see [Generator Registration and Application Scopes](./security-model.md#generator-registration-and-application-scopes).
+
 With the database ready, the broker initializes its runtime subsystems in sequence: the Data Access Layer (DAL), the encryption subsystem for webhook secrets, the event emission system for webhook dispatch, the audit logger for compliance tracking, and finally a set of background maintenance tasks. If a configuration file is specified, it also starts a filesystem watcher for hot-reload capability.
 
 ### API Layer
@@ -98,7 +100,7 @@ C4Component
     Rel(pool, db, "SQL", "TCP :5432")
 ```
 
-The API is organized into resource-specific modules: agents, generators, stacks, deployment objects, templates, work orders, webhooks, diagnostics, health status, and admin operations. Each module defines its routes, request/response structures, and authorization requirements.
+The API is organized into resource-specific modules: agents, generators, stacks, deployment objects, templates, work orders, webhooks, diagnostics, health status, and admin operations. Each module defines its routes, request/response structures, and authorization requirements. The generators and agents modules also expose endpoints for managing generator registrations — registering an agent with or deregistering it from an application scope, and listing the scopes an agent or generator is associated with — which underpin the application-level isolation model (see the [API reference](../reference/api/README.md)).
 
 ### Data Access Layer
 
@@ -157,6 +159,8 @@ The agent is a Kubernetes-native component that runs inside target clusters, res
 When the agent starts, it first loads its configuration, which must include the broker URL, the agent's name and cluster name, and its PAK for authentication. It then enters a readiness loop, repeatedly checking the broker's health endpoint until it receives a successful response or exceeds its retry limit.
 
 Once the broker is reachable, the agent verifies its PAK by calling the authentication endpoint. A successful response confirms the agent is properly registered and authorized. The agent then fetches its full details from the broker, including its assigned labels and annotations that determine which deployments it will receive.
+
+The agent also registers with its configured generator scope(s), opting into application-level deployments beyond the system/fleet scope it already receives by default. The scope is resolved by precedence: the `--generator-ids` CLI flag takes priority over the `BROKKR__AGENT__GENERATOR_IDS` environment variable (equivalently `agent.generator_ids` in a config file), which in turn takes priority over the deprecated bare `BROKKR_GENERATOR_IDS` variable (still honored, but it logs a deprecation warning). When no generator scope is configured, the agent operates in system/fleet scope only. This opt-in is the agent's consent boundary: it can only be targeted by stacks from application scopes it has explicitly joined. See [Generator Registration and Application Scopes](./security-model.md#generator-registration-and-application-scopes) for the concept, the [agent registration how-to](../how-to/agent-registration.md) for operational steps, and [environment variables](../reference/environment-variables.md) for the exact configuration keys.
 
 With authentication confirmed, the agent initializes its Kubernetes client using in-cluster configuration (when running as a pod) or a specified kubeconfig path (for development). It validates connectivity by fetching the cluster's API server version.
 
@@ -244,6 +248,8 @@ Understanding how the broker and agents interact is essential for operating and 
 The deployment lifecycle begins when an administrator or CI/CD system (acting as a generator) creates a stack and adds deployment objects to it. The stack serves as a logical grouping with labels and annotations that determine which agents will receive its deployments.
 
 Creating a deployment object does not trigger any matching or write any agent associations. Instead, the agent-to-stack association is resolved dynamically at read time, on every poll. Rows in the `agent_targets` table exist only when an operator explicitly creates them via `POST /api/v1/agents/{id}/targets`. When an agent requests its target state, the broker computes the union of three sets: stacks explicitly targeted to the agent, stacks sharing *any* label with the agent (OR semantics), and stacks sharing *any* annotation key/value pair with the agent (also OR). Deployment objects are then served from that union.
+
+Creating an explicit target is gated by generator registration: before an operator can add an `agent_targets` row via `POST /api/v1/agents/{id}/targets`, the agent must be registered with the stack's owning generator — otherwise the request is rejected. The gate applies to target creation and removal only; it does not change the read-time association logic above, which still serves the union of explicit targets, label matches, and annotation matches. This is how an agent's opt-in consent boundary is enforced — see [Generator Registration and Application Scopes](./security-model.md#generator-registration-and-application-scopes).
 
 ```mermaid
 sequenceDiagram
@@ -345,3 +351,5 @@ The Helm charts ship conservative CPU and memory defaults suitable for small to 
 The broker supports multi-tenant deployments through PostgreSQL schema isolation. When configured with a schema name, the broker creates a dedicated schema and sets the connection's `search_path` to use it for all queries. This provides data isolation between tenants sharing a PostgreSQL instance without requiring separate databases.
 
 Schema names are validated to prevent SQL injection, accepting only alphanumeric characters and underscores, and requiring the name to start with a letter.
+
+Schema-per-tenant is a deployment-level isolation mechanism and is distinct from generator registration, which provides application-level isolation *within* a single broker. Schema isolation separates tenants that each share nothing in the database; generator registration lets multiple applications share one broker while agents opt into the application scopes they serve, preventing accidental cross-application targeting. The two are complementary, not alternatives — see [Generator Registration and Application Scopes](./security-model.md#generator-registration-and-application-scopes) and the [multi-tenancy reference](../reference/multi-tenancy.md).

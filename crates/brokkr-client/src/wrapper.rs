@@ -37,8 +37,9 @@ use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 
 use crate::Client;
 use crate::types::{
-    CreateDeploymentObjectRequest, DeploymentObject, ErrorResponse, K8sEventHistoryResponse,
-    NewStack, PodLogHistoryResponse, Stack, WsConnectionsResponse,
+    AgentGeneratorRegistration, AgentRegistrationBody, CreateDeploymentObjectRequest,
+    DeploymentObject, ErrorResponse, K8sEventHistoryResponse, NewStack, PodLogHistoryResponse,
+    Stack, WsConnectionsResponse,
 };
 use chrono::{DateTime, Utc};
 use std::path::Path;
@@ -458,6 +459,80 @@ impl BrokkrClient {
         } else {
             ApplyOutcome::Created(object)
         })
+    }
+
+    // -------------------------------------------------------------------
+    // Generator registration helpers (BROKKR-I-0030). An agent must be
+    // registered with a generator before that generator's stacks can be
+    // targeted at it. The agent self-registers on startup; these methods are
+    // the admin-side path for bootstrapping and inspection.
+    // -------------------------------------------------------------------
+
+    /// Register an agent with a generator scope. Pass `agent_id = None` to
+    /// register the calling agent (implied by its PAK); an admin supplies the
+    /// target agent's id. Registering an already-registered pair returns the
+    /// existing registration. Returns the registration record.
+    pub async fn register_agent(
+        &self,
+        generator_id: Uuid,
+        agent_id: Option<Uuid>,
+    ) -> Result<AgentGeneratorRegistration, BrokkrError> {
+        let resp = self
+            .inner
+            .register_agent()
+            .id(generator_id)
+            .body(AgentRegistrationBody { agent_id })
+            .send()
+            .await?;
+        Ok(resp.into_inner())
+    }
+
+    /// Remove an agent's registration from a generator scope. Pass
+    /// `agent_id = None` for the calling agent, or an admin supplies the target.
+    ///
+    /// Destructive: the broker cascades the agent's `agent_targets` for that
+    /// generator and pushes a `TargetChanged` frame to the departing agent so it
+    /// prunes the corresponding Kubernetes resources on its next reconcile.
+    pub async fn deregister_agent(
+        &self,
+        generator_id: Uuid,
+        agent_id: Option<Uuid>,
+    ) -> Result<(), BrokkrError> {
+        self.inner
+            .deregister_agent()
+            .id(generator_id)
+            .body(AgentRegistrationBody { agent_id })
+            .send()
+            .await?;
+        Ok(())
+    }
+
+    /// List the generator scopes an agent is registered with.
+    pub async fn list_agent_registrations(
+        &self,
+        agent_id: Uuid,
+    ) -> Result<Vec<AgentGeneratorRegistration>, BrokkrError> {
+        let resp = self
+            .inner
+            .list_agent_registrations()
+            .id(agent_id)
+            .send()
+            .await?;
+        Ok(resp.into_inner())
+    }
+
+    /// List the agents registered with a generator scope.
+    pub async fn list_generator_registered_agents(
+        &self,
+        generator_id: Uuid,
+    ) -> Result<Vec<AgentGeneratorRegistration>, BrokkrError> {
+        let resp = self
+            .inner
+            .list_generator_registered_agents()
+            .id(generator_id)
+            .send()
+            .await?;
+        Ok(resp.into_inner())
     }
 
     /// Run `op` with exponential backoff on retryable errors.

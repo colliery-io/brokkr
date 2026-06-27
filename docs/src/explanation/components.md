@@ -33,6 +33,20 @@ pub fn routes(dal: DAL, cors_config: &Cors, reloadable_config: Option<Reloadable
 
 The authentication middleware intercepts every request, extracts the PAK from the Authorization header, verifies it against the database, and attaches an `AuthPayload` to the request extensions. Handlers can then access the authenticated identity to make authorization decisions.
 
+#### Target Authorization and Registration Gates
+
+Authentication establishes *who* is calling; a second layer establishes *which generators' stacks may be targeted at a given agent*. Generator registration is the agent's opt-in consent boundary: an agent must be registered with a generator (an application scope) before any stack owned by that generator can be explicitly targeted at it. The conceptual model lives in [the security model](./security-model.md#generator-registration-and-application-scopes).
+
+The enforcement point is `authorize_target_mutation` in the agents handler. It gates *both* directions of an explicit target — adding one (`POST /agents/{id}/targets`) and removing one (`DELETE /agents/{id}/targets/{stack_id}`). If the calling context is not registered with the stack's owning generator, the broker rejects the mutation with HTTP 403 and the error code `agent_not_registered`. This gate is absolute: there is no admin override or force flag, so even an admin PAK cannot create a target that crosses an agent's registration boundary.
+
+Registration gates only the *creation* of explicit targets. The read path (`GET /agents/{id}/target-state`) is unchanged: the served-stack set remains the union of explicit `agent_targets`, label matches, and annotation matches. Existing targets stay valid (a migration back-fills registrations from any `agent_targets` that predate this model), so registration controls what can be wired up, not what is read back at reconcile time.
+
+This application-level isolation is complementary to — and separate from — the deployment-level [schema-per-tenant](#multi-tenant-schema-support) isolation described below; one partitions data across PostgreSQL schemas, the other scopes targeting within a single broker.
+
+##### The System Generator
+
+One generator is special. At broker startup the broker idempotently provisions a system generator (`__system__`, `is_system=true`), and every agent is automatically registered with it at creation (`POST /agents`). The system generator carries fleet- and system-wide stacks that must reach all agents, so fleet-scoped targeting works without any per-application opt-in. It is excluded from the public `GET /generators` listing. The system generator is distinct from the admin generator, which is tied to the admin role/PAK; agents are *not* auto-registered with the admin generator.
+
 #### CORS Configuration
 
 CORS is configured dynamically based on settings, supporting three modes: allow all origins when `"*"` is specified, restrict to specific origins otherwise, with configurable methods, headers, and preflight cache duration.
@@ -116,6 +130,8 @@ BROKKR__LOG__LEVEL=info
 BROKKR__BROKER__WEBHOOK_DELIVERY_INTERVAL_SECONDS=5
 ```
 
+For day-zero bootstrap, the `brokkr-broker generate-pak` subcommand mints an admin PAK and prints its SHA-256 hash entirely offline — no database connection and no keyfile are involved. The operator sets `BROKKR__BROKER__PAK_HASH` to that hash before the first broker startup; on startup the broker stores the hash on the admin role so the corresponding PAK authenticates as admin. The PAK itself is never written to disk by the broker. See the [CLI reference](../reference/cli.md) for the command and the [Environment Variables reference](../reference/environment-variables.md) for `BROKKR__BROKER__PAK_HASH`.
+
 ### Background Tasks Module
 
 The broker runs a set of background tasks for maintenance operations:
@@ -192,6 +208,12 @@ The agent communicates with these broker endpoints:
 | `/api/v1/agents/{id}/health-status` | PATCH | Report deployment health |
 | `/api/v1/agents/{id}/work-orders/pending` | GET | Fetch claimable work orders |
 | `/api/v1/agents/{id}/diagnostics/pending` | GET | Fetch diagnostic requests |
+| `/api/v1/agents/{id}/registrations` | GET | List generator scopes the agent is registered with |
+| `/api/v1/generators/{id}/register` | POST | Register an agent with a generator (self or admin) |
+| `/api/v1/generators/{id}/register` | DELETE | Deregister an agent from a generator |
+| `/api/v1/generators/{id}/registered-agents` | GET | List agents registered with a generator |
+
+On startup the agent self-registers with its configured generator scopes via `POST /generators/{id}/register` (see [Generator Self-Registration](#agent-startup-sequence) below). For the full request/response shapes see the [API reference](../reference/api/README.md).
 
 #### Retry Logic
 
@@ -322,7 +344,10 @@ BROKKR__AGENT__AGENT_NAME=production-cluster
 BROKKR__AGENT__CLUSTER_NAME=prod-us-east-1
 BROKKR__AGENT__POLLING_INTERVAL=10
 BROKKR__AGENT__HEALTH_PORT=8080
+BROKKR__AGENT__GENERATOR_IDS=<uuid>,<uuid>
 ```
+
+`BROKKR__AGENT__GENERATOR_IDS` is a comma-separated list of generator UUIDs the agent self-registers with at startup. The agent resolves its generator scopes by precedence: the `--generator-ids` CLI flag wins, then `BROKKR__AGENT__GENERATOR_IDS` (config key `agent.generator_ids`, settable via env var or config file), then the legacy bare `BROKKR_GENERATOR_IDS` variable. `BROKKR_GENERATOR_IDS` is **deprecated** — it is still honored but logs a warning; prefer the namespaced form. Malformed UUIDs are skipped with a warning, and an empty/unset value means the agent serves only the system/fleet scope it is auto-registered with. The full catalog lives in the [Environment Variables reference](../reference/environment-variables.md).
 
 ## Configuration
 
@@ -337,19 +362,21 @@ The broker supports hot-reloading a limited set of values without a restart: the
 1. **Configuration Loading** - Parse environment variables and configuration files
 2. **Database Connection** - Establish r2d2 connection pool to PostgreSQL
 3. **Migration Check** - Verify database schema is current
-4. **Encryption Initialization** - Load or generate webhook encryption key
-5. **Event Emission Setup** - Database-centric: events are matched against subscriptions and inserted directly into `webhook_deliveries`; no in-memory event bus exists
-6. **Audit Logger Initialization** - Start background writer with batching
-7. **Background Tasks** - Spawn the maintenance task set (diagnostic, work order, webhook delivery/cleanup, audit, agent-metrics-refresh, agent-events-cleanup, fleet-sweep, and WebSocket-eviction)
-8. **API Server** - Bind to configured port and start accepting requests
+4. **System Generator Provisioning** - Idempotently provision the `__system__` generator and ensure every existing agent is registered with it
+5. **Encryption Initialization** - Load or generate webhook encryption key
+6. **Event Emission Setup** - Database-centric: events are matched against subscriptions and inserted directly into `webhook_deliveries`; no in-memory event bus exists
+7. **Audit Logger Initialization** - Start background writer with batching
+8. **Background Tasks** - Spawn the maintenance task set (diagnostic, work order, webhook delivery/cleanup, audit, agent-metrics-refresh, agent-events-cleanup, fleet-sweep, and WebSocket-eviction)
+9. **API Server** - Bind to configured port and start accepting requests
 
 ### Agent Startup Sequence
 
 1. **Configuration Loading** - Parse environment variables
 2. **PAK Verification** - Authenticate with broker and retrieve agent identity
-3. **Kubernetes Client** - Initialize kube-rs client with in-cluster or kubeconfig credentials
-4. **Health Server** - Start HTTP server for probes and metrics
-5. **Control Loop** - Enter main loop with polling, health checks, and work order processing
+3. **Generator Self-Registration** - Resolve generator scopes (`--generator-ids` flag > `BROKKR__AGENT__GENERATOR_IDS` > deprecated `BROKKR_GENERATOR_IDS`, which logs a warning) and self-register with each via `POST /generators/{id}/register`; registration with the system generator is implicit and needs no configuration. See [agent registration](../how-to/agent-registration.md) for the operational walkthrough
+4. **Kubernetes Client** - Initialize kube-rs client with in-cluster or kubeconfig credentials
+5. **Health Server** - Start HTTP server for probes and metrics
+6. **Control Loop** - Enter main loop with polling, health checks, and work order processing
 
 ### Graceful Shutdown
 

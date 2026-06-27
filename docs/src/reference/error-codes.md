@@ -54,6 +54,8 @@ These come from the database classifier (`ApiError::from_diesel`) on create/upda
 | `agent_annotation_not_found` | 404 | The named annotation does not exist on the agent. |
 | `agent_event_not_found` | 404 | No agent event with the given ID. |
 | `agent_target_not_found` | 404 | No agent target for the given agent/stack pair. |
+| `agent_not_registered` | 403 | Agent is not registered with the stack's owning generator; targets cannot be added or removed until it is. Admin cannot bypass. |
+| `invalid_generator_id` | 400 | A `generator_ids` entry supplied to `POST /agents` does not name an existing generator. |
 | `target_generator_mismatch` | 403 | A generator can only target its own stacks. |
 | `target_create_denied` | 403 | Creating an agent target requires admin or the owning generator. |
 
@@ -63,6 +65,10 @@ These come from the database classifier (`ApiError::from_diesel`) on create/upda
 |------|--------|---------|
 | `generator_not_found` | 404 | No generator with the given ID. |
 | `generator_not_owned` | 403 | Caller is neither admin nor the generator referenced in the path. |
+| `missing_agent_id` | 400 | An admin caller invoked `POST /generators/{id}/register` without an `agent_id` in the body; only an agent self-registering may omit it. |
+| `already_registered` | 409 | The agent is already registered with this generator. `POST /generators/{id}/register` is not idempotent; a repeat returns this. (The agent's startup self-registration treats it as success.) |
+| `invalid_generator_id` | 400 | A `generator_ids` entry supplied to `POST /agents` references a generator that does not exist. |
+| `forbidden` | 403 | A generator PAK called a registration endpoint (`POST`/`DELETE /generators/{id}/register`); only an agent (self) or an admin may. |
 
 ## Stacks
 

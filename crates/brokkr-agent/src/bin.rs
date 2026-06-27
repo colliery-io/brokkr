@@ -12,8 +12,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = parse_cli();
 
     match cli.command {
-        Commands::Start => {
-            commands::start().await?;
+        Commands::Start { generator_ids } => {
+            commands::start(generator_ids).await?;
         }
     }
 

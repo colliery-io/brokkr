@@ -53,6 +53,12 @@ broker:
   # Obtain from staging broker when registering agent
   pak: ""
 
+  # Generator scopes this agent serves (optional). UUIDs of the generators whose
+  # stacks this agent should reconcile; the agent self-registers with each on
+  # startup. Empty = system/fleet scope only (see values.yaml for details).
+  #   generatorIds:
+  #     - 7c9e6679-7425-40de-944b-e07fc1f90ae7
+
 # Agent Behavior Configuration
 agent:
   # Staging: Same as production to test realistic behavior

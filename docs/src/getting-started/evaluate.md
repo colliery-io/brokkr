@@ -90,7 +90,15 @@ STACK_ID=$(curl -s -X POST http://localhost:3000/api/v1/stacks \
   -d "{\"name\": \"evaluate\", \"description\": \"Evaluation stack\", \"generator_id\": \"$GEN_ID\"}" \
   | jq -r '.id')
 
-# Target the agent to the stack so it receives the deployment
+# Register the agent with the admin-generator. An agent must be registered with a
+# generator before any stack that generator owns can be targeted at it — without
+# this, the next call fails with 403 agent_not_registered.
+curl -s -X POST http://localhost:3000/api/v1/generators/$GEN_ID/register \
+  -H "Authorization: Bearer $ADMIN_PAK" \
+  -H "Content-Type: application/json" \
+  -d "{\"agent_id\": \"$AGENT_ID\"}"
+
+# Now target the agent to the stack so it receives the deployment.
 # The body `agent_id` must match the agent id in the path — the broker rejects a mismatch with 400.
 curl -s -X POST http://localhost:3000/api/v1/agents/$AGENT_ID/targets \
   -H "Authorization: Bearer $ADMIN_PAK" \
@@ -221,6 +229,8 @@ curl -s http://localhost:3000/api/v1/agents \
 
 When the agent pod is `Running` and `eval-agent` appears in the broker's agent list, the broker and agent are talking. The agent registers as `INACTIVE`; you activate it in the next step before deploying.
 
+> **Pre-register at creation (optional):** This walkthrough registers the agent with the admin-generator as a separate step below. You can instead register at creation time by passing `generator_ids` to `POST /agents` (e.g. `-d '{"name": "eval-agent", "cluster_name": "evaluation", "generator_ids": ["'$GEN_ID'"]}'`) or `--set broker.generatorIds={$GEN_ID}` on the agent `helm install` — then the separate register call is unnecessary. Every agent is always auto-registered with the system generator for fleet-wide stacks regardless. See [Registering an Agent with a Generator](../how-to/agent-registration.md).
+
 ### 6. Deploy a test resource and watch it reconcile
 
 Create a stack, target the agent, and push a namespace through the broker.
@@ -245,6 +255,13 @@ STACK_ID=$(curl -s -X POST http://localhost:3000/api/v1/stacks \
   -H "Content-Type: application/json" \
   -d "{\"name\": \"evaluate\", \"description\": \"Evaluation stack\", \"generator_id\": \"$GEN_ID\"}" \
   | jq -r '.id')
+
+# Register the agent with the admin-generator before targeting it. Targeting a stack
+# at an agent that is not registered with the stack's generator fails with 403 agent_not_registered.
+curl -s -X POST http://localhost:3000/api/v1/generators/$GEN_ID/register \
+  -H "Authorization: Bearer $ADMIN_PAK" \
+  -H "Content-Type: application/json" \
+  -d "{\"agent_id\": \"$AGENT_ID\"}"
 
 # The body `agent_id` must match the agent id in the path — the broker rejects a mismatch with 400.
 curl -s -X POST http://localhost:3000/api/v1/agents/$AGENT_ID/targets \

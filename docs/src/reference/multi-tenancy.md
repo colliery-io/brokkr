@@ -1,6 +1,11 @@
 # Multi-Tenancy Reference
 
-Brokkr supports multi-tenant deployments through PostgreSQL schema isolation. Each tenant gets a separate database schema, providing logical separation of all data while sharing a single database server, with one broker instance per tenant.
+Brokkr supports multi-tenancy through two complementary, independent mechanisms:
+
+- **Schema-per-tenant isolation** — deployment-level isolation using PostgreSQL schemas. Each tenant gets a separate database schema and its own broker instance, sharing a single database server. Covered below.
+- **Application-level isolation via generator registration** — logical isolation within a single broker. An agent must register with a generator (an application scope) before any stack owned by that generator can be targeted at it. See [Application-Level Isolation via Generator Registration](#application-level-isolation-via-generator-registration).
+
+The two are not the same mechanism and do not substitute for each other; see [Schema-Per-Tenant vs. Application-Level Isolation](#schema-per-tenant-vs-application-level-isolation).
 
 ## Behavior
 
@@ -77,6 +82,58 @@ Each broker instance:
 ## Kubernetes Deployment
 
 For the Helm-based per-tenant deployment walkthrough, see [Multi-Tenant Setup](../how-to/multi-tenant-setup.md).
+
+## Application-Level Isolation via Generator Registration
+
+Generators are application scopes. Within a single broker, an agent must be **registered** with a generator before any stack owned by that generator can be targeted at the agent. Registration is the agent's opt-in consent boundary; it is separate from and complementary to schema-per-tenant isolation.
+
+For the concept, see [Security Model](../explanation/security-model.md#generator-registration-and-application-scopes); for operational steps, see [Agent Registration](../how-to/agent-registration.md).
+
+### Enforcement
+
+| Aspect | Behavior |
+|--------|----------|
+| Gated operations | Creating (`POST /agents/{id}/targets`) and removing (`DELETE /agents/{id}/targets/{stack_id}`) explicit targets |
+| Not gated | The read path `GET /agents/{id}/target-state`; an agent's served-stack set is still the union of explicit agent_targets, label matches, and annotation matches |
+| Unregistered target write | `403` with error code `agent_not_registered` — see [Error Codes](error-codes.md) |
+| Admin override | None. There is no force flag; admin cannot bypass registration |
+| Existing targets | Remain valid. Migration 23 back-fills registrations from existing agent_targets |
+
+### System Generator
+
+| Property | Value |
+|----------|-------|
+| Name | `__system__` (`is_system = true`) |
+| Provisioned | At broker startup |
+| Auto-registration | Every agent is auto-registered with it at creation (`POST /agents`) |
+| Purpose | Carries fleet/system stacks that reach all agents |
+| Listing | Excluded from the public `GET /generators` listing |
+
+The system generator is **not** the admin generator. The admin generator is a separate entity tied to the admin role/PAK; agents are not auto-registered with it.
+
+### Agent Self-Registration at Startup
+
+An agent registers itself with generators at startup. Sources, in precedence order (highest first):
+
+1. `--generator-ids` CLI flag
+2. `BROKKR__AGENT__GENERATOR_IDS` config (config key `agent.generator_ids`) — see [Environment Variables](environment-variables.md)
+3. `BROKKR_GENERATOR_IDS` legacy bare env var (**deprecated**, still honored, logs a warning)
+
+Values are comma-separated UUIDs; malformed entries are skipped with a warning; an empty value means system/fleet scope only. For the Helm chart, set `broker.generatorIds`, which renders to `BROKKR__AGENT__GENERATOR_IDS` in the agent ConfigMap.
+
+Registration can also be managed out of band: pass optional `generator_ids` to `POST /agents`, use the `register`/`deregister`/`registrations` `brokkr` CLI commands (see [CLI Reference](cli.md)), or call the registration endpoints documented in the [API Reference](api/README.md). For generator details, see [Generators Reference](generators.md).
+
+## Schema-Per-Tenant vs. Application-Level Isolation
+
+The two mechanisms are independent. Use either, both, or neither as your isolation needs require.
+
+| Aspect | Schema-Per-Tenant | Application-Level (Generator Registration) |
+|--------|-------------------|--------------------------------------------|
+| Isolation level | Deployment-level | Application-level (within one broker) |
+| Scope | One broker per tenant | Multiple applications (generators) per broker |
+| Physical separation | Separate database schemas | Shared schema |
+| Configuration | `database.schema` setting | Agent `generator_ids` registration |
+| Use case | Separate tenants on shared infrastructure | Multi-application authorization within one broker |
 
 ## Connection Pool Behavior
 

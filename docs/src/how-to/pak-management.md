@@ -6,6 +6,46 @@ Prefixed API Keys (PAKs) are the authentication credentials for all Brokkr entit
 
 PAKs look like `brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8`. Brokkr stores only the **hash** — once a PAK is displayed at creation, it cannot be recovered, only rotated. See the [Environment Variables Reference](../reference/environment-variables.md#pak-pre-authentication-key-generation) for PAK configuration details.
 
+## Day-Zero Bootstrap
+
+Before the broker has ever started, there is no admin PAK and no database to read one from. Use `brokkr-broker generate-pak` to mint the first admin PAK **offline** — it derives a PAK and its SHA-256 hash from the embedded defaults without touching a database, a running broker, or a key file. You supply the hash to the broker through configuration so it can authenticate the very first request. This is distinct from [Rotating the Admin PAK](#rotating-the-admin-pak) below, which changes a PAK that already exists.
+
+1. Mint the PAK/hash pair offline (no database or running broker required):
+
+   ```bash
+   brokkr-broker generate-pak
+   ```
+
+   The command prints both the secret PAK and its SHA-256 hash:
+
+   ```text
+   PAK:  brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8
+   Hash: 9f2c4e1b8a7d6c5f4e3b2a1908d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d9
+   ```
+
+2. Store the PAK securely — a Kubernetes secret, CI/CD vault, or password manager. It is shown only once and cannot be recovered.
+
+3. Set the hash in the broker configuration **before** first startup:
+
+   ```bash
+   export BROKKR__BROKER__PAK_HASH="9f2c4e1b8a7d6c5f4e3b2a1908d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d9"
+   ```
+
+4. Start the broker:
+
+   ```bash
+   brokkr-broker serve
+   ```
+
+5. Verify admin access with the PAK you stored:
+
+   ```bash
+   curl -s "http://localhost:3000/api/v1/admin/audit-logs" \
+     -H "Authorization: brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8" | jq .
+   ```
+
+> **Note:** On first startup the broker stores this hash on the admin role and admin generator — no key file is written to `/tmp/brokkr-keys/`. See the [CLI Reference](../reference/cli.md) for the full `generate-pak` flag set.
+
 ## Rotating the Admin PAK
 
 ### Via CLI

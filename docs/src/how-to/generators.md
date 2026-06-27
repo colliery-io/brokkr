@@ -1,6 +1,6 @@
 # Working with Generators
 
-A generator is an external identity principal — a CI/CD pipeline, automation tool, or service — that creates and manages Brokkr resources. Each generator receives a Prefixed API Key (PAK) scoped to itself: it can create stacks, templates, and deployment objects, but can only access resources it created, providing natural isolation between pipelines or teams. Unlike the admin PAK, a generator PAK cannot perform administrative operations such as creating other generators or managing agents. This guide covers creating generators, integrating them with CI/CD systems, and managing their lifecycle.
+A generator is an external identity principal — a CI/CD pipeline, automation tool, or service — that creates and manages Brokkr resources. Each generator also serves as an application scope: an agent must register with a generator before any stack owned by that generator can be targeted at the agent, giving each agent an opt-in consent boundary and enforcing application-level isolation (see the [security model](../explanation/security-model.md#generator-registration-and-application-scopes)). Each generator receives a Prefixed API Key (PAK) scoped to itself: it can create stacks, templates, and deployment objects, but can only access resources it created, providing natural isolation between pipelines or teams. Unlike the admin PAK, a generator PAK cannot perform administrative operations such as creating other generators or managing agents. This guide covers creating generators, integrating them with CI/CD systems, registering agents, and managing their lifecycle.
 
 ## Prerequisites
 
@@ -193,6 +193,73 @@ curl -X DELETE "http://broker:3000/api/v1/generators/$GENERATOR_ID" \
 
 Deleting a generator cascades the soft-delete to all stacks owned by the generator and their deployment objects. This is handled by a database trigger, so the cascade is atomic.
 
+## Registering Agents
+
+An agent must be registered with a generator before any stack owned by that generator can be targeted at the agent. Targeting an unregistered agent returns `403 agent_not_registered`, and admin cannot bypass it. Registration is the agent's opt-in consent boundary. This section covers registration from the generator admin's side; for the full operational workflow (including agent self-registration at startup) see [Agent Registration](./agent-registration.md).
+
+### Step 1: Register an Agent
+
+Register an agent with the generator (admin, or the agent acting on itself — a generator PAK is rejected):
+
+```bash
+curl -X POST "http://broker:3000/api/v1/generators/$GENERATOR_ID/register" \
+  -H "Authorization: Bearer $ADMIN_PAK" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agent_id": "f1e2d3c4-b5a6-7890-abcd-ef0123456789"
+  }'
+```
+
+The response is the registration record:
+
+```json
+{
+  "id": "9a8b7c6d-5e4f-3210-fedc-ba9876543210",
+  "agent_id": "f1e2d3c4-b5a6-7890-abcd-ef0123456789",
+  "generator_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "registered_at": "2025-01-02T10:05:00Z"
+}
+```
+
+Re-registering an already-registered agent returns `409` with code `already_registered` (the call is not idempotent). When an agent self-registers, it omits `agent_id` and authenticates with its own credentials.
+
+### Step 2: List Registered Agents
+
+View the agents registered with a generator:
+
+```bash
+curl "http://broker:3000/api/v1/generators/$GENERATOR_ID/registered-agents" \
+  -H "Authorization: Bearer $ADMIN_PAK"
+```
+
+### Step 3: Deregister an Agent
+
+Remove an agent's registration. This is destructive: it cascades by removing the agent's explicit targets for this generator's stacks and pushes a target-changed notification to the agent, which prunes those Kubernetes resources on its next reconcile.
+
+```bash
+curl -X DELETE "http://broker:3000/api/v1/generators/$GENERATOR_ID/register" \
+  -H "Authorization: Bearer $ADMIN_PAK" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agent_id": "f1e2d3c4-b5a6-7890-abcd-ef0123456789"
+  }'
+```
+
+### CLI Equivalents
+
+The `brokkr` CLI wraps these endpoints (an admin PAK is required for cross-entity operations):
+
+```bash
+# Register an agent with a generator
+brokkr register --agent <agent-id> --generator <generator-id>
+
+# Deregister (destructive — cascades target removal)
+brokkr deregister --agent <agent-id> --generator <generator-id>
+
+# List registrations by agent or by generator
+brokkr registrations --generator <generator-id>
+```
+
 ## PAK Rotation
 
 Rotate the generator's PAK for security best practices or if the current PAK is compromised:
@@ -271,5 +338,6 @@ If you've lost a generator's PAK:
 ## Related Documentation
 
 - [Generators API Reference](../reference/generators.md) - Complete API documentation
+- [Agent Registration](./agent-registration.md) - Registering agents with generators (application scopes)
 - [Stack Templates](./templates.md) - Using templates with generators
 - [Authentication](../explanation/security-model.md) - Understanding Brokkr authentication

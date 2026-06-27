@@ -53,7 +53,7 @@ Agents run in Kubernetes clusters and apply deployment objects.
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/agents` | List all agents |
-| POST | `/agents` | Register a new agent |
+| POST | `/agents` | Register a new agent (optional `generator_ids` pre-registers additional generators) |
 | GET | `/agents/:id` | Get agent by ID |
 | PUT | `/agents/:id` | Update an agent |
 | DELETE | `/agents/:id` | Delete an agent |
@@ -67,8 +67,9 @@ Agents run in Kubernetes clusters and apply deployment objects.
 | DELETE | `/agents/:id/annotations/:key` | Remove annotation from agent |
 | GET | `/agents/:id/stacks` | List agent's associated stacks |
 | GET | `/agents/:id/targets` | List agent's stack targets |
-| POST | `/agents/:id/targets` | Add stack target |
-| DELETE | `/agents/:id/targets/:stack_id` | Remove stack target |
+| POST | `/agents/:id/targets` | Add stack target (requires registration with the stack's generator) |
+| DELETE | `/agents/:id/targets/:stack_id` | Remove stack target (requires registration with the stack's generator) |
+| GET | `/agents/:id/registrations` | List the agent's generator registrations |
 | POST | `/agents/:id/rotate-pak` | Rotate agent PAK |
 | PATCH | `/agents/:id/health-status` | Agent reports deployment health |
 | GET | `/agents/:id/events` | List agent events |
@@ -76,6 +77,17 @@ Agents run in Kubernetes clusters and apply deployment objects.
 | GET | `/agents/:id/diagnostics/pending` | Pending diagnostics for agent |
 | GET | `/agents/:agent_id/webhooks/pending` | Pending webhook deliveries (auto-claims) |
 | GET | `/agents/` | Search agents by query string |
+
+A stack target can only be added or removed when the agent is registered with the
+target stack's owning generator; otherwise the request returns `403`
+`agent_not_registered` (admin PAK cannot bypass this gate). Every agent is
+auto-registered with the system generator at creation, granting access to
+system/fleet stacks; `generator_ids` in `POST /agents` pre-registers additional
+application-scoped generators. Registration gates only whether an explicit target
+can be created — the served set returned by `GET /agents/:id/target-state` remains
+the union of explicit targets, label matches, and annotation matches. See
+[Generator Registration and Application Scopes](../../explanation/security-model.md#generator-registration-and-application-scopes)
+and the [agent registration how-to](../../how-to/agent-registration.md).
 
 #### Fleet Legibility
 
@@ -148,6 +160,9 @@ External systems that create deployment objects.
 | PUT | `/generators/:id` | Update a generator |
 | DELETE | `/generators/:id` | Delete a generator |
 | POST | `/generators/:id/rotate-pak` | Rotate generator PAK |
+| POST | `/generators/:id/register` | Register an agent with the generator (`agent_id` optional for agent self-registration; re-registering returns `409 already_registered`) |
+| DELETE | `/generators/:id/register` | Deregister an agent (cascades: removes the agent's targets for the generator's stacks) |
+| GET | `/generators/:id/registered-agents` | List agents registered with the generator |
 
 #### Other Endpoints
 
@@ -227,7 +242,7 @@ Match on `code`, not `message` — the codes are part of the SDK contract. See [
 Common HTTP status codes:
 - `400` - Bad request (invalid input)
 - `401` - Unauthorized (missing or invalid PAK)
-- `403` - Forbidden (valid PAK but insufficient permissions)
+- `403` - Forbidden (valid PAK but insufficient permissions; includes `agent_not_registered` when targeting a stack without registration with its generator)
 - `404` - Not found
 - `409` - Conflict (unique constraint violations)
 - `422` - Unprocessable entity (validation, foreign-key, check, or not-null violations)

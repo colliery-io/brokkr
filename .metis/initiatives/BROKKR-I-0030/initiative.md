@@ -184,6 +184,24 @@ No change needed to the agent's `GET /agents/:id/target-state` response. The reg
 - Script or migration to register existing agents with existing application generators (one-time, data-preserving)
 - Verify no existing targets are orphaned
 
+**Phase 6 — Operator surface (post-release audit, v0.8.2)**
+
+A release audit of #79 found the registration model shipped end-to-end in the
+broker/agent/API/SDK, but the operator-facing surfaces that the design intended
+(declare scope "at deploy time", Decision 3) were not wired. Follow-on tasks:
+- [[BROKKR-T-0249]] — Agent Helm chart: expose `BROKKR_GENERATOR_IDS` via a
+  `generatorIds` value (chart was version-bumped only; the value is unreachable
+  through Helm today). Empty default = system/fleet scope only.
+- [[BROKKR-T-0250]] — Promote generator IDs into `AgentConfig`
+  (`BROKKR__AGENT__GENERATOR_IDS` + `--generator-ids`); the agent currently reads
+  a bare `std::env::var`, off the `BROKKR__AGENT__*` config convention.
+- [[BROKKR-T-0251]] — `brokkr-cli` registration commands (register / deregister /
+  list); the lifecycle is API/SDK-only, no admin CLI path.
+
+Broker Helm chart correctly needed no change (system generator is auto-provisioned
+at startup). The day-zero offline-PAK bootstrap QoL is handled separately on the
+working branch and is not ticketed here.
+
 ## Resolved Design Decisions
 
 1. **System generator UUID:** Generated at first startup, stored persistently (in `system_config` table, a text file, or broker config — implementation choice at task time). Avoids hardcoded constants; each deployment gets its own identity.

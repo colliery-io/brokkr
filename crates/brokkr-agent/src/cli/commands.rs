@@ -97,7 +97,33 @@ fn classify_push_frame(msg: &WsMessage) -> PushAction {
     }
 }
 
-pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
+/// Resolve the comma-separated generator-scope string in precedence order:
+///   1. `flag` — the `--generator-ids` CLI flag
+///   2. `config` — `BROKKR__AGENT__GENERATOR_IDS` / `agent.generator_ids` (file)
+///   3. `legacy_env` — the deprecated bare `BROKKR_GENERATOR_IDS` env var
+///
+/// Returns the resolved string and whether the deprecated legacy source supplied
+/// a non-empty value (so the caller can emit a one-time deprecation warning).
+fn resolve_generator_ids(
+    flag: Option<String>,
+    config: Option<String>,
+    legacy_env: Option<String>,
+) -> (String, bool) {
+    if let Some(v) = flag {
+        (v, false)
+    } else if let Some(v) = config {
+        (v, false)
+    } else if let Some(v) = legacy_env {
+        let used_legacy = !v.trim().is_empty();
+        (v, used_legacy)
+    } else {
+        (String::new(), false)
+    }
+}
+
+pub async fn start(
+    generator_ids_override: Option<String>,
+) -> Result<(), Box<dyn std::error::Error>> {
     // BROKKR_CONFIG_FILE adds an optional file layer between embedded
     // defaults and BROKKR__ env vars (BROKKR-T-0187).
     let config = Settings::new(std::env::var("BROKKR_CONFIG_FILE").ok())
@@ -140,16 +166,27 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
         agent.name
     );
 
-    // Register with any generators listed in BROKKR_GENERATOR_IDS (comma-separated UUIDs).
-    // 409 = already registered (idempotent). Other errors are logged but non-fatal.
-    let generator_ids_raw = std::env::var("BROKKR_GENERATOR_IDS").unwrap_or_default();
+    // Resolve the generator scope to self-register with (see resolve_generator_ids
+    // for precedence). Comma-separated UUIDs. 409 on register = already registered
+    // (idempotent); other errors are logged but non-fatal.
+    let (generator_ids_raw, used_legacy_env) = resolve_generator_ids(
+        generator_ids_override,
+        config.agent.generator_ids.clone(),
+        std::env::var("BROKKR_GENERATOR_IDS").ok(),
+    );
+    if used_legacy_env {
+        warn!(
+            "BROKKR_GENERATOR_IDS is deprecated; set BROKKR__AGENT__GENERATOR_IDS \
+             (or agent.generator_ids in config, or --generator-ids) instead"
+        );
+    }
     if !generator_ids_raw.trim().is_empty() {
         let mut registered = vec![];
         let mut failed = vec![];
         for part in generator_ids_raw.split(',') {
             let part = part.trim();
             match Uuid::parse_str(part) {
-                Err(_) => warn!(%part, "BROKKR_GENERATOR_IDS: skipping malformed UUID"),
+                Err(_) => warn!(%part, "generator_ids: skipping malformed UUID"),
                 Ok(gid) => {
                     let result = sdk_client
                         .api()
@@ -778,5 +815,45 @@ mod tests {
             k8s_api_latency_ms: None,
         });
         assert_eq!(classify_push_frame(&hb), PushAction::Ignore);
+    }
+
+    #[test]
+    fn generator_ids_flag_wins_over_config_and_env() {
+        let (resolved, legacy) = resolve_generator_ids(
+            Some("flag".into()),
+            Some("config".into()),
+            Some("env".into()),
+        );
+        assert_eq!(resolved, "flag");
+        assert!(!legacy);
+    }
+
+    #[test]
+    fn generator_ids_config_wins_over_legacy_env() {
+        let (resolved, legacy) =
+            resolve_generator_ids(None, Some("config".into()), Some("env".into()));
+        assert_eq!(resolved, "config");
+        assert!(!legacy);
+    }
+
+    #[test]
+    fn generator_ids_falls_back_to_legacy_env_and_flags_it() {
+        let (resolved, legacy) = resolve_generator_ids(None, None, Some("env".into()));
+        assert_eq!(resolved, "env");
+        assert!(legacy, "non-empty legacy env should be flagged as deprecated use");
+    }
+
+    #[test]
+    fn generator_ids_empty_legacy_env_is_not_flagged() {
+        let (resolved, legacy) = resolve_generator_ids(None, None, Some("  ".into()));
+        assert_eq!(resolved, "  ");
+        assert!(!legacy, "blank legacy env should not trigger the deprecation warning");
+    }
+
+    #[test]
+    fn generator_ids_default_when_all_absent() {
+        let (resolved, legacy) = resolve_generator_ids(None, None, None);
+        assert_eq!(resolved, "");
+        assert!(!legacy);
     }
 }

@@ -7,6 +7,7 @@ In this tutorial, you'll set up a generator — Brokkr's mechanism for CI/CD int
 - What generators are and why they exist
 - How to create a generator and manage its PAK
 - How generators create and manage stacks
+- How agents must register with a generator before being targeted to its stacks
 - How to push deployment objects from a CI/CD pipeline
 - Access control differences between admin and generator roles
 
@@ -19,6 +20,8 @@ In this tutorial, you'll set up a generator — Brokkr's mechanism for CI/CD int
 ## Step 1: Create a Generator
 
 Generators represent automated systems (CI/CD pipelines, GitOps controllers, deployment scripts) that push resources to Brokkr. They have their own PAK (Prefixed API Key) and can only manage resources they own.
+
+A generator is also an isolated application scope: any agent that will run a generator's stacks must first be **registered** with that generator. Registration is the agent's opt-in boundary — it prevents a stack from one application accidentally being targeted at an agent that never agreed to serve it. You'll register an agent in Step 4 before targeting. For the full picture, see [Generator Registration and Application Scopes](../explanation/security-model.md#generator-registration-and-application-scopes).
 
 Create a generator via the API (the `brokkr-broker` CLI can do this too — see the [CLI Reference](../reference/cli.md)):
 
@@ -36,6 +39,8 @@ echo "Generator PAK: $GENERATOR_PAK"
 ```
 
 **Save this PAK immediately** — it's only shown once. You'll store it as a CI secret.
+
+> **Why registration is needed only for application generators:** Behind the scenes, every new agent is automatically registered with the built-in system generator (`__system__`), which carries fleet-wide stacks that reach all agents without any explicit opt-in. The application generator you just created is different — its stacks may be proprietary or customer-specific, so an agent must explicitly register before they can be targeted at it.
 
 ## Step 2: Create a Stack as the Generator
 
@@ -73,23 +78,52 @@ curl -s http://localhost:3000/api/v1/agents \
 # Returns: 403 Forbidden
 ```
 
-The key rule: generators can create, update, and delete their own stacks and push deployment objects to them, but they cannot manage agents, targets, or other generators' resources. See the [Security Model](../explanation/security-model.md) for the complete access control matrix.
+The key rule: generators can create, update, and delete their own stacks and push deployment objects to them, but they cannot manage agents, targets, or other generators' resources. Registering an agent with a generator is likewise an admin operation (or the agent acting on itself) — a generator PAK can't register agents on its own. See the [Security Model](../explanation/security-model.md) for the complete access control matrix.
 
-## Step 4: Target an Agent (So Deployments Reach a Cluster)
+## Step 4: Register and Target an Agent (So Deployments Reach a Cluster)
 
-Before pushing deployment objects, an agent must be targeted to the stack. Otherwise the deployment exists in the broker but no agent will apply it. As an admin, target the default agent:
+Before pushing deployment objects, an agent must be targeted to the stack. Otherwise the deployment exists in the broker but no agent will apply it. Targeting has a prerequisite: the agent must first be **registered** with the stack's generator. Targeting an unregistered agent is rejected with a `403` (`agent_not_registered`) — admins can't bypass this gate either.
+
+First, grab the default agent's ID and register it with your generator. With no `agent_id` in the body the agent would register itself; as admin you supply the `agent_id` you want to register:
 
 ```bash
 AGENT_ID=$(curl -s http://localhost:3000/api/v1/agents \
   -H "Authorization: Bearer <your-admin-pak>" | jq -r '.[0].id')
 
+curl -s -X POST "http://localhost:3000/api/v1/generators/${GENERATOR_ID}/register" \
+  -H "Authorization: Bearer <your-admin-pak>" \
+  -H "Content-Type: application/json" \
+  -d "{\"agent_id\": \"${AGENT_ID}\"}" | jq .
+```
+
+Re-running this registration returns `409 already_registered` (harmless if the agent is already registered). Now target the agent at the stack:
+
+```bash
 curl -s -X POST "http://localhost:3000/api/v1/agents/${AGENT_ID}/targets" \
   -H "Authorization: Bearer <your-admin-pak>" \
   -H "Content-Type: application/json" \
   -d "{\"agent_id\": \"${AGENT_ID}\", \"stack_id\": \"${STACK_ID}\"}" | jq .
 ```
 
-> **Note:** Generators cannot manage agents or targets — that requires admin access. In production, an admin sets up the targeting once and the generator just pushes deployments.
+> **Note:** Generators cannot manage agents, registrations, or targets — that requires admin access (or the agent acting on itself). In production, an admin registers and targets the agent once and the generator just pushes deployments.
+
+> **Troubleshooting:** A `403` with code `agent_not_registered` means the agent isn't registered with this stack's generator. Register it with `POST /generators/{id}/register` (as above), or start the agent with `--generator-ids {id}` so it self-registers. See the [error-codes reference](../reference/error-codes.md) and the operational [agent-registration how-to](../how-to/agent-registration.md).
+
+### Alternative: Agent Self-Registration at Startup
+
+Manual admin registration is convenient in a tutorial, but in production agents usually declare their generator scopes when they start, so no per-agent API call is needed. The agent resolves its scopes from, in precedence order:
+
+1. The `--generator-ids` CLI flag (highest priority)
+2. The `BROKKR__AGENT__GENERATOR_IDS` environment variable (config key `agent.generator_ids`)
+3. The legacy bare `BROKKR_GENERATOR_IDS` variable (deprecated — still honored, but logs a warning)
+
+Each is a comma-separated list of generator UUIDs; an empty value leaves the agent in system/fleet scope only. For example:
+
+```bash
+brokkr-agent start --generator-ids "${GENERATOR_ID}"
+```
+
+Self-registration happens alongside the automatic system-generator registration, so a self-registering agent still serves fleet-wide stacks. See the [environment-variables reference](../reference/environment-variables.md) for the config keys and the [agent-registration how-to](../how-to/agent-registration.md) for the full workflow.
 
 ## Step 5: Push a Deployment (Simulating CI/CD)
 
@@ -260,6 +294,7 @@ curl -s -X DELETE "http://localhost:3000/api/v1/generators/${GENERATOR_ID}" \
 - **Generators** are scoped identities for CI/CD pipeline integration
 - Each generator gets its own **PAK** for authentication
 - Generators **own** the stacks they create — other generators can't modify them
+- An agent must be **registered** with a generator before its stacks can be targeted at that agent — manually via the API or by self-registering at startup with `--generator-ids`
 - Pushing deployment objects is as simple as a `curl` POST with YAML content
 - **Sequence IDs** ensure agents always apply the latest version
 - Generator PAKs should be stored as CI secrets and **rotated** periodically

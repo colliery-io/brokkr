@@ -11,6 +11,7 @@ classDiagram
     class deployment_objects
     class agent_events
     class agent_targets
+    class agent_generator_registrations
     class generators
     class stack_templates
     class template_targets
@@ -29,6 +30,9 @@ classDiagram
 
     generators "1" -- "0..*" stacks : owns
     generators "1" -- "0..*" stack_templates : owns
+    agents "0..*" -- "0..*" generators : registers with
+    agents "1" -- "0..*" agent_generator_registrations : opts in via
+    generators "1" -- "0..*" agent_generator_registrations : scopes
     stacks "1" -- "0..*" deployment_objects : contains
     stacks "1" -- "0..*" agent_targets : targeted by
     agents "1" -- "0..*" agent_targets : targets
@@ -49,6 +53,8 @@ classDiagram
     agents "1" -- "0..*" agent_k8s_events : streams
     agents "1" -- "0..*" agent_pod_logs : streams
 ```
+
+`agent_generator_registrations` is the join entity that records an agent's opt-in to a generator's application scope. It is the enforcement boundary for targeting: an agent must be registered with a generator before any of that generator's stacks can be targeted at it. See [Why Generators?](#why-generators) below and the [security model](security-model.md#generator-registration-and-application-scopes).
 
 Labels and annotations are omitted from the diagram for legibility: stacks, agents, templates, and work orders each have their own `*_labels` (single string values) and `*_annotations` (key-value pairs) tables. `audit_logs` stands alone — it records actor/action/resource tuples without foreign keys, so rows survive the deletion of what they describe. `agent_k8s_events` and `agent_pod_logs` are short-lived telemetry buffers evicted on a 6-hour ceiling, not part of the relational core.
 
@@ -83,15 +89,27 @@ The system implements intelligent cascading for both soft and hard deletes:
 - Agent → Agent Targets, Agent Events
 - Generator → (handled by foreign key constraints)
 
+#### Deregistration Cascades
+
+Deregistering an agent from a generator is a distinct cascade that cleans up targeting state rather than the entities themselves. When an agent is deregistered, every `agent_target` linking that agent to a stack owned by that generator is removed, and a `TargetChanged` frame is pushed to the agent over its WebSocket connection. On its next reconcile the agent prunes the corresponding Kubernetes resources, so withdrawing consent also withdraws the workloads that consent permitted.
+
 ## Key Architectural Decisions
 
 ### Why Generators?
 
-Generators represent external systems that create stacks and deployment objects. This abstraction:
-- Provides authentication boundaries for automated systems
-- Tracks which system created which resources
-- Enables rate limiting and access control per generator
-- Maintains audit trail of automated deployments
+Generators serve a dual purpose. Historically they represented external systems that create stacks and deployment objects, providing:
+- Authentication boundaries for automated systems
+- Tracking of which system created which resources
+- Rate limiting and access control per generator
+- An audit trail of automated deployments
+
+They now also partition stacks into **application scopes**. Each generator owns a set of stacks, and an agent must register with a generator to declare that it serves that generator's scope. Registration is the agent's opt-in consent boundary, and it is enforced at target-creation time: an explicit target can only be created for a stack when the agent is registered with the stack's owning generator. This prevents accidental cross-application targeting — one application's stacks cannot be aimed at an agent that never agreed to serve them. The conceptual treatment lives in the [security model](security-model.md#generator-registration-and-application-scopes); the operational steps are in the [agent-registration how-to](../how-to/agent-registration.md).
+
+### The System Generator
+
+One generator is special. Brokkr provisions a **system generator** (`is_system = true`) at broker startup and auto-registers every agent with it at creation time. It carries fleet-wide and system-management stacks — cluster provisioning, telemetry collection, and similar concerns — so those reach all agents without per-agent opt-in. Because it is internal infrastructure rather than an application scope, it is excluded from the public `GET /generators` listing.
+
+The system generator is the inverse of an ordinary application-scope generator: it reaches every agent by default, whereas application-scope generators require explicit per-agent registration. It is also distinct from the admin generator, which is tied to the admin role and does not auto-register agents.
 
 ### Why Agent Targets?
 
@@ -100,6 +118,8 @@ The many-to-many relationship between agents and stacks enables:
 - Multi-cluster deployments
 - Gradual rollouts
 - Environment-specific targeting
+
+Creating a target is gated by registration: an agent may only target a stack when it is registered with that stack's owning generator (the system generator aside, since every agent is registered with it). The registration check applies to both adding and removing explicit targets, and admins cannot bypass it — there is no force flag. Registration governs only whether an explicit target may be *created*; it does not change what an agent is served at read time, which remains the union of explicit targets, label matches, and annotation matches.
 
 ### Labels vs Annotations
 

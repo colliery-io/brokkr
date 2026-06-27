@@ -52,6 +52,14 @@ broker:
   # SECURITY: Use --set flag or external secret, never commit to values file
   pak: ""
 
+  # Generator scopes this agent serves (optional but recommended in production).
+  # UUIDs of the generators whose stacks this agent should reconcile; the agent
+  # self-registers with each on startup. Empty = system/fleet scope only, so the
+  # agent will NOT serve any application generator's stacks until listed here
+  # (see values.yaml for the full semantics).
+  #   generatorIds:
+  #     - 1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed
+
 # Agent Behavior Configuration
 agent:
   # Polling interval in seconds

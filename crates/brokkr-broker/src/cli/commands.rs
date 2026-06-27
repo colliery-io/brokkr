@@ -241,6 +241,47 @@ pub fn rotate_admin(config: &Settings) -> Result<(), Box<dyn std::error::Error>>
     Ok(())
 }
 
+/// Mints a fresh PAK + hash pair offline, without touching the database or
+/// writing a key file.
+///
+/// This is the day-zero bootstrap path: an operator runs it before the broker
+/// has ever started, captures the hash, sets `BROKKR__BROKER__PAK_HASH`, and
+/// keeps the PAK as the admin credential. On first startup `upsert_admin` then
+/// takes the configured-hash branch and stores it directly — no PAK is
+/// generated server-side and no key file is dropped in `/tmp/brokkr-keys/`.
+///
+/// The hash is a plain SHA-256 of the key's long token (no secret, no salt), so
+/// it is reproducible from the PAK but the PAK cannot be recovered from it. We
+/// only need the PAK controller (whose prefix/length come from config) to mint a
+/// key the broker will recognize; no database connection is opened.
+pub fn generate_pak(config: &Settings) -> Result<(), Box<dyn std::error::Error>> {
+    info!("Minting admin PAK + hash pair (offline)");
+
+    // Initialize the controller from config if it has not been already. This is
+    // idempotent (OnceCell) and keeps the command self-contained rather than
+    // relying on the caller having initialized it first.
+    pak::create_pak_controller(Some(config)).map_err(|e| e.to_string())?;
+
+    let (pak, pak_hash) = pak::create_pak()?;
+
+    println!("Minted admin PAK (offline — nothing was written to the database):");
+    println!();
+    println!("  PAK (secret — send as `Authorization: Bearer <PAK>`; store securely):");
+    println!("    {pak}");
+    println!();
+    println!("  PAK hash (set as BROKKR__BROKER__PAK_HASH before first startup):");
+    println!("    {pak_hash}");
+    println!();
+    println!("Day-zero flow:");
+    println!("  1. export BROKKR__BROKER__PAK_HASH={pak_hash}");
+    println!("  2. Start the broker. First startup stores this hash on the admin role");
+    println!("     and the admin generator; no key file is written to /tmp/brokkr-keys/.");
+    println!("  3. Authenticate with the PAK above. It cannot be recovered from the hash,");
+    println!("     so the hash is safe to keep in config while the PAK stays secret.");
+
+    Ok(())
+}
+
 /// Synchronously records a PAK lifecycle event performed via the CLI. The
 /// async batched audit logger is not initialized outside `serve`, so CLI
 /// commands write the row directly (BROKKR-T-0189).

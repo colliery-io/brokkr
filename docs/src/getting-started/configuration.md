@@ -51,6 +51,8 @@ BROKKR__BROKER__WEBHOOK_ENCRYPTION_KEY=<64-hex-chars>
 BROKKR__LOG__LEVEL=info
 ```
 
+To mint an admin credential before the broker ever starts, run `brokkr-broker generate-pak`. It produces a PAK and its SHA-256 hash entirely offline — no database, no keyfile — so you can set `BROKKR__BROKER__PAK_HASH` to that hash for a day-zero bootstrap. Leaving the hash unset/empty instead has the broker auto-generate a fresh PAK on first startup and write it to `/tmp/brokkr-keys/key.txt`. See the [CLI Reference](../reference/cli.md) for the command's full output.
+
 **Agent:**
 
 ```bash
@@ -61,6 +63,15 @@ BROKKR__AGENT__CLUSTER_NAME=prod-us-east-1
 ```
 
 These four agent values have placeholder defaults (`DEFAULT` names, localhost broker) that only suit the dev compose stack; `agent_name` and `cluster_name` must match the agent's broker registration. Everything else — polling intervals, health checking, the WebSocket channel, CORS, telemetry, PAK generation parameters — has working defaults; see the [Environment Variables Reference](../reference/environment-variables.md) for the full catalog.
+
+One optional value belongs to the generator-registration authorization model. To let an agent receive stacks owned by application-scoped generators, register it with those generators:
+
+```bash
+# Comma-separated generator UUIDs the agent opts into at startup
+BROKKR__AGENT__GENERATOR_IDS=<uuid>,<uuid>
+```
+
+The same list can be supplied by the `--generator-ids` CLI flag (highest precedence) or the `agent.generator_ids` config-file key. When unset, the agent runs in system/fleet scope only — it is still auto-registered with the system generator and serves any fleet-wide stacks. Registration is an agent's consent boundary: a stack owned by a generator cannot be targeted at the agent until the agent is registered with that generator. For the operational walkthrough see [Registering an agent with a generator](../how-to/agent-registration.md); for the why, see [the security model](../explanation/security-model.md#generator-registration-and-application-scopes).
 
 ## Hot-Reload Configuration
 

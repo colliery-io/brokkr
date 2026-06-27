@@ -44,6 +44,8 @@ A fresh admin PAK is generated (and written to `/tmp/brokkr-keys/key.txt`) only 
 | `BROKKR__AGENT__BROKER_URL` | String | `http://localhost:3000` | Broker API base URL |
 | `BROKKR__AGENT__POLLING_INTERVAL` | Integer | `10` | How often to poll broker for updates (seconds) |
 | `BROKKR__AGENT__KUBECONFIG_PATH` | String | `/home/${USER}/.kube/config` (literal, not shell-expanded) | Exported as `KUBECONFIG` before client creation; if the file cannot be loaded, kube's config inference falls back to in-cluster configuration |
+| `BROKKR__AGENT__GENERATOR_IDS` | String (comma-separated) | *(none)* | Generator UUIDs to self-register with on startup. Resolution precedence (highest wins): `--generator-ids` CLI flag > `BROKKR__AGENT__GENERATOR_IDS` > `agent.generator_ids` (config file) > legacy `BROKKR_GENERATOR_IDS`. When unset or empty, the agent serves system/fleet scope only. See [Agent Registration](../how-to/agent-registration.md). |
+| `BROKKR_GENERATOR_IDS` | String (comma-separated) | *(deprecated)* | **Deprecated** legacy form of `BROKKR__AGENT__GENERATOR_IDS`, outside the `BROKKR__` namespace. Still honored as a fallback when `BROKKR__AGENT__GENERATOR_IDS` is unset, but logs a deprecation warning on startup. Migrate to `BROKKR__AGENT__GENERATOR_IDS` or `agent.generator_ids` in the config file. |
 | `BROKKR__AGENT__MAX_RETRIES` | Integer | `60` | Max retries when waiting for broker on startup |
 | `BROKKR__AGENT__PAK` | String | *(required)* | Agent's PAK for broker authentication |
 | `BROKKR__AGENT__AGENT_NAME` | String | `DEFAULT` | Agent name (must match broker registration) |
@@ -55,6 +57,8 @@ A fresh admin PAK is generated (and written to `/tmp/brokkr-keys/key.txt`) only 
 | `BROKKR__AGENT__WS_URL` | String | *(derived)* | Override the WebSocket URL; defaults to `broker_url` with `http`→`ws`/`https`→`wss` and `/internal/ws/agent` appended |
 | `BROKKR__AGENT__KUBE_EVENT_UID_CACHE_CAP` | Integer | `10000` | LRU capacity for the kube-event UID→stack ownership cache |
 | `BROKKR__AGENT__WATCH_NAMESPACE` | String | *(none — cluster-wide)* | Restrict pod-log/kube-event watchers and health discovery to one namespace (namespace-scoped RBAC). The agent Helm chart sets this from the downward API when `rbac.clusterWide: false` |
+
+On startup the agent self-registers with each generator UUID resolved from `BROKKR__AGENT__GENERATOR_IDS` (or its higher-precedence equivalents). Malformed UUIDs are skipped with a warning, and registration failures do not block startup. Every agent is additionally auto-registered with the system generator (internal fleet scope) by the broker at agent creation, independent of this configuration. For operational steps and conceptual background, see [Agent Registration](../how-to/agent-registration.md) and the [security model](../explanation/security-model.md#generator-registration-and-application-scopes).
 
 ## PAK (Pre-Authentication Key) Generation
 

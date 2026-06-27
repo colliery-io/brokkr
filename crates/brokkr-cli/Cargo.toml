@@ -21,6 +21,7 @@ tokio = { workspace = true }
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
 dirs = "5"
+uuid = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3"
