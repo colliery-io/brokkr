@@ -1,7 +1,7 @@
 ---
 id: slice-8-webhooks-view
 level: task
-title: "Slice 8: Webhooks view — subscriptions + recent deliveries"
+title: "Webhooks view — subscriptions + recent deliveries"
 short_code: "BROKKR-T-0263"
 created_at: 2026-06-28T01:44:27.093925+00:00
 updated_at: 2026-06-28T01:44:27.093925+00:00
@@ -18,7 +18,7 @@ exit_criteria_met: false
 initiative_id: BROKKR-I-0031
 ---
 
-# Slice 8: Webhooks view
+# Webhooks view
 
 ## Parent Initiative
 

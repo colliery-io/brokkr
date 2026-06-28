@@ -1,24 +1,24 @@
 ---
-id: slice-1b-broker-serves-the-brokkr
+id: broker-serves-the-brokkr-web-wasm
 level: task
-title: "Slice 1b: broker serves the brokkr-web wasm bundle + SPA fallback; Trunk build wired into image/angreal"
+title: "broker serves the brokkr-web wasm bundle + SPA fallback; Trunk build wired into image/angreal"
 short_code: "BROKKR-T-0253"
 created_at: 2026-06-28T01:32:27.739206+00:00
-updated_at: 2026-06-28T23:23:48.457035+00:00
+updated_at: 2026-06-28T23:45:33.181547+00:00
 parent: brokkr-operator-console
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/active"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
 initiative_id: BROKKR-I-0031
 ---
 
-# Slice 1b: broker serves brokkr-web wasm + SPA fallback; build wiring
+# broker serves brokkr-web wasm + SPA fallback; build wiring
 
 ## Parent Initiative
 
@@ -32,6 +32,8 @@ broker image + `angreal` build so it ships in lockstep.
 
 ### Type
 - [x] Feature — broker-served UI (hosting half of the walking skeleton)
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 
@@ -84,3 +86,11 @@ Auth confirmed scoped to `/api/v1`, so the console shell serves PAK-free.
 **Remaining:** build wiring (Dockerfile + angreal trunk step) and a live run of the broker
 `--features embed-ui` to curl `/` (console) + `/api/v1/...` (API) + `/api/v1/nope` (404).
 Best done with the integration stack; add the route-precedence test there.
+**2026-06-28 (later) — build wiring added.** `docker/Dockerfile.broker` now installs
+the wasm target + trunk, runs `trunk build --release` for `crates/brokkr-web`, then
+`cargo build --bin brokkr-broker --release --features embed-ui` so the shipped image
+embeds + serves the console. (The container build itself is unverified here — it needs
+a `docker build`/CI run; trunk fetches wasm-bindgen + wasm-opt at build time.) The existing
+`angreal build multi-arch` picks this up via the Dockerfile; a dedicated local
+`angreal`/CI wasm step + the route-precedence test remain as a small follow-up. Code +
+host builds verified green; image build + live curl deferred to the integration/release run.

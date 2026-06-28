@@ -1,7 +1,7 @@
 ---
 id: slice-2-overview-view-six-widgets
 level: task
-title: "Slice 2: Overview view — six widgets + three swappable layouts"
+title: "Overview view — six widgets + three swappable layouts"
 short_code: "BROKKR-T-0257"
 created_at: 2026-06-28T01:44:26.734560+00:00
 updated_at: 2026-06-28T01:44:26.734560+00:00
@@ -18,7 +18,7 @@ exit_criteria_met: false
 initiative_id: BROKKR-I-0031
 ---
 
-# Slice 2: Overview view
+# Overview view
 
 ## Parent Initiative
 

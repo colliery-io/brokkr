@@ -1,7 +1,7 @@
 ---
 id: slice-7-broker-health-view
 level: task
-title: "Slice 7: Broker health view — Prometheus metric cards + internal WS connections"
+title: "Broker health view — Prometheus metric cards + internal WS connections"
 short_code: "BROKKR-T-0262"
 created_at: 2026-06-28T01:44:27.035882+00:00
 updated_at: 2026-06-28T01:44:27.035882+00:00
@@ -18,7 +18,7 @@ exit_criteria_met: false
 initiative_id: BROKKR-I-0031
 ---
 
-# Slice 7: Broker health view
+# Broker health view
 
 ## Parent Initiative
 

@@ -1,6 +1,9 @@
-//! Brokkr Operator Console — Leptos CSR entrypoint (BROKKR-I-0031, slice 1a).
+//! Brokkr Operator Console — Leptos CSR entrypoint (BROKKR-I-0031).
 
+mod api;
 mod app;
+mod models;
+mod views;
 
 fn main() {
     leptos::mount::mount_to_body(app::App);

@@ -1,7 +1,7 @@
 ---
 id: slice-5-telemetry-view-kube-events
 level: task
-title: "Slice 5: Telemetry view — kube events + pod logs (REST-poll, 6h retention)"
+title: "Telemetry view — kube events + pod logs (REST-poll, 6h retention)"
 short_code: "BROKKR-T-0260"
 created_at: 2026-06-28T01:44:26.917487+00:00
 updated_at: 2026-06-28T01:44:26.917487+00:00
@@ -18,7 +18,7 @@ exit_criteria_met: false
 initiative_id: BROKKR-I-0031
 ---
 
-# Slice 5: Telemetry view
+# Telemetry view
 
 ## Parent Initiative
 

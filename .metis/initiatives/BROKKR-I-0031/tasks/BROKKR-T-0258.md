@@ -1,7 +1,7 @@
 ---
 id: slice-3-agent-detail-slide-over
 level: task
-title: "Slice 3: Agent detail slide-over + run-diagnostic action (the v1 write)"
+title: "Agent detail slide-over + run-diagnostic action (the v1 write)"
 short_code: "BROKKR-T-0258"
 created_at: 2026-06-28T01:44:26.794739+00:00
 updated_at: 2026-06-28T01:44:26.794739+00:00
@@ -18,7 +18,7 @@ exit_criteria_met: false
 initiative_id: BROKKR-I-0031
 ---
 
-# Slice 3: Agent detail slide-over + run-diagnostic
+# Agent detail slide-over + run-diagnostic
 
 ## Parent Initiative
 

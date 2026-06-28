@@ -1,7 +1,7 @@
 ---
 id: foundation-aurora-primitive
 level: task
-title: "Foundation: map Brokkr Monitor design to aurora-leptos + build app-local gap components (slide-over, sparkline, segmented health bars)"
+title: "map Brokkr Monitor design to aurora-leptos + build app-local gap components (slide-over, sparkline, segmented health bars)"
 short_code: "BROKKR-T-0255"
 created_at: 2026-06-28T01:44:26.547382+00:00
 updated_at: 2026-06-28T01:44:26.547382+00:00
@@ -18,7 +18,7 @@ exit_criteria_met: false
 initiative_id: BROKKR-I-0031
 ---
 
-# Foundation: design→aurora-leptos mapping + app-local gap components
+# design→aurora-leptos mapping + app-local gap components
 
 ## Parent Initiative
 

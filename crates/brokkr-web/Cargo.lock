@@ -122,8 +122,13 @@ name = "brokkr-web"
 version = "0.1.0"
 dependencies = [
  "aurora-leptos",
+ "gloo-net",
  "js-sys",
  "leptos",
+ "serde",
+ "serde_json",
+ "wasm-bindgen-futures",
+ "web-sys",
 ]
 
 [[package]]

@@ -15,3 +15,9 @@ aurora-leptos = { git = "https://github.com/colliery-io/aurora-dark", rev = "b32
 leptos = { version = "0.8", features = ["csr"] }
 # Wall-clock for the header clock (Date.now / getHours…).
 js-sys = "0.3"
+# Data layer: same-origin REST fetch + WebSocket to the broker.
+gloo-net = { version = "0.6", features = ["http", "websocket"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+wasm-bindgen-futures = "0.4"
+web-sys = { version = "0.3", features = ["Storage", "Window"] }

@@ -7,11 +7,20 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     pkg-config \
     libpq-dev \
+    curl \
     && rm -rf /var/lib/apt/lists/*
+
+# Operator console (BROKKR-I-0031): build the brokkr-web Leptos/WASM bundle with
+# trunk so the broker can embed + serve it via `--features embed-ui`. brokkr-web is
+# excluded from the workspace, so this is a standalone build; trunk fetches the
+# matching wasm-bindgen + wasm-opt itself.
+RUN rustup target add wasm32-unknown-unknown \
+    && cargo install --locked trunk
 
 # Copy source code and build
 COPY . .
-RUN cargo build --bin brokkr-broker --release
+RUN cd crates/brokkr-web && trunk build --release
+RUN cargo build --bin brokkr-broker --release --features embed-ui
 
 # Stage 2: Create the final image
 FROM debian:bookworm-slim

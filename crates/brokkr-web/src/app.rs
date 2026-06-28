@@ -181,16 +181,18 @@ fn Main(
                 }
             }}
             <div style="margin-top:16px;">
-                <Panel title="Walking skeleton">
-                    {move || {
-                        let (title, _) = meta(route.get());
+                {move || match route.get() {
+                    "fleet" => view! { <crate::views::fleet::FleetView /> }.into_any(),
+                    other => {
+                        let (title, _) = meta(other);
                         view! {
-                            <Text dimmed=true>
-                                {format!("{title} — live data lands in a later slice.")}
-                            </Text>
+                            <Panel title="Coming soon">
+                                <Text dimmed=true>{format!("{title} — not yet implemented.")}</Text>
+                            </Panel>
                         }
-                    }}
-                </Panel>
+                        .into_any()
+                    }
+                }}
             </div>
         </div>
     }

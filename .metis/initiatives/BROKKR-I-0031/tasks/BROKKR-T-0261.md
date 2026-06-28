@@ -1,7 +1,7 @@
 ---
 id: slice-6-work-orders-view-active
 level: task
-title: "Slice 6: Work orders view — active (live progress) + history"
+title: "Work orders view — active (live progress) + history"
 short_code: "BROKKR-T-0261"
 created_at: 2026-06-28T01:44:26.976822+00:00
 updated_at: 2026-06-28T01:44:26.976822+00:00
@@ -18,7 +18,7 @@ exit_criteria_met: false
 initiative_id: BROKKR-I-0031
 ---
 
-# Slice 6: Work orders view
+# Work orders view
 
 ## Parent Initiative
 

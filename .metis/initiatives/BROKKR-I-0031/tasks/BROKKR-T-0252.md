@@ -1,7 +1,7 @@
 ---
 id: slice-1a-scaffold-crates-brokkr
 level: task
-title: "Slice 1a: scaffold crates/brokkr-web (Leptos + Trunk) + aurora-leptos dependency + app shell"
+title: "scaffold crates/brokkr-web (Leptos + Trunk) + aurora-leptos dependency + app shell"
 short_code: "BROKKR-T-0252"
 created_at: 2026-06-28T01:32:27.588822+00:00
 updated_at: 2026-06-28T23:25:19.798239+00:00
@@ -18,7 +18,7 @@ exit_criteria_met: false
 initiative_id: BROKKR-I-0031
 ---
 
-# Slice 1a: scaffold crates/brokkr-web + aurora-leptos + app shell
+# scaffold crates/brokkr-web + aurora-leptos + app shell
 
 ## Parent Initiative
 

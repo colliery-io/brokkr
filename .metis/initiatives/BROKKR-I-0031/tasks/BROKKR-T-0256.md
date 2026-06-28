@@ -1,7 +1,7 @@
 ---
 id: cross-cutting-live-paused-engine
 level: task
-title: "Cross-cutting: Live/Paused engine, toast system, prefers-reduced-motion"
+title: "Live/Paused engine, toast system, prefers-reduced-motion"
 short_code: "BROKKR-T-0256"
 created_at: 2026-06-28T01:44:26.674406+00:00
 updated_at: 2026-06-28T01:44:26.674406+00:00
@@ -18,7 +18,7 @@ exit_criteria_met: false
 initiative_id: BROKKR-I-0031
 ---
 
-# Cross-cutting: Live/Paused engine, toasts, reduced-motion
+# Live/Paused engine, toasts, reduced-motion
 
 ## Parent Initiative
 

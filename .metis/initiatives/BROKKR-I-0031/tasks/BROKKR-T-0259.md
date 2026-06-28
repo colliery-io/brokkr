@@ -1,7 +1,7 @@
 ---
 id: slice-4-deployments-view-per-stack
 level: task
-title: "Slice 4: Deployments view — per-stack deployment-object health"
+title: "Deployments view — per-stack deployment-object health"
 short_code: "BROKKR-T-0259"
 created_at: 2026-06-28T01:44:26.854707+00:00
 updated_at: 2026-06-28T01:44:26.854707+00:00
@@ -18,7 +18,7 @@ exit_criteria_met: false
 initiative_id: BROKKR-I-0031
 ---
 
-# Slice 4: Deployments view
+# Deployments view
 
 ## Parent Initiative
 
