@@ -1,0 +1,17 @@
+# Brokkr Operator Console — Leptos CSR / WASM (BROKKR-I-0031).
+# Excluded from the root workspace (see ../../Cargo.toml): built by `trunk`,
+# served by the broker. Has its own Cargo.lock.
+[package]
+name = "brokkr-web"
+version = "0.1.0"
+edition = "2021"
+license = "Elastic-2.0"
+description = "Brokkr Operator Console — a read-mostly Leptos/WASM monitoring console served by the broker."
+
+[dependencies]
+# Aurora Dark design system (components + tokens + CSS), pinned. ADR BROKKR-A-0010.
+aurora-leptos = { git = "https://github.com/colliery-io/aurora-dark", rev = "b32747dfd69a8c0f65f73a3c9841822fe8af79be" }
+# Renderer selected here (csr); this also enables csr for aurora-leptos.
+leptos = { version = "0.8", features = ["csr"] }
+# Wall-clock for the header clock (Date.now / getHours…).
+js-sys = "0.3"

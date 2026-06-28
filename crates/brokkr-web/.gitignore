@@ -1,0 +1,4 @@
+# Trunk wasm build output + this crate's own target (it's excluded from the
+# root workspace, so it builds here). Cargo.lock IS committed (app crate).
+/dist
+/target

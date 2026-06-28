@@ -1,5 +1,10 @@
 [workspace]
 members = [ "crates/*"]
+# brokkr-web is a Leptos CSR crate targeting wasm32-unknown-unknown, built by
+# `trunk` (not cargo) and served by the broker (BROKKR-I-0031). Excluding it keeps
+# the host toolchain from pulling leptos/wasm into every `cargo build` /
+# `angreal tests` run; mirrors Skadi's skadi-web. See ADR BROKKR-A-0010.
+exclude = ["crates/brokkr-web"]
 resolver = "2"
 
 [workspace.package]
