@@ -2,6 +2,7 @@
 
 mod api;
 mod app;
+mod components;
 mod models;
 mod views;
 

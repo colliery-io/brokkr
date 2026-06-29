@@ -59,12 +59,14 @@ pub fn App() -> impl IntoView {
         move || clock.set(now_hms()),
         std::time::Duration::from_secs(1),
     );
+    crate::components::provide_toasts();
 
     view! {
         <AuroraStyles/>
         <AppShell navbar=Box::new(move || view! { <Sidebar route=route /> }.into_any())>
             <Main route=route live=live clock=clock />
         </AppShell>
+        <crate::components::Toaster/>
     }
 }
 
@@ -182,6 +184,7 @@ fn Main(
             }}
             <div style="margin-top:16px;">
                 {move || match route.get() {
+                    "overview" => view! { <crate::views::overview::OverviewView /> }.into_any(),
                     "fleet" => view! { <crate::views::fleet::FleetView /> }.into_any(),
                     "system" => view! { <crate::views::health::BrokerHealthView /> }.into_any(),
                     "jobs" => view! { <crate::views::work_orders::WorkOrdersView /> }.into_any(),

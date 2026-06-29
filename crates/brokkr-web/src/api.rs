@@ -7,6 +7,7 @@
 use crate::models::{ErrorBody, FleetAgentRecord};
 use aurora_leptos::tokens::ApiError;
 use gloo_net::http::Request;
+use serde::Serialize;
 use serde::de::DeserializeOwned;
 
 /// Operator-pasted PAK, if any (interim auth — see module docs).
@@ -114,4 +115,31 @@ pub async fn stacks() -> Result<Vec<crate::models::Stack>, ApiError> {
 /// `GET /api/v1/agent-events`.
 pub async fn agent_events() -> Result<Vec<crate::models::AgentEventDto>, ApiError> {
     get("/agent-events").await
+}
+
+/// POST `/api/v1{path}` with a JSON body; discards the response on success.
+pub async fn post<B: Serialize>(path: &str, body: &B) -> Result<(), ApiError> {
+    let url = format!("/api/v1{path}");
+    let mut req = Request::post(&url);
+    if let Some(p) = pak() {
+        req = req.header("Authorization", &format!("Bearer {p}"));
+    }
+    let resp = req
+        .json(body)
+        .map_err(|_| ApiError::Network)?
+        .send()
+        .await
+        .map_err(|_| ApiError::Network)?;
+    let status = resp.status();
+    if !(200..300).contains(&status) {
+        let message = resp.text().await.unwrap_or_default();
+        let code = serde_json::from_str::<ErrorBody>(&message).ok().map(|b| b.code);
+        return Err(ApiError::Http { status, message, code });
+    }
+    Ok(())
+}
+
+/// `POST /api/v1/diagnostics` — request a diagnostic for an agent (the v1 write).
+pub async fn create_diagnostic(agent_id: &str) -> Result<(), ApiError> {
+    post("/diagnostics", &serde_json::json!({ "agent_id": agent_id })).await
 }

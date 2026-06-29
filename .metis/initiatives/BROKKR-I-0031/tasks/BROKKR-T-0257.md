@@ -56,3 +56,9 @@ layouts (command / grid / stream), per the handoff §Overview.
 ## Status Updates
 
 *To be added during implementation*
+
+**2026-06-28 — implemented + pixel-verified.** `src/views/overview.rs`: KPI row, Fleet health
+(SegmentedHealthBar), Broker throughput (Sparkline over an accumulating http-requests ring),
+and Live activity (agent-events). Composes fleet + /metrics + /agent-events. Partial vs handoff:
+the 3 layout variants → single "command" layout; per-cluster fleet panel → overall fleet health
+(fleet record lacks cluster_name). Rendered correct via the harness.

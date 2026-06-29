@@ -43,10 +43,17 @@ brokkr_deployment_objects_total 47
 `;
 
 // scene = { name, nav?: sidebar label to click, mocks: { "/path": json } }
+const EVENTS = [
+  { agent_id: "a1", event_type: "Apply", status: "success", message: "applied Deployment/payments (3 objects)" },
+  { agent_id: "a1", event_type: "Heartbeat", status: "success", message: "k8s reachable (12ms)" },
+  { agent_id: "a2", event_type: "Reconcile", status: "failure", message: "Service/ingest: port 8080 already allocated" },
+];
+
 const SCENES = [
-  { name: "overview", mocks: {} },
+  { name: "overview", mocks: { "/fleet": FLEET, "/agent-events": EVENTS } },
   { name: "fleet", nav: "Fleet", mocks: { "/fleet": FLEET } },
   { name: "fleet-empty", nav: "Fleet", mocks: { "/fleet": [] } },
+  { name: "fleet-slideover", nav: "Fleet", click: "prod-agent-01", mocks: { "/fleet": FLEET } },
   { name: "health", nav: "Broker health", mocks: { "/admin/ws/connections": WSCONN } },
   { name: "jobs", nav: "Work orders", mocks: { "/work-order-log": [
     { id: "7f3a01ab", work_type: "image_build", success: true, retries_attempted: 0, result_message: "pushed ghcr.io/app:sha-7f3a01" },
@@ -109,7 +116,12 @@ for (const s of SCENES) {
   if (s.nav) {
     await page.getByText(s.nav, { exact: true }).first().click().catch(() => {});
   }
-  await page.waitForTimeout(1200);
+  await page.waitForTimeout(800);
+  if (s.click) {
+    await page.getByText(s.click, { exact: true }).first().click().catch(() => {});
+    await page.waitForTimeout(500);
+  }
+  await page.waitForTimeout(700);
   await page.screenshot({ path: `${OUT}/${s.name}.png`, fullPage: true });
   console.log(`shot: ${s.name}`);
 }

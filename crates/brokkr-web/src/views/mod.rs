@@ -3,6 +3,7 @@
 
 pub mod deployments;
 pub mod fleet;
+pub mod overview;
 pub mod health;
 pub mod telemetry;
 pub mod webhooks;

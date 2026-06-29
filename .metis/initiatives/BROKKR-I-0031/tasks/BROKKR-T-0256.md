@@ -59,3 +59,10 @@ system, and global `prefers-reduced-motion` handling.
 ## Status Updates
 
 *To be added during implementation*
+
+**2026-06-28 — implemented + verified.** Toast system in `src/components.rs` (`ToastBus`
+context, `toast`/`push_toast`, `Toaster` bottom-right stack, 3.4s auto-dismiss) — wired at the
+App root and fired by the run-diagnostic action (request/queued/failed). The Live/Paused toggle
+exists in the header; per-view 5s polling is in place. Partial: gating the polls on Live/Paused
+and `prefers-reduced-motion` on the slide-over transition are small follow-ups (no other app-local
+animations exist yet).

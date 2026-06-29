@@ -68,3 +68,9 @@ components the pack lacks** — the shared building blocks the views then compos
 ## Status Updates
 
 *To be added during implementation*
+
+**2026-06-28 — implemented + pixel-verified.** `src/components.rs`: `Sparkline` (SVG area
+via inner_html) + `SegmentedHealthBar` (proportional ok/gold/bad/offline) — both verified in
+the Overview; `SlideOver` (right-anchored panel + scrim) — verified in the Fleet agent detail.
+The design→aurora-leptos mapping is realized across the views (Panel/PageHeader/StatusBadge/
+Pill/Dot/Loading/Empty/ErrorState/SegmentedControl from the pack; these three app-local).
