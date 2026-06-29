@@ -284,27 +284,29 @@ fn test_release_expired() {
     // Sleep briefly to ensure TTL expires
     std::thread::sleep(std::time::Duration::from_millis(100));
 
-    // Release expired
-    let released = fixture
+    // Release expired claims. NOTE: release_expired() sweeps the GLOBAL expired
+    // set, so the returned *count* is not deterministic on a shared DB — an external
+    // delivery worker (or another queue test) can release our row first, making this
+    // call return 0 even though the sweep works. Asserting `released >= 1` on that
+    // count is what flaked in CI. The race-free invariant is checked below: OUR
+    // delivery — observed "acquired" above — must be transitioned back to "pending".
+    fixture
         .dal
         .webhook_deliveries()
         .release_expired()
         .expect("Failed to release expired");
 
-    // At least our delivery should be released (may be more from other tests)
-    assert!(
-        released >= 1,
-        "At least 1 expired delivery should be released"
-    );
-
-    // Verify OUR delivery's status is back to pending
+    // Verify OUR delivery's status is back to pending (released from its expired claim).
     let delivery = fixture
         .dal
         .webhook_deliveries()
         .get(created_id)
         .unwrap()
         .unwrap();
-    assert_eq!(delivery.status, "pending");
+    assert_eq!(
+        delivery.status, "pending",
+        "our expired-claim delivery should be released back to pending"
+    );
     assert!(delivery.acquired_by.is_none());
     assert!(delivery.acquired_until.is_none());
 }
