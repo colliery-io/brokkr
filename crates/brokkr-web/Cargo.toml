@@ -3,7 +3,7 @@
 # served by the broker. Has its own Cargo.lock.
 [package]
 name = "brokkr-web"
-version = "0.1.0"
+version = "0.8.3"
 edition = "2021"
 license = "Elastic-2.0"
 description = "Brokkr Operator Console — a read-mostly Leptos/WASM monitoring console served by the broker."
