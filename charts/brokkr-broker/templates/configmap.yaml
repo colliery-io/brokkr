@@ -54,12 +54,15 @@ data:
   BROKKR__BROKER__WEBHOOK_DELIVERY_INTERVAL_SECONDS: {{ .Values.broker.webhookDeliveryIntervalSeconds | default 5 | quote }}
   BROKKR__BROKER__WEBHOOK_DELIVERY_BATCH_SIZE: {{ .Values.broker.webhookDeliveryBatchSize | default 50 | quote }}
   BROKKR__BROKER__WEBHOOK_CLEANUP_RETENTION_DAYS: {{ .Values.broker.webhookCleanupRetentionDays | default 7 | quote }}
-  {{- if .Values.broker.webhookEncryptionKey }}
+  {{- if and .Values.broker.webhookEncryptionKey (not .Values.broker.webhookEncryptionKeyExistingSecret) }}
   # Webhook encryption key (static - requires restart)
+  # When webhookEncryptionKeyExistingSecret is set, the key is injected via
+  # secretKeyRef in the deployment instead and omitted here.
   BROKKR__BROKER__WEBHOOK_ENCRYPTION_KEY: {{ .Values.broker.webhookEncryptionKey | quote }}
   {{- end }}
-  {{- if .Values.broker.pakHash }}
+  {{- if and .Values.broker.pakHash (not .Values.broker.pakHashExistingSecret) }}
   # Admin PAK hash (static - requires restart)
+  # When pakHashExistingSecret is set, injected via secretKeyRef instead.
   BROKKR__BROKER__PAK_HASH: {{ .Values.broker.pakHash | quote }}
   {{- end }}
   {{- end }}

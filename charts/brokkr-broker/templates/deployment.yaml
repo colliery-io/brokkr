@@ -63,6 +63,23 @@ spec:
               name: {{ .Values.postgresql.existingSecret }}
               key: {{ .Values.postgresql.existingSecretKey | default "database-url" }}
         {{- end }}
+        {{- if .Values.broker.webhookEncryptionKeyExistingSecret }}
+        # Source the webhook encryption key from a pre-existing Secret (GitOps-friendly).
+        # An explicit env entry overrides the ConfigMap value from envFrom.
+        - name: BROKKR__BROKER__WEBHOOK_ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.broker.webhookEncryptionKeyExistingSecret }}
+              key: {{ .Values.broker.webhookEncryptionKeyExistingSecretKey | default "BROKKR__BROKER__WEBHOOK_ENCRYPTION_KEY" }}
+        {{- end }}
+        {{- if .Values.broker.pakHashExistingSecret }}
+        # Source the admin PAK hash from a pre-existing Secret (GitOps-friendly).
+        - name: BROKKR__BROKER__PAK_HASH
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.broker.pakHashExistingSecret }}
+              key: {{ .Values.broker.pakHashExistingSecretKey | default "BROKKR__BROKER__PAK_HASH" }}
+        {{- end }}
         {{- with .Values.extraEnv }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
