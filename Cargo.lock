@@ -375,7 +375,7 @@ dependencies = [
 
 [[package]]
 name = "brokkr-agent"
-version = "0.8.2"
+version = "0.8.3"
 dependencies = [
  "aquamarine",
  "axum",
@@ -410,7 +410,7 @@ dependencies = [
 
 [[package]]
 name = "brokkr-broker"
-version = "0.8.2"
+version = "0.8.3"
 dependencies = [
  "aes-gcm",
  "axum",
@@ -428,6 +428,7 @@ dependencies = [
  "jsonschema",
  "k8s-openapi",
  "kube",
+ "mime_guess",
  "moka",
  "notify",
  "once_cell",
@@ -440,6 +441,7 @@ dependencies = [
  "rand",
  "rand_core",
  "reqwest 0.11.27",
+ "rust-embed",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -460,7 +462,7 @@ dependencies = [
 
 [[package]]
 name = "brokkr-cli"
-version = "0.8.2"
+version = "0.8.3"
 dependencies = [
  "brokkr-client",
  "clap",
@@ -474,7 +476,7 @@ dependencies = [
 
 [[package]]
 name = "brokkr-client"
-version = "0.8.2"
+version = "0.8.3"
 dependencies = [
  "bytes",
  "chrono",
@@ -493,7 +495,7 @@ dependencies = [
 
 [[package]]
 name = "brokkr-models"
-version = "0.8.2"
+version = "0.8.3"
 dependencies = [
  "brokkr-utils",
  "chrono",
@@ -512,7 +514,7 @@ dependencies = [
 
 [[package]]
 name = "brokkr-utils"
-version = "0.8.2"
+version = "0.8.3"
 dependencies = [
  "chrono",
  "config",
@@ -534,7 +536,7 @@ dependencies = [
 
 [[package]]
 name = "brokkr-wire"
-version = "0.8.2"
+version = "0.8.3"
 dependencies = [
  "brokkr-models",
  "chrono",

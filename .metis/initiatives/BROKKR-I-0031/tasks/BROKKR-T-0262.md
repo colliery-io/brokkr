@@ -1,0 +1,68 @@
+---
+id: broker-health-view-prometheus
+level: task
+title: "Broker health view — Prometheus metric cards + internal WS connections"
+short_code: "BROKKR-T-0262"
+created_at: 2026-06-28T01:44:27.035882+00:00
+updated_at: 2026-06-29T00:08:33.577940+00:00
+parent: brokkr-operator-console
+blocked_by: []
+archived: false
+
+tags:
+  - "#task"
+  - "#phase/completed"
+
+
+exit_criteria_met: false
+initiative_id: BROKKR-I-0031
+---
+
+# Broker health view
+
+## Parent Initiative
+
+[[BROKKR-I-0031]] · decision [[BROKKR-A-0010]]
+
+## Objective
+
+Broker health view: Prometheus metric cards + internal WS connections panel, per the handoff §Broker health.
+
+### Type
+- [x] Feature — view slice
+
+## Acceptance Criteria
+
+## Acceptance Criteria
+
+## Acceptance Criteria
+
+- [ ] Metric cards (auto-fit): Active agents, WS connected (teal), Http req/min (ice), DB queries/min
+      (violet), Stacks, Deploy objects — each with the Prometheus metric name as mono sub
+      (`brokkr_active_agents`, `brokkr_ws_connected_agents`, `brokkr_http_requests_total`,
+      `brokkr_database_queries_total`, `brokkr_stacks_total`, `brokkr_deployment_objects_total`).
+- [ ] Bound to the broker **`/metrics`** endpoint (Prometheus text), parsed + polled on the live interval.
+- [ ] **Internal WS connections** panel: rows — pulsing teal dot, mono agent name, mono cluster,
+      mono `N msg/s`, mono "up {uptime}" — from `GET /api/v1/admin/ws/connections`.
+- [ ] Loading/Empty/Error states.
+
+## Dependencies
+
+- Depends on [[BROKKR-T-0255]], [[BROKKR-T-0256]], slice 1.
+
+## Implementation Notes
+
+- Reference: handoff §6 Broker health; broker `metrics.rs` (`/metrics`) + `admin/ws/connections`.
+- Parsing Prometheus text in-wasm: a small parser for the named counters/gauges (don't pull a heavy dep).
+
+## Status Updates
+
+*To be added during implementation*
+**2026-06-28 — implemented + pixel-verified.** `src/views/health.rs`: 6 Prometheus metric
+cards (active agents, ws connected [teal], http requests [ice], live subscribers [violet],
+stacks, deploy objects) each with the metric name as mono sub; internal WS connections panel
+(teal dot + agent id + msg in/out). Data layer: `api::metrics_text()` (top-level `/metrics`
+text), `api::metric_sum()` (sums labeled samples — verified 1840+95=1935 for http_requests),
+`api::ws_connections()` + `WsConnectionsResponse` model. `trunk build` green; rendered correct
+via the web-e2e harness (mocked /metrics + /admin/ws/connections). NOTE: dropped the handoff's
+"DB queries/min" card — no `brokkr_database_queries_total` metric exists (used the metrics that do).

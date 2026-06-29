@@ -121,6 +121,7 @@
     "body": {
       "agent_id": "11111111-1111-1111-1111-111111111111",
       "name": "demo-agent",
+      "cluster_name": "demo-cluster",
       "status": "ACTIVE",
       "ws_connected": true,
       "connected_since": "2026-01-01T00:00:00Z",

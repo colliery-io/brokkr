@@ -1,0 +1,994 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/aurora-dark-design-system-a8591a48-9174-4266-8b9c-f4e26d291f0c/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/aurora-dark-design-system-a8591a48-9174-4266-8b9c-f4e26d291f0c/tokens/colors.css">
+<link rel="stylesheet" href="_ds/aurora-dark-design-system-a8591a48-9174-4266-8b9c-f4e26d291f0c/tokens/typography.css">
+<link rel="stylesheet" href="_ds/aurora-dark-design-system-a8591a48-9174-4266-8b9c-f4e26d291f0c/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/aurora-dark-design-system-a8591a48-9174-4266-8b9c-f4e26d291f0c/tokens/base.css">
+<script src="_ds/aurora-dark-design-system-a8591a48-9174-4266-8b9c-f4e26d291f0c/_ds_bundle.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; background: var(--bg); }
+  @keyframes brk-pulse { 0%,100% { opacity: 1 } 50% { opacity: .38 } }
+  @keyframes brk-sweep { 0% { transform: translateX(-100%) } 100% { transform: translateX(320%) } }
+  .brk-scroll::-webkit-scrollbar { width: 9px; height: 9px; }
+  .brk-scroll::-webkit-scrollbar-thumb { background: #283039; border-radius: 6px; }
+  .brk-scroll::-webkit-scrollbar-track { background: transparent; }
+  .brk-nav:hover { background: rgba(127,178,255,.08) !important; }
+  .brk-row:hover { background: var(--panel-2) !important; }
+</style>
+</helmet>
+<div style="display:flex;height:100vh;overflow:hidden;background:var(--bg);font-family:var(--font-sans);color:var(--fg)">
+
+  <!-- ===================== SIDEBAR ===================== -->
+  <aside style="width:236px;flex:none;background:var(--sidebar);border-right:1px solid var(--border-soft);display:flex;flex-direction:column">
+    <div style="padding:18px 16px 14px;border-bottom:1px solid var(--border-fainter)">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="width:26px;height:26px;border-radius:7px;background:{{ accentHex }};display:flex;align-items:center;justify-content:center;flex:none">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0b0d10" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3l8 8-3 3-8-8z"></path><path d="M11 5L3 13l5 5 8-8"></path></svg>
+        </span>
+        <div style="display:flex;flex-direction:column;line-height:1.1">
+          <span style="font-size:16px;font-weight:600;color:var(--fg-bright);letter-spacing:-.01em">Brokkr</span>
+          <span style="font-family:var(--font-mono);font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--faint);margin-top:2px">control plane</span>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:7px;margin-top:13px;font-family:var(--font-mono);font-size:10.5px;color:var(--muted)">
+        <span style="width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 3px color-mix(in srgb,var(--ok) 16%,transparent);animation:brk-pulse 1.6s ease-in-out infinite;flex:none"></span>
+        broker ready · v0.5.0
+      </div>
+    </div>
+
+    <nav class="brk-scroll" style="flex:1;overflow-y:auto;padding:10px 8px">
+      <sc-for list="{{ navGroups }}" as="g" hint-placeholder-count="3">
+        <div style="font-family:var(--font-mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--fainter);padding:12px 10px 6px">{{ g.label }}</div>
+        <sc-for list="{{ g.items }}" as="it" hint-placeholder-count="3">
+          <a class="brk-nav" href="#" onClick="{{ it.go }}" style="{{ it.style }}">
+            <span style="{{ it.markerStyle }}"></span>
+            <span style="flex:1">{{ it.label }}</span>
+            <sc-if value="{{ it.badge }}" hint-placeholder-val="{{ false }}"><span style="font-family:var(--font-mono);font-size:10px;color:var(--faint)">{{ it.badge }}</span></sc-if>
+          </a>
+        </sc-for>
+      </sc-for>
+    </nav>
+
+    <div style="padding:11px 16px;border-top:1px solid var(--border-fainter);display:flex;justify-content:space-between;align-items:center;font-family:var(--font-mono);font-size:10px;color:var(--faint)">
+      <span>tenant · public</span>
+      <span style="color:var(--fainter)">wasm · {{ buildLabel }}</span>
+    </div>
+  </aside>
+
+  <!-- ===================== MAIN ===================== -->
+  <main class="brk-scroll" style="flex:1;min-width:0;overflow-y:auto;padding:20px 26px 40px">
+    <div style="display:flex;flex-direction:column;gap:16px;max-width:1500px;margin:0 auto">
+
+      <!-- Header -->
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px">
+        <div>
+          <div style="font-size:22px;font-weight:600;color:var(--fg-bright);letter-spacing:-.01em">{{ title }}</div>
+          <div style="font-family:var(--font-mono);font-size:11px;color:var(--faint);margin-top:3px">{{ sub }}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;flex:none">
+          <sc-if value="{{ isOverview }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;background:var(--control);border:1px solid var(--border);border-radius:9px;padding:2px">
+              <sc-for list="{{ layoutBtns }}" as="b" hint-placeholder-count="3">
+                <button onClick="{{ b.go }}" style="{{ b.style }}">{{ b.label }}</button>
+              </sc-for>
+            </div>
+          </sc-if>
+          <button onClick="{{ toggleLive }}" style="{{ liveBtnStyle }}">
+            <span style="{{ liveDotStyle }}"></span>{{ liveLabel }}
+          </button>
+          <div style="font-family:var(--font-mono);font-size:11px;color:var(--faint);min-width:62px;text-align:right">{{ clock }}</div>
+        </div>
+      </div>
+
+      <!-- ===================== OVERVIEW ===================== -->
+      <sc-if value="{{ isOverview }}" hint-placeholder-val="{{ true }}">
+      <div style="{{ ov.grid }}">
+
+        <!-- KPIs -->
+        <div style="{{ ov.kpis }}">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:11px">
+            <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="6">
+              <div style="background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:13px 15px">
+                <div style="display:flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)">
+                  <span style="{{ k.dotStyle }}"></span>{{ k.label }}
+                </div>
+                <div class="cl-tnum" style="font-size:29px;font-weight:600;line-height:1;margin:8px 0 3px;color:{{ k.color }}">{{ k.value }}</div>
+                <div style="font-family:var(--font-mono);font-size:10px;color:var(--faint)">{{ k.unit }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <!-- Fleet by cluster -->
+        <div style="{{ ov.fleet }}">
+          <div style="background:var(--panel);border:1px solid var(--border);border-radius:11px;padding:15px 17px;height:100%;display:flex;flex-direction:column">
+            <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border-soft);padding-bottom:10px;margin-bottom:12px">
+              <span style="font-size:13px;font-weight:600;color:var(--fg)">Fleet by cluster</span>
+              <span style="font-family:var(--font-mono);font-size:10.5px;color:var(--faint)">{{ fleetCaption }}</span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:13px;flex:1">
+              <sc-for list="{{ fleetClusters }}" as="c" hint-placeholder-count="4">
+                <div>
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                    <div style="display:flex;align-items:center;gap:8px">
+                      <span style="width:8px;height:8px;border-radius:2px;background:{{ c.envColor }};flex:none"></span>
+                      <span style="font-family:var(--font-mono);font-size:11.5px;color:var(--fg-2)">{{ c.name }}</span>
+                    </div>
+                    <span class="cl-tnum" style="font-family:var(--font-mono);font-size:10.5px;color:var(--faint)">{{ c.summary }}</span>
+                  </div>
+                  <div style="display:flex;height:7px;border-radius:4px;overflow:hidden;background:var(--inset)">
+                    <div style="width:{{ c.healthyPct }};background:var(--ok)"></div>
+                    <div style="width:{{ c.degradedPct }};background:var(--gold)"></div>
+                    <div style="width:{{ c.failingPct }};background:var(--bad)"></div>
+                    <div style="width:{{ c.offlinePct }};background:var(--border-control)"></div>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+
+        <!-- Deployment health -->
+        <div style="{{ ov.deploy }}">
+          <div style="background:var(--panel);border:1px solid var(--border);border-radius:11px;padding:15px 17px;height:100%;display:flex;flex-direction:column">
+            <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border-soft);padding-bottom:10px;margin-bottom:13px">
+              <span style="font-size:13px;font-weight:600;color:var(--fg)">Deployment health</span>
+              <span style="font-family:var(--font-mono);font-size:10.5px;color:var(--faint)">{{ deployRollup.total }} objects</span>
+            </div>
+            <div style="display:flex;gap:18px;margin-bottom:14px">
+              <div><div class="cl-tnum" style="font-size:26px;font-weight:600;color:var(--ok);line-height:1">{{ deployRollup.healthy }}</div><div style="font-family:var(--font-mono);font-size:10px;color:var(--faint);margin-top:3px">healthy</div></div>
+              <div><div class="cl-tnum" style="font-size:26px;font-weight:600;color:var(--gold);line-height:1">{{ deployRollup.degraded }}</div><div style="font-family:var(--font-mono);font-size:10px;color:var(--faint);margin-top:3px">degraded</div></div>
+              <div><div class="cl-tnum" style="font-size:26px;font-weight:600;color:var(--bad);line-height:1">{{ deployRollup.failing }}</div><div style="font-family:var(--font-mono);font-size:10px;color:var(--faint);margin-top:3px">failing</div></div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:7px;flex:1">
+              <sc-for list="{{ deployRollup.stacks }}" as="s" hint-placeholder-count="4">
+                <div style="display:flex;align-items:center;gap:9px">
+                  <span style="width:7px;height:7px;border-radius:50%;background:{{ s.color }};flex:none"></span>
+                  <span style="font-family:var(--font-mono);font-size:11.5px;color:var(--fg-2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ s.name }}</span>
+                  <span style="font-family:var(--font-mono);font-size:10.5px;color:var(--faint)">{{ s.counts }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+
+        <!-- Throughput -->
+        <div style="{{ ov.flow }}">
+          <div style="background:var(--panel);border:1px solid var(--border);border-radius:11px;padding:15px 17px;height:100%;display:flex;flex-direction:column">
+            <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border-soft);padding-bottom:10px;margin-bottom:12px">
+              <span style="font-size:13px;font-weight:600;color:var(--fg)">Broker throughput</span>
+              <span style="font-family:var(--font-mono);font-size:10.5px;color:var(--teal)">live</span>
+            </div>
+            <div style="display:flex;gap:20px;margin-bottom:10px">
+              <div><div class="cl-tnum" style="font-size:22px;font-weight:600;color:var(--ice);line-height:1">{{ metricLive.req }}</div><div style="font-family:var(--font-mono);font-size:9.5px;color:var(--faint);margin-top:3px">http req/min</div></div>
+              <div><div class="cl-tnum" style="font-size:22px;font-weight:600;color:var(--teal);line-height:1">{{ metricLive.ws }}</div><div style="font-family:var(--font-mono);font-size:9.5px;color:var(--faint);margin-top:3px">ws msg/min</div></div>
+              <div><div class="cl-tnum" style="font-size:22px;font-weight:600;color:var(--violet);line-height:1">{{ metricLive.db }}</div><div style="font-family:var(--font-mono);font-size:9.5px;color:var(--faint);margin-top:3px">db q/min</div></div>
+            </div>
+            <div style="flex:1;min-height:46px;display:flex;align-items:flex-end">
+              <svg viewBox="0 0 240 52" preserveAspectRatio="none" style="width:100%;height:56px;display:block">
+                <polyline points="{{ sparkArea }}" fill="color-mix(in srgb,var(--ice) 12%,transparent)" stroke="none"></polyline>
+                <polyline points="{{ sparkLine }}" fill="none" stroke="var(--ice)" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"></polyline>
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <!-- Live activity stream -->
+        <div style="{{ ov.stream }}">
+          <div style="background:var(--panel);border:1px solid var(--border);border-radius:11px;padding:15px 17px;height:100%;display:flex;flex-direction:column;min-height:0">
+            <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border-soft);padding-bottom:10px;margin-bottom:6px">
+              <span style="font-size:13px;font-weight:600;color:var(--fg)">Live activity</span>
+              <span style="display:flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:10.5px;color:var(--faint)"><span style="{{ liveDotMini }}"></span>{{ streamCaption }}</span>
+            </div>
+            <div class="brk-scroll" style="flex:1;overflow-y:auto;min-height:0;margin:0 -4px">
+              <sc-for list="{{ streamEvents }}" as="e" hint-placeholder-count="9">
+                <div style="display:flex;gap:10px;padding:8px 4px;border-bottom:1px solid var(--border-fainter)">
+                  <span style="width:6px;height:6px;border-radius:50%;background:{{ e.color }};margin-top:5px;flex:none"></span>
+                  <div style="flex:1;min-width:0">
+                    <div style="display:flex;justify-content:space-between;gap:8px">
+                      <span style="font-family:var(--font-mono);font-size:11px;color:{{ e.color }}">{{ e.reason }}</span>
+                      <span style="font-family:var(--font-mono);font-size:10px;color:var(--faint);flex:none">{{ e.ago }}</span>
+                    </div>
+                    <div style="font-size:11.5px;color:var(--fg-2);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ e.message }}</div>
+                    <div style="font-family:var(--font-mono);font-size:9.5px;color:var(--faint);margin-top:2px">{{ e.ns }}</div>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+
+        <!-- Work orders -->
+        <div style="{{ ov.jobs }}">
+          <div style="background:var(--panel);border:1px solid var(--border);border-radius:11px;padding:15px 17px;height:100%;display:flex;flex-direction:column">
+            <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border-soft);padding-bottom:10px;margin-bottom:12px">
+              <span style="font-size:13px;font-weight:600;color:var(--fg)">Work orders</span>
+              <span style="font-family:var(--font-mono);font-size:10.5px;color:var(--faint)">{{ jobsCaption }}</span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px;flex:1">
+              <sc-for list="{{ jobsMini }}" as="w" hint-placeholder-count="4">
+                <div style="display:flex;align-items:center;gap:9px">
+                  <span style="font-family:var(--font-mono);font-size:11px;color:var(--fg-2);flex:none">{{ w.id }}</span>
+                  <span style="font-family:var(--font-mono);font-size:10px;color:var(--faint)">{{ w.type }}</span>
+                  <div style="flex:1;height:5px;border-radius:3px;background:var(--inset);overflow:hidden"><div style="width:{{ w.progress }};height:100%;background:{{ w.color }}"></div></div>
+                  <span style="{{ w.badgeStyle }}">{{ w.status }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+
+      </div>
+      </sc-if>
+
+      <!-- ===================== FLEET ===================== -->
+      <sc-if value="{{ isFleet }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:11px">
+          <sc-for list="{{ fleetKpis }}" as="k" hint-placeholder-count="4">
+            <div style="background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:13px 15px">
+              <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)">{{ k.label }}</div>
+              <div class="cl-tnum" style="font-size:27px;font-weight:600;line-height:1;margin:7px 0 0;color:{{ k.color }}">{{ k.value }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <sc-for list="{{ fleetView }}" as="c" hint-placeholder-count="4">
+          <div style="background:var(--panel);border:1px solid var(--border);border-radius:11px;overflow:hidden">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:13px 17px;border-bottom:1px solid var(--border-soft)">
+              <div style="display:flex;align-items:center;gap:9px">
+                <span style="width:9px;height:9px;border-radius:2px;background:{{ c.envColor }};flex:none"></span>
+                <span style="font-size:13px;font-weight:600;color:var(--fg)">{{ c.name }}</span>
+                <span style="font-family:var(--font-mono);font-size:10px;color:var(--faint)">{{ c.region }}</span>
+              </div>
+              <span style="font-family:var(--font-mono);font-size:10.5px;color:var(--faint)">{{ c.summary }}</span>
+            </div>
+            <div>
+              <sc-for list="{{ c.agents }}" as="a" hint-placeholder-count="6">
+                <div class="brk-row" onClick="{{ a.select }}" style="display:flex;align-items:center;gap:12px;padding:10px 17px;border-bottom:1px solid var(--border-fainter);cursor:pointer">
+                  <span style="width:7px;height:7px;border-radius:50%;background:{{ a.healthColor }};box-shadow:0 0 0 3px {{ a.healthGlow }};flex:none;{{ a.pulse }}"></span>
+                  <span style="font-family:var(--font-mono);font-size:12px;color:var(--fg);min-width:150px">{{ a.name }}</span>
+                  <span style="{{ a.statusBadge }}">{{ a.status }}</span>
+                  <span style="{{ a.healthBadge }}">{{ a.health }}</span>
+                  <div style="flex:1;display:flex;gap:5px;flex-wrap:wrap">
+                    <sc-for list="{{ a.labels }}" as="l" hint-placeholder-count="2"><span style="font-family:var(--font-mono);font-size:9.5px;color:var(--muted);background:var(--control);border:1px solid var(--border-soft);border-radius:5px;padding:1px 6px">{{ l }}</span></sc-for>
+                  </div>
+                  <sc-if value="{{ a.ws }}" hint-placeholder-val="{{ false }}"><span title="on internal WS channel" style="font-family:var(--font-mono);font-size:9.5px;color:var(--teal)">⇄ ws</span></sc-if>
+                  <span class="cl-tnum" style="font-family:var(--font-mono);font-size:10.5px;color:{{ a.beatColor }};min-width:52px;text-align:right">{{ a.beat }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+      </sc-if>
+
+      <!-- ===================== DEPLOYMENTS ===================== -->
+      <sc-if value="{{ isDeploy }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;flex-direction:column;gap:13px">
+        <sc-for list="{{ stacksView }}" as="s" hint-placeholder-count="5">
+          <div style="background:var(--panel);border:1px solid var(--border);border-radius:11px;overflow:hidden">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:13px 17px;border-bottom:1px solid var(--border-soft)">
+              <div style="display:flex;align-items:center;gap:10px">
+                <span style="font-size:13px;font-weight:600;color:var(--fg);font-family:var(--font-mono)">{{ s.name }}</span>
+                <span style="{{ s.healthBadge }}">{{ s.health }}</span>
+                <div style="display:flex;gap:5px">
+                  <sc-for list="{{ s.labels }}" as="l" hint-placeholder-count="2"><span style="font-family:var(--font-mono);font-size:9.5px;color:var(--muted);background:var(--control);border:1px solid var(--border-soft);border-radius:5px;padding:1px 6px">{{ l }}</span></sc-for>
+                </div>
+              </div>
+              <span style="font-family:var(--font-mono);font-size:10px;color:var(--faint)">gen · {{ s.generator }}</span>
+            </div>
+            <div>
+              <sc-for list="{{ s.objects }}" as="o" hint-placeholder-count="2">
+                <div style="display:flex;align-items:center;gap:12px;padding:10px 17px;border-bottom:1px solid var(--border-fainter)">
+                  <span style="font-family:var(--font-mono);font-size:11px;color:var(--faint);min-width:96px">{{ o.id }}</span>
+                  <span style="{{ o.actionBadge }}">{{ o.action }}</span>
+                  <span style="font-family:var(--font-mono);font-size:11.5px;color:var(--fg-2);flex:1">{{ o.kind }}</span>
+                  <div style="display:flex;align-items:center;gap:10px;font-family:var(--font-mono);font-size:11px">
+                    <span style="color:var(--ok)">{{ o.healthy }}✓</span>
+                    <span style="color:var(--gold)">{{ o.degraded }}⚠</span>
+                    <span style="color:var(--bad)">{{ o.failing }}✕</span>
+                  </div>
+                  <span style="font-family:var(--font-mono);font-size:10px;color:var(--faint);min-width:48px;text-align:right">{{ o.ago }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+      </sc-if>
+
+      <!-- ===================== TELEMETRY ===================== -->
+      <sc-if value="{{ isTele }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;flex-direction:column;gap:13px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div style="display:flex;background:var(--control);border:1px solid var(--border);border-radius:9px;padding:2px">
+            <sc-for list="{{ teleTabs }}" as="t" hint-placeholder-count="2"><button onClick="{{ t.go }}" style="{{ t.style }}">{{ t.label }}</button></sc-for>
+          </div>
+          <span style="font-family:var(--font-mono);font-size:10.5px;color:var(--gold)">⚠ 6h retention window · ship to Datadog for long-term</span>
+        </div>
+
+        <sc-if value="{{ teleIsEvents }}" hint-placeholder-val="{{ true }}">
+        <div style="background:var(--panel);border:1px solid var(--border);border-radius:11px;overflow:hidden">
+          <sc-for list="{{ telEvents }}" as="e" hint-placeholder-count="12">
+            <div style="display:flex;align-items:center;gap:12px;padding:9px 17px;border-bottom:1px solid var(--border-fainter)">
+              <span style="{{ e.sevBadge }}">{{ e.sev }}</span>
+              <span style="font-family:var(--font-mono);font-size:11px;color:{{ e.color }};min-width:130px">{{ e.reason }}</span>
+              <span style="font-size:11.5px;color:var(--fg-2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ e.message }}</span>
+              <span style="font-family:var(--font-mono);font-size:10px;color:var(--faint)">{{ e.ns }}</span>
+              <span class="cl-tnum" style="font-family:var(--font-mono);font-size:10px;color:var(--faint);min-width:44px;text-align:right">{{ e.ago }}</span>
+            </div>
+          </sc-for>
+        </div>
+        </sc-if>
+        <sc-if value="{{ teleIsLogs }}" hint-placeholder-val="{{ false }}">
+        <div style="background:var(--inset);border:1px solid var(--border);border-radius:11px;padding:14px 16px">
+          <pre class="brk-scroll" style="margin:0;max-height:62vh;overflow:auto;font-family:var(--font-mono);font-size:11.5px;line-height:1.7;color:var(--fg-2);white-space:pre-wrap;word-break:break-word">{{ telLogsText }}</pre>
+        </div>
+        </sc-if>
+      </div>
+      </sc-if>
+
+      <!-- ===================== WORK ORDERS ===================== -->
+      <sc-if value="{{ isJobs }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <div>
+          <div style="font-size:13px;font-weight:600;color:var(--fg);margin-bottom:9px">Active</div>
+          <div style="background:var(--panel);border:1px solid var(--border);border-radius:11px;overflow:hidden">
+            <sc-for list="{{ woActive }}" as="w" hint-placeholder-count="3">
+              <div style="display:flex;align-items:center;gap:13px;padding:11px 17px;border-bottom:1px solid var(--border-fainter)">
+                <span style="font-family:var(--font-mono);font-size:11.5px;color:var(--fg);min-width:118px">{{ w.id }}</span>
+                <span style="font-family:var(--font-mono);font-size:10px;color:var(--muted);background:var(--control);border-radius:5px;padding:1px 7px">{{ w.type }}</span>
+                <span style="{{ w.badge }}">{{ w.status }}</span>
+                <div style="flex:1;height:6px;border-radius:3px;background:var(--inset);overflow:hidden"><div style="width:{{ w.progress }};height:100%;background:{{ w.barColor }}"></div></div>
+                <span style="font-family:var(--font-mono);font-size:10px;color:var(--faint)">{{ w.meta }}</span>
+                <span style="font-family:var(--font-mono);font-size:10px;color:var(--faint);min-width:42px;text-align:right">{{ w.ago }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:13px;font-weight:600;color:var(--fg);margin-bottom:9px">History</div>
+          <div style="background:var(--panel);border:1px solid var(--border);border-radius:11px;overflow:hidden">
+            <sc-for list="{{ woHistory }}" as="w" hint-placeholder-count="5">
+              <div style="display:flex;align-items:center;gap:13px;padding:10px 17px;border-bottom:1px solid var(--border-fainter)">
+                <span style="font-family:var(--font-mono);font-size:11.5px;color:var(--fg-2);min-width:118px">{{ w.id }}</span>
+                <span style="font-family:var(--font-mono);font-size:10px;color:var(--muted);background:var(--control);border-radius:5px;padding:1px 7px">{{ w.type }}</span>
+                <span style="{{ w.badge }}">{{ w.status }}</span>
+                <span style="font-family:var(--font-mono);font-size:11px;color:var(--fg-2);flex:1">{{ w.detail }}</span>
+                <span style="font-family:var(--font-mono);font-size:10px;color:var(--faint);min-width:48px;text-align:right">{{ w.ago }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ===================== SYSTEM ===================== -->
+      <sc-if value="{{ isSystem }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:11px">
+          <sc-for list="{{ sysMetrics }}" as="m" hint-placeholder-count="6">
+            <div style="background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px 16px">
+              <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)">{{ m.label }}</div>
+              <div class="cl-tnum" style="font-size:26px;font-weight:600;line-height:1;margin:8px 0 3px;color:{{ m.color }}">{{ m.value }}</div>
+              <div style="font-family:var(--font-mono);font-size:10px;color:var(--faint)">{{ m.sub }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="background:var(--panel);border:1px solid var(--border);border-radius:11px;overflow:hidden">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:13px 17px;border-bottom:1px solid var(--border-soft)">
+            <span style="font-size:13px;font-weight:600;color:var(--fg)">Internal WS connections</span>
+            <span style="font-family:var(--font-mono);font-size:10.5px;color:var(--teal)">{{ wsCaption }}</span>
+          </div>
+          <sc-for list="{{ wsConns }}" as="w" hint-placeholder-count="6">
+            <div style="display:flex;align-items:center;gap:13px;padding:9px 17px;border-bottom:1px solid var(--border-fainter)">
+              <span style="width:6px;height:6px;border-radius:50%;background:var(--teal);box-shadow:0 0 0 3px color-mix(in srgb,var(--teal) 16%,transparent);animation:brk-pulse 1.8s ease-in-out infinite;flex:none"></span>
+              <span style="font-family:var(--font-mono);font-size:11.5px;color:var(--fg);min-width:150px">{{ w.agent }}</span>
+              <span style="font-family:var(--font-mono);font-size:10.5px;color:var(--faint);flex:1">{{ w.cluster }}</span>
+              <span class="cl-tnum" style="font-family:var(--font-mono);font-size:10.5px;color:var(--fg-2)">{{ w.msgs }} msg/s</span>
+              <span style="font-family:var(--font-mono);font-size:10px;color:var(--faint);min-width:64px;text-align:right">up {{ w.uptime }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ===================== WEBHOOKS ===================== -->
+      <sc-if value="{{ isHooks }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div style="display:flex;flex-direction:column;gap:9px">
+          <span style="font-size:13px;font-weight:600;color:var(--fg)">Subscriptions</span>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:11px">
+            <sc-for list="{{ hookSubs }}" as="h" hint-placeholder-count="3">
+              <div style="background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:13px 15px">
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                  <span style="font-size:12.5px;font-weight:600;color:var(--fg)">{{ h.name }}</span>
+                  <span style="{{ h.stateBadge }}">{{ h.state }}</span>
+                </div>
+                <div style="font-family:var(--font-mono);font-size:10px;color:var(--faint);margin-top:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ h.url }}</div>
+                <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:9px">
+                  <sc-for list="{{ h.events }}" as="ev" hint-placeholder-count="2"><span style="font-family:var(--font-mono);font-size:9.5px;color:var(--ice);background:color-mix(in srgb,var(--ice) 10%,transparent);border-radius:5px;padding:1px 6px">{{ ev }}</span></sc-for>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:9px">
+          <span style="font-size:13px;font-weight:600;color:var(--fg)">Recent deliveries</span>
+          <div style="background:var(--panel);border:1px solid var(--border);border-radius:11px;overflow:hidden">
+            <sc-for list="{{ hookDeliveries }}" as="d" hint-placeholder-count="8">
+              <div style="display:flex;align-items:center;gap:13px;padding:9px 17px;border-bottom:1px solid var(--border-fainter)">
+                <span style="font-family:var(--font-mono);font-size:11px;color:var(--faint);min-width:92px">{{ d.id }}</span>
+                <span style="font-family:var(--font-mono);font-size:11px;color:var(--ice);min-width:150px">{{ d.event }}</span>
+                <span style="font-family:var(--font-mono);font-size:11px;color:var(--fg-2);flex:1">{{ d.hook }}</span>
+                <span style="font-family:var(--font-mono);font-size:10px;color:var(--faint)">try {{ d.attempts }}</span>
+                <span style="{{ d.badge }}">{{ d.status }}</span>
+                <span style="font-family:var(--font-mono);font-size:10px;color:var(--faint);min-width:44px;text-align:right">{{ d.ago }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+      </sc-if>
+
+    </div>
+  </main>
+
+  <!-- ===================== AGENT DETAIL SLIDE-OVER ===================== -->
+  <sc-if value="{{ agentOpen }}" hint-placeholder-val="{{ false }}">
+  <div onClick="{{ closeAgent }}" style="position:fixed;inset:0;background:rgba(6,8,11,.55);z-index:40"></div>
+  <div class="brk-scroll" style="position:fixed;top:0;right:0;height:100vh;width:430px;max-width:92vw;background:var(--panel);border-left:1px solid var(--border);z-index:41;overflow-y:auto;box-shadow:-24px 0 60px rgba(0,0,0,.5)">
+    <div style="padding:18px 20px;border-bottom:1px solid var(--border-soft);display:flex;justify-content:space-between;align-items:flex-start">
+      <div>
+        <div style="font-size:16px;font-weight:600;color:var(--fg-bright);font-family:var(--font-mono)">{{ sel.name }}</div>
+        <div style="font-family:var(--font-mono);font-size:10.5px;color:var(--faint);margin-top:3px">{{ sel.id }}</div>
+      </div>
+      <button onClick="{{ closeAgent }}" style="background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;line-height:1;padding:2px 6px">✕</button>
+    </div>
+    <div style="padding:18px 20px;display:flex;flex-direction:column;gap:18px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:13px">
+        <div><div style="font-family:var(--font-mono);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)">Cluster</div><div style="font-family:var(--font-mono);font-size:12px;color:var(--fg-2);margin-top:4px">{{ sel.cluster }}</div></div>
+        <div><div style="font-family:var(--font-mono);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)">Last heartbeat</div><div style="font-family:var(--font-mono);font-size:12px;color:{{ sel.beatColor }};margin-top:4px">{{ sel.beat }} ago</div></div>
+        <div><div style="font-family:var(--font-mono);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)">Status</div><div style="margin-top:5px"><span style="{{ sel.statusBadge }}">{{ sel.status }}</span></div></div>
+        <div><div style="font-family:var(--font-mono);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)">Health</div><div style="margin-top:5px"><span style="{{ sel.healthBadge }}">{{ sel.health }}</span></div></div>
+      </div>
+
+      <div>
+        <div style="font-family:var(--font-mono);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:7px">Labels</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <sc-for list="{{ sel.labels }}" as="l" hint-placeholder-count="3"><span style="font-family:var(--font-mono);font-size:10px;color:var(--fg-2);background:var(--control);border:1px solid var(--border-soft);border-radius:6px;padding:2px 8px">{{ l }}</span></sc-for>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px">
+        <button onClick="{{ sel.toggle }}" style="{{ sel.toggleStyle }}">{{ sel.toggleLabel }}</button>
+        <button onClick="{{ sel.diag }}" style="flex:1;padding:9px 12px;border-radius:8px;border:1px solid var(--border-control);background:var(--control);color:var(--fg);font-family:var(--font-sans);font-size:12px;font-weight:500;cursor:pointer">⌕ Run diagnostic</button>
+      </div>
+
+      <sc-if value="{{ sel.hasDiag }}" hint-placeholder-val="{{ false }}">
+      <div style="background:var(--inset);border:1px solid var(--border);border-radius:10px;padding:13px 15px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:9px">
+          <span style="font-size:12px;font-weight:600;color:var(--fg)">Diagnostic</span>
+          <span style="{{ sel.diagBadge }}">{{ sel.diagStatus }}</span>
+        </div>
+        <sc-if value="{{ sel.diagPending }}" hint-placeholder-val="{{ true }}">
+          <div style="position:relative;height:4px;border-radius:3px;background:var(--control);overflow:hidden"><div style="position:absolute;top:0;left:0;height:100%;width:30%;background:var(--ice);animation:brk-sweep 1.1s ease-in-out infinite"></div></div>
+          <div style="font-family:var(--font-mono);font-size:10px;color:var(--faint);margin-top:8px">collecting pod statuses, events, log tails…</div>
+        </sc-if>
+        <sc-if value="{{ sel.diagDone }}" hint-placeholder-val="{{ false }}">
+          <pre style="margin:0;font-family:var(--font-mono);font-size:10.5px;line-height:1.6;color:var(--fg-2);white-space:pre-wrap">{{ sel.diagResult }}</pre>
+        </sc-if>
+      </div>
+      </sc-if>
+
+      <div>
+        <div style="font-family:var(--font-mono);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Recent events</div>
+        <div style="display:flex;flex-direction:column;gap:7px">
+          <sc-for list="{{ sel.events }}" as="e" hint-placeholder-count="4">
+            <div style="display:flex;align-items:center;gap:9px">
+              <span style="font-family:var(--font-mono);font-size:10px;color:var(--faint);min-width:40px">{{ e.ago }}</span>
+              <span style="font-family:var(--font-mono);font-size:11px;color:var(--fg-2);flex:1">{{ e.type }}</span>
+              <span style="{{ e.badge }}">{{ e.result }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ===================== TOASTS ===================== -->
+  <div style="position:fixed;bottom:18px;right:18px;z-index:60;display:flex;flex-direction:column;gap:9px;align-items:flex-end">
+    <sc-for list="{{ toasts }}" as="t" hint-placeholder-count="0">
+      <div style="display:flex;align-items:center;gap:9px;background:var(--control);border:1px solid var(--border-control);border-left:3px solid {{ t.color }};border-radius:9px;padding:10px 14px;box-shadow:0 12px 30px rgba(0,0,0,.4);min-width:230px">
+        <span style="width:7px;height:7px;border-radius:50%;background:{{ t.color }};flex:none"></span>
+        <span style="font-size:12px;color:var(--fg)">{{ t.msg }}</span>
+      </div>
+    </sc-for>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:900},&quot;accent&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;ice&quot;,&quot;teal&quot;,&quot;violet&quot;],&quot;default&quot;:&quot;ice&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;defaultView&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;overview&quot;,&quot;fleet&quot;,&quot;deployments&quot;,&quot;telemetry&quot;,&quot;jobs&quot;,&quot;system&quot;,&quot;webhooks&quot;],&quot;default&quot;:&quot;overview&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;liveStream&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  state = this.seed();
+
+  // ---- color tokens (mirror Aurora Dark) ----
+  T() { return { ice:'#7fb2ff', teal:'#5fd0c5', violet:'#9d8cff', gold:'#d8a657', ok:'#4bd07f', bad:'#f06464', muted:'#8b95a3', faint:'#5b6573', skip:'#cf83a4', edge:'#2a3340' }; }
+
+  seed() {
+    const T = this.T();
+    let s = 73217;
+    const rnd = () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296;
+    const pick = (a) => a[Math.floor(rnd() * a.length)];
+    const now = Date.now();
+
+    const clusters = [
+      { id:'c1', name:'prod-us-west-2',   env:'prod',    region:'us-west-2',    envColor:T.ice,   n:8 },
+      { id:'c2', name:'prod-eu-central-1',env:'prod',    region:'eu-central-1', envColor:T.ice,   n:6 },
+      { id:'c3', name:'staging-us-east-1',env:'staging', region:'us-east-1',    envColor:T.violet,n:5 },
+      { id:'c4', name:'dev-local',        env:'dev',     region:'local',        envColor:T.teal,  n:5 },
+    ];
+    const labelPool = ['frontend','backend','database','edge','gpu','arm64','team-platform','team-payments'];
+    const healthPool = ['healthy','healthy','healthy','healthy','healthy','degraded','failing'];
+    const agents = [];
+    clusters.forEach((c) => {
+      for (let i = 1; i <= c.n; i++) {
+        const active = rnd() > 0.1;
+        const health = active ? pick(healthPool) : 'unknown';
+        agents.push({
+          id: 'agt_' + Math.floor(rnd() * 0xfffffff).toString(16).padStart(7, '0'),
+          name: c.env + '-agent-' + String(i).padStart(2, '0'),
+          cluster: c.name, clusterId: c.id, env: c.env,
+          status: active ? 'active' : 'inactive',
+          health,
+          ws: active && rnd() > 0.18,
+          beat: active ? Math.floor(rnd() * 38) : Math.floor(rnd() * 5400 + 900),
+          labels: Array.from(new Set([c.env, pick(labelPool), pick(labelPool)])),
+          targets: Math.floor(rnd() * 5),
+        });
+      }
+    });
+
+    const stackDefs = [
+      { name:'payments-api', gen:'ci-pipeline',   labels:['prod','backend'],  objs:[['Deployment + Service','deploy'],['ConfigMap','deploy']] },
+      { name:'web-frontend', gen:'ci-pipeline',   labels:['prod','frontend'], objs:[['Deployment + Service','deploy']] },
+      { name:'orders-worker',gen:'ci-pipeline',   labels:['prod','backend'],  objs:[['Deployment','deploy'],['HPA','deploy']] },
+      { name:'edge-proxy',   gen:'platform-bot',  labels:['edge'],            objs:[['DaemonSet','deploy']] },
+      { name:'analytics-db', gen:'platform-bot',  labels:['staging','database'], objs:[['StatefulSet','deploy'],['PVC','deploy']] },
+      { name:'legacy-cron',  gen:'platform-bot',  labels:['dev'],             objs:[['CronJob','delete']] },
+    ];
+    const stacks = stackDefs.map((d, di) => ({
+      id: 'stk_' + Math.floor(rnd() * 0xffffff).toString(16),
+      name: d.name, generator: d.gen, labels: d.labels,
+      objects: d.objs.map((o, oi) => {
+        const healthy = Math.floor(rnd() * 8) + 2;
+        const degraded = rnd() > 0.7 ? Math.floor(rnd() * 2) + 1 : 0;
+        const failing = rnd() > 0.82 ? 1 : 0;
+        return {
+          id: 'do_' + Math.floor(rnd() * 0xffffff).toString(16),
+          kind: o[0], action: o[1], healthy, degraded, failing,
+          t: now - Math.floor(rnd() * 6 * 3600 * 1000),
+        };
+      }),
+    }));
+
+    const eventsPool = [
+      { sev:'Normal',  reason:'Scheduled',       message:'Successfully assigned to node prod-node-04', ns:'payments' },
+      { sev:'Normal',  reason:'Pulled',          message:'Container image "nginx:alpine" already present', ns:'web' },
+      { sev:'Normal',  reason:'Created',         message:'Created container web', ns:'web' },
+      { sev:'Normal',  reason:'Started',         message:'Started container api', ns:'payments' },
+      { sev:'Normal',  reason:'SuccessfulCreate',message:'Created pod worker-5d9c1a', ns:'orders' },
+      { sev:'Warning', reason:'BackOff',         message:'Back-off restarting failed container api', ns:'orders' },
+      { sev:'Warning', reason:'Unhealthy',       message:'Readiness probe failed: HTTP probe returned 503', ns:'orders' },
+      { sev:'Warning', reason:'FailedMount',     message:'MountVolume.SetUp failed for volume "config"', ns:'edge' },
+      { sev:'Normal',  reason:'Killing',         message:'Stopping container sidecar', ns:'web' },
+      { sev:'Warning', reason:'ImagePullBackOff',message:'Failed to pull image "svc:v999": manifest not found', ns:'orders' },
+      { sev:'Normal',  reason:'ScalingReplicaSet', message:'Scaled up replica set web-frontend to 4', ns:'web' },
+    ];
+    const logsPool = [
+      { ns:'payments', pod:'api-5d9c1a',  c:'api',    line:'level=info msg="charge.captured" amount=4200 currency=usd' },
+      { ns:'web',      pod:'web-7f3ad2',  c:'web',    line:'127.0.0.1 - GET /healthz 200 1ms' },
+      { ns:'orders',   pod:'worker-2b8e', c:'worker', line:'level=warn msg="retry queue depth" depth=128' },
+      { ns:'edge',     pod:'proxy-aa31',  c:'envoy',  line:'[info] upstream connect ok 12ms 200' },
+      { ns:'payments', pod:'api-5d9c1a',  c:'api',    line:'level=error msg="db statement timeout" after=30s' },
+      { ns:'web',      pod:'web-7f3ad2',  c:'web',    line:'127.0.0.1 - GET /metrics 200 3ms' },
+      { ns:'orders',   pod:'worker-2b8e', c:'worker', line:'level=info msg="job.completed" id=db-migration-001 took=4.8s' },
+    ];
+    const events = [];
+    for (let i = 0; i < 14; i++) { const e = pick(eventsPool); events.push({ id: 'e' + i, ...e, t: now - i * 9000 - Math.floor(rnd() * 4000) }); }
+    const logs = [];
+    for (let i = 0; i < 40; i++) { const l = pick(logsPool); logs.push({ ...l, t: now - (40 - i) * 1500 }); }
+
+    const woActive = [
+      { id:'wo_3f9a21c4', type:'build',  status:'claimed', progress: 62, retries:0, ago:'42s', meta:'shipwright · payments-api' },
+      { id:'wo_8c12d0a7', type:'build',  status:'claimed', progress: 28, retries:1, ago:'1m',  meta:'shipwright · web-frontend' },
+      { id:'wo_b551e3f0', type:'custom', status:'pending', progress: 0,  retries:0, ago:'6s',  meta:'2 target agents' },
+    ];
+    const woHistory = [
+      { id:'wo_a17c9b22', type:'build',  status:'completed', detail:'digest sha256:9f2a… pushed', t: now - 220000 },
+      { id:'wo_55de1a09', type:'custom', status:'completed', detail:'db-migration-001 applied', t: now - 640000 },
+      { id:'wo_2b88f410', type:'build',  status:'failed',    detail:'build timeout after 900s', t: now - 1280000 },
+      { id:'wo_71aa3c5d', type:'custom', status:'completed', detail:'cache warmup ok', t: now - 2400000 },
+      { id:'wo_0d9e6612', type:'build',  status:'completed', detail:'digest sha256:1c0d… pushed', t: now - 5400000 },
+    ];
+
+    const hookSubs = [
+      { name:'Slack — oncall', url:'https://hooks.slack.com/services/T0/B0/xxxx', state:'enabled',  events:['health.*','workorder.completed'] },
+      { name:'PagerDuty',      url:'https://events.pagerduty.com/v2/enqueue',     state:'enabled',  events:['health.failing'] },
+      { name:'Audit sink',     url:'https://audit.internal/brokkr/events',        state:'disabled', events:['*'] },
+    ];
+    const dEvents = ['health.degraded','health.failing','health.recovered','workorder.completed'];
+    const dStatus = ['success','success','success','success','failed','dead','pending'];
+    const hookDeliveries = [];
+    for (let i = 0; i < 11; i++) {
+      hookDeliveries.push({
+        id: 'dlv_' + Math.floor(rnd() * 0xffffff).toString(16),
+        event: pick(dEvents), hook: pick(hookSubs).name,
+        status: pick(dStatus), attempts: Math.floor(rnd() * 3) + 1,
+        t: now - i * 47000 - Math.floor(rnd() * 20000),
+      });
+    }
+
+    return {
+      now, tick: 0,
+      route: this.props.defaultView || 'overview',
+      overviewLayout: 'command',
+      liveOn: this.props.liveStream !== false,
+      teleTab: 'events',
+      clusters, agents, stacks, eventsPool, logsPool, events, logs,
+      woActive, woHistory, hookSubs, hookDeliveries,
+      metrics: { req: 1420, ws: 880, db: 3210 },
+      throughput: Array.from({ length: 44 }, () => 1300 + Math.floor(Math.random() * 280)),
+      selectedAgentId: null,
+      diag: null,
+      toasts: [],
+    };
+  }
+
+  componentDidMount() {
+    this._timer = setInterval(() => this.tick(), 1000);
+  }
+  componentWillUnmount() { clearInterval(this._timer); }
+
+  tick() {
+    this.setState((st) => {
+      const now = st.now + 1000;
+      const tick = st.tick + 1;
+      const r = () => Math.random();
+
+      const agents = st.agents.map((a) => {
+        if (a.status === 'active' && ((a.ws && r() < 0.08) || (!a.ws && r() < 0.025))) return { ...a, beat: 0 };
+        return { ...a, beat: a.beat + 1 };
+      });
+
+      const metrics = {
+        req: Math.max(700, Math.round(1420 + (r() - 0.5) * 460)),
+        ws:  Math.max(300, Math.round(880 + (r() - 0.5) * 280)),
+        db:  Math.max(1500, Math.round(3210 + (r() - 0.5) * 900)),
+      };
+      const throughput = [...st.throughput, metrics.req].slice(-44);
+
+      let events = st.events, logs = st.logs;
+      if (st.liveOn) {
+        if (tick % 2 === 0) {
+          const e = st.eventsPool[Math.floor(r() * st.eventsPool.length)];
+          events = [{ id: 'e' + now + Math.floor(r() * 1e6), ...e, t: now }, ...st.events].slice(0, 60);
+        }
+        const l = st.logsPool[Math.floor(r() * st.logsPool.length)];
+        logs = [...st.logs, { ...l, t: now }].slice(-200);
+      }
+
+      let woActive = st.woActive.map((w) => {
+        if (w.status === 'claimed') {
+          const p = Math.min(100, w.progress + Math.round(r() * 11));
+          return { ...w, progress: p, status: p >= 100 ? 'completed' : 'claimed' };
+        }
+        if (w.status === 'pending' && r() < 0.15) return { ...w, status: 'claimed' };
+        return w;
+      });
+
+      return { now, tick, agents, metrics, throughput, events, logs, woActive };
+    });
+  }
+
+  // ---- helpers ----
+  ago(t) {
+    const s = Math.max(0, Math.floor((this.state.now - t) / 1000));
+    if (s < 60) return s + 's';
+    const m = Math.floor(s / 60);
+    if (m < 60) return m + 'm';
+    const h = Math.floor(m / 60);
+    if (h < 24) return h + 'h';
+    return Math.floor(h / 24) + 'd';
+  }
+  healthColor(h) { const T = this.T(); return ({ healthy:T.ok, degraded:T.gold, failing:T.bad, unknown:T.muted })[h] || T.muted; }
+  statusColor(s) { const T = this.T(); return ({ active:T.ok, inactive:T.muted, running:T.ice, claimed:T.ice, pending:T.muted, completed:T.ok, failed:T.bad, dead:T.bad, success:T.ok, enabled:T.ok, disabled:T.muted })[s] || T.muted; }
+  pill(color) { return `display:inline-block;background:color-mix(in srgb,${color} 12%,transparent);color:${color};border-radius:10px;padding:2px 9px;font-family:var(--font-mono);font-size:10px;font-weight:500;line-height:1.5;text-transform:lowercase;white-space:nowrap`; }
+
+  pushToast(kind, msg) {
+    const id = 't' + Date.now() + Math.random();
+    const color = kind === 'ok' ? this.T().ok : kind === 'bad' ? this.T().bad : this.T().ice;
+    this.setState((st) => ({ toasts: [...st.toasts, { id, kind, msg, color }] }));
+    setTimeout(() => this.setState((st) => ({ toasts: st.toasts.filter((t) => t.id !== id) })), 3400);
+  }
+
+  navTo(route) { return (e) => { e && e.preventDefault(); this.setState({ route }); }; }
+  setLayout(k) { return () => this.setState({ overviewLayout: k }); }
+  setTele(k) { return () => this.setState({ teleTab: k }); }
+  toggleLiveFn() { this.setState((st) => ({ liveOn: !st.liveOn })); }
+  selectAgent(id) { return () => this.setState({ selectedAgentId: id, diag: null }); }
+  closeAgentFn() { this.setState({ selectedAgentId: null, diag: null }); }
+
+  toggleAgent(a) {
+    return () => {
+      const next = a.status === 'active' ? 'inactive' : 'active';
+      this.setState((st) => ({ agents: st.agents.map((x) => x.id === a.id ? { ...x, status: next, health: next === 'inactive' ? 'unknown' : 'healthy', ws: next === 'active' } : x) }));
+      this.pushToast(next === 'active' ? 'ok' : 'info', `Agent ${a.name} ${next === 'active' ? 'activated' : 'deactivated'}`);
+    };
+  }
+  runDiag(a) {
+    return () => {
+      this.setState({ diag: { agentId: a.id, status: 'pending', result: null } });
+      this.pushToast('info', 'Diagnostic requested · ' + a.name);
+      setTimeout(() => {
+        if (this.state.selectedAgentId !== a.id) return;
+        const res = `agent: ${a.name} (${a.cluster})\npod_statuses:\n  payments-api-7f3a   Running   2/2   0 restarts\n  payments-api-2b8e   Running   2/2   1 restart\nevents:\n  Normal  Pulled   image present\n  Normal  Started  container api\nlog_tails:\n  GET /healthz 200 1ms\n  level=info msg="ready"`;
+        this.setState({ diag: { agentId: a.id, status: 'completed', result: res } });
+        this.pushToast('ok', 'Diagnostic completed · ' + a.name);
+      }, 2400);
+    };
+  }
+
+  renderVals() {
+    const T = this.T();
+    const st = this.state;
+    const accentMap = { ice: T.ice, teal: T.teal, violet: T.violet };
+    const accentHex = accentMap[this.props.accent] || T.ice;
+
+    // ---- nav ----
+    const routeMeta = {
+      overview:   { label:'Overview',     title:'Overview',         sub:'all clusters · live' },
+      fleet:      { label:'Fleet',        title:'Fleet',            sub:'' },
+      deployments:{ label:'Deployments',  title:'Deployment health',sub:'' },
+      telemetry:  { label:'Telemetry',    title:'Telemetry',        sub:'kube events + pod logs · 6h window' },
+      jobs:       { label:'Work orders',  title:'Work orders',      sub:'' },
+      system:     { label:'Broker health',title:'Broker health',    sub:'system metrics · live' },
+      webhooks:   { label:'Webhooks',     title:'Webhooks',         sub:'' },
+    };
+    const activeAgents = st.agents.filter((a) => a.status === 'active');
+    const wsCount = st.agents.filter((a) => a.ws && a.status === 'active').length;
+    const failingAgents = st.agents.filter((a) => a.health === 'failing').length;
+    const degradedAgents = st.agents.filter((a) => a.health === 'degraded').length;
+
+    const navItem = (route, marker, badge) => {
+      const active = st.route === route;
+      const base = 'display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;margin-bottom:2px;font-size:13px;font-weight:500;text-decoration:none;cursor:pointer;';
+      const style = base + (active
+        ? `color:var(--fg-bright);background:color-mix(in srgb,${accentHex} 14%,transparent);box-shadow:inset 2px 0 0 ${accentHex}`
+        : 'color:var(--muted);background:transparent');
+      const markerStyle = marker
+        ? `width:9px;height:9px;border-radius:2px;background:${marker};flex:none`
+        : 'width:9px;height:9px;flex:none';
+      return { label: routeMeta[route].label, go: this.navTo(route), style, markerStyle, badge: badge || '' };
+    };
+    const navGroups = [
+      { label: 'Monitor', items: [ navItem('overview'), navItem('fleet', null, String(st.agents.length)), navItem('deployments'), navItem('telemetry') ] },
+      { label: 'Operations', items: [ navItem('jobs', null, String(st.woActive.length)), navItem('webhooks') ] },
+      { label: 'System', items: [ navItem('system') ] },
+    ];
+
+    // ---- header live + clock ----
+    const clock = new Date(st.now).toTimeString().slice(0, 8);
+    const liveLabel = st.liveOn ? 'Live' : 'Paused';
+    const liveBtnStyle = `display:flex;align-items:center;gap:7px;padding:7px 12px;border-radius:8px;font-family:var(--font-sans);font-size:12px;font-weight:500;cursor:pointer;border:1px solid ${st.liveOn ? 'color-mix(in srgb,' + T.ok + ' 40%,transparent)' : 'var(--border-control)'};background:${st.liveOn ? 'color-mix(in srgb,' + T.ok + ' 12%,transparent)' : 'var(--control)'};color:${st.liveOn ? T.ok : T.muted}`;
+    const liveDotStyle = `width:7px;height:7px;border-radius:50%;background:${st.liveOn ? T.ok : T.muted};flex:none;${st.liveOn ? 'animation:brk-pulse 1.4s ease-in-out infinite' : ''}`;
+    const liveDotMini = `width:6px;height:6px;border-radius:50%;background:${st.liveOn ? T.teal : T.muted};${st.liveOn ? 'animation:brk-pulse 1.4s ease-in-out infinite' : ''}`;
+
+    const layoutBtn = (k, label) => {
+      const active = st.overviewLayout === k;
+      return { label, go: this.setLayout(k), style: `padding:5px 12px;border:none;border-radius:7px;font-family:var(--font-sans);font-size:11.5px;font-weight:500;cursor:pointer;background:${active ? accentHex : 'transparent'};color:${active ? '#0b0d10' : 'var(--muted)'}` };
+    };
+    const layoutBtns = [ layoutBtn('command', 'Command'), layoutBtn('grid', 'Grid'), layoutBtn('stream', 'Stream') ];
+
+    // ---- overview grid layouts ----
+    const layoutDefs = {
+      command: { cols:'minmax(0,1fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1.1fr)', areas:'"kpis kpis kpis kpis" "fleet fleet stream stream" "deploy jobs stream stream" "flow flow stream stream"', rows:'auto 1fr 1fr auto' },
+      grid:    { cols:'repeat(3,minmax(0,1fr))', areas:'"kpis kpis kpis" "fleet deploy jobs" "stream stream flow"', rows:'auto 1fr 1fr' },
+      stream:  { cols:'1.5fr 1fr', areas:'"stream kpis" "stream fleet" "stream deploy" "flow jobs"', rows:'auto auto 1fr auto' },
+    };
+    const L = layoutDefs[st.overviewLayout];
+    const ov = {
+      grid: { display:'grid', gridTemplateColumns: L.cols, gridTemplateRows: L.rows, gridTemplateAreas: L.areas, gap: '13px', minHeight: 'calc(100vh - 130px)' },
+      kpis: { gridArea:'kpis', minWidth:0 },
+      fleet:{ gridArea:'fleet', minWidth:0, minHeight:0 },
+      deploy:{ gridArea:'deploy', minWidth:0, minHeight:0 },
+      stream:{ gridArea:'stream', minWidth:0, minHeight:0 },
+      flow:{ gridArea:'flow', minWidth:0, minHeight:0 },
+      jobs:{ gridArea:'jobs', minWidth:0, minHeight:0 },
+    };
+
+    // ---- KPIs ----
+    const totalDeployObjs = st.stacks.reduce((n, s) => n + s.objects.length, 0);
+    const failingObjs = st.stacks.reduce((n, s) => n + s.objects.filter((o) => o.failing > 0).length, 0);
+    const degradedObjs = st.stacks.reduce((n, s) => n + s.objects.filter((o) => o.failing === 0 && o.degraded > 0).length, 0);
+    const healthyObjs = totalDeployObjs - failingObjs - degradedObjs;
+    const kpiDot = (c) => `width:7px;height:7px;border-radius:50%;background:${c};flex:none`;
+    const kpis = [
+      { label:'Active agents', value: activeAgents.length + '/' + st.agents.length, unit:'connected', color:'var(--fg)', dotStyle:kpiDot(T.ok) },
+      { label:'WS channel', value: String(wsCount), unit:'streaming', color:T.teal, dotStyle:kpiDot(T.teal) },
+      { label:'Healthy', value: String(healthyObjs), unit:'deploy objects', color:T.ok, dotStyle:kpiDot(T.ok) },
+      { label:'Degraded', value: String(degradedObjs), unit:'deploy objects', color:T.gold, dotStyle:kpiDot(T.gold) },
+      { label:'Failing', value: String(failingObjs), unit:'deploy objects', color:T.bad, dotStyle:kpiDot(T.bad) },
+      { label:'Req/min', value: st.metrics.req.toLocaleString(), unit:'broker http', color:T.ice, dotStyle:kpiDot(T.ice) },
+    ];
+
+    // ---- fleet by cluster (overview mini) ----
+    const fleetClusters = st.clusters.map((c) => {
+      const ags = st.agents.filter((a) => a.clusterId === c.id);
+      const tot = ags.length;
+      const cnt = (h) => ags.filter((a) => a.status === 'active' && a.health === h).length;
+      const healthy = cnt('healthy'), degraded = cnt('degraded'), failing = cnt('failing');
+      const offline = ags.filter((a) => a.status !== 'active').length;
+      const pct = (n) => (tot ? (n / tot * 100).toFixed(1) + '%' : '0%');
+      return { name: c.name, envColor: c.envColor,
+        summary: `${ags.filter((a)=>a.status==='active').length}/${tot} up`,
+        healthyPct: pct(healthy), degradedPct: pct(degraded), failingPct: pct(failing), offlinePct: pct(offline) };
+    });
+    const fleetCaption = `${st.clusters.length} clusters · ${activeAgents.length} up`;
+
+    // ---- deployment rollup ----
+    const deployRollup = {
+      total: totalDeployObjs, healthy: healthyObjs, degraded: degradedObjs, failing: failingObjs,
+      stacks: st.stacks.map((s) => {
+        const fail = s.objects.some((o) => o.failing > 0);
+        const deg = !fail && s.objects.some((o) => o.degraded > 0);
+        const color = fail ? T.bad : deg ? T.gold : T.ok;
+        const hh = s.objects.reduce((n,o)=>n+o.healthy,0), dd = s.objects.reduce((n,o)=>n+o.degraded,0), ff = s.objects.reduce((n,o)=>n+o.failing,0);
+        return { name: s.name, color, counts: `${hh}✓ ${dd}⚠ ${ff}✕` };
+      }),
+    };
+
+    // ---- throughput sparkline ----
+    const hist = st.throughput;
+    const min = Math.min(...hist), max = Math.max(...hist);
+    const span = max - min || 1;
+    const n = hist.length;
+    const xy = hist.map((v, i) => [ (i / (n - 1) * 240).toFixed(1), (50 - (v - min) / span * 44 - 3).toFixed(1) ]);
+    const sparkLine = xy.map((p) => p.join(',')).join(' ');
+    const sparkArea = `0,52 ${sparkLine} 240,52`;
+    const metricLive = { req: st.metrics.req.toLocaleString(), ws: st.metrics.ws.toLocaleString(), db: st.metrics.db.toLocaleString() };
+
+    // ---- stream events ----
+    const streamEvents = st.events.slice(0, 24).map((e) => {
+      const color = e.sev === 'Warning' ? T.gold : T.ok;
+      return { id: e.id, reason: e.reason, message: e.message, ns: 'ns/' + e.ns, ago: this.ago(e.t), color };
+    });
+    const streamCaption = st.liveOn ? 'live tail' : 'paused';
+
+    // ---- jobs mini ----
+    const jobBadge = (s) => this.pill(this.statusColor(s));
+    const jobsMini = st.woActive.map((w) => ({ id: w.id.replace('wo_', '').slice(0, 7), type: w.type, progress: w.progress + '%', color: w.status === 'pending' ? T.muted : T.ice, status: w.status, badgeStyle: jobBadge(w.status) }));
+    const jobsCaption = `${st.woActive.length} active · ${st.woHistory.length} done`;
+
+    // ===== FLEET VIEW =====
+    const fleetKpis = [
+      { label:'Total agents', value:String(st.agents.length), color:'var(--fg)' },
+      { label:'Active', value:String(activeAgents.length), color:T.ok },
+      { label:'Degraded', value:String(degradedAgents), color:T.gold },
+      { label:'Failing', value:String(failingAgents), color:T.bad },
+    ];
+    const fleetView = st.clusters.map((c) => {
+      const ags = st.agents.filter((a) => a.clusterId === c.id);
+      return { name: c.name, region: c.region, envColor: c.envColor,
+        summary: `${ags.filter((a)=>a.status==='active').length}/${ags.length} active`,
+        agents: ags.map((a) => {
+          const hc = this.healthColor(a.health);
+          const beatLong = a.status !== 'active' || a.beat > 90;
+          return {
+            select: this.selectAgent(a.id), name: a.name, status: a.status, health: a.health, ws: a.ws, labels: a.labels,
+            healthColor: hc, healthGlow: `color-mix(in srgb,${hc} 16%,transparent)`,
+            pulse: (a.status === 'active' && a.beat < 8) ? 'animation:brk-pulse 1.5s ease-in-out infinite' : '',
+            statusBadge: this.pill(this.statusColor(a.status)), healthBadge: this.pill(hc),
+            beat: a.status === 'active' ? this.ago(st.now - a.beat * 1000) : 'offline',
+            beatColor: beatLong ? T.faint : (a.beat < 30 ? T.ok : T.gold),
+          };
+        }),
+      };
+    });
+
+    // ===== DEPLOYMENTS VIEW =====
+    const stacksView = st.stacks.map((s) => {
+      const fail = s.objects.some((o) => o.failing > 0);
+      const deg = !fail && s.objects.some((o) => o.degraded > 0);
+      const h = fail ? 'failing' : deg ? 'degraded' : 'healthy';
+      return { name: s.name, generator: s.generator, labels: s.labels, health: h, healthBadge: this.pill(this.healthColor(h)),
+        objects: s.objects.map((o) => ({
+          id: o.id, kind: o.kind, action: o.action,
+          actionBadge: this.pill(o.action === 'delete' ? T.bad : T.teal),
+          healthy: o.healthy, degraded: o.degraded, failing: o.failing, ago: this.ago(o.t),
+        })),
+      };
+    });
+
+    // ===== TELEMETRY VIEW =====
+    const teleTab = (k, label) => { const active = st.teleTab === k; return { label, go: this.setTele(k), style: `padding:5px 14px;border:none;border-radius:7px;font-family:var(--font-sans);font-size:12px;font-weight:500;cursor:pointer;background:${active ? accentHex : 'transparent'};color:${active ? '#0b0d10' : 'var(--muted)'}` }; };
+    const teleTabs = [ teleTab('events', 'Kube events'), teleTab('logs', 'Pod logs') ];
+    const telEvents = st.events.slice(0, 40).map((e) => {
+      const color = e.sev === 'Warning' ? T.gold : T.ok;
+      return { sev: e.sev.toLowerCase(), sevBadge: this.pill(color), color, reason: e.reason, message: e.message, ns: 'ns/' + e.ns, ago: this.ago(e.t) };
+    });
+    const telLogsText = st.logs.slice(-90).map((l) => `[${new Date(l.t).toTimeString().slice(0,8)}] ${l.ns}/${l.pod}/${l.c}: ${l.line}`).join('\n');
+
+    // ===== WORK ORDERS VIEW =====
+    const woActive = st.woActive.map((w) => ({ id: w.id, type: w.type, status: w.status, badge: this.pill(this.statusColor(w.status)), progress: w.progress + '%', barColor: w.status === 'pending' ? T.muted : T.ice, meta: w.meta, ago: w.ago }));
+    const woHistory = st.woHistory.map((w) => ({ id: w.id, type: w.type, status: w.status, badge: this.pill(this.statusColor(w.status)), detail: w.detail, ago: this.ago(w.t) }));
+
+    // ===== SYSTEM VIEW =====
+    const sysMetrics = [
+      { label:'Active agents', value:String(activeAgents.length), sub:'brokkr_active_agents', color:'var(--fg)' },
+      { label:'WS connected', value:String(wsCount), sub:'brokkr_ws_connected_agents', color:T.teal },
+      { label:'Http req/min', value:st.metrics.req.toLocaleString(), sub:'brokkr_http_requests_total', color:T.ice },
+      { label:'DB queries/min', value:st.metrics.db.toLocaleString(), sub:'brokkr_database_queries_total', color:T.violet },
+      { label:'Stacks', value:String(st.stacks.length), sub:'brokkr_stacks_total', color:'var(--fg)' },
+      { label:'Deploy objects', value:String(totalDeployObjs), sub:'brokkr_deployment_objects_total', color:'var(--fg)' },
+    ];
+    const wsConns = st.agents.filter((a) => a.ws && a.status === 'active').slice(0, 9).map((a) => ({ agent: a.name, cluster: a.cluster, msgs: (Math.floor(Math.random() * 9) + 1), uptime: this.ago(st.now - (a.beat + 3600 + Math.floor(Math.random()*7200)) * 1000) }));
+    const wsCaption = `${wsCount} live`;
+
+    // ===== WEBHOOKS VIEW =====
+    const hookSubs = st.hookSubs.map((h) => ({ name: h.name, url: h.url, events: h.events, state: h.state, stateBadge: this.pill(this.statusColor(h.state)) }));
+    const hookDeliveries = st.hookDeliveries.map((d) => ({ id: d.id.replace('dlv_','').slice(0,8), event: d.event, hook: d.hook, attempts: d.attempts, status: d.status, badge: this.pill(this.statusColor(d.status)), ago: this.ago(d.t) }));
+
+    // ===== AGENT DETAIL =====
+    let sel = null;
+    const a = st.agents.find((x) => x.id === st.selectedAgentId);
+    if (a) {
+      const hc = this.healthColor(a.health);
+      const isActive = a.status === 'active';
+      const d = st.diag && st.diag.agentId === a.id ? st.diag : null;
+      const evPool = [['Apply','SUCCESS'],['Heartbeat','SUCCESS'],['Reconcile','SUCCESS'],['Apply','FAILURE']];
+      sel = {
+        id: a.id, name: a.name, cluster: a.cluster, status: a.status, health: a.health, labels: a.labels,
+        beat: isActive ? this.ago(st.now - a.beat * 1000) : 'offline',
+        beatColor: a.beat < 30 ? T.ok : T.gold,
+        statusBadge: this.pill(this.statusColor(a.status)), healthBadge: this.pill(hc),
+        toggle: this.toggleAgent(a), toggleLabel: isActive ? 'Deactivate' : 'Activate',
+        toggleStyle: `flex:1;padding:9px 12px;border-radius:8px;font-family:var(--font-sans);font-size:12px;font-weight:600;cursor:pointer;border:none;background:${isActive ? 'color-mix(in srgb,' + T.bad + ' 16%,transparent)' : T.ok};color:${isActive ? T.bad : '#0b0d10'}`,
+        diag: this.runDiag(a),
+        hasDiag: !!d, diagPending: d && d.status === 'pending', diagDone: d && d.status === 'completed',
+        diagStatus: d ? d.status : '', diagBadge: this.pill(d ? (d.status === 'completed' ? T.ok : T.ice) : T.muted),
+        diagResult: d && d.result ? d.result : '',
+        events: evPool.map((e, i) => ({ ago: this.ago(st.now - (i * 70 + 20) * 1000), type: e[0], result: e[1].toLowerCase(), badge: this.pill(e[1] === 'SUCCESS' ? T.ok : T.bad) })),
+      };
+    }
+
+    return {
+      accentHex, buildLabel: '0.5.0',
+      navGroups, title: routeMeta[st.route].title, sub: routeMeta[st.route].sub,
+      clock, liveLabel, liveBtnStyle, liveDotStyle, liveDotMini, toggleLive: () => this.toggleLiveFn(),
+      isOverview: st.route === 'overview', isFleet: st.route === 'fleet', isDeploy: st.route === 'deployments',
+      isTele: st.route === 'telemetry', isJobs: st.route === 'jobs', isSystem: st.route === 'system', isHooks: st.route === 'webhooks',
+      layoutBtns,
+      ov, kpis, fleetClusters, fleetCaption, deployRollup, sparkLine, sparkArea, metricLive, streamEvents, streamCaption, jobsMini, jobsCaption,
+      fleetKpis, fleetView, stacksView,
+      teleTabs, teleIsEvents: st.teleTab === 'events', teleIsLogs: st.teleTab === 'logs', telEvents, telLogsText,
+      woActive, woHistory, sysMetrics, wsConns, wsCaption, hookSubs, hookDeliveries,
+      agentOpen: !!sel, sel: sel || {}, closeAgent: () => this.closeAgentFn(),
+      toasts: st.toasts,
+    };
+  }
+}
+</script>
+</body>
+</html>

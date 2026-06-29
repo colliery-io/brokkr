@@ -742,6 +742,7 @@ mod tests {
         crate::api::v1::fleet::FleetAgentRecord {
             agent_id,
             name: "a".to_string(),
+            cluster_name: "c".to_string(),
             status: "ACTIVE".to_string(),
             ws_connected: false,
             connected_since: None,

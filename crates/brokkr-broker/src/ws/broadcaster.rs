@@ -213,6 +213,7 @@ mod tests {
         WsMessage::FleetUpdate(FleetAgentRecord {
             agent_id,
             name: "a".into(),
+            cluster_name: "c".into(),
             status: "ACTIVE".into(),
             ws_connected: true,
             connected_since: Some(Utc::now()),

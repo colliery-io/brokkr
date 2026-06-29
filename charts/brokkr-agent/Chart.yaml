@@ -2,8 +2,8 @@ apiVersion: v2
 name: brokkr-agent
 description: Brokkr Kubernetes cluster agent
 type: application
-version: 0.8.2
-appVersion: "0.8.2"
+version: 0.8.3
+appVersion: "0.8.3"
 # Shipwright integration (when enabled) requires Kubernetes >= 1.29
 kubeVersion: ">=1.29.0-0"
 

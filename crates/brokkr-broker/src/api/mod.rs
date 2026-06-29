@@ -154,6 +154,7 @@
 //!   - Returns: AgentEvent object.
 //!   - Required PAK: Any valid PAK.
 
+pub mod assets;
 pub mod v1;
 use crate::dal::DAL;
 use crate::metrics;
@@ -223,7 +224,7 @@ pub fn configure_api_routes(
     // the process lifetime.
     let _eviction_handle = spawn_eviction(dal.clone(), RetentionConfig::default_policy());
 
-    Router::new()
+    let app = Router::new()
         .merge(v1::routes(dal.clone(), cors_config, reloadable_config))
         .merge(internal_routes(
             dal.clone(),
@@ -270,7 +271,12 @@ pub fn configure_api_routes(
         // Outermost: turn any panic in a handler or inner layer (e.g. a DB
         // pool-acquisition failure) into a 500 response instead of dropping the
         // connection, which under load looks like the broker hanging up.
-        .layer(CatchPanicLayer::new())
+        .layer(CatchPanicLayer::new());
+
+    // Operator console (brokkr-web) static serving + SPA fallback, on the OUTER
+    // router so the `/api/v1` nest (and its auth) wins every route it owns
+    // (BROKKR-T-0253). No-op-ish placeholder unless built with `--features embed-ui`.
+    assets::attach(app)
 }
 
 /// Health check endpoint handler

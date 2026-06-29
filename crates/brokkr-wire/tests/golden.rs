@@ -123,6 +123,7 @@ fn sample_messages() -> Vec<WsMessage> {
         WsMessage::FleetUpdate(FleetAgentRecord {
             agent_id,
             name: "demo-agent".to_string(),
+            cluster_name: "demo-cluster".to_string(),
             status: "ACTIVE".to_string(),
             ws_connected: true,
             connected_since: Some(ts),

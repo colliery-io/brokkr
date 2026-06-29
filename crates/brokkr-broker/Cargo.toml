@@ -1,6 +1,6 @@
 [package]
 name = "brokkr-broker"
-version = "0.8.2"
+version = "0.8.3"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -74,6 +74,17 @@ futures = "0.3"
 
 # File watching for config hot-reload
 notify = "7"
+
+# Operator console (brokkr-web) static serving — embed the trunk `dist/` into the
+# binary. Optional + off by default so the host workspace / tests build without a
+# wasm bundle; the container build turns on `embed-ui` after `trunk build`.
+# (BROKKR-I-0031 / BROKKR-T-0253; mirrors Skadi's skadi-api.)
+rust-embed = { version = "8", optional = true }
+mime_guess = { version = "2", optional = true }
+
+[features]
+# Bake crates/brokkr-web/dist into the broker binary and serve it.
+embed-ui = ["dep:rust-embed", "dep:mime_guess"]
 
 [dev-dependencies]
 # Real-TCP WebSocket client for /internal/ws/agent integration tests (WS-02).

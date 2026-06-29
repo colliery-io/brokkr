@@ -1,0 +1,167 @@
+//! App-local components the design handoff needs but `aurora-leptos` does not ship
+//! (BROKKR-T-0255): an SVG sparkline and a segmented health bar; plus the toast
+//! system (BROKKR-T-0256). Detail views use the pack's centered `Modal`. Built on
+//! Aurora tokens.
+
+use aurora_leptos::tokens::token;
+use leptos::prelude::*;
+use std::cell::Cell;
+use std::time::Duration;
+
+/// Map a Brokkr domain status string to a severity color. Covers the statuses
+/// `status_color` doesn't (healthy/degraded/failing, delivered, …); falls back to muted.
+pub fn sev(status: &str) -> &'static str {
+    match status.to_ascii_lowercase().as_str() {
+        "healthy" | "delivered" | "active" | "completed" | "success" | "succeeded" | "ok"
+        | "ready" => token::OK,
+        "degraded" | "pending" | "claimed" | "retrying" | "in_progress" | "warning"
+        | "queued" => token::GOLD,
+        "failing" | "failed" | "error" | "errored" | "unhealthy" | "inactive"
+        | "offline" => token::BAD,
+        _ => token::MUTED,
+    }
+}
+
+/// SVG area sparkline over a value series (rendered via `inner_html` to sidestep
+/// leptos SVG-attr casing). `color` is any CSS color (a `token::*` or `var(--*)`).
+#[component]
+pub fn Sparkline(#[prop(into)] values: Vec<f64>, #[prop(into)] color: String) -> impl IntoView {
+    let (w, h) = (240.0_f64, 52.0_f64);
+    let n = values.len().max(2);
+    let max = values.iter().copied().fold(f64::MIN, f64::max).max(1.0);
+    let min = values.iter().copied().fold(f64::MAX, f64::min).min(0.0);
+    let range = (max - min).max(1.0);
+    let pts: Vec<String> = values
+        .iter()
+        .enumerate()
+        .map(|(i, v)| {
+            let x = i as f64 / (n as f64 - 1.0) * w;
+            let y = h - ((v - min) / range) * h;
+            format!("{x:.1},{y:.1}")
+        })
+        .collect();
+    let line = pts.join(" ");
+    let area = format!("0,{h} {line} {w},{h}");
+    let svg = format!(
+        "<svg viewBox=\"0 0 {w} {h}\" width=\"100%\" height=\"52\" preserveAspectRatio=\"none\">\
+         <polygon points=\"{area}\" fill=\"color-mix(in srgb, {color} 12%, transparent)\"/>\
+         <polyline points=\"{line}\" fill=\"none\" stroke=\"{color}\" stroke-width=\"1.6\"/></svg>"
+    );
+    view! { <div inner_html=svg></div> }
+}
+
+/// Proportional healthy/degraded/failing/offline bar (handoff fleet-by-cluster).
+#[component]
+pub fn SegmentedHealthBar(
+    #[prop(default = 0)] healthy: usize,
+    #[prop(default = 0)] degraded: usize,
+    #[prop(default = 0)] failing: usize,
+    #[prop(default = 0)] offline: usize,
+) -> impl IntoView {
+    let total = (healthy + degraded + failing + offline).max(1) as f64;
+    let seg = |n: usize, color: &str| {
+        format!(
+            "<span style=\"width:{:.1}%;background:{color};display:block;\"></span>",
+            n as f64 / total * 100.0
+        )
+    };
+    let html = format!(
+        "{}{}{}{}",
+        seg(healthy, "var(--ok)"),
+        seg(degraded, "var(--gold)"),
+        seg(failing, "var(--bad)"),
+        seg(offline, "var(--border-control)")
+    );
+    view! {
+        <div
+            style="display:flex;height:7px;border-radius:4px;overflow:hidden;background:var(--inset);"
+            inner_html=html
+        ></div>
+    }
+}
+
+// Detail views use the pack's centered `Modal` (preferred over a slide-over).
+
+/// A key/value row for detail modals: mono uppercase label left, value right.
+/// `children` is the value (text, a `Pill`, chips, …).
+#[component]
+pub fn DetailRow(#[prop(into)] label: String, children: Children) -> impl IntoView {
+    view! {
+        <div style="display:flex;justify-content:space-between;gap:16px;align-items:baseline;\
+                    padding:7px 0;border-bottom:1px solid rgba(255,255,255,.05);">
+            <span style="font:10px var(--font-mono);text-transform:uppercase;letter-spacing:.05em;\
+                         color:var(--muted);white-space:nowrap;">{label}</span>
+            <span style="font:12px var(--font-mono);color:var(--fg);text-align:right;\
+                         word-break:break-word;">{children()}</span>
+        </div>
+    }
+}
+
+// ---- toasts --------------------------------------------------------------
+
+#[derive(Clone)]
+pub struct Toast {
+    pub id: u32,
+    pub msg: String,
+    pub color: String,
+}
+
+#[derive(Clone, Copy)]
+pub struct ToastBus(pub RwSignal<Vec<Toast>>);
+
+thread_local! {
+    static NEXT_ID: Cell<u32> = const { Cell::new(1) };
+}
+
+/// Install the toast bus at the app root. Call once.
+pub fn provide_toasts() {
+    provide_context(ToastBus(RwSignal::new(Vec::new())));
+}
+
+/// Push a toast onto a specific bus (auto-dismisses after 3.4s). Use this from
+/// async handlers where `use_context` is unavailable — capture the bus first.
+pub fn toast(bus: ToastBus, msg: impl Into<String>, color: &'static str) {
+    let id = NEXT_ID.with(|c| {
+        let v = c.get();
+        c.set(v.wrapping_add(1));
+        v
+    });
+    bus.0.update(|v| {
+        v.push(Toast {
+            id,
+            msg: msg.into(),
+            color: color.into(),
+        })
+    });
+    set_timeout(
+        move || bus.0.update(|v| v.retain(|t| t.id != id)),
+        Duration::from_millis(3400),
+    );
+}
+
+/// Push a toast via the context bus (call from a reactive scope).
+#[allow(dead_code)]
+pub fn push_toast(msg: impl Into<String>, color: &'static str) {
+    if let Some(bus) = use_context::<ToastBus>() {
+        toast(bus, msg, color);
+    }
+}
+
+/// Bottom-right toast stack. Mount once near the app root.
+#[component]
+pub fn Toaster() -> impl IntoView {
+    let bus = use_context::<ToastBus>().expect("ToastBus provided");
+    view! {
+        <div style="position:fixed;bottom:18px;right:18px;display:flex;flex-direction:column;\
+                    gap:9px;z-index:60;">
+            <For each=move || bus.0.get() key=|t| t.id let:t>
+                <div style=format!(
+                    "background:var(--control);border:1px solid var(--border-control);\
+                     border-left:3px solid {};border-radius:9px;padding:10px 14px;min-width:230px;\
+                     box-shadow:0 12px 30px rgba(0,0,0,.4);font:12px var(--font-sans);color:var(--fg);",
+                    t.color
+                )>{t.msg.clone()}</div>
+            </For>
+        </div>
+    }
+}
