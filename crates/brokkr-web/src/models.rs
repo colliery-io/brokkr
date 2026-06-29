@@ -125,3 +125,38 @@ pub struct AgentEventDto {
     #[serde(default)]
     pub message: Option<String>,
 }
+
+/// `GET /api/v1/stacks/:id/health` — per-stack deployment-object health rollup.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct DeploymentObjectHealth {
+    pub id: String,
+    pub status: String,
+    #[serde(default)]
+    pub healthy_agents: usize,
+    #[serde(default)]
+    pub degraded_agents: usize,
+    #[serde(default)]
+    pub failing_agents: usize,
+}
+
+/// `GET /api/v1/stacks/:id/health`.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct StackHealth {
+    #[serde(default)]
+    pub overall_status: String,
+    #[serde(default)]
+    pub deployment_objects: Vec<DeploymentObjectHealth>,
+}
+
+/// `GET /api/v1/webhooks/:id/deliveries` — recent delivery attempts (summary).
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct WebhookDeliveryDto {
+    #[serde(default)]
+    pub event_type: String,
+    #[serde(default)]
+    pub status: String,
+    #[serde(default)]
+    pub attempts: i32,
+    #[serde(default)]
+    pub last_error: Option<String>,
+}

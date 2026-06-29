@@ -253,3 +253,12 @@ polling, the 3 Overview layout variants, container-build + live-broker runtime v
 centered `aurora-leptos` Modal on click (shared `DetailRow` key/value helper in components.rs):
 Fleet→agent (+run-diagnostic), Deployments→stack, Work orders→job, Webhooks→subscription,
 Telemetry→event, Broker health→WS connection. All pixel-verified via the harness (`*-modal` scenes).
+
+## Gap-closure follow-up (2026-06-28, user-requested)
+
+Closing the logged data gaps. Findings on re-check: several "gaps" have existing endpoints/fields.
+- **Deployment health** — `GET /stacks/:id/health` exists → wire into Deployments modal (UI only).
+- **Webhook deliveries** — `GET /webhooks/:id/deliveries` exists → wire into Webhooks modal (UI only).
+- **Fleet cluster grouping** — `cluster_name` is already on `Agent`; add to `FleetAgentRecord`
+  (broker fleet.rs API + wire structs + builder + OpenAPI regen) then group Fleet/Overview by cluster.
+- **Active work orders** — add `GET /work-orders` (DAL `.list()` exists) + OpenAPI regen; UI "Active" panel.

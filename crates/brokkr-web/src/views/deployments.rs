@@ -8,6 +8,7 @@ use crate::api;
 use crate::components::DetailRow;
 use crate::models::Stack;
 use aurora_leptos::components::*;
+use crate::components::sev;
 use leptos::prelude::*;
 
 #[component]
@@ -15,6 +16,16 @@ pub fn DeploymentsView() -> impl IntoView {
     let data = LocalResource::new(|| api::stacks());
     let selected = RwSignal::new(None::<Stack>);
     let open = RwSignal::new(false);
+    // Per-stack deployment-object health, refetched when the selection changes.
+    let health = LocalResource::new(move || {
+        let id = selected.get().map(|s| s.id.clone());
+        async move {
+            match id {
+                Some(id) => Some(api::stack_health(&id).await),
+                None => None,
+            }
+        }
+    });
 
     view! {
         {move || match data.get() {
@@ -67,6 +78,39 @@ pub fn DeploymentsView() -> impl IntoView {
                             <DetailRow label="generator">{s.generator_id.clone()}</DetailRow>
                             <DetailRow label="description">{s.description.clone().unwrap_or_else(|| "—".into())}</DetailRow>
                         </div>
+                        <span style="font:600 10px var(--font-mono);text-transform:uppercase;\
+                                     letter-spacing:.05em;color:var(--muted);">"deployment health"</span>
+                        {move || match health.get() {
+                            None | Some(None) => view! { <Loading label="loading health" /> }.into_any(),
+                            Some(Some(Err(_))) => view! {
+                                <span style="font:11px var(--font-mono);color:var(--faint);">
+                                    "health unavailable"
+                                </span>
+                            }.into_any(),
+                            Some(Some(Ok(h))) => {
+                                let oc = sev(&h.overall_status);
+                                let rows = h.deployment_objects.into_iter().map(|o| {
+                                    let id8: String = o.id.chars().take(8).collect();
+                                    view! {
+                                        <Group justify="between">
+                                            <Group gap="sm">
+                                                <Pill color=sev(&o.status)>{o.status}</Pill>
+                                                <span style="font:11px var(--font-mono);color:var(--muted);">{id8}</span>
+                                            </Group>
+                                            <span style="font:10px var(--font-mono);color:var(--faint);">
+                                                {format!("{}\u{2713} {}~ {}\u{2717}", o.healthy_agents, o.degraded_agents, o.failing_agents)}
+                                            </span>
+                                        </Group>
+                                    }
+                                }).collect_view();
+                                view! {
+                                    <Stack gap="sm">
+                                        <Pill color=oc>{h.overall_status}</Pill>
+                                        {rows}
+                                    </Stack>
+                                }.into_any()
+                            }
+                        }}
                     </Stack>
                 }
                 .into_any(),

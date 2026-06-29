@@ -77,9 +77,17 @@ const SCENES = [
   { name: "jobs", nav: "Work orders", mocks: { "/work-order-log": JOBS } },
   { name: "jobs-modal", nav: "Work orders", click: "image_build", mocks: { "/work-order-log": JOBS } },
   { name: "webhooks", nav: "Webhooks", mocks: { "/webhooks": HOOKS } },
-  { name: "webhooks-modal", nav: "Webhooks", click: "prod-alerts", mocks: { "/webhooks": HOOKS } },
+  { name: "webhooks-modal", nav: "Webhooks", click: "prod-alerts", mocks: { "/webhooks": HOOKS,
+    "/webhooks/h1/deliveries": [
+      { event_type: "stack.updated", status: "delivered", attempts: 1, last_error: null },
+      { event_type: "agent.failed", status: "failed", attempts: 3, last_error: "connect ETIMEDOUT 10.0.0.4:443" },
+    ] } },
   { name: "deployments", nav: "Deployments", mocks: { "/stacks": STACKS } },
-  { name: "deployments-modal", nav: "Deployments", click: "payments-api", mocks: { "/stacks": STACKS } },
+  { name: "deployments-modal", nav: "Deployments", click: "payments-api", mocks: { "/stacks": STACKS,
+    "/stacks/s1/health": { stack_id: "s1", overall_status: "degraded", deployment_objects: [
+      { id: "d1a2b3c4", status: "healthy", healthy_agents: 3, degraded_agents: 0, failing_agents: 0 },
+      { id: "e5f6a7b8", status: "degraded", healthy_agents: 1, degraded_agents: 2, failing_agents: 0 },
+    ] } } },
   { name: "telemetry", nav: "Telemetry", mocks: { "/agent-events": TELEM } },
   { name: "telemetry-modal", nav: "Telemetry", click: "Apply", mocks: { "/agent-events": TELEM } },
 ];

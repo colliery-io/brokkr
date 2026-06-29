@@ -143,3 +143,13 @@ pub async fn post<B: Serialize>(path: &str, body: &B) -> Result<(), ApiError> {
 pub async fn create_diagnostic(agent_id: &str) -> Result<(), ApiError> {
     post("/diagnostics", &serde_json::json!({ "agent_id": agent_id })).await
 }
+
+/// `GET /api/v1/stacks/:id/health` — per-stack deployment-object health rollup.
+pub async fn stack_health(id: &str) -> Result<crate::models::StackHealth, ApiError> {
+    get(&format!("/stacks/{id}/health")).await
+}
+
+/// `GET /api/v1/webhooks/:id/deliveries` — recent delivery attempts.
+pub async fn webhook_deliveries(id: &str) -> Result<Vec<crate::models::WebhookDeliveryDto>, ApiError> {
+    get(&format!("/webhooks/{id}/deliveries")).await
+}

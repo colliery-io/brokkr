@@ -3,9 +3,24 @@
 //! system (BROKKR-T-0256). Detail views use the pack's centered `Modal`. Built on
 //! Aurora tokens.
 
+use aurora_leptos::tokens::token;
 use leptos::prelude::*;
 use std::cell::Cell;
 use std::time::Duration;
+
+/// Map a Brokkr domain status string to a severity color. Covers the statuses
+/// `status_color` doesn't (healthy/degraded/failing, delivered, …); falls back to muted.
+pub fn sev(status: &str) -> &'static str {
+    match status.to_ascii_lowercase().as_str() {
+        "healthy" | "delivered" | "active" | "completed" | "success" | "succeeded" | "ok"
+        | "ready" => token::OK,
+        "degraded" | "pending" | "claimed" | "retrying" | "in_progress" | "warning"
+        | "queued" => token::GOLD,
+        "failing" | "failed" | "error" | "errored" | "unhealthy" | "inactive"
+        | "offline" => token::BAD,
+        _ => token::MUTED,
+    }
+}
 
 /// SVG area sparkline over a value series (rendered via `inner_html` to sidestep
 /// leptos SVG-attr casing). `color` is any CSS color (a `token::*` or `var(--*)`).

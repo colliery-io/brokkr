@@ -9,6 +9,7 @@ use crate::components::DetailRow;
 use crate::models::WebhookSummary;
 use aurora_leptos::components::*;
 use aurora_leptos::tokens::token;
+use crate::components::sev;
 use leptos::prelude::*;
 
 fn event_chip(e: String) -> impl IntoView {
@@ -23,6 +24,16 @@ pub fn WebhooksView() -> impl IntoView {
     let data = LocalResource::new(|| api::webhooks());
     let selected = RwSignal::new(None::<WebhookSummary>);
     let open = RwSignal::new(false);
+    // Recent delivery attempts for the selected subscription.
+    let deliveries = LocalResource::new(move || {
+        let id = selected.get().map(|s| s.id.clone());
+        async move {
+            match id {
+                Some(id) => Some(api::webhook_deliveries(&id).await),
+                None => None,
+            }
+        }
+    });
 
     view! {
         {move || match data.get() {
@@ -86,6 +97,36 @@ pub fn WebhooksView() -> impl IntoView {
                                 <DetailRow label="url">{if s.has_url { "configured (redacted)" } else { "—" }}</DetailRow>
                             </div>
                             <Group gap="xs" wrap=true>{chips}</Group>
+                            <span style="font:600 10px var(--font-mono);text-transform:uppercase;\
+                                         letter-spacing:.05em;color:var(--muted);">"recent deliveries"</span>
+                            {move || match deliveries.get() {
+                                None | Some(None) => view! { <Loading label="loading deliveries" /> }.into_any(),
+                                Some(Some(Err(_))) => view! {
+                                    <span style="font:11px var(--font-mono);color:var(--faint);">"deliveries unavailable"</span>
+                                }.into_any(),
+                                Some(Some(Ok(ds))) if ds.is_empty() => view! {
+                                    <span style="font:11px var(--font-mono);color:var(--faint);">"no deliveries yet"</span>
+                                }.into_any(),
+                                Some(Some(Ok(ds))) => {
+                                    let rows = ds.into_iter().take(8).map(|d| {
+                                        let err = d.last_error.unwrap_or_default();
+                                        view! {
+                                            <Group justify="between">
+                                                <Group gap="sm">
+                                                    <Pill color=sev(&d.status)>{d.status}</Pill>
+                                                    <span style="font:11px var(--font-mono);color:var(--muted);">{d.event_type}</span>
+                                                </Group>
+                                                <span style="font:10px var(--font-mono);color:var(--faint);\
+                                                             max-width:45%;overflow:hidden;text-overflow:ellipsis;\
+                                                             white-space:nowrap;">
+                                                    {if err.is_empty() { format!("{}\u{00d7}", d.attempts) } else { err }}
+                                                </span>
+                                            </Group>
+                                        }
+                                    }).collect_view();
+                                    view! { <Stack gap="sm">{rows}</Stack> }.into_any()
+                                }
+                            }}
                         </Stack>
                     }
                     .into_any()
