@@ -2,6 +2,8 @@
 //! WS connections panel (`GET /api/v1/admin/ws/connections`).
 
 use crate::api;
+use crate::components::DetailRow;
+use crate::models::WsConnectionInfo;
 use aurora_leptos::components::*;
 use aurora_leptos::tokens::token;
 use leptos::prelude::*;
@@ -55,6 +57,8 @@ pub fn BrokerHealthView() -> impl IntoView {
         },
         std::time::Duration::from_secs(5),
     );
+    let selected = RwSignal::new(None::<WsConnectionInfo>);
+    let open = RwSignal::new(false);
 
     view! {
         <Stack gap="md">
@@ -97,18 +101,24 @@ pub fn BrokerHealthView() -> impl IntoView {
                             .connections
                             .into_iter()
                             .map(|c| {
+                                let c_sel = c.clone();
                                 view! {
-                                    <Group justify="between">
-                                        <Group gap="sm">
-                                            <Dot color=token::TEAL glow=true />
-                                            <span style="font:12px var(--font-mono);color:var(--fg);">
-                                                {c.agent_id}
+                                    <div style="cursor:pointer;" on:click=move |_| {
+                                        selected.set(Some(c_sel.clone()));
+                                        open.set(true);
+                                    }>
+                                        <Group justify="between">
+                                            <Group gap="sm">
+                                                <Dot color=token::TEAL glow=true />
+                                                <span style="font:12px var(--font-mono);color:var(--fg);">
+                                                    {c.agent_id.clone()}
+                                                </span>
+                                            </Group>
+                                            <span style="font:11px var(--font-mono);color:var(--muted);">
+                                                {format!("{}\u{2193} {}\u{2191}", c.messages_in, c.messages_out)}
                                             </span>
                                         </Group>
-                                        <span style="font:11px var(--font-mono);color:var(--muted);">
-                                            {format!("{}\u{2193} {}\u{2191}", c.messages_in, c.messages_out)}
-                                        </span>
-                                    </Group>
+                                    </div>
                                 }
                             })
                             .collect_view();
@@ -117,5 +127,24 @@ pub fn BrokerHealthView() -> impl IntoView {
                 }}
             </Panel>
         </Stack>
+
+        <Modal open=open title="WS connection">
+            {move || match selected.get() {
+                None => ().into_any(),
+                Some(c) => view! {
+                    <Stack gap="md">
+                        <span style="font:600 14px var(--font-mono);color:var(--fg-bright);word-break:break-all;">
+                            {c.agent_id.clone()}
+                        </span>
+                        <div>
+                            <DetailRow label="messages in">{c.messages_in.to_string()}</DetailRow>
+                            <DetailRow label="messages out">{c.messages_out.to_string()}</DetailRow>
+                            <DetailRow label="connected since">{c.connected_since.clone().unwrap_or_else(|| "—".into())}</DetailRow>
+                        </div>
+                    </Stack>
+                }
+                .into_any(),
+            }}
+        </Modal>
     }
 }

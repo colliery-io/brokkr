@@ -1,10 +1,12 @@
-//! Telemetry view — Kube events / Pod logs tabs.
+//! Telemetry view — Kube events / Pod logs tabs; click an event for detail.
 //! NOTE: true kube events + pod logs are per-stack (`/stacks/:id/{events,logs}`),
 //! with no global feed; the events tab binds to the global `/agent-events`
 //! (Apply/Heartbeat/Reconcile lifecycle events) as the closest global stream, and
 //! the logs tab needs a stack selected. REST-poll, 6h retention (logged on task).
 
 use crate::api;
+use crate::components::DetailRow;
+use crate::models::AgentEventDto;
 use aurora_leptos::components::*;
 use aurora_leptos::tokens::status_color;
 use leptos::prelude::*;
@@ -14,6 +16,8 @@ pub fn TelemetryView() -> impl IntoView {
     let tab = RwSignal::new(String::from("Kube events"));
     let events = LocalResource::new(|| api::agent_events());
     set_interval(move || events.refetch(), std::time::Duration::from_secs(5));
+    let selected = RwSignal::new(None::<AgentEventDto>);
+    let open = RwSignal::new(false);
 
     view! {
         <Stack gap="md">
@@ -50,19 +54,23 @@ pub fn TelemetryView() -> impl IntoView {
                                 .into_iter()
                                 .map(|e| {
                                     let sc = status_color(&e.status);
-                                    let msg = e.message.unwrap_or_default();
+                                    let msg = e.message.clone().unwrap_or_default();
+                                    let e_sel = e.clone();
                                     view! {
-                                        <Group justify="between">
+                                        <div style="cursor:pointer;" on:click=move |_| {
+                                            selected.set(Some(e_sel.clone()));
+                                            open.set(true);
+                                        }>
                                             <Group gap="sm">
-                                                <Pill color=sc>{e.event_type}</Pill>
+                                                <Pill color=sc>{e.event_type.clone()}</Pill>
                                                 <span style="font:11px var(--font-mono);\
-                                                             color:var(--muted);">{e.status}</span>
+                                                             color:var(--muted);">{e.status.clone()}</span>
                                                 <span style="font:12px var(--font-sans);\
                                                              color:var(--fg-2);max-width:600px;\
                                                              overflow:hidden;text-overflow:ellipsis;\
                                                              white-space:nowrap;">{msg}</span>
                                             </Group>
-                                        </Group>
+                                        </div>
                                     }
                                 })
                                 .collect_view();
@@ -77,5 +85,29 @@ pub fn TelemetryView() -> impl IntoView {
                 }
             }}
         </Stack>
+
+        <Modal open=open title="Event detail">
+            {move || match selected.get() {
+                None => ().into_any(),
+                Some(e) => {
+                    let sc = status_color(&e.status);
+                    view! {
+                        <Stack gap="md">
+                            <Group gap="sm">
+                                <Pill color=sc>{e.event_type.clone()}</Pill>
+                                <span style="font:11px var(--font-mono);color:var(--muted);">{e.status.clone()}</span>
+                            </Group>
+                            <div>
+                                <DetailRow label="agent">{e.agent_id.clone()}</DetailRow>
+                            </div>
+                            <span style="font:12px var(--font-sans);color:var(--fg);line-height:1.5;">
+                                {e.message.clone().unwrap_or_else(|| "(no message)".into())}
+                            </span>
+                        </Stack>
+                    }
+                    .into_any()
+                }
+            }}
+        </Modal>
     }
 }

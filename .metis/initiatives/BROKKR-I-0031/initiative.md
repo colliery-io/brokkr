@@ -248,3 +248,8 @@ is built end-to-end and self-verified via the `web-e2e` Playwright+mock harness:
 **Deferred (per ADR-0010 / follow-ups):** UI read-access auth (interim: pasted PAK in
 localStorage), `/fleet/live` WS (interim 5s poll), Live/Paused gating of polls, diagnostic-result
 polling, the 3 Overview layout variants, container-build + live-broker runtime verification.
+
+**2026-06-28 — modal detail pattern applied across all views.** Every list/card view now opens a
+centered `aurora-leptos` Modal on click (shared `DetailRow` key/value helper in components.rs):
+Fleet→agent (+run-diagnostic), Deployments→stack, Work orders→job, Webhooks→subscription,
+Telemetry→event, Broker health→WS connection. All pixel-verified via the harness (`*-modal` scenes).

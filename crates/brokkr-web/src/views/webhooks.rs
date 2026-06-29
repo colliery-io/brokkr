@@ -1,17 +1,28 @@
-//! Webhooks view — subscription summaries from `GET /api/v1/webhooks`.
-//! NOTE: the API redacts the URL (encrypted at rest) to `has_url`, and delivery
-//! history is per-subscription (`/webhooks/:id/deliveries`), not a global feed —
-//! so this shows subscriptions; a global "recent deliveries" panel needs a broker
-//! enhancement (logged on the task).
+//! Webhooks view — subscription summaries from `GET /api/v1/webhooks`; click a card
+//! for detail. NOTE: the API redacts the URL (encrypted at rest) to `has_url`, and
+//! delivery history is per-subscription (`/webhooks/:id/deliveries`), not a global
+//! feed — so this shows subscriptions; a global "recent deliveries" panel needs a
+//! broker enhancement (logged on the task).
 
 use crate::api;
+use crate::components::DetailRow;
+use crate::models::WebhookSummary;
 use aurora_leptos::components::*;
 use aurora_leptos::tokens::token;
 use leptos::prelude::*;
 
+fn event_chip(e: String) -> impl IntoView {
+    view! {
+        <span style="font:9.5px var(--font-mono);color:var(--ice);background:rgba(127,178,255,.1);\
+                     padding:2px 6px;border-radius:6px;">{e}</span>
+    }
+}
+
 #[component]
 pub fn WebhooksView() -> impl IntoView {
     let data = LocalResource::new(|| api::webhooks());
+    let selected = RwSignal::new(None::<WebhookSummary>);
+    let open = RwSignal::new(false);
 
     view! {
         {move || match data.get() {
@@ -32,24 +43,19 @@ pub fn WebhooksView() -> impl IntoView {
                         } else {
                             ("disabled", token::MUTED)
                         };
-                        let chips = s
-                            .event_types
-                            .into_iter()
-                            .map(|e| {
-                                view! {
-                                    <span style="font:9.5px var(--font-mono);color:var(--ice);\
-                                                 background:rgba(127,178,255,.1);padding:2px 6px;\
-                                                 border-radius:6px;">{e}</span>
-                                }
-                            })
-                            .collect_view();
+                        let chips = s.event_types.iter().cloned().map(event_chip).collect_view();
+                        let has_url = s.has_url;
+                        let s_sel = s.clone();
                         view! {
-                            <div style="min-width:260px;flex:1;">
+                            <div style="min-width:260px;flex:1;cursor:pointer;" on:click=move |_| {
+                                selected.set(Some(s_sel.clone()));
+                                open.set(true);
+                            }>
                                 <Panel title=s.name.clone()>
                                     <Stack gap="sm">
                                         <Group gap="sm">
                                             <Pill color=color>{label}</Pill>
-                                            {(!s.has_url).then(|| view! {
+                                            {(!has_url).then(|| view! {
                                                 <span style="font:9.5px var(--font-mono);\
                                                              color:var(--faint);">"url redacted"</span>
                                             })}
@@ -64,5 +70,27 @@ pub fn WebhooksView() -> impl IntoView {
                 view! { <Group gap="md" wrap=true>{cards}</Group> }.into_any()
             }
         }}
+
+        <Modal open=open title="Webhook subscription">
+            {move || match selected.get() {
+                None => ().into_any(),
+                Some(s) => {
+                    let (label, color) = if s.enabled { ("enabled", token::OK) } else { ("disabled", token::MUTED) };
+                    let chips = s.event_types.iter().cloned().map(event_chip).collect_view();
+                    view! {
+                        <Stack gap="md">
+                            <span style="font:600 15px var(--font-mono);color:var(--fg-bright);">{s.name.clone()}</span>
+                            <div>
+                                <DetailRow label="status"><Pill color=color>{label}</Pill></DetailRow>
+                                <DetailRow label="id">{s.id.clone()}</DetailRow>
+                                <DetailRow label="url">{if s.has_url { "configured (redacted)" } else { "—" }}</DetailRow>
+                            </div>
+                            <Group gap="xs" wrap=true>{chips}</Group>
+                        </Stack>
+                    }
+                    .into_any()
+                }
+            }}
+        </Modal>
     }
 }

@@ -49,29 +49,39 @@ const EVENTS = [
   { agent_id: "a2", event_type: "Reconcile", status: "failure", message: "Service/ingest: port 8080 already allocated" },
 ];
 
+const JOBS = [
+  { id: "7f3a01ab", work_type: "image_build", success: true, retries_attempted: 0, result_message: "pushed ghcr.io/app:sha-7f3a01" },
+  { id: "561200cd", work_type: "image_build", success: false, retries_attempted: 3, result_message: "buildah: manifest unknown" },
+];
+const HOOKS = [
+  { id: "h1", name: "prod-alerts", enabled: true, has_url: true, event_types: ["stack.updated", "agent.failed"] },
+  { id: "h2", name: "audit-sink", enabled: false, has_url: true, event_types: ["pak.rotated"] },
+];
+const STACKS = [
+  { id: "s1", name: "payments-api", description: "prod payments service", generator_id: "1b9d6bcd-bbfd" },
+  { id: "s2", name: "ingest-worker", description: "event ingest", generator_id: "7c9e6679-7425" },
+];
+const TELEM = [
+  { agent_id: "a1", event_type: "Apply", status: "success", message: "applied Deployment/payments (3 objects)" },
+  { agent_id: "a1", event_type: "Reconcile", status: "success", message: "no drift" },
+  { agent_id: "a2", event_type: "Apply", status: "failure", message: "Service/ingest: port 8080 already allocated" },
+];
+
 const SCENES = [
   { name: "overview", mocks: { "/fleet": FLEET, "/agent-events": EVENTS } },
   { name: "fleet", nav: "Fleet", mocks: { "/fleet": FLEET } },
   { name: "fleet-empty", nav: "Fleet", mocks: { "/fleet": [] } },
   { name: "fleet-modal", nav: "Fleet", click: "prod-agent-01", mocks: { "/fleet": FLEET } },
   { name: "health", nav: "Broker health", mocks: { "/admin/ws/connections": WSCONN } },
-  { name: "jobs", nav: "Work orders", mocks: { "/work-order-log": [
-    { id: "7f3a01ab", work_type: "image_build", success: true, retries_attempted: 0, result_message: "pushed ghcr.io/app:sha-7f3a01" },
-    { id: "561200cd", work_type: "image_build", success: false, retries_attempted: 3, result_message: "buildah: manifest unknown" },
-  ] } },
-  { name: "webhooks", nav: "Webhooks", mocks: { "/webhooks": [
-    { id: "h1", name: "prod-alerts", enabled: true, has_url: true, event_types: ["stack.updated", "agent.failed"] },
-    { id: "h2", name: "audit-sink", enabled: false, has_url: true, event_types: ["pak.rotated"] },
-  ] } },
-  { name: "deployments", nav: "Deployments", mocks: { "/stacks": [
-    { id: "s1", name: "payments-api", description: "prod payments service", generator_id: "1b9d6bcd-bbfd" },
-    { id: "s2", name: "ingest-worker", description: "event ingest", generator_id: "7c9e6679-7425" },
-  ] } },
-  { name: "telemetry", nav: "Telemetry", mocks: { "/agent-events": [
-    { agent_id: "a1", event_type: "Apply", status: "success", message: "applied Deployment/payments (3 objects)" },
-    { agent_id: "a1", event_type: "Reconcile", status: "success", message: "no drift" },
-    { agent_id: "a2", event_type: "Apply", status: "failure", message: "Service/ingest: port 8080 already allocated" },
-  ] } },
+  { name: "health-modal", nav: "Broker health", click: "1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed", mocks: { "/admin/ws/connections": WSCONN } },
+  { name: "jobs", nav: "Work orders", mocks: { "/work-order-log": JOBS } },
+  { name: "jobs-modal", nav: "Work orders", click: "image_build", mocks: { "/work-order-log": JOBS } },
+  { name: "webhooks", nav: "Webhooks", mocks: { "/webhooks": HOOKS } },
+  { name: "webhooks-modal", nav: "Webhooks", click: "prod-alerts", mocks: { "/webhooks": HOOKS } },
+  { name: "deployments", nav: "Deployments", mocks: { "/stacks": STACKS } },
+  { name: "deployments-modal", nav: "Deployments", click: "payments-api", mocks: { "/stacks": STACKS } },
+  { name: "telemetry", nav: "Telemetry", mocks: { "/agent-events": TELEM } },
+  { name: "telemetry-modal", nav: "Telemetry", click: "Apply", mocks: { "/agent-events": TELEM } },
 ];
 
 // ---- driver --------------------------------------------------------------

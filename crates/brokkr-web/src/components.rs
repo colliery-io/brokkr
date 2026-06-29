@@ -67,6 +67,21 @@ pub fn SegmentedHealthBar(
 
 // Detail views use the pack's centered `Modal` (preferred over a slide-over).
 
+/// A key/value row for detail modals: mono uppercase label left, value right.
+/// `children` is the value (text, a `Pill`, chips, …).
+#[component]
+pub fn DetailRow(#[prop(into)] label: String, children: Children) -> impl IntoView {
+    view! {
+        <div style="display:flex;justify-content:space-between;gap:16px;align-items:baseline;\
+                    padding:7px 0;border-bottom:1px solid rgba(255,255,255,.05);">
+            <span style="font:10px var(--font-mono);text-transform:uppercase;letter-spacing:.05em;\
+                         color:var(--muted);white-space:nowrap;">{label}</span>
+            <span style="font:12px var(--font-mono);color:var(--fg);text-align:right;\
+                         word-break:break-word;">{children()}</span>
+        </div>
+    }
+}
+
 // ---- toasts --------------------------------------------------------------
 
 #[derive(Clone)]
@@ -110,6 +125,7 @@ pub fn toast(bus: ToastBus, msg: impl Into<String>, color: &'static str) {
 }
 
 /// Push a toast via the context bus (call from a reactive scope).
+#[allow(dead_code)]
 pub fn push_toast(msg: impl Into<String>, color: &'static str) {
     if let Some(bus) = use_context::<ToastBus>() {
         toast(bus, msg, color);
