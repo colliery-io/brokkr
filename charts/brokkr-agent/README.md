@@ -71,20 +71,26 @@ Rendered into the agent ConfigMap as the `BROKKR__AGENT__GENERATOR_IDS` environm
 variable (equivalently settable via `agent.generator_ids` in a config file or the
 `--generator-ids` CLI flag).
 
-**Security Note**: The PAK is a sensitive credential. In production, use Kubernetes secrets:
+**Security Note**: The PAK is a sensitive credential. Setting `broker.pak` renders it
+into the agent ConfigMap in plaintext — fine for dev/test, but in production (and any
+GitOps workflow) source it from a pre-existing Kubernetes Secret via `broker.existingSecret`:
 
 ```bash
+# Secret keyed to match the env var name (the default existingSecretKey):
 kubectl create secret generic agent-credentials \
-  --from-literal=pak=your-pak-token
+  --from-literal=BROKKR__AGENT__PAK=your-pak-token
 
 helm install my-agent charts/brokkr-agent \
   --set broker.url=http://my-broker:3000 \
   --set broker.clusterName=production \
-  --set broker.pak="" \
-  --set-string 'extraEnv[0].name=BROKKR__AGENT__PAK' \
-  --set-string 'extraEnv[0].valueFrom.secretKeyRef.name=agent-credentials' \
-  --set-string 'extraEnv[0].valueFrom.secretKeyRef.key=pak'
+  --set broker.existingSecret=agent-credentials
 ```
+
+The PAK is injected into the pod via `secretKeyRef` (overriding the ConfigMap), so the
+raw credential never lands in a values file or git history. If your Secret stores the PAK
+under a different key, set `broker.existingSecretKey` to match. This pairs naturally with
+[external-secrets-operator](https://external-secrets.io/), which can vend the PAK from
+Vault / 1Password / AWS Secrets Manager into the Secret at deploy time.
 
 ### Agent Polling Configuration
 
@@ -216,7 +222,9 @@ securityContext:
 | `broker.url` | string | `"http://brokkr-broker:3000"` | Broker service URL |
 | `broker.agentName` | string | `""` | Agent identifier (auto-generated if empty) |
 | `broker.clusterName` | string | `""` | Cluster identifier |
-| `broker.pak` | string | `""` | Pre-Authenticated Key for authentication |
+| `broker.pak` | string | `""` | Pre-Authenticated Key (rendered into the ConfigMap in plaintext; dev/test only). Ignored when `broker.existingSecret` is set. |
+| `broker.existingSecret` | string | `""` | Name of a pre-existing Secret to source the PAK from. When set, the PAK is injected via `secretKeyRef` and kept out of the ConfigMap/values/git (GitOps-friendly). |
+| `broker.existingSecretKey` | string | `"BROKKR__AGENT__PAK"` | Key within `broker.existingSecret` holding the PAK. |
 | `broker.generatorIds` | list/string | `[]` | Generator UUIDs the agent self-registers with on startup (`BROKKR__AGENT__GENERATOR_IDS`). Empty = system/fleet scope only. |
 | `agent.pollingInterval` | int | `30` | Polling interval in seconds |
 | `rbac.create` | bool | `true` | Create RBAC resources |

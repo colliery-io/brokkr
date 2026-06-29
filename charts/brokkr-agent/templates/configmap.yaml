@@ -14,7 +14,10 @@ data:
   # agent derives the WS URL from BROKKR__AGENT__BROKER_URL. See ADR-0008.
   BROKKR__AGENT__WS_URL: {{ .Values.agent.wsUrl | quote }}
   {{- end }}
-  BROKKR__AGENT__PAK: {{ .Values.broker.pak | quote }}
+  {{- /* When existingSecret is set the PAK is injected via secretKeyRef in the
+         deployment (env overrides envFrom), so keep the raw credential out of
+         the ConfigMap entirely. */}}
+  BROKKR__AGENT__PAK: {{ if .Values.broker.existingSecret }}""{{ else }}{{ .Values.broker.pak | quote }}{{ end }}
   {{- with .Values.broker.generatorIds }}
   # Generator scopes the agent self-registers with on startup (BROKKR-I-0030).
   # Comma-separated generator UUIDs; unset/empty = system/fleet scope only.

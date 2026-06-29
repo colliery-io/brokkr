@@ -66,7 +66,17 @@ broker:
   url: http://brokkr-broker:3000
   agentName: ""
   clusterName: ""
+  # Pre-Authenticated Key. Used only when broker.existingSecret is empty.
+  # WARNING: a value here is rendered into the agent ConfigMap in plaintext —
+  # for GitOps / production, prefer broker.existingSecret below.
   pak: ""
+  # Source the PAK from a pre-existing Kubernetes Secret instead of broker.pak.
+  # When set, the ConfigMap omits the PAK and the deployment injects
+  # BROKKR__AGENT__PAK from this Secret via secretKeyRef (overriding the
+  # ConfigMap). Lets the raw credential stay out of values files / git history —
+  # e.g. vended by external-secrets-operator from Vault / 1Password / AWS SM.
+  existingSecret: ""                       # name of the pre-existing Secret
+  existingSecretKey: "BROKKR__AGENT__PAK"  # key within that Secret holding the PAK
   # Generator scopes this agent serves. Each entry is a generator UUID; the agent
   # self-registers with each on startup so the broker will only target it with
   # stacks owned by these generators (see ADR-0009, BROKKR-I-0030).

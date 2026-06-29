@@ -320,6 +320,12 @@ securityContext:
 | `postgresql.external.password` | string | `"brokkr"` | Database password |
 | `postgresql.external.schema` | string | `""` | PostgreSQL schema for multi-tenant isolation |
 | `postgresql.existingSecret` | string | `""` | Existing secret for database URL |
+| `broker.webhookEncryptionKey` | string | `""` | Webhook encryption key (rendered into the ConfigMap in plaintext; dev/test only). Ignored when `broker.webhookEncryptionKeyExistingSecret` is set. |
+| `broker.webhookEncryptionKeyExistingSecret` | string | `""` | Name of a pre-existing Secret to source the webhook encryption key from. Injected via `secretKeyRef`, kept out of the ConfigMap/values/git (GitOps-friendly). |
+| `broker.webhookEncryptionKeyExistingSecretKey` | string | `"BROKKR__BROKER__WEBHOOK_ENCRYPTION_KEY"` | Key within that Secret holding the webhook encryption key. |
+| `broker.pakHash` | string | `""` | Admin PAK hash (rendered into the ConfigMap in plaintext; dev/test only). Ignored when `broker.pakHashExistingSecret` is set. |
+| `broker.pakHashExistingSecret` | string | `""` | Name of a pre-existing Secret to source the admin PAK hash from. Injected via `secretKeyRef`. |
+| `broker.pakHashExistingSecretKey` | string | `"BROKKR__BROKER__PAK_HASH"` | Key within that Secret holding the admin PAK hash. |
 | `tls.enabled` | bool | `false` | Enable TLS/SSL |
 | `tls.existingSecret` | string | `""` | Existing TLS secret name |
 | `tls.cert` | string | `""` | Base64-encoded certificate (testing only) |

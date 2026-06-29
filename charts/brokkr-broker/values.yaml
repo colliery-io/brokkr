@@ -204,7 +204,25 @@ broker:
   # @hot-reload: false - requires restart
   # If not set, a random key is generated on startup
   # WARNING: Changing this will make existing encrypted webhook data unreadable
+  # WARNING: a value here is rendered into the broker ConfigMap in plaintext —
+  # for GitOps / production, prefer the existingSecret option below.
   # webhookEncryptionKey: ""
+  # Source the webhook encryption key from a pre-existing Kubernetes Secret
+  # instead of webhookEncryptionKey. When set, the key is injected via
+  # secretKeyRef (overriding the ConfigMap) and never touches values/git —
+  # e.g. vended by external-secrets-operator from Vault / 1Password / AWS SM.
+  webhookEncryptionKeyExistingSecret: ""                                    # name of the pre-existing Secret
+  webhookEncryptionKeyExistingSecretKey: BROKKR__BROKER__WEBHOOK_ENCRYPTION_KEY  # key within that Secret
+
+  # Admin PAK hash for day-zero bootstrap (BROKKR__BROKER__PAK_HASH).
+  # @hot-reload: false - requires restart
+  # WARNING: a value here is rendered into the broker ConfigMap in plaintext —
+  # for GitOps / production, prefer the existingSecret option below.
+  # pakHash: ""
+  # Source the admin PAK hash from a pre-existing Kubernetes Secret instead of
+  # pakHash. When set, injected via secretKeyRef (overriding the ConfigMap).
+  pakHashExistingSecret: ""                            # name of the pre-existing Secret
+  pakHashExistingSecretKey: BROKKR__BROKER__PAK_HASH   # key within that Secret
 
 # CORS configuration for API access
 # @hot-reload: true - changes apply without restart (except allowCredentials)
