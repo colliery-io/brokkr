@@ -1,17 +1,17 @@
 ---
-id: cross-cutting-live-paused-engine
+id: live-paused-engine-toast-system
 level: task
 title: "Live/Paused engine, toast system, prefers-reduced-motion"
 short_code: "BROKKR-T-0256"
 created_at: 2026-06-28T01:44:26.674406+00:00
-updated_at: 2026-06-28T01:44:26.674406+00:00
+updated_at: 2026-06-29T00:32:35.501264+00:00
 parent: brokkr-operator-console
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/todo"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -32,6 +32,10 @@ system, and global `prefers-reduced-motion` handling.
 
 ### Type
 - [x] Feature — cross-cutting runtime
+
+## Acceptance Criteria
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

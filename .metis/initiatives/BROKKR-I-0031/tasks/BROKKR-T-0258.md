@@ -4,14 +4,14 @@ level: task
 title: "Agent detail slide-over + run-diagnostic action (the v1 write)"
 short_code: "BROKKR-T-0258"
 created_at: 2026-06-28T01:44:26.794739+00:00
-updated_at: 2026-06-29T00:27:50.930106+00:00
+updated_at: 2026-06-29T00:32:13.911196+00:00
 parent: brokkr-operator-console
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/active"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -31,6 +31,8 @@ Add the right-anchored agent-detail slide-over (opened from any Fleet row) and t
 
 ### Type
 - [x] Feature — view slice + the single v1 write action
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

@@ -1,17 +1,17 @@
 ---
-id: slice-6-work-orders-view-active
+id: work-orders-view-active-live
 level: task
 title: "Work orders view — active (live progress) + history"
 short_code: "BROKKR-T-0261"
 created_at: 2026-06-28T01:44:26.976822+00:00
-updated_at: 2026-06-28T01:44:26.976822+00:00
+updated_at: 2026-06-29T00:32:36.704965+00:00
 parent: brokkr-operator-console
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/todo"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -30,6 +30,10 @@ Work-orders view: Active (live progress) + History, per the handoff §Work order
 
 ### Type
 - [x] Feature — view slice
+
+## Acceptance Criteria
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

@@ -1,17 +1,17 @@
 ---
-id: slice-2-overview-view-six-widgets
+id: overview-view-six-widgets-three
 level: task
 title: "Overview view — six widgets + three swappable layouts"
 short_code: "BROKKR-T-0257"
 created_at: 2026-06-28T01:44:26.734560+00:00
-updated_at: 2026-06-28T01:44:26.734560+00:00
+updated_at: 2026-06-29T00:32:35.798743+00:00
 parent: brokkr-operator-console
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/todo"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -31,6 +31,10 @@ layouts (command / grid / stream), per the handoff §Overview.
 
 ### Type
 - [x] Feature — view slice
+
+## Acceptance Criteria
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

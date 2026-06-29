@@ -225,3 +225,26 @@ discovery → design.**
   hand-vendor a ds-bundle and reimplement primitives. T-0255 repurposed from "reimplement
   primitives" → "adopt `aurora-leptos` + build the few app-local gap components (slide-over,
   SVG sparkline, segmented health bars)". ADR-0010 updated.
+## Status Updates
+
+**2026-06-28 — all 12 tasks implemented + pixel-verified (Ralph run).** The operator console
+is built end-to-end and self-verified via the `web-e2e` Playwright+mock harness:
+- **Walking skeleton**: `crates/brokkr-web` (Leptos/WASM) served by the broker (`embed-ui` +
+  Dockerfile); Aurora `AppShell` shell.
+- **All 7 views** render with data: Overview (KPIs + fleet-health bar + throughput sparkline +
+  activity), Fleet (+ agent slide-over + run-diagnostic write), Deployments, Telemetry, Work
+  orders, Broker health, Webhooks.
+- **Foundations**: data layer (`api.rs` gloo-net + Prometheus parser, `models.rs`), app-local
+  gap components (Sparkline / SegmentedHealthBar / SlideOver), toast system.
+
+**Known data gaps (need broker enhancements, out of UI scope) — backlog:**
+- `/fleet` lacks `cluster_name`/`labels` → flat fleet list, no per-cluster grouping (also limits Overview).
+- No "list active work orders" endpoint (only `/work-order-log` history).
+- Webhook URLs redacted (`has_url`); no global deliveries feed (per-sub only).
+- Telemetry kube-events + pod-logs are per-stack; no global feed.
+- No `brokkr_database_queries_total` metric.
+- Per-stack deployment-object health rollup needs `/stacks/:id/health` + deployment-objects.
+
+**Deferred (per ADR-0010 / follow-ups):** UI read-access auth (interim: pasted PAK in
+localStorage), `/fleet/live` WS (interim 5s poll), Live/Paused gating of polls, diagnostic-result
+polling, the 3 Overview layout variants, container-build + live-broker runtime verification.

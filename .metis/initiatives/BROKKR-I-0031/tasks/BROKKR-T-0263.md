@@ -1,17 +1,17 @@
 ---
-id: slice-8-webhooks-view
+id: webhooks-view-subscriptions-recent
 level: task
 title: "Webhooks view — subscriptions + recent deliveries"
 short_code: "BROKKR-T-0263"
 created_at: 2026-06-28T01:44:27.093925+00:00
-updated_at: 2026-06-28T01:44:27.093925+00:00
+updated_at: 2026-06-29T00:32:37.024801+00:00
 parent: brokkr-operator-console
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/todo"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -30,6 +30,10 @@ Webhooks view: subscriptions + recent deliveries, per the handoff §Webhooks. Re
 
 ### Type
 - [x] Feature — view slice (completes the seven-view monitor)
+
+## Acceptance Criteria
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

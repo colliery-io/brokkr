@@ -1,17 +1,17 @@
 ---
-id: slice-5-telemetry-view-kube-events
+id: telemetry-view-kube-events-pod
 level: task
 title: "Telemetry view — kube events + pod logs (REST-poll, 6h retention)"
 short_code: "BROKKR-T-0260"
 created_at: 2026-06-28T01:44:26.917487+00:00
-updated_at: 2026-06-28T01:44:26.917487+00:00
+updated_at: 2026-06-29T00:32:36.406884+00:00
 parent: brokkr-operator-console
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/todo"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -32,6 +32,10 @@ enhancement — see [[BROKKR-A-0010]]).
 
 ### Type
 - [x] Feature — view slice
+
+## Acceptance Criteria
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

@@ -1,17 +1,17 @@
 ---
-id: slice-4-deployments-view-per-stack
+id: deployments-view-per-stack
 level: task
 title: "Deployments view — per-stack deployment-object health"
 short_code: "BROKKR-T-0259"
 created_at: 2026-06-28T01:44:26.854707+00:00
-updated_at: 2026-06-28T01:44:26.854707+00:00
+updated_at: 2026-06-29T00:32:36.098518+00:00
 parent: brokkr-operator-console
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/todo"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -30,6 +30,10 @@ Per-stack deployment-object health view per the handoff §Deployments.
 
 ### Type
 - [x] Feature — view slice
+
+## Acceptance Criteria
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 
