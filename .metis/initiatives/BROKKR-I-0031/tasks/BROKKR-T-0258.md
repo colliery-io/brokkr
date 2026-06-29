@@ -66,3 +66,6 @@ Add the right-anchored agent-detail slide-over (opened from any Fleet row) and t
 (`api::create_diagnostic`) with request/queued/failed toasts. Activate/Deactivate intentionally
 omitted (deferred per ADR-0010). Diagnostic-result polling is a follow-up. Verified via harness
 (slide-over screenshot).
+**2026-06-28 — detail view switched to a centered Modal** (user preference over the slide-over).
+Now uses `aurora-leptos`'s `Modal`; the app-local `SlideOver` was removed. Content + run-diagnostic
+write unchanged. Re-verified via harness (fleet-modal screenshot).

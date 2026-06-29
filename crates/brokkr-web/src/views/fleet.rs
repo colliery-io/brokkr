@@ -1,10 +1,10 @@
 //! Fleet view — agents from `GET /api/v1/fleet` with a KPI strip and a row per
 //! agent (status/health pills, `⇄ ws`, heartbeat "ago"). Clicking a row opens the
-//! agent-detail slide-over with the v1 **run-diagnostic** write (POST /diagnostics).
+//! agent-detail **Modal** with the v1 **run-diagnostic** write (POST /diagnostics).
 //! Flat list (no per-cluster grouping — the fleet record lacks cluster_name/labels).
 
 use crate::api;
-use crate::components::{toast, SlideOver, ToastBus};
+use crate::components::{toast, ToastBus};
 use crate::models::FleetAgentRecord;
 use crate::views::{ago, Kpi};
 use aurora_leptos::components::*;
@@ -77,7 +77,7 @@ pub fn FleetView() -> impl IntoView {
             }
         }}
 
-        <SlideOver open=open title="Agent detail">
+        <Modal open=open title="Agent detail">
             {move || match selected.get() {
                 None => ().into_any(),
                 Some(a) => {
@@ -114,6 +114,6 @@ pub fn FleetView() -> impl IntoView {
                     .into_any()
                 }
             }}
-        </SlideOver>
+        </Modal>
     }
 }

@@ -78,3 +78,5 @@ via inner_html) + `SegmentedHealthBar` (proportional ok/gold/bad/offline) — bo
 the Overview; `SlideOver` (right-anchored panel + scrim) — verified in the Fleet agent detail.
 The design→aurora-leptos mapping is realized across the views (Panel/PageHeader/StatusBadge/
 Pill/Dot/Loading/Empty/ErrorState/SegmentedControl from the pack; these three app-local).
+**2026-06-28 — `SlideOver` removed.** Detail views use the pack's centered `Modal` instead, so
+the app-local gap components are now just `Sparkline` + `SegmentedHealthBar`.

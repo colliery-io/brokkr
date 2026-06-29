@@ -53,7 +53,7 @@ const SCENES = [
   { name: "overview", mocks: { "/fleet": FLEET, "/agent-events": EVENTS } },
   { name: "fleet", nav: "Fleet", mocks: { "/fleet": FLEET } },
   { name: "fleet-empty", nav: "Fleet", mocks: { "/fleet": [] } },
-  { name: "fleet-slideover", nav: "Fleet", click: "prod-agent-01", mocks: { "/fleet": FLEET } },
+  { name: "fleet-modal", nav: "Fleet", click: "prod-agent-01", mocks: { "/fleet": FLEET } },
   { name: "health", nav: "Broker health", mocks: { "/admin/ws/connections": WSCONN } },
   { name: "jobs", nav: "Work orders", mocks: { "/work-order-log": [
     { id: "7f3a01ab", work_type: "image_build", success: true, retries_attempted: 0, result_message: "pushed ghcr.io/app:sha-7f3a01" },

@@ -1,6 +1,7 @@
 //! App-local components the design handoff needs but `aurora-leptos` does not ship
-//! (BROKKR-T-0255): an SVG sparkline, a segmented health bar, a right-anchored
-//! slide-over; plus the toast system (BROKKR-T-0256). Built on Aurora tokens.
+//! (BROKKR-T-0255): an SVG sparkline and a segmented health bar; plus the toast
+//! system (BROKKR-T-0256). Detail views use the pack's centered `Modal`. Built on
+//! Aurora tokens.
 
 use leptos::prelude::*;
 use std::cell::Cell;
@@ -64,38 +65,7 @@ pub fn SegmentedHealthBar(
     }
 }
 
-/// Right-anchored slide-over panel + scrim. Always rendered; visibility is toggled
-/// by `open` (so `children` runs once and may contain its own reactive closures).
-#[component]
-pub fn SlideOver(
-    open: RwSignal<bool>,
-    #[prop(into)] title: String,
-    children: Children,
-) -> impl IntoView {
-    view! {
-        <div
-            style=move || format!(
-                "position:fixed;inset:0;background:rgba(6,8,11,.55);z-index:50;{}",
-                if open.get() { "" } else { "display:none;" }
-            )
-            on:click=move |_| open.set(false)
-        ></div>
-        <div style=move || format!(
-            "position:fixed;top:0;right:0;width:430px;max-width:92vw;height:100vh;\
-             background:var(--panel);border-left:1px solid var(--border);\
-             box-shadow:-24px 0 60px rgba(0,0,0,.5);z-index:51;padding:18px 20px;\
-             overflow-y:auto;transition:transform .18s ease;transform:translateX({});",
-            if open.get() { "0" } else { "100%" }
-        )>
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
-                <span style="font:600 16px var(--font-mono);color:var(--fg-bright);">{title}</span>
-                <span style="cursor:pointer;color:var(--muted);font-size:16px;"
-                      on:click=move |_| open.set(false)>"\u{2715}"</span>
-            </div>
-            {children()}
-        </div>
-    }
-}
+// Detail views use the pack's centered `Modal` (preferred over a slide-over).
 
 // ---- toasts --------------------------------------------------------------
 
