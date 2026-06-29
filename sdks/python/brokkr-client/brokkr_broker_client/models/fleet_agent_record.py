@@ -24,6 +24,7 @@ class FleetAgentRecord:
         Attributes:
             agent_id (UUID): The agent's unique identifier.
             claimed_work_orders (int): Number of work orders currently CLAIMED by this agent.
+            cluster_name (str): The Kubernetes cluster the agent runs in (used to group the fleet).
             health_degraded (int): Count of this agent's deployment-health records with status `degraded`.
             health_failing (int): Count of this agent's deployment-health records with status `failing`.
             name (str): The agent's name.
@@ -50,6 +51,7 @@ class FleetAgentRecord:
 
     agent_id: UUID
     claimed_work_orders: int
+    cluster_name: str
     health_degraded: int
     health_failing: int
     name: str
@@ -70,6 +72,8 @@ class FleetAgentRecord:
         agent_id = str(self.agent_id)
 
         claimed_work_orders = self.claimed_work_orders
+
+        cluster_name = self.cluster_name
 
         health_degraded = self.health_degraded
 
@@ -139,6 +143,7 @@ class FleetAgentRecord:
             {
                 "agent_id": agent_id,
                 "claimed_work_orders": claimed_work_orders,
+                "cluster_name": cluster_name,
                 "health_degraded": health_degraded,
                 "health_failing": health_failing,
                 "name": name,
@@ -171,6 +176,8 @@ class FleetAgentRecord:
         agent_id = UUID(d.pop("agent_id"))
 
         claimed_work_orders = d.pop("claimed_work_orders")
+
+        cluster_name = d.pop("cluster_name")
 
         health_degraded = d.pop("health_degraded")
 
@@ -276,6 +283,7 @@ class FleetAgentRecord:
         fleet_agent_record = cls(
             agent_id=agent_id,
             claimed_work_orders=claimed_work_orders,
+            cluster_name=cluster_name,
             health_degraded=health_degraded,
             health_failing=health_failing,
             name=name,

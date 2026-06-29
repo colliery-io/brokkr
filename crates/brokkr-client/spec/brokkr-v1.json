@@ -1246,6 +1246,10 @@
             "format": "int64",
             "type": "integer"
           },
+          "cluster_name": {
+            "description": "The Kubernetes cluster the agent runs in (used to group the fleet).",
+            "type": "string"
+          },
           "connected_since": {
             "description": "When the current WebSocket connection was established, if connected.",
             "format": "date-time",
@@ -1323,6 +1327,7 @@
         "required": [
           "agent_id",
           "name",
+          "cluster_name",
           "status",
           "ws_connected",
           "pending_object_count",

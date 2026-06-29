@@ -262,3 +262,14 @@ Closing the logged data gaps. Findings on re-check: several "gaps" have existing
 - **Fleet cluster grouping** — `cluster_name` is already on `Agent`; add to `FleetAgentRecord`
   (broker fleet.rs API + wire structs + builder + OpenAPI regen) then group Fleet/Overview by cluster.
 - **Active work orders** — add `GET /work-orders` (DAL `.list()` exists) + OpenAPI regen; UI "Active" panel.
+
+**2026-06-28 — all four selected data gaps closed + verified.**
+- **Deployment health** (UI): Deployments stack modal fetches `GET /stacks/:id/health` → overall
+  status + per-object health (agent counts). `components::sev()` for domain-status colors.
+- **Webhook deliveries** (UI): Webhooks modal fetches `GET /webhooks/:id/deliveries` → recent attempts.
+- **Active work orders** (UI): `GET /work-orders` already existed (I'd misread the routes); Work
+  orders view gained a live **Active** panel over the History. Admin-PAK gated (degrades to a note).
+- **Fleet cluster grouping** (broker + UI): added `cluster_name` (already on `Agent`) to the REST
+  `FleetAgentRecord` + the `brokkr-wire` twin + `to_wire`/builders + golden fixture; OpenAPI + both
+  SDKs regenerated (checks green). Fleet view now renders one panel per cluster; agent modal shows cluster.
+  NOTE: the wire-struct field is a protocol change → wire/release version bump at tag time (lockstep).

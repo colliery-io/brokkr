@@ -153,3 +153,8 @@ pub async fn stack_health(id: &str) -> Result<crate::models::StackHealth, ApiErr
 pub async fn webhook_deliveries(id: &str) -> Result<Vec<crate::models::WebhookDeliveryDto>, ApiError> {
     get(&format!("/webhooks/{id}/deliveries")).await
 }
+
+/// `GET /api/v1/work-orders` — full work-order list (admin-gated).
+pub async fn work_orders() -> Result<Vec<crate::models::WorkOrder>, ApiError> {
+    get("/work-orders").await
+}

@@ -1841,6 +1841,8 @@ export interface components {
              * @description Number of work orders currently CLAIMED by this agent.
              */
             claimed_work_orders: number;
+            /** @description The Kubernetes cluster the agent runs in (used to group the fleet). */
+            cluster_name: string;
             /**
              * Format: date-time
              * @description When the current WebSocket connection was established, if connected.

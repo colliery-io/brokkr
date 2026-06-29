@@ -129,6 +129,8 @@ pub struct FleetAgentRecord {
     pub agent_id: Uuid,
     /// The agent's name.
     pub name: String,
+    /// The Kubernetes cluster the agent runs in (used to group the fleet).
+    pub cluster_name: String,
     /// The agent's lifecycle status (e.g. "ACTIVE").
     pub status: String,
     /// Whether the agent currently holds a broker↔agent WebSocket connection.

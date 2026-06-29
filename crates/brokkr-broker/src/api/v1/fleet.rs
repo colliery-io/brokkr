@@ -42,6 +42,8 @@ pub struct FleetAgentRecord {
     pub agent_id: Uuid,
     /// The agent's name.
     pub name: String,
+    /// The Kubernetes cluster the agent runs in (used to group the fleet).
+    pub cluster_name: String,
     /// The agent's lifecycle status (e.g. "ACTIVE").
     pub status: String,
     /// Whether the agent currently holds a broker↔agent WebSocket connection.
@@ -84,6 +86,7 @@ impl FleetAgentRecord {
         brokkr_wire::FleetAgentRecord {
             agent_id: self.agent_id,
             name: self.name.clone(),
+            cluster_name: self.cluster_name.clone(),
             status: self.status.clone(),
             ws_connected: self.ws_connected,
             connected_since: self.connected_since,
@@ -216,6 +219,7 @@ impl FleetAggregates {
         FleetAgentRecord {
             agent_id: agent.id,
             name: agent.name.clone(),
+            cluster_name: agent.cluster_name.clone(),
             status: agent.status.clone(),
             ws_connected: connected_since.is_some(),
             connected_since,

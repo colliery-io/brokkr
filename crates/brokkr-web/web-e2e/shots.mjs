@@ -12,15 +12,20 @@ mkdirSync(OUT, { recursive: true });
 
 // ---- fixtures ------------------------------------------------------------
 const FLEET = [
-  { agent_id: "1b9d6bcd", name: "prod-agent-01", status: "ACTIVE", ws_connected: true,
+  { agent_id: "1b9d6bcd", name: "prod-agent-01", cluster_name: "prod-us-east-1", status: "ACTIVE", ws_connected: true,
     heartbeat_age_seconds: 3, health_failing: 0, health_degraded: 0,
     pending_object_count: 2, pending_work_orders: 0, claimed_work_orders: 1 },
-  { agent_id: "7c9e6679", name: "prod-agent-02", status: "ACTIVE", ws_connected: false,
+  { agent_id: "7c9e6679", name: "prod-agent-02", cluster_name: "prod-us-east-1", status: "ACTIVE", ws_connected: false,
     heartbeat_age_seconds: 42, health_failing: 0, health_degraded: 2,
     pending_object_count: 0, pending_work_orders: 1, claimed_work_orders: 0 },
-  { agent_id: "a1b2c3d4", name: "staging-agent-01", status: "INACTIVE", ws_connected: false,
+  { agent_id: "a1b2c3d4", name: "staging-agent-01", cluster_name: "staging-eu-west-1", status: "INACTIVE", ws_connected: false,
     heartbeat_age_seconds: 900, health_failing: 1, health_degraded: 0,
     pending_object_count: 0, pending_work_orders: 0, claimed_work_orders: 0 },
+];
+
+const ACTIVE_WOS = [
+  { id: "9a01ffbe", work_type: "image_build", status: "claimed", retry_count: 0, claimed_by: "1b9d6bcd-bbfd", last_error: null },
+  { id: "b2c3d4e5", work_type: "image_build", status: "pending", retry_count: 1, claimed_by: null, last_error: null },
 ];
 
 const WSCONN = {
@@ -74,8 +79,8 @@ const SCENES = [
   { name: "fleet-modal", nav: "Fleet", click: "prod-agent-01", mocks: { "/fleet": FLEET } },
   { name: "health", nav: "Broker health", mocks: { "/admin/ws/connections": WSCONN } },
   { name: "health-modal", nav: "Broker health", click: "1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed", mocks: { "/admin/ws/connections": WSCONN } },
-  { name: "jobs", nav: "Work orders", mocks: { "/work-order-log": JOBS } },
-  { name: "jobs-modal", nav: "Work orders", click: "image_build", mocks: { "/work-order-log": JOBS } },
+  { name: "jobs", nav: "Work orders", mocks: { "/work-order-log": JOBS, "/work-orders": ACTIVE_WOS } },
+  { name: "jobs-modal", nav: "Work orders", click: "completed", mocks: { "/work-order-log": JOBS, "/work-orders": ACTIVE_WOS } },
   { name: "webhooks", nav: "Webhooks", mocks: { "/webhooks": HOOKS } },
   { name: "webhooks-modal", nav: "Webhooks", click: "prod-alerts", mocks: { "/webhooks": HOOKS,
     "/webhooks/h1/deliveries": [

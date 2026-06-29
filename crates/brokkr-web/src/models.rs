@@ -4,13 +4,13 @@
 use serde::Deserialize;
 
 /// One agent in `GET /api/v1/fleet` (mirrors the broker `FleetAgentRecord`).
-/// NOTE: the fleet record carries no `cluster_name`/`labels` today, so the
-/// console renders a flat agent list rather than the handoff's per-cluster
-/// grouping — that needs a broker enhancement (see the Fleet task).
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct FleetAgentRecord {
     pub agent_id: String,
     pub name: String,
+    /// Kubernetes cluster the agent runs in — used to group the fleet.
+    #[serde(default)]
+    pub cluster_name: String,
     pub status: String,
     pub ws_connected: bool,
     #[serde(default)]
@@ -159,4 +159,29 @@ pub struct WebhookDeliveryDto {
     pub attempts: i32,
     #[serde(default)]
     pub last_error: Option<String>,
+}
+
+/// One work order in `GET /api/v1/work-orders` (admin-gated list). NOTE: requires
+/// an admin PAK; with an operator-scoped PAK the Active panel renders an error.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct WorkOrder {
+    pub id: String,
+    pub work_type: String,
+    pub status: String,
+    #[serde(default)]
+    pub retry_count: i32,
+    #[serde(default)]
+    pub claimed_by: Option<String>,
+    #[serde(default)]
+    pub last_error: Option<String>,
+}
+
+impl WorkOrder {
+    /// Whether the order is still in flight (not in a terminal state).
+    pub fn is_active(&self) -> bool {
+        !matches!(
+            self.status.to_ascii_lowercase().as_str(),
+            "completed" | "failed" | "cancelled" | "canceled" | "succeeded"
+        )
+    }
 }
