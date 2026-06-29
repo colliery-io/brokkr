@@ -55,3 +55,8 @@ enhancement — see [[BROKKR-A-0010]]).
 ## Status Updates
 
 *To be added during implementation*
+
+**2026-06-28 — implemented + pixel-verified.** `src/views/telemetry.rs`: Kube events / Pod logs
+`SegmentedControl` + 6h-retention gold caption. Events tab binds to global `/agent-events`
+(Apply/Heartbeat/Reconcile). Gaps: true kube events + pod logs are per-stack (`/stacks/:id/{events,logs}`),
+no global feed — logs tab prompts to select a stack. trunk build green; rendered via harness.

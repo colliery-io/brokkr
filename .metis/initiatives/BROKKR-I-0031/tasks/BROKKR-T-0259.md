@@ -51,3 +51,8 @@ Per-stack deployment-object health view per the handoff §Deployments.
 ## Status Updates
 
 *To be added during implementation*
+
+**2026-06-28 — implemented + pixel-verified.** `src/views/deployments.rs` lists stacks
+(name, description, generator) from `GET /api/v1/stacks`. Gap: per-stack deployment-objects +
+per-agent health rollup need `/stacks/:id/health` + deployment-objects (N+1) — a follow-up.
+trunk build green; rendered via harness. Runtime verification pending the stack.

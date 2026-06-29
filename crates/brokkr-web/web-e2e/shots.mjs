@@ -56,6 +56,15 @@ const SCENES = [
     { id: "h1", name: "prod-alerts", enabled: true, has_url: true, event_types: ["stack.updated", "agent.failed"] },
     { id: "h2", name: "audit-sink", enabled: false, has_url: true, event_types: ["pak.rotated"] },
   ] } },
+  { name: "deployments", nav: "Deployments", mocks: { "/stacks": [
+    { id: "s1", name: "payments-api", description: "prod payments service", generator_id: "1b9d6bcd-bbfd" },
+    { id: "s2", name: "ingest-worker", description: "event ingest", generator_id: "7c9e6679-7425" },
+  ] } },
+  { name: "telemetry", nav: "Telemetry", mocks: { "/agent-events": [
+    { agent_id: "a1", event_type: "Apply", status: "success", message: "applied Deployment/payments (3 objects)" },
+    { agent_id: "a1", event_type: "Reconcile", status: "success", message: "no drift" },
+    { agent_id: "a2", event_type: "Apply", status: "failure", message: "Service/ingest: port 8080 already allocated" },
+  ] } },
 ];
 
 // ---- driver --------------------------------------------------------------

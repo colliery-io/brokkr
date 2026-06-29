@@ -104,3 +104,24 @@ pub struct WorkOrderLogEntry {
     #[serde(default)]
     pub result_message: Option<String>,
 }
+
+/// `GET /api/v1/stacks`.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct Stack {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    pub generator_id: String,
+}
+
+/// `GET /api/v1/agent-events` (agent lifecycle events: Apply/Heartbeat/Reconcile).
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct AgentEventDto {
+    #[serde(default)]
+    pub agent_id: String,
+    pub event_type: String,
+    pub status: String,
+    #[serde(default)]
+    pub message: Option<String>,
+}

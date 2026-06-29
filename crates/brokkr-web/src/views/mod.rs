@@ -1,8 +1,10 @@
 //! Operator-console views. Each is a read-only surface bound to a broker API and
 //! wrapped in Aurora `Loading`/`Empty`/`ErrorState`.
 
+pub mod deployments;
 pub mod fleet;
 pub mod health;
+pub mod telemetry;
 pub mod webhooks;
 pub mod work_orders;
 

@@ -105,3 +105,13 @@ pub async fn webhooks() -> Result<Vec<crate::models::WebhookSummary>, ApiError> 
 pub async fn work_order_log() -> Result<Vec<crate::models::WorkOrderLogEntry>, ApiError> {
     get("/work-order-log").await
 }
+
+/// `GET /api/v1/stacks`.
+pub async fn stacks() -> Result<Vec<crate::models::Stack>, ApiError> {
+    get("/stacks").await
+}
+
+/// `GET /api/v1/agent-events`.
+pub async fn agent_events() -> Result<Vec<crate::models::AgentEventDto>, ApiError> {
+    get("/agent-events").await
+}

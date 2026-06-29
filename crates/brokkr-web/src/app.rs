@@ -186,6 +186,8 @@ fn Main(
                     "system" => view! { <crate::views::health::BrokerHealthView /> }.into_any(),
                     "jobs" => view! { <crate::views::work_orders::WorkOrdersView /> }.into_any(),
                     "webhooks" => view! { <crate::views::webhooks::WebhooksView /> }.into_any(),
+                    "deployments" => view! { <crate::views::deployments::DeploymentsView /> }.into_any(),
+                    "telemetry" => view! { <crate::views::telemetry::TelemetryView /> }.into_any(),
                     other => {
                         let (title, _) = meta(other);
                         view! {
