@@ -183,6 +183,7 @@ fn Main(
             <div style="margin-top:16px;">
                 {move || match route.get() {
                     "fleet" => view! { <crate::views::fleet::FleetView /> }.into_any(),
+                    "system" => view! { <crate::views::health::BrokerHealthView /> }.into_any(),
                     other => {
                         let (title, _) = meta(other);
                         view! {

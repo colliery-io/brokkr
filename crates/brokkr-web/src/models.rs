@@ -55,3 +55,26 @@ pub struct ErrorBody {
     #[serde(default)]
     pub message: String,
 }
+
+/// One internal-WS connection in `GET /api/v1/admin/ws/connections`.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct WsConnectionInfo {
+    pub agent_id: String,
+    #[serde(default)]
+    pub connected_since: Option<String>,
+    #[serde(default)]
+    pub messages_in: u64,
+    #[serde(default)]
+    pub messages_out: u64,
+}
+
+/// `GET /api/v1/admin/ws/connections`.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct WsConnectionsResponse {
+    #[serde(default)]
+    pub connected_agents: usize,
+    #[serde(default)]
+    pub connections: Vec<WsConnectionInfo>,
+    #[serde(default)]
+    pub live_subscribers: usize,
+}

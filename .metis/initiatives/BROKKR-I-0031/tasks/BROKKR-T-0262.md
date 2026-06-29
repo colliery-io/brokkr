@@ -1,17 +1,17 @@
 ---
-id: slice-7-broker-health-view
+id: broker-health-view-prometheus
 level: task
 title: "Broker health view — Prometheus metric cards + internal WS connections"
 short_code: "BROKKR-T-0262"
 created_at: 2026-06-28T01:44:27.035882+00:00
-updated_at: 2026-06-28T01:44:27.035882+00:00
+updated_at: 2026-06-29T00:08:33.577940+00:00
 parent: brokkr-operator-console
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/todo"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -30,6 +30,10 @@ Broker health view: Prometheus metric cards + internal WS connections panel, per
 
 ### Type
 - [x] Feature — view slice
+
+## Acceptance Criteria
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 
@@ -54,3 +58,11 @@ Broker health view: Prometheus metric cards + internal WS connections panel, per
 ## Status Updates
 
 *To be added during implementation*
+**2026-06-28 — implemented + pixel-verified.** `src/views/health.rs`: 6 Prometheus metric
+cards (active agents, ws connected [teal], http requests [ice], live subscribers [violet],
+stacks, deploy objects) each with the metric name as mono sub; internal WS connections panel
+(teal dot + agent id + msg in/out). Data layer: `api::metrics_text()` (top-level `/metrics`
+text), `api::metric_sum()` (sums labeled samples — verified 1840+95=1935 for http_requests),
+`api::ws_connections()` + `WsConnectionsResponse` model. `trunk build` green; rendered correct
+via the web-e2e harness (mocked /metrics + /admin/ws/connections). NOTE: dropped the handoff's
+"DB queries/min" card — no `brokkr_database_queries_total` metric exists (used the metrics that do).

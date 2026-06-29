@@ -2,6 +2,7 @@
 //! wrapped in Aurora `Loading`/`Empty`/`ErrorState`.
 
 pub mod fleet;
+pub mod health;
 
 use leptos::prelude::*;
 
