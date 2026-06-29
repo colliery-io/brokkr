@@ -7,7 +7,7 @@ created_at: 2026-06-28T01:44:26.674406+00:00
 updated_at: 2026-06-29T00:32:35.501264+00:00
 parent: brokkr-operator-console
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -32,6 +32,10 @@ system, and global `prefers-reduced-motion` handling.
 
 ### Type
 - [x] Feature — cross-cutting runtime
+
+## Acceptance Criteria
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

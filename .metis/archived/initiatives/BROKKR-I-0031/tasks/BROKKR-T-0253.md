@@ -7,7 +7,7 @@ created_at: 2026-06-28T01:32:27.739206+00:00
 updated_at: 2026-06-28T23:45:33.181547+00:00
 parent: brokkr-operator-console
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -32,6 +32,10 @@ broker image + `angreal` build so it ships in lockstep.
 
 ### Type
 - [x] Feature — broker-served UI (hosting half of the walking skeleton)
+
+## Acceptance Criteria
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

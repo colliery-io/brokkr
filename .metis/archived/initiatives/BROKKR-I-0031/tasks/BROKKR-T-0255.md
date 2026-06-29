@@ -7,7 +7,7 @@ created_at: 2026-06-28T01:44:26.547382+00:00
 updated_at: 2026-06-29T00:32:35.205108+00:00
 parent: brokkr-operator-console
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -33,6 +33,10 @@ components the pack lacks** — the shared building blocks the views then compos
 
 ### Type
 - [x] Feature — design mapping + app-local component gaps
+
+## Acceptance Criteria
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

@@ -7,7 +7,7 @@ created_at: 2026-06-28T01:44:27.035882+00:00
 updated_at: 2026-06-29T00:08:33.577940+00:00
 parent: brokkr-operator-console
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -30,6 +30,10 @@ Broker health view: Prometheus metric cards + internal WS connections panel, per
 
 ### Type
 - [x] Feature — view slice
+
+## Acceptance Criteria
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

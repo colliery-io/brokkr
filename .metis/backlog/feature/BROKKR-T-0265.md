@@ -5,17 +5,17 @@ title: "Broker: database query metrics (brokkr_database_queries_total)"
 short_code: "BROKKR-T-0265"
 created_at: 2026-06-29T10:45:50.781507+00:00
 updated_at: 2026-06-29T10:45:50.781507+00:00
-parent: brokkr-operator-console
+parent:
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
+  - "#feature"
   - "#phase/todo"
 
 
 exit_criteria_met: false
-initiative_id: BROKKR-I-0031
 ---
 
 # Broker: database query metrics (brokkr_database_queries_total)

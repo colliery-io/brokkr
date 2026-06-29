@@ -4,14 +4,14 @@ level: initiative
 title: "Brokkr Operator Console"
 short_code: "BROKKR-I-0031"
 created_at: 2026-06-27T19:20:44.336146+00:00
-updated_at: 2026-06-28T23:02:19.545351+00:00
+updated_at: 2026-06-29T15:17:57.696304+00:00
 parent: brokkr-environment-aware
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#initiative"
-  - "#phase/design"
+  - "#phase/completed"
 
 
 exit_criteria_met: false

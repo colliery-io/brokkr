@@ -1,13 +1,13 @@
 ---
-id: fleet-reference-reference-fleet-md
+id: gated-four-reviewer-loop-assemble
 level: task
-title: "Fleet reference: reference/fleet.md + cross-links"
-short_code: "BROKKR-T-0233"
-created_at: 2026-06-14T16:08:29.007612+00:00
-updated_at: 2026-06-14T16:31:28.373170+00:00
+title: "Gated four-reviewer loop + assemble single docs PR"
+short_code: "BROKKR-T-0237"
+created_at: 2026-06-14T16:08:34.540889+00:00
+updated_at: 2026-06-14T16:31:31.758497+00:00
 parent: BROKKR-I-0029
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -18,7 +18,7 @@ exit_criteria_met: false
 initiative_id: BROKKR-I-0029
 ---
 
-# Fleet reference: reference/fleet.md + cross-links
+# Gated four-reviewer loop + assemble single docs PR
 
 *This template includes sections for various types of tasks. Delete sections that don't apply to your specific use case.*
 
@@ -63,6 +63,10 @@ initiative_id: BROKKR-I-0029
 - **Current Problems**: {What's difficult/slow/buggy now}
 - **Benefits of Fixing**: {What improves after refactoring}
 - **Risk Assessment**: {Risks of not addressing this}
+
+## Acceptance Criteria
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

@@ -7,7 +7,7 @@ created_at: 2026-06-28T01:44:26.917487+00:00
 updated_at: 2026-06-29T00:32:36.406884+00:00
 parent: brokkr-operator-console
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -32,6 +32,10 @@ enhancement — see [[BROKKR-A-0010]]).
 
 ### Type
 - [x] Feature — view slice
+
+## Acceptance Criteria
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

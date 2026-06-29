@@ -7,7 +7,7 @@ created_at: 2026-06-28T01:32:27.844905+00:00
 updated_at: 2026-06-28T23:43:13.640313+00:00
 parent: brokkr-operator-console
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -33,6 +33,10 @@ mechanical scope work.
 
 ### Type
 - [x] Feature — first real read surface (data half of the walking skeleton)
+
+## Acceptance Criteria
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

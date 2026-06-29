@@ -7,7 +7,7 @@ created_at: 2026-06-28T01:44:27.093925+00:00
 updated_at: 2026-06-29T00:32:37.024801+00:00
 parent: brokkr-operator-console
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -30,6 +30,10 @@ Webhooks view: subscriptions + recent deliveries, per the handoff §Webhooks. Re
 
 ### Type
 - [x] Feature — view slice (completes the seven-view monitor)
+
+## Acceptance Criteria
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

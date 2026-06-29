@@ -1,13 +1,13 @@
 ---
-id: onboarding-restructure-trial-paths
+id: fleet-reference-reference-fleet-md
 level: task
-title: "Onboarding restructure: trial paths + nav reorg + de-dup"
-short_code: "BROKKR-T-0231"
-created_at: 2026-06-14T16:08:26.664761+00:00
-updated_at: 2026-06-14T16:31:26.009970+00:00
+title: "Fleet reference: reference/fleet.md + cross-links"
+short_code: "BROKKR-T-0233"
+created_at: 2026-06-14T16:08:29.007612+00:00
+updated_at: 2026-06-14T16:31:28.373170+00:00
 parent: BROKKR-I-0029
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -18,7 +18,7 @@ exit_criteria_met: false
 initiative_id: BROKKR-I-0029
 ---
 
-# Onboarding restructure: trial paths + nav reorg + de-dup
+# Fleet reference: reference/fleet.md + cross-links
 
 *This template includes sections for various types of tasks. Delete sections that don't apply to your specific use case.*
 
@@ -63,6 +63,10 @@ initiative_id: BROKKR-I-0029
 - **Current Problems**: {What's difficult/slow/buggy now}
 - **Benefits of Fixing**: {What improves after refactoring}
 - **Risk Assessment**: {Risks of not addressing this}
+
+## Acceptance Criteria
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

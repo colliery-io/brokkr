@@ -1,13 +1,13 @@
 ---
-id: file-code-tickets-for-openapi-auth
+id: correctness-sweep-ui-as-demo-ws
 level: task
-title: "File code tickets for OpenAPI auth-vs-enforcement mismatches"
-short_code: "BROKKR-T-0236"
-created_at: 2026-06-14T16:08:33.763320+00:00
-updated_at: 2026-06-14T16:31:31.190155+00:00
+title: "Correctness sweep: UI-as-demo, WS count, config, metrics, C4"
+short_code: "BROKKR-T-0235"
+created_at: 2026-06-14T16:08:32.320325+00:00
+updated_at: 2026-06-14T16:31:30.242890+00:00
 parent: BROKKR-I-0029
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -18,7 +18,7 @@ exit_criteria_met: false
 initiative_id: BROKKR-I-0029
 ---
 
-# File code tickets for OpenAPI auth-vs-enforcement mismatches
+# Correctness sweep: UI-as-demo, WS count, config, metrics, C4
 
 *This template includes sections for various types of tasks. Delete sections that don't apply to your specific use case.*
 
@@ -28,17 +28,7 @@ initiative_id: BROKKR-I-0029
 
 ## Objective **[REQUIRED]**
 
-Record the **code** discrepancies found during the I-0029 docs audit so they get fixed in the source (separate from the docs PR). The docs now describe the **actual enforced behavior**; these are spec/code bugs where the OpenAPI annotations (or a runtime path) don't match enforcement. These are NOT part of the docs PR.
-
-### Findings (verified against source by the accuracy review)
-1. **agent_events list/get** — OpenAPI `security` declares admin+agent+generator, but code enforces **admin-only** (`crates/brokkr-broker/src/api/v1/agent_events.rs:51,89`). Fix the OpenAPI annotation to match (admin-only).
-2. **agents `search_agent`** (`GET /agents/`) — OpenAPI declares admin-only, but code also permits the matching agent (`agents.rs:282`). Reconcile annotation with enforcement.
-3. **agents `add_target`/`remove_target`** — OpenAPI declares admin+generator, code is admin OR the **owning** generator (`agents.rs:785`). Tighten the annotation to owning-generator semantics.
-4. **`POST /admin/config/reload`** — if hot-reload is disabled, the missing `Extension<ReloadableConfig>` makes the handler **500 before** the admin check runs (`v1/mod.rs:72-74`). Should fail gracefully (e.g. 404/501) and after auth.
-5. **`complete_work_order`** — returns **202** `{"status":"retry_scheduled"}` at runtime in addition to 200 (`work_orders.rs:645`); OpenAPI documents only 200. Add the 202 response.
-6. **Stale module doc** — `crates/brokkr-models/src/models/agents.rs` header comment (lines ~14-25) omits the three k8s connectivity columns; refresh to match the struct (agents.rs:60-91) + migration 20.
-
-These are likely best handled as a small "OpenAPI annotation drift + minor API correctness" code initiative/backlog, scheduled independently of the docs work.
+{Clear statement of what this task accomplishes}
 
 ## Backlog Item Details **[CONDITIONAL: Backlog Item]**
 
@@ -73,6 +63,10 @@ These are likely best handled as a small "OpenAPI annotation drift + minor API c
 - **Current Problems**: {What's difficult/slow/buggy now}
 - **Benefits of Fixing**: {What improves after refactoring}
 - **Risk Assessment**: {Risks of not addressing this}
+
+## Acceptance Criteria
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

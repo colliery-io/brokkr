@@ -7,7 +7,7 @@ created_at: 2026-06-28T01:44:26.854707+00:00
 updated_at: 2026-06-29T00:32:36.098518+00:00
 parent: brokkr-operator-console
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -30,6 +30,10 @@ Per-stack deployment-object health view per the handoff §Deployments.
 
 ### Type
 - [x] Feature — view slice
+
+## Acceptance Criteria
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

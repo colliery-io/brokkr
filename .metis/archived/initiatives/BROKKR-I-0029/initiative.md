@@ -4,14 +4,14 @@ level: initiative
 title: "Documentation Audit & Onboarding Restructure (Diátaxis)"
 short_code: "BROKKR-I-0029"
 created_at: 2026-06-14T16:01:38.094833+00:00
-updated_at: 2026-06-14T16:08:50.701805+00:00
+updated_at: 2026-06-29T15:18:13.436869+00:00
 parent: BROKKR-V-0001
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#initiative"
-  - "#phase/active"
+  - "#phase/completed"
 
 
 exit_criteria_met: false

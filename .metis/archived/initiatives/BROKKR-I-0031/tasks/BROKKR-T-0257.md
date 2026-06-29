@@ -7,7 +7,7 @@ created_at: 2026-06-28T01:44:26.734560+00:00
 updated_at: 2026-06-29T00:32:35.798743+00:00
 parent: brokkr-operator-console
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -31,6 +31,10 @@ layouts (command / grid / stream), per the handoff §Overview.
 
 ### Type
 - [x] Feature — view slice
+
+## Acceptance Criteria
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

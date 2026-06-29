@@ -1,13 +1,13 @@
 ---
-id: correctness-sweep-ui-as-demo-ws
+id: fleet-explanation-legibility-model
 level: task
-title: "Correctness sweep: UI-as-demo, WS count, config, metrics, C4"
-short_code: "BROKKR-T-0235"
-created_at: 2026-06-14T16:08:32.320325+00:00
-updated_at: 2026-06-14T16:31:30.242890+00:00
+title: "Fleet explanation: legibility model (surface vs decide, pull vs push)"
+short_code: "BROKKR-T-0234"
+created_at: 2026-06-14T16:08:30.886848+00:00
+updated_at: 2026-06-14T16:31:29.308227+00:00
 parent: BROKKR-I-0029
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -18,7 +18,7 @@ exit_criteria_met: false
 initiative_id: BROKKR-I-0029
 ---
 
-# Correctness sweep: UI-as-demo, WS count, config, metrics, C4
+# Fleet explanation: legibility model (surface vs decide, pull vs push)
 
 *This template includes sections for various types of tasks. Delete sections that don't apply to your specific use case.*
 
@@ -63,6 +63,10 @@ initiative_id: BROKKR-I-0029
 - **Current Problems**: {What's difficult/slow/buggy now}
 - **Benefits of Fixing**: {What improves after refactoring}
 - **Risk Assessment**: {Risks of not addressing this}
+
+## Acceptance Criteria
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

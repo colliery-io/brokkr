@@ -7,7 +7,7 @@ created_at: 2026-06-28T01:44:26.976822+00:00
 updated_at: 2026-06-29T00:32:36.704965+00:00
 parent: brokkr-operator-console
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -30,6 +30,10 @@ Work-orders view: Active (live progress) + History, per the handoff §Work order
 
 ### Type
 - [x] Feature — view slice
+
+## Acceptance Criteria
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

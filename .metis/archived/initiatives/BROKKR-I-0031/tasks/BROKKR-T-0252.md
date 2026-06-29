@@ -1,5 +1,5 @@
 ---
-id: slice-1a-scaffold-crates-brokkr
+id: scaffold-crates-brokkr-web-leptos
 level: task
 title: "scaffold crates/brokkr-web (Leptos + Trunk) + aurora-leptos dependency + app shell"
 short_code: "BROKKR-T-0252"
@@ -7,7 +7,7 @@ created_at: 2026-06-28T01:32:27.588822+00:00
 updated_at: 2026-06-28T23:25:19.798239+00:00
 parent: brokkr-operator-console
 blocked_by: []
-archived: false
+archived: true
 
 tags:
   - "#task"
@@ -33,6 +33,10 @@ that 1b serves and the views fill.
 
 ### Type
 - [x] Feature — new front-end crate (first slice of the operator console)
+
+## Acceptance Criteria
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 
