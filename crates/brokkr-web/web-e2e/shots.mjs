@@ -48,6 +48,14 @@ const SCENES = [
   { name: "fleet", nav: "Fleet", mocks: { "/fleet": FLEET } },
   { name: "fleet-empty", nav: "Fleet", mocks: { "/fleet": [] } },
   { name: "health", nav: "Broker health", mocks: { "/admin/ws/connections": WSCONN } },
+  { name: "jobs", nav: "Work orders", mocks: { "/work-order-log": [
+    { id: "7f3a01ab", work_type: "image_build", success: true, retries_attempted: 0, result_message: "pushed ghcr.io/app:sha-7f3a01" },
+    { id: "561200cd", work_type: "image_build", success: false, retries_attempted: 3, result_message: "buildah: manifest unknown" },
+  ] } },
+  { name: "webhooks", nav: "Webhooks", mocks: { "/webhooks": [
+    { id: "h1", name: "prod-alerts", enabled: true, has_url: true, event_types: ["stack.updated", "agent.failed"] },
+    { id: "h2", name: "audit-sink", enabled: false, has_url: true, event_types: ["pak.rotated"] },
+  ] } },
 ];
 
 // ---- driver --------------------------------------------------------------

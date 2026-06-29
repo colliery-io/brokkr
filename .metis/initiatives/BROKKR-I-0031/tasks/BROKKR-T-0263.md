@@ -52,3 +52,9 @@ Webhooks view: subscriptions + recent deliveries, per the handoff §Webhooks. Re
 ## Status Updates
 
 *To be added during implementation*
+
+**2026-06-28 — implemented + pixel-verified.** View built (`src/views/`), wired into the
+router + web-e2e harness scene, `trunk build` green, rendered correct via screenshot.
+Gaps: the API redacts the webhook URL (`has_url` only); deliveries are per-subscription
+(`/webhooks/:id/deliveries`), no global feed. View shows subscriptions (name/enabled/events);
+a "recent deliveries" panel needs a broker enhancement. Runtime verification pending the stack.

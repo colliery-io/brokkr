@@ -3,6 +3,8 @@
 
 pub mod fleet;
 pub mod health;
+pub mod webhooks;
+pub mod work_orders;
 
 use leptos::prelude::*;
 

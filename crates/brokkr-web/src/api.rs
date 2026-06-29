@@ -95,3 +95,13 @@ pub fn metric_sum(text: &str, name: &str) -> Option<f64> {
     }
     found.then_some(total)
 }
+
+/// `GET /api/v1/webhooks` — subscription summaries.
+pub async fn webhooks() -> Result<Vec<crate::models::WebhookSummary>, ApiError> {
+    get("/webhooks").await
+}
+
+/// `GET /api/v1/work-order-log` — completed work-order history.
+pub async fn work_order_log() -> Result<Vec<crate::models::WorkOrderLogEntry>, ApiError> {
+    get("/work-order-log").await
+}

@@ -78,3 +78,29 @@ pub struct WsConnectionsResponse {
     #[serde(default)]
     pub live_subscribers: usize,
 }
+
+/// `GET /api/v1/webhooks` (safe DTO — URL is redacted to `has_url`).
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct WebhookSummary {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub event_types: Vec<String>,
+    #[serde(default)]
+    pub has_url: bool,
+}
+
+/// `GET /api/v1/work-order-log` (completed work-order history).
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct WorkOrderLogEntry {
+    pub id: String,
+    pub work_type: String,
+    #[serde(default)]
+    pub success: bool,
+    #[serde(default)]
+    pub retries_attempted: i32,
+    #[serde(default)]
+    pub result_message: Option<String>,
+}

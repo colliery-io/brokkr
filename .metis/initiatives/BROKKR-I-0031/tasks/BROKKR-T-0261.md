@@ -52,3 +52,9 @@ Work-orders view: Active (live progress) + History, per the handoff §Work order
 ## Status Updates
 
 *To be added during implementation*
+
+**2026-06-28 — implemented + pixel-verified.** View built (`src/views/`), wired into the
+router + web-e2e harness scene, `trunk build` green, rendered correct via screenshot.
+Gap: no "list active work orders" endpoint — only `/work-order-log` (history) + per-id; the
+view shows history. Active live-progress section needs a broker enhancement (per-agent counts
+exist in the fleet record). Runtime verification pending the stack.
