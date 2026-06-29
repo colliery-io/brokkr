@@ -1,0 +1,14 @@
+{
+  "name": "brokkr-web-e2e",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Playwright screenshot / pixel-verification harness for the brokkr-web operator console (BROKKR-I-0031). Mirrors Skadi's web-e2e, but mocks the broker API via route interception so views render with fixtures (no live broker needed).",
+  "type": "module",
+  "scripts": {
+    "shots": "node shots.mjs",
+    "install-browser": "playwright install chromium"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.60.0"
+  }
+}
