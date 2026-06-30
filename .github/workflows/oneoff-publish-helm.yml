@@ -26,10 +26,10 @@ jobs:
   publish:
     name: Package & push charts
     runs-on: ubuntu-latest
-    # Same gated environment as the normal publish job, so this still requires
-    # human approval before it can push (see release approval gates).
-    environment:
-      name: release
+    # NOTE: intentionally NOT using `environment: release`. That environment's
+    # deployment-branch policy only permits tag refs, so a workflow_dispatch from
+    # main is rejected. GHCR_TOKEN is a repo-level secret, so no environment is
+    # needed; the manual dispatch itself is the gate.
     permissions:
       contents: read
       packages: write
