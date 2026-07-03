@@ -183,3 +183,66 @@ async fn test_audit_logs_denied_for_generator() {
 
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }
+
+/// Entries carry a resolved `actor_name` (BROKKR-T-0271): generator/agent
+/// actors resolve to their names, admin/system to static labels.
+#[tokio::test]
+async fn test_audit_logs_actor_name_enrichment() {
+    use brokkr_models::models::audit_logs::{
+        ACTOR_TYPE_ADMIN, ACTOR_TYPE_GENERATOR, NewAuditLog, RESOURCE_TYPE_PAK,
+    };
+
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+
+    let (generator, _) =
+        fixture.create_test_generator_with_pak("team-payments".to_string(), None);
+
+    let generator_log = NewAuditLog::new(
+        ACTOR_TYPE_GENERATOR,
+        Some(generator.id),
+        "pak.rotated",
+        RESOURCE_TYPE_PAK,
+        Some(generator.id),
+    )
+    .unwrap();
+    let admin_log = NewAuditLog::new(
+        ACTOR_TYPE_ADMIN,
+        None,
+        "pak.rotated",
+        RESOURCE_TYPE_PAK,
+        None,
+    )
+    .unwrap();
+    fixture.dal.audit_logs().create(&generator_log).unwrap();
+    fixture.dal.audit_logs().create(&admin_log).unwrap();
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/admin/audit-logs?action=pak.rotated")
+                .header("Authorization", format!("Bearer {}", fixture.admin_pak))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let list_response: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let logs = list_response["logs"].as_array().unwrap();
+
+    let generator_entry = logs
+        .iter()
+        .find(|l| l["actor_type"] == "generator" && l["actor_id"] == generator.id.to_string())
+        .expect("generator audit entry present");
+    assert_eq!(generator_entry["actor_name"], "team-payments");
+
+    let admin_entry = logs
+        .iter()
+        .find(|l| l["actor_type"] == "admin")
+        .expect("admin audit entry present");
+    assert_eq!(admin_entry["actor_name"], "admin");
+}

@@ -91,6 +91,27 @@ impl AgentEventsDAL<'_> {
             .load::<AgentEvent>(conn)
     }
 
+    /// Lists non-deleted events for agents registered under a generator
+    /// (tenant scoping, BROKKR-T-0270). Single query via an `eq_any` subselect
+    /// on `agent_generator_registrations`.
+    pub fn list_for_generator(
+        &self,
+        generator_id: Uuid,
+    ) -> Result<Vec<AgentEvent>, diesel::result::Error> {
+        use brokkr_models::schema::agent_generator_registrations;
+        let conn = &mut self.dal.conn()?;
+        agent_events::table
+            .filter(agent_events::deleted_at.is_null())
+            .filter(
+                agent_events::agent_id.eq_any(
+                    agent_generator_registrations::table
+                        .filter(agent_generator_registrations::generator_id.eq(generator_id))
+                        .select(agent_generator_registrations::agent_id),
+                ),
+            )
+            .load::<AgentEvent>(conn)
+    }
+
     /// Lists all agent events from the database, including deleted ones.
     ///
     /// # Returns

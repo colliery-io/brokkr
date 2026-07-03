@@ -47,6 +47,14 @@ impl FleetAgentRecord {
     }
 }
 
+/// One named PAK (tenant) in `GET /api/v1/paks` — powers the scope selector
+/// (BROKKR-I-0032). `id` is the generator id used as `?pak_id=`.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct PakSummary {
+    pub id: String,
+    pub name: String,
+}
+
 /// The broker's `ErrorResponse` body (`{ code, message, details? }`).
 #[derive(Debug, Clone, Deserialize)]
 pub struct ErrorBody {

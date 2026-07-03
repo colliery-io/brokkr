@@ -10,10 +10,11 @@
 //! through HTTP endpoints.
 
 use crate::api::v1::error::{ApiError, ErrorResponse};
+use crate::api::v1::paks::PakScopeQuery;
 use crate::dal::DAL;
 use axum::{
     Json, Router,
-    extract::{Extension, Path, State},
+    extract::{Extension, Path, Query, State},
     routing::get,
 };
 use brokkr_models::models::agent_events::AgentEvent;
@@ -30,6 +31,7 @@ pub fn routes() -> Router<DAL> {
 #[utoipa::path(
     get,
     path = "/agent-events",
+    params(PakScopeQuery),
     responses(
         (status = 200, description = "List all agent events", body = Vec<AgentEvent>),
         (status = 500, description = "Internal server error", body = ErrorResponse)
@@ -42,6 +44,7 @@ pub fn routes() -> Router<DAL> {
 async fn list_agent_events(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<crate::api::v1::middleware::AuthPayload>,
+    Query(scope): Query<PakScopeQuery>,
 ) -> Result<Json<Vec<AgentEvent>>, ApiError> {
     info!("Handling request to list agent events");
     // This is a cluster-wide list; only admin may enumerate every agent's
@@ -52,7 +55,13 @@ async fn list_agent_events(
             "admin access required",
         ));
     }
-    let events = dal.agent_events().list().map_err(|e| {
+    let events = match scope.pak_id {
+        // Tenant scope (BROKKR-T-0270): only events from agents registered
+        // under this generator.
+        Some(pak_id) => dal.agent_events().list_for_generator(pak_id),
+        None => dal.agent_events().list(),
+    }
+    .map_err(|e| {
         error!("Failed to fetch agent events: {:?}", e);
         ApiError::internal("failed to fetch agent events")
     })?;

@@ -17,17 +17,21 @@ class AuthResponse:
 
     Attributes:
         admin (bool): Indicates if the authenticated entity is an admin.
+        readonly (bool): Whether the credential is read-only (the console's ephemeral UI PAK).
         agent (None | str | Unset): The string representation of the agent's UUID, if applicable.
         generator (None | str | Unset): The string representation of the generator's UUID, if applicable.
     """
 
     admin: bool
+    readonly: bool
     agent: None | str | Unset = UNSET
     generator: None | str | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         admin = self.admin
+
+        readonly = self.readonly
 
         agent: None | str | Unset
         if isinstance(self.agent, Unset):
@@ -46,6 +50,7 @@ class AuthResponse:
         field_dict.update(
             {
                 "admin": admin,
+                "readonly": readonly,
             }
         )
         if agent is not UNSET:
@@ -59,6 +64,8 @@ class AuthResponse:
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         d = dict(src_dict)
         admin = d.pop("admin")
+
+        readonly = d.pop("readonly")
 
         def _parse_agent(data: object) -> None | str | Unset:
             if data is None:
@@ -80,6 +87,7 @@ class AuthResponse:
 
         auth_response = cls(
             admin=admin,
+            readonly=readonly,
             agent=agent,
             generator=generator,
         )

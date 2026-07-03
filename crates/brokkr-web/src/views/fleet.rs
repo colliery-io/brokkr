@@ -15,7 +15,10 @@ use wasm_bindgen_futures::spawn_local;
 
 #[component]
 pub fn FleetView() -> impl IntoView {
-    let data = LocalResource::new(|| api::fleet());
+    // Scope-reactive (BROKKR-I-0032): reading the scope signal inside the
+    // fetcher makes the resource refetch when the tenant selection changes.
+    let scope = crate::app::use_scope();
+    let data = LocalResource::new(move || api::fleet(scope.get()));
     set_interval(move || data.refetch(), std::time::Duration::from_secs(5));
     let selected = RwSignal::new(None::<FleetAgentRecord>);
     let open = RwSignal::new(false);

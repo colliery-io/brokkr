@@ -470,6 +470,25 @@
         ],
         "type": "object"
       },
+      "AuditLogEntry": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/AuditLog",
+            "description": "The audit log record."
+          },
+          {
+            "properties": {
+              "actor_name": {
+                "description": "Human-readable actor name: the generator/agent name, `\"admin\"`,\n`\"system\"`, or `null` when the actor no longer resolves.",
+                "nullable": true,
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": "An audit log entry enriched with a human-readable actor name\n(BROKKR-T-0271). Names are resolved at read time from the owning entity\n(generator/agent name), so a rename stays reflected in history."
+      },
       "AuditLogListResponse": {
         "description": "Response structure for audit log list operations.",
         "properties": {
@@ -486,7 +505,7 @@
           "logs": {
             "description": "The audit log entries.",
             "items": {
-              "$ref": "#/components/schemas/AuditLog"
+              "$ref": "#/components/schemas/AuditLogEntry"
             },
             "type": "array"
           },
@@ -526,10 +545,15 @@
             "description": "The string representation of the generator's UUID, if applicable.",
             "nullable": true,
             "type": "string"
+          },
+          "readonly": {
+            "description": "Whether the credential is read-only (the console's ephemeral UI PAK).",
+            "type": "boolean"
           }
         },
         "required": [
-          "admin"
+          "admin",
+          "readonly"
         ],
         "type": "object"
       },
@@ -1820,6 +1844,25 @@
         ],
         "type": "object"
       },
+      "PakSummary": {
+        "description": "One tenant entry for the console scope selector: a named PAK owner\n(generator) reduced to its identity.",
+        "properties": {
+          "id": {
+            "description": "The tenant's generator ID (used as `?pak_id=` in scoped queries).",
+            "format": "uuid",
+            "type": "string"
+          },
+          "name": {
+            "description": "Human-readable tenant name (the generator name).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "type": "object"
+      },
       "PendingWebhookDelivery": {
         "properties": {
           "attempts": {
@@ -2914,7 +2957,7 @@
       "url": "https://www.elastic.co/licensing/elastic-license"
     },
     "title": "brokkr-broker",
-    "version": "0.8.3"
+    "version": "0.8.4"
   },
   "openapi": "3.0.3",
   "paths": {
@@ -3183,6 +3226,19 @@
     "/agent-events": {
       "get": {
         "operationId": "list_agent_events",
+        "parameters": [
+          {
+            "description": "Tenant (generator) ID to scope the listing to.",
+            "in": "query",
+            "name": "pak_id",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "nullable": true,
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -5599,6 +5655,19 @@
     "/fleet": {
       "get": {
         "operationId": "list_fleet",
+        "parameters": [
+          {
+            "description": "Tenant (generator) ID to scope the listing to.",
+            "in": "query",
+            "name": "pak_id",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "nullable": true,
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -6278,9 +6347,71 @@
         ]
       }
     },
+    "/paks": {
+      "get": {
+        "operationId": "list_paks",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PakSummary"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "List of named PAKs (tenants)"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden - PAK does not have required rights"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "admin_pak": []
+          }
+        ],
+        "summary": "Lists named PAKs (tenants) for scope selection.",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
     "/stacks": {
       "get": {
         "operationId": "list_stacks",
+        "parameters": [
+          {
+            "description": "Tenant (generator) ID to scope the listing to.",
+            "in": "query",
+            "name": "pak_id",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "nullable": true,
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {

@@ -5,7 +5,7 @@
  */
 
 use crate::api::v1::admin::{
-    AuditLogListResponse, ConfigChangeInfo, ConfigReloadResponse, WsConnectionInfo,
+    AuditLogEntry, AuditLogListResponse, ConfigChangeInfo, ConfigReloadResponse, WsConnectionInfo,
     WsConnectionsResponse,
 };
 use crate::api::v1::agents::{CreateAgentRequest, CreateAgentResponse, HeartbeatReport};
@@ -20,6 +20,7 @@ use crate::api::v1::health::{
     HealthStatusUpdate, StackHealthResponse,
 };
 use crate::api::v1::middleware::AuthResponse;
+use crate::api::v1::paks::PakSummary;
 use crate::api::v1::stacks::{
     CreateDeploymentObjectRequest, K8sEventHistoryResponse, PodLogHistoryResponse, RetentionInfo,
     TemplateInstantiationRequest,
@@ -36,7 +37,7 @@ use crate::api::v1::work_orders::{
 };
 use crate::api::v1::{
     admin, agent_events, agents, auth, deployment_objects, diagnostics, fleet, generators, health,
-    stacks, templates, webhooks, work_orders,
+    paks, stacks, templates, webhooks, work_orders,
 };
 use crate::dal::DAL;
 use axum::{Router, response::Json, routing::get};
@@ -149,6 +150,7 @@ use utoipa_swagger_ui::SwaggerUi;
         work_orders::list_work_order_log,
         work_orders::get_work_order_log,
         auth::verify_pak,
+        paks::list_paks,
         health::update_health_status,
         health::get_deployment_health,
         health::get_stack_health,
@@ -197,6 +199,7 @@ use utoipa_swagger_ui::SwaggerUi;
             Stack,
             NewStack,
             AuthResponse,
+            PakSummary,
             StackTemplate,
             NewStackTemplate,
             TemplateLabel,
@@ -229,6 +232,7 @@ use utoipa_swagger_ui::SwaggerUi;
             ConfigReloadResponse,
             ConfigChangeInfo,
             AuditLog,
+            AuditLogEntry,
             AuditLogListResponse,
             ErrorResponse,
             AgentK8sEvent,

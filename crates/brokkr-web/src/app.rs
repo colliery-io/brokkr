@@ -48,6 +48,33 @@ fn now_hms() -> String {
     )
 }
 
+/// The selected tenant scope (BROKKR-I-0032): `None` = all tenants, `Some(id)`
+/// = only resources under that named PAK (generator). Provided as context at
+/// the app root; data views read it and pass it to the scoped API fetches.
+pub type ScopeSignal = RwSignal<Option<String>>;
+
+/// Read the app-wide scope signal from context (installed by [`App`]).
+pub fn use_scope() -> ScopeSignal {
+    use_context::<ScopeSignal>().expect("scope signal provided at app root")
+}
+
+const SCOPE_STORAGE_KEY: &str = "brokkr_scope";
+
+fn load_scope() -> Option<String> {
+    let ls = web_sys::window()?.local_storage().ok()??;
+    ls.get_item(SCOPE_STORAGE_KEY).ok()?.filter(|s| !s.is_empty())
+}
+
+fn save_scope(scope: &Option<String>) {
+    let Some(ls) = web_sys::window().and_then(|w| w.local_storage().ok().flatten()) else {
+        return;
+    };
+    match scope {
+        Some(id) => { let _ = ls.set_item(SCOPE_STORAGE_KEY, id); }
+        None => { let _ = ls.remove_item(SCOPE_STORAGE_KEY); }
+    }
+}
+
 #[component]
 pub fn App() -> impl IntoView {
     let route = RwSignal::new("overview");
@@ -60,6 +87,12 @@ pub fn App() -> impl IntoView {
         std::time::Duration::from_secs(1),
     );
     crate::components::provide_toasts();
+
+    // Tenant scope (BROKKR-I-0032): restored from localStorage, persisted on
+    // change, available to every data view via context.
+    let scope: ScopeSignal = RwSignal::new(load_scope());
+    provide_context(scope);
+    Effect::new(move |_| save_scope(&scope.get()));
 
     view! {
         <AuroraStyles/>
@@ -139,6 +172,8 @@ fn Sidebar(route: RwSignal<&'static str>) -> impl IntoView {
             </div>
             // Nav
             <div style="display:flex;flex-direction:column;gap:14px;">{groups}</div>
+            // Tenant scope selector (BROKKR-I-0032)
+            <ScopeSelector />
             // Footer
             <div style="margin-top:auto;border-top:1px solid var(--border-fainter,#15191f);\
                         padding-top:8px;display:flex;justify-content:space-between;\
@@ -147,6 +182,63 @@ fn Sidebar(route: RwSignal<&'static str>) -> impl IntoView {
                 <span>"wasm"</span>
             </div>
         </div>
+    }
+}
+
+/// Tenant scope selector (BROKKR-I-0032): "All" + one entry per named PAK from
+/// `GET /api/v1/paks`. Hidden entirely on single-tenant installs (empty list)
+/// or when the listing fails (the views still work unscoped). A styled
+/// `<select>` rather than a `SegmentedControl`: the 220px sidebar can't fit
+/// segments for arbitrary tenant names, and `value=id` keeps duplicate names
+/// unambiguous.
+#[component]
+fn ScopeSelector() -> impl IntoView {
+    let scope = use_scope();
+    let paks = LocalResource::new(|| crate::api::paks());
+
+    view! {
+        {move || match paks.get() {
+            Some(Ok(list)) if !list.is_empty() => {
+                // A stored scope whose tenant no longer exists falls back to All.
+                if let Some(current) = scope.get_untracked() {
+                    if !list.iter().any(|p| p.id == current) {
+                        scope.set(None);
+                    }
+                }
+                let options = list
+                    .iter()
+                    .map(|p| {
+                        let selected = scope.get() == Some(p.id.clone());
+                        view! {
+                            <option value=p.id.clone() selected=selected>{p.name.clone()}</option>
+                        }
+                    })
+                    .collect_view();
+                view! {
+                    <div style="display:flex;flex-direction:column;gap:4px;">
+                        <div style="font:600 9.5px/1 var(--font-mono);letter-spacing:.12em;\
+                                    text-transform:uppercase;color:var(--faint);padding:0 10px;">
+                            "Tenant"
+                        </div>
+                        <select
+                            style="margin:0 2px;padding:7px 8px;border-radius:8px;\
+                                   background:var(--inset,#12151b);color:var(--fg);\
+                                   border:1px solid var(--border-control,#252b35);\
+                                   font:12px var(--font-mono);outline:none;cursor:pointer;"
+                            on:change=move |ev| {
+                                let v = event_target_value(&ev);
+                                scope.set((!v.is_empty()).then_some(v));
+                            }
+                        >
+                            <option value="" selected=move || scope.get().is_none()>"All"</option>
+                            {options}
+                        </select>
+                    </div>
+                }
+                .into_any()
+            }
+            _ => ().into_any(),
+        }}
     }
 }
 

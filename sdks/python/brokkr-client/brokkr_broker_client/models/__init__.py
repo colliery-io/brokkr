@@ -12,6 +12,7 @@ from .agent_pod_log import AgentPodLog
 from .agent_registration_body import AgentRegistrationBody
 from .agent_target import AgentTarget
 from .audit_log import AuditLog
+from .audit_log_entry import AuditLogEntry
 from .audit_log_list_response import AuditLogListResponse
 from .auth_response import AuthResponse
 from .claim_work_order_request import ClaimWorkOrderRequest
@@ -57,6 +58,7 @@ from .new_stack_label import NewStackLabel
 from .new_stack_template import NewStackTemplate
 from .new_template_annotation import NewTemplateAnnotation
 from .new_template_label import NewTemplateLabel
+from .pak_summary import PakSummary
 from .pending_webhook_delivery import PendingWebhookDelivery
 from .pod_log_history_response import PodLogHistoryResponse
 from .resource_health import ResourceHealth
@@ -97,6 +99,7 @@ __all__ = (
     "AgentRegistrationBody",
     "AgentTarget",
     "AuditLog",
+    "AuditLogEntry",
     "AuditLogListResponse",
     "AuthResponse",
     "ClaimWorkOrderRequest",
@@ -142,6 +145,7 @@ __all__ = (
     "NewStackTemplate",
     "NewTemplateAnnotation",
     "NewTemplateLabel",
+    "PakSummary",
     "PendingWebhookDelivery",
     "PodLogHistoryResponse",
     "ResourceHealth",

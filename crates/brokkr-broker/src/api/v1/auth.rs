@@ -42,5 +42,6 @@ async fn verify_pak(Extension(auth_payload): Extension<AuthPayload>) -> Json<Aut
         admin: auth_payload.admin,
         agent: auth_payload.agent.map(|id| id.to_string()),
         generator: auth_payload.generator.map(|id| id.to_string()),
+        readonly: auth_payload.readonly,
     })
 }
