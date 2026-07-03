@@ -14,7 +14,9 @@ use leptos::prelude::*;
 #[component]
 pub fn TelemetryView() -> impl IntoView {
     let tab = RwSignal::new(String::from("Kube events"));
-    let events = LocalResource::new(|| api::agent_events());
+    // Scope-reactive (BROKKR-I-0032): refetches when the tenant selection changes.
+    let scope = crate::app::use_scope();
+    let events = LocalResource::new(move || api::agent_events(scope.get()));
     set_interval(move || events.refetch(), std::time::Duration::from_secs(5));
     let selected = RwSignal::new(None::<AgentEventDto>);
     let open = RwSignal::new(false);

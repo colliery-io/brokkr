@@ -1,38 +1,20 @@
 from http import HTTPStatus
 from typing import Any
-from uuid import UUID
 
 import httpx
 
 from ... import errors
 from ...client import AuthenticatedClient, Client
 from ...models.error_response import ErrorResponse
-from ...models.fleet_agent_record import FleetAgentRecord
-from ...types import UNSET, Response, Unset
+from ...models.pak_summary import PakSummary
+from ...types import Response
 
 
-def _get_kwargs(
-    *,
-    pak_id: None | Unset | UUID = UNSET,
-) -> dict[str, Any]:
-
-    params: dict[str, Any] = {}
-
-    json_pak_id: None | str | Unset
-    if isinstance(pak_id, Unset):
-        json_pak_id = UNSET
-    elif isinstance(pak_id, UUID):
-        json_pak_id = str(pak_id)
-    else:
-        json_pak_id = pak_id
-    params["pak_id"] = json_pak_id
-
-    params = {k: v for k, v in params.items() if v is not UNSET and v is not None}
+def _get_kwargs() -> dict[str, Any]:
 
     _kwargs: dict[str, Any] = {
         "method": "get",
-        "url": "/fleet",
-        "params": params,
+        "url": "/paks",
     }
 
     return _kwargs
@@ -40,12 +22,12 @@ def _get_kwargs(
 
 def _parse_response(
     *, client: AuthenticatedClient | Client, response: httpx.Response
-) -> ErrorResponse | list[FleetAgentRecord] | None:
+) -> ErrorResponse | list[PakSummary] | None:
     if response.status_code == 200:
         response_200 = []
         _response_200 = response.json()
         for response_200_item_data in _response_200:
-            response_200_item = FleetAgentRecord.from_dict(response_200_item_data)
+            response_200_item = PakSummary.from_dict(response_200_item_data)
 
             response_200.append(response_200_item)
 
@@ -69,7 +51,7 @@ def _parse_response(
 
 def _build_response(
     *, client: AuthenticatedClient | Client, response: httpx.Response
-) -> Response[ErrorResponse | list[FleetAgentRecord]]:
+) -> Response[ErrorResponse | list[PakSummary]]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -81,23 +63,18 @@ def _build_response(
 def sync_detailed(
     *,
     client: AuthenticatedClient,
-    pak_id: None | Unset | UUID = UNSET,
-) -> Response[ErrorResponse | list[FleetAgentRecord]]:
-    """
-    Args:
-        pak_id (None | Unset | UUID):
+) -> Response[ErrorResponse | list[PakSummary]]:
+    """Lists named PAKs (tenants) for scope selection.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[ErrorResponse | list[FleetAgentRecord]]
+        Response[ErrorResponse | list[PakSummary]]
     """
 
-    kwargs = _get_kwargs(
-        pak_id=pak_id,
-    )
+    kwargs = _get_kwargs()
 
     response = client.get_httpx_client().request(
         **kwargs,
@@ -109,46 +86,37 @@ def sync_detailed(
 def sync(
     *,
     client: AuthenticatedClient,
-    pak_id: None | Unset | UUID = UNSET,
-) -> ErrorResponse | list[FleetAgentRecord] | None:
-    """
-    Args:
-        pak_id (None | Unset | UUID):
+) -> ErrorResponse | list[PakSummary] | None:
+    """Lists named PAKs (tenants) for scope selection.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        ErrorResponse | list[FleetAgentRecord]
+        ErrorResponse | list[PakSummary]
     """
 
     return sync_detailed(
         client=client,
-        pak_id=pak_id,
     ).parsed
 
 
 async def asyncio_detailed(
     *,
     client: AuthenticatedClient,
-    pak_id: None | Unset | UUID = UNSET,
-) -> Response[ErrorResponse | list[FleetAgentRecord]]:
-    """
-    Args:
-        pak_id (None | Unset | UUID):
+) -> Response[ErrorResponse | list[PakSummary]]:
+    """Lists named PAKs (tenants) for scope selection.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[ErrorResponse | list[FleetAgentRecord]]
+        Response[ErrorResponse | list[PakSummary]]
     """
 
-    kwargs = _get_kwargs(
-        pak_id=pak_id,
-    )
+    kwargs = _get_kwargs()
 
     response = await client.get_async_httpx_client().request(**kwargs)
 
@@ -158,23 +126,19 @@ async def asyncio_detailed(
 async def asyncio(
     *,
     client: AuthenticatedClient,
-    pak_id: None | Unset | UUID = UNSET,
-) -> ErrorResponse | list[FleetAgentRecord] | None:
-    """
-    Args:
-        pak_id (None | Unset | UUID):
+) -> ErrorResponse | list[PakSummary] | None:
+    """Lists named PAKs (tenants) for scope selection.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        ErrorResponse | list[FleetAgentRecord]
+        ErrorResponse | list[PakSummary]
     """
 
     return (
         await asyncio_detailed(
             client=client,
-            pak_id=pak_id,
         )
     ).parsed

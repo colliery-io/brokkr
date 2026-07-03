@@ -13,9 +13,11 @@ use leptos::prelude::*;
 
 #[component]
 pub fn OverviewView() -> impl IntoView {
-    let fleet = LocalResource::new(|| api::fleet());
+    // Scope-reactive (BROKKR-I-0032): refetches when the tenant selection changes.
+    let scope = crate::app::use_scope();
+    let fleet = LocalResource::new(move || api::fleet(scope.get()));
     let metrics = LocalResource::new(|| api::metrics_text());
-    let events = LocalResource::new(|| api::agent_events());
+    let events = LocalResource::new(move || api::agent_events(scope.get()));
     let history = RwSignal::new(Vec::<f64>::new());
 
     set_interval(

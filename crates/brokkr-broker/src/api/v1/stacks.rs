@@ -92,6 +92,7 @@ async fn fetch_owned_stack(
     get,
     path = "/stacks",
     tag = "stacks",
+    params(crate::api::v1::paks::PakScopeQuery),
     responses(
         (status = 200, description = "List of stacks (admin: all; generator: own)", body = Vec<Stack>),
         (status = 403, description = "Forbidden", body = ErrorResponse),
@@ -103,11 +104,18 @@ async fn fetch_owned_stack(
 async fn list_stacks(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
+    Query(scope): Query<crate::api::v1::paks::PakScopeQuery>,
 ) -> Result<Json<Vec<Stack>>, ApiError> {
     info!("Handling request to list stacks");
 
     let stacks = if auth_payload.admin {
-        dal.stacks().list().map_err(|e| {
+        // Tenant scope (BROKKR-T-0270): a view filter for the console, only
+        // meaningful on the admin path (a generator already sees only its own).
+        match scope.pak_id {
+            Some(pak_id) => dal.stacks().list_for_generator(pak_id),
+            None => dal.stacks().list(),
+        }
+        .map_err(|e| {
             error!("Failed to fetch stacks: {:?}", e);
             ApiError::internal("failed to fetch stacks")
         })?
@@ -127,7 +135,8 @@ async fn list_stacks(
     };
 
     info!("Successfully retrieved {} stacks", stacks.len());
-    if auth_payload.admin {
+    // Only an unscoped admin listing reflects the true total.
+    if auth_payload.admin && scope.pak_id.is_none() {
         metrics::set_stacks_total(stacks.len() as i64);
     }
     Ok(Json(stacks))

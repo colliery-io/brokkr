@@ -13,7 +13,9 @@ use leptos::prelude::*;
 
 #[component]
 pub fn DeploymentsView() -> impl IntoView {
-    let data = LocalResource::new(|| api::stacks());
+    // Scope-reactive (BROKKR-I-0032): refetches when the tenant selection changes.
+    let scope = crate::app::use_scope();
+    let data = LocalResource::new(move || api::stacks(scope.get()));
     let selected = RwSignal::new(None::<Stack>);
     let open = RwSignal::new(false);
     // Per-stack deployment-object health, refetched when the selection changes.

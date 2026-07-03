@@ -13,11 +13,12 @@
 
 use crate::api::v1::error::{ApiError, ErrorResponse};
 use crate::api::v1::middleware::AuthPayload;
+use crate::api::v1::paks::PakScopeQuery;
 use crate::dal::DAL;
 use crate::ws::ConnectionRegistry;
 use axum::{
     Json,
-    extract::{Extension, Path, State},
+    extract::{Extension, Path, Query, State},
 };
 use brokkr_models::models::agent_events::AgentEvent;
 use brokkr_models::models::deployment_health::{HEALTH_STATUS_DEGRADED, HEALTH_STATUS_FAILING};
@@ -325,6 +326,7 @@ fn require_admin(auth: &AuthPayload) -> Result<(), ApiError> {
 
 #[utoipa::path(
     get, path = "/fleet", tag = "fleet",
+    params(PakScopeQuery),
     responses(
         (status = 200, description = "Per-agent fleet records (measured values only)", body = Vec<FleetAgentRecord>),
         (status = 403, description = "Forbidden", body = ErrorResponse),
@@ -336,11 +338,33 @@ pub async fn list_fleet(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
     Extension(registry): Extension<Arc<ConnectionRegistry>>,
+    Query(scope): Query<PakScopeQuery>,
 ) -> Result<Json<Vec<FleetAgentRecord>>, ApiError> {
     info!("Handling request to list fleet records");
     require_admin(&auth_payload)?;
 
-    let records = build_all_fleet_records(&dal, &registry)?;
+    let mut records = build_all_fleet_records(&dal, &registry)?;
+
+    // Tenant scope (BROKKR-T-0270): keep only agents registered under the
+    // requested generator. The aggregates are whole-fleet grouped queries
+    // either way, so filtering the assembled records costs nothing extra.
+    if let Some(pak_id) = scope.pak_id {
+        let registered: std::collections::HashSet<Uuid> = dal
+            .agent_generator_registrations()
+            .list_for_generator(pak_id)
+            .map_err(|e| {
+                error!(
+                    "Failed to fetch registrations for generator {}: {:?}",
+                    pak_id, e
+                );
+                ApiError::internal("failed to fetch tenant registrations")
+            })?
+            .into_iter()
+            .map(|r| r.agent_id)
+            .collect();
+        records.retain(|r| registered.contains(&r.agent_id));
+    }
+
     info!("Successfully assembled {} fleet records", records.len());
     Ok(Json(records))
 }

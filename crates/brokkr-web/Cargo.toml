@@ -3,7 +3,7 @@
 # served by the broker. Has its own Cargo.lock.
 [package]
 name = "brokkr-web"
-version = "0.8.3"
+version = "0.8.4"
 edition = "2021"
 license = "Elastic-2.0"
 description = "Brokkr Operator Console — a read-mostly Leptos/WASM monitoring console served by the broker."
@@ -20,4 +20,4 @@ gloo-net = { version = "0.6", features = ["http", "websocket"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 wasm-bindgen-futures = "0.4"
-web-sys = { version = "0.3", features = ["Storage", "Window"] }
+web-sys = { version = "0.3", features = ["Document", "Element", "Storage", "Window"] }

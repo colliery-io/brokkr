@@ -7,7 +7,7 @@ from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 
 if TYPE_CHECKING:
-    from ..models.audit_log import AuditLog
+    from ..models.audit_log_entry import AuditLogEntry
 
 
 T = TypeVar("T", bound="AuditLogListResponse")
@@ -20,14 +20,14 @@ class AuditLogListResponse:
     Attributes:
         count (int): Number of entries returned.
         limit (int): Limit used for this query.
-        logs (list[AuditLog]): The audit log entries.
+        logs (list[AuditLogEntry]): The audit log entries.
         offset (int): Offset used for this query.
         total (int): Total count of matching entries (for pagination).
     """
 
     count: int
     limit: int
-    logs: list[AuditLog]
+    logs: list[AuditLogEntry]
     offset: int
     total: int
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
@@ -62,7 +62,7 @@ class AuditLogListResponse:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.audit_log import AuditLog
+        from ..models.audit_log_entry import AuditLogEntry
 
         d = dict(src_dict)
         count = d.pop("count")
@@ -72,7 +72,7 @@ class AuditLogListResponse:
         logs = []
         _logs = d.pop("logs")
         for logs_item_data in _logs:
-            logs_item = AuditLog.from_dict(logs_item_data)
+            logs_item = AuditLogEntry.from_dict(logs_item_data)
 
             logs.append(logs_item)
 

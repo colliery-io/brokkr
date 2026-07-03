@@ -1,5 +1,6 @@
 from http import HTTPStatus
 from typing import Any
+from uuid import UUID
 
 import httpx
 
@@ -7,14 +8,31 @@ from ... import errors
 from ...client import AuthenticatedClient, Client
 from ...models.error_response import ErrorResponse
 from ...models.stack import Stack
-from ...types import Response
+from ...types import UNSET, Response, Unset
 
 
-def _get_kwargs() -> dict[str, Any]:
+def _get_kwargs(
+    *,
+    pak_id: None | Unset | UUID = UNSET,
+) -> dict[str, Any]:
+
+    params: dict[str, Any] = {}
+
+    json_pak_id: None | str | Unset
+    if isinstance(pak_id, Unset):
+        json_pak_id = UNSET
+    elif isinstance(pak_id, UUID):
+        json_pak_id = str(pak_id)
+    else:
+        json_pak_id = pak_id
+    params["pak_id"] = json_pak_id
+
+    params = {k: v for k, v in params.items() if v is not UNSET and v is not None}
 
     _kwargs: dict[str, Any] = {
         "method": "get",
         "url": "/stacks",
+        "params": params,
     }
 
     return _kwargs
@@ -63,8 +81,12 @@ def _build_response(
 def sync_detailed(
     *,
     client: AuthenticatedClient,
+    pak_id: None | Unset | UUID = UNSET,
 ) -> Response[ErrorResponse | list[Stack]]:
     """
+    Args:
+        pak_id (None | Unset | UUID):
+
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
@@ -73,7 +95,9 @@ def sync_detailed(
         Response[ErrorResponse | list[Stack]]
     """
 
-    kwargs = _get_kwargs()
+    kwargs = _get_kwargs(
+        pak_id=pak_id,
+    )
 
     response = client.get_httpx_client().request(
         **kwargs,
@@ -85,8 +109,12 @@ def sync_detailed(
 def sync(
     *,
     client: AuthenticatedClient,
+    pak_id: None | Unset | UUID = UNSET,
 ) -> ErrorResponse | list[Stack] | None:
     """
+    Args:
+        pak_id (None | Unset | UUID):
+
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
@@ -97,14 +125,19 @@ def sync(
 
     return sync_detailed(
         client=client,
+        pak_id=pak_id,
     ).parsed
 
 
 async def asyncio_detailed(
     *,
     client: AuthenticatedClient,
+    pak_id: None | Unset | UUID = UNSET,
 ) -> Response[ErrorResponse | list[Stack]]:
     """
+    Args:
+        pak_id (None | Unset | UUID):
+
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
@@ -113,7 +146,9 @@ async def asyncio_detailed(
         Response[ErrorResponse | list[Stack]]
     """
 
-    kwargs = _get_kwargs()
+    kwargs = _get_kwargs(
+        pak_id=pak_id,
+    )
 
     response = await client.get_async_httpx_client().request(**kwargs)
 
@@ -123,8 +158,12 @@ async def asyncio_detailed(
 async def asyncio(
     *,
     client: AuthenticatedClient,
+    pak_id: None | Unset | UUID = UNSET,
 ) -> ErrorResponse | list[Stack] | None:
     """
+    Args:
+        pak_id (None | Unset | UUID):
+
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
@@ -136,5 +175,6 @@ async def asyncio(
     return (
         await asyncio_detailed(
             client=client,
+            pak_id=pak_id,
         )
     ).parsed

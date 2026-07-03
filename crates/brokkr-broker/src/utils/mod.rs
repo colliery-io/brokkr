@@ -25,6 +25,7 @@ pub mod event_bus;
 pub mod matching;
 pub mod pak;
 pub mod templating;
+pub mod ui_pak;
 use brokkr_utils::config::Settings;
 
 /// Path of the bootstrap key file written when the broker generates an admin

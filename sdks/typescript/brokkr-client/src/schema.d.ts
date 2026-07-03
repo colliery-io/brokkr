@@ -679,6 +679,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/paks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lists named PAKs (tenants) for scope selection. */
+        get: operations["list_paks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/stacks": {
         parameters: {
             query?: never;
@@ -1428,6 +1445,18 @@ export interface components {
             /** @description Client user agent string. */
             user_agent?: string | null;
         };
+        /**
+         * @description An audit log entry enriched with a human-readable actor name
+         *     (BROKKR-T-0271). Names are resolved at read time from the owning entity
+         *     (generator/agent name), so a rename stays reflected in history.
+         */
+        AuditLogEntry: components["schemas"]["AuditLog"] & {
+            /**
+             * @description Human-readable actor name: the generator/agent name, `"admin"`,
+             *     `"system"`, or `null` when the actor no longer resolves.
+             */
+            actor_name?: string | null;
+        };
         /** @description Response structure for audit log list operations. */
         AuditLogListResponse: {
             /** @description Number of entries returned. */
@@ -1438,7 +1467,7 @@ export interface components {
              */
             limit: number;
             /** @description The audit log entries. */
-            logs: components["schemas"]["AuditLog"][];
+            logs: components["schemas"]["AuditLogEntry"][];
             /**
              * Format: int64
              * @description Offset used for this query.
@@ -1458,6 +1487,8 @@ export interface components {
             agent?: string | null;
             /** @description The string representation of the generator's UUID, if applicable. */
             generator?: string | null;
+            /** @description Whether the credential is read-only (the console's ephemeral UI PAK). */
+            readonly: boolean;
         };
         ClaimWorkOrderRequest: {
             /** Format: uuid */
@@ -2154,6 +2185,19 @@ export interface components {
              * @description ID of the template this label is associated with.
              */
             template_id: string;
+        };
+        /**
+         * @description One tenant entry for the console scope selector: a named PAK owner
+         *     (generator) reduced to its identity.
+         */
+        PakSummary: {
+            /**
+             * Format: uuid
+             * @description The tenant's generator ID (used as `?pak_id=` in scoped queries).
+             */
+            id: string;
+            /** @description Human-readable tenant name (the generator name). */
+            name: string;
         };
         PendingWebhookDelivery: {
             /** Format: int32 */
@@ -2934,7 +2978,10 @@ export interface operations {
     };
     list_agent_events: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Tenant (generator) ID to scope the listing to. */
+                pak_id?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -4630,7 +4677,10 @@ export interface operations {
     };
     list_fleet: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Tenant (generator) ID to scope the listing to. */
+                pak_id?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -5131,9 +5181,50 @@ export interface operations {
             };
         };
     };
-    list_stacks: {
+    list_paks: {
         parameters: {
             query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description List of named PAKs (tenants) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PakSummary"][];
+                };
+            };
+            /** @description Forbidden - PAK does not have required rights */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_stacks: {
+        parameters: {
+            query?: {
+                /** @description Tenant (generator) ID to scope the listing to. */
+                pak_id?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;

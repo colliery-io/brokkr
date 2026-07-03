@@ -19,7 +19,8 @@ use axum::{
     routing::{get, post},
 };
 use brokkr_models::models::audit_logs::{
-    ACTION_CONFIG_RELOADED, ACTOR_TYPE_ADMIN, AuditLog, AuditLogFilter, RESOURCE_TYPE_CONFIG,
+    ACTION_CONFIG_RELOADED, ACTOR_TYPE_ADMIN, ACTOR_TYPE_AGENT, ACTOR_TYPE_GENERATOR,
+    ACTOR_TYPE_SYSTEM, AuditLog, AuditLogFilter, RESOURCE_TYPE_CONFIG,
 };
 use brokkr_utils::config::ReloadableConfig;
 use chrono::{DateTime, Utc};
@@ -95,11 +96,24 @@ impl From<AuditLogQueryParams> for AuditLogFilter {
     }
 }
 
+/// An audit log entry enriched with a human-readable actor name
+/// (BROKKR-T-0271). Names are resolved at read time from the owning entity
+/// (generator/agent name), so a rename stays reflected in history.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct AuditLogEntry {
+    /// The audit log record.
+    #[serde(flatten)]
+    pub log: AuditLog,
+    /// Human-readable actor name: the generator/agent name, `"admin"`,
+    /// `"system"`, or `null` when the actor no longer resolves.
+    pub actor_name: Option<String>,
+}
+
 /// Response structure for audit log list operations.
 #[derive(Debug, Serialize, ToSchema)]
 pub struct AuditLogListResponse {
     /// The audit log entries.
-    pub logs: Vec<AuditLog>,
+    pub logs: Vec<AuditLogEntry>,
     /// Total count of matching entries (for pagination).
     pub total: i64,
     /// Number of entries returned.
@@ -371,6 +385,7 @@ async fn list_audit_logs(
         })?;
 
     let count = logs.len();
+    let logs = enrich_with_actor_names(&dal, logs)?;
 
     Ok(Json(AuditLogListResponse {
         logs,
@@ -379,6 +394,55 @@ async fn list_audit_logs(
         limit,
         offset,
     }))
+}
+
+/// Attach human-readable actor names to a page of audit logs
+/// (BROKKR-T-0271). Names resolve in one batched query per entity type —
+/// never per-row. Dangling IDs (hard-deleted entities) resolve to `None`.
+fn enrich_with_actor_names(
+    dal: &DAL,
+    logs: Vec<AuditLog>,
+) -> Result<Vec<AuditLogEntry>, ApiError> {
+    let mut agent_ids: Vec<Uuid> = Vec::new();
+    let mut generator_ids: Vec<Uuid> = Vec::new();
+    for log in &logs {
+        match (log.actor_type.as_str(), log.actor_id) {
+            (ACTOR_TYPE_AGENT, Some(id)) => agent_ids.push(id),
+            (ACTOR_TYPE_GENERATOR, Some(id)) => generator_ids.push(id),
+            _ => {}
+        }
+    }
+    agent_ids.sort_unstable();
+    agent_ids.dedup();
+    generator_ids.sort_unstable();
+    generator_ids.dedup();
+
+    let lookup_names = |pairs: Result<Vec<(Uuid, String)>, diesel::result::Error>| {
+        pairs.map(|v| v.into_iter().collect::<std::collections::HashMap<_, _>>())
+    };
+    let agent_names = lookup_names(dal.agents().get_names_by_ids(&agent_ids)).map_err(|e| {
+        error!("Failed to resolve agent names for audit logs: {:?}", e);
+        ApiError::internal("failed to resolve actor names")
+    })?;
+    let generator_names =
+        lookup_names(dal.generators().get_names_by_ids(&generator_ids)).map_err(|e| {
+            error!("Failed to resolve generator names for audit logs: {:?}", e);
+            ApiError::internal("failed to resolve actor names")
+        })?;
+
+    Ok(logs
+        .into_iter()
+        .map(|log| {
+            let actor_name = match (log.actor_type.as_str(), log.actor_id) {
+                (ACTOR_TYPE_ADMIN, _) => Some(ACTOR_TYPE_ADMIN.to_string()),
+                (ACTOR_TYPE_SYSTEM, _) => Some(ACTOR_TYPE_SYSTEM.to_string()),
+                (ACTOR_TYPE_AGENT, Some(id)) => agent_names.get(&id).cloned(),
+                (ACTOR_TYPE_GENERATOR, Some(id)) => generator_names.get(&id).cloned(),
+                _ => None,
+            };
+            AuditLogEntry { log, actor_name }
+        })
+        .collect())
 }
 
 #[cfg(test)]

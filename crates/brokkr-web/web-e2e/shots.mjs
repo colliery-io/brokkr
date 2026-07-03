@@ -66,6 +66,14 @@ const STACKS = [
   { id: "s1", name: "payments-api", description: "prod payments service", generator_id: "1b9d6bcd-bbfd" },
   { id: "s2", name: "ingest-worker", description: "event ingest", generator_id: "7c9e6679-7425" },
 ];
+// Named PAKs (tenants) for the scope selector (BROKKR-I-0032). IDs line up
+// with STACKS.generator_id so scoped mocks stay coherent.
+const PAKS = [
+  { id: "1b9d6bcd-bbfd", name: "team-payments" },
+  { id: "7c9e6679-7425", name: "team-ingest" },
+];
+// team-payments owns the two prod agents; team-ingest the staging one.
+const FLEET_PAYMENTS = FLEET.slice(0, 2);
 const TELEM = [
   { agent_id: "a1", event_type: "Apply", status: "success", message: "applied Deployment/payments (3 objects)" },
   { agent_id: "a1", event_type: "Reconcile", status: "success", message: "no drift" },
@@ -95,6 +103,11 @@ const SCENES = [
     ] } } },
   { name: "telemetry", nav: "Telemetry", mocks: { "/agent-events": TELEM } },
   { name: "telemetry-modal", nav: "Telemetry", click: "Apply", mocks: { "/agent-events": TELEM } },
+  // Scope selector (BROKKR-I-0032): selector visible with named PAKs...
+  { name: "scope-selector", nav: "Fleet", mocks: { "/paks": PAKS, "/fleet": FLEET } },
+  // ...and selecting a tenant narrows the fleet to its agents.
+  { name: "fleet-scoped", nav: "Fleet", select: "team-payments",
+    mocks: { "/paks": PAKS, "/fleet": FLEET, "/fleet?pak_id=1b9d6bcd-bbfd": FLEET_PAYMENTS } },
 ];
 
 // ---- driver --------------------------------------------------------------
@@ -118,12 +131,23 @@ await page.route("**/metrics", (route) =>
 
 let MOCKS = {};
 await page.route("**/api/v1/**", (route) => {
-  const suffix = new URL(route.request().url()).pathname.replace(/^\/api\/v1/, "");
-  if (suffix in MOCKS) {
+  const url = new URL(route.request().url());
+  const suffix = url.pathname.replace(/^\/api\/v1/, "");
+  // Query-aware first (scoped fixtures like "/fleet?pak_id=..."), then bare
+  // path. Trailing separators are stripped so URL-builder quirks can't dodge
+  // a scoped fixture.
+  const withQuery = (suffix + url.search).replace(/[&?]+$/, "");
+  const key = withQuery in MOCKS ? withQuery : suffix;
+  // The scope selector fetches /paks on every scene; scenes that don't care
+  // get an empty tenant list (selector hidden) instead of 404 noise.
+  if (!(key in MOCKS) && suffix === "/paks") {
+    return route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
+  }
+  if (key in MOCKS) {
     return route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify(MOCKS[suffix]),
+      body: JSON.stringify(MOCKS[key]),
     });
   }
   return route.fulfill({
@@ -144,9 +168,15 @@ for (const s of SCENES) {
     await page.getByText(s.click, { exact: true }).first().click().catch(() => {});
     await page.waitForTimeout(500);
   }
+  if (s.select) {
+    await page.locator("select").last().selectOption({ label: s.select }).catch(() => {});
+    await page.waitForTimeout(500);
+  }
   await page.waitForTimeout(700);
   await page.screenshot({ path: `${OUT}/${s.name}.png`, fullPage: true });
   console.log(`shot: ${s.name}`);
+  // The selected scope persists in localStorage; clear it so scenes stay independent.
+  await page.evaluate(() => localStorage.removeItem("brokkr_scope"));
 }
 
 console.log(errs.length ? `CONSOLE ERRORS:\n${errs.join("\n")}` : "no console errors");

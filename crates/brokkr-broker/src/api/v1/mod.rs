@@ -22,6 +22,7 @@ pub mod generators;
 pub mod health;
 pub mod middleware;
 pub mod openapi;
+pub mod paks;
 pub mod stacks;
 pub mod templates;
 pub mod webhooks;
@@ -56,6 +57,7 @@ pub fn routes(
         .merge(diagnostics::routes())
         .merge(generators::routes())
         .merge(health::routes())
+        .merge(paks::routes())
         .merge(stacks::routes())
         .merge(templates::routes())
         .merge(webhooks::routes())

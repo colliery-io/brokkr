@@ -38,6 +38,9 @@ pub struct AuthPayload {
     pub agent: Option<Uuid>,
     /// The UUID of the authenticated generator, if applicable.
     pub generator: Option<Uuid>,
+    /// Read-only credential: the middleware rejects mutating requests
+    /// (see [`readonly_request_allowed`]). Set for the ephemeral UI PAK.
+    pub readonly: bool,
 }
 
 /// Represents the response structure for authentication information.
@@ -49,6 +52,8 @@ pub struct AuthResponse {
     pub agent: Option<String>,
     /// The string representation of the generator's UUID, if applicable.
     pub generator: Option<String>,
+    /// Whether the credential is read-only (the console's ephemeral UI PAK).
+    pub readonly: bool,
 }
 
 /// Middleware function for authenticating requests.
@@ -94,6 +99,16 @@ pub async fn auth_middleware<B>(
     match verify_pak(&dal, pak).await {
         Ok(auth_payload) => {
             info!("Authentication successful");
+            if auth_payload.readonly
+                && !readonly_request_allowed(request.method(), request.uri().path())
+            {
+                warn!(
+                    "Rejecting mutating request from read-only credential: {} {}",
+                    request.method(),
+                    request.uri().path()
+                );
+                return Err(StatusCode::FORBIDDEN);
+            }
             request.extensions_mut().insert(auth_payload);
             Ok(next.run(request).await)
         }
@@ -132,6 +147,35 @@ pub async fn auth_middleware<B>(
     }
 }
 
+/// Whether a request from a read-only credential may proceed.
+///
+/// Reads (GET/HEAD) are always allowed. Two POST routes are allowlisted per
+/// the BROKKR-I-0032 design decision because they don't mutate desired state:
+/// `/auth/pak` (credential introspection) and diagnostic creation
+/// (`/deployment-objects/:id/diagnostics`, an observability action).
+///
+/// Paths arrive with the `/api/v1` prefix already stripped by the router
+/// nesting; the defensive strip below keeps the check correct if this ever
+/// runs outside the nest.
+fn readonly_request_allowed(method: &axum::http::Method, path: &str) -> bool {
+    use axum::http::Method;
+    if method == Method::GET || method == Method::HEAD {
+        return true;
+    }
+    if method == Method::POST {
+        let path = path.strip_prefix("/api/v1").unwrap_or(path);
+        if path == "/auth/pak" {
+            return true;
+        }
+        if let Some(rest) = path.strip_prefix("/deployment-objects/") {
+            if let Some(id) = rest.strip_suffix("/diagnostics") {
+                return !id.is_empty() && !id.contains('/');
+            }
+        }
+    }
+    false
+}
+
 /// Verifies the provided PAK and returns the corresponding `AuthPayload`.
 ///
 /// This function checks the PAK against agents, generators, and admin roles
@@ -157,6 +201,21 @@ async fn verify_pak(dal: &DAL, pak: &str) -> Result<AuthPayload, StatusCode> {
             return Err(StatusCode::UNAUTHORIZED);
         }
     };
+
+    // Check the ephemeral UI PAK first (BROKKR-T-0267): an in-memory,
+    // constant-time comparison — no DB round-trip, nothing persisted.
+    if let Some(ui_hash) = crate::utils::ui_pak::hash() {
+        use subtle::ConstantTimeEq;
+        if bool::from(pak_hash.as_bytes().ct_eq(ui_hash.as_bytes())) {
+            info!("UI PAK verified (read-only admin)");
+            return Ok(AuthPayload {
+                admin: true,
+                agent: None,
+                generator: None,
+                readonly: true,
+            });
+        }
+    }
 
     // Check the auth cache first
     if let Some(cache) = &dal.auth_cache {
@@ -192,6 +251,7 @@ async fn verify_pak(dal: &DAL, pak: &str) -> Result<AuthPayload, StatusCode> {
                 admin: true,
                 agent: None,
                 generator: None,
+                readonly: false,
             };
             if let Some(cache) = &dal.auth_cache {
                 cache.insert(pak_hash, payload.clone());
@@ -208,6 +268,7 @@ async fn verify_pak(dal: &DAL, pak: &str) -> Result<AuthPayload, StatusCode> {
                 admin: false,
                 agent: Some(agent.id),
                 generator: None,
+                readonly: false,
             };
             if let Some(cache) = &dal.auth_cache {
                 cache.insert(pak_hash, payload.clone());
@@ -229,6 +290,7 @@ async fn verify_pak(dal: &DAL, pak: &str) -> Result<AuthPayload, StatusCode> {
                 admin: false,
                 agent: None,
                 generator: Some(generator.id),
+                readonly: false,
             };
             if let Some(cache) = &dal.auth_cache {
                 cache.insert(pak_hash, payload.clone());

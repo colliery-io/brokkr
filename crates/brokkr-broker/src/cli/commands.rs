@@ -115,6 +115,11 @@ pub async fn serve(config: &Settings) -> Result<(), Box<dyn std::error::Error>> 
     utils::encryption::init_encryption_key(config.broker.webhook_encryption_key.as_deref())
         .expect("Failed to initialize encryption key");
 
+    // Mint the ephemeral read-only UI PAK for the served operator console
+    // (BROKKR-T-0267). In-memory only; the token itself is never logged.
+    info!("Minting ephemeral read-only UI PAK for the operator console");
+    utils::ui_pak::init()?;
+
     // Provision system generator (idempotent — creates it on first run, no-op thereafter)
     info!("Provisioning system generator");
     let system_generator_id = dal

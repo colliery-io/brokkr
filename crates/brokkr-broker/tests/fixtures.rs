@@ -123,6 +123,10 @@ impl TestFixture {
         // Initialize encryption key for webhook tests (ignore if already initialized)
         let _ = utils::encryption::init_encryption_key(None);
 
+        // Mint the ephemeral read-only UI PAK (idempotent) so middleware tests
+        // can exercise the readonly path (BROKKR-T-0267).
+        utils::ui_pak::init().expect("Failed to mint UI PAK");
+
         // Read the admin PAK from the temporary file
         let admin_pak = "brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8".to_string();
 

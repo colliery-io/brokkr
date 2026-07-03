@@ -89,6 +89,20 @@ impl GeneratorsDAL<'_> {
             .load::<Generator>(conn)
     }
 
+    /// Resolves generator names for a set of IDs in one query (audit-log actor
+    /// enrichment, BROKKR-T-0271). Includes deleted and system generators so
+    /// historical audit entries still resolve.
+    pub fn get_names_by_ids(
+        &self,
+        ids: &[Uuid],
+    ) -> Result<Vec<(Uuid, String)>, diesel::result::Error> {
+        let conn = &mut self.dal.conn()?;
+        generators::table
+            .filter(generators::id.eq_any(ids))
+            .select((generators::id, generators::name))
+            .load::<(Uuid, String)>(conn)
+    }
+
     /// Lists all non-system generators from the database, including deleted ones.
     pub fn list_all(&self) -> Result<Vec<Generator>, diesel::result::Error> {
         let conn = &mut self.dal.conn()?;

@@ -131,6 +131,20 @@ impl AgentsDAL<'_> {
             .load::<Agent>(conn)
     }
 
+    /// Resolves agent names for a set of IDs in one query (audit-log actor
+    /// enrichment, BROKKR-T-0271). Includes soft-deleted agents so historical
+    /// audit entries still resolve.
+    pub fn get_names_by_ids(
+        &self,
+        ids: &[Uuid],
+    ) -> Result<Vec<(Uuid, String)>, diesel::result::Error> {
+        let conn = &mut self.dal.conn()?;
+        agents::table
+            .filter(agents::id.eq_any(ids))
+            .select((agents::id, agents::name))
+            .load::<(Uuid, String)>(conn)
+    }
+
     /// Lists all agents from the database, including deleted ones.
     ///
     /// # Returns
