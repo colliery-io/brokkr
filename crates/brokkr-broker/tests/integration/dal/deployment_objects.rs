@@ -791,7 +791,10 @@ fn test_target_state_label_targeting_after_deployment_exists() {
         "Test Cluster Label".to_string(),
     );
 
-    // 4. NOW add matching label to agent (after deployment exists)
+    // 4. NOW add matching label to agent (after deployment exists). The agent
+    // must also be registered with the stack's generator — registration is the
+    // consent boundary for label matching (BROKKR-T-0287).
+    fixture.register_agent_with_generator(agent.id, generator.id);
     fixture.create_test_agent_label(agent.id, "env:prod".to_string());
 
     // 5. Query target state
@@ -843,7 +846,10 @@ fn test_target_state_annotation_targeting_after_deployment_exists() {
         "Test Cluster Annotation".to_string(),
     );
 
-    // 4. NOW add matching annotation to agent (after deployment exists)
+    // 4. NOW add matching annotation to agent (after deployment exists). The
+    // agent must also be registered with the stack's generator — registration
+    // is the consent boundary for annotation matching (BROKKR-T-0287).
+    fixture.register_agent_with_generator(agent.id, generator.id);
     fixture.create_test_agent_annotation(agent.id, "region".to_string(), "us-west".to_string());
 
     // 5. Query target state

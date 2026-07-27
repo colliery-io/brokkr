@@ -471,6 +471,11 @@ fn test_get_associated_stacks() {
     let stack3 = fixture.create_test_stack("Stack 3".to_string(), None, generator.id);
     let stack4 = fixture.create_test_stack("Stack 4".to_string(), None, generator.id);
 
+    // Registration is the consent boundary for label/annotation matching
+    // (BROKKR-T-0287): agent1 must be registered with the stacks' generator for
+    // its label and annotation matches to associate. agent2 stays unregistered.
+    fixture.register_agent_with_generator(agent1.id, generator.id);
+
     // Add labels
 
     fixture.create_test_agent_label(agent1.id, "label1".to_string());
@@ -557,8 +562,10 @@ fn test_get_associated_stacks() {
         .unwrap();
     assert_eq!(associated_stacks.len(), 0); // stack1 is deleted
 
-    // Test with only annotations
+    // Test with only annotations (registered with the stacks' generator, so the
+    // annotation match is within consent — BROKKR-T-0287)
     let agent4 = fixture.create_test_agent("Agent 4".to_string(), "Cluster 4".to_string());
+    fixture.register_agent_with_generator(agent4.id, generator.id);
     fixture.create_test_agent_annotation(agent4.id, "key1".to_string(), "value1".to_string());
     let associated_stacks = fixture
         .dal

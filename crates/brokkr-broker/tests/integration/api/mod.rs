@@ -17,6 +17,7 @@ mod generators;
 mod health;
 mod pak_scoping;
 mod paks;
+mod registration_consent;
 mod stacks;
 mod templates;
 mod ui_pak;

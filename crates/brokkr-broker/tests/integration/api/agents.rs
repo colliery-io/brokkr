@@ -1343,6 +1343,11 @@ async fn test_get_agent_stacks() {
     let stack3 = fixture.create_test_stack("Stack 3".to_string(), None, generator.id);
     let stack4 = fixture.create_test_stack("Stack 4".to_string(), None, generator.id);
 
+    // Registration is the consent boundary for label/annotation matching
+    // (BROKKR-T-0287): the agent must be registered with the stacks' generator
+    // for its label and annotation matches to associate.
+    fixture.register_agent_with_generator(agent.id, generator.id);
+
     // Create associations:
     // 1. Direct target
     let new_target = NewAgentTarget::new(agent.id, stack1.id).unwrap();
