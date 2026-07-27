@@ -77,19 +77,10 @@ securityContext:
     type: RuntimeDefault
 
 # TLS/SSL Configuration
-tls:
-  # Staging: Enable TLS to test certificate management
-  enabled: true
-
-  # Option 1: Use self-signed or internal CA certificates
-  # Allows testing TLS without external dependencies
-  existingSecret: 'brokkr-tls-staging'
-
-  # Option 2: Use cert-manager with staging issuer
-  # certManager:
-  #   enabled: true
-  #   issuer: 'letsencrypt-staging'
-  #   issuerKind: 'ClusterIssuer'
+#
+# The broker serves plain HTTP; TLS terminates at the ingress. Point
+# `ingress.tls` at an existing secret (e.g. brokkr-tls-staging) or annotate the
+# ingress for cert-manager with a staging issuer.
 
 # Ingress Configuration
 ingress:

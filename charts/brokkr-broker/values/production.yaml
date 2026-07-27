@@ -10,7 +10,8 @@
 # IMPORTANT: Review and customize the following before deploying:
 #   - postgresql.external.host (your database endpoint)
 #   - ingress.hosts (your domain)
-#   - tls.certManager.issuer (your cert-manager issuer)
+#   - ingress.annotations cert-manager.io/cluster-issuer (your cert-manager issuer)
+#   - ingress.tls (secret name + hosts for the terminating ingress)
 
 # High Availability: Run 3 replicas for redundancy
 # Note: Ensure your load balancer supports session affinity or use external session storage
@@ -80,18 +81,12 @@ securityContext:
     type: RuntimeDefault
 
 # TLS/SSL Configuration
-tls:
-  # Production: Always enable TLS
-  enabled: true
-
-  # Option 1: Use cert-manager for automatic certificate management (RECOMMENDED)
-  certManager:
-    enabled: true
-    # ClusterIssuer for Let's Encrypt production certificates
-    issuer: 'letsencrypt-prod'
-    issuerKind: 'ClusterIssuer'
-  # Option 2: Use existing TLS secret (if not using cert-manager)
-  # existingSecret: 'brokkr-tls-prod'
+#
+# The broker serves plain HTTP and cannot terminate TLS. Production TLS
+# terminates at the ingress: the cert-manager.io/cluster-issuer annotation below
+# provisions the certificate into the secret named by `ingress.tls`. To use a
+# pre-existing certificate instead, drop the annotation and point `ingress.tls`
+# at that secret.
 
 # Ingress Configuration
 ingress:

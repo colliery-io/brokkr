@@ -19,13 +19,6 @@ data:
   {{- if .Values.postgresql.external.schema }}
   BROKKR__DATABASE__SCHEMA: {{ .Values.postgresql.external.schema | quote }}
   {{- end }}
-  {{- if .Values.tls.enabled }}
-  BROKKR__TLS__ENABLED: "true"
-  BROKKR__TLS__CERT_PATH: "/etc/tls/tls.crt"
-  BROKKR__TLS__KEY_PATH: "/etc/tls/tls.key"
-  {{- else }}
-  BROKKR__TLS__ENABLED: "false"
-  {{- end }}
   # Telemetry configuration (static - requires restart)
   {{- if .Values.telemetry.enabled }}
   BROKKR__TELEMETRY__ENABLED: "true"
