@@ -145,9 +145,9 @@ Brokkr uses API key authentication and role-based authorization for all API acce
 
 ### Authentication
 
-The system supports three types of PAKs, each granting different levels of access. Admin PAKs provide full administrative access to all API endpoints and resources. Agent PAKs grant access only to endpoints and data relevant to a specific agent, such as fetching target state and reporting events. Generator PAKs allow external systems to create resources within their designated scope.
+The system supports four credential classes, each granting different levels of access. Admin PAKs provide full administrative access to all API endpoints and resources. Agent PAKs grant access only to endpoints and data relevant to a specific agent, such as fetching target state and reporting events. Generator PAKs allow external systems to create resources within their designated scope. Finally, an ephemeral read-only UI PAK — minted in memory once per broker process and embedded in the served operator console page — grants read-only admin visibility so the console works without configuration; it cannot change system state.
 
-When a request arrives, the API middleware extracts the PAK from the Authorization header and verifies it against stored hashes. If the PAK matches a known admin, agent, or generator, the request proceeds with that identity and role attached. Invalid or missing PAKs result in authentication failures.
+When a request arrives, the API middleware extracts the PAK from the Authorization header and verifies it: first against the in-memory UI PAK, then against a short-lived cache of recent verifications, and finally against the stored hashes for admins, agents, and generators. If the PAK matches a known identity, the request proceeds with that identity and role attached. Invalid or missing PAKs result in authentication failures.
 
 ### Authorization
 

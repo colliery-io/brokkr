@@ -14,26 +14,68 @@ This Helm chart deploys the Brokkr control plane broker to a Kubernetes cluster.
 
 ### Basic Installation
 
-Deploy with default settings (bundled PostgreSQL, no TLS, ClusterIP service):
+First mint the admin credential — the command prints a PAK (the secret you authenticate with) and its hash (what the broker stores):
 
 ```bash
-helm install my-broker charts/brokkr-broker
+brokkr-broker generate-pak
+# Or without a local binary (the image's entrypoint is the broker):
+docker run --rm ghcr.io/colliery-io/brokkr-broker:latest generate-pak
 ```
+
+Then deploy with default settings (bundled PostgreSQL, ClusterIP service), passing the hash:
+
+```bash
+helm install my-broker charts/brokkr-broker \
+  --set broker.pakHash=<pak-hash-from-generate-pak>
+```
+
+**WARNING:** installing without `broker.pakHash` or `broker.pakHashExistingSecret` leaves the broker running with the publicly-known development admin PAK compiled into the binary — anyone who can reach the broker can authenticate as admin. Always set one of the two, even on dev clusters. Setting `broker.pakHash` to an empty string is the same as omitting it: the chart only renders the variable when the value is non-empty.
 
 ### Production Installation
 
-For production, use external PostgreSQL and enable TLS:
+For production, store the admin PAK hash in a pre-created Secret, use external PostgreSQL, and terminate TLS at the ingress (the broker itself serves plain HTTP — see [TLS/SSL Configuration](#tlsssl-configuration)):
 
 ```bash
+# 1. Mint the admin credential and store its hash in a Secret
+docker run --rm ghcr.io/colliery-io/brokkr-broker:latest generate-pak
+kubectl create secret generic broker-admin-pak-hash \
+  --from-literal=BROKKR__BROKER__PAK_HASH=<pak-hash-from-generate-pak>
+
+# 2. Install
 helm install my-broker charts/brokkr-broker \
   --set postgresql.enabled=false \
   --set postgresql.external.host=prod-postgres.example.com \
   --set postgresql.external.password=secure-password \
-  --set tls.enabled=true \
-  --set tls.existingSecret=my-tls-secret
+  --set broker.pakHashExistingSecret=broker-admin-pak-hash \
+  --set ingress.enabled=true \
+  --set ingress.hosts[0].host=broker.example.com \
+  --set ingress.tls[0].secretName=broker-tls \
+  --set ingress.tls[0].hosts[0]=broker.example.com
 ```
 
 ## Configuration
+
+### Admin Credential (Day-Zero Bootstrap)
+
+On its true first startup the broker stores an admin PAK hash from `BROKKR__BROKER__PAK_HASH`. The chart provides two ways to set it:
+
+```yaml
+broker:
+  # Dev/test: rendered into the ConfigMap in plaintext
+  pakHash: '<pak-hash-from-generate-pak>'
+
+  # Production: sourced from a pre-existing Secret via secretKeyRef
+  pakHashExistingSecret: broker-admin-pak-hash
+  pakHashExistingSecretKey: BROKKR__BROKER__PAK_HASH  # default
+```
+
+When `pakHashExistingSecret` is set it takes precedence and `pakHash` is ignored. When **neither** is set, the chart omits `BROKKR__BROKER__PAK_HASH` entirely and the broker falls back to the publicly-known development hash embedded in the binary — the matching PAK is public, so never run this way outside a throwaway environment. An empty `pakHash` behaves identically to an unset one.
+
+Notes on behavior:
+
+- The hash is a bare 64-character hex SHA-256 digest, exactly as `generate-pak` prints it (no `sha256:` prefix).
+- The broker only self-generates a PAK (writing it to `/tmp/brokkr-keys/key.txt` in the pod, deleted on graceful shutdown) when `BROKKR__BROKER__PAK_HASH` is present in its environment but empty — something the chart values cannot produce. With a hash configured, no key file is ever written.
+- To replace a lost admin PAK, mint a new pair with `generate-pak`, update the configured hash (value or Secret), and run `brokkr-broker rotate admin` in the pod; a plain restart does not re-run the bootstrap.
 
 ### Database Configuration
 
@@ -108,7 +150,7 @@ postgresql:
 
 **Example: Multi-Environment Setup**
 
-Deploy three broker instances to different namespaces, all using the same PostgreSQL:
+Deploy three broker instances to different namespaces, all using the same PostgreSQL. Mint a separate admin credential per instance with `generate-pak` (see [Admin Credential](#admin-credential-day-zero-bootstrap)) — each schema gets its own admin PAK:
 
 ```bash
 # Development environment
@@ -116,21 +158,24 @@ helm install dev-broker charts/brokkr-broker \
   --namespace dev \
   --set postgresql.enabled=false \
   --set postgresql.external.host=shared-postgres.example.com \
-  --set postgresql.external.schema=brokkr_dev
+  --set postgresql.external.schema=brokkr_dev \
+  --set broker.pakHash=<dev-pak-hash>
 
 # Staging environment
 helm install staging-broker charts/brokkr-broker \
   --namespace staging \
   --set postgresql.enabled=false \
   --set postgresql.external.host=shared-postgres.example.com \
-  --set postgresql.external.schema=brokkr_staging
+  --set postgresql.external.schema=brokkr_staging \
+  --set broker.pakHash=<staging-pak-hash>
 
-# Production environment
+# Production environment (prefer a Secret over a plaintext value)
 helm install prod-broker charts/brokkr-broker \
   --namespace production \
   --set postgresql.enabled=false \
   --set postgresql.external.host=shared-postgres.example.com \
-  --set postgresql.external.schema=brokkr_prod
+  --set postgresql.external.schema=brokkr_prod \
+  --set broker.pakHashExistingSecret=prod-admin-pak-hash
 ```
 
 **Schema Provisioning:**
@@ -162,19 +207,15 @@ When `schema` is not set (or empty string), the broker uses the default `public`
 
 ### TLS/SSL Configuration
 
-The chart supports multiple methods for configuring TLS certificates.
+**The broker does not terminate TLS.** The binary serves plain HTTP on port 3000 and reads no TLS configuration. All TLS for broker traffic must terminate in front of the broker — normally at the ingress, or at a service mesh / reverse proxy.
 
-#### Method 1: Existing Kubernetes Secret (Recommended for Production)
+**REMOVED — the chart's `tls.*` values no longer exist.** Earlier chart versions accepted `tls.enabled`, `tls.existingSecret`, `tls.cert`/`tls.key`, and `tls.certManager.*`. Those values only mounted certificate files into the pod and set `BROKKR__TLS__*` environment variables that the broker never reads — they never encrypted anything, so they have been removed rather than left as a false signal. Helm ignores stale `tls.*` entries left in your values files, but you should delete them.
 
-Use a pre-existing Kubernetes TLS secret:
+**If you were relying on them:** any broker traffic you believed was encrypted — including PAKs in `Authorization` headers — was plaintext unless a TLS-terminating ingress or proxy was already in front. Move TLS to the ingress as shown below, and rotate any PAKs that transited untrusted networks.
 
-```yaml
-tls:
-  enabled: true
-  existingSecret: my-tls-secret
-```
+#### Method 1: Ingress with an Existing TLS Secret
 
-Create the secret manually:
+Create the secret and reference it from the ingress:
 
 ```bash
 kubectl create secret tls my-tls-secret \
@@ -182,47 +223,31 @@ kubectl create secret tls my-tls-secret \
   --key=path/to/tls.key
 ```
 
-#### Method 2: Inline Certificates (Testing Only)
-
-Provide base64-encoded certificates inline:
-
 ```yaml
-tls:
-  enabled: true
-  cert: "LS0tLS1CRUdJTi..."  # base64-encoded certificate
-  key: "LS0tLS1CRUdJTi..."   # base64-encoded private key
-```
-
-Generate self-signed certificates for testing:
-
-```bash
-# Generate certificate and key
-openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-  -keyout tls.key -out tls.crt \
-  -subj "/CN=brokkr.example.com"
-
-# Base64 encode for values file
-cat tls.crt | base64
-cat tls.key | base64
-```
-
-**WARNING:** Inline certificates are not recommended for production. Use `existingSecret` instead.
-
-#### Method 3: cert-manager (Recommended for Production)
-
-Use cert-manager for automatic certificate generation and renewal:
-
-```yaml
-tls:
-  enabled: true
-  certManager:
-    enabled: true
-    issuer: letsencrypt-prod
-    issuerKind: ClusterIssuer
-
 ingress:
   enabled: true
   className: nginx
+  hosts:
+    - host: brokkr.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: my-tls-secret
+      hosts:
+        - brokkr.example.com
+```
+
+#### Method 2: Ingress with cert-manager (Recommended for Production)
+
+Use cert-manager for automatic certificate generation and renewal, driven by an ingress annotation:
+
+```yaml
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
   hosts:
     - host: brokkr.example.com
       paths:
@@ -326,11 +351,7 @@ securityContext:
 | `broker.pakHash` | string | `""` | Admin PAK hash (rendered into the ConfigMap in plaintext; dev/test only). Ignored when `broker.pakHashExistingSecret` is set. |
 | `broker.pakHashExistingSecret` | string | `""` | Name of a pre-existing Secret to source the admin PAK hash from. Injected via `secretKeyRef`. |
 | `broker.pakHashExistingSecretKey` | string | `"BROKKR__BROKER__PAK_HASH"` | Key within that Secret holding the admin PAK hash. |
-| `tls.enabled` | bool | `false` | Enable TLS/SSL |
-| `tls.existingSecret` | string | `""` | Existing TLS secret name |
-| `tls.cert` | string | `""` | Base64-encoded certificate (testing only) |
-| `tls.key` | string | `""` | Base64-encoded private key (testing only) |
-| `tls.certManager.enabled` | bool | `false` | Enable cert-manager integration |
+| `ingress.tls` | list | `[{secretName, hosts}]` | TLS termination for the ingress — the only supported TLS path (the broker serves plain HTTP). |
 | `tls.certManager.issuer` | string | `"letsencrypt-prod"` | cert-manager issuer name |
 | `tls.certManager.issuerKind` | string | `"ClusterIssuer"` | Issuer kind |
 | `ingress.enabled` | bool | `false` | Enable ingress |
@@ -348,47 +369,65 @@ securityContext:
 ### Development Setup
 
 ```bash
-helm install dev-broker charts/brokkr-broker
+brokkr-broker generate-pak   # save the printed PAK and hash
+
+helm install dev-broker charts/brokkr-broker \
+  --set broker.pakHash=<pak-hash-from-generate-pak>
 ```
 
 This deploys with:
 - Bundled PostgreSQL (ephemeral or persistent based on values)
 - ClusterIP service (internal only)
-- No TLS
+- Plain HTTP (the broker never terminates TLS; add an ingress for HTTPS)
 - Default resource limits
+- Your own admin PAK hash (never rely on the built-in development default)
 
 ### Production Setup with Let's Encrypt
 
 ```bash
+# Mint the admin credential and store its hash in a Secret
+docker run --rm ghcr.io/colliery-io/brokkr-broker:latest generate-pak
+kubectl create secret generic broker-admin-pak-hash \
+  --from-literal=BROKKR__BROKER__PAK_HASH=<pak-hash>
+
 helm install prod-broker charts/brokkr-broker \
   --set postgresql.enabled=false \
   --set postgresql.existingSecret=prod-db-secret \
-  --set tls.enabled=true \
-  --set tls.certManager.enabled=true \
-  --set tls.certManager.issuer=letsencrypt-prod \
+  --set broker.pakHashExistingSecret=broker-admin-pak-hash \
   --set ingress.enabled=true \
+  --set ingress.annotations."cert-manager\.io/cluster-issuer"=letsencrypt-prod \
   --set ingress.hosts[0].host=broker.example.com \
   --set ingress.hosts[0].paths[0].path=/ \
-  --set ingress.hosts[0].paths[0].pathType=Prefix
+  --set ingress.hosts[0].paths[0].pathType=Prefix \
+  --set ingress.tls[0].secretName=broker-tls \
+  --set ingress.tls[0].hosts[0]=broker.example.com
 ```
+
+TLS terminates at the ingress; cert-manager creates and renews the `broker-tls` secret.
 
 ### Production Setup with Existing Certificates
 
 ```bash
-# Create TLS secret
+# Create TLS secret for the ingress
 kubectl create secret tls broker-tls \
   --cert=broker.crt \
   --key=broker.key
 
-# Install chart
+# Mint the admin credential and store its hash in a Secret
+docker run --rm ghcr.io/colliery-io/brokkr-broker:latest generate-pak
+kubectl create secret generic broker-admin-pak-hash \
+  --from-literal=BROKKR__BROKER__PAK_HASH=<pak-hash>
+
+# Install chart (TLS terminates at the ingress)
 helm install prod-broker charts/brokkr-broker \
   --set postgresql.enabled=false \
   --set postgresql.existingSecret=prod-db-secret \
-  --set tls.enabled=true \
-  --set tls.existingSecret=broker-tls \
+  --set broker.pakHashExistingSecret=broker-admin-pak-hash \
   --set ingress.enabled=true \
   --set ingress.className=nginx \
-  --set ingress.hosts[0].host=broker.example.com
+  --set ingress.hosts[0].host=broker.example.com \
+  --set ingress.tls[0].secretName=broker-tls \
+  --set ingress.tls[0].hosts[0]=broker.example.com
 ```
 
 ### Multi-Tenant Setup (Schema Isolation)
@@ -400,12 +439,21 @@ Deploy multiple broker instances sharing a single PostgreSQL database with schem
 kubectl create secret generic shared-db-secret \
   --from-literal=database-url='postgres://brokkr:password@postgres.example.com:5432/brokkr'
 
+# Mint a separate admin credential per tenant (one generate-pak run each)
+docker run --rm ghcr.io/colliery-io/brokkr-broker:latest generate-pak  # tenant A
+docker run --rm ghcr.io/colliery-io/brokkr-broker:latest generate-pak  # tenant B
+kubectl create secret generic tenant-a-admin-pak-hash --namespace tenant-a \
+  --from-literal=BROKKR__BROKER__PAK_HASH=<tenant-a-pak-hash>
+kubectl create secret generic tenant-b-admin-pak-hash --namespace tenant-b \
+  --from-literal=BROKKR__BROKER__PAK_HASH=<tenant-b-pak-hash>
+
 # Deploy tenant A broker
 helm install tenant-a-broker charts/brokkr-broker \
   --namespace tenant-a \
   --set postgresql.enabled=false \
   --set postgresql.external.schema=tenant_a \
   --set postgresql.existingSecret=shared-db-secret \
+  --set broker.pakHashExistingSecret=tenant-a-admin-pak-hash \
   --set ingress.enabled=true \
   --set ingress.hosts[0].host=tenant-a.example.com
 
@@ -415,9 +463,12 @@ helm install tenant-b-broker charts/brokkr-broker \
   --set postgresql.enabled=false \
   --set postgresql.external.schema=tenant_b \
   --set postgresql.existingSecret=shared-db-secret \
+  --set broker.pakHashExistingSecret=tenant-b-admin-pak-hash \
   --set ingress.enabled=true \
   --set ingress.hosts[0].host=tenant-b.example.com
 ```
+
+Without a per-tenant `broker.pakHash` / `broker.pakHashExistingSecret`, every tenant shares the publicly-known development admin PAK.
 
 **Note:** Ensure schemas are created in PostgreSQL before deploying:
 
@@ -432,7 +483,7 @@ GRANT ALL PRIVILEGES ON SCHEMA tenant_b TO brokkr;
 
 ### Certificate Issues
 
-If pods fail to start with certificate errors:
+If HTTPS access through the ingress fails with certificate errors (the broker itself never uses these certificates):
 
 1. Verify the secret exists and contains valid certificate data:
 ```bash

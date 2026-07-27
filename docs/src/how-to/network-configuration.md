@@ -4,11 +4,13 @@ This guide covers the hands-on network setup for a Brokkr deployment: TLS termin
 
 ## TLS Configuration
 
-### Broker TLS Options
+### The Broker Does Not Terminate TLS
 
-The broker supports three TLS configuration approaches.
+The broker binary serves plain HTTP on port 3000 and has no TLS support of its own. All TLS for broker traffic must be terminated in front of the broker — by an ingress controller, a service mesh, or another reverse proxy. There is no supported configuration in which the broker process itself holds a certificate and speaks HTTPS.
 
-**Ingress TLS Termination** is the recommended approach for most production deployments. TLS terminates at the ingress controller, and internal traffic between the ingress and broker uses plain HTTP. This approach centralizes certificate management and integrates smoothly with cert-manager:
+> **Warning — if you enabled `tls.enabled` in the broker Helm chart:** the chart's `tls.enabled`, `tls.existingSecret`, and `tls.cert`/`tls.key` values (previously documented here as "Direct TLS on Broker") only mount certificate files into the pod and set `BROKKR__TLS__*` environment variables that no broker code reads. They have never encrypted anything. If you set `tls.enabled: true` expecting broker-terminated TLS, all traffic to that broker — including PAKs sent in `Authorization` headers — has been plaintext beyond whatever ingress or proxy actually terminates TLS. Move TLS termination to the ingress or proxy layer as described below, and treat any PAKs that transited untrusted networks as compromised (rotate them).
+
+**Ingress TLS Termination** is the supported approach. TLS terminates at the ingress controller, and internal traffic between the ingress and broker uses plain HTTP. This centralizes certificate management and integrates smoothly with cert-manager:
 
 ```yaml
 ingress:
@@ -20,22 +22,27 @@ ingress:
         - broker.example.com
 ```
 
-**Direct TLS on Broker** enables TLS termination at the broker itself, useful for deployments without an ingress controller or when end-to-end encryption is required. Enable via `tls.enabled: true` and provide certificates either through `tls.existingSecret` or inline via `tls.cert` and `tls.key`.
+Traffic between the ingress and the broker pod stays plain HTTP inside the cluster. If that hop must also be encrypted, use a service mesh (e.g. Istio or Linkerd mTLS) or a TLS-terminating sidecar in front of the pod — the broker cannot provide it.
 
-**Cert-Manager Integration** automates certificate provisioning when combined with ingress TLS. The Helm chart can configure cert-manager annotations to automatically request and renew certificates:
+**Cert-Manager Integration** automates certificate provisioning for the ingress. Annotate the ingress with your issuer and cert-manager will create and renew the TLS secret the ingress references:
 
 ```yaml
-tls:
+ingress:
   enabled: true
-  certManager:
-    enabled: true
-    issuer: 'letsencrypt-prod'
-    issuerKind: 'ClusterIssuer'
+  className: 'nginx'
+  annotations:
+    cert-manager.io/cluster-issuer: 'letsencrypt-prod'
+  tls:
+    - secretName: brokkr-tls
+      hosts:
+        - broker.example.com
 ```
+
+(The chart also has `tls.certManager.*` values that create a standalone cert-manager `Certificate` resource. The resulting secret is only useful if something in front of the broker — ingress or proxy — serves it; the broker itself will not.)
 
 ### Agent-to-Broker TLS
 
-Agents should always communicate with the broker over HTTPS in production. The agent validates the broker's TLS certificate using the system's trusted certificate authorities. For deployments with self-signed or private CA certificates, the CA must be added to the agent's trust store or mounted as a volume.
+Agents should always communicate with the broker over HTTPS in production, terminated at the ingress or proxy in front of the broker. The agent validates the TLS certificate presented by that endpoint using the system's trusted certificate authorities. For deployments with self-signed or private CA certificates, the CA must be added to the agent's trust store or mounted as a volume.
 
 ## WebSocket Timeouts
 

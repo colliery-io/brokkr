@@ -71,12 +71,9 @@ This prints both the PAK value and its SHA-256 hash without touching a database 
 For a throwaway dev cluster you can instead rely on how the broker provisions the admin role at first startup:
 
 - **If you installed with the commands above** (no `broker.pakHash` chart value), the broker's embedded default configuration supplies a publicly known hash, and the admin PAK is `brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8` — fine for a throwaway dev cluster, **never for production**.
-- **If you explicitly set `broker.pakHash` to an empty value**, the broker generates a fresh admin PAK at first startup and writes it to `/tmp/brokkr-keys/key.txt` inside the broker container (the file does not exist otherwise):
+- **If you set `broker.pakHash` to the hash of your own PAK** (or reference a Secret containing it via `broker.pakHashExistingSecret`), use that PAK.
 
-```bash
-kubectl exec deploy/brokkr-broker -- cat /tmp/brokkr-keys/key.txt
-```
-- **If you set `broker.pakHash` to the hash of your own PAK**, use that PAK.
+> **Warning:** Setting `broker.pakHash` to an empty value does **not** make the broker generate a fresh PAK. The chart only passes the hash to the broker when the value is non-empty, so an empty or omitted `broker.pakHash` silently leaves the publicly known development admin PAK above active. Anywhere beyond a throwaway dev cluster, always set `broker.pakHash` or `broker.pakHashExistingSecret` from the `brokkr-broker generate-pak` output.
 
 Export it for the following steps:
 
@@ -116,15 +113,19 @@ The response wraps the agent record and the one-time PAK in `initial_pak`:
 
 Save the `initial_pak` value (`jq -r '.initial_pak'`) — it is shown only once; you'll need it to install the agent.
 
+Note the `"status": "INACTIVE"` in the response: every new agent starts inactive and applies nothing until you activate it. You'll activate this agent in the [Test Deployment](#test-deployment) section before deploying anything through it.
+
 ### 5. Install the Agent
 
-Install the agent using the `initial_pak` from step 4:
+Install the agent using the `initial_pak` from step 4. The `broker.agentName` and `broker.clusterName` values must exactly match the name and cluster you registered in step 4 — at startup the agent looks up its own registration by that pair, and a mismatch leaves the pod crashlooping with "Agent not found":
 
 ```bash
 # Install agent (replace <PAK> with the initial_pak from step 4)
 helm install brokkr-agent oci://ghcr.io/colliery-io/charts/brokkr-agent \
   --set broker.url=http://brokkr-broker:3000 \
   --set broker.pak="<PAK>" \
+  --set broker.agentName=my-agent \
+  --set broker.clusterName=development \
   --wait
 
 # Verify agent is running
@@ -207,11 +208,15 @@ The agent runs in each Kubernetes cluster you want to manage and communicates wi
 
 ```bash
 # Create agent via broker API (see Quick Start step 4)
-# Then install with the returned initial_pak:
+# Then install with the returned initial_pak.
+# agentName and clusterName must match the created agent exactly,
+# or the agent's startup self-lookup fails and the pod crashloops.
 
 helm install brokkr-agent oci://ghcr.io/colliery-io/charts/brokkr-agent \
   --set broker.url=http://brokkr-broker:3000 \
   --set broker.pak="<PAK_FROM_BROKER>" \
+  --set broker.agentName=<AGENT_NAME> \
+  --set broker.clusterName=<CLUSTER_NAME> \
   --wait
 ```
 
@@ -223,6 +228,8 @@ Brokkr includes pre-configured values files for agents — development (minimal 
 helm install brokkr-agent oci://ghcr.io/colliery-io/charts/brokkr-agent \
   --set broker.url=http://brokkr-broker:3000 \
   --set broker.pak="<PAK>" \
+  --set broker.agentName=<AGENT_NAME> \
+  --set broker.clusterName=<CLUSTER_NAME> \
   -f https://raw.githubusercontent.com/colliery-io/brokkr/main/charts/brokkr-agent/values/<environment>.yaml
 ```
 
@@ -264,6 +271,13 @@ STACK_ID=$(curl -s -X POST http://localhost:3000/api/v1/stacks \
 AGENT_ID=$(curl -s http://localhost:3000/api/v1/agents \
   -H "Authorization: Bearer $ADMIN_PAK" | jq -r '.[0].id')
 
+# New agents start INACTIVE and skip all deployment work until activated.
+# Activate yours so it will pull and reconcile deployment objects:
+curl -X PUT http://localhost:3000/api/v1/agents/$AGENT_ID \
+  -H "Authorization: Bearer $ADMIN_PAK" \
+  -H "Content-Type: application/json" \
+  -d '{"status": "ACTIVE"}'
+
 # Register the agent with the admin-generator first. Targeting a stack at an
 # agent that is not registered with the stack's owning generator returns
 # 403 agent_not_registered. (Skip this if you passed generator_ids at
@@ -287,7 +301,8 @@ curl -X POST http://localhost:3000/api/v1/stacks/$STACK_ID/deployment-objects \
     "is_deletion_marker": false
   }'
 
-# Verify namespace was created
+# Allow one poll cycle (the chart's default agent.pollingInterval is 30s),
+# then verify the namespace was created
 kubectl get namespace brokkr-test
 
 # Clean up
@@ -299,7 +314,7 @@ curl -X POST http://localhost:3000/api/v1/stacks/$STACK_ID/deployment-objects \
     "is_deletion_marker": true
   }'
 
-kubectl get namespace brokkr-test  # Should show Terminating/NotFound
+kubectl get namespace brokkr-test  # After the next poll cycle: Terminating/NotFound
 ```
 
 ## Configuration Reference
@@ -326,7 +341,7 @@ Key configuration options for the broker chart:
 | `configReload.debounceSeconds` | Debounce window for successive reloads | `5` |
 | `resources.limits.cpu` | CPU limit | `500m` |
 | `resources.limits.memory` | Memory limit | `512Mi` |
-| `tls.enabled` | Enable TLS | `false` |
+| `ingress.tls` | TLS termination for the ingress — the broker itself serves plain HTTP and cannot terminate TLS | unset |
 
 ### Agent Values
 
@@ -359,7 +374,7 @@ For complete configuration options, see the chart values files:
 
 Three defaults are safe for development but dangerous in production:
 
-1. **Replace the default admin PAK.** The default configuration embeds a publicly known `broker.pak_hash`. Set `broker.pak_hash` (env var `BROKKR__BROKER__PAK_HASH`) to the hash of a PAK you generated, or leave it empty so the broker generates one and writes it to `/tmp/brokkr-keys/key.txt` on first startup.
+1. **Replace the default admin PAK.** The default configuration embeds a publicly known `broker.pak_hash` — leaving it in place means anyone can use the development admin credential against your broker. Run `brokkr-broker generate-pak` and set the printed hash as `broker.pakHash` (or reference a Secret containing it via `broker.pakHashExistingSecret`) before first startup. Leaving the chart value empty does **not** generate a fresh key; it silently keeps the publicly known default active.
 2. **Set a persistent webhook encryption key.** If `broker.webhook_encryption_key` (`BROKKR__BROKER__WEBHOOK_ENCRYPTION_KEY`, 64 hex chars / 32 bytes) is unset, the broker generates a random key on every startup — webhook URLs and auth headers encrypted under the previous key become unreadable after a restart.
 3. **Lower the log level.** The binary default is `debug`; the Helm chart sets `broker.logLevel: info`. If you run the binary outside the chart, set `BROKKR__LOG__LEVEL=info` (or `warn`).
 

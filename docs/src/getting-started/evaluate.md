@@ -112,7 +112,7 @@ curl -s -X POST "http://localhost:3000/api/v1/stacks/$STACK_ID/deployment-object
   -d '{"yaml_content": "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: brokkr-evaluate", "is_deletion_marker": false}'
 ```
 
-The agent polls the broker on its next cycle and applies the namespace. Point `kubectl` at the bundled k3s cluster (its host kubeconfig is written to `/tmp/brokkr-keys/`) and verify:
+The agent polls the broker on its next cycle and applies the namespace — allow one full poll cycle (about 10 seconds in this stack). Point `kubectl` at the bundled k3s cluster (its host kubeconfig is written to `/tmp/brokkr-keys/`) and verify:
 
 ```bash
 export KUBECONFIG=/tmp/brokkr-keys/kubeconfig.local.yaml
@@ -212,13 +212,15 @@ echo "$AGENT_PAK"   # shown only once
 
 ### 5. Install the agent
 
-Install the agent chart with the PAK from the previous step.
+Install the agent chart with the PAK from the previous step. The `broker.agentName` and `broker.clusterName` values must exactly match the agent you created in step 4 (`eval-agent` / `evaluation`) — at startup the agent looks up its own registration by that pair, and a mismatch leaves the pod crashlooping with "Agent not found".
 
 ```bash
 helm install brokkr-agent oci://ghcr.io/colliery-io/charts/brokkr-agent \
   --version 0.8.0 \
   --set broker.url=http://brokkr-broker:3000 \
   --set broker.pak="$AGENT_PAK" \
+  --set broker.agentName=eval-agent \
+  --set broker.clusterName=evaluation \
   --wait
 
 # Visible result: the agent pod is Running and the agent has registered
@@ -275,7 +277,7 @@ curl -s -X POST "http://localhost:3000/api/v1/stacks/$STACK_ID/deployment-object
   -d '{"yaml_content": "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: brokkr-evaluate", "is_deletion_marker": false}'
 ```
 
-After the agent's next poll, the namespace appears on your cluster:
+After the agent's next poll, the namespace appears on your cluster — allow one full poll cycle (the chart's default polling interval is 30 seconds):
 
 ```bash
 # Visible result: the namespace your agent reconciled

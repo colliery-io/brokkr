@@ -15,7 +15,7 @@ In this tutorial, you'll set up a generator — Brokkr's mechanism for CI/CD int
 
 - A running Brokkr development environment (`angreal local up`)
 - Your admin PAK
-- Completed the [Deploy Your First Application](./first-deployment.md) tutorial
+- Completed the [Deploy Your First Application](./first-deployment.md) tutorial — including its Step 3 agent activation. Agents start `INACTIVE` and apply nothing until activated; this tutorial assumes the development agent is already `ACTIVE`.
 
 ## Step 1: Create a Generator
 
@@ -84,7 +84,7 @@ The key rule: generators can create, update, and delete their own stacks and pus
 
 Before pushing deployment objects, an agent must be targeted to the stack. Otherwise the deployment exists in the broker but no agent will apply it. Targeting has a prerequisite: the agent must first be **registered** with the stack's generator. Targeting an unregistered agent is rejected with a `403` (`agent_not_registered`) — admins can't bypass this gate either.
 
-First, grab the default agent's ID and register it with your generator. With no `agent_id` in the body the agent would register itself; as admin you supply the `agent_id` you want to register:
+First, grab the default agent's ID and register it with your generator. (This is the agent you activated in the [first tutorial](./first-deployment.md) — if it is still `INACTIVE`, deployments will sit in the broker unapplied.) With no `agent_id` in the body the agent would register itself; as admin you supply the `agent_id` you want to register:
 
 ```bash
 AGENT_ID=$(curl -s http://localhost:3000/api/v1/agents \
@@ -176,7 +176,7 @@ curl -s -X POST "http://localhost:3000/api/v1/stacks/${STACK_ID}/deployment-obje
   --data-binary @myapp.yaml | jq '{id, sequence_id, yaml_checksum}'
 ```
 
-Each push creates a new deployment object with an incrementing `sequence_id`. The agent sees the new sequence and applies the latest version.
+Each push creates a new deployment object with an incrementing `sequence_id`. The agent sees the new sequence and applies the latest version — allow one poll cycle (about 10 seconds in the development environment; the Helm chart's default is 30 seconds) before checking the cluster.
 
 ## Step 6: Simulate a Deployment Update
 

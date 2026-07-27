@@ -12,10 +12,10 @@ In this tutorial, you'll deploy an nginx web server to a Kubernetes cluster thro
 **Prerequisites:**
 
 - A running Brokkr development environment (see [Local Development Environment](../getting-started/development.md) — `angreal local up` starts the full stack)
-- The admin PAK (Prefixed API Key). The PAK itself is never logged. The development environment uses the default configuration, whose embedded `broker.pak_hash` corresponds to the publicly known dev PAK `brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8` — use that here. (If a broker runs with `broker.pak_hash` unset or empty, it generates a fresh PAK at first startup and writes it to `/tmp/brokkr-keys/key.txt` inside the broker container.)
+- The admin PAK (Prefixed API Key). The PAK itself is never logged. The development environment uses the default configuration, whose embedded `broker.pak_hash` corresponds to the publicly known dev PAK `brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8` — use that here. (Only if a broker is explicitly configured with an empty `broker.pak_hash` does it generate a fresh PAK at first startup and write it to `/tmp/brokkr-keys/key.txt` inside the broker container; leaving the setting untouched keeps the embedded default hash.)
 - `curl` and `jq` installed
 
-The development environment automatically creates a test agent (`brokkr-integration-test-agent`) that is registered only with the **system generator**. You'll register it with the `admin-generator` in Step 3 before targeting it to your stack — see [Registering Agents with Generators](../how-to/agent-registration.md) for the operational details.
+The development environment automatically creates a test agent (`brokkr-integration-test-agent`) that starts `INACTIVE` and is registered only with the **system generator**. You'll activate it and register it with the `admin-generator` in Step 3 before targeting it to your stack — see [Registering Agents with Generators](../how-to/agent-registration.md) for the operational details.
 
 ## Step 1: Verify the Environment
 
@@ -69,7 +69,7 @@ echo "Stack ID: $STACK_ID"
 
 The response contains the new stack with its ID. The `generator_id` field ties the stack to its owning generator — we'll explore generators in a [later tutorial](./cicd-generators.md).
 
-## Step 3: Register and Target the Agent
+## Step 3: Activate, Register, and Target the Agent
 
 Agents receive a stack's resources in two ways: via **agent targets** — explicit assignments that require the agent to be registered with the stack's owning generator first — or via label/annotation matching, when the stack's selectors match the agent's labels or annotations. In this tutorial you'll use an agent target.
 
@@ -85,7 +85,18 @@ AGENT_ID=$(curl -s http://localhost:3000/api/v1/agents \
 echo "Agent ID: $AGENT_ID"
 ```
 
-Register the agent with the `admin-generator` (the `$GEN_ID` you looked up in Step 2):
+Every new agent starts with status `INACTIVE`, and an inactive agent skips all deployment work — nothing reaches the cluster until you activate it. The development environment leaves its test agent inactive, so activate it now:
+
+```bash
+curl -s -X PUT "http://localhost:3000/api/v1/agents/${AGENT_ID}" \
+  -H "Authorization: Bearer <your-admin-pak>" \
+  -H "Content-Type: application/json" \
+  -d '{"status": "ACTIVE"}' | jq '{name, status}'
+```
+
+The response should show `"status": "ACTIVE"`.
+
+Next, register the agent with the `admin-generator` (the `$GEN_ID` you looked up in Step 2):
 
 ```bash
 curl -s -X POST "http://localhost:3000/api/v1/generators/${GEN_ID}/register" \
@@ -128,7 +139,7 @@ The response includes a `sequence_id` — an auto-incrementing number that order
 
 ## Step 5: Watch the Agent Apply Resources
 
-The agent polls the broker at its configured interval — the binary's embedded default is 10 seconds, while the Helm chart sets 30 seconds via `agent.pollingInterval`. Within a few seconds, you should see the resources appear in your Kubernetes cluster.
+The agent polls the broker at its configured interval — the binary's embedded default is 10 seconds, while the Helm chart sets 30 seconds via `agent.pollingInterval`. Allow one full poll cycle before checking; then you should see the resources appear in your Kubernetes cluster.
 
 Check the agent events to confirm the deployment was applied:
 
@@ -147,6 +158,8 @@ You should see a SUCCESS event:
   "created_at": "2025-01-15T10:01:30Z"
 }
 ```
+
+> **Troubleshooting:** If the events list stays empty and nothing appears on the cluster, the usual cause is an agent that is still `INACTIVE` — re-run the activation command from Step 3 and check that the response shows `"status": "ACTIVE"`.
 
 If you have `kubectl` configured to talk to your development cluster (k3s), verify the resources directly:
 

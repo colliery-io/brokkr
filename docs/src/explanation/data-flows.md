@@ -305,7 +305,7 @@ Webhook subscriptions can filter by event type using exact matches or wildcards 
 
 ## Authentication Flows
 
-All actors in Brokkr authenticate using Prefixed API Keys (PAKs) sent via the `Authorization: Bearer` header. The authentication middleware checks the PAK against three tables in order—admin roles, agents, and generators—to determine the identity type.
+All actors in Brokkr authenticate using Prefixed API Keys (PAKs) sent via the `Authorization: Bearer` header. The middleware resolves one of four identity classes. It first compares the presented PAK's hash against the ephemeral read-only UI PAK held in broker memory (a constant-time, database-free check that authenticates the operator console), then consults a short-lived auth cache of recent verifications, and only on a cache miss checks three tables in order—admin roles, agents, and generators—to determine the identity type.
 
 ### PAK Authentication
 
@@ -326,6 +326,7 @@ sequenceDiagram
 
     Broker->>Auth: Validate PAK
     Auth->>Auth: Parse PAK and hash long token (SHA-256)
+    Auth->>Auth: UI PAK compare + auth cache check (miss)
     Auth->>DB: Lookup agent by pak_hash (indexed)
     DB-->>Auth: Agent record (if hash matches)
 
@@ -341,7 +342,7 @@ sequenceDiagram
 
 PAK structure follows a defined format: `brokkr_BR{short_token}_{long_token}`. The short token serves as an identifier that can be safely logged and displayed. The long token is the secret component—it is hashed with SHA-256 before storage, and the plaintext is never persisted.
 
-When an agent authenticates, the middleware hashes the presented PAK's long token with SHA-256 and looks the result up directly in the indexed `pak_hash` column (checking the admin role first, then agents, then generators). A request authenticates if and only if a live record with that hash exists.
+When an agent authenticates, the middleware hashes the presented PAK's long token with SHA-256, rules out the in-memory UI PAK with a constant-time compare, and checks the auth cache (TTL configurable via `broker.auth_cache_ttl_seconds`, default 60 seconds; 0 disables it). On a cache miss it looks the hash up directly in the indexed `pak_hash` column (checking the admin role first, then agents, then generators) and caches a successful result. A request authenticates if and only if a live record with that hash exists — or the hash matches the process's UI PAK, which yields a read-only admin identity for the operator console (see the [Security Model](./security-model.md#read-only-console-authentication-the-ui-pak)).
 
 PAKs can be rotated through the `POST /api/v1/agents/{id}/rotate-pak` endpoint, which generates a new PAK and invalidates the previous one. The new PAK is returned only once—it cannot be retrieved later.
 

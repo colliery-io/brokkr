@@ -33,7 +33,17 @@ You don't need to create the schemas manually — Brokkr creates them on first s
 
 ### Option A: Helm (Kubernetes)
 
-Deploy each tenant as a separate Helm release:
+First mint an admin PAK and hash for each tenant. The chart does not do this for you, and a release that sets neither `broker.pakHash` nor `broker.pakHashExistingSecret` falls back to the publicly-known development admin PAK compiled into the broker binary — anyone would be able to authenticate as that tenant's admin:
+
+```bash
+# One run per tenant — save the printed PAK (the credential) and hash separately
+brokkr-broker generate-pak   # -> Acme admin PAK + hash
+brokkr-broker generate-pak   # -> Globex admin PAK + hash
+```
+
+(No local binary? The container image's entrypoint is the broker: `docker run --rm ghcr.io/colliery-io/brokkr-broker:latest generate-pak`.)
+
+Then deploy each tenant as a separate Helm release, passing that tenant's hash:
 
 ```bash
 # Tenant: Acme
@@ -45,7 +55,8 @@ helm install brokkr-acme oci://ghcr.io/colliery-io/charts/brokkr-broker \
   --set postgresql.external.database=brokkr \
   --set postgresql.external.username=brokkr \
   --set postgresql.external.password=your-secure-password \
-  --set postgresql.external.schema=tenant_acme
+  --set postgresql.external.schema=tenant_acme \
+  --set broker.pakHash=<acme-admin-pak-hash>
 
 # Tenant: Globex
 helm install brokkr-globex oci://ghcr.io/colliery-io/charts/brokkr-broker \
@@ -56,8 +67,24 @@ helm install brokkr-globex oci://ghcr.io/colliery-io/charts/brokkr-broker \
   --set postgresql.external.database=brokkr \
   --set postgresql.external.username=brokkr \
   --set postgresql.external.password=your-secure-password \
-  --set postgresql.external.schema=tenant_globex
+  --set postgresql.external.schema=tenant_globex \
+  --set broker.pakHash=<globex-admin-pak-hash>
 ```
+
+`broker.pakHash` renders the hash into the broker ConfigMap in plaintext — fine for dev/test. For production, put each tenant's hash in a pre-created Secret and reference it instead:
+
+```bash
+kubectl create secret generic acme-admin-pak-hash \
+  --namespace brokkr-acme \
+  --from-literal=BROKKR__BROKER__PAK_HASH=<acme-admin-pak-hash>
+
+helm install brokkr-acme oci://ghcr.io/colliery-io/charts/brokkr-broker \
+  --namespace brokkr-acme --create-namespace \
+  ... \
+  --set broker.pakHashExistingSecret=acme-admin-pak-hash
+```
+
+> **Warning:** setting `broker.pakHash` to an empty string is the same as omitting it — the chart only renders `BROKKR__BROKER__PAK_HASH` when the value is non-empty, so an empty value silently leaves the publicly-known development admin PAK active. It does **not** make the broker generate a fresh PAK.
 
 ### Option B: Environment Variables (Direct)
 
@@ -85,11 +112,11 @@ On first startup, each broker instance:
 
 1. Creates the schema (`CREATE SCHEMA IF NOT EXISTS tenant_acme`)
 2. Runs all database migrations within the schema
-3. Creates the admin role and an admin PAK
+3. Creates the admin role, storing the configured admin PAK hash (or generating a fresh PAK only if no hash is configured at all)
 
 By default, `broker.pak_hash` is set to a publicly-known development hash, which would give **both tenants the same well-known dev PAK**. For any real multi-tenant setup, override it per tenant. There are two approaches:
 
-**Recommended (production):** Mint a PAK and its hash offline with `brokkr-broker generate-pak`, then set `BROKKR__BROKER__PAK_HASH` to the generated hash before first startup. This is the day-zero bootstrap flow — it touches no database and writes no keyfile, so you control the PAK from the start:
+**Recommended (production):** Mint a PAK and its hash offline with `brokkr-broker generate-pak`, then set `BROKKR__BROKER__PAK_HASH` to the generated hash before first startup (for Helm, that is the `broker.pakHash` / `broker.pakHashExistingSecret` flow from Step 2). This is the day-zero bootstrap flow — it touches no database and writes no keyfile, so you control the PAK from the start:
 
 ```bash
 # Generate an admin PAK + SHA-256 hash offline (one run per tenant)
@@ -100,7 +127,7 @@ BROKKR__DATABASE__SCHEMA=tenant_acme \
 ... brokkr-broker serve
 ```
 
-**Alternative:** Set `BROKKR__BROKER__PAK_HASH` empty to force the broker to generate a fresh PAK on first startup:
+**Alternative (direct/env-var runs only):** Explicitly set `BROKKR__BROKER__PAK_HASH` to an empty string to force the broker to generate a fresh PAK on first startup:
 
 ```bash
 # Force per-tenant PAK generation
@@ -109,15 +136,19 @@ BROKKR__DATABASE__SCHEMA=tenant_acme \
 ... brokkr-broker serve
 ```
 
-When the broker generates a PAK, it is written to `/tmp/brokkr-keys/key.txt` inside the broker's filesystem — it is not logged. **Capture it for each tenant**:
+This only works when the variable is genuinely set to empty in the broker's environment. Via Helm, `--set broker.pakHash=""` does **not** do this — the chart drops the variable and the public default hash applies (see the warning in Step 2). To force generation under the chart you would have to inject `BROKKR__BROKER__PAK_HASH: ""` through `extraEnv`; prefer the recommended flow instead.
+
+When the broker generates a PAK this way, it writes the raw PAK to `/tmp/brokkr-keys/key.txt` inside the broker's filesystem — it is not logged. The file is written on the true first startup only (later restarts never recreate it) and is deleted on graceful shutdown, so **capture it promptly for each tenant**:
 
 ```bash
-# Kubernetes
+# Kubernetes (only when generation was forced via extraEnv)
 kubectl exec -n brokkr-acme <acme-broker-pod> -- cat /tmp/brokkr-keys/key.txt
 
 # Direct/container
 cat /tmp/brokkr-keys/key.txt
 ```
+
+**Recovering a lost admin PAK:** when a hash is configured (the recommended flow), no key file is ever written — there is nothing to `cat` out of the pod. If you lose a tenant's admin PAK, mint a replacement pair with `brokkr-broker generate-pak`, update that tenant's configured hash (`BROKKR__BROKER__PAK_HASH`, or the chart's `broker.pakHash` / Secret), and run `brokkr-broker rotate admin` with that tenant's configuration to store the new hash. A plain restart does not re-run the admin bootstrap.
 
 ## Step 4: Create Agents Per Tenant
 

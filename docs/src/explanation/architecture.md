@@ -77,7 +77,7 @@ With the database ready, the broker initializes its runtime subsystems in sequen
 
 The API layer exposes a RESTful interface under the `/api/v1` prefix, with all endpoints documented via OpenAPI annotations that generate Swagger documentation. Every request to an API endpoint passes through authentication middleware that extracts and validates the PAK from the Authorization header.
 
-The authentication middleware performs verification against three possible identity types in order: first checking the admin role table, then the agents table, and finally the generators table. This lookup is optimized with partial database indexes on the `pak_hash` column that exclude soft-deleted records, enabling O(1) lookup performance rather than full table scans.
+The authentication middleware resolves one of four identity classes. It first compares the presented PAK's hash, in constant time, against the ephemeral read-only UI PAK the broker mints in memory at startup for the embedded operator console — a match yields a read-only admin identity without touching the database. It then consults a short-lived auth cache of recent verifications (TTL configurable, default 60 seconds), and on a cache miss checks the remaining identity types in order: the admin role table, then the agents table, and finally the generators table. The database lookups are optimized with partial indexes on the `pak_hash` column that exclude soft-deleted records, enabling O(1) lookup performance rather than full table scans.
 
 Upon successful authentication, the middleware injects an `AuthPayload` structure into the request context containing the authenticated identity's type and ID. Individual endpoint handlers then perform authorization checks against this payload to determine if the caller has permission for the requested operation.
 
@@ -304,13 +304,15 @@ The figures below are illustrative design targets, not measured guarantees; real
 
 **Agent Performance**: Reconciliation applies resources via server-side apply and is designed to converge a poll's worth of changes promptly, with low-latency event reporting back to the broker.
 
-For larger deployments, the broker can be horizontally scaled behind a load balancer since it maintains no in-memory state beyond caches—all persistent state lives in PostgreSQL.
+For larger deployments, the broker can be horizontally scaled behind a load balancer since it maintains no in-memory state beyond caches—all persistent state lives in PostgreSQL. One caveat: each replica mints its own ephemeral UI PAK for the embedded operator console, so console traffic needs sticky sessions (see [Horizontal Broker Scaling](#horizontal-broker-scaling)).
 
 ## Scaling Patterns
 
 ### Horizontal Broker Scaling
 
 The broker's stateless design enables straightforward horizontal scaling. Multiple broker instances can run behind a load balancer, all connecting to the same PostgreSQL database. Each instance runs its own background tasks, but these are designed to be safe for concurrent execution through database-level coordination (e.g., work order claiming uses atomic updates to prevent double-claiming).
+
+The API is fully stateless across replicas, but the embedded operator console is not: each broker process mints its own ephemeral read-only UI PAK at startup, and the console page served by one replica carries a token that other replicas reject. When multiple replicas serve console traffic behind a load balancer, enable sticky sessions (session affinity) so a browser stays with the replica that issued its token. Agent, generator, and admin PAK authentication is unaffected — those credentials verify identically on every replica.
 
 ```mermaid
 C4Container
