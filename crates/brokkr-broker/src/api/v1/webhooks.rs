@@ -167,6 +167,54 @@ fn decrypt_value(encrypted: &[u8]) -> Result<String, String> {
     encryption::decrypt_string(encrypted)
 }
 
+/// Permanently fails a delivery that has already been claimed because the
+/// subscription's encrypted fields cannot be decrypted (BROKKR-T-0302).
+///
+/// A decryption failure is not transient: the stored ciphertext is unreadable
+/// with the broker's current key, so every subsequent claim would fail
+/// identically. Passing `max_retries = 0` makes `mark_failed` move the row
+/// straight to `dead`, which releases the claim and ends the
+/// claim -> TTL expiry -> reclaim loop. This mirrors the broker delivery path
+/// in `utils::background_tasks`.
+///
+/// Errors are logged rather than returned: one poisoned delivery must not fail
+/// the whole poll for the agent's other pending deliveries.
+fn fail_delivery_undecryptable(dal: &DAL, delivery: &WebhookDelivery, reason: &str) {
+    // NOTE: brokkr_webhook_decrypt_failures_total (BROKKR-T-0288) belongs here
+    // once that workstream lands.
+    match dal.webhook_deliveries().mark_failed(delivery.id, reason, 0) {
+        Ok(updated) => {
+            warn!(
+                "Webhook delivery {} marked {} for subscription {}: {}",
+                delivery.id, updated.status, delivery.subscription_id, reason
+            );
+            if updated.status == "dead" {
+                audit::log_action(
+                    ACTOR_TYPE_SYSTEM,
+                    None,
+                    ACTION_WEBHOOK_DELIVERY_FAILED,
+                    RESOURCE_TYPE_WEBHOOK,
+                    Some(delivery.subscription_id),
+                    Some(serde_json::json!({
+                        "delivery_id": delivery.id,
+                        "event_type": delivery.event_type,
+                        "attempts": updated.attempts,
+                        "error": reason,
+                    })),
+                    None,
+                    None,
+                );
+            }
+        }
+        Err(e) => {
+            error!(
+                "Failed to mark undecryptable delivery {} as dead: {:?}",
+                delivery.id, e
+            );
+        }
+    }
+}
+
 // =============================================================================
 // Routes
 // =============================================================================
@@ -828,9 +876,20 @@ async fn get_pending_agent_webhooks(
                     "Failed to decrypt URL for subscription {}: {}",
                     subscription.id, e
                 );
+                // The delivery is already claimed; without this it would sit
+                // acquired until its TTL lapsed and then be reclaimed forever
+                // with attempts pinned at 0 (BROKKR-T-0302).
+                fail_delivery_undecryptable(
+                    &dal,
+                    &delivery,
+                    &format!("Failed to decrypt URL: {}", e),
+                );
                 continue;
             }
         };
+        // A subscription configured with an auth header must never be delivered
+        // without it: dispatching unauthenticated would silently downgrade the
+        // subscriber's authentication (BROKKR-T-0302).
         let auth_header = match subscription.auth_header_encrypted {
             Some(ref encrypted) => match decrypt_value(encrypted) {
                 Ok(h) => Some(h),
@@ -839,7 +898,12 @@ async fn get_pending_agent_webhooks(
                         "Failed to decrypt auth header for subscription {}: {}",
                         subscription.id, e
                     );
-                    None
+                    fail_delivery_undecryptable(
+                        &dal,
+                        &delivery,
+                        &format!("Failed to decrypt auth header: {}", e),
+                    );
+                    continue;
                 }
             },
             None => None,
