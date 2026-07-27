@@ -11,7 +11,7 @@ archived: false
 
 tags:
   - "#task"
-  - "#phase/backlog"
+  - "#phase/completed"
   - "#bug"
 
 
@@ -51,4 +51,20 @@ Found 2026-07-27 during the BROKKR-T-0288 investigation; filed separately becaus
 
 ## Status Updates
 
-*To be added during implementation*
+**2026-07-27 — FIXED** on branch `docs/tenancy-review-2026-07`.
+
+Added a private `fail_delivery_undecryptable(dal, delivery, reason)` helper in `api/v1/webhooks.rs` that calls `mark_failed(delivery.id, reason, 0)` — `max_retries = 0` sends the row straight to `dead`, clears `acquired_by`/`acquired_until`, and sets `completed_at`, mirroring the broker path. Errors are logged rather than propagated so one poisoned delivery cannot fail the whole poll for an agent's other deliveries.
+
+1. URL-decrypt failure now fails the delivery before `continue`, ending the claimed → TTL-expired → reclaimed cycle.
+2. Auth-header decrypt failure no longer degrades to `None`; the delivery fails instead, so a subscription configured with an `Authorization` header is never dispatched without it.
+
+`last_error` distinguishes the two ("Failed to decrypt URL: …" vs "Failed to decrypt auth header: …"). A `NOTE:` comment marks where `brokkr_webhook_decrypt_failures_total` attaches under BROKKR-T-0288. No DAL change was needed.
+
+Tests: `test_pending_agent_webhooks_undecryptable_url_marks_delivery_dead` and `test_pending_agent_webhooks_undecryptable_auth_header_never_delivers`. Undecryptable rows are produced by encrypting with a foreign `EncryptionKey`, not by restarting the process. The URL test polls twice and asserts the row stays `dead` with `attempts == 1`, proving the loop is over. Clippy clean; integration target compiles.
+
+**Corrections to this ticket found during implementation:**
+- The claim that the broker path marks such deliveries dead "with an audit row (`background_tasks.rs:356-370`)" is **wrong** — those lines contain no audit call; the broker's decrypt-failure path is a bare `let _ = mark_failed(...)`. Audit rows there only appear on the HTTP delivery-attempt failure path. The agent path now emits one anyway (matching `report_delivery_result`'s idiom), making it slightly *more* observable than the broker path it was meant to mirror.
+- Defect 2 is agent-path-only; the broker path already handles auth-header decrypt failure correctly (`background_tasks.rs:372-392`). No broker-side change was needed.
+- Testing gotcha worth knowing: pre-existing tests store **plaintext** in `url_encrypted`, which does not fail decryption — a leading byte that is not `0x00`/`0x01` falls through to a legacy-XOR path that never errors and returns garbage.
+
+**Follow-up filed:** the same unbounded reclaim loop exists in the `Ok(None)` "subscription not found" arm and the subscription-fetch `Err` arm of the same function — both `continue` after the claim with `attempts` pinned at 0. Left alone as out of scope here; now a two-line change given the helper exists. See BROKKR-T-0304.

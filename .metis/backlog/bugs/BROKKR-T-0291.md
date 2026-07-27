@@ -11,7 +11,7 @@ archived: false
 
 tags:
   - "#task"
-  - "#phase/backlog"
+  - "#phase/completed"
   - "#bug"
 
 
@@ -81,4 +81,23 @@ Chart wiring (`charts/brokkr-broker/templates/deployment.yaml`): liveness → `/
 
 ## Status Updates
 
-*To be added during implementation*
+**2026-07-27 — `/readyz` IMPLEMENTED** on branch `docs/tenancy-review-2026-07`. Remaining items below are still open.
+
+`readyz` in `api/mod.rs` now takes `State(dal)` and performs `pool.get_timeout(750ms)` + `SELECT 1` inside `spawn_blocking`, returning 200 `"Ready"` / 503 `"database unavailable"`, with the result cached 2s. It deliberately uses the raw r2d2 pool rather than `ConnectionPool::get()`, which has no timeout variant and `.expect()`s on schema setup — that would panic a probe handler. `/healthz` untouched (liveness must never depend on the DB). No migration check.
+
+**Design deviation worth knowing:** the cache is not a process-global `static` but a `ReadinessCache(Arc<Mutex<..>>)` created in `configure_api_routes` and injected via `Extension`, layered immediately after the `/readyz` route. A global would be shared across every `#[tokio::test]` in the integration binary, making DB-down and ready tests mutually flaky. Note the layer ordering is load-bearing (existing extension layers in that function are applied *before* the health routes and would not reach it); there is a comment saying so.
+
+Tests: `test_readyz_endpoint` (now meaningful), `test_readyz_result_is_cached_across_probes`, `test_readyz_returns_503_when_database_unreachable`, and `test_healthz_stays_up_when_database_unreachable` as the regression guard for the liveness constraint. DB-down proved practical to simulate via a `build_unchecked` pool pointed at `127.0.0.1:1`; the explicit `connection_timeout(200ms)` on that fake pool is load-bearing because `configure_api_routes` spawns the fleet sweep whose interval fires immediately and would otherwise block on r2d2's 30s default.
+
+**Chart probes are compatible as-is** — readiness is `timeout 3s / period 5s / failureThreshold 3`; worst-case handler latency on a cache miss is ~750ms plus the query, and the DB-down path returns a fast 503 rather than timing out. The earlier suggestion to widen `failureThreshold` was written as if it were 1; it is already 3, so no chart change is needed. Note period (5s) > TTL (2s), so every kubelet probe is a real round-trip — intended, since the cache exists to blunt external hammering of an unauthenticated endpoint.
+
+**2026-07-27 — ALL REMAINING ITEMS COMPLETE; ticket closed.**
+
+- **Item 2 (`failed`)** — `reference/diagnostics.md` gained an "Emitted" column and a Collection Errors section with a worked example of the error-bearing `completed` result; `how-to/diagnostics.md` gained a step for checking whether collection actually succeeded, plus a troubleshooting entry stating the status will never reach `failed` and must not be alerted on. `failed` deliberately **retained** in the documented status list as defined-but-not-currently-emitted, per BROKKR-T-0300.
+- **Item 3 (`EventInfo`)** — struct widened rather than docs narrowed: `involved_object_kind: Option<String>` added in `brokkr-agent/src/diagnostics.rs`, populated from the source event. Docs table and sample payload corrected to the real shape (`involved_object` + `involved_object_kind`, replacing the never-existing `involved_object_name`). Clippy clean, 79 agent unit tests pass.
+- **Item 5 (retention table)** — `explanation/data-flows.md` corrected: agent events are hard-deleted after `agent_events_retention_days` (default 30, hourly sweep), not retained permanently; added the 6h streamed-telemetry ceiling, real config key names, a soft-deletion-vs-eviction distinction, and a "Telemetry Is Not a Log Store" statement of the product stance. Incidental fix: three webhook config keys were written camelCase and are now the actual snake_case keys.
+- **Readiness docs** — `reference/health-endpoints.md` and `how-to/monitoring-setup.md` rewritten around the real liveness/readiness split, including what each signal does *not* tell an operator, the ~2s cache recovery lag, and an explicit warning against adding dependency checks to liveness. A fictional broker `/health` section was removed.
+
+**Item 4 (work-order monitoring) is owned entirely by BROKKR-T-0303**, per the decision to implement before documenting. Not a loose end on this ticket.
+
+**Adjacent defect found, not fixed here:** the rustdoc on `Broker::agent_events_retention_days` in `brokkr-utils/src/config.rs` claimed that leaving the value unset disables eviction, while the spawn site is `unwrap_or(30)` — unset means 30 days and only an explicit `0` disables. Corrected in this branch.

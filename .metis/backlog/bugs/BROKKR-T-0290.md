@@ -11,7 +11,7 @@ archived: false
 
 tags:
   - "#task"
-  - "#phase/backlog"
+  - "#phase/completed"
   - "#bug"
 
 
@@ -69,4 +69,18 @@ The paragraphs above framed this as a P0-class cross-tenant disclosure path. Tha
 
 ## Status Updates
 
-*To be added during implementation*
+**2026-07-27 — access check IMPLEMENTED** on branch `docs/tenancy-review-2026-07` (the security half only; the docs half of this ticket remains open).
+
+`check_read_access` promoted to `pub(crate)` in `api/v1/templates.rs`; `instantiate_template` (`api/v1/stacks.rs`) now calls it immediately after the template fetch/404 — **after** `fetch_owned_stack` (so an unowned target stack still fails first) and **before** the label match, so the 422 body enumerating `missing_labels`/`missing_annotations` is no longer reachable for a foreign template. That incidentally closes the selector-oracle concern for cross-tenant templates. The utoipa block already documented 403, so no OpenAPI change.
+
+System-template sharing confirmed intact: a generator PAK against `generator_id = NULL` falls into the catch-all `Ok(())` arm. The `(None, _)` arm is unreachable from instantiate because `fetch_owned_stack` already requires admin-or-owning-generator, so no new denial for agents.
+
+Tests: `test_generator_cannot_instantiate_other_generator_template` (generator 2 owns the *stack* so only the template check can reject — asserts 403 `template_not_accessible`), `test_generator_can_instantiate_system_template`, `test_generator_can_instantiate_own_template`.
+
+**Selector-enumeration item — RESOLVED as "no change needed", deliberately.** The earlier note said the 422 body enumerating `missing_labels`/`missing_annotations` was "a mild information leak worth trimming regardless of the access decision". On re-examination that is wrong now that the access check is in place: the enumeration is only reachable for templates the caller may already read in full (their own, or admin-authored system templates whose selectors are shared by design). For those, enumerating the missing selectors is useful diagnostics, not disclosure — it is precisely what tells an operator why their instantiate failed. Trimming it would remove real DX to mitigate an oracle that the access check already closed. Leaving it as-is.
+
+**2026-07-27 — DOCS COMPLETE; ticket closed.** All four template pages now tell one code-verified story: instantiation renders the *pinned* row (an old id renders old content indefinitely, no error), `PUT` mints a new id, and labels/annotations belong to a version record so a restricted v1 becomes a go-anywhere v2 unless re-applied. `explanation/template-system.md` gained a "Pinned, Not Latest" section and the rationale (an id behaves like a pinned dependency) plus the look-up-by-name-take-highest-version escape hatch; `reference/templates.md` gained per-version label ownership, corrected per-endpoint auth, and an error table; `how-to/templates.md` captures the new id on PUT and re-applies labels; `tutorials/templates.md` gained a step that teaches the label-vanishes-on-update lesson by doing.
+
+Also corrected the rendering-pipeline order to match code (access → stack matching → parameter validation → render), documented that a template with no labels/annotations matches everything unconditionally, and framed matching as a guardrail rather than a tenant boundary. Incidental bug fixed: the how-to's PostgreSQL example labelled the template but instantiated into an unlabelled stack, which would 422.
+
+*Superseded line:* the documentation items — pinned-row versioning, labels/annotations not carrying over on PUT — across `explanation/template-system.md`, `how-to/templates.md`, `reference/templates.md`. Those are the consumer-facing half and are what actually mislead people into thinking they deploy the newest version.
