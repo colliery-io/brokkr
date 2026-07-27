@@ -57,6 +57,12 @@ This ticket is therefore **no longer a bug fix; it is a feature** whose current 
 
 **Also in scope:** `POST /admin/config/reload` only becomes meaningful once slice 1 lands *and* a config file exists; until then it must not be documented as an operator path. Delete `BROKKR_CONFIGMAP_NAME` (referenced nowhere in `crates/`) regardless of slice.
 
+**Chart annotations must be reconciled as part of slice 1 (added 2026-07-27).** The chart marks values `@hot-reload: true` in `values.yaml` and `templates/configmap.yaml`. Because no code reads `ReloadableConfig` back after a reload, **every one of those annotations is currently false** — `log.level`, `broker.diagnosticCleanupIntervalSeconds`, `broker.diagnosticMaxAgeHours`, `cors.allowedOrigins`, `cors.maxAgeSeconds`.
+
+Three webhook values were corrected to `@hot-reload: false` during BROKKR-T-0288 because they are captured into their worker's config struct at spawn and are restart-only even after slice 1 unless that slice explicitly makes those loops re-read per tick: `webhookDeliveryIntervalSeconds`, `webhookDeliveryBatchSize`, and `webhookCleanupRetentionDays` (verified: `WebhookCleanupConfig { retention_days: ... }` is built in `cli/commands.rs` and moved into the spawned task).
+
+So slice 1 must finish with the chart telling the truth in whichever direction it lands: flip these three back to `true` if the loops are made to re-read, and leave the remaining five as `true` only once consumers genuinely read the reloaded values. Do not let the annotations drift from behavior again — they are the operator-facing contract and were wrong in three separate places today.
+
 **Note:** this is multi-day and spans two distinct deliverables — consider promoting to an initiative and decomposing, rather than carrying it as one backlog task.
 
 ---

@@ -11,7 +11,7 @@ archived: false
 
 tags:
   - "#task"
-  - "#phase/backlog"
+  - "#phase/completed"
   - "#tech-debt"
 
 
@@ -58,4 +58,10 @@ Schema-per-tenant is **not** the tenancy model — tenants live at the generator
 
 ## Status Updates
 
-*To be added during implementation*
+**2026-07-27 — COMPLETE.** Five pages reframed (`reference/multi-tenancy.md`, `how-to/multi-tenant-setup.md`, `reference/generators.md`, `how-to/generators.md`, `reference/api/README.md`): generator tenancy leads, schema separation preserved in full but relabelled as running separate broker instances with non-tenant example names. `GET /api/v1/paks` (path is `/paks`, *not* `/auth/paks`), `?pak_id=` view-filter semantics with the not-an-authz-boundary warning, the `readonly` introspection field, and the four PAK classes are all documented. The api reference's "three types of PAKs" and "no API to list or manage tenants" claims are corrected.
+
+**Consistency sweep beyond the original scope.** The reframe surfaced that five other pages still asserted registration gates only target creation and that label matching needs no registration — `explanation/{security-model,architecture,data-model,components}.md` and `how-to/agent-registration.md`. True this morning, false after BROKKR-T-0287 landed. All corrected. Some of that wording was written earlier the same day and deliberately phrased to survive a future tightening; the tightening arrived hours later, which is a useful reminder that "future-proof" phrasing still needs a sweep when the future shows up. Also aligned the SUMMARY.md entry with the page's new H1.
+
+**ADR resolution (Dylan, 2026-07-27):** ADR-0004 amended to narrow it to deployment isolation; ADR-0009 recorded as owning the tenant model, with a note that its consent semantics are now fully enforced. This removes the contradiction between a standing `decided` ADR and the operative model.
+
+Committed as `705d1b2` on `docs/tenancy-review-2026-07`; `angreal docs build` passes.
