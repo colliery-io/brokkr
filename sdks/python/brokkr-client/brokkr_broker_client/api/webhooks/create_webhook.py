@@ -48,6 +48,11 @@ def _parse_response(
 
         return response_403
 
+    if response.status_code == 422:
+        response_422 = ErrorResponse.from_dict(response.json())
+
+        return response_422
+
     if response.status_code == 500:
         response_500 = ErrorResponse.from_dict(response.json())
 
@@ -77,7 +82,28 @@ def sync_detailed(
 ) -> Response[ErrorResponse | WebhookResponse]:
     """
     Args:
-        body (CreateWebhookRequest):
+        body (CreateWebhookRequest): Body of `POST /webhooks`.
+
+            Unknown keys are ignored rather than rejected, with two deliberate
+            exceptions that this endpoint used to accept and silently ignore
+            (BROKKR-T-0288). Both are now **rejected with 422** by
+            [`reject_removed_write_fields`] before this struct is deserialized:
+
+            * `validate` ("send test request on creation") was documented and parsed but
+              never read by `create_webhook` — it did nothing, ever. The real mechanism
+              is `POST /webhooks/{id}/test`.
+            * `filters.labels` was stored and echoed but never evaluated; label-based
+              routing is `target_labels`, which is real.
+
+            Rejecting is the lesser evil. A caller who sends `filters.labels` believes
+            their deliveries are scoped; accepting the request and dropping the key
+            leaves them with a subscription that fires on everything and a response they
+            have no reason to re-read. A 422 naming the field and its replacement is
+            noisy exactly once, at the moment the operator can still fix it.
+
+            This is a **write-path** rule only. Subscription rows already stored with a
+            `labels` key keep loading and keep delivering — see [`WebhookFilters`],
+            whose deserialization stays tolerant of unknown keys.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -105,7 +131,28 @@ def sync(
 ) -> ErrorResponse | WebhookResponse | None:
     """
     Args:
-        body (CreateWebhookRequest):
+        body (CreateWebhookRequest): Body of `POST /webhooks`.
+
+            Unknown keys are ignored rather than rejected, with two deliberate
+            exceptions that this endpoint used to accept and silently ignore
+            (BROKKR-T-0288). Both are now **rejected with 422** by
+            [`reject_removed_write_fields`] before this struct is deserialized:
+
+            * `validate` ("send test request on creation") was documented and parsed but
+              never read by `create_webhook` — it did nothing, ever. The real mechanism
+              is `POST /webhooks/{id}/test`.
+            * `filters.labels` was stored and echoed but never evaluated; label-based
+              routing is `target_labels`, which is real.
+
+            Rejecting is the lesser evil. A caller who sends `filters.labels` believes
+            their deliveries are scoped; accepting the request and dropping the key
+            leaves them with a subscription that fires on everything and a response they
+            have no reason to re-read. A 422 naming the field and its replacement is
+            noisy exactly once, at the moment the operator can still fix it.
+
+            This is a **write-path** rule only. Subscription rows already stored with a
+            `labels` key keep loading and keep delivering — see [`WebhookFilters`],
+            whose deserialization stays tolerant of unknown keys.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -128,7 +175,28 @@ async def asyncio_detailed(
 ) -> Response[ErrorResponse | WebhookResponse]:
     """
     Args:
-        body (CreateWebhookRequest):
+        body (CreateWebhookRequest): Body of `POST /webhooks`.
+
+            Unknown keys are ignored rather than rejected, with two deliberate
+            exceptions that this endpoint used to accept and silently ignore
+            (BROKKR-T-0288). Both are now **rejected with 422** by
+            [`reject_removed_write_fields`] before this struct is deserialized:
+
+            * `validate` ("send test request on creation") was documented and parsed but
+              never read by `create_webhook` — it did nothing, ever. The real mechanism
+              is `POST /webhooks/{id}/test`.
+            * `filters.labels` was stored and echoed but never evaluated; label-based
+              routing is `target_labels`, which is real.
+
+            Rejecting is the lesser evil. A caller who sends `filters.labels` believes
+            their deliveries are scoped; accepting the request and dropping the key
+            leaves them with a subscription that fires on everything and a response they
+            have no reason to re-read. A 422 naming the field and its replacement is
+            noisy exactly once, at the moment the operator can still fix it.
+
+            This is a **write-path** rule only. Subscription rows already stored with a
+            `labels` key keep loading and keep delivering — see [`WebhookFilters`],
+            whose deserialization stays tolerant of unknown keys.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -154,7 +222,28 @@ async def asyncio(
 ) -> ErrorResponse | WebhookResponse | None:
     """
     Args:
-        body (CreateWebhookRequest):
+        body (CreateWebhookRequest): Body of `POST /webhooks`.
+
+            Unknown keys are ignored rather than rejected, with two deliberate
+            exceptions that this endpoint used to accept and silently ignore
+            (BROKKR-T-0288). Both are now **rejected with 422** by
+            [`reject_removed_write_fields`] before this struct is deserialized:
+
+            * `validate` ("send test request on creation") was documented and parsed but
+              never read by `create_webhook` — it did nothing, ever. The real mechanism
+              is `POST /webhooks/{id}/test`.
+            * `filters.labels` was stored and echoed but never evaluated; label-based
+              routing is `target_labels`, which is real.
+
+            Rejecting is the lesser evil. A caller who sends `filters.labels` believes
+            their deliveries are scoped; accepting the request and dropping the key
+            leaves them with a subscription that fires on everything and a response they
+            have no reason to re-read. A 422 naming the field and its replacement is
+            noisy exactly once, at the moment the operator can still fix it.
+
+            This is a **write-path** rule only. Subscription rows already stored with a
+            `labels` key keep loading and keep delivering — see [`WebhookFilters`],
+            whose deserialization stays tolerant of unknown keys.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
