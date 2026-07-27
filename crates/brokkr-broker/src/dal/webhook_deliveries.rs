@@ -21,7 +21,15 @@
 //! - acquired: Claimed by broker/agent, being processed (TTL via acquired_until)
 //! - success: Delivered successfully
 //! - failed: Attempt failed, will retry (goes back to pending after next_retry_at)
-//! - dead: Max retries exceeded
+//! - dead: Attempt budget exhausted, or the failure was non-retryable
+//!
+//! ## Retry classification
+//!
+//! [`is_retryable_status`] is the single policy point shared by both delivery
+//! paths (the broker's delivery worker and the agent-reported result endpoint):
+//! a status it rejects sends the delivery straight to `dead` via [`mark_dead`]
+//! instead of burning the subscription's whole attempt budget on an endpoint
+//! that will never accept the payload.
 
 use crate::dal::DAL;
 use brokkr_models::models::webhooks::{
@@ -35,6 +43,35 @@ use uuid::Uuid;
 
 /// Default TTL for acquired deliveries (60 seconds).
 const DEFAULT_CLAIM_TTL_SECONDS: i64 = 60;
+
+/// Whether an HTTP status returned by a webhook endpoint is worth retrying
+/// (BROKKR-T-0288).
+///
+/// This is the one place the retry policy is expressed; both delivery paths
+/// (the broker's own worker and the `status_code` agents report back) call it
+/// so they cannot drift apart.
+///
+/// Retryable:
+/// - `408 Request Timeout`, `425 Too Early`, `429 Too Many Requests`
+/// - every `5xx` — the endpoint is broken, not the payload
+/// - anything that is not a `4xx` or `5xx` at all (e.g. an unfollowed `3xx`),
+///   which preserves the historical retry-everything behavior for statuses the
+///   policy does not speak to
+///
+/// Non-retryable: every other `4xx`. A 404, 401 or 422 means this request will
+/// be rejected identically on every attempt, so the delivery is marked `dead`
+/// on the first attempt with the status recorded in `last_error`.
+///
+/// Transport-level failures (connection refused, DNS, client-side timeouts)
+/// carry no status at all and are always retryable; callers represent them as
+/// "no status" rather than passing a synthetic code here.
+pub fn is_retryable_status(status: u16) -> bool {
+    match status {
+        408 | 425 | 429 => true,
+        400..=499 => false,
+        _ => true,
+    }
+}
 
 /// Data Access Layer for WebhookDelivery operations.
 pub struct WebhookDeliveriesDAL<'a> {
@@ -288,11 +325,17 @@ impl WebhookDeliveriesDAL<'_> {
 
     /// Records a failed delivery attempt and schedules retry if applicable.
     ///
+    /// `max_retries` is a total-**attempt** cap, not a count of retries after
+    /// the first try: the delivery dies once `attempts >= max_retries`, so the
+    /// default of 5 allows 5 attempts (1 initial + 4 retries). Passing `0`
+    /// therefore forces the delivery straight to `dead`; prefer the explicit
+    /// [`Self::mark_dead`] for failures that are known to be permanent.
+    ///
     /// # Arguments
     ///
     /// * `id` - The delivery UUID.
     /// * `error` - The error message.
-    /// * `max_retries` - Maximum retry attempts allowed.
+    /// * `max_retries` - Maximum total attempts allowed.
     ///
     /// # Returns
     ///
@@ -314,19 +357,8 @@ impl WebhookDeliveriesDAL<'_> {
         let now = Utc::now();
 
         if new_attempts >= max_retries {
-            // Max retries exceeded, mark as dead
-            diesel::update(webhook_deliveries::table.filter(webhook_deliveries::id.eq(id)))
-                .set((
-                    webhook_deliveries::status.eq(DELIVERY_STATUS_DEAD),
-                    webhook_deliveries::attempts.eq(new_attempts),
-                    webhook_deliveries::last_attempt_at.eq(now),
-                    webhook_deliveries::acquired_by.eq(None::<Uuid>),
-                    webhook_deliveries::acquired_until.eq(None::<DateTime<Utc>>),
-                    webhook_deliveries::next_retry_at.eq(None::<DateTime<Utc>>),
-                    webhook_deliveries::completed_at.eq(now),
-                    webhook_deliveries::last_error.eq(error),
-                ))
-                .get_result(conn)
+            // Attempt budget exhausted, mark as dead
+            Self::write_dead(conn, id, new_attempts, now, error)
         } else {
             // Schedule retry with exponential backoff: 2^attempts seconds
             let backoff_seconds = 2_i64.pow(new_attempts as u32);
@@ -344,6 +376,62 @@ impl WebhookDeliveriesDAL<'_> {
                 ))
                 .get_result(conn)
         }
+    }
+
+    /// Records a permanently-failed delivery attempt: the delivery goes to
+    /// `dead` immediately, whatever attempt budget it had left
+    /// (BROKKR-T-0288).
+    ///
+    /// Used for failures that a retry cannot fix — a non-retryable HTTP status
+    /// (see [`is_retryable_status`]) or a subscription whose encrypted fields
+    /// the broker's current key cannot read. The attempt is still counted, so
+    /// `attempts` reflects the request that was actually made.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - The delivery UUID.
+    /// * `error` - The error message, which should carry the HTTP status when
+    ///   one was received.
+    ///
+    /// # Returns
+    ///
+    /// Returns the updated delivery.
+    pub fn mark_dead(
+        &self,
+        id: Uuid,
+        error: &str,
+    ) -> Result<WebhookDelivery, diesel::result::Error> {
+        let conn = &mut self.dal.conn()?;
+
+        let delivery: WebhookDelivery = webhook_deliveries::table
+            .filter(webhook_deliveries::id.eq(id))
+            .first(conn)?;
+
+        Self::write_dead(conn, id, delivery.attempts + 1, Utc::now(), error)
+    }
+
+    /// Shared terminal-state write behind [`Self::mark_failed`] (budget
+    /// exhausted) and [`Self::mark_dead`] (non-retryable failure), so both
+    /// release the claim and record completion identically.
+    fn write_dead(
+        conn: &mut PgConnection,
+        id: Uuid,
+        attempts: i32,
+        now: DateTime<Utc>,
+        error: &str,
+    ) -> Result<WebhookDelivery, diesel::result::Error> {
+        diesel::update(webhook_deliveries::table.filter(webhook_deliveries::id.eq(id)))
+            .set((
+                webhook_deliveries::status.eq(DELIVERY_STATUS_DEAD),
+                webhook_deliveries::attempts.eq(attempts),
+                webhook_deliveries::last_attempt_at.eq(now),
+                webhook_deliveries::acquired_by.eq(None::<Uuid>),
+                webhook_deliveries::acquired_until.eq(None::<DateTime<Utc>>),
+                webhook_deliveries::next_retry_at.eq(None::<DateTime<Utc>>),
+                webhook_deliveries::completed_at.eq(now),
+                webhook_deliveries::last_error.eq(error),
+            ))
+            .get_result(conn)
     }
 
     // =========================================================================
@@ -492,4 +580,33 @@ pub struct DeliveryStats {
     pub failed: i64,
     /// Number of dead deliveries (max retries exceeded).
     pub dead: i64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_retryable_status;
+
+    #[test]
+    fn retryable_statuses_are_transient_only() {
+        // Explicitly listed transient 4xx.
+        assert!(is_retryable_status(408));
+        assert!(is_retryable_status(425));
+        assert!(is_retryable_status(429));
+        // All 5xx: the endpoint is broken, not the payload.
+        for status in [500, 502, 503, 504, 599] {
+            assert!(is_retryable_status(status), "{status} should be retryable");
+        }
+        // Statuses the policy does not speak to keep the old behavior.
+        assert!(is_retryable_status(302));
+    }
+
+    #[test]
+    fn other_4xx_statuses_are_not_retryable() {
+        for status in [400, 401, 403, 404, 410, 422, 451, 499] {
+            assert!(
+                !is_retryable_status(status),
+                "{status} should be non-retryable"
+            );
+        }
+    }
 }

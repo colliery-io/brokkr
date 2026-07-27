@@ -22,7 +22,7 @@ use diesel::sql_query;
 use diesel::sql_types::BigInt;
 use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
 use tokio::signal;
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 use uuid::Uuid;
 
 // Assuming MIGRATIONS is defined in the bin.rs file, we need to import it
@@ -109,6 +109,27 @@ pub async fn serve(config: &Settings) -> Result<(), Box<dyn std::error::Error>> 
             "disabled"
         }
     );
+
+    // Guard against the unset-encryption-key trap (BROKKR-T-0288) before the
+    // key is initialized. An unset key means a fresh random per-process key, so
+    // any subscription written by a previous process is already undecryptable
+    // and can never deliver again. Runs here because it needs migrations to
+    // have created `webhook_subscriptions` and must precede
+    // `init_encryption_key`, which would otherwise silently install the random
+    // key. Fresh installs (zero rows) fall through to the warning path.
+    let existing_webhook_subscriptions: Count =
+        sql_query("SELECT COUNT(*) as count FROM webhook_subscriptions")
+            .get_result(&mut conn)
+            .expect("Failed to count webhook subscriptions");
+    if let Err(e) = utils::encryption::check_webhook_encryption_key(
+        config.broker.webhook_encryption_key.as_deref(),
+        existing_webhook_subscriptions.count,
+    ) {
+        // Log as well as return: `main` renders the error with `Debug`, which
+        // would escape this message into an unreadable single quoted string.
+        error!("{}", e);
+        return Err(e.into());
+    }
 
     // Initialize encryption key for webhooks
     info!("Initializing encryption key");
