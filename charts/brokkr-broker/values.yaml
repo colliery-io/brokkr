@@ -9,14 +9,14 @@
 #   - log.level
 #   - broker.diagnosticCleanupIntervalSeconds
 #   - broker.diagnosticMaxAgeHours
-#   - broker.webhookDeliveryIntervalSeconds
-#   - broker.webhookDeliveryBatchSize
-#   - broker.webhookCleanupRetentionDays
 #   - cors.allowedOrigins
 #   - cors.maxAgeSeconds
 #
 # Static settings (require pod restart):
 #   - database.url, database.schema
+#   - broker.webhookDeliveryIntervalSeconds
+#   - broker.webhookDeliveryBatchSize
+#   - broker.webhookCleanupRetentionDays
 #   - broker.webhookEncryptionKey
 #   - telemetry.* (all telemetry settings)
 #
@@ -194,9 +194,14 @@ broker:
   diagnosticMaxAgeHours: 1
 
   # Webhook delivery settings
-  # @hot-reload: true - changes apply without restart
+  # @hot-reload: false - read once when the delivery worker starts; changing
+  # either value requires a pod restart to take effect
   webhookDeliveryIntervalSeconds: 5
   webhookDeliveryBatchSize: 50
+
+  # Webhook delivery retention
+  # @hot-reload: false - read once when the cleanup worker starts; changing
+  # this requires a pod restart to take effect
   webhookCleanupRetentionDays: 7
 
   # Webhook encryption key (hex-encoded 32-byte key)

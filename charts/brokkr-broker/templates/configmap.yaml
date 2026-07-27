@@ -43,9 +43,13 @@ data:
   # Diagnostic cleanup settings (@hot-reload: true)
   BROKKR__BROKER__DIAGNOSTIC_CLEANUP_INTERVAL_SECONDS: {{ .Values.broker.diagnosticCleanupIntervalSeconds | default 900 | quote }}
   BROKKR__BROKER__DIAGNOSTIC_MAX_AGE_HOURS: {{ .Values.broker.diagnosticMaxAgeHours | default 1 | quote }}
-  # Webhook delivery settings (@hot-reload: true)
+  # Webhook delivery settings (static - requires restart)
+  # These are read once when the delivery worker starts, so a ConfigMap reload
+  # does not apply them; restart the pod after changing either value.
   BROKKR__BROKER__WEBHOOK_DELIVERY_INTERVAL_SECONDS: {{ .Values.broker.webhookDeliveryIntervalSeconds | default 5 | quote }}
   BROKKR__BROKER__WEBHOOK_DELIVERY_BATCH_SIZE: {{ .Values.broker.webhookDeliveryBatchSize | default 50 | quote }}
+  # Webhook delivery retention (static - requires restart)
+  # Captured when the cleanup worker starts, like the delivery settings above.
   BROKKR__BROKER__WEBHOOK_CLEANUP_RETENTION_DAYS: {{ .Values.broker.webhookCleanupRetentionDays | default 7 | quote }}
   {{- if and .Values.broker.webhookEncryptionKey (not .Values.broker.webhookEncryptionKeyExistingSecret) }}
   # Webhook encryption key (static - requires restart)
