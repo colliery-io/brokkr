@@ -113,8 +113,13 @@ pub struct EventInfo {
     pub reason: Option<String>,
     /// Event message.
     pub message: Option<String>,
-    /// Object involved.
+    /// Name of the object the event refers to, or `"unknown"` when the
+    /// source event carries no name.
     pub involved_object: String,
+    /// Kind of the object the event refers to (`Pod`, `ReplicaSet`, …).
+    /// `None` when the source event omits it. Without this a bare name is
+    /// ambiguous — several kinds in a namespace routinely share one.
+    pub involved_object_kind: Option<String>,
     /// First timestamp.
     pub first_timestamp: Option<DateTime<Utc>>,
     /// Last timestamp.
@@ -352,6 +357,7 @@ impl DiagnosticsHandler {
                 reason: event.reason.clone(),
                 message: event.message.clone(),
                 involved_object,
+                involved_object_kind: event.involved_object.kind.clone(),
                 first_timestamp: event.first_timestamp.map(|t| t.0),
                 last_timestamp: event.last_timestamp.map(|t| t.0),
                 count: event.count,
@@ -476,6 +482,7 @@ mod tests {
             reason: Some("Started".to_string()),
             message: Some("Container started".to_string()),
             involved_object: "test-pod".to_string(),
+            involved_object_kind: Some("Pod".to_string()),
             first_timestamp: Some(Utc::now()),
             last_timestamp: Some(Utc::now()),
             count: Some(1),
