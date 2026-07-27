@@ -758,6 +758,12 @@ async fn instantiate_template(
         })?
         .ok_or_else(|| ApiError::not_found("template_not_found", "template not found"))?;
 
+    // BROKKR-T-0290: instantiate used to be the only template path that skipped
+    // the read-access check, letting any generator render another tenant's
+    // template body into its own stack. System templates (generator_id = NULL)
+    // remain instantiable by anyone — that is the sanctioned sharing mechanism.
+    crate::api::v1::templates::check_read_access(&auth_payload, &template)?;
+
     let template_labels: Vec<String> = dal
         .template_labels()
         .list_for_template(template.id)

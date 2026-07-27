@@ -789,3 +789,162 @@ async fn test_generator_cannot_access_other_generator_template() {
 
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }
+
+/// BROKKR-T-0290: instantiate used to be the only template path that skipped
+/// `check_read_access`, so a generator could render another tenant's template
+/// body into its own stack just by knowing the template UUID.
+#[tokio::test]
+async fn test_generator_cannot_instantiate_other_generator_template() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+
+    let (generator1, _) = fixture.create_test_generator_with_pak("Generator 1".to_string(), None);
+    let (generator2, generator2_pak) =
+        fixture.create_test_generator_with_pak("Generator 2".to_string(), None);
+
+    // Generator 2 owns the target stack, so the stack-ownership gate passes and
+    // the only thing that can reject the request is the template read check.
+    let stack = fixture.create_test_stack("generator2-stack".to_string(), None, generator2.id);
+
+    let template = fixture.create_test_template(
+        Some(generator1.id),
+        "generator1-private-template".to_string(),
+        None,
+        TEST_TEMPLATE_CONTENT.to_string(),
+        TEST_PARAMETERS_SCHEMA.to_string(),
+    );
+
+    let instantiation_request = json!({
+        "template_id": template.id,
+        "parameters": {
+            "name": "my-config",
+            "value": "my-value"
+        }
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!(
+                    "/api/v1/stacks/{}/deployment-objects/from-template",
+                    stack.id
+                ))
+                .header("Content-Type", "application/json")
+                .header("Authorization", format!("Bearer {}", generator2_pak))
+                .body(Body::from(
+                    serde_json::to_string(&instantiation_request).unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    // Same error code the sibling template read paths emit.
+    assert_eq!(json["code"].as_str().unwrap(), "template_not_accessible");
+}
+
+/// System templates (`generator_id = NULL`) are the sanctioned cross-tenant
+/// sharing mechanism and must stay instantiable by any generator.
+#[tokio::test]
+async fn test_generator_can_instantiate_system_template() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+
+    let (generator, generator_pak) =
+        fixture.create_test_generator_with_pak("Tenant Generator".to_string(), None);
+    let stack = fixture.create_test_stack("tenant-stack".to_string(), None, generator.id);
+
+    // generator_id = None => system template.
+    let template = fixture.create_test_template(
+        None,
+        "system-template".to_string(),
+        None,
+        TEST_TEMPLATE_CONTENT.to_string(),
+        TEST_PARAMETERS_SCHEMA.to_string(),
+    );
+
+    let instantiation_request = json!({
+        "template_id": template.id,
+        "parameters": {
+            "name": "my-config",
+            "value": "my-value"
+        }
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!(
+                    "/api/v1/stacks/{}/deployment-objects/from-template",
+                    stack.id
+                ))
+                .header("Content-Type", "application/json")
+                .header("Authorization", format!("Bearer {}", generator_pak))
+                .body(Body::from(
+                    serde_json::to_string(&instantiation_request).unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::CREATED);
+}
+
+/// The owning generator must still be able to instantiate its own template.
+#[tokio::test]
+async fn test_generator_can_instantiate_own_template() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+
+    let (generator, generator_pak) =
+        fixture.create_test_generator_with_pak("Owner Generator".to_string(), None);
+    let stack = fixture.create_test_stack("owner-stack".to_string(), None, generator.id);
+
+    let template = fixture.create_test_template(
+        Some(generator.id),
+        "owned-template".to_string(),
+        None,
+        TEST_TEMPLATE_CONTENT.to_string(),
+        TEST_PARAMETERS_SCHEMA.to_string(),
+    );
+
+    let instantiation_request = json!({
+        "template_id": template.id,
+        "parameters": {
+            "name": "my-config",
+            "value": "my-value"
+        }
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!(
+                    "/api/v1/stacks/{}/deployment-objects/from-template",
+                    stack.id
+                ))
+                .header("Content-Type", "application/json")
+                .header("Authorization", format!("Bearer {}", generator_pak))
+                .body(Body::from(
+                    serde_json::to_string(&instantiation_request).unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let yaml_content = json["yaml_content"].as_str().unwrap();
+    assert!(yaml_content.contains("name: my-config"));
+}

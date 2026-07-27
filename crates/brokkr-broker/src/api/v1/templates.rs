@@ -79,7 +79,18 @@ fn can_modify_template(auth: &AuthPayload, template: &StackTemplate) -> bool {
     }
 }
 
-fn check_read_access(auth: &AuthPayload, template: &StackTemplate) -> Result<(), ApiError> {
+/// Read-access gate for a single template.
+///
+/// Admins see everything; a generator sees its own templates plus system
+/// templates (`generator_id = NULL`), which are the sanctioned cross-tenant
+/// sharing mechanism. Any other combination is denied.
+///
+/// `pub(crate)` because `stacks::instantiate_template` must enforce the same
+/// rule as `get_template` / `list_labels` / `list_annotations` (BROKKR-T-0290).
+pub(crate) fn check_read_access(
+    auth: &AuthPayload,
+    template: &StackTemplate,
+) -> Result<(), ApiError> {
     if auth.admin {
         return Ok(());
     }
