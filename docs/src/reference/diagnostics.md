@@ -7,18 +7,53 @@ Brokkr provides an on-demand diagnostic system for collecting Kubernetes pod inf
 ```
 Created (pending) → Claimed (by agent) → Result submitted (completed)
                   → Expired (past retention)
-                  → Failed (agent error)
 ```
 
 ### Status Values
 
-| Status | Description |
-|--------|-------------|
-| `pending` | Request created, waiting for agent to claim |
-| `claimed` | Agent has claimed the request and is collecting data |
-| `completed` | Agent submitted diagnostic results |
-| `failed` | Agent encountered an error during collection |
-| `expired` | Request exceeded its retention period without completion |
+| Status | Description | Emitted |
+|--------|-------------|---------|
+| `pending` | Request created, waiting for agent to claim | Yes |
+| `claimed` | Agent has claimed the request and is collecting data | Yes |
+| `completed` | Agent submitted a diagnostic result, whether or not collection succeeded | Yes |
+| `failed` | Terminal failure state defined by the data model | **No — not currently set by any code path** |
+| `expired` | Request exceeded its retention period without completion | Yes |
+
+`failed` is part of the diagnostic request model and is accepted wherever a status is read, but no code path assigns it today. Collection errors are reported through the *result payload* of a `completed` request instead — see [Collection Errors](#collection-errors). Treat `failed` as reserved: a request will never arrive in that state, so a query or alert filtering on it matches nothing.
+
+---
+
+## Collection Errors
+
+When an agent claims a request but fails to collect data — for example the Kubernetes API is unreachable, or the agent lacks RBAC permission to list pods, events, or logs — it does not abandon the request or mark it failed. It submits a well-formed result whose `events` array carries a single error object, and the broker transitions the request to `completed` exactly as it would for a successful collection.
+
+An error-bearing result has this shape:
+
+```json
+{
+  "request": {
+    "id": "diag-uuid",
+    "status": "completed",
+    "claimed_at": "2025-01-15T10:00:15Z",
+    "completed_at": "2025-01-15T10:00:16Z"
+  },
+  "result": {
+    "pod_statuses": "[]",
+    "events": "[{\"error\":\"Failed to list pods in namespace default: ApiError: pods is forbidden: User \\\"system:serviceaccount:brokkr:brokkr-agent\\\" cannot list resource \\\"pods\\\"\"}]",
+    "log_tails": null,
+    "collected_at": "2025-01-15T10:00:16Z"
+  }
+}
+```
+
+The distinguishing marks are:
+
+- `status` is `completed`, not `failed`
+- `pod_statuses` is the empty array `[]`
+- `events` contains exactly one object, and that object has an `error` key rather than the [event fields](#events)
+- `log_tails` is `null`
+
+Note that an empty `pod_statuses` alone does not mean an error occurred: a successful collection that matched no pods also returns `[]` (see [Known Limitations](#known-limitations)). The presence of an `error` key inside `events` is what separates the two.
 
 ---
 
@@ -166,7 +201,7 @@ POST /api/v1/diagnostics/{id}/result
 ```json
 {
   "pod_statuses": "[{\"name\": \"myapp-abc12\", \"namespace\": \"default\", \"phase\": \"Running\", \"conditions\": [{\"condition_type\": \"Ready\", \"status\": \"True\"}], \"containers\": [{\"name\": \"myapp\", \"ready\": true, \"restart_count\": 0, \"state\": \"running\"}]}]",
-  "events": "[{\"event_type\": \"Normal\", \"reason\": \"Pulled\", \"message\": \"Successfully pulled image\", \"involved_object_kind\": \"Pod\", \"involved_object_name\": \"myapp-abc12\", \"count\": 1}]",
+  "events": "[{\"event_type\": \"Normal\", \"reason\": \"Pulled\", \"message\": \"Successfully pulled image\", \"involved_object\": \"myapp-abc12\", \"involved_object_kind\": \"Pod\", \"count\": 1}]",
   "log_tails": "{\"myapp-abc12/myapp\": \"2025-01-15 10:00:00 INFO Starting server on :8080\\n2025-01-15 10:00:01 INFO Ready to accept connections\"}",
   "collected_at": "2025-01-15T10:00:18Z"
 }
@@ -208,8 +243,8 @@ Container status fields:
 | `event_type` | String? | Normal or Warning |
 | `reason` | String? | Short reason string |
 | `message` | String? | Human-readable message |
-| `involved_object_kind` | String? | Kind of involved object (Pod, ReplicaSet, etc.) |
-| `involved_object_name` | String? | Name of involved object |
+| `involved_object` | String | Name of the object the event refers to. Falls back to `unknown` when the source event carries no name. |
+| `involved_object_kind` | String? | Kind of the object the event refers to (`Pod`, `ReplicaSet`, …). Absent when the source event omits it. |
 | `count` | Integer? | Number of occurrences |
 | `first_timestamp` | String? | First occurrence |
 | `last_timestamp` | String? | Last occurrence |

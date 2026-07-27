@@ -225,7 +225,12 @@ Prometheus alert rules for the WebSocket channel ship alongside the dashboards a
 
 ## Configure Kubernetes probes
 
-Use `/healthz` for liveness probes and `/readyz` for readiness probes. The agent's `/health` endpoint performs multiple dependency checks and is intended for monitoring systems rather than Kubernetes probes.
+Use `/healthz` for liveness probes and `/readyz` for readiness probes. Do not swap them:
+
+- `/healthz` checks nothing but the process itself on both components. Keep it that way — a liveness probe that depends on the database or the Kubernetes API turns a dependency outage into a fleet-wide restart loop.
+- `/readyz` checks the dependency each component needs to do its job: the database for the broker, the Kubernetes API for the agent. A failing readiness probe pulls the pod out of Service endpoints and stops rolling updates from progressing, which is what you want during a dependency outage.
+
+The agent's `/health` endpoint performs multiple dependency checks and returns JSON; point monitoring systems at it rather than Kubernetes probes.
 
 ### Broker deployment
 
@@ -301,7 +306,11 @@ spec:
           failureThreshold: 3
 ```
 
-Tighter intervals detect failures faster at the cost of more probe traffic; longer `initialDelaySeconds` accommodates slower startup (for example, database connection on broker startup).
+Tighter intervals detect failures faster at the cost of more probe traffic; longer `initialDelaySeconds` accommodates slower startup (for example, database connection and migrations on broker startup).
+
+Leave the broker's readiness `timeoutSeconds` at 3 or higher. The broker bounds its database check at 750 ms and answers a dead database with an immediate `503`, so a 3-second timeout is comfortable — but cutting it below one second risks the kubelet timing out a check that was about to return a correct answer, which is indistinguishable from a real failure in `kubectl describe pod`.
+
+These probe values are baked into the chart templates rather than exposed through `values.yaml`. To change them, render the chart and edit the Deployment, or patch the live object.
 
 ## Monitor health endpoints externally
 
@@ -334,7 +343,7 @@ scrape_configs:
 
 ### Custom health check script
 
-A monitoring script can poll the health endpoints directly:
+A monitoring script can poll the health endpoints directly. Alert on `/readyz`, not `/healthz` — the liveness endpoints answer `200 OK` from any running process and will not tell you that a dependency is down.
 
 ```bash
 #!/bin/bash
@@ -343,9 +352,10 @@ A monitoring script can poll the health endpoints directly:
 BROKER_URL="http://brokkr-broker:3000"
 AGENT_URL="http://brokkr-agent:8080"
 
-# Check broker readiness
-if ! curl -sf "$BROKER_URL/readyz" > /dev/null; then
-  echo "ALERT: Broker not ready"
+# Check broker readiness (503 "database unavailable" means the DB is unreachable)
+BROKER_READY=$(curl -s -o /dev/null -w '%{http_code}' "$BROKER_URL/readyz")
+if [ "$BROKER_READY" != "200" ]; then
+  echo "ALERT: Broker not ready (HTTP $BROKER_READY): $(curl -s "$BROKER_URL/readyz")"
   # Send alert to monitoring system
 fi
 
@@ -493,25 +503,41 @@ metrics:
 
 ### Health check failures
 
-**Symptom:** Broker `/readyz` returning errors or timeouts
+**Symptom:** Broker `/readyz` returns `503 Service Unavailable` with body `database unavailable`
+
+The broker could not check out a database connection within its 750 ms budget, or the connection it got would not answer `SELECT 1`.
 
 **Possible Causes:**
-- Database connectivity issues
-- Broker process overloaded
-- Network policy blocking health probe
+- Database down, restarting, or unreachable from the broker's network
+- Connection pool exhausted by long-running queries
+- Wrong or rotated database credentials
+- Network policy blocking broker-to-database traffic
 
 **Resolution:**
 ```bash
-# Check broker logs
-kubectl logs -l app.kubernetes.io/name=brokkr-broker
+# The response body does not name the cause; the broker logs it
+kubectl logs -l app.kubernetes.io/name=brokkr-broker | grep -i "readiness check failed"
 
-# Test database connectivity
+# Confirm the configured database URL
 kubectl exec -it <broker-pod> -- env | grep DATABASE
 
-# Test health endpoint manually
+# Confirm the database itself is up and accepting connections
+kubectl get pods -l app.kubernetes.io/name=postgresql
+
+# Test the endpoint manually
 kubectl port-forward svc/brokkr-broker 3000:3000
-curl -v http://localhost:3000/readyz
+curl -i http://localhost:3000/readyz
 ```
+
+Expect up to two seconds of lag between the database recovering and `/readyz` reporting `Ready`: the broker caches each verdict for that long.
+
+**Symptom:** Broker pods stay `Running` and `/healthz` returns `200 OK`, but every API call fails
+
+`/healthz` is a process-liveness signal only and does not check the database — this is deliberate, so that a database blip cannot restart-loop every broker pod. Check `/readyz` instead; a `503` there confirms a database problem. Do not add a database check to the liveness probe to "fix" this.
+
+**Symptom:** A rollout does not progress and new broker pods never become ready
+
+Readiness gates the rollout, so this is the expected outcome when the new pods cannot reach the database — a misconfigured `BROKKR__DATABASE__URL` in the new revision is the usual cause. The old pods keep serving. Inspect the new pod's logs and `/readyz` body, fix the configuration, and roll forward, or run `kubectl rollout undo`.
 
 **Symptom:** Agent `/readyz` failing with "Kubernetes API unavailable"
 

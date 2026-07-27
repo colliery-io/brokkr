@@ -245,7 +245,7 @@ sequenceDiagram
     end
 ```
 
-The webhook worker runs as a background task, polling for pending deliveries every 5 seconds (configurable via `broker.webhookDeliveryIntervalSeconds`). Each polling cycle processes up to 50 deliveries (configurable via `broker.webhookDeliveryBatchSize`), enabling high throughput while controlling resource usage.
+The webhook worker runs as a background task, polling for pending deliveries every 5 seconds (configurable via `broker.webhook_delivery_interval_seconds`). Each polling cycle processes up to 50 deliveries (configurable via `broker.webhook_delivery_batch_size`), enabling high throughput while controlling resource usage.
 
 #### Agent Delivery
 
@@ -288,7 +288,7 @@ Delivery URLs and authentication headers are stored encrypted in the database us
 
 #### Retry Behavior
 
-Failed deliveries are retried with exponential backoff. The first retry occurs after 2 seconds, the second after 4 seconds, then 8, 16, and so on. After exhausting the maximum retry count (configurable), deliveries are marked as "dead" and no longer retried. A cleanup task removes old delivery records after 7 days (configurable via `broker.webhookCleanupRetentionDays`).
+Failed deliveries are retried with exponential backoff. The first retry occurs after 2 seconds, the second after 4 seconds, then 8, 16, and so on. After exhausting the maximum retry count (configurable), deliveries are marked as "dead" and no longer retried. A cleanup task removes old delivery records after 7 days (configurable via `broker.webhook_cleanup_retention_days`).
 
 ### Event Types
 
@@ -474,7 +474,7 @@ Stale claims are automatically detected and reset. If an agent claims a work ord
 
 ## Data Retention
 
-Brokkr maintains extensive data for auditing, debugging, and compliance purposes. Different data types have different retention characteristics based on their importance and storage requirements.
+Brokkr keeps different classes of data for very different lengths of time, and by two different mechanisms. Understanding which mechanism applies to a table tells you whether old data is merely hidden or actually gone.
 
 ### Immutability Pattern
 
@@ -482,17 +482,32 @@ As established above, deployment objects are append-only: updates create new obj
 
 The `deleted_at` timestamp implements soft deletion across most entity types. Queries filter by `deleted_at IS NULL` by default, hiding deleted records from normal operations while preserving them for auditing. Special "include deleted" query variants provide access to the full history when needed.
 
+Soft deletion is a *visibility* mechanism, not a retention mechanism. Rows marked `deleted_at` still occupy storage indefinitely. Tables that would otherwise grow without bound are additionally subject to a background eviction task that issues real `DELETE` statements — those rows are unrecoverable once the window passes, whether or not they were ever soft-deleted.
+
 ### Retention Policies
 
 | Data Type | Default Retention | Cleanup Method |
 |-----------|-------------------|----------------|
-| Deployment objects | Permanent | Soft delete only |
-| Agent events | Permanent | Soft delete only |
-| Webhook deliveries | 7 days | Background cleanup task |
-| Audit logs | 90 days | Background cleanup task |
-| Diagnostic results | 1 hour | Background cleanup task |
+| Deployment objects | Indefinite | Soft delete only — no eviction |
+| Agent events | 30 days (`broker.agent_events_retention_days`; set to `0` to keep indefinitely) | Hourly hard-delete task |
+| Webhook deliveries | 7 days (`broker.webhook_cleanup_retention_days`) | Hourly hard-delete task |
+| Audit logs | 90 days (`broker.audit_log_retention_days`) | Daily hard-delete task |
+| Diagnostic requests and results | 1 hour (`broker.diagnostic_max_age_hours`) | Hard-delete task every 15 minutes |
+| Streamed Kubernetes events and pod logs | 6 hours (hard ceiling, not configurable upward) | Continuous eviction, every 60 seconds |
 
-Background tasks run at regular intervals to enforce retention policies. The webhook cleanup task runs hourly, removing deliveries older than the configured retention period. The audit log cleanup task runs daily, removing entries beyond the retention window. Diagnostic results have a short retention period (1 hour by default) as they contain point-in-time debugging information.
+Deployment objects are the only class with no eviction at all — they are the system's record of what was deployed, so they are kept indefinitely and only soft-deleted.
+
+Agent events are evicted on an hourly sweep that hard-deletes every row whose server-side `created_at` is older than the window. This matters for anyone treating the agent event stream as a durable deployment history: by default, events older than thirty days are gone from the database, not merely hidden. The window is configurable, and setting it to `0` disables eviction entirely at the cost of unbounded table growth at fleet scale. Eviction keys off the broker's own ingestion timestamp rather than any timestamp supplied by the agent, so a misbehaving agent cannot backdate events to keep them alive past the window.
+
+Audit logs and webhook deliveries follow the same pattern on longer and shorter windows respectively. Diagnostic results are the shortest-lived of the request-scoped data, since they capture point-in-time debugging snapshots that lose value quickly; their cleanup task also expires unclaimed diagnostic requests past their `expires_at`.
+
+### Telemetry Is Not a Log Store
+
+The streamed Kubernetes events and pod logs that reach the broker over the agent WebSocket channel are governed by a deliberately different rule: a **hard six-hour ceiling** that cannot be raised. A shorter window can be configured; a longer one cannot — any larger value is silently clamped back to six hours.
+
+This is a product stance, not an implementation limit. These buffers exist to support immediate operational work — watching a rollout, reading the events behind a crash loop that is happening right now — and nothing else. Brokkr is explicitly not a log aggregation or long-term log retention system, and it should not be positioned as one or made the system of record for logs. Ship logs to a purpose-built platform for anything that must be queryable tomorrow; treat what Brokkr holds as a live tail that will be gone by the end of the shift.
+
+Eviction here runs continuously rather than on a long interval — a sweep every sixty seconds — so the ceiling is enforced closely rather than approximately, and it keys off the broker's ingestion timestamp for the same reason agent-event eviction does.
 
 ### Incremental Target-State Filtering
 

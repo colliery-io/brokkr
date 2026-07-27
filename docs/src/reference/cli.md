@@ -25,6 +25,10 @@ brokkr-broker serve
 | `/readyz` | Readiness probe |
 | `/metrics` | Prometheus metrics |
 | `/swagger-ui` | Interactive API documentation |
+| `/docs/openapi.json` | OpenAPI 3 specification |
+| `/` | Operator Console — the read-only web view of fleet, deployments, and telemetry. Any path not owned by `/api` or `/internal` falls back to the console shell |
+
+The console is served only by builds that include the `embed-ui` feature. The published broker container image is built that way, so a stock `brokkr-broker` container serves the console on the same port as the API; a binary you build yourself without the feature serves a placeholder instead.
 
 ---
 
@@ -151,12 +155,14 @@ Prints the PAK (the admin credential — store securely) and its hash. Set the h
 ```
 Minted admin PAK (offline — nothing was written to the database):
 
-  PAK (secret — send as `Authorization: Bearer <PAK>`):
+  PAK (secret — send as `Authorization: Bearer <PAK>`; store securely):
     brokkr_BRx9y2Kq_A1B2C3D4E5F6G7H8I9J0K1L2
 
   PAK hash (set as BROKKR__BROKER__PAK_HASH before first startup):
-    sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+    9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
 ```
+
+The hash is printed as bare hexadecimal — exactly 64 characters, with no `sha256:` or other prefix. Copy it verbatim; the broker validates the configured hash at startup and refuses to boot with "Invalid PAK hash provided in configuration" if it is anything other than 64 hex characters.
 
 See the [Environment Variables Reference](./environment-variables.md) for `BROKKR__BROKER__PAK_HASH`.
 

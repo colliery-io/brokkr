@@ -75,6 +75,10 @@ For a throwaway dev cluster you can instead rely on how the broker provisions th
 
 > **Warning:** Setting `broker.pakHash` to an empty value does **not** make the broker generate a fresh PAK. The chart only passes the hash to the broker when the value is non-empty, so an empty or omitted `broker.pakHash` silently leaves the publicly known development admin PAK above active. Anywhere beyond a throwaway dev cluster, always set `broker.pakHash` or `broker.pakHashExistingSecret` from the `brokkr-broker generate-pak` output.
 
+The only configuration in which the broker mints an admin PAK for you is one where the hash is genuinely empty in its environment — which the chart cannot produce without an `extraEnv` override. If you do force that, the broker writes the PAK to `/tmp/brokkr-keys/key.txt` inside the broker's own filesystem, and that file is a one-shot artifact: it is written on the genuinely first startup only, never recreated by later restarts, and deleted when the broker shuts down gracefully. A pod restart, reschedule, or `helm upgrade` before you read it loses the admin PAK for good. Capture it in the same breath as the install, or avoid the race entirely by presetting the hash from `brokkr-broker generate-pak` as described above.
+
+If the admin PAK is lost, it cannot be recovered from the stored hash — mint a replacement with `brokkr-broker generate-pak`, update `broker.pakHash` (or the Secret behind `broker.pakHashExistingSecret`), and run `brokkr-broker rotate admin` against the broker's database to store the new hash. Restarting the broker does not re-run the admin bootstrap. See [Managing PAKs](../how-to/pak-management.md#rotating-the-admin-pak).
+
 Export it for the following steps:
 
 ```bash
@@ -418,7 +422,7 @@ kubectl get secret brokkr-broker-postgresql -o yaml
 ```
 
 **PAK authentication failures:**
-- Verify the PAK is correct and not expired
+- Verify the PAK is correct. PAKs have no expiry — a key that used to work has been rotated or revoked (its agent or generator was deleted)
 - Check that the agent name matches the registration
 - Ensure the broker URL is accessible
 

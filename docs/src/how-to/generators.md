@@ -315,8 +315,8 @@ Use descriptive names that identify purpose and scope, e.g. `github-actions-prod
 
 If API calls fail with 401 or 403:
 
-1. Verify the PAK is correct and not expired
-2. Check if the PAK was rotated
+1. Verify the PAK is correct — PAKs do not expire, so a previously working key has been rotated or revoked
+2. Check whether the PAK was rotated elsewhere, or the generator deleted (deleting a generator revokes its PAK)
 3. Ensure you're using the generator PAK, not the admin PAK (for generator-scoped operations)
 
 ### Cannot See Resources

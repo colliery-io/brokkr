@@ -18,29 +18,37 @@ Brokkr supports sophisticated targeting through labels and annotations, allowing
 
 ### Prerequisites
 
-Running Brokkr locally requires Rust 1.8+, PostgreSQL, Docker with Docker Compose, and the [Angreal](https://angreal.github.io/) task runner which you can install via `pip install angreal`.
+Running Brokkr locally requires Rust 1.90+ (edition 2024), PostgreSQL, Docker with Docker Compose, and the [Angreal](https://angreal.github.io/) task runner which you can install via `pip install angreal`.
 
 ### Running Locally
 
 Clone the repository and start the development environment:
 
 ```bash
-git clone https://github.com/your-org/brokkr.git
+git clone https://github.com/colliery-io/brokkr.git
 cd brokkr
 angreal local up
 ```
 
-This starts the broker API at http://localhost:3000 and the admin UI at http://localhost:3001.
+This starts the broker at http://localhost:3000, which serves both the REST API and the Operator Console — the supported read-only web view of your fleet, deployments, and telemetry. The development environment also brings up `examples/ui-slim` at http://localhost:3001; that is a demonstration app, not a supported product.
 
 ### Creating Your First Deployment
 
-Create a stack to hold your application's resources:
+Every stack belongs to a generator, so first look up the admin-generator the broker creates at initialization (it is linked to the admin PAK):
+
+```bash
+GEN_ID=$(curl -s http://localhost:3000/api/v1/generators \
+  -H "Authorization: Bearer <admin-pak>" \
+  | jq -r '.[] | select(.name=="admin-generator") | .id')
+```
+
+Then create a stack to hold your application's resources:
 
 ```bash
 curl -X POST http://localhost:3000/api/v1/stacks \
   -H "Authorization: Bearer <admin-pak>" \
   -H "Content-Type: application/json" \
-  -d '{"name": "my-app", "description": "My application stack"}'
+  -d "{\"name\": \"my-app\", \"description\": \"My application stack\", \"generator_id\": \"$GEN_ID\"}"
 ```
 
 Verify agents are connected and ready to receive deployments:

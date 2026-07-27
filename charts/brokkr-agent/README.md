@@ -320,7 +320,7 @@ For detailed information about why each permission is needed and security implic
 **Solutions**:
 1. Verify PAK is correct in ConfigMap or Secret
 2. Generate a new PAK from the broker
-3. Ensure PAK has not expired
+3. PAKs do not expire — if the agent's key stopped working, it was rotated or revoked (the agent record was deleted on the broker)
 
 ### Agent Not Polling
 

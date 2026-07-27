@@ -9,8 +9,8 @@ Stack templates allow you to define reusable Kubernetes manifests with parameter
 - **Reusability**: Define common patterns once, instantiate many times
 - **Validation**: Parameters are validated against JSON Schema before rendering
 - **Safety**: Template syntax is validated at creation time
-- **Versioning**: Updates create new versions, preserving history
-- **Access Control**: System templates (admin) vs generator-owned templates
+- **Versioning**: Updates create a new version with a **new template ID**; the old ID keeps rendering the old content
+- **Access Control**: System templates (admin, usable by everyone) vs generator-owned templates (usable only by their owner)
 
 ### Template Matching
 
@@ -19,6 +19,8 @@ Templates can be constrained to specific stacks using labels and annotations:
 - **No labels/annotations**: Template can be used with any stack
 - **With labels**: ALL template labels must exist on the target stack
 - **With annotations**: ALL template annotation key-value pairs must exist on the target stack
+
+Labels and annotations are attached to one specific template version. Keep this in mind when you update a template — see [Template Versioning](#template-versioning).
 
 ## Creating a Template
 
@@ -71,16 +73,19 @@ curl -X POST http://localhost:3000/api/v1/stacks/$STACK_ID/deployment-objects/fr
 ```
 
 The broker will:
-1. Validate template labels match the stack
-2. Validate parameters against the JSON Schema
-3. Render the template with Tera
-4. Create a deployment object in the stack
+1. Check that you own the target stack, and that the template is yours or a system template
+2. Validate template labels match the stack
+3. Validate parameters against the JSON Schema
+4. Render the template with Tera
+5. Create a deployment object in the stack
+
+`template_id` identifies one specific version, and that is the version that gets rendered. There is no "use the latest version" option — see [Template Versioning](#template-versioning).
 
 ## Template Labels and Annotations
 
 ### Restricting Template Usage
 
-Add labels to restrict which stacks can use a template:
+A template with no labels or annotations can be instantiated into any stack. Add labels or annotations to restrict it — the target stack must then carry the same ones:
 
 ```bash
 # Add label to template
@@ -120,21 +125,57 @@ When instantiation fails due to label mismatch, you'll receive a 422 response wi
 
 ## Template Versioning
 
-Templates are immutable. Updates create new versions:
+Templates are immutable. An update does not change the existing template — it creates a new version, stored as a new row with **its own template ID**. The old ID stays valid and keeps rendering the old content forever, so you must capture the new ID from the response and use it from then on.
+
+### Update a Template and Pick Up the New ID
 
 ```bash
-# Update template (creates version 2)
-curl -X PUT http://localhost:3000/api/v1/templates/$TEMPLATE_ID \
+# Update template (creates version 2 with a NEW id)
+UPDATED=$(curl -s -X PUT http://localhost:3000/api/v1/templates/$TEMPLATE_ID \
   -H "Authorization: Bearer $ADMIN_PAK" \
   -H "Content-Type: application/json" \
   -d '{
     "description": "Updated nginx template with HPA support",
     "template_content": "...",
     "parameters_schema": "..."
-  }'
+  }')
+
+# Keep the old id if you still need it, then switch to the new one
+OLD_TEMPLATE_ID=$TEMPLATE_ID
+TEMPLATE_ID=$(echo "$UPDATED" | jq -r '.id')
+echo "$UPDATED" | jq '{id, version}'   # → new id, version 2
 ```
 
-Each version has a unique ID. Deployment objects reference the specific template version used.
+Anything still sending `$OLD_TEMPLATE_ID` — a pipeline, a saved script, a CI variable — keeps deploying version 1 silently, with no error. Roll the new ID out to every caller that should be on the new version.
+
+### Re-apply Labels and Annotations
+
+**Labels and annotations do not carry over to the new version.** They belong to the previous row, so version 2 starts with none and will match *any* stack until you re-add them:
+
+```bash
+# Re-apply every label the previous version had, to the NEW template id
+curl -X POST http://localhost:3000/api/v1/templates/$TEMPLATE_ID/labels \
+  -H "Authorization: Bearer $ADMIN_PAK" \
+  -H "Content-Type: application/json" \
+  -d '"env=production"'
+
+# ...and every annotation
+curl -X POST http://localhost:3000/api/v1/templates/$TEMPLATE_ID/annotations \
+  -H "Authorization: Bearer $ADMIN_PAK" \
+  -H "Content-Type: application/json" \
+  -d '{"key": "tier", "value": "1"}'
+```
+
+To be sure you re-apply the full set, list what the previous version carried (do this before the update if you would rather not chase it afterwards):
+
+```bash
+curl -s http://localhost:3000/api/v1/templates/$OLD_TEMPLATE_ID/labels \
+  -H "Authorization: Bearer $ADMIN_PAK" | jq -r '.[].label'
+curl -s http://localhost:3000/api/v1/templates/$OLD_TEMPLATE_ID/annotations \
+  -H "Authorization: Bearer $ADMIN_PAK" | jq -r '.[] | "\(.key)=\(.value)"'
+```
+
+Old versions remain available, and deployment objects record the specific template version they were rendered from. To find the current version of a template, list templates and take the highest `version` for that name.
 
 ## Generator-Owned Templates
 
@@ -155,7 +196,11 @@ curl -X POST http://localhost:3000/api/v1/templates \
 Generators can only:
 - View system templates (no generator_id) and their own templates
 - Modify/delete only their own templates
-- Instantiate templates into stacks they own
+- Instantiate system templates and their own templates, and only into stacks they own
+
+Supplying another generator's template ID is rejected with `403 template_not_accessible`, even when you own the target stack. Knowing an ID grants nothing.
+
+To share a template across generators, create it as a **system template** — an admin PAK creating a template produces one (`generator_id` is null), and every generator can then instantiate it. That is the supported sharing mechanism; there is no way to grant one generator access to another's template.
 
 ## Complete Example: PostgreSQL Database
 
@@ -173,7 +218,7 @@ curl -X POST http://localhost:3000/api/v1/templates \
   }'
 ```
 
-### 2. Add Production Label
+### 2. Restrict the Template with a Label
 
 ```bash
 curl -X POST http://localhost:3000/api/v1/templates/$TEMPLATE_ID/labels \
@@ -182,7 +227,18 @@ curl -X POST http://localhost:3000/api/v1/templates/$TEMPLATE_ID/labels \
   -d '"database=postgresql"'
 ```
 
-### 3. Instantiate for Production
+### 3. Give the Target Stack the Same Label
+
+The template now only matches stacks that carry `database=postgresql`, so add it to the stack you intend to deploy into — otherwise instantiation fails with `template_stack_mismatch`:
+
+```bash
+curl -X POST http://localhost:3000/api/v1/stacks/$PROD_STACK_ID/labels \
+  -H "Authorization: Bearer $ADMIN_PAK" \
+  -H "Content-Type: application/json" \
+  -d '"database=postgresql"'
+```
+
+### 4. Instantiate for Production
 
 ```bash
 curl -X POST http://localhost:3000/api/v1/stacks/$PROD_STACK_ID/deployment-objects/from-template \
@@ -259,3 +315,28 @@ Check that parameters match the schema constraints.
 ```
 
 Ensure all required template variables are provided in parameters, or use `| default(value=...)` for optional ones.
+
+### Template Not Accessible
+
+```json
+{
+  "code": "template_not_accessible",
+  "message": "not authorized to access this template"
+}
+```
+
+The template belongs to another generator. Use one of your own templates, or ask an admin to publish it as a system template.
+
+### Updated the Template, but Deployments Are Unchanged
+
+You are still instantiating the old version. `PUT` created a new row with a new ID; the ID your pipeline holds still points at the previous version. List the template's versions, take the highest one, and update the ID your callers use:
+
+```bash
+curl -s http://localhost:3000/api/v1/templates \
+  -H "Authorization: Bearer $ADMIN_PAK" \
+  | jq '[.[] | select(.name=="nginx-deployment")] | sort_by(.version) | .[-1] | {id, version}'
+```
+
+### A Restricted Template Suddenly Matches Every Stack
+
+Its labels and annotations were left behind on the previous version. Re-apply them to the new template ID — see [Re-apply Labels and Annotations](#re-apply-labels-and-annotations).

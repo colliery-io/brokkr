@@ -44,31 +44,48 @@ Before the broker has ever started, there is no admin PAK and no database to rea
      -H "Authorization: brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8" | jq .
    ```
 
-> **Note:** On first startup the broker stores this hash on the admin role and admin generator — no key file is written to `/tmp/brokkr-keys/`. See the [CLI Reference](../reference/cli.md) for the full `generate-pak` flag set.
+> **Note:** On first startup the broker stores this hash on the admin role and admin generator — no key file is written to `/tmp/brokkr-keys/`. `generate-pak` takes no arguments; see the [CLI Reference](../reference/cli.md) for the exact output format.
+
+Presetting the hash this way is also the safest bootstrap: you hold the admin PAK before the broker ever runs, so there is no window in which the credential exists only inside a container. If you instead let the broker mint its own admin PAK (see below), you must capture it from the key file on the very first startup or lose it.
 
 ## Rotating the Admin PAK
 
 ### Via CLI
 
-The `rotate admin` command re-runs the same admin upsert that runs at startup, and its behavior depends on `broker.pak_hash`:
+`brokkr-broker rotate admin` is the only way to change the admin PAK. Restarting the broker does **not** rotate it: the admin bootstrap runs only on a database that has never been initialized, so on an existing database a restart re-reads the stored hash and changes nothing.
 
-- **If `broker.pak_hash` is set** (it is by default, to a publicly-known development hash), the command simply re-applies that hash — **nothing rotates**.
-- **If `broker.pak_hash` is unset or empty**, a fresh PAK is generated and written to `/tmp/brokkr-keys/key.txt` on the broker host. It is never printed to stdout.
+What `rotate admin` does depends on `broker.pak_hash`:
 
-To actually rotate:
+- **If `broker.pak_hash` is set** (it is by default, to a publicly-known development hash), the command validates and re-applies that hash — **nothing rotates**. This is the path to use when you manage the hash yourself: mint a new pair with `brokkr-broker generate-pak`, update the hash everywhere the broker config defines it (`BROKKR__BROKER__PAK_HASH`, or the chart's `broker.pakHash` / `broker.pakHashExistingSecret`), then run `rotate admin` to store it.
+- **If `broker.pak_hash` is unset or empty**, the command generates a fresh PAK itself, stores its hash, and writes the PAK to `/tmp/brokkr-keys/key.txt`. It is never printed to stdout, so read the file immediately — the broker deletes it when it shuts down gracefully.
+
+Rotating with a hash you minted yourself:
+
+```bash
+# 1. Mint the replacement pair offline
+brokkr-broker generate-pak
+
+# 2. Set the new hash in the broker's configuration
+export BROKKR__BROKER__PAK_HASH="<new-hash>"
+
+# 3. Store it on the admin role
+brokkr-broker rotate admin
+```
+
+Letting the broker mint the replacement instead:
 
 ```bash
 # 1. Clear the configured hash so a fresh PAK is generated
 export BROKKR__BROKER__PAK_HASH=""
 
-# 2. Rotate (or restart the broker — startup runs the same upsert)
+# 2. Rotate
 brokkr-broker rotate admin
 
-# 3. Read the new PAK from the key file
+# 3. Read the new PAK from the key file, immediately
 cat /tmp/brokkr-keys/key.txt
 ```
 
-The old admin PAK stops working once the new hash is in the database (subject to the auth cache — see below). If you manage `broker.pak_hash` explicitly, instead generate a new PAK/hash pair yourself and set the new hash in every place the broker config defines it.
+Either way the old admin PAK stops working once the new hash is in the database, subject to the auth cache — a `rotate admin` run from the CLI cannot reach a running broker's cache, so the previous PAK may keep authenticating for up to `broker.auth_cache_ttl_seconds` (default 60). See [Cache Considerations After CLI Rotation](#cache-considerations-after-cli-rotation).
 
 ### Via API
 
