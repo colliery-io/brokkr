@@ -179,7 +179,7 @@ To resolve:
 2. Register the agent with that generator (see [Register or Deregister an Existing Agent](#register-or-deregister-an-existing-agent-admin)).
 3. Retry the target mutation.
 
-What registration does **not** change: the read path `GET /agents/{id}/target-state` is unchanged. An agent's served-stack set is still the **union** of explicit `agent_targets`, label matches, and annotation matches. Registration only gates whether an explicit target can be **created** — it does not alter the read-time union, and existing targets remain valid. (Migration 23 back-fills registrations from pre-existing `agent_targets`, so upgrades do not break current targeting.)
+What registration controls on the read path: `GET /agents/{id}/target-state` serves the **union** of explicit `agent_targets`, label matches, and annotation matches — and the label and annotation legs are limited to stacks whose owning generator the agent is registered with. So labelling a stack cannot pull it onto an agent that never registered with its generator; registration decides which generators an agent hears from, and labels select among their stacks. Explicit targets are not filtered at read time because registration was checked when they were created, and existing targets remain valid. (Migration 23 back-fills registrations from pre-existing `agent_targets`, so upgrades do not break current targeting.)
 
 ## A Note on the Two Isolation Layers
 

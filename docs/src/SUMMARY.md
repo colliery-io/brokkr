@@ -43,7 +43,7 @@
   - [Setting Up Monitoring](./how-to/monitoring-setup.md)
   - [Network Configuration](./how-to/network-configuration.md)
   - [Security Hardening](./how-to/security-hardening.md)
-  - [Setting Up Multi-Tenant Isolation](./how-to/multi-tenant-setup.md)
+  - [Setting Up Multi-Tenant Operation](./how-to/multi-tenant-setup.md)
   - [Container Builds with Shipwright](./how-to/shipwright-builds.md)
   - [Building & Publishing Images](./how-to/build-and-publish-images.md)
 

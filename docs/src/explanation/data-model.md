@@ -119,7 +119,9 @@ The many-to-many relationship between agents and stacks enables:
 - Gradual rollouts
 - Environment-specific targeting
 
-Creating a target is gated by registration: an agent may only target a stack when it is registered with that stack's owning generator (the system generator aside, since every agent is registered with it). The registration check applies to both adding and removing explicit targets, and admins cannot bypass it — there is no force flag. Registration governs only whether an explicit target may be *created*; it does not change what an agent is served at read time, which remains the union of explicit targets, label matches, and annotation matches.
+Creating a target is gated by registration: an agent may only target a stack when it is registered with that stack's owning generator (the system generator aside, since every agent is registered with it). The registration check applies to both adding and removing explicit targets, and admins cannot bypass it — there is no force flag.
+
+Registration also governs the read path. An agent's served-stack set is the union of explicit targets, label matches, and annotation matches, but the label and annotation legs only ever contribute stacks whose owning generator the agent is registered with. Matching therefore selects *within* the generators an agent has consented to, rather than reaching across them: a stack labelled to attract agents cannot reach an agent that never registered with its generator. Explicit targets need no such filter, because registration was already checked when the target was created.
 
 ### Labels vs Annotations
 

@@ -4,9 +4,11 @@ This reference documents the API endpoints for managing generators in Brokkr.
 
 ## Overview
 
-Generators are identity principals that enable external systems (CI/CD pipelines, automation tools) to authenticate with Brokkr and manage resources. Each generator has its own Pre-Authentication Key (PAK) and can only access resources it created.
+Generators are identity principals that enable external systems (CI/CD pipelines, automation tools) and teams to authenticate with Brokkr and manage resources. Each generator has its own Pre-Authentication Key (PAK) and can only access resources it created.
 
-A generator also defines an application-level tenant scope. An agent must be registered with a generator before any stack owned by that generator can be targeted at the agent; this registration is the agent's opt-in consent boundary and is enforced at target-creation time (it cannot be bypassed by admin). A singleton system generator (`is_system = true`, excluded from the `GET /generators` listing) is provisioned at broker startup and auto-registers every agent at creation, carrying fleet/system stacks that reach all agents without per-agent registration. For the concept, see [Generator Registration and Application Scopes](../explanation/security-model.md#generator-registration-and-application-scopes); for operational steps, see [Agent Registration](../how-to/agent-registration.md).
+**A generator is also Brokkr's tenant.** Onboarding a team or an application onto a shared broker means creating a generator and handing over its PAK: stacks carry the owning `generator_id`, templates are private to their generator unless they are system templates, and agents must register with a generator before its stacks reach them. Generators are what the operator console's tenant scope selector lists (`GET /api/v1/paks`) and what `?pak_id=` narrows a listing to. See [Multi-Tenancy](./multi-tenancy.md) for the full tenant model.
+
+An agent must be registered with a generator before any stack owned by that generator is associated with the agent. Registration is the agent's opt-in consent boundary and applies to every association path — explicit targets, label matches, and annotation matches — and cannot be bypassed by admin. A singleton system generator (`is_system = true`, excluded from the `GET /generators` and `GET /paks` listings) is provisioned at broker startup and auto-registers every agent at creation, carrying fleet/system stacks that reach all agents without per-agent registration. For the concept, see [Generator Registration and Application Scopes](../explanation/security-model.md#generator-registration-and-application-scopes); for operational steps, see [Agent Registration](../how-to/agent-registration.md).
 
 ## Data Model
 
@@ -68,6 +70,39 @@ Authorization: Bearer <admin_pak>
 |--------|-------------|
 | 403 | Admin access required |
 | 500 | Internal server error |
+
+---
+
+### List Tenants (Named PAKs)
+
+List generators reduced to identity only, for a tenant scope selector. Requires admin access; the operator console's ephemeral read-only PAK is a read-only admin and qualifies.
+
+The path is `/api/v1/paks`. It is grouped under the `auth` tag in the OpenAPI document but is **not** nested under `/api/v1/auth/`.
+
+```
+GET /api/v1/paks
+Authorization: Bearer <admin_pak>
+```
+
+**Response: 200 OK**
+
+```json
+[
+  { "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890", "name": "team-acme" },
+  { "id": "b2c3d4e5-f6a7-8901-bcde-f12345678901", "name": "team-globex" }
+]
+```
+
+Returns all non-deleted, non-system generators. The system generator is never included. For full generator metadata, use `GET /api/v1/generators`.
+
+**Error Responses:**
+
+| Status | Description |
+|--------|-------------|
+| 403 | `admin_required` — admin access required |
+| 500 | Internal server error |
+
+The IDs returned here are the values accepted by the `?pak_id=` query parameter on `GET /fleet`, `GET /stacks`, and `GET /agent-events`. That parameter is a **view filter, not an authorization boundary** — see [Multi-Tenancy](./multi-tenancy.md#scoped-views-the-pak_id-query-parameter).
 
 ---
 
@@ -427,7 +462,7 @@ Authorization: Bearer <admin_pak | agent_pak>
 
 ### PAK Format
 
-All PAKs — admin, agent, and generator — share the same format: `<prefix>_<short-token>_<long-token>`, by default `brokkr_BR<8 chars>_<24 chars>` (configured by the `pak.*` settings; see [Environment Variables](./environment-variables.md)). The token itself does not encode the role: the broker determines whether a PAK belongs to the admin role, an agent, or a generator by hash lookup. Use `POST /api/v1/auth/pak` to discover which identity a PAK resolves to.
+All PAKs — admin, agent, generator, and the console's ephemeral read-only PAK — share the same format: `<prefix>_<short-token>_<long-token>`, by default `brokkr_BR<8 chars>_<24 chars>` (configured by the `pak.*` settings; see [Environment Variables](./environment-variables.md)). The token itself does not encode the role: the broker determines which identity a PAK belongs to by hash lookup. Use `POST /api/v1/auth/pak` to discover which identity a PAK resolves to; its `generator` field is the caller's tenant ID, and `readonly` is `true` only for the console PAK.
 
 ### Authorization Header
 
@@ -442,11 +477,14 @@ Authorization: Bearer brokkr_BRgen12ab_GeneratorLongTokenExample01
 | Operation | Admin PAK | Generator PAK (own) | Generator PAK (other) |
 |-----------|-----------|---------------------|----------------------|
 | List generators | Yes | No | No |
+| List tenants (`GET /paks`) | Yes | No | No |
 | Create generator | Yes | No | No |
 | Get generator | Yes | Yes | No |
 | Update generator | Yes | Yes | No |
 | Delete generator | Yes | Yes | No |
 | Rotate PAK | Yes | Yes | No |
+| Register / deregister an agent | Yes | No (`403 forbidden`) | No |
+| List registered agents | Yes | Yes | No |
 
 ## Resource Scoping
 
@@ -458,13 +496,25 @@ When a generator creates a stack, the stack's `generator_id` is set to the gener
 
 ### Agent Registration
 
-Before any of a generator's stacks can be targeted at an agent, the agent must be registered with that generator. Registration is explicit (an opt-in boundary) and is enforced when a target is created or removed (`POST /agents/{id}/targets` and `DELETE /agents/{id}/targets/{stack_id}`); an unregistered agent yields error code [`agent_not_registered`](./error-codes.md) (HTTP 403), and admin cannot bypass it. The system generator auto-registers every agent at creation, so system/fleet stacks reach all agents without per-agent registration. Application-scoped generators are registered explicitly, via the registration endpoints above or at agent startup. Registration gates only the *creation* of explicit targets; the agent's read-time served-stack set (`GET /agents/{id}/target-state`) is unchanged. See [Agent Registration](../how-to/agent-registration.md) for operations and [Multi-Tenancy](./multi-tenancy.md) for how this application-level isolation relates to schema-per-tenant deployment isolation.
+Before any of a generator's stacks are associated with an agent, the agent must be registered with that generator. Registration is explicit (an opt-in boundary) and applies to all three association paths:
+
+| Path | Enforcement |
+|------|-------------|
+| Explicit target | Gated at creation and removal (`POST /agents/{id}/targets`, `DELETE /agents/{id}/targets/{stack_id}`). An unregistered agent yields error code [`agent_not_registered`](./error-codes.md) (HTTP 403), and admin cannot bypass it |
+| Shared label | Filtered at read time — a label match associates the stack only when the agent is registered with the stack's owning generator |
+| Shared annotation | Filtered at read time, on the same rule |
+
+An agent with no registrations therefore receives nothing from label or annotation matching, and two generators can safely reuse the same label and annotation vocabulary. The served set returned by `GET /agents/{id}/target-state` reflects this rule.
+
+The system generator auto-registers every agent at creation, so system/fleet stacks reach all agents without per-agent registration. Other generators are registered explicitly, via the registration endpoints above or at agent startup. See [Agent Registration](../how-to/agent-registration.md) for operations and [Multi-Tenancy](./multi-tenancy.md) for the tenant model this enforces.
 
 ### Templates
 
 Templates can be:
-- **Generator-scoped**: Created by a generator, only visible to that generator
-- **System templates**: Created by admin (no `generator_id`), visible to all generators
+- **Generator-scoped**: created by a generator, and readable, modifiable, and instantiable only by that generator
+- **System templates**: created by admin (`generator_id` is null), readable and instantiable by every generator — the sanctioned cross-tenant sharing mechanism
+
+A generator that reads or instantiates another generator's template receives `403` with error code `template_not_accessible`. This applies to `GET /templates/{id}`, the template label and annotation reads, and `POST /stacks/{id}/deployment-objects/from-template`. Admin may access any template.
 
 ### Deployment Objects
 
@@ -505,4 +555,5 @@ This allows reusing names after a generator is deleted.
 - [Agent Registration](../how-to/agent-registration.md) - Registering agents with generators for targeting
 - [Stack Templates](../how-to/templates.md) - Using templates with generators
 - [Security Model](../explanation/security-model.md#generator-registration-and-application-scopes) - Generator registration and the targeting authorization gate
-- [Multi-Tenancy](./multi-tenancy.md) - Application-level vs deployment-level isolation
+- [Multi-Tenancy](./multi-tenancy.md) - The tenant model, tenant listing, and `pak_id` scoped views
+- [Multi-Tenant Setup](../how-to/multi-tenant-setup.md) - Onboarding teams onto a shared broker
