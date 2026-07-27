@@ -42,9 +42,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     match cli.command {
         Commands::Serve => commands::serve(&config).await?,
         Commands::Create(create_commands) => match create_commands.command {
-            CreateSubcommands::Agent { name, cluster_name } => {
-                commands::create_agent(&config, name, cluster_name)?
-            }
+            CreateSubcommands::Agent {
+                name,
+                cluster_name,
+                generator_ids,
+            } => commands::create_agent(&config, name, cluster_name, generator_ids)?,
             CreateSubcommands::Generator { name, description } => {
                 commands::create_generator(&config, name, description)?
             }

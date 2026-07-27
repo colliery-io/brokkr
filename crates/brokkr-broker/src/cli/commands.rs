@@ -376,10 +376,18 @@ pub fn rotate_generator_key(
     Ok(new_pak)
 }
 
+/// Creates an agent and its initial PAK.
+///
+/// Mirrors `POST /api/v1/agents` (BROKKR-T-0289): the agent is always
+/// registered with the system generator, and additionally with any generators
+/// named in `generator_ids`, which are validated before anything is written.
+/// Registration is the consent boundary — an agent with no registrations
+/// receives no stacks from label or annotation matching (BROKKR-T-0287).
 pub fn create_agent(
     config: &Settings,
     name: String,
     cluster_name: String,
+    generator_ids: Vec<uuid::Uuid>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     info!("Creating new agent: {}", name);
 
@@ -392,6 +400,14 @@ pub fn create_agent(
         config.database.schema.as_deref(),
     );
     let dal = DAL::new(pool.clone());
+
+    // Validate every requested generator before creating anything, so a typo
+    // doesn't leave a half-registered agent behind.
+    for gid in &generator_ids {
+        if dal.generators().get(*gid)?.is_none() {
+            return Err(format!("generator {} does not exist", gid).into());
+        }
+    }
 
     let new_agent = NewAgent::new(name, cluster_name)
         .map_err(|e| format!("Failed to create NewAgent: {}", e))?;
@@ -408,12 +424,33 @@ pub fn create_agent(
         &agent.name,
     );
 
+    // Register with the system generator (always), matching the API path.
+    let mut registered: Vec<String> = Vec::new();
+    if let Some(system_id) = dal.generators().get_system_generator_id()? {
+        dal.agent_generator_registrations()
+            .create(agent.id, system_id)?;
+        registered.push("system (fleet scope)".to_string());
+    } else {
+        warn!(
+            "System generator not found; agent {} created without fleet-scope registration. \
+             Start the broker once to provision it, then register the agent.",
+            agent.id
+        );
+    }
+
+    // Register with any additional generators requested.
+    for gid in &generator_ids {
+        dal.agent_generator_registrations().create(agent.id, *gid)?;
+        registered.push(gid.to_string());
+    }
+
     info!("Successfully created agent with ID: {}", agent.id);
     println!("Agent created successfully:");
     println!("ID: {}", agent.id);
     println!("Name: {}", agent.name);
     println!("Cluster: {}", agent.cluster_name);
     println!("Initial PAK: {}", pak);
+    println!("Registered with: {}", registered.join(", "));
 
     Ok(())
 }
