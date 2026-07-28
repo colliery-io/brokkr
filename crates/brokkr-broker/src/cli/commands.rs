@@ -6,7 +6,7 @@
 
 use crate::api;
 use crate::dal::DAL;
-use crate::db::create_shared_connection_pool;
+use crate::db::{ConnectionPool, create_shared_connection_pool};
 use crate::utils;
 use crate::utils::pak;
 use brokkr_models::models::agents::NewAgent;
@@ -35,6 +35,33 @@ struct Count {
     count: i64,
 }
 
+/// Builds the database connection pool for a CLI entry point from `config`,
+/// honoring `database.schema` (`BROKKR__DATABASE__SCHEMA`).
+///
+/// Every command in this module that talks to the database must go through
+/// this: it is the single place that plumbs the configured schema into the
+/// pool. The schema is *not* applied once at construction — it is applied per
+/// connection by [`ConnectionPool::get`], which issues
+/// `SET search_path TO <schema>, public` on each checkout. Callers must
+/// therefore take connections via `pool.get()` (which the DAL does internally),
+/// never `pool.pool.get()`, or the connection lands on `public` regardless of
+/// configuration.
+///
+/// Opening a bare `PgConnection::establish(&config.database.url)` bypasses all
+/// of this and silently operates on `public`; that was BROKKR-T-0297.
+///
+/// `max_size` is per-command: `serve` needs a large pool, one-shot subcommands
+/// need one connection (two where the operation emits webhook events, which
+/// need a second connection while the first is still held).
+pub fn connection_pool_from_settings(config: &Settings, max_size: u32) -> ConnectionPool {
+    create_shared_connection_pool(
+        &config.database.url,
+        "brokkr",
+        max_size,
+        config.database.schema.as_deref(),
+    )
+}
+
 /// Function to start the Brokkr Broker server
 ///
 /// This function initializes the database, runs migrations, checks for first-time setup,
@@ -48,12 +75,7 @@ pub async fn serve(config: &Settings) -> Result<(), Box<dyn std::error::Error>> 
     // - HTTP requests (middleware holds 1 connection while DAL methods need another)
     // - Concurrent request handling and webhook event emission
     info!("Creating database connection pool");
-    let connection_pool = create_shared_connection_pool(
-        &config.database.url,
-        "brokkr",
-        50,
-        config.database.schema.as_deref(),
-    );
+    let connection_pool = connection_pool_from_settings(config, 50);
     info!("Database connection pool created successfully");
 
     // Set up schema if configured (for multi-tenant deployments)
@@ -95,6 +117,31 @@ pub async fn serve(config: &Settings) -> Result<(), Box<dyn std::error::Error>> 
     } else {
         info!("Existing application detected. Proceeding with normal startup.");
     }
+
+    // Backstop for the publicly-known default admin PAK (BROKKR-T-0298).
+    //
+    // Deliberately a warning, not a refusal — the opposite of the webhook
+    // encryption-key guard below. Refusing here would need a development
+    // opt-out flag (`angreal local up`, the compose harness and the integration
+    // suites all boot with the shipped default), and such flags end up copied
+    // into production manifests: a worse footgun than the one being closed.
+    // Documentation (BROKKR-T-0286) is the primary control; this is the net
+    // under it.
+    //
+    // Runs after the first-run branch so `admin_role` reflects whatever
+    // `upsert_admin` just wrote, and reads the stored hash as well as the
+    // configured one: an install that first booted with the default keeps
+    // accepting it even after the config is corrected.
+    let stored_admin_hash = utils::stored_admin_pak_hash(&mut conn).unwrap_or_else(|e| {
+        warn!("Could not read the stored admin PAK hash to check it against the shipped default (the check is a backstop, so startup continues): {}", e);
+        None
+    });
+    let default_admin_pak = utils::detect_default_admin_pak_hash(
+        config.broker.pak_hash.as_deref(),
+        stored_admin_hash.as_deref(),
+    );
+    utils::report_default_admin_pak_hash(&default_admin_pak);
+    utils::start_default_admin_pak_reminder_task(default_admin_pak);
 
     // Initialize Data Access Layer
     info!("Initializing Data Access Layer");
@@ -211,7 +258,9 @@ pub async fn serve(config: &Settings) -> Result<(), Box<dyn std::error::Error>> 
             agent_events_cleanup_config,
         );
     } else {
-        info!("Agent-events retention disabled (agent_events_retention_days = 0); skipping eviction task");
+        info!(
+            "Agent-events retention disabled (agent_events_retention_days = 0); skipping eviction task"
+        );
     }
 
     // Create reloadable configuration for hot-reload support
@@ -253,12 +302,18 @@ pub async fn serve(config: &Settings) -> Result<(), Box<dyn std::error::Error>> 
 /// Function to rotate the admin key
 ///
 /// This function generates a new admin key and updates it in the database.
+///
+/// The connection comes from [`connection_pool_from_settings`] rather than a
+/// bare `PgConnection::establish`, so `database.schema` is applied to it. With a
+/// bare connection no `search_path` was ever set and the rotation silently hit
+/// the `public` schema — failing to find the configured schema's `admin_role`
+/// row, or rewriting `public`'s (BROKKR-T-0297).
 pub fn rotate_admin(config: &Settings) -> Result<(), Box<dyn std::error::Error>> {
     info!("Rotating admin key");
 
-    // Create database connection
-    let mut conn = PgConnection::establish(&config.database.url)
-        .expect("Failed to establish database connection");
+    // Create database connection (search_path applied on checkout)
+    let pool = connection_pool_from_settings(config, 1);
+    let mut conn = pool.get()?;
 
     // Run the first_startup function to generate a new admin key
     utils::upsert_admin(&mut conn, config)?;
@@ -332,12 +387,7 @@ pub fn rotate_agent_key(
 ) -> Result<String, Box<dyn std::error::Error>> {
     info!("Rotating agent key");
 
-    let pool = create_shared_connection_pool(
-        &config.database.url,
-        "brokkr",
-        1,
-        config.database.schema.as_deref(),
-    );
+    let pool = connection_pool_from_settings(config, 1);
     let dal = DAL::new(pool.clone());
 
     let agent = dal.agents().get(uuid)?.ok_or("Agent not found")?;
@@ -365,12 +415,7 @@ pub fn rotate_generator_key(
 ) -> Result<String, Box<dyn std::error::Error>> {
     info!("Rotating generator key");
 
-    let pool = create_shared_connection_pool(
-        &config.database.url,
-        "brokkr",
-        1,
-        config.database.schema.as_deref(),
-    );
+    let pool = connection_pool_from_settings(config, 1);
     let dal = DAL::new(pool.clone());
 
     let generator = dal.generators().get(uuid)?.ok_or("Generator not found")?;
@@ -414,12 +459,7 @@ pub fn create_agent(
 
     // Use pool size 2 because agent creation emits webhook events
     // which require a second connection while the first is still held
-    let pool = create_shared_connection_pool(
-        &config.database.url,
-        "brokkr",
-        2,
-        config.database.schema.as_deref(),
-    );
+    let pool = connection_pool_from_settings(config, 2);
     let dal = DAL::new(pool.clone());
 
     // Validate every requested generator before creating anything, so a typo
@@ -483,12 +523,7 @@ pub fn create_generator(
 ) -> Result<(), Box<dyn std::error::Error>> {
     info!("Creating new generator: {}", name);
 
-    let pool = create_shared_connection_pool(
-        &config.database.url,
-        "brokkr",
-        1,
-        config.database.schema.as_deref(),
-    );
+    let pool = connection_pool_from_settings(config, 1);
     let dal = DAL::new(pool.clone());
 
     let new_generator = NewGenerator::new(name, description)

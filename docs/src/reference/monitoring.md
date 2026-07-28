@@ -61,6 +61,21 @@ rate(brokkr_http_request_duration_seconds_sum[5m])
 
 ### System State Metrics
 
+#### `brokkr_default_admin_pak_hash_in_use`
+- **Type:** Gauge
+- **Description:** `1` when the broker's admin credential is still the publicly-known development PAK hash shipped in the binary, `0` otherwise. The gauge is always published, so a healthy broker reports `0` rather than omitting the series — an `== 1` alert is therefore meaningful rather than silently absent.
+- **Labels:** None
+
+The check covers both the configured hash and the one actually stored on the admin role. Those can differ: an install that first started with the default and only later set `BROKKR__BROKER__PAK_HASH` keeps the public hash in the database and keeps accepting the public PAK, because the admin bootstrap runs only on first startup or an explicit rotation. In that case a restart does not help — rotate the credential.
+
+**Example PromQL:**
+```promql
+# Alert while the public development admin credential is accepted
+brokkr_default_admin_pak_hash_in_use == 1
+```
+
+See [Replace the Default Admin PAK](../how-to/security-hardening.md) for the remediation.
+
 #### `brokkr_active_agents`
 - **Type:** Gauge
 - **Description:** Number of currently active agents

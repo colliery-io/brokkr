@@ -4,6 +4,8 @@
  * See LICENSE file in the project root for full license text.
  */
 
+mod cli_schema;
+mod default_admin_pak;
 mod multi_tenant;
 
 use brokkr_utils::Settings;
