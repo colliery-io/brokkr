@@ -728,11 +728,8 @@ fn test_delete_older_than_retention() {
         .dal
         .agents()
         .create(
-            &NewAgent::new(
-                "Agent for retention".to_string(),
-                "TestCluster".to_string(),
-            )
-            .expect("Failed to create NewAgent"),
+            &NewAgent::new("Agent for retention".to_string(), "TestCluster".to_string())
+                .expect("Failed to create NewAgent"),
         )
         .expect("Failed to create agent");
 

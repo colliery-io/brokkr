@@ -7,12 +7,12 @@
 mod admin;
 mod agent_events;
 mod agents;
-mod generator_registration;
 mod audit_logs;
 mod auth;
 mod deployment_objects;
 mod diagnostics;
 mod fleet;
+mod generator_registration;
 mod generators;
 mod health;
 mod pak_scoping;

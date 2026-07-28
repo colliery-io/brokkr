@@ -448,7 +448,10 @@ impl TestFixture {
     /// compatible with the registration enforcement added in T-0246.
     pub fn register_agent_with_defaults(&self, agent_id: Uuid) {
         if let Ok(Some(sys_id)) = self.dal.generators().get_system_generator_id() {
-            let _ = self.dal.agent_generator_registrations().create(agent_id, sys_id);
+            let _ = self
+                .dal
+                .agent_generator_registrations()
+                .create(agent_id, sys_id);
         }
         let _ = self
             .dal

@@ -16,10 +16,7 @@ use brokkr_broker::utils::ui_pak;
 
 use crate::fixtures::TestFixture;
 
-async fn get_paks(
-    app: axum::Router,
-    token: &str,
-) -> (StatusCode, Option<Vec<serde_json::Value>>) {
+async fn get_paks(app: axum::Router, token: &str) -> (StatusCode, Option<Vec<serde_json::Value>>) {
     let response = app
         .oneshot(
             Request::builder()
@@ -99,10 +96,8 @@ async fn test_list_paks_allows_ui_pak_rejects_non_admin() {
     assert_eq!(status, StatusCode::FORBIDDEN);
 
     // An agent PAK is not an admin: 403.
-    let (_agent, agent_pak) = fixture.create_test_agent_with_pak(
-        "paks-agent".to_string(),
-        "paks-cluster".to_string(),
-    );
+    let (_agent, agent_pak) =
+        fixture.create_test_agent_with_pak("paks-agent".to_string(), "paks-cluster".to_string());
     let (status, _) = get_paks(app, &agent_pak).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
 }

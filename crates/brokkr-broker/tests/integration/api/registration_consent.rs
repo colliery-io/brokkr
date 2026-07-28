@@ -56,8 +56,7 @@ async fn target_state_object_ids(fixture: &TestFixture, agent_id: Uuid) -> Vec<U
 async fn test_label_match_delivers_stack_from_registered_generator() {
     let fixture = TestFixture::new();
 
-    let (gen_a, _) =
-        fixture.create_test_generator_with_pak("tenant-a".to_string(), None);
+    let (gen_a, _) = fixture.create_test_generator_with_pak("tenant-a".to_string(), None);
     let (agent, _) =
         fixture.create_bare_agent_with_pak("consent-agent".to_string(), "cluster-1".to_string());
     fixture.register_agent_with_generator(agent.id, gen_a.id);
@@ -89,10 +88,8 @@ async fn test_label_match_delivers_stack_from_registered_generator() {
 async fn test_label_match_requires_registration_consent() {
     let fixture = TestFixture::new();
 
-    let (gen_a, _) =
-        fixture.create_test_generator_with_pak("tenant-a".to_string(), None);
-    let (gen_b, _) =
-        fixture.create_test_generator_with_pak("tenant-b".to_string(), None);
+    let (gen_a, _) = fixture.create_test_generator_with_pak("tenant-a".to_string(), None);
+    let (gen_b, _) = fixture.create_test_generator_with_pak("tenant-b".to_string(), None);
     let (agent, _) =
         fixture.create_bare_agent_with_pak("consent-agent".to_string(), "cluster-1".to_string());
     fixture.register_agent_with_generator(agent.id, gen_a.id);
@@ -126,10 +123,9 @@ async fn test_label_match_requires_registration_consent() {
 async fn test_unregistered_agent_receives_nothing_from_label_match() {
     let fixture = TestFixture::new();
 
-    let (gen_a, _) =
-        fixture.create_test_generator_with_pak("tenant-a".to_string(), None);
-    let (agent, _) = fixture
-        .create_bare_agent_with_pak("no-registrations".to_string(), "cluster-1".to_string());
+    let (gen_a, _) = fixture.create_test_generator_with_pak("tenant-a".to_string(), None);
+    let (agent, _) =
+        fixture.create_bare_agent_with_pak("no-registrations".to_string(), "cluster-1".to_string());
 
     fixture.create_test_agent_label(agent.id, "env=consent-prod".to_string());
     let stack_a = fixture.create_test_stack("tenant-a-stack".to_string(), None, gen_a.id);
@@ -154,10 +150,8 @@ async fn test_unregistered_agent_receives_nothing_from_label_match() {
 async fn test_annotation_match_requires_registration_consent() {
     let fixture = TestFixture::new();
 
-    let (gen_a, _) =
-        fixture.create_test_generator_with_pak("tenant-a".to_string(), None);
-    let (gen_b, _) =
-        fixture.create_test_generator_with_pak("tenant-b".to_string(), None);
+    let (gen_a, _) = fixture.create_test_generator_with_pak("tenant-a".to_string(), None);
+    let (gen_b, _) = fixture.create_test_generator_with_pak("tenant-b".to_string(), None);
     let (agent, _) =
         fixture.create_bare_agent_with_pak("consent-agent".to_string(), "cluster-1".to_string());
     fixture.register_agent_with_generator(agent.id, gen_a.id);

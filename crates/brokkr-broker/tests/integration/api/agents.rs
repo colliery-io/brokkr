@@ -299,10 +299,12 @@ async fn test_create_event_agent_id_mismatch_returns_400() {
 
     let agent_a = fixture.create_test_agent("Agent A".to_string(), "Cluster A".to_string());
     let agent_b = fixture.create_test_agent("Agent B".to_string(), "Cluster B".to_string());
-    let test_stack =
-        fixture.create_test_stack("Mismatch Stack".to_string(), None, fixture.admin_generator.id);
-    let test_do =
-        fixture.create_test_deployment_object(test_stack.id, "DO".to_string(), false);
+    let test_stack = fixture.create_test_stack(
+        "Mismatch Stack".to_string(),
+        None,
+        fixture.admin_generator.id,
+    );
+    let test_do = fixture.create_test_deployment_object(test_stack.id, "DO".to_string(), false);
 
     // Body attributes the event to agent_b, but we POST to agent_a's path.
     let new_event = NewAgentEvent::new(
@@ -439,8 +441,7 @@ async fn test_add_agent_label_duplicate_returns_409() {
     let app = fixture.create_test_router().with_state(fixture.dal.clone());
     let admin_pak = fixture.admin_pak.clone();
 
-    let test_agent =
-        fixture.create_test_agent("Dup Agent".to_string(), "Dup Cluster".to_string());
+    let test_agent = fixture.create_test_agent("Dup Agent".to_string(), "Dup Cluster".to_string());
     fixture.create_test_agent_label(test_agent.id, "dup_label".to_string());
 
     let new_label = NewAgentLabel::new(test_agent.id, "dup_label".to_string())
@@ -722,8 +723,7 @@ async fn test_add_agent_target_duplicate_returns_409() {
     let app = fixture.create_test_router().with_state(fixture.dal.clone());
     let admin_pak = fixture.admin_pak.clone();
 
-    let test_agent =
-        fixture.create_test_agent("Dup Agent".to_string(), "Dup Cluster".to_string());
+    let test_agent = fixture.create_test_agent("Dup Agent".to_string(), "Dup Cluster".to_string());
     let new_stack = NewStack::new("Dup Stack".to_string(), None, fixture.admin_generator.id)
         .expect("Failed to create NewStack");
     let stack = fixture

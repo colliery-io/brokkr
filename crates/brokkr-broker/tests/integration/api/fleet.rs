@@ -58,7 +58,10 @@ async fn test_fleet_surfaces_agent_reported_k8s_connectivity() {
         .find(|r| r["agent_id"] == serde_json::json!(reporting.id))
         .expect("reporting agent missing from fleet rollup");
     assert_eq!(reporting_record["k8s_reachable"], Value::Bool(false));
-    assert_eq!(reporting_record["k8s_api_latency_ms"], serde_json::json!(42));
+    assert_eq!(
+        reporting_record["k8s_api_latency_ms"],
+        serde_json::json!(42)
+    );
 
     let silent_record = records
         .iter()

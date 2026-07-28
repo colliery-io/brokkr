@@ -368,10 +368,7 @@ impl DeploymentObjectsDAL<'_> {
         // non-deleted agent_event.
         let event_pairs: Vec<(Uuid, Uuid)> = agent_events::table
             .filter(agent_events::deleted_at.is_null())
-            .select((
-                agent_events::agent_id,
-                agent_events::deployment_object_id,
-            ))
+            .select((agent_events::agent_id, agent_events::deployment_object_id))
             .load::<(Uuid, Uuid)>(conn)?;
         let acknowledged: HashSet<(Uuid, Uuid)> = event_pairs.into_iter().collect();
 
