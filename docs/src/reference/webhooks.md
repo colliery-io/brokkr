@@ -33,11 +33,13 @@ The `data` object of each delivered payload carries exactly the fields listed be
 | Event Type | Description | Payload Fields |
 |------------|-------------|----------------|
 | `deployment.created` | New deployment object created | `deployment_object_id`, `stack_id`, `sequence_id`, `created_at` |
-| `deployment.applied` | Deployment successfully applied by agent | `agent_event_id`, `agent_id`, `deployment_object_id`, `event_type`, `status`, `message`, `created_at` |
-| `deployment.failed` | Deployment failed to apply | `agent_event_id`, `agent_id`, `deployment_object_id`, `event_type`, `status`, `message`, `created_at` |
+| `deployment.applied` | Deployment successfully applied by agent | `agent_event_id`, `agent_id`, `deployment_object_id`, `stack_id`, `event_type`, `status`, `message`, `created_at` |
+| `deployment.failed` | Deployment failed to apply | `agent_event_id`, `agent_id`, `deployment_object_id`, `stack_id`, `event_type`, `status`, `message`, `created_at` |
 | `deployment.deleted` | Deployment object soft-deleted | `deployment_object_id`, `stack_id`, `deleted_at` |
 
-`deployment.applied` and `deployment.failed` are the same payload with a different event type; `status` distinguishes them. Neither carries `stack_id` — only `deployment_object_id`.
+`deployment.applied` and `deployment.failed` are the same payload with a different event type; `status` distinguishes them. Both carry the owning `stack_id` alongside `deployment_object_id`, so a consumer can correlate an apply to its stack without a second API call.
+
+`deployment.applied` and `deployment.failed` emit `"stack_id": null` when the deployment object has been soft-deleted between the apply and the agent reporting it, so the owning stack is no longer resolvable.
 
 `deployment.deleted` emits `"stack_id": null` when the deployment object row is no longer readable at deletion time.
 
@@ -80,7 +82,7 @@ These are the only recognized filter fields. Label-based routing is `target_labe
 - A `filters` object that is absent, `null`, or empty (`{}`) matches every event of a subscribed type.
 - Every field that is set must match. Setting both `agent_id` and `stack_id` requires the payload to carry both, with both values equal.
 - **An event that does not carry a filtered field never matches.** A subscription filtering on `stack_id` receives nothing from event types whose payload has no `stack_id`, and one filtering on `agent_id` receives nothing from event types whose payload has no `agent_id`. Filters narrow; they never widen to "or the event did not say."
-- A JSON `null` in the payload counts as absent, not as a value. A `stack_id` filter therefore excludes a `deployment.deleted` event that emitted `"stack_id": null`, and an `agent_id` filter excludes a `workorder.completed` or `workorder.failed` event for an unclaimed work order.
+- A JSON `null` in the payload counts as absent, not as a value. A `stack_id` filter therefore excludes a `deployment.deleted`, `deployment.applied`, or `deployment.failed` event that emitted `"stack_id": null`, and an `agent_id` filter excludes a `workorder.completed` or `workorder.failed` event for an unclaimed work order.
 - A stored filter that cannot be parsed as JSON **fails closed**: the subscription receives nothing at all, and the broker logs an error naming the subscription for each excluded event. Nothing in the API can write such a value; it indicates a hand-edited or externally written row.
 
 ### Filter Fields by Event Type
@@ -94,8 +96,8 @@ Which filter field is usable depends on what each event payload carries:
 | `stack.created` | Never matches | Usable |
 | `stack.deleted` | Never matches | Usable |
 | `deployment.created` | Never matches | Usable |
-| `deployment.applied` | Usable | Never matches |
-| `deployment.failed` | Usable | Never matches |
+| `deployment.applied` | Usable | Usable, except when the payload's `stack_id` is `null` |
+| `deployment.failed` | Usable | Usable, except when the payload's `stack_id` is `null` |
 | `deployment.deleted` | Never matches | Usable, except when the payload's `stack_id` is `null` |
 | `workorder.created` | Never matches | Never matches |
 | `workorder.claimed` | Usable | Never matches |
@@ -104,7 +106,7 @@ Which filter field is usable depends on what each event payload carries:
 
 "Never matches" means the subscription receives no deliveries for that event type while that filter field is set. Because `workorder.created` carries neither field, any filter at all excludes it.
 
-A subscription combining a wildcard such as `deployment.*` with a `stack_id` filter therefore receives `deployment.created` and `deployment.deleted` but not `deployment.applied` or `deployment.failed`. To receive apply results for a specific stack, subscribe without a filter and select on `deployment_object_id` in the receiving service.
+A subscription combining a wildcard such as `deployment.*` with a `stack_id` filter therefore receives the whole deployment lifecycle for that stack — `deployment.created`, `deployment.applied`, `deployment.failed`, and `deployment.deleted`. The only gap is an event whose payload `stack_id` is `null` because the deployment object was no longer resolvable when the event was emitted.
 
 ### Removed Fields
 
@@ -475,6 +477,7 @@ Consumers should not rely on the `X-Brokkr-*` headers for broker-delivered event
     "agent_event_id": "f0e1d2c3-...",
     "agent_id": "e5f6g7h8-...",
     "deployment_object_id": "a1b2c3d4-...",
+    "stack_id": "d4c3b2a1-...",
     "event_type": "APPLY",
     "status": "SUCCESS",
     "message": "Applied successfully",

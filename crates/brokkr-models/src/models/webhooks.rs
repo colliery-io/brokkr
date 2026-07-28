@@ -118,9 +118,9 @@ impl BrokkrEvent {
 /// * Every filter field that is set must match: the fields are ANDed.
 /// * **An event that does not carry a filtered field does not match.** A
 ///   subscription filtering on `stack_id` therefore receives nothing for event
-///   types whose payload has no `stack_id` (`agent.*`, `workorder.*`, and
-///   `deployment.applied`/`deployment.failed`, which carry only
-///   `deployment_object_id`). This is deliberate: a filter is a narrowing
+///   types whose payload has no `stack_id` (`agent.*` and `workorder.*`; the
+///   whole `deployment.*` family does carry it). This is deliberate: a filter
+///   is a narrowing
 ///   statement, and widening it to "…or the event didn't say" would deliver
 ///   precisely the events the operator asked to exclude.
 /// * A JSON `null` counts as absent, not as a value. Several payloads emit

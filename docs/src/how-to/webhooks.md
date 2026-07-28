@@ -169,7 +169,7 @@ curl -X POST "http://broker:3000/api/v1/webhooks" \
 Only `agent_id` and `stack_id` are recognized. Two rules decide what you actually receive:
 
 - Both fields must match if both are set.
-- **An event that does not carry the field you filtered on is never delivered.** Filtering on `stack_id` while subscribing to `deployment.*` silently drops `deployment.applied` and `deployment.failed`, because those payloads carry only `deployment_object_id`. That is why the example above subscribes to the two event types that do carry `stack_id`.
+- **An event that does not carry the field you filtered on is never delivered.** A `stack_id` filter receives nothing from event types whose payload has no `stack_id` — `workorder.*` and the `agent.*` events, for instance. The whole `deployment.*` family carries `stack_id`, so filtering `deployment.*` by stack delivers the full lifecycle for that stack. The one gap is an event whose `stack_id` is `null` because the deployment object was already soft-deleted when the event was emitted; a JSON `null` counts as absent, not as a value.
 
 Check the [filter fields by event type table](../reference/webhooks.md#filter-fields-by-event-type) before setting a filter, and confirm the response echoes the filter you intended.
 

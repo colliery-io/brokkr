@@ -802,6 +802,97 @@ async fn test_pending_agent_webhooks_undecryptable_auth_header_never_delivers() 
     );
 }
 
+/// Deletes a subscription row while leaving its deliveries behind.
+///
+/// `webhook_deliveries.subscription_id` is `ON DELETE CASCADE` (migration
+/// `13_webhooks`), so a plain delete takes the deliveries with it and the
+/// "subscription not found" arm is unreachable from the outside. In production
+/// that arm is reached by a delete that lands *between* the claim and the
+/// subscription fetch of a single poll, where the claimed rows are already in
+/// memory; suppressing the FK trigger for one transaction reproduces the same
+/// on-disk state deterministically. `SET LOCAL` is reverted when the
+/// transaction ends, so the pooled connection is handed back untouched.
+fn delete_subscription_without_cascade(fixture: &TestFixture, subscription_id: uuid::Uuid) {
+    use brokkr_models::schema::webhook_subscriptions;
+    use diesel::connection::SimpleConnection;
+    use diesel::prelude::*;
+
+    let mut conn = fixture.dal.conn().expect("db connection");
+    conn.transaction::<_, diesel::result::Error, _>(|conn| {
+        conn.batch_execute("SET LOCAL session_replication_role = replica")?;
+        diesel::delete(
+            webhook_subscriptions::table.filter(webhook_subscriptions::id.eq(subscription_id)),
+        )
+        .execute(conn)?;
+        Ok(())
+    })
+    .expect("subscription deleted without cascading to its deliveries");
+}
+
+#[tokio::test]
+async fn test_pending_agent_webhooks_missing_subscription_marks_delivery_dead() {
+    // A delivery whose subscription is gone used to `continue` *after* the
+    // delivery was claimed, leaving it acquired until the TTL lapsed, reclaimed
+    // on the next poll, and failing forever with attempts pinned at 0
+    // (BROKKR-T-0304). There is nothing left to deliver to, so it must die.
+    use brokkr_broker::utils::encryption::encrypt_string;
+
+    let fixture = TestFixture::new();
+    let (agent_id, agent_pak, delivery_id) = setup_agent_targeted_delivery(
+        &fixture,
+        encrypt_string("https://example.com/webhook").unwrap(),
+        None,
+    );
+    let subscription_id = fixture
+        .dal
+        .webhook_deliveries()
+        .get(delivery_id)
+        .unwrap()
+        .expect("delivery created")
+        .subscription_id;
+    delete_subscription_without_cascade(&fixture, subscription_id);
+
+    let pending = poll_pending(&fixture, agent_id, &agent_pak).await;
+    assert!(
+        !pending
+            .iter()
+            .any(|d| d["id"] == delivery_id.to_string().as_str()),
+        "a delivery with no subscription must not be handed to the agent"
+    );
+
+    let delivery = fixture
+        .dal
+        .webhook_deliveries()
+        .get(delivery_id)
+        .unwrap()
+        .expect("delivery still exists");
+    assert_eq!(delivery.status, "dead");
+    assert_eq!(delivery.attempts, 1);
+    assert!(delivery.acquired_by.is_none(), "claim must be released");
+    let last_error = delivery.last_error.expect("last_error recorded");
+    assert!(
+        last_error.contains("Subscription not found"),
+        "the missing subscription must be attributable, got: {}",
+        last_error
+    );
+
+    // Second poll: a dead delivery is not claimable, so the reclaim loop ends.
+    let pending = poll_pending(&fixture, agent_id, &agent_pak).await;
+    assert!(
+        !pending
+            .iter()
+            .any(|d| d["id"] == delivery_id.to_string().as_str())
+    );
+    let delivery = fixture
+        .dal
+        .webhook_deliveries()
+        .get(delivery_id)
+        .unwrap()
+        .unwrap();
+    assert_eq!(delivery.status, "dead");
+    assert_eq!(delivery.attempts, 1, "delivery must not be retried");
+}
+
 // =============================================================================
 // Retry Classification Tests (BROKKR-T-0288)
 // =============================================================================
@@ -1230,12 +1321,46 @@ async fn test_webhook_filter_field_absent_from_event_never_matches() {
     );
 }
 
+/// Reports an agent event as the agent itself, which is what emits
+/// `deployment.applied` (`status` "SUCCESS") or `deployment.failed` (anything
+/// else). Asserts the 201 so callers only deal with the resulting deliveries.
+async fn report_agent_event(
+    fixture: &TestFixture,
+    agent_id: uuid::Uuid,
+    agent_pak: &str,
+    deployment_object_id: uuid::Uuid,
+    status: &str,
+) {
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/agents/{agent_id}/events"))
+                .header("Authorization", format!("Bearer {agent_pak}"))
+                .header("Content-Type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "agent_id": agent_id,
+                        "deployment_object_id": deployment_object_id,
+                        "event_type": "deploy",
+                        "status": status,
+                        "message": "reported by test",
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+}
+
 #[tokio::test]
-async fn test_webhook_filter_stack_id_excludes_deployment_applied() {
-    // `deployment.applied`/`.failed` carry agent_id and deployment_object_id but
-    // no stack_id, so a stack_id filter excludes them. Deliberate: resolving the
-    // owning stack would mean a DAL lookup per subscription on the write path.
-    // This test pins the behavior so the gap is visible rather than surprising.
+async fn test_webhook_filter_stack_id_delivers_deployment_applied() {
+    // BROKKR-T-0305 replaced the exclusion this test used to pin: the emission
+    // site now resolves the owning stack once, so `deployment.applied` carries
+    // `stack_id` and a stack_id filter scopes apply results to a stack.
     let fixture = TestFixture::new();
     let generator = fixture.create_test_generator(
         format!("applied-gen-{}", uuid::Uuid::new_v4()),
@@ -1244,6 +1369,11 @@ async fn test_webhook_filter_stack_id_excludes_deployment_applied() {
     );
     let stack = fixture.create_test_stack(
         format!("applied-stack-{}", uuid::Uuid::new_v4()),
+        None,
+        generator.id,
+    );
+    let other_stack = fixture.create_test_stack(
+        format!("applied-other-{}", uuid::Uuid::new_v4()),
         None,
         generator.id,
     );
@@ -1261,6 +1391,13 @@ async fn test_webhook_filter_stack_id_excludes_deployment_applied() {
         Some(json!({"stack_id": stack.id})),
     )
     .await;
+    let other_stack_filtered = create_webhook_via_api(
+        &fixture,
+        "Applied Other Stack Filter",
+        &["deployment.applied"],
+        Some(json!({"stack_id": other_stack.id})),
+    )
+    .await;
     let agent_filtered = create_webhook_via_api(
         &fixture,
         "Applied Agent Filter",
@@ -1269,39 +1406,152 @@ async fn test_webhook_filter_stack_id_excludes_deployment_applied() {
     )
     .await;
 
-    // Reporting a successful apply is what emits `deployment.applied`.
-    let app = fixture.create_test_router().with_state(fixture.dal.clone());
-    let response = app
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri(format!("/api/v1/agents/{}/events", agent.id))
-                .header("Authorization", format!("Bearer {}", agent_pak))
-                .header("Content-Type", "application/json")
-                .body(Body::from(
-                    json!({
-                        "agent_id": agent.id,
-                        "deployment_object_id": deployment_object.id,
-                        "event_type": "deploy",
-                        "status": "SUCCESS",
-                        "message": "applied",
-                    })
-                    .to_string(),
-                ))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(response.status(), StatusCode::CREATED);
+    report_agent_event(
+        &fixture,
+        agent.id,
+        &agent_pak,
+        deployment_object.id,
+        "SUCCESS",
+    )
+    .await;
+
+    let payloads = deliveries_for(&fixture, stack_filtered);
+    assert_eq!(
+        payloads.len(),
+        1,
+        "deployment.applied now carries stack_id, so a stack_id filter matches it"
+    );
+    assert_eq!(payloads[0]["data"]["stack_id"], json!(stack.id));
+    assert_eq!(
+        payloads[0]["data"]["deployment_object_id"],
+        json!(deployment_object.id)
+    );
 
     assert!(
-        deliveries_for(&fixture, stack_filtered).is_empty(),
-        "deployment.applied has no stack_id in its payload, so a stack_id filter excludes it"
+        deliveries_for(&fixture, other_stack_filtered).is_empty(),
+        "a stack_id filter for a different stack must still exclude the event"
     );
     assert_eq!(
         deliveries_for(&fixture, agent_filtered).len(),
         1,
-        "the same event does carry agent_id, so an agent_id filter matches"
+        "the same event still carries agent_id, so an agent_id filter matches"
+    );
+}
+
+#[tokio::test]
+async fn test_webhook_filter_stack_id_delivers_deployment_failed() {
+    // Same emission site, the non-SUCCESS branch: a failed apply must be
+    // scopable to its stack too.
+    let fixture = TestFixture::new();
+    let generator = fixture.create_test_generator(
+        format!("failed-gen-{}", uuid::Uuid::new_v4()),
+        None,
+        "hash".to_string(),
+    );
+    let stack = fixture.create_test_stack(
+        format!("failed-stack-{}", uuid::Uuid::new_v4()),
+        None,
+        generator.id,
+    );
+    let deployment_object =
+        fixture.create_test_deployment_object(stack.id, "key: value".to_string(), false);
+    let (agent, agent_pak) = fixture.create_test_agent_with_pak(
+        format!("failed-agent-{}", uuid::Uuid::new_v4()),
+        format!("cluster-{}", uuid::Uuid::new_v4()),
+    );
+
+    let stack_filtered = create_webhook_via_api(
+        &fixture,
+        "Failed Stack Filter",
+        &["deployment.failed"],
+        Some(json!({"stack_id": stack.id})),
+    )
+    .await;
+
+    report_agent_event(
+        &fixture,
+        agent.id,
+        &agent_pak,
+        deployment_object.id,
+        "FAILURE",
+    )
+    .await;
+
+    let payloads = deliveries_for(&fixture, stack_filtered);
+    assert_eq!(
+        payloads.len(),
+        1,
+        "deployment.failed now carries stack_id, so a stack_id filter matches it"
+    );
+    assert_eq!(payloads[0]["event_type"], json!("deployment.failed"));
+    assert_eq!(payloads[0]["data"]["stack_id"], json!(stack.id));
+}
+
+#[tokio::test]
+async fn test_deployment_applied_stack_id_is_null_when_object_soft_deleted() {
+    // The object can be soft-deleted between the apply and the agent reporting
+    // it. `stack_id` is then emitted as JSON `null` rather than omitted, which
+    // the filter predicate treats as absent — so an unfiltered subscription
+    // still sees the event, and a stack_id filter does not match it.
+    let fixture = TestFixture::new();
+    let generator = fixture.create_test_generator(
+        format!("gone-gen-{}", uuid::Uuid::new_v4()),
+        None,
+        "hash".to_string(),
+    );
+    let stack = fixture.create_test_stack(
+        format!("gone-stack-{}", uuid::Uuid::new_v4()),
+        None,
+        generator.id,
+    );
+    let deployment_object =
+        fixture.create_test_deployment_object(stack.id, "key: value".to_string(), false);
+    let (agent, agent_pak) = fixture.create_test_agent_with_pak(
+        format!("gone-agent-{}", uuid::Uuid::new_v4()),
+        format!("cluster-{}", uuid::Uuid::new_v4()),
+    );
+
+    // Subscribed to `deployment.applied` only, so the soft delete below does not
+    // add a `deployment.deleted` delivery to either subscription.
+    let unfiltered =
+        create_webhook_via_api(&fixture, "Gone Unfiltered", &["deployment.applied"], None).await;
+    let stack_filtered = create_webhook_via_api(
+        &fixture,
+        "Gone Stack Filter",
+        &["deployment.applied"],
+        Some(json!({"stack_id": stack.id})),
+    )
+    .await;
+
+    fixture
+        .dal
+        .deployment_objects()
+        .soft_delete(deployment_object.id)
+        .unwrap();
+
+    report_agent_event(
+        &fixture,
+        agent.id,
+        &agent_pak,
+        deployment_object.id,
+        "SUCCESS",
+    )
+    .await;
+
+    let payloads = deliveries_for(&fixture, unfiltered);
+    assert_eq!(payloads.len(), 1);
+    assert!(
+        payloads[0]["data"].get("stack_id").is_some(),
+        "the key must be present rather than omitted"
+    );
+    assert_eq!(
+        payloads[0]["data"]["stack_id"],
+        json!(null),
+        "an unresolvable deployment object emits stack_id: null"
+    );
+    assert!(
+        deliveries_for(&fixture, stack_filtered).is_empty(),
+        "null counts as absent, so a stack_id filter does not match"
     );
 }
 

@@ -286,24 +286,64 @@ fn decrypt_value(encrypted: &[u8]) -> Result<String, String> {
     encryption::decrypt_string(encrypted)
 }
 
-/// Permanently fails a delivery that has already been claimed because the
-/// subscription's encrypted fields cannot be decrypted (BROKKR-T-0302).
+/// Attempt budget used when a delivery must be failed without its subscription
+/// in hand. Mirrors the `max_retries` column default in migration
+/// `13_webhooks` (and `NewWebhookSubscription::new`); only reachable when the
+/// subscription row itself could not be read (BROKKR-T-0304).
+const FALLBACK_MAX_RETRIES: i32 = 5;
+
+/// How a claimed delivery that cannot be dispatched should be disposed of.
 ///
-/// A decryption failure is not transient: the stored ciphertext is unreadable
-/// with the broker's current key, so every subsequent claim would fail
-/// identically. `mark_dead` moves the row straight to `dead`, which releases
-/// the claim and ends the claim -> TTL expiry -> reclaim loop. This mirrors the
-/// broker delivery path in `utils::background_tasks`.
+/// The question each arm has to answer is whether re-claiming the same row
+/// could ever produce a different outcome.
+enum DeliveryDisposition {
+    /// The failure is a property of the stored data rather than of this
+    /// attempt — unreadable ciphertext, or a subscription that no longer
+    /// exists. Every subsequent claim fails identically, so the delivery goes
+    /// straight to `dead` whatever budget it had left.
+    Terminal,
+    /// The failure may not recur — a transient database error says nothing
+    /// about this delivery. Ordinary retry semantics apply: count the attempt,
+    /// release the claim, back off, and die only once `max_retries` is
+    /// exhausted.
+    Retryable {
+        /// Total attempts allowed before the delivery dies.
+        max_retries: i32,
+    },
+}
+
+/// Fails a delivery that has already been claimed and cannot be handed to the
+/// agent (BROKKR-T-0302, BROKKR-T-0304).
+///
+/// Every arm of the agent poll loop that gives up on a claimed delivery must go
+/// through here. Bare `continue` leaves the row `acquired` until its 60s TTL
+/// lapses, at which point `release_expired` returns it to `pending`, the next
+/// poll re-claims it, and it fails again — forever, with `attempts` pinned at 0
+/// because nothing ever recorded the failure. Both dispositions write a state
+/// that releases the claim and bounds the cycle. The `Terminal` disposition
+/// mirrors the broker delivery path in `utils::background_tasks`.
 ///
 /// Errors are logged rather than returned: one poisoned delivery must not fail
 /// the whole poll for the agent's other pending deliveries.
 ///
 /// # Arguments
-/// * `field` - The encrypted field that failed (`url` or `auth_header`), used
-///   as the `brokkr_webhook_decrypt_failures_total` label (BROKKR-T-0288).
-fn fail_delivery_undecryptable(dal: &DAL, delivery: &WebhookDelivery, field: &str, reason: &str) {
-    crate::metrics::record_webhook_decrypt_failure(field, "agent");
-    match dal.webhook_deliveries().mark_dead(delivery.id, reason) {
+/// * `reason` - Recorded verbatim as the delivery's `last_error`; it must name
+///   the specific failure so a dead row stays attributable.
+/// * `disposition` - See [`DeliveryDisposition`].
+fn fail_claimed_delivery(
+    dal: &DAL,
+    delivery: &WebhookDelivery,
+    reason: &str,
+    disposition: DeliveryDisposition,
+) {
+    let deliveries = dal.webhook_deliveries();
+    let result = match disposition {
+        DeliveryDisposition::Terminal => deliveries.mark_dead(delivery.id, reason),
+        DeliveryDisposition::Retryable { max_retries } => {
+            deliveries.mark_failed(delivery.id, reason, max_retries)
+        }
+    };
+    match result {
         Ok(updated) => {
             warn!(
                 "Webhook delivery {} marked {} for subscription {}: {}",
@@ -329,7 +369,7 @@ fn fail_delivery_undecryptable(dal: &DAL, delivery: &WebhookDelivery, field: &st
         }
         Err(e) => {
             error!(
-                "Failed to mark undecryptable delivery {} as dead: {:?}",
+                "Failed to record failure for claimed delivery {}: {:?}",
                 delivery.id, e
             );
         }
@@ -1004,13 +1044,46 @@ async fn get_pending_agent_webhooks(
             Ok(Some(sub)) => sub,
             Ok(None) => {
                 warn!(
-                    "Subscription {} not found for delivery {}",
+                    "Subscription {} not found for delivery {}, marking as dead",
                     delivery.subscription_id, delivery.id
+                );
+                // Permanent: a missing subscription never comes back, and
+                // without its URL there is nothing to deliver to. The delivery
+                // is already claimed, so `continue` alone would cycle it
+                // forever (BROKKR-T-0304). Matches the broker delivery path.
+                fail_claimed_delivery(
+                    &dal,
+                    &delivery,
+                    "Subscription not found",
+                    DeliveryDisposition::Terminal,
                 );
                 continue;
             }
             Err(e) => {
-                error!("Failed to fetch subscription: {:?}", e);
+                error!(
+                    "Failed to fetch subscription {} for delivery {}: {:?}",
+                    delivery.subscription_id, delivery.id, e
+                );
+                // Retryable, unlike the arm above: this is a database error,
+                // not a statement about the delivery. The subscription is
+                // probably still there and readable on the next poll, so
+                // killing the delivery on the first blip would discard a valid
+                // webhook. The claim must still be settled, or the row cycles
+                // claimed -> TTL expiry -> reclaimed with `attempts` never
+                // moving (BROKKR-T-0304); recording the attempt bounds the
+                // cycle by the retry budget instead. The subscription's own
+                // `max_retries` is exactly what could not be read, so the
+                // schema default stands in. If the database is down hard this
+                // write fails too, leaving the row to TTL recovery — which is
+                // the right outcome for an outage that recorded nothing.
+                fail_claimed_delivery(
+                    &dal,
+                    &delivery,
+                    &format!("Failed to fetch subscription: {}", e),
+                    DeliveryDisposition::Retryable {
+                        max_retries: FALLBACK_MAX_RETRIES,
+                    },
+                );
                 continue;
             }
         };
@@ -1023,12 +1096,15 @@ async fn get_pending_agent_webhooks(
                 );
                 // The delivery is already claimed; without this it would sit
                 // acquired until its TTL lapsed and then be reclaimed forever
-                // with attempts pinned at 0 (BROKKR-T-0302).
-                fail_delivery_undecryptable(
+                // with attempts pinned at 0 (BROKKR-T-0302). Terminal: the
+                // ciphertext is unreadable with the broker's current key, so
+                // every later claim fails identically.
+                crate::metrics::record_webhook_decrypt_failure("url", "agent");
+                fail_claimed_delivery(
                     &dal,
                     &delivery,
-                    "url",
                     &format!("Failed to decrypt URL: {}", e),
+                    DeliveryDisposition::Terminal,
                 );
                 continue;
             }
@@ -1044,11 +1120,12 @@ async fn get_pending_agent_webhooks(
                         "Failed to decrypt auth header for subscription {}: {}",
                         subscription.id, e
                     );
-                    fail_delivery_undecryptable(
+                    crate::metrics::record_webhook_decrypt_failure("auth_header", "agent");
+                    fail_claimed_delivery(
                         &dal,
                         &delivery,
-                        "auth_header",
                         &format!("Failed to decrypt auth header: {}", e),
+                        DeliveryDisposition::Terminal,
                     );
                     continue;
                 }

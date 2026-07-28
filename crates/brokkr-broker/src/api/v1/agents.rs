@@ -20,8 +20,8 @@ use axum::{
 };
 use brokkr_models::models::agent_annotations::{AgentAnnotation, NewAgentAnnotation};
 use brokkr_models::models::agent_events::{AgentEvent, NewAgentEvent};
-use brokkr_models::models::agent_labels::{AgentLabel, NewAgentLabel};
 use brokkr_models::models::agent_generator_registrations::AgentGeneratorRegistration;
+use brokkr_models::models::agent_labels::{AgentLabel, NewAgentLabel};
 use brokkr_models::models::agent_targets::{AgentTarget, NewAgentTarget};
 use brokkr_models::models::agents::{Agent, NewAgent};
 use brokkr_models::models::audit_logs::{
@@ -209,7 +209,9 @@ async fn create_agent(
     {
         dal.agent_generator_registrations()
             .create(agent.id, system_id)
-            .map_err(|e| ApiError::from_diesel(e, "failed to register agent with system generator"))?;
+            .map_err(|e| {
+                ApiError::from_diesel(e, "failed to register agent with system generator")
+            })?;
     }
 
     // Register with any additional generators supplied in the request.
@@ -520,10 +522,33 @@ async fn create_event(
     } else {
         EVENT_DEPLOYMENT_FAILED
     };
+    // Resolve the owning stack once, here, so every subscription filtering on
+    // `stack_id` can match these events (BROKKR-T-0305). Doing it lazily inside
+    // the event bus would cost a DAL round trip per subscription on this hot
+    // write path. `None` becomes JSON `null` rather than an omitted key, which
+    // the filter predicate treats as absent — the same shape `deployment.deleted`
+    // already emits. The object is only unresolvable when it was soft-deleted
+    // between the apply and the report; a lookup failure is logged and treated
+    // the same way rather than failing the agent's report.
+    let stack_id = match dal
+        .deployment_objects()
+        .get(event.deployment_object_id)
+        .map(|object| object.map(|object| object.stack_id))
+    {
+        Ok(stack_id) => stack_id,
+        Err(e) => {
+            error!(
+                "Failed to resolve stack for deployment object {}: {:?}",
+                event.deployment_object_id, e
+            );
+            None
+        }
+    };
     let event_data = serde_json::json!({
         "agent_event_id": event.id,
         "agent_id": event.agent_id,
         "deployment_object_id": event.deployment_object_id,
+        "stack_id": stack_id,
         "event_type": event.event_type,
         "status": event.status,
         "message": event.message,
@@ -837,7 +862,10 @@ fn authorize_target_mutation(
     stack_id: Uuid,
 ) -> Result<(), ApiError> {
     let mut stacks = dal.stacks().get(vec![stack_id]).map_err(|e| {
-        error!("Failed to fetch stack {} for target auth: {:?}", stack_id, e);
+        error!(
+            "Failed to fetch stack {} for target auth: {:?}",
+            stack_id, e
+        );
         ApiError::internal("failed to fetch stack")
     })?;
     let stack = stacks
@@ -996,12 +1024,7 @@ async fn record_heartbeat(
     // after the heartbeat + T-0227 k8s fields are persisted, so the pushed
     // record reflects the just-recorded values. A push failure must never
     // affect the heartbeat response.
-    crate::api::v1::fleet::broadcast_agent_fleet_update(
-        &dal,
-        &ws_registry,
-        &fleet_broadcaster,
-        id,
-    );
+    crate::api::v1::fleet::broadcast_agent_fleet_update(&dal, &ws_registry, &fleet_broadcaster, id);
 
     Ok(StatusCode::NO_CONTENT)
 }
