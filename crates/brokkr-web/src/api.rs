@@ -7,7 +7,10 @@
 //! auth path under `trunk serve`, where no broker injects a token). Errors
 //! map to Aurora's `ApiError` for `ErrorState`.
 
-use crate::models::{ErrorBody, FleetAgentRecord, PakSummary};
+use crate::models::{
+    DiagnosticRequestDto, DiagnosticResponse, ErrorBody, FleetAgentRecord, PakSummary,
+    TargetStateObject,
+};
 use aurora_leptos::tokens::ApiError;
 use gloo_net::http::Request;
 use serde::Serialize;
@@ -47,17 +50,18 @@ fn token() -> Option<String> {
     pak().or_else(injected_token)
 }
 
-/// GET `/api/v1{path}` and deserialize the JSON body. `scope` becomes a
-/// `?pak_id=` query param (tenant filter, BROKKR-I-0032) — attached via the
-/// builder's query API so the URL stays canonical (no stray separators).
-pub async fn get_scoped<T: DeserializeOwned>(
+/// GET `/api/v1{path}` with `params` as the query string, and deserialize the
+/// JSON body. Params go through the builder's query API rather than being baked
+/// into `path` so the URL stays canonical (no stray separators — gloo-net
+/// concatenates an existing query with its own and would leave a trailing `&`).
+async fn get_query<T: DeserializeOwned>(
     path: &str,
-    scope: Option<String>,
+    params: &[(&str, &str)],
 ) -> Result<T, ApiError> {
     let url = format!("/api/v1{path}");
     let mut req = Request::get(&url);
-    if let Some(pak_id) = scope.filter(|s| !s.is_empty()) {
-        req = req.query([("pak_id", pak_id.as_str())]);
+    if !params.is_empty() {
+        req = req.query(params.iter().copied());
     }
     if let Some(t) = token() {
         req = req.header("Authorization", &format!("Bearer {t}"));
@@ -80,6 +84,18 @@ pub async fn get_scoped<T: DeserializeOwned>(
         message: e.to_string(),
         code: None,
     })
+}
+
+/// GET `/api/v1{path}` and deserialize the JSON body. `scope` becomes a
+/// `?pak_id=` query param (tenant filter, BROKKR-I-0032).
+pub async fn get_scoped<T: DeserializeOwned>(
+    path: &str,
+    scope: Option<String>,
+) -> Result<T, ApiError> {
+    match scope.filter(|s| !s.is_empty()) {
+        Some(pak_id) => get_query(path, &[("pak_id", pak_id.as_str())]).await,
+        None => get_query(path, &[]).await,
+    }
 }
 
 /// GET `/api/v1{path}` (unscoped) and deserialize the JSON body.
@@ -166,8 +182,16 @@ pub async fn agent_events(
     get_scoped("/agent-events", scope).await
 }
 
-/// POST `/api/v1{path}` with a JSON body; discards the response on success.
-pub async fn post<B: Serialize>(path: &str, body: &B) -> Result<(), ApiError> {
+/// POST `/api/v1{path}` with a JSON body, deserializing the response body
+/// (BROKKR-T-0301 — the previous `post` discarded it, which threw away the
+/// created diagnostic request's id and made the feature write-only). The
+/// console's only write is diagnostic creation, which answers `201` with the
+/// created record, so every caller wants the body; there is no body-discarding
+/// variant left to keep in step.
+pub async fn post_json<B: Serialize, T: DeserializeOwned>(
+    path: &str,
+    body: &B,
+) -> Result<T, ApiError> {
     let url = format!("/api/v1{path}");
     let mut req = Request::post(&url);
     if let Some(t) = token() {
@@ -185,12 +209,49 @@ pub async fn post<B: Serialize>(path: &str, body: &B) -> Result<(), ApiError> {
         let code = serde_json::from_str::<ErrorBody>(&message).ok().map(|b| b.code);
         return Err(ApiError::Http { status, message, code });
     }
-    Ok(())
+    resp.json::<T>().await.map_err(|e| ApiError::Http {
+        status,
+        message: e.to_string(),
+        code: None,
+    })
 }
 
-/// `POST /api/v1/diagnostics` — request a diagnostic for an agent (the v1 write).
-pub async fn create_diagnostic(agent_id: &str) -> Result<(), ApiError> {
-    post("/diagnostics", &serde_json::json!({ "agent_id": agent_id })).await
+/// `GET /api/v1/agents/:id/target-state?mode=full` — every deployment object
+/// currently targeted at an agent (`mode=full` includes already-deployed ones,
+/// not just the undeployed delta). Admin-readable, so the read-only UI PAK
+/// passes. Populates the Fleet modal's diagnostic picker.
+pub async fn agent_target_state(agent_id: &str) -> Result<Vec<TargetStateObject>, ApiError> {
+    get_query(
+        &format!("/agents/{agent_id}/target-state"),
+        &[("mode", "full")],
+    )
+    .await
+}
+
+/// `POST /api/v1/deployment-objects/:id/diagnostics` — ask `agent_id` to collect
+/// diagnostics for one deployment object (the console's only write).
+///
+/// Diagnostics are inherently deployment-object-scoped — there is no bare
+/// `POST /diagnostics` route, and this path is the one the broker's read-only
+/// PAK allowlist admits (BROKKR-I-0032), so the injected UI token can drive it.
+/// Returns the created request (201 body) so the caller can poll
+/// [`diagnostic`] for its outcome (BROKKR-T-0301).
+pub async fn create_diagnostic(
+    deployment_object_id: &str,
+    agent_id: &str,
+) -> Result<DiagnosticRequestDto, ApiError> {
+    post_json(
+        &format!("/deployment-objects/{deployment_object_id}/diagnostics"),
+        &serde_json::json!({ "agent_id": agent_id, "requested_by": "operator-console" }),
+    )
+    .await
+}
+
+/// `GET /api/v1/diagnostics/:id` — the request plus, once an agent has submitted
+/// one, its result. A plain read, so the injected read-only UI token (which the
+/// broker treats as a read-only *admin*) is admitted.
+pub async fn diagnostic(id: &str) -> Result<DiagnosticResponse, ApiError> {
+    get(&format!("/diagnostics/{id}")).await
 }
 
 /// `GET /api/v1/stacks/:id/health` — per-stack deployment-object health rollup.

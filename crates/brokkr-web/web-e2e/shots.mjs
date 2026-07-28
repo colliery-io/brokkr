@@ -80,6 +80,73 @@ const TELEM = [
   { agent_id: "a2", event_type: "Apply", status: "failure", message: "Service/ingest: port 8080 already allocated" },
 ];
 
+// Diagnostics (BROKKR-T-0301). The Fleet modal picks a deployment object from
+// the agent's target state, POSTs a request, keeps the returned id and polls
+// GET /diagnostics/:id. The route mock is method-agnostic (keyed on path), so
+// the POST is answered with the 201-shaped body below.
+const TARGET_STATE = [
+  { id: "d1a2b3c4", stack_id: "s1", sequence_id: 41, is_deletion_marker: false },
+];
+const DIAG_CREATED = {
+  id: "9f10ab22", agent_id: "1b9d6bcd", deployment_object_id: "d1a2b3c4",
+  status: "pending", requested_by: "operator-console",
+  created_at: "2026-07-27T10:00:00Z", expires_at: "2026-07-27T11:00:00Z",
+};
+// The result's three payload fields are JSON-encoded *strings*, not nested
+// objects — hence the JSON.stringify calls: the console parses them a second time.
+const DIAG_DONE = {
+  request: { ...DIAG_CREATED, status: "completed", claimed_at: "2026-07-27T10:00:08Z",
+    completed_at: "2026-07-27T10:00:14Z" },
+  result: {
+    request_id: "9f10ab22",
+    pod_statuses: JSON.stringify([
+      { name: "payments-api-7d9f4-x2k1", namespace: "payments", phase: "Running",
+        conditions: [{ condition_type: "Ready", status: "True" }],
+        containers: [{ name: "api", ready: true, restart_count: 0, state: "running" }] },
+      { name: "payments-api-7d9f4-q8m3", namespace: "payments", phase: "Pending",
+        conditions: [{ condition_type: "Ready", status: "False" }],
+        containers: [{ name: "api", ready: false, restart_count: 4, state: "waiting",
+          state_reason: "ImagePullBackOff" }] },
+    ]),
+    events: JSON.stringify([
+      { event_type: "Warning", reason: "Failed", message: "Failed to pull image \"ghcr.io/app:sha-7f3a01\": not found",
+        involved_object: "payments-api-7d9f4-q8m3", involved_object_kind: "Pod", count: 6,
+        last_timestamp: "2026-07-27T10:00:12Z" },
+      { event_type: "Normal", reason: "Pulled", message: "Successfully pulled image in 1.2s",
+        involved_object: "payments-api-7d9f4-x2k1", involved_object_kind: "Pod", count: 1,
+        last_timestamp: "2026-07-27T09:59:40Z" },
+    ]),
+    log_tails: JSON.stringify({
+      "payments-api-7d9f4-x2k1/api": "10:00:01 INFO listening on :8080\n10:00:02 INFO ready",
+    }),
+    collected_at: "2026-07-27T10:00:13Z",
+  },
+};
+// An honest empty success: no pods attributed (legitimate — the object may apply
+// no workloads), but the collection itself worked.
+const DIAG_EMPTY = {
+  request: { ...DIAG_DONE.request },
+  result: { request_id: "9f10ab22", pod_statuses: "[]",
+    events: JSON.stringify([
+      { event_type: "Normal", reason: "Created", message: "Created ConfigMap/payments-config",
+        involved_object: "payments-config", involved_object_kind: "ConfigMap", count: 1 },
+    ]),
+    log_tails: null, collected_at: "2026-07-27T10:00:13Z" },
+};
+// A FAILED collection: the broker has no `failed` status, so this arrives as
+// `completed` with a single `error` entry inside `events`.
+const DIAG_ERROR = {
+  request: { ...DIAG_DONE.request },
+  result: { request_id: "9f10ab22", pod_statuses: "[]",
+    events: JSON.stringify([{ error: "Failed to list pods in namespace payments: ApiError: pods is forbidden: User \"system:serviceaccount:brokkr:brokkr-agent\" cannot list resource \"pods\"" }]),
+    log_tails: null, collected_at: "2026-07-27T10:00:13Z" },
+};
+const DIAG_MOCKS = {
+  "/fleet": FLEET,
+  "/agents/1b9d6bcd/target-state": TARGET_STATE,
+  "/deployment-objects/d1a2b3c4/diagnostics": DIAG_CREATED,
+};
+
 const SCENES = [
   { name: "overview", mocks: { "/fleet": FLEET, "/agent-events": EVENTS } },
   { name: "fleet", nav: "Fleet", mocks: { "/fleet": FLEET } },
@@ -103,6 +170,15 @@ const SCENES = [
     ] } } },
   { name: "telemetry", nav: "Telemetry", mocks: { "/agent-events": TELEM } },
   { name: "telemetry-modal", nav: "Telemetry", click: "Apply", mocks: { "/agent-events": TELEM } },
+  // Diagnostics request -> result (BROKKR-T-0301): open the agent modal, run a
+  // diagnostic, and screenshot the polled outcome. Three outcomes that must not
+  // look alike: a real collection, an empty-but-successful one, and a failure.
+  { name: "fleet-diagnostic", nav: "Fleet", click: "prod-agent-01", then_click: "Run diagnostic",
+    mocks: { ...DIAG_MOCKS, "/diagnostics/9f10ab22": DIAG_DONE } },
+  { name: "fleet-diagnostic-empty", nav: "Fleet", click: "prod-agent-01", then_click: "Run diagnostic",
+    mocks: { ...DIAG_MOCKS, "/diagnostics/9f10ab22": DIAG_EMPTY } },
+  { name: "fleet-diagnostic-error", nav: "Fleet", click: "prod-agent-01", then_click: "Run diagnostic",
+    mocks: { ...DIAG_MOCKS, "/diagnostics/9f10ab22": DIAG_ERROR } },
   // Scope selector (BROKKR-I-0032): selector visible with named PAKs...
   { name: "scope-selector", nav: "Fleet", mocks: { "/paks": PAKS, "/fleet": FLEET } },
   // ...and selecting a tenant narrows the fleet to its agents.
@@ -171,6 +247,12 @@ for (const s of SCENES) {
   if (s.select) {
     await page.locator("select").last().selectOption({ label: s.select }).catch(() => {});
     await page.waitForTimeout(500);
+  }
+  // A second click *inside* whatever the first one opened (the modal's "Run
+  // diagnostic" button). Substring match: the button label carries a glyph.
+  if (s.then_click) {
+    await page.getByText(s.then_click).first().click().catch(() => {});
+    await page.waitForTimeout(900);
   }
   await page.waitForTimeout(700);
   await page.screenshot({ path: `${OUT}/${s.name}.png`, fullPage: true });

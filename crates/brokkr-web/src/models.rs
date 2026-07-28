@@ -47,6 +47,238 @@ impl FleetAgentRecord {
     }
 }
 
+/// One deployment object in `GET /api/v1/agents/:id/target-state?mode=full`
+/// (mirrors the broker `DeploymentObject`; only the fields the console needs —
+/// unknown fields are ignored). Diagnostics are deployment-object-scoped
+/// (`deployment_object_id` is NOT NULL), so this is what the Fleet modal's
+/// diagnostic picker offers.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct TargetStateObject {
+    pub id: String,
+    pub stack_id: String,
+    /// Global, monotonically increasing ordering key — unique per object, so it
+    /// makes the picker labels unambiguous.
+    #[serde(default)]
+    pub sequence_id: i64,
+    #[serde(default)]
+    pub is_deletion_marker: bool,
+}
+
+impl TargetStateObject {
+    /// Operator-readable, collision-free picker label (`sequence_id` is unique).
+    /// Doubles as the picker's value — `aurora_leptos`'s `Select` uses one string
+    /// for both — so the click handler maps back by matching this exact label.
+    pub fn label(&self) -> String {
+        let id8: String = self.id.chars().take(8).collect();
+        let stack8: String = self.stack_id.chars().take(8).collect();
+        let marker = if self.is_deletion_marker {
+            " · deletion"
+        } else {
+            ""
+        };
+        format!("#{} · {id8} · stack {stack8}{marker}", self.sequence_id)
+    }
+}
+
+// ---- diagnostics (BROKKR-T-0301) -----------------------------------------
+
+/// `GET /api/v1/diagnostics/:id` — mirrors the broker's `DiagnosticResponse`:
+/// the request, plus the result once an agent has submitted one.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct DiagnosticResponse {
+    pub request: DiagnosticRequestDto,
+    #[serde(default)]
+    pub result: Option<DiagnosticResultDto>,
+}
+
+/// A diagnostic request (the 201 body of `POST /deployment-objects/:id/diagnostics`
+/// and the `request` half of `GET /diagnostics/:id`). Only the fields the console
+/// shows; unknown fields are ignored.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct DiagnosticRequestDto {
+    pub id: String,
+    #[serde(default)]
+    pub status: String,
+    #[serde(default)]
+    pub claimed_at: Option<String>,
+    #[serde(default)]
+    pub completed_at: Option<String>,
+}
+
+/// A diagnostic result. **The three payload fields are JSON-encoded *strings***
+/// (that is how the agent submits them and how the broker stores them), not
+/// nested JSON — they have to be parsed a second time, which is what
+/// [`DiagnosticData::parse`] does.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct DiagnosticResultDto {
+    /// JSON array of [`PodStatus`].
+    #[serde(default)]
+    pub pod_statuses: String,
+    /// JSON array of [`DiagEvent`].
+    #[serde(default)]
+    pub events: String,
+    /// JSON object mapping `pod/container` to a log tail. `null` when the agent
+    /// collected none.
+    #[serde(default)]
+    pub log_tails: Option<String>,
+    #[serde(default)]
+    pub collected_at: Option<String>,
+}
+
+/// One entry of the parsed `pod_statuses` array.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct PodStatus {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub namespace: String,
+    #[serde(default)]
+    pub phase: String,
+    #[serde(default)]
+    pub containers: Vec<ContainerStatus>,
+}
+
+/// One container inside a [`PodStatus`].
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct ContainerStatus {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub ready: bool,
+    #[serde(default)]
+    pub restart_count: i32,
+    #[serde(default)]
+    pub state: String,
+    #[serde(default)]
+    pub state_reason: Option<String>,
+}
+
+/// One entry of the parsed `events` array.
+///
+/// `error` is not a Kubernetes event field: when collection fails the agent
+/// submits `[{"error": "..."}]` here and the broker still marks the request
+/// `completed` (there is no `failed` status — see
+/// `docs/src/reference/diagnostics.md`, "Collection Errors"). Modelling it as an
+/// optional field on the same struct lets one parse cover both shapes.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct DiagEvent {
+    #[serde(default)]
+    pub event_type: Option<String>,
+    #[serde(default)]
+    pub reason: Option<String>,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub involved_object: Option<String>,
+    #[serde(default)]
+    pub involved_object_kind: Option<String>,
+    #[serde(default)]
+    pub count: Option<i32>,
+    #[serde(default)]
+    pub last_timestamp: Option<String>,
+    /// Present only on a collection-failure marker (see above).
+    #[serde(default)]
+    pub error: Option<String>,
+}
+
+/// The result's three JSON-in-string payloads, parsed. Each is kept as a
+/// `Result` so a payload the console cannot read is reported as unreadable
+/// rather than silently rendered as "nothing collected".
+#[derive(Debug, Clone, PartialEq)]
+pub struct DiagnosticData {
+    pub pods: Result<Vec<PodStatus>, String>,
+    pub events: Result<Vec<DiagEvent>, String>,
+    /// `pod/container` -> log tail, sorted by key. Empty when `log_tails` was null.
+    pub log_tails: Result<Vec<(String, String)>, String>,
+    pub collected_at: Option<String>,
+}
+
+impl DiagnosticData {
+    /// Parse the JSON-encoded payload strings.
+    pub fn parse(dto: &DiagnosticResultDto) -> Self {
+        fn json<T: serde::de::DeserializeOwned>(raw: &str) -> Result<T, String> {
+            serde_json::from_str::<T>(raw).map_err(|e| e.to_string())
+        }
+        let log_tails = match dto.log_tails.as_deref().filter(|s| !s.is_empty()) {
+            None => Ok(Vec::new()),
+            Some(raw) => json::<std::collections::BTreeMap<String, String>>(raw)
+                .map(|m| m.into_iter().collect()),
+        };
+        Self {
+            pods: json(if dto.pod_statuses.is_empty() {
+                "[]"
+            } else {
+                &dto.pod_statuses
+            }),
+            events: json(if dto.events.is_empty() {
+                "[]"
+            } else {
+                &dto.events
+            }),
+            log_tails,
+            collected_at: dto.collected_at.clone(),
+        }
+    }
+
+    /// The collection-failure messages carried inside `events`, if any.
+    ///
+    /// Any event bearing an `error` key is a failure marker — real Kubernetes
+    /// events never carry one. (The documented shape is exactly one such entry;
+    /// accepting more can only make a real failure more visible, never turn a
+    /// good collection into a false alarm.)
+    pub fn collection_errors(&self) -> Vec<String> {
+        match &self.events {
+            Ok(evs) => evs.iter().filter_map(|e| e.error.clone()).collect(),
+            Err(_) => Vec::new(),
+        }
+    }
+}
+
+/// What a polled diagnostic actually amounts to, once the `completed`-with-an-
+/// `error`-event case is separated from a genuine collection.
+#[derive(Debug, Clone, PartialEq)]
+pub enum DiagnosticOutcome {
+    /// `pending` or `claimed` — the agent has not submitted anything yet.
+    InFlight,
+    /// `completed`, but the result carries collection errors: the agent could not
+    /// read the cluster. This is a FAILURE, not an empty success.
+    CollectionFailed(Vec<String>),
+    /// `completed` with a real result (which may legitimately be empty).
+    Collected(Box<DiagnosticData>),
+    /// A terminal status with nothing to show — `expired`, the reserved-but-never-
+    /// set `failed`, or `completed` without a stored result. Carries the status.
+    NoResult(String),
+}
+
+impl DiagnosticResponse {
+    /// Whether the request has reached a state the agent will never move it out
+    /// of, so polling can stop.
+    pub fn is_terminal(&self) -> bool {
+        matches!(
+            self.request.status.to_ascii_lowercase().as_str(),
+            "completed" | "failed" | "expired"
+        )
+    }
+
+    /// Classify the response for rendering.
+    pub fn outcome(&self) -> DiagnosticOutcome {
+        let status = self.request.status.to_ascii_lowercase();
+        match (status.as_str(), self.result.as_ref()) {
+            ("pending" | "claimed", _) => DiagnosticOutcome::InFlight,
+            (_, Some(dto)) => {
+                let data = DiagnosticData::parse(dto);
+                let errs = data.collection_errors();
+                if errs.is_empty() {
+                    DiagnosticOutcome::Collected(Box::new(data))
+                } else {
+                    DiagnosticOutcome::CollectionFailed(errs)
+                }
+            }
+            (_, None) => DiagnosticOutcome::NoResult(self.request.status.clone()),
+        }
+    }
+}
+
 /// One named PAK (tenant) in `GET /api/v1/paks` — powers the scope selector
 /// (BROKKR-I-0032). `id` is the generator id used as `?pak_id=`.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
