@@ -12,3 +12,4 @@ mod diagnostics;
 mod fixtures;
 mod health;
 mod k8s;
+mod work_orders;
