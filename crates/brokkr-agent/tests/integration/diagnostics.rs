@@ -122,9 +122,8 @@ async fn test_diagnostics_collects_pods_across_namespaces() {
     create_labeled_pod(&client, &ns2, "diag-pod-b", &deployment_object_id).await;
 
     let handler = DiagnosticsHandler::new(client.clone());
-    let label_selector = format!("{}={}", DEPLOYMENT_OBJECT_ID_LABEL, deployment_object_id);
     let result = handler
-        .collect_diagnostics_in(&[ns1.clone(), ns2.clone()], &label_selector)
+        .collect_diagnostics_in(&[ns1.clone(), ns2.clone()], deployment_object_id)
         .await
         .expect("Diagnostics collection across namespaces should succeed");
 
