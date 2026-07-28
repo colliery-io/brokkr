@@ -4,11 +4,24 @@ This Helm chart deploys the Brokkr control plane broker to a Kubernetes cluster.
 
 ## Prerequisites
 
-- Kubernetes 1.19+
-- Helm 3.0+
+- **Kubernetes 1.23 or later.** Unlike the agent chart, `Chart.yaml` here declares no
+  `kubeVersion`, so Helm will not stop you on an older cluster — but the chart will not fully
+  work: the bundled Bitnami PostgreSQL subchart (18.x) states Kubernetes 1.23+, and
+  `autoscaling.enabled` renders `autoscaling/v2` (1.23+) while `podDisruptionBudget.enabled`
+  renders `policy/v1` (1.21+). If you also run the agent chart in the same cluster, its
+  `kubeVersion: ">=1.29.0-0"` pin makes **1.29** the effective floor for a Brokkr fleet — see
+  [Installing Brokkr](https://github.com/colliery-io/brokkr/blob/main/docs/src/getting-started/installation.md).
+- Helm 3.8+ (3.8 is the floor for `helm install oci://…` against the published charts;
+  installing from a local checkout works with any Helm 3.x)
 - PostgreSQL database (bundled by default, or external)
-- (Optional) cert-manager for automatic TLS certificate management
+- (Optional) cert-manager for automatic TLS certificate management **at the ingress** — the
+  broker itself never terminates TLS, see [TLS/SSL Configuration](#tlsssl-configuration)
 - (Optional) Ingress controller for external access
+- (Optional) Prometheus Operator, if you enable `metrics.serviceMonitor`
+
+Unlike the agent chart, this chart installs nothing cluster-wide: every resource it creates
+(Deployment, Service, ConfigMap, optional Ingress/HPA/PDB/NetworkPolicy/ServiceMonitor, plus the
+PostgreSQL subchart when bundled) lives in the release namespace.
 
 ## Installation
 
@@ -318,51 +331,187 @@ resources:
 
 ### Security Context
 
-The broker runs as a non-root user by default:
+The broker runs as a non-root user by default. Note the keys are `podSecurityContext` and
+`containerSecurityContext` — there is no top-level `securityContext` value:
 
 ```yaml
-securityContext:
+podSecurityContext:
   runAsNonRoot: true
   runAsUser: 10001
+  runAsGroup: 10001
   fsGroup: 10001
+  # seccompProfile:          # recommended for production
+  #   type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false   # true is safe: /tmp is an emptyDir
+  runAsNonRoot: true
+  runAsUser: 10001
+  capabilities:
+    drop: [ALL]
 ```
 
+Each object is rendered verbatim, so overriding one replaces it wholesale — restate any
+defaults you want to keep.
+
 ## Values
+
+This table covers **every key in `values.yaml`** for chart version 0.8.4, plus the keys the
+templates read that `values.yaml` only mentions in comments (marked *not in values.yaml*).
+It is hand-maintained, so `values.yaml` remains the authoritative source — check it with
+`helm show values charts/brokkr-broker` (or `oci://ghcr.io/colliery-io/charts/brokkr-broker`)
+if this table and the chart ever disagree. There is no `tls.*` section: those values were
+removed, see [TLS/SSL Configuration](#tlsssl-configuration).
+
+### Image and workload
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `image.repository` | string | `"ghcr.io/colliery-io/brokkr-broker"` | Container image repository |
-| `image.tag` | string | `"latest"` | Container image tag |
+| `image.tag` | string | `"latest"` | Container image tag. Pin a release tag in production. |
 | `image.pullPolicy` | string | `"IfNotPresent"` | Image pull policy |
-| `replicaCount` | int | `1` | Number of broker replicas |
-| `service.type` | string | `"ClusterIP"` | Kubernetes service type |
-| `service.port` | int | `3000` | Service port |
-| `postgresql.enabled` | bool | `true` | Enable bundled PostgreSQL |
-| `postgresql.external.host` | string | `""` | External PostgreSQL host |
-| `postgresql.external.port` | int | `5432` | External PostgreSQL port |
+| `image.pullSecrets` | array | unset (commented in `values.yaml`) | `imagePullSecrets` entries for private registries, e.g. `[{name: ghcr-secret}]` |
+| `replicaCount` | int | `1` | Number of broker replicas. Ignored while `autoscaling.enabled` is true. |
+| `nameOverride` | string | unset (*not in values.yaml*) | Overrides the chart name portion of generated resource names |
+| `fullnameOverride` | string | unset (*not in values.yaml*) | Overrides the full generated resource name |
+| `extraEnv` | array | `[]` | Extra container env entries appended verbatim (plain `value` or `valueFrom`). The escape hatch for settings the chart does not expose. |
+
+### Service and ingress
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `service.type` | string | `"ClusterIP"` | Service type (`ClusterIP`, `NodePort`, `LoadBalancer`) |
+| `service.port` | int | `3000` | Service port; targets the container's `http` port |
+| `service.nodePort` | int | unset (*not in values.yaml*) | Explicit node port; only honoured when `service.type: NodePort` |
+| `ingress.enabled` | bool | `false` | Create an Ingress |
+| `ingress.className` | string | `"nginx"` | `ingressClassName` |
+| `ingress.annotations` | object | `{}` | Ingress annotations — where cert-manager (`cert-manager.io/cluster-issuer`) and SSL-redirect settings go |
+| `ingress.hosts` | array | `[{host: brokkr.example.com, paths: [{path: /, pathType: Prefix}]}]` | Ingress hosts and paths |
+| `ingress.tls` | array | `[{secretName: brokkr-tls, hosts: [brokkr.example.com]}]` | Ingress TLS — the **only** supported TLS path, since the broker serves plain HTTP |
+
+> `service.annotations` appears as a commented example in `values.yaml`, but `templates/service.yaml`
+> renders no annotations, so setting it has no effect. Annotate the Service out-of-band if you need
+> LoadBalancer annotations.
+
+### Database
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `postgresql.enabled` | bool | `true` | Deploy the bundled Bitnami PostgreSQL subchart. Set `false` for an external database. |
+| `postgresql.external.host` | string | `''` | External PostgreSQL host (required when `postgresql.enabled: false`) |
+| `postgresql.external.port` | int | `5432` | External PostgreSQL port; also used for the NetworkPolicy egress rule |
 | `postgresql.external.database` | string | `"brokkr"` | Database name |
-| `postgresql.external.username` | string | `"brokkr"` | Database username |
-| `postgresql.external.password` | string | `"brokkr"` | Database password |
-| `postgresql.external.schema` | string | `""` | PostgreSQL schema for multi-tenant isolation |
-| `postgresql.existingSecret` | string | `""` | Existing secret for database URL |
-| `broker.webhookEncryptionKey` | string | `""` | Webhook encryption key (rendered into the ConfigMap in plaintext; dev/test only). Ignored when `broker.webhookEncryptionKeyExistingSecret` is set. |
+| `postgresql.external.username` | string | `"brokkr"` | Database username (unused when `postgresql.existingSecret` is set) |
+| `postgresql.external.password` | string | `"brokkr"` | Database password. Rendered into the ConfigMap inside `BROKKR__DATABASE__URL` in plaintext — prefer `postgresql.existingSecret`. |
+| `postgresql.external.schema` | string | `''` | PostgreSQL schema (`BROKKR__DATABASE__SCHEMA`) for multi-tenant isolation; empty means `public` |
+| `postgresql.existingSecret` | string | `''` | Name of a pre-existing Secret holding the full connection URL. When set, `BROKKR__DATABASE__URL` is injected via `secretKeyRef` and omitted from the ConfigMap. Applies to bundled and external alike. |
+| `postgresql.existingSecretKey` | string | `"database-url"` | Key within that Secret holding the connection URL |
+| `postgresql.auth.username` | string | `"brokkr"` | Bundled PostgreSQL username (subchart value; also used to build the connection URL) |
+| `postgresql.auth.password` | string | `"brokkr"` | Bundled PostgreSQL password. **Change this or use `existingSecret` — the default is a published credential.** |
+| `postgresql.auth.database` | string | `"brokkr"` | Bundled PostgreSQL database name |
+| `postgresql.primary.persistence.enabled` | bool | `true` | Bundled PostgreSQL persistence. `false` means data is lost on pod restart. |
+| `postgresql.primary.persistence.storageClass` | string | `""` | PVC storage class; empty uses the cluster default |
+| `postgresql.primary.persistence.size` | string | `"8Gi"` | PVC size |
+| `postgresql.primary.resources.requests.memory` / `.cpu` | string | `"256Mi"` / `"250m"` | Bundled PostgreSQL requests |
+| `postgresql.primary.resources.limits.memory` / `.cpu` | string | `"512Mi"` / `"500m"` | Bundled PostgreSQL limits |
+
+Everything under `postgresql.auth` and `postgresql.primary` is passed to the
+[Bitnami PostgreSQL subchart](https://github.com/bitnami/charts/tree/main/bitnami/postgresql),
+which accepts many more keys than the chart's `values.yaml` lists.
+
+### Broker application settings
+
+`configReload` marks which of these apply without a restart; see the header comment in
+`values.yaml` for the authoritative hot-reload list.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `broker.logLevel` | string | `"info"` | `BROKKR__LOG__LEVEL` (`trace`/`debug`/`info`/`warn`/`error`). Hot-reloadable. The binary's own default is `debug`, so running outside the chart is noisier. |
+| `broker.diagnosticCleanupIntervalSeconds` | int | `900` | How often diagnostics are pruned. Hot-reloadable. |
+| `broker.diagnosticMaxAgeHours` | int | `1` | Diagnostic retention. Hot-reloadable. |
+| `broker.webhookDeliveryIntervalSeconds` | int | `5` | Webhook delivery worker poll interval. Read once at worker start — **requires a pod restart**. |
+| `broker.webhookDeliveryBatchSize` | int | `50` | Deliveries claimed per pass. Read once at worker start — **requires a pod restart**. |
+| `broker.webhookCleanupRetentionDays` | int | `7` | Delivery-record retention. Read once at cleanup-worker start — **requires a pod restart**. |
+| `broker.webhookEncryptionKey` | string | unset (commented in `values.yaml`) | Hex-encoded 32-byte key protecting webhook secrets at rest. Rendered into the ConfigMap in plaintext (dev/test only); ignored when `webhookEncryptionKeyExistingSecret` is set. **Unset means a fresh random key each boot, making previously encrypted webhook data unreadable after a restart.** |
 | `broker.webhookEncryptionKeyExistingSecret` | string | `""` | Name of a pre-existing Secret to source the webhook encryption key from. Injected via `secretKeyRef`, kept out of the ConfigMap/values/git (GitOps-friendly). |
-| `broker.webhookEncryptionKeyExistingSecretKey` | string | `"BROKKR__BROKER__WEBHOOK_ENCRYPTION_KEY"` | Key within that Secret holding the webhook encryption key. |
-| `broker.pakHash` | string | `""` | Admin PAK hash (rendered into the ConfigMap in plaintext; dev/test only). Ignored when `broker.pakHashExistingSecret` is set. |
+| `broker.webhookEncryptionKeyExistingSecretKey` | string | `"BROKKR__BROKER__WEBHOOK_ENCRYPTION_KEY"` | Key within that Secret holding the webhook encryption key |
+| `broker.pakHash` | string | unset (commented in `values.yaml`) | Admin PAK hash for day-zero bootstrap. Rendered into the ConfigMap in plaintext (dev/test only); ignored when `pakHashExistingSecret` is set. **Unset or empty leaves the publicly-known development admin PAK active** — see [Admin Credential](#admin-credential-day-zero-bootstrap). |
 | `broker.pakHashExistingSecret` | string | `""` | Name of a pre-existing Secret to source the admin PAK hash from. Injected via `secretKeyRef`. |
-| `broker.pakHashExistingSecretKey` | string | `"BROKKR__BROKER__PAK_HASH"` | Key within that Secret holding the admin PAK hash. |
-| `ingress.tls` | list | `[{secretName, hosts}]` | TLS termination for the ingress — the only supported TLS path (the broker serves plain HTTP). |
-| `tls.certManager.issuer` | string | `"letsencrypt-prod"` | cert-manager issuer name |
-| `tls.certManager.issuerKind` | string | `"ClusterIssuer"` | Issuer kind |
-| `ingress.enabled` | bool | `false` | Enable ingress |
-| `ingress.className` | string | `"nginx"` | Ingress class name |
-| `ingress.annotations` | object | `{}` | Ingress annotations |
-| `ingress.hosts` | array | See values.yaml | Ingress host configuration |
-| `ingress.tls` | array | See values.yaml | Ingress TLS configuration |
+| `broker.pakHashExistingSecretKey` | string | `"BROKKR__BROKER__PAK_HASH"` | Key within that Secret holding the admin PAK hash |
+| `configReload.enabled` | bool | `true` | Sets `BROKKR_CONFIG_WATCHER_ENABLED`, so the broker watches its own ConfigMap and reloads hot-reloadable settings. Note the Deployment sets no `serviceAccountName` and the chart creates no RBAC, so the pod runs as the namespace `default` ServiceAccount — grant it `get`/`watch` on ConfigMaps separately if the watcher must work. |
+| `configReload.debounceSeconds` | int | `5` | Debounce window between successive reloads |
+
+### CORS
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `cors.allowedOrigins` | array | `["*"]` | `BROKKR__CORS__ALLOWED_ORIGINS` (joined with commas). Hot-reloadable. **The default allows every origin — narrow it for any internet-reachable broker.** |
+| `cors.allowedMethods` | array | `[GET, POST, PUT, PATCH, DELETE, OPTIONS]` | Allowed HTTP methods |
+| `cors.allowedHeaders` | array | `[Authorization, Content-Type, Accept]` | Allowed request headers |
+| `cors.maxAgeSeconds` | int | `3600` | Preflight cache lifetime. Hot-reloadable. |
+
+### Scaling and availability
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `autoscaling.enabled` | bool | `false` | Create a HorizontalPodAutoscaler (`autoscaling/v2`); overrides `replicaCount` |
+| `autoscaling.minReplicas` | int | `1` | HPA minimum replicas |
+| `autoscaling.maxReplicas` | int | `5` | HPA maximum replicas |
+| `autoscaling.targetCPUUtilizationPercentage` | int | `70` | CPU target for scaling |
+| `autoscaling.targetMemoryUtilizationPercentage` | int | unset (commented in `values.yaml`) | Optional memory target |
+| `autoscaling.behavior` | object | unset (commented in `values.yaml`) | HPA `behavior` block, passed through verbatim |
+| `podDisruptionBudget.enabled` | bool | `false` | Create a PodDisruptionBudget (`policy/v1`) |
+| `podDisruptionBudget.minAvailable` | int/string | `1` | Minimum available pods during voluntary disruptions. With `replicaCount: 1` this blocks node drains — pair PDBs with more than one replica. |
+| `podDisruptionBudget.maxUnavailable` | int/string | unset (commented in `values.yaml`) | Alternative to `minAvailable`; set only one |
+
+### Resources and security context
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
 | `resources.requests.memory` | string | `"256Mi"` | Memory request |
 | `resources.requests.cpu` | string | `"100m"` | CPU request |
 | `resources.limits.memory` | string | `"512Mi"` | Memory limit |
 | `resources.limits.cpu` | string | `"500m"` | CPU limit |
+| `apparmor.enabled` | bool | `false` | Add the `container.apparmor.security.beta.kubernetes.io/broker` pod annotation. Requires AppArmor-enabled nodes. |
+| `apparmor.profile` | string | `"runtime/default"` | AppArmor profile referenced by that annotation |
+| `podSecurityContext` | object | `{runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, fsGroup: 10001}` | Rendered verbatim as the pod `securityContext`. Replacing this object replaces all of it — re-state the defaults you want to keep. `seccompProfile: {type: RuntimeDefault}` is commented out in `values.yaml` and recommended for hardening. |
+| `containerSecurityContext` | object | `{allowPrivilegeEscalation: false, readOnlyRootFilesystem: false, runAsNonRoot: true, runAsUser: 10001, capabilities: {drop: [ALL]}}` | Rendered verbatim as the container `securityContext`. The chart already mounts an `emptyDir` at `/tmp`, so `readOnlyRootFilesystem: true` is the hardened setting. |
+
+### Metrics
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `metrics.enabled` | bool | `true` | In this chart it only gates the NetworkPolicy ingress rule for scraping. The broker's `/metrics` endpoint is served by the binary regardless of this value. |
+| `metrics.serviceMonitor.enabled` | bool | `false` | Create a Prometheus Operator `ServiceMonitor` scraping `/metrics` on the Service's `http` port |
+| `metrics.serviceMonitor.interval` | string | `"30s"` | Scrape interval |
+| `metrics.serviceMonitor.scrapeTimeout` | string | unset (commented in `values.yaml`) | Scrape timeout; must be shorter than `interval` |
+| `metrics.serviceMonitor.additionalLabels` | object | unset (commented in `values.yaml`) | Extra labels so your Prometheus `serviceMonitorSelector` matches |
+
+### NetworkPolicy
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `networkPolicy.enabled` | bool | `false` | Create a NetworkPolicy for the broker pod (Ingress + Egress) |
+| `networkPolicy.allowIngressFrom` | array | `[]` | Selectors allowed to reach the broker's API port. Empty means any pod in the same namespace. |
+| `networkPolicy.allowMetricsFrom` | array | `[]` | Selectors allowed to scrape metrics. Only applied when `metrics.enabled` is true. |
+| `networkPolicy.allowWebhookEgress` | bool | `true` | Permit egress so webhook deliveries can reach external HTTPS endpoints. Setting `false` breaks outbound webhooks. |
+| `networkPolicy.additionalEgressRules` | array | `[]` | Extra egress rules appended verbatim |
+
+### Telemetry (OpenTelemetry tracing)
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `telemetry.enabled` | bool | `false` | Set `BROKKR__TELEMETRY__ENABLED`; also sets the service name and sampling rate. Requires a pod restart to change. |
+| `telemetry.otlpEndpoint` | string | `"http://otel-collector:4317"` | OTLP/gRPC endpoint for trace export |
+| `telemetry.samplingRate` | float | `0.1` | Fraction of traces sampled (0.0–1.0) |
+| `telemetry.collector.enabled` | bool | `false` | Intended to run an OTel Collector sidecar. **Caveat:** this chart renders no sidecar container — setting it true only repoints `BROKKR__TELEMETRY__OTLP_ENDPOINT` at `http://localhost:4317`, where nothing is listening. Leave `false` and point `telemetry.otlpEndpoint` at a real collector. |
+| `telemetry.collector.image.repository` | string | `"otel/opentelemetry-collector-contrib"` | Sidecar image (unused — see above) |
+| `telemetry.collector.image.tag` | string | `"0.96.0"` | Sidecar image tag (unused) |
+| `telemetry.collector.image.pullPolicy` | string | `"IfNotPresent"` | Sidecar pull policy (unused) |
+| `telemetry.collector.resources` | object | requests `64Mi`/`50m`, limits `128Mi`/`100m` | Sidecar resources (unused) |
+| `telemetry.collector.exporters.otlpEndpoint` | string | `""` | Sidecar exporter endpoint (unused) |
+| `telemetry.collector.exporters.debug` | bool | `false` | Sidecar debug exporter (unused) |
 
 ## Examples
 

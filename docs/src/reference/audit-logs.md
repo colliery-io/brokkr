@@ -1,6 +1,8 @@
 # Audit Logs
 
-Brokkr maintains an immutable audit trail of administrative and security-sensitive operations. Every PAK creation, resource modification, authentication attempt, and significant system event is recorded with details about who performed the action, what was affected, and when it occurred.
+Brokkr records administrative and security-sensitive operations to an append-only audit trail. PAK creations, resource modifications, failed authentication attempts, and significant system events are captured with details about who performed the action, what was affected, and when it occurred.
+
+Audit writes are asynchronous and best-effort — see [Delivery Guarantees](#delivery-guarantees) before treating the trail as a system of record.
 
 ## Schema
 
@@ -16,9 +18,12 @@ Each audit log entry captures comprehensive information about an event:
 | `resource_type` | string | Type of resource affected (e.g., `agent`, `stack`) |
 | `resource_id` | UUID | ID of the affected resource (null if not applicable) |
 | `details` | JSON | Structured details about the action |
-| `ip_address` | string | Client IP address |
-| `user_agent` | string | Client user agent string |
+| `ip_address` | string | Client IP address. Omitted from the JSON entirely when not recorded |
+| `user_agent` | string | Client user agent string. Omitted from the JSON entirely when not recorded |
 | `created_at` | timestamp | When the record was created |
+| `actor_name` | string \| null | Human-readable actor name, added by the query API (see below) |
+
+`actor_name` is not a stored column: the query API resolves it when the entry is read. For `admin` and `system` actors it is the literal `"admin"` or `"system"`; for agents and generators it is that entity's current name, so a rename is reflected across the whole history. It is `null` when the actor ID no longer resolves to a live entity.
 
 ## Actor Types
 
@@ -37,13 +42,15 @@ Actions follow a `resource.verb` naming convention.
 
 ### Currently Emitted
 
-These actions are recorded by the broker today (emit sites in `crates/brokkr-broker/src/api/v1/{agents,stacks,webhooks,middleware,admin}.rs`):
+These actions are recorded by the broker today:
 
 | Action | Description |
 |--------|-------------|
-| `agent.created` | New agent registered |
+| `agent.created` | New agent created |
 | `agent.updated` | Agent details modified |
 | `agent.deleted` | Agent removed |
+| `agent.registered` | An agent was registered with a generator |
+| `agent.deregistered` | An agent's registration with a generator was removed |
 | `pak.rotated` | An agent or generator PAK was rotated (REST endpoint or CLI; CLI entries carry `details.via = "cli"`) |
 | `stack.created` | New stack created |
 | `stack.updated` | Stack details modified |
@@ -69,7 +76,7 @@ These actions are recorded by the broker today (emit sites in `crates/brokkr-bro
 
 ### Defined but Not Yet Emitted
 
-Two action constants exist in the data model (`crates/brokkr-models/src/models/audit_logs.rs`) but are intentionally not recorded: `auth.success` (one row per uncached authenticated request would dwarf the rest of the log; successful access is observable via the resource-level events) and `pak.deleted` (PAKs have no standalone deletion — they are replaced on rotation or die with their entity, both of which are audited).
+Two action constants exist in the data model but are intentionally not recorded: `auth.success` (one row per uncached authenticated request would dwarf the rest of the log; successful access is observable via the resource-level events) and `pak.deleted` (PAKs have no standalone deletion — they are replaced on rotation or die with their entity, both of which are audited).
 
 ## Resource Types
 
@@ -122,6 +129,7 @@ Authorization: Bearer <admin_pak>
       "timestamp": "2025-01-02T10:00:00Z",
       "actor_type": "admin",
       "actor_id": null,
+      "actor_name": "admin",
       "action": "agent.created",
       "resource_type": "agent",
       "resource_id": "e5f6g7h8-...",
@@ -171,12 +179,19 @@ The `details` field contains structured JSON with context specific to each actio
 }
 ```
 
-**Agent update** (`agent.updated`, from `crates/brokkr-broker/src/api/v1/agents.rs`):
+**Agent update** (`agent.updated`):
 ```json
 {
   "name": "my-agent",
   "cluster_name": "production",
   "status": "ACTIVE"
+}
+```
+
+**Agent registration** (`agent.registered`, `agent.deregistered`) — the resource is the agent; the generator it was registered with is in the details:
+```json
+{
+  "generator_id": "abc123-..."
 }
 ```
 
@@ -204,6 +219,19 @@ broker:
 
 The cleanup task uses the `created_at` index for efficient deletion of old records.
 
+## Delivery Guarantees
+
+Audit logging is asynchronous and best-effort. It is deliberately kept off the request hot path: a handler hands the entry to an in-memory queue (bounded at 10,000 entries) and returns immediately, and a background writer drains the queue into the database in batches of up to 100, at least once per second.
+
+The consequences of that design are:
+
+- **Entries are not written transactionally with the operation they describe.** An operation can succeed and its entry can still be missing. Ordering within a batch is preserved, but an entry may land in the database slightly after the response is sent.
+- **A failed batch insert is discarded, not retried.** If the database is unavailable when the writer flushes, the entries in that batch are logged to the broker's error log (`Lost audit entry: ...`) and dropped. They are never re-attempted.
+- **Queued entries do not survive an abrupt stop.** Anything still in memory when the process is killed is lost.
+- **Sustained write pressure slows producers rather than losing entries.** When the queue is full, the enqueue waits for space instead of discarding, so a backlog shows up as delayed entries.
+
+Treat the trail as a high-fidelity operational and security record, not as a guaranteed-complete ledger. If your compliance posture requires guaranteed capture, export the trail on a schedule (see [Working with Audit Logs](../how-to/audit-logs.md)) and alert on `Lost audit entry` in the broker logs.
+
 ## Immutability
 
 Audit log records are immutable after creation. The database schema enforces this by:
@@ -212,7 +240,7 @@ Audit log records are immutable after creation. The database schema enforces thi
 - No update operations are exposed through the API or DAL
 - Records can only be deleted by the retention policy
 
-This immutability is essential for compliance requirements—audit logs must accurately reflect what happened without possibility of after-the-fact modification.
+Nothing that reaches the table can be altered after the fact. Note that immutability is a separate property from completeness — see [Delivery Guarantees](#delivery-guarantees).
 
 ## Database Indexes
 
@@ -228,7 +256,9 @@ For query performance, the following indexes exist:
 
 ## Security Considerations
 
-**Access control**: Only admin PAKs can query audit logs. Agents and generators cannot access the audit log API.
+**Access control**: The audit log API is gated on admin rights. Two credentials qualify: an admin PAK, and the broker's zero-config read-only console token. Agent and generator PAKs are rejected.
+
+**Console exposure**: The read-only console token is handed to any browser that can load the Operator Console from the broker's HTTP port, and read requests made with it — including audit-log queries — are allowed. Network reachability of that port is therefore the boundary protecting the audit trail, IP addresses and user agents included. Restrict access to the broker port accordingly.
 
 **Sensitive data**: The `details` field may contain resource names and identifiers but should not contain secrets. PAK values are never logged—only the action of creation or rotation is recorded.
 

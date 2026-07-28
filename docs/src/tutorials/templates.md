@@ -12,9 +12,12 @@ In this tutorial, you'll create a reusable deployment template with parameterize
 
 **Prerequisites:**
 
-- A running Brokkr development environment (`angreal local up`)
-- Your admin PAK
-- Completed the [Deploy Your First Application](./first-deployment.md) tutorial
+- A broker you can reach at `http://localhost:3000` — either a [Helm install](../getting-started/installation.md) with `kubectl port-forward svc/brokkr-broker 3000:3000` running, or the [local development environment](../getting-started/development.md) (`angreal local up`)
+- Your admin PAK for that broker (see [Adapting the commands to your install](./README.md#adapting-the-commands-to-your-install))
+- `curl` and `jq` installed
+- Recommended: [Deploy Your First Application](./first-deployment.md), for stacks and deployment objects. Nothing here depends on the resources it created.
+
+**No agent is required.** Templates are validated and rendered by the broker, and this tutorial stops at the deployment object it produces — it never targets an agent, so nothing reaches a cluster.
 
 ## Step 1: Understand the Template Concept
 

@@ -148,10 +148,12 @@ BROKKR__AGENT__PAK=brokkr_BRnewKey_NewLongTokenValue1234567890
 
 **Kubernetes secret:**
 ```bash
-kubectl create secret generic brokkr-agent-pak \
-  --from-literal=pak="brokkr_BRnewKey_NewLongTokenValue1234567890" \
+kubectl create secret generic brokkr-agent-credentials \
+  --from-literal=BROKKR__AGENT__PAK="brokkr_BRnewKey_NewLongTokenValue1234567890" \
   --dry-run=client -o yaml | kubectl apply -f -
 ```
+
+The key must be `BROKKR__AGENT__PAK` — that is the agent chart's default `broker.existingSecretKey`, and the chart injects it into the pod by that name. Point the release at the Secret with `--set broker.existingSecret=brokkr-agent-credentials`; a mismatched key leaves the pod in `CreateContainerConfigError`. Because the value is read once at container start, updating the Secret does not restart the agent — follow it with `kubectl rollout restart deploy/brokkr-agent`. See [Installing Brokkr](../getting-started/installation.md) for the full Secret-based install.
 
 > **Warning:** The agent will fail to authenticate with the old PAK immediately after rotation. Ensure you update the agent configuration before the next poll cycle, or the agent will lose connectivity until updated.
 

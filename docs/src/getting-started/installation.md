@@ -27,6 +27,8 @@ kubectl cluster-info
 
 Get a broker and agent running in your cluster in under 10 minutes.
 
+This walkthrough passes credentials as plaintext `--set` values, which is the fastest way to see Brokkr working on a throwaway cluster. Values set that way are rendered into ConfigMaps in cleartext, so for anything you intend to keep, use [Production Install: Credentials from Kubernetes Secrets](#production-install-credentials-from-kubernetes-secrets) instead — the steps are the same shape, with each credential read from a Secret you create first.
+
 ### 1. Install the Broker
 
 Install the broker with bundled PostgreSQL for development:
@@ -65,6 +67,14 @@ Every `/api/v1` request must carry a PAK (Prefixed API Key) in the `Authorizatio
 ```bash
 brokkr-broker generate-pak
 ```
+
+You do not need a source checkout or a Rust toolchain for this. `brokkr-broker` is the same binary the broker image runs as its entrypoint, so if you are installing by Helm alone, run the command straight from the published image:
+
+```bash
+docker run --rm ghcr.io/colliery-io/brokkr-broker:latest generate-pak
+```
+
+Substitute the release tag you intend to deploy if you are pinning the image rather than tracking `latest`. The command is entirely offline — no database, no cluster, no keyfile — so it is safe to run on a laptop before the broker exists. Everywhere this guide says `brokkr-broker generate-pak`, either form works.
 
 This prints both the PAK value and its SHA-256 hash without touching a database or keyfile. Set the hash as `broker.pakHash` in your Helm values before first startup; the broker stores it on the admin role at initialization. Keep the PAK value secret and export it for the steps below.
 
@@ -148,16 +158,102 @@ Check that both components are healthy:
 
 ```bash
 # Check broker health
-kubectl exec deploy/brokkr-broker -- wget -qO- http://localhost:3000/healthz
+kubectl exec deploy/brokkr-broker -- curl -fsS http://localhost:3000/healthz
 
 # Check agent health
-kubectl exec deploy/brokkr-agent -- wget -qO- http://localhost:8080/healthz
+kubectl exec deploy/brokkr-agent -- curl -fsS http://localhost:8080/healthz
 
 # View agent registration in broker logs
 kubectl logs deploy/brokkr-broker | grep -i agent
 ```
 
 You should see "OK" from both health checks and agent registration messages in the broker logs.
+
+Both images are `debian:bookworm-slim` with `curl` installed and no `wget`, so `curl` is the tool to reach for in any in-pod check.
+
+## Production Install: Credentials from Kubernetes Secrets
+
+Four values the charts accept are credentials: the database connection URL, the admin PAK hash, the webhook encryption key, and the agent's PAK. Set as plaintext Helm values, each one is rendered into a ConfigMap — readable by anything with `get configmap` in the namespace, and preserved in your values files, in `helm get values`, and in git history if the values file is committed.
+
+Both charts can instead read each credential from a Kubernetes Secret you create beforehand. When you set the matching `existingSecret` value, the chart **leaves the credential out of the ConfigMap** and injects it into the pod with a `secretKeyRef`. That omission is the observable difference, and it is worth checking after the install. This is the recommended path for any install you intend to keep, and the natural fit for GitOps: your values carry only the *name* of the Secret. It also pairs with tools like [external-secrets-operator](https://external-secrets.io/), which vend the credential from Vault, 1Password, or a cloud secret manager into the Secret at deploy time.
+
+Create the Secrets before installing. A Secret or key that does not exist leaves the pod stuck in `CreateContainerConfigError` — Kubernetes cannot start a container whose environment it cannot resolve.
+
+> **Install a recent enough chart.** Most of these `existingSecret` values are new, and Helm silently ignores values a chart does not know about: pin an older chart and the install appears to succeed while the credential goes into the ConfigMap in plaintext anyway. The `helm install` commands on this page carry no `--version`, so Helm resolves the newest published chart and you are fine. If you pin versions, check the minimum in [Chart Versions and the `existingSecret` Values](../how-to/install-operations.md#chart-versions-and-the-existingsecret-values) first, and verify the ConfigMap afterwards as shown below — that check is what catches the mistake.
+
+### 1. Create the Broker Secrets
+
+```bash
+# Database connection URL — the full postgres:// URL, not its parts
+kubectl create secret generic brokkr-broker-db \
+  --from-literal=database-url='postgres://brokkr:<password>@postgres.example.com:5432/brokkr'
+
+# Admin PAK hash, from `brokkr-broker generate-pak` (see Quick Start step 3)
+kubectl create secret generic brokkr-broker-admin-pak-hash \
+  --from-literal=BROKKR__BROKER__PAK_HASH='<hash-from-generate-pak>'
+
+# Webhook encryption key — 64 hex characters (32 bytes)
+kubectl create secret generic brokkr-broker-webhook-key \
+  --from-literal=BROKKR__BROKER__WEBHOOK_ENCRYPTION_KEY="$(openssl rand -hex 32)"
+```
+
+The key names above are the chart defaults, so nothing else is needed to point at them. If your secret manager writes different key names, set the matching `*ExistingSecretKey` value instead of renaming the key.
+
+### 2. Install the Broker
+
+```bash
+helm install brokkr-broker oci://ghcr.io/colliery-io/charts/brokkr-broker \
+  --set postgresql.enabled=false \
+  --set postgresql.existingSecret=brokkr-broker-db \
+  --set broker.pakHashExistingSecret=brokkr-broker-admin-pak-hash \
+  --set broker.webhookEncryptionKeyExistingSecret=brokkr-broker-webhook-key \
+  --wait
+```
+
+Confirm no credential reached the ConfigMap:
+
+```bash
+kubectl get configmap brokkr-broker -o yaml
+```
+
+`BROKKR__DATABASE__URL`, `BROKKR__BROKER__PAK_HASH`, and `BROKKR__BROKER__WEBHOOK_ENCRYPTION_KEY` should all be absent from the output. Each is present in the pod's environment instead:
+
+```bash
+kubectl exec deploy/brokkr-broker -- printenv BROKKR__BROKER__PAK_HASH
+```
+
+Sourcing the webhook encryption key this way also heads off a hard failure later. With no key configured, the broker generates a fresh random key on every start and warns about it; once at least one webhook subscription exists, a broker that starts with the key unset **refuses to start** rather than come up unable to decrypt those subscriptions' stored URLs and auth headers. See [Configuring Webhooks](../how-to/webhooks.md).
+
+### 3. Create the Agent Secret and Install
+
+Register the agent through the broker API first (Quick Start step 4), then put the returned `initial_pak` in a Secret rather than on the `helm install` command line, where it would be visible in your shell history and in the agent's ConfigMap:
+
+```bash
+kubectl create secret generic brokkr-agent-credentials \
+  --from-literal=BROKKR__AGENT__PAK='<initial_pak>'
+
+helm install brokkr-agent oci://ghcr.io/colliery-io/charts/brokkr-agent \
+  --set broker.url=http://brokkr-broker:3000 \
+  --set broker.existingSecret=brokkr-agent-credentials \
+  --set broker.agentName=my-agent \
+  --set broker.clusterName=development \
+  --wait
+```
+
+With `broker.existingSecret` set, the agent ConfigMap's `BROKKR__AGENT__PAK` renders as an empty string and the `secretKeyRef` in the Deployment supplies the real value, so the PAK itself never appears in the ConfigMap or in your values.
+
+### Existing-Secret Values Reference
+
+| Chart | Values | Credential | Default key in the Secret |
+|-------|--------|------------|---------------------------|
+| Broker | `postgresql.existingSecret` / `postgresql.existingSecretKey` | Full PostgreSQL connection URL (`BROKKR__DATABASE__URL`) | `database-url` |
+| Broker | `broker.pakHashExistingSecret` / `broker.pakHashExistingSecretKey` | Admin PAK hash (`BROKKR__BROKER__PAK_HASH`) | `BROKKR__BROKER__PAK_HASH` |
+| Broker | `broker.webhookEncryptionKeyExistingSecret` / `broker.webhookEncryptionKeyExistingSecretKey` | Webhook encryption key (`BROKKR__BROKER__WEBHOOK_ENCRYPTION_KEY`) | `BROKKR__BROKER__WEBHOOK_ENCRYPTION_KEY` |
+| Agent | `broker.existingSecret` / `broker.existingSecretKey` | Agent PAK (`BROKKR__AGENT__PAK`) | `BROKKR__AGENT__PAK` |
+
+In every case the `existingSecret` value wins. When it is set, the plaintext value it replaces — the connection URL the chart would otherwise assemble from `postgresql.external.*` or the bundled database's credentials, `broker.pakHash`, `broker.webhookEncryptionKey`, or the agent's `broker.pak` — is ignored, the credential is left out of the ConfigMap, and the pod receives it through `secretKeyRef`. `postgresql.existingSecret` applies whether the database is bundled or external.
+
+You can mix the two: source the admin PAK hash from a Secret while leaving a development database URL as a plain value, for example. Each pair is independent.
 
 ## Detailed Installation
 
@@ -167,7 +263,7 @@ The broker is the central management service that coordinates deployments across
 
 #### Development Setup (Bundled PostgreSQL)
 
-For development and testing, use the bundled PostgreSQL:
+For development and testing, use the bundled PostgreSQL. The password below is rendered into the broker's ConfigMap as part of `BROKKR__DATABASE__URL`, so keep this form to dev and test clusters and use [`postgresql.existingSecret`](#production-install-credentials-from-kubernetes-secrets) elsewhere:
 
 ```bash
 helm install brokkr-broker oci://ghcr.io/colliery-io/charts/brokkr-broker \
@@ -210,6 +306,8 @@ The agent runs in each Kubernetes cluster you want to manage and communicates wi
 
 #### Basic Agent Installation
 
+Passing the PAK with `--set broker.pak` renders it into the agent's ConfigMap in plaintext — acceptable for dev and test, but for anything longer-lived source it from a Secret with `broker.existingSecret` as shown in [Production Install](#3-create-the-agent-secret-and-install).
+
 ```bash
 # Create agent via broker API (see Quick Start step 4)
 # Then install with the returned initial_pak.
@@ -244,7 +342,7 @@ View all available agent values files:
 
 ## Chart Versions, Upgrades, and Uninstallation
 
-For pinning chart versions, installing development builds, upgrading, and uninstalling, see [Installing, Upgrading, and Uninstalling with Helm](../how-to/install-operations.md).
+Every `helm install` on this page is unpinned, so Helm pulls the newest published chart — the right default, and the one that supports everything documented here. For pinning to a specific version (and the minimum version the `existingSecret` values need), installing development builds, upgrading, and uninstalling, see [Installing, Upgrading, and Uninstalling with Helm](../how-to/install-operations.md).
 
 ## Verifying the Installation
 
@@ -340,12 +438,14 @@ Key configuration options for the broker chart:
 | `replicaCount` | Number of broker replicas | `1` |
 | `image.tag` | Image tag to use | `latest` |
 | `broker.logLevel` | Log level | `info` |
-| `broker.webhookEncryptionKey` | Hex-encoded 32-byte key for webhook secrets at rest; a random key is generated on every boot if unset | unset |
+| `broker.webhookEncryptionKey` | Hex-encoded 32-byte key for webhook secrets at rest; a random key is generated on every boot if unset. Rendered into the ConfigMap in plaintext — prefer `broker.webhookEncryptionKeyExistingSecret` | unset |
 | `configReload.enabled` | Watch the ConfigMap and reload hot-reloadable settings automatically | `true` |
 | `configReload.debounceSeconds` | Debounce window for successive reloads | `5` |
 | `resources.limits.cpu` | CPU limit | `500m` |
 | `resources.limits.memory` | Memory limit | `512Mi` |
 | `ingress.tls` | TLS termination for the ingress — the broker itself serves plain HTTP and cannot terminate TLS | unset |
+
+The credential values that can be sourced from a pre-created Secret instead — the database URL, the admin PAK hash, and the webhook encryption key — are listed in the [Existing-Secret Values Reference](#existing-secret-values-reference).
 
 ### Agent Values
 
@@ -354,7 +454,9 @@ Key configuration options for the agent chart:
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `broker.url` | Broker URL | `http://brokkr-broker:3000` |
-| `broker.pak` | Agent PAK (Prefixed API Key) | **Required** |
+| `broker.pak` | Agent PAK (Prefixed API Key). Rendered into the ConfigMap in plaintext (dev/test); ignored when `broker.existingSecret` is set | **Required** unless `broker.existingSecret` is set |
+| `broker.existingSecret` | Name of a pre-created Secret to read the agent PAK from; injected via `secretKeyRef` and kept out of the ConfigMap. See the [Existing-Secret Values Reference](#existing-secret-values-reference) | `""` |
+| `broker.existingSecretKey` | Key within that Secret holding the PAK | `BROKKR__AGENT__PAK` |
 | `broker.generatorIds` | Generator UUIDs (YAML list or comma string) this agent self-registers with at startup. The agent is always auto-registered with the system/fleet generator; application generators must be listed here to serve their stacks. See [Registering Agents with Generators](../how-to/agent-registration.md) | `[]` |
 | `broker.agentName` | Human-readable agent name | `""` |
 | `broker.clusterName` | Name of the managed cluster | `""` |
@@ -376,11 +478,12 @@ For complete configuration options, see the chart values files:
 
 ## Production Checklist
 
-Three defaults are safe for development but dangerous in production:
+These defaults and shortcuts are safe for development but dangerous in production:
 
-1. **Replace the default admin PAK.** The default configuration embeds a publicly known `broker.pak_hash` — leaving it in place means anyone can use the development admin credential against your broker. Run `brokkr-broker generate-pak` and set the printed hash as `broker.pakHash` (or reference a Secret containing it via `broker.pakHashExistingSecret`) before first startup. Leaving the chart value empty does **not** generate a fresh key; it silently keeps the publicly known default active.
-2. **Set a persistent webhook encryption key.** If `broker.webhook_encryption_key` (`BROKKR__BROKER__WEBHOOK_ENCRYPTION_KEY`, 64 hex chars / 32 bytes) is unset, the broker generates a random key on every startup — webhook URLs and auth headers encrypted under the previous key become unreadable after a restart.
-3. **Lower the log level.** The binary default is `debug`; the Helm chart sets `broker.logLevel: info`. If you run the binary outside the chart, set `BROKKR__LOG__LEVEL=info` (or `warn`).
+1. **Replace the default admin PAK.** The default configuration embeds a publicly known `broker.pak_hash` — leaving it in place means anyone can use the development admin credential against your broker. Run `brokkr-broker generate-pak` — from the broker image if you have no binary, `docker run --rm ghcr.io/colliery-io/brokkr-broker:latest generate-pak` (see [Get the Admin PAK](#3-get-the-admin-pak)) — and set the printed hash via `broker.pakHashExistingSecret` (or, on a dev cluster, as the plaintext `broker.pakHash`) before first startup. Leaving the chart value empty does **not** generate a fresh key; it silently keeps the publicly known default active.
+2. **Set a persistent webhook encryption key.** If `broker.webhook_encryption_key` (`BROKKR__BROKER__WEBHOOK_ENCRYPTION_KEY`, 64 hex chars / 32 bytes) is unset, the broker generates a random key on every startup — webhook URLs and auth headers encrypted under the previous key become unreadable after a restart, and once subscriptions exist the broker refuses to start with the key unset. Source it from a Secret with `broker.webhookEncryptionKeyExistingSecret`.
+3. **Keep credentials out of ConfigMaps.** The database URL, admin PAK hash, webhook encryption key, and agent PAK all land in a ConfigMap in cleartext when set as plaintext Helm values. Source each from a pre-created Secret instead — see [Production Install: Credentials from Kubernetes Secrets](#production-install-credentials-from-kubernetes-secrets).
+4. **Lower the log level.** The binary default is `debug`; the Helm chart sets `broker.logLevel: info`. If you run the binary outside the chart, set `BROKKR__LOG__LEVEL=info` (or `warn`).
 
 See the [Configuration Guide](./configuration.md) for details on each setting.
 
@@ -406,11 +509,25 @@ kubectl logs -l app.kubernetes.io/name=brokkr-broker
 **Agent not connecting to broker:**
 ```bash
 # Verify broker URL is accessible from agent
-kubectl exec deploy/brokkr-agent -- wget -qO- http://brokkr-broker:3000/healthz
+kubectl exec deploy/brokkr-agent -- curl -fsS http://brokkr-broker:3000/healthz
 
 # Check agent logs for connection errors
 kubectl logs -l app.kubernetes.io/name=brokkr-agent
 ```
+
+**Pod stuck in `CreateContainerConfigError`:**
+
+A pod that never starts a container is usually missing a Secret it was told to read. Kubernetes cannot resolve the environment, so it never gets as far as running the image.
+
+```bash
+# The event names the missing Secret or key
+kubectl describe pod -l app.kubernetes.io/name=brokkr-broker | tail -20
+
+# Confirm the Secret exists and holds the expected key
+kubectl get secret <secret-name> -o jsonpath='{.data}' | jq 'keys'
+```
+
+Check the key name against the defaults in the [Existing-Secret Values Reference](#existing-secret-values-reference), and set the matching `*ExistingSecretKey` value if your Secret uses a different one.
 
 **Database connection errors:**
 ```bash

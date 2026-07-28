@@ -46,7 +46,19 @@ The response includes the stack's UUID which you'll use for all subsequent opera
 
 ### Stack Naming Conventions
 
-Stack names must be non-empty strings up to 255 characters. Brokkr enforces nothing beyond that, but a consistent pattern (e.g. `api-gateway-v2`) makes infrastructure easier to navigate.
+Stack names must be non-empty strings up to 255 characters, and they are **unique across the whole broker** — not per generator. Creating a stack whose name is already taken by a live stack fails with `409 Conflict` and error code `unique_violation`:
+
+```json
+{
+  "code": "unique_violation",
+  "message": "violates unique constraint `unique_stack_name`",
+  "details": { "constraint": "unique_stack_name" }
+}
+```
+
+The constraint only covers stacks that have not been deleted, so deleting a stack frees its name for reuse.
+
+Because the namespace is shared by every tenant on the broker, prefix names with the owning team or application (e.g. `payments-api-gateway-v2` rather than `api-gateway-v2`). Doing so avoids collisions with another generator's stacks — and avoids leaking that a name is already in use elsewhere.
 
 ## Configuring Labels and Annotations
 

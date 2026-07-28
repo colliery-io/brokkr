@@ -11,11 +11,19 @@ In this tutorial, you'll deploy an nginx web server to a Kubernetes cluster thro
 
 **Prerequisites:**
 
-- A running Brokkr development environment (see [Local Development Environment](../getting-started/development.md) — `angreal local up` starts the full stack)
-- The admin PAK (Prefixed API Key). The PAK itself is never logged. The development environment uses the default configuration, whose embedded `broker.pak_hash` corresponds to the publicly known dev PAK `brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8` — use that here. (Only if a broker is explicitly configured with an empty `broker.pak_hash` does it generate a fresh PAK at first startup and write it to `/tmp/brokkr-keys/key.txt` inside the broker container; leaving the setting untouched keeps the embedded default hash.)
+- A broker you can reach at `http://localhost:3000`, from either a [Helm install](../getting-started/installation.md) (`kubectl port-forward svc/brokkr-broker 3000:3000`) or the [local development environment](../getting-started/development.md) (`angreal local up`)
+- The admin PAK (Prefixed API Key) for that broker. The PAK itself is never logged. In the development environment it is the publicly known dev PAK `brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8`, which corresponds to the embedded default `broker.pak_hash`. After a Helm install it is the PAK you minted with `brokkr-broker generate-pak` — you can run that from the published image without installing anything: `docker run --rm ghcr.io/colliery-io/brokkr-broker:latest generate-pak`. (Only if a broker is explicitly configured with an empty `broker.pak_hash` does it generate a fresh PAK at first startup and write it to `/tmp/brokkr-keys/key.txt` inside the broker container; leaving the setting untouched keeps the embedded default hash.)
+- **A running agent connected to a Kubernetes cluster.** This tutorial checks its own results with `kubectl`, so an agent *process* has to be polling and applying — an agent record in the broker alone is not enough. The development environment pre-creates one called `brokkr-integration-test-agent`; after a Helm install it is the agent you created and installed in [Quick Start steps 4 and 5](../getting-started/installation.md#4-create-an-agent-and-get-its-pak), named by your `broker.agentName`.
 - `curl` and `jq` installed
 
-The development environment automatically creates a test agent (`brokkr-integration-test-agent`) that starts `INACTIVE` and is registered only with the **system generator**. You'll activate it and register it with the `admin-generator` in Step 3 before targeting it to your stack — see [Registering Agents with Generators](../how-to/agent-registration.md) for the operational details.
+Export your agent's name before you start — the commands below use it:
+
+```bash
+export AGENT_NAME=brokkr-integration-test-agent   # development environment
+# export AGENT_NAME=my-agent                      # Helm install: your broker.agentName
+```
+
+A freshly created agent — the development environment's test agent included — starts `INACTIVE` and is registered only with the **system generator**. You'll activate it and register it with the `admin-generator` in Step 3 before targeting it to your stack — see [Registering Agents with Generators](../how-to/agent-registration.md) for the operational details. (If you already activated and registered your agent while following the installation guide, those steps are idempotent enough to re-run: re-registering returns `409 already_registered`.)
 
 ## Step 1: Verify the Environment
 
@@ -38,9 +46,9 @@ curl -s http://localhost:3000/api/v1/agents \
   -H "Authorization: Bearer <your-admin-pak>" | jq '.[].name'
 ```
 
-In the development environment, you should see `"brokkr-integration-test-agent"` — the agent the environment pre-creates at startup. Note the agent's `id` field — you'll need it later.
+You should see the name you exported as `$AGENT_NAME` in that list: `"brokkr-integration-test-agent"` in the development environment, or your own `broker.agentName` after a Helm install. If the list is empty, no agent has been created yet — go back to [Quick Start step 4](../getting-started/installation.md#4-create-an-agent-and-get-its-pak).
 
-> **Tip:** Throughout this tutorial, replace `<your-admin-pak>` with your actual admin PAK. In the development environment that is `brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8`.
+> **Tip:** Throughout this tutorial, replace `<your-admin-pak>` with your actual admin PAK. In the development environment that is `brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8`; on your own install it is the PAK whose hash you configured as `broker.pakHash` / `broker.pakHashExistingSecret`.
 
 ## Step 2: Create a Stack
 
@@ -73,19 +81,19 @@ The response contains the new stack with its ID. The `generator_id` field ties t
 
 Agents receive a stack's resources in two ways: via **agent targets** — explicit assignments that require the agent to be registered with the stack's owning generator first — or via label/annotation matching, when the stack's selectors match the agent's labels or annotations. In this tutorial you'll use an agent target.
 
-Registration is the agent's opt-in consent boundary: an agent must be registered with a generator before any stack that generator owns can be targeted at it. The development environment's test agent is registered only with the system generator, so you must register it with the `admin-generator` before targeting. For the operational details, see [Registering Agents with Generators](../how-to/agent-registration.md).
+Registration is the agent's opt-in consent boundary: an agent must be registered with a generator before any stack that generator owns can be targeted at it. A new agent — the development environment's test agent, or one you created through the API — is registered only with the system generator, so you must register it with the `admin-generator` before targeting. For the operational details, see [Registering Agents with Generators](../how-to/agent-registration.md).
 
-First, get the agent ID:
+First, get the agent ID (using the `$AGENT_NAME` you exported in the prerequisites):
 
 ```bash
 AGENT_ID=$(curl -s http://localhost:3000/api/v1/agents \
   -H "Authorization: Bearer <your-admin-pak>" \
-  | jq -r '.[] | select(.name=="brokkr-integration-test-agent") | .id')
+  | jq -r --arg name "$AGENT_NAME" '.[] | select(.name==$name) | .id')
 
 echo "Agent ID: $AGENT_ID"
 ```
 
-Every new agent starts with status `INACTIVE`, and an inactive agent skips all deployment work — nothing reaches the cluster until you activate it. The development environment leaves its test agent inactive, so activate it now:
+Every new agent starts with status `INACTIVE`, and an inactive agent skips all deployment work — nothing reaches the cluster until you activate it. Activate yours now (harmless if it is already `ACTIVE`):
 
 ```bash
 curl -s -X PUT "http://localhost:3000/api/v1/agents/${AGENT_ID}" \
@@ -161,7 +169,7 @@ You should see a SUCCESS event:
 
 > **Troubleshooting:** If the events list stays empty and nothing appears on the cluster, the usual cause is an agent that is still `INACTIVE` — re-run the activation command from Step 3 and check that the response shows `"status": "ACTIVE"`.
 
-If you have `kubectl` configured to talk to your development cluster (k3s), verify the resources directly:
+With `kubectl` pointed at the cluster your agent manages (the bundled k3s in the development environment, or the cluster you installed the agent chart into), verify the resources directly:
 
 ```bash
 kubectl get all -n tutorial-nginx

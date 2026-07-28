@@ -4,22 +4,116 @@ This Helm chart deploys the Brokkr agent to a Kubernetes cluster. The agent conn
 
 ## Prerequisites
 
-- Kubernetes 1.19+
-- Helm 3.0+
+- **Kubernetes 1.29 or later.** `Chart.yaml` declares `kubeVersion: ">=1.29.0-0"`, so
+  Helm refuses to install or upgrade this chart on anything older:
+
+  ```
+  Error: chart requires kubeVersion: >=1.29.0-0 which is incompatible with Kubernetes v1.28.0
+  ```
+
+  The floor was introduced together with the Shipwright Build integration and is
+  documented in `Chart.yaml` as the Kubernetes baseline that integration requires
+  (the same 1.29 floor is stated in
+  [Shipwright Builds](https://github.com/colliery-io/brokkr/blob/main/docs/src/how-to/shipwright-builds.md)).
+  Note that the pin is **chart-wide and unconditional** — setting `shipwright.enabled=false`
+  does not lower it. If you need the agent on an older cluster you would have to relax
+  `kubeVersion` in a fork; nothing else in the agent's own manifests is known to require 1.29.
+- Helm 3.8+ (3.8 is the floor for `helm install oci://…` against the published charts;
+  installing from a local checkout works with any Helm 3.x)
 - A running Brokkr broker instance
 - Broker Pre-Authenticated Key (PAK) for agent authentication
+- For a **default** install, cluster-admin rights and a cluster with no existing Tekton or
+  Shipwright installation — see the next section
+
+## What a Default Install Does to Your Cluster
+
+> **Read this before installing into a shared or multi-tenant cluster.**
+>
+> With chart defaults (`shipwright.enabled: true`, `shipwright.install.tekton: true`,
+> `shipwright.install.shipwright: true`), installing "just an agent" also installs
+> **cluster-scoped build infrastructure that is not namespaced to your release**.
+
+A pre-install/pre-upgrade hook Job (`templates/shipwright-install-job.yaml`) runs `kubectl apply`
+against upstream release manifests and creates:
+
+| What | Where | Triggered when |
+|------|-------|----------------|
+| **Tekton Pipelines `v0.68.1`** — 9 CRDs, the `tekton-pipelines` and `tekton-pipelines-resolvers` namespaces, controller/webhook/events-controller Deployments, cluster RBAC, and 3 admission webhook configurations | cluster-wide | `shipwright.enabled` **and** `shipwright.install.tekton` |
+| **Shipwright Build `v0.18.1`** — 4 CRDs, the `shipwright-build` namespace, controller and webhook Deployments, cluster RBAC | cluster-wide | `shipwright.enabled` **and** `shipwright.install.shipwright` |
+| Webhook serving certificate + CRD `caBundle` patches on `builds/buildruns/buildstrategies/clusterbuildstrategies.shipwright.io` | cluster-wide | as above, per `shipwright.certManagement` |
+| Upstream sample `ClusterBuildStrategy` objects (buildah, kaniko, buildpacks, …) | cluster-wide | additionally `shipwright.install.sampleStrategies` |
+| A `ServiceAccount` bound to the built-in **`cluster-admin`** ClusterRole, used to run the Job | your release namespace + a cluster-scoped `ClusterRoleBinding` | whenever the Job renders |
+
+Versions come from `shipwright.install.tektonVersion` / `shipwright.install.shipwrightVersion`;
+the table shows the current chart defaults. Consequences worth knowing up front:
+
+- **It collides with an existing Tekton/Shipwright.** The Job applies the pinned upstream
+  manifests with `kubectl apply --server-side=true` (no `--force-conflicts`), so against an
+  installation owned by another field manager it will either take ownership of those
+  cluster-scoped objects or fail on field conflicts — and the Job's `set -e` turns a failure
+  into a failed `helm install`/`helm upgrade`. Either way the blast radius is the whole
+  cluster, not just your namespace.
+- **It requires cluster-admin, and grants it.** Whoever installs must be able to create a
+  `ClusterRoleBinding` to `cluster-admin`. A namespace-scoped tenant cannot install with
+  defaults, and should not be given the ability to.
+- **It re-runs on every `helm upgrade`** — the hook is `pre-install,pre-upgrade`.
+- **It needs egress** to `storage.googleapis.com` and `github.com` from the Job pod. Air-gapped
+  clusters must opt out and install Tekton/Shipwright by mirror.
+- **`helm uninstall` does not remove any of it.** The Job's `kubectl apply` output is not part
+  of the Helm release. See [Uninstallation](#uninstallation).
+- Setting `rbac.clusterWide: false` limits the *agent's* RBAC only. It does **not** disable
+  the installer hook or make the install namespace-local.
+
+### Opting Out
+
+```bash
+# Keep build work orders, but do NOT install Tekton/Shipwright (you provide them).
+# shipwright.enabled=true still grants the agent RBAC for shipwright.io / tekton.dev.
+helm install my-agent charts/brokkr-agent \
+  --set shipwright.install.tekton=false \
+  --set shipwright.install.shipwright=false \
+  ...
+
+# No build work orders at all: no hook Job, and no shipwright.io/tekton.dev RBAC.
+helm install my-agent charts/brokkr-agent \
+  --set shipwright.enabled=false \
+  ...
+```
+
+Either form drops the hook Job, the installer ServiceAccount, and the `cluster-admin`
+ClusterRoleBinding from the rendered manifests. Confirm before you install:
+
+```bash
+helm template my-agent charts/brokkr-agent --set shipwright.enabled=false | grep -c cluster-admin  # → 0
+```
+
+For the full build workflow see
+[Shipwright Builds](https://github.com/colliery-io/brokkr/blob/main/docs/src/how-to/shipwright-builds.md).
 
 ## Installation
 
 ### Basic Installation
 
-Deploy with default settings (cluster-wide RBAC):
+Deploy with default settings (cluster-wide RBAC — **and the cluster-wide Tekton/Shipwright
+install described above**):
 
 ```bash
 helm install my-agent charts/brokkr-agent \
   --set broker.url=http://my-broker:3000 \
   --set broker.pak=your-pak-token \
   --set broker.clusterName=production-cluster
+```
+
+For a multi-tenant cluster, the agent-only form is:
+
+```bash
+helm install my-agent charts/brokkr-agent \
+  --namespace tenant-namespace \
+  --set broker.url=http://my-broker:3000 \
+  --set broker.pak=your-pak-token \
+  --set broker.clusterName=production-cluster \
+  --set shipwright.enabled=false \
+  --set rbac.clusterWide=false
 ```
 
 ### Installation with Custom Agent Name
@@ -92,14 +186,20 @@ under a different key, set `broker.existingSecretKey` to match. This pairs natur
 [external-secrets-operator](https://external-secrets.io/), which can vend the PAK from
 Vault / 1Password / AWS Secrets Manager into the Secret at deploy time.
 
-### Agent Polling Configuration
-
-Control how frequently the agent polls the broker:
+### Agent Polling and Health Configuration
 
 ```yaml
 agent:
-  pollingInterval: 30  # Seconds between broker polls
+  pollingInterval: 30       # Seconds between broker polls
+  wsUrl: null               # Override the internal WebSocket URL; derived from broker.url when null
+  deploymentHealth:
+    enabled: true           # Report health of deployed workloads back to the broker
+    intervalSeconds: 60     # Health check interval (30 is the practical minimum)
 ```
+
+Leave `agent.wsUrl` null unless WebSocket traffic must traverse a different ingress or load
+balancer than the REST API; otherwise the agent derives it from `broker.url`
+(`http`→`ws`, `https`→`wss`, path `/internal/ws/agent`).
 
 ### RBAC Configuration
 
@@ -155,6 +255,21 @@ rbac:
       verbs: ["get", "list"]
 ```
 
+#### Secret Access (off by default)
+
+The agent is **not** granted access to Secrets unless you ask for it:
+
+```yaml
+rbac:
+  secretAccess:
+    enabled: false       # true adds list/watch on secrets (metadata: names, namespaces, labels)
+    readContents: false  # true additionally adds get — read access to secret *contents* in scope
+```
+
+With `rbac.clusterWide: true`, "in scope" means every Secret in the cluster. Turn `readContents`
+on only when a workflow genuinely requires reading secret data, and prefer
+`rbac.clusterWide: false` to bound the blast radius.
+
 #### Disabling RBAC Creation
 
 If you manage RBAC separately:
@@ -202,40 +317,154 @@ resources:
 
 ### Security Context
 
-The agent runs as a non-root user by default:
+The agent runs as a non-root user by default. Note the keys are `podSecurityContext` and
+`containerSecurityContext` — there is no top-level `securityContext` value:
 
 ```yaml
-securityContext:
+podSecurityContext:
   runAsNonRoot: true
   runAsUser: 10001
+  runAsGroup: 10001
   fsGroup: 10001
+  # seccompProfile:          # recommended for production
+  #   type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false   # true is safe: /tmp is an emptyDir
+  runAsNonRoot: true
+  runAsUser: 10001
+  capabilities:
+    drop: [ALL]
 ```
 
+Each object is rendered verbatim, so overriding one replaces it wholesale — restate any
+defaults you want to keep.
+
 ## Values
+
+This table covers **every key in `values.yaml`** for chart version 0.8.4, plus the keys the
+templates read that `values.yaml` only mentions in comments (marked *not in values.yaml*).
+It is hand-maintained, so `values.yaml` remains the authoritative source — check it with
+`helm show values charts/brokkr-agent` (or `oci://ghcr.io/colliery-io/charts/brokkr-agent`)
+if this table and the chart ever disagree.
+
+### Image and workload
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `image.repository` | string | `"ghcr.io/colliery-io/brokkr-agent"` | Container image repository |
-| `image.tag` | string | `"latest"` | Container image tag |
+| `image.tag` | string | `"latest"` | Container image tag. Pin a release tag in production. |
 | `image.pullPolicy` | string | `"IfNotPresent"` | Image pull policy |
-| `replicaCount` | int | `1` | Number of agent replicas |
-| `broker.url` | string | `"http://brokkr-broker:3000"` | Broker service URL |
-| `broker.agentName` | string | `""` | Agent identifier (auto-generated if empty) |
-| `broker.clusterName` | string | `""` | Cluster identifier |
+| `image.pullSecrets` | array | unset (*not in values.yaml*) | `imagePullSecrets` entries for private registries, e.g. `[{name: ghcr-secret}]` |
+| `replicaCount` | int | `1` | Number of agent replicas. The agent is not designed to run active/active — leave at 1. |
+| `nameOverride` | string | unset (*not in values.yaml*) | Overrides the chart name portion of generated resource names |
+| `fullnameOverride` | string | unset (*not in values.yaml*) | Overrides the full generated resource name |
+| `hostAliases` | array | `[]` | `hostAliases` entries injected into the pod, for resolving a broker that lives outside the cluster |
+
+### Broker connection
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `broker.url` | string | `"http://brokkr-broker:3000"` | Broker service URL (`BROKKR__AGENT__BROKER_URL`) |
+| `broker.agentName` | string | `""` | Agent identifier. Must match the name the agent was registered under on the broker, or startup self-lookup fails. |
+| `broker.clusterName` | string | `""` | Cluster identifier. Must match the registered cluster name. |
 | `broker.pak` | string | `""` | Pre-Authenticated Key (rendered into the ConfigMap in plaintext; dev/test only). Ignored when `broker.existingSecret` is set. |
 | `broker.existingSecret` | string | `""` | Name of a pre-existing Secret to source the PAK from. When set, the PAK is injected via `secretKeyRef` and kept out of the ConfigMap/values/git (GitOps-friendly). |
 | `broker.existingSecretKey` | string | `"BROKKR__AGENT__PAK"` | Key within `broker.existingSecret` holding the PAK. |
 | `broker.generatorIds` | list/string | `[]` | Generator UUIDs the agent self-registers with on startup (`BROKKR__AGENT__GENERATOR_IDS`). Empty = system/fleet scope only. |
-| `agent.pollingInterval` | int | `30` | Polling interval in seconds |
-| `rbac.create` | bool | `true` | Create RBAC resources |
-| `rbac.clusterWide` | bool | `true` | Use ClusterRole (true) or Role (false) |
-| `rbac.additionalRules` | array | `[]` | Additional RBAC rules |
-| `serviceAccount.create` | bool | `true` | Create service account |
-| `serviceAccount.name` | string | `""` | Service account name |
+| `broker.port` | int | `3000` (*not in values.yaml*) | Broker port used **only** to build the NetworkPolicy egress rule. Set it if your broker does not listen on 3000 and `networkPolicy.enabled: true`. |
+
+### Agent behaviour
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `agent.pollingInterval` | int | `30` | Seconds between broker polls (`BROKKR__AGENT__POLLING_INTERVAL`) |
+| `agent.wsUrl` | string | `null` | Override for the internal WebSocket upgrade URL (`BROKKR__AGENT__WS_URL`). Left null, it is derived from `broker.url` (`http`→`ws`, `https`→`wss`, path `/internal/ws/agent`). Set only when WS traffic must traverse a different ingress than REST. |
+| `agent.deploymentHealth.enabled` | bool | `true` | Enable deployment health checking (`BROKKR__AGENT__DEPLOYMENT_HEALTH_ENABLED`) |
+| `agent.deploymentHealth.intervalSeconds` | int | `60` | Health check interval in seconds; 30 is the practical minimum |
+
+### Shipwright / Tekton build infrastructure
+
+See [What a Default Install Does to Your Cluster](#what-a-default-install-does-to-your-cluster)
+— these defaults mutate cluster-global state.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `shipwright.enabled` | bool | `true` | Master switch for the build integration. Gates the installer hook Job **and** the agent's `shipwright.io` / `tekton.dev` ClusterRole rules. Set `false` if you never use build work orders. |
+| `shipwright.install.tekton` | bool | `true` | Install Tekton Pipelines cluster-wide via the pre-install/pre-upgrade hook Job |
+| `shipwright.install.tektonVersion` | string | `"v0.68.1"` | Tekton Pipelines release applied by the hook Job |
+| `shipwright.install.shipwright` | bool | `true` | Install Shipwright Build cluster-wide via the hook Job |
+| `shipwright.install.shipwrightVersion` | string | `"v0.18.1"` | Shipwright Build release applied by the hook Job |
+| `shipwright.install.sampleStrategies` | bool | `true` | Also apply the upstream sample `ClusterBuildStrategy` set (buildah, kaniko, buildpacks, …) cluster-wide |
+| `shipwright.install.image` | string | `"alpine/k8s:1.30.2"` | Image for the installer Job (needs `kubectl`; `openssl` is added at runtime via `apk`) |
+| `shipwright.install.timeout` | int | `600` | Installer Job `activeDeadlineSeconds` |
+| `shipwright.certManagement` | string | `"self-signed"` | How the Shipwright webhook certificate is provisioned: `self-signed` (Job generates a CA and patches CRD `caBundle`s) or `cert-manager` |
+| `shipwright.certManager.issuerName` | string | `"selfsigned-issuer"` | Issuer used for the webhook Certificate (`certManagement: cert-manager` only) |
+| `shipwright.certManager.issuerKind` | string | `"Issuer"` | `Issuer` (the chart creates a self-signed one in `shipwright-build`) or `ClusterIssuer` (you provide it) |
+| `shipwright.certManager.duration` | string | `"2160h"` | Certificate lifetime (90 days) |
+| `shipwright.certManager.renewBefore` | string | `"720h"` | Renew window before expiry (30 days) |
+| `shipwright.installSampleStrategies` | bool | `false` | Render this chart's own bundled buildah `ClusterBuildStrategy`. Only takes effect when `shipwright.install.sampleStrategies` is `false`. |
+
+### RBAC and service account
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `rbac.create` | bool | `true` | Create the agent Role/ClusterRole and binding |
+| `rbac.clusterWide` | bool | `true` | `ClusterRole`/`ClusterRoleBinding` (true) or namespaced `Role`/`RoleBinding` (false). When false the deployment also sets `BROKKR__AGENT__WATCH_NAMESPACE` to the release namespace. Does **not** affect the Shipwright installer hook. |
+| `rbac.secretAccess.enabled` | bool | `false` | Grant the agent `list`/`watch` on Secrets. Off by default; enabling exposes Secret metadata in scope. |
+| `rbac.secretAccess.readContents` | bool | `false` | Additionally grant `get` on Secrets — this is read access to **Secret contents** in scope. Enable only if a workflow demands it. |
+| `rbac.additionalRules` | array | `[]` | Extra policy rules appended verbatim to the agent role |
+| `serviceAccount.create` | bool | `true` | Create the agent ServiceAccount |
+| `serviceAccount.name` | string | `""` | ServiceAccount name; auto-generated from the release when empty |
+
+### Resources and security context
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
 | `resources.requests.memory` | string | `"128Mi"` | Memory request |
 | `resources.requests.cpu` | string | `"50m"` | CPU request |
 | `resources.limits.memory` | string | `"256Mi"` | Memory limit |
 | `resources.limits.cpu` | string | `"200m"` | CPU limit |
+| `apparmor.enabled` | bool | `false` | Add the `container.apparmor.security.beta.kubernetes.io/agent` pod annotation. Requires AppArmor-enabled nodes. |
+| `apparmor.profile` | string | `"runtime/default"` | AppArmor profile referenced by that annotation |
+| `podSecurityContext` | object | `{runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, fsGroup: 10001}` | Rendered verbatim as the pod `securityContext`. Replacing this object replaces all of it — re-state the defaults you want to keep. `seccompProfile: {type: RuntimeDefault}` is commented out in `values.yaml` and recommended for hardening. |
+| `containerSecurityContext` | object | `{allowPrivilegeEscalation: false, readOnlyRootFilesystem: false, runAsNonRoot: true, runAsUser: 10001, capabilities: {drop: [ALL]}}` | Rendered verbatim as the container `securityContext`. The chart already mounts an `emptyDir` at `/tmp`, so `readOnlyRootFilesystem: true` is the hardened setting. |
+
+### Metrics
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `metrics.enabled` | bool | `true` | In this chart it only gates the NetworkPolicy ingress rule for scraping port 8080. The agent's `/metrics` endpoint is served by the binary regardless of this value. |
+| `metrics.serviceMonitor.enabled` | bool | `false` | Create a Prometheus Operator `ServiceMonitor`. **Caveat:** the agent chart renders no `Service`, and the ServiceMonitor selects a service port named `health`, so nothing is scraped until you create a matching Service yourself. |
+| `metrics.serviceMonitor.interval` | string | `"30s"` | Scrape interval |
+| `metrics.serviceMonitor.scrapeTimeout` | string | unset (commented in `values.yaml`) | Scrape timeout; must be shorter than `interval` |
+| `metrics.serviceMonitor.additionalLabels` | object | unset (commented in `values.yaml`) | Extra labels so your Prometheus `serviceMonitorSelector` matches |
+
+### NetworkPolicy
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `networkPolicy.enabled` | bool | `false` | Create a NetworkPolicy for the agent pod (Ingress + Egress) |
+| `networkPolicy.kubernetesApiCidr` | string | `"0.0.0.0/0"` | CIDR allowed for egress to the API server on 443/6443. The default allows any destination — narrow it to your API server for real restriction. |
+| `networkPolicy.brokerEndpoint` | object | unset (commented in `values.yaml`) | `podSelector`/`namespaceSelector` identifying the broker. When unset, broker egress falls back to `0.0.0.0/0` on `broker.port`. |
+| `networkPolicy.allowMetricsFrom` | array | `[]` | Selectors allowed to scrape port 8080. Only applied when `metrics.enabled` is true; empty means no metrics ingress is permitted. |
+| `networkPolicy.additionalEgressRules` | array | `[]` | Extra egress rules appended verbatim |
+
+### Telemetry (OpenTelemetry tracing)
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `telemetry.enabled` | bool | `false` | Set `BROKKR__TELEMETRY__ENABLED`; also sets the service name and sampling rate |
+| `telemetry.otlpEndpoint` | string | `"http://otel-collector:4317"` | OTLP/gRPC endpoint for trace export |
+| `telemetry.samplingRate` | float | `0.1` | Fraction of traces sampled (0.0–1.0) |
+| `telemetry.collector.enabled` | bool | `false` | Intended to run an OTel Collector sidecar. **Caveat:** this chart renders no sidecar container — setting it true only repoints `BROKKR__TELEMETRY__OTLP_ENDPOINT` at `http://localhost:4317`, where nothing is listening. Leave `false` and point `telemetry.otlpEndpoint` at a real collector. |
+| `telemetry.collector.image.repository` | string | `"otel/opentelemetry-collector-contrib"` | Sidecar image (unused — see above) |
+| `telemetry.collector.image.tag` | string | `"0.96.0"` | Sidecar image tag (unused) |
+| `telemetry.collector.image.pullPolicy` | string | `"IfNotPresent"` | Sidecar pull policy (unused) |
+| `telemetry.collector.resources` | object | requests `64Mi`/`50m`, limits `128Mi`/`100m` | Sidecar resources (unused) |
+| `telemetry.collector.exporters.otlpEndpoint` | string | `""` | Sidecar exporter endpoint (unused) |
+| `telemetry.collector.exporters.debug` | bool | `false` | Sidecar debug exporter (unused) |
 
 ## Examples
 
@@ -270,8 +499,13 @@ helm install tenant-agent charts/brokkr-agent \
   --set broker.pak=tenant-pak-token \
   --set broker.clusterName=shared-cluster \
   --set broker.agentName=tenant-a-agent \
-  --set rbac.clusterWide=false
+  --set rbac.clusterWide=false \
+  --set shipwright.enabled=false
 ```
+
+`shipwright.enabled=false` is what keeps this install namespace-local. Without it the chart still
+runs the `cluster-admin` installer Job and installs Tekton/Shipwright cluster-wide, regardless of
+`rbac.clusterWide`.
 
 ### Deployment with Custom Resources
 
@@ -339,11 +573,21 @@ kubectl logs -l app.kubernetes.io/name=brokkr-agent --tail=100 -f
 
 ## Security Considerations
 
-1. **PAK Protection**: Store the PAK in Kubernetes secrets, not in values files
+1. **PAK Protection**: Store the PAK in a Kubernetes Secret (`broker.existingSecret`), not in values files
 2. **RBAC Scope**: Use namespace-scoped mode (`rbac.clusterWide: false`) in multi-tenant environments
-3. **Secret Access**: The agent has read access to all secrets in scope - see [RBAC.md](./RBAC.md) for mitigation strategies
-4. **Resource Limits**: Configure appropriate resource limits to prevent resource exhaustion
-5. **Network Policies**: Restrict agent network access to only the broker
+3. **Cluster-wide install side effects**: With defaults, the chart installs Tekton and Shipwright
+   cluster-wide through a Job bound to `cluster-admin`. In a multi-tenant cluster set
+   `shipwright.enabled=false` (or at least `shipwright.install.tekton=false` and
+   `shipwright.install.shipwright=false`) — see
+   [What a Default Install Does to Your Cluster](#what-a-default-install-does-to-your-cluster)
+4. **Secret Access**: Secret access is **off** by default (`rbac.secretAccess.enabled: false`).
+   Enabling it grants `list`/`watch`; `rbac.secretAccess.readContents: true` additionally grants
+   `get`, i.e. read access to Secret contents in scope — see [RBAC.md](./RBAC.md) for mitigations
+5. **Deployment permissions**: Even without secret access, the agent holds wildcard verbs on core,
+   apps, batch, and networking (plus RBAC when cluster-wide) so it can apply arbitrary manifests
+6. **Resource Limits**: Configure appropriate resource limits to prevent resource exhaustion
+7. **Network Policies**: Restrict agent network access to only the broker (`networkPolicy.enabled`,
+   and narrow `networkPolicy.kubernetesApiCidr` from its `0.0.0.0/0` default)
 
 ## Uninstallation
 
@@ -351,7 +595,36 @@ kubectl logs -l app.kubernetes.io/name=brokkr-agent --tail=100 -f
 helm uninstall my-agent
 ```
 
-This removes all resources created by the chart.
+This removes the resources in the Helm release: the Deployment, ConfigMap, ServiceAccount, the
+agent's Role/ClusterRole and binding, and (if enabled) the NetworkPolicy and ServiceMonitor.
+
+**It does not remove Tekton Pipelines or Shipwright Build.** Those were applied by the
+pre-install hook Job with `kubectl apply`, so they are not tracked by the Helm release and
+survive uninstall — including their CRDs, `tekton-pipelines` / `tekton-pipelines-resolvers` /
+`shipwright-build` namespaces, cluster RBAC, admission webhooks, and any sample
+`ClusterBuildStrategy` objects. To check what is left behind:
+
+```bash
+kubectl get ns tekton-pipelines shipwright-build
+kubectl get crd | grep -E 'tekton\.dev|shipwright\.io'
+kubectl get clusterbuildstrategies
+```
+
+Removing them means deleting the upstream manifests yourself, at the versions that were
+installed — and only after confirming nothing else in the cluster depends on them:
+
+```bash
+kubectl delete -f https://github.com/shipwright-io/build/releases/download/v0.18.1/release.yaml
+kubectl delete -f https://storage.googleapis.com/tekton-releases/pipeline/previous/v0.68.1/release.yaml
+```
+
+The installer ServiceAccount and its `cluster-admin` ClusterRoleBinding are cleaned up by the
+hook's `hook-succeeded` delete policy, so they should not linger after a successful install. If
+the Job failed, check for and remove them explicitly:
+
+```bash
+kubectl get clusterrolebinding | grep -- -installer
+```
 
 ## Architecture
 

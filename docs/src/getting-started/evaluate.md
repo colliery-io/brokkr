@@ -3,9 +3,11 @@
 This page gets you from zero to a working Brokkr deployment fast, so you can decide whether it fits your needs. It offers two paths — pick one:
 
 - **[Path A — Fastest look](#path-a--fastest-look-angreal-local-up)** — one command builds the stack from source and bundles its own Kubernetes (k3s); nothing to install but Docker.
-- **[Path B — Realistic evaluation](#path-b--realistic-evaluation-helm-on-a-local-cluster)** — Helm installs the published `v0.8.0` images onto a local cluster you bring yourself (kind or k3d); no source build.
+- **[Path B — Realistic evaluation](#path-b--realistic-evaluation-helm-on-a-local-cluster)** — Helm installs the published images onto a local cluster you bring yourself (kind or k3d); no source build.
 
 Both paths end with an agent reconciling a real Kubernetes resource onto a cluster.
+
+Along the way you will meet Brokkr's five nouns — **generator**, **agent**, **stack**, **deployment object**, and **target**. You can follow either path without knowing them, since every command below says what it is doing, but if you would rather have the model first, read [Core Concepts](../explanation/core-concepts.md) — it takes a few minutes and makes the rest of the book easier to navigate.
 
 ---
 
@@ -138,7 +140,7 @@ angreal local down --hard   # stop and remove volumes
 
 ## Path B — Realistic evaluation (Helm on a local cluster)
 
-This path installs the **published `v0.8.0` images** with Helm onto a local Kubernetes cluster — no source build. It mirrors a real install closely enough to evaluate operational behavior.
+This path installs the **published images** with Helm onto a local Kubernetes cluster — no source build. It mirrors a real install closely enough to evaluate operational behavior.
 
 ### Prerequisites
 
@@ -173,7 +175,6 @@ Install the broker chart with bundled PostgreSQL. The chart pulls the published 
 
 ```bash
 helm install brokkr-broker oci://ghcr.io/colliery-io/charts/brokkr-broker \
-  --version 0.8.0 \
   --set postgresql.enabled=true \
   --wait
 
@@ -216,7 +217,6 @@ Install the agent chart with the PAK from the previous step. The `broker.agentNa
 
 ```bash
 helm install brokkr-agent oci://ghcr.io/colliery-io/charts/brokkr-agent \
-  --version 0.8.0 \
   --set broker.url=http://brokkr-broker:3000 \
   --set broker.pak="$AGENT_PAK" \
   --set broker.agentName=eval-agent \

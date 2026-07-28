@@ -146,7 +146,7 @@ The following commands help diagnose network connectivity issues:
 
 ```bash
 # Test broker connectivity from agent pod
-kubectl exec -it deploy/brokkr-agent -- wget -qO- http://brokkr-broker:3000/healthz
+kubectl exec -it deploy/brokkr-agent -- curl -fsS http://brokkr-broker:3000/healthz
 
 # Test database connectivity from broker pod
 kubectl exec -it deploy/brokkr-broker -- nc -zv postgresql 5432

@@ -53,15 +53,15 @@ When a release git tag (e.g., `v1.2.3`) is pushed, the workflow publishes image 
 - Use `1` to track the major version
 - Use `latest` for the bleeding edge (not recommended for production)
 
-### Commit SHA Tags
+### Branch Tags
 
-Every commit that triggers a build gets a SHA-based tag in the form `{branch}-{short-sha}` (e.g., `main-abc1234`; pull requests use `pr-{number}-{short-sha}`).
+A push to a tracked branch republishes that branch's tag (e.g. `main`), overwriting whatever it pointed at before.
 
 **Rationale**:
-- Enables exact reproducibility
-- Supports bisecting issues to specific commits
-- Provides audit trail for security and compliance
-- Immutable and unique across the repository's lifetime
+- Gives a stable name for "the current state of this branch"
+- Deliberately mutable: the point is to follow the branch, not to freeze a commit
+
+There is no per-commit tag. The role a `{branch}-{short-sha}` tag would play — pinning a build for reproducibility or bisection — is served by digest references, which are already immutable and unique for the lifetime of the registry. Adding a second immutable identifier for the same image would double the tag churn on the package without adding a capability.
 
 ### Nightly Tag
 
@@ -72,9 +72,9 @@ A scheduled nightly workflow on `main` publishes a `:nightly` image for the brok
 - Provides a continuously-validated build artifact that exercises the full test suite daily
 - Surfaces breakage on `main` quickly via auto-filed GitHub issues
 
-### Pull Request Tags (Optional)
+### Pull Request Tags
 
-Pull requests can optionally generate tags (e.g., `pr-123`).
+A pull request that touches the broker, agent, or chart sources publishes a `pr-{number}` tag (e.g. `pr-123`), refreshed on every push to the PR.
 
 **Rationale**:
 - Test changes in isolation before merging
@@ -89,16 +89,16 @@ Not all tags are created equal. Understanding mutability is critical for product
 
 These tags never change once created:
 - Full semantic version: `1.2.3`
-- SHA tags: `main-abc1234` (branch + commit short SHA)
 - Digest references: `@sha256:...`
 
 ### Mutable Tags
 
 These tags are updated with new pushes:
 - Minor and major versions: `1.2`, `1` (move to the newest matching release)
+- Branch tags: `main` (rebuilt on every qualifying push)
 - Nightly: `nightly` (rebuilt daily from `main`)
 - Latest: `latest`
-- PR tags: `pr-123` (if the PR is updated)
+- PR tags: `pr-123` (rebuilt on every push to the PR)
 
 ### Production Deployment Recommendation
 
@@ -164,7 +164,7 @@ Before any image is published:
 
 ### Authentication and Authorization
 
-- **GitHub Actions**: Uses built-in `GITHUB_TOKEN` with automatic permissions
+- **GitHub Actions**: Publishing jobs authenticate to GHCR with a repository secret scoped to package writes, and the release jobs sit behind a protected environment that requires human approval
 - **Manual publishing**: Requires Personal Access Token with `write:packages` scope
 - **Token security**: Tokens stored as GitHub secrets, never committed to source
 
@@ -182,13 +182,17 @@ Therefore, all security must be built into the application itself, not rely on i
 ### Automated Publishing (Preferred)
 
 GitHub Actions workflows handle publishing for:
-- Release tags (`v*`) → semantic version tags
+- Release tags (`v*`) → semantic version tags, plus `latest`
 - Scheduled nightly run on `main` → `nightly` tag
+- Pushes to `main` and pull requests that touch build inputs → branch and `pr-{number}` tags
+- Release tags (`v*`) → the `brokkr-broker` and `brokkr-agent` Helm charts, packaged at the release version and pushed to `oci://ghcr.io/colliery-io/charts`
+
+Charts ship in lockstep with the images: the chart version and app version are both taken from the git tag, so `1.2.3` of a chart always installs `1.2.3` of its image.
 
 **Benefits**:
 - Consistent build environment
 - Multi-architecture builds guaranteed
-- Security scanning integrated
+- Images and charts released together, never separately
 - Audit trail in GitHub Actions logs
 
 ### Manual Publishing
@@ -207,8 +211,9 @@ Planned improvements to the publishing strategy:
 - **Image signing**: Cosign signatures for supply chain security
 - **SBOM generation**: Software Bill of Materials for dependency tracking
 - **Vulnerability scanning**: Automated Trivy or Grype integration
-- **Helm chart publishing**: OCI-based Helm chart distribution via GHCR
 - **Image attestations**: Build provenance and SLSA compliance
+
+None of these are wired into the release pipeline today.
 
 ## Related Documentation
 
