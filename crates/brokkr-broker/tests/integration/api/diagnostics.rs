@@ -489,6 +489,103 @@ async fn test_get_diagnostic_with_result() {
     );
 }
 
+/// BROKKR-T-0300: an agent claims a request, dies, and the expiry sweep moves
+/// the request to `failed`. An operator polling `GET /diagnostics/{id}` must see
+/// that terminal state rather than a request stuck in `claimed` forever, and a
+/// late result from the resurrected agent must be refused.
+#[tokio::test]
+async fn test_abandoned_claimed_diagnostic_reports_failed() {
+    let fixture = TestFixture::new();
+
+    let (agent, agent_pak) = fixture.create_test_agent_with_pak(
+        "Abandoned Diag Agent".to_string(),
+        "Test Cluster".to_string(),
+    );
+    let stack = fixture.create_test_stack(
+        "Abandoned Diag Stack".to_string(),
+        None,
+        fixture.admin_generator.id,
+    );
+    let deployment_object = fixture.create_test_deployment_object(
+        stack.id,
+        "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: test".to_string(),
+        false,
+    );
+
+    // A request whose deadline has already passed, claimed but never answered.
+    use brokkr_models::models::diagnostic_requests::NewDiagnosticRequest;
+    use chrono::{Duration, Utc};
+
+    let new_request = NewDiagnosticRequest {
+        agent_id: agent.id,
+        deployment_object_id: deployment_object.id,
+        status: "pending".to_string(),
+        requested_by: Some("oncall@test.com".to_string()),
+        expires_at: Utc::now() - Duration::minutes(5),
+    };
+    let request = fixture
+        .dal
+        .diagnostic_requests()
+        .create(&new_request)
+        .unwrap();
+    fixture.dal.diagnostic_requests().claim(request.id).unwrap();
+
+    // The background cleanup task's first step.
+    let sweep = fixture
+        .dal
+        .diagnostic_requests()
+        .expire_old_requests()
+        .unwrap();
+    assert_eq!(sweep.failed, 1);
+
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/api/v1/diagnostics/{}", request.id))
+                .header("Authorization", format!("Bearer {}", fixture.admin_pak))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let diagnostic: Value = serde_json::from_slice(&body).unwrap();
+
+    assert_eq!(diagnostic["request"]["status"], "failed");
+    assert!(!diagnostic["request"]["completed_at"].is_null());
+    assert!(diagnostic["result"].is_null());
+
+    // A late result from the agent that abandoned it is refused: the request is
+    // no longer `claimed`.
+    let result_body = json!({
+        "pod_statuses": "[]",
+        "events": "[]",
+        "collected_at": "2025-01-15T10:30:00Z"
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/diagnostics/{}/result", request.id))
+                .header("Authorization", format!("Bearer {}", agent_pak))
+                .header("Content-Type", "application/json")
+                .body(Body::from(result_body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+}
+
 #[tokio::test]
 async fn test_get_diagnostic_not_found() {
     let fixture = TestFixture::new();

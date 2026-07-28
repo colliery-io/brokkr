@@ -80,7 +80,9 @@ curl -s "http://localhost:3000/api/v1/diagnostics/${DIAG_ID}" \
 
 Status progression: `pending` → `claimed` → `completed`
 
-A request that is never claimed eventually becomes `expired`. A request never becomes `failed` — if the agent hits an error while collecting, it still reports a `completed` request and puts the error in the result payload, so check the payload rather than waiting for a failure status.
+A request that is never claimed eventually becomes `expired`. A request that an agent claimed but never finished becomes `failed` once it passes its expiry — that is the signal an agent took the work and stopped answering, usually because it crashed, was evicted, or was rescheduled.
+
+Note that a collection *error* is not a `failed` request: if the agent hits an error while collecting, it still reports a `completed` request and puts the error in the result payload. Check the payload rather than waiting for a failure status.
 
 ## Step 5: Check Whether Collection Actually Succeeded
 
@@ -172,8 +174,11 @@ Each container's last 100 log lines are included.
 - Check the agent logs for the same failure with surrounding context
 - Fix the cause and issue a new diagnostic request; results are never retried in place
 
-**Diagnostic never reaches `failed`:**
-- It will not. `failed` is defined by the data model but is not set by any code path today, so alerting or polling on `status == "failed"` never fires. Detect collection problems by inspecting the result payload as described in Step 5.
+**Diagnostic is `failed`:**
+- An agent claimed the request and never submitted a result before it expired. The agent process most likely died, was evicted, lost its credential, or was rescheduled mid-collection
+- Check that agent's health and recent restarts; repeated `failed` diagnostics against one agent are evidence about that agent's stability, not about the diagnostic itself
+- Note the distinction from `expired`, which means nobody ever claimed the request — that points at an agent being offline or not polling, rather than crashing
+- A collection error does **not** produce `failed`; it produces a `completed` request with an error in the payload (Step 5)
 
 ## Cleanup
 

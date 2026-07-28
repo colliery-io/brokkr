@@ -290,13 +290,15 @@ fn test_expire_old_requests() {
         .unwrap();
 
     // Run expire
-    let expired_count = fixture
+    let sweep = fixture
         .dal
         .diagnostic_requests()
         .expire_old_requests()
         .expect("Failed to expire");
 
-    assert_eq!(expired_count, 1);
+    assert_eq!(sweep.expired, 1);
+    assert_eq!(sweep.failed, 0, "an unclaimed request must not be failed");
+    assert_eq!(sweep.total(), 1);
 
     // Verify status changed
     let pending = fixture
@@ -306,6 +308,162 @@ fn test_expire_old_requests() {
         .expect("Failed to get pending");
 
     assert!(pending.is_empty());
+}
+
+/// BROKKR-T-0300: an agent claims a request and then dies without submitting a
+/// result. Before the fix the row sat in `claimed` forever — never expired,
+/// never failed, never eligible for cleanup.
+#[test]
+fn test_expire_sweeps_abandoned_claimed_request_to_failed() {
+    let fixture = TestFixture::new();
+
+    let agent = fixture.create_test_agent("Abandon Agent".to_string(), "Cluster".to_string());
+    let stack = fixture.create_test_stack(
+        "Abandon Stack".to_string(),
+        None,
+        fixture.admin_generator.id,
+    );
+    let deployment_object = fixture.create_test_deployment_object(
+        stack.id,
+        "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: test".to_string(),
+        false,
+    );
+
+    // Insert with an already-past expires_at so the sweep sees it as stale the
+    // moment it is claimed; `claim()` does not touch expires_at.
+    let new_request = NewDiagnosticRequest {
+        agent_id: agent.id,
+        deployment_object_id: deployment_object.id,
+        status: "pending".to_string(),
+        requested_by: None,
+        expires_at: Utc::now() - Duration::minutes(5),
+    };
+
+    let created = fixture
+        .dal
+        .diagnostic_requests()
+        .create(&new_request)
+        .unwrap();
+
+    let claimed = fixture
+        .dal
+        .diagnostic_requests()
+        .claim(created.id)
+        .expect("Failed to claim");
+    assert_eq!(claimed.status, "claimed");
+
+    let sweep = fixture
+        .dal
+        .diagnostic_requests()
+        .expire_old_requests()
+        .expect("Failed to expire");
+
+    assert_eq!(
+        sweep.failed, 1,
+        "a stale claimed request must be swept to failed"
+    );
+    assert_eq!(
+        sweep.expired, 0,
+        "a claimed request must not be reported as expired"
+    );
+
+    let swept = fixture
+        .dal
+        .diagnostic_requests()
+        .get(created.id)
+        .expect("Failed to get")
+        .expect("Request vanished");
+
+    assert_eq!(swept.status, "failed");
+    assert!(
+        swept.completed_at.is_some(),
+        "the terminal transition must stamp completed_at"
+    );
+    assert!(
+        swept.claimed_at.is_some(),
+        "claimed_at must survive so the operator can see who took the work"
+    );
+
+    // The sweep is idempotent: a second pass finds nothing left to move.
+    let second = fixture
+        .dal
+        .diagnostic_requests()
+        .expire_old_requests()
+        .expect("Failed to expire");
+    assert_eq!(second.total(), 0);
+}
+
+/// BROKKR-T-0300: the terminal state the sweep produces must actually be
+/// reaped, otherwise the stuck state is merely relabeled and the rows still
+/// grow without bound.
+#[test]
+fn test_cleanup_reaps_abandoned_claimed_request() {
+    let fixture = TestFixture::new();
+
+    let agent = fixture.create_test_agent("Reap Agent".to_string(), "Cluster".to_string());
+    let stack =
+        fixture.create_test_stack("Reap Stack".to_string(), None, fixture.admin_generator.id);
+    let deployment_object = fixture.create_test_deployment_object(
+        stack.id,
+        "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: test".to_string(),
+        false,
+    );
+
+    let new_request = NewDiagnosticRequest {
+        agent_id: agent.id,
+        deployment_object_id: deployment_object.id,
+        status: "pending".to_string(),
+        requested_by: None,
+        expires_at: Utc::now() - Duration::minutes(5),
+    };
+
+    let created = fixture
+        .dal
+        .diagnostic_requests()
+        .create(&new_request)
+        .unwrap();
+    fixture.dal.diagnostic_requests().claim(created.id).unwrap();
+
+    // Cleanup before the sweep must not touch it: it is still `claimed`.
+    let deleted = fixture
+        .dal
+        .diagnostic_requests()
+        .cleanup_old_requests(0)
+        .expect("Failed to cleanup");
+    assert_eq!(deleted, 0, "a claimed request is not yet terminal");
+    assert!(
+        fixture
+            .dal
+            .diagnostic_requests()
+            .get(created.id)
+            .unwrap()
+            .is_some()
+    );
+
+    // Sweep it to a terminal state, then cleanup must reap it.
+    let sweep = fixture
+        .dal
+        .diagnostic_requests()
+        .expire_old_requests()
+        .expect("Failed to expire");
+    assert_eq!(sweep.failed, 1);
+
+    let deleted = fixture
+        .dal
+        .diagnostic_requests()
+        .cleanup_old_requests(0)
+        .expect("Failed to cleanup");
+    assert_eq!(deleted, 1);
+
+    assert!(
+        fixture
+            .dal
+            .diagnostic_requests()
+            .get(created.id)
+            .expect("Failed to get")
+            .is_none(),
+        "the abandoned request must not survive cleanup"
+    );
 }
 
 #[test]

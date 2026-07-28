@@ -38,7 +38,9 @@ impl Default for DiagnosticCleanupConfig {
 /// Starts the diagnostic cleanup background task.
 ///
 /// This task periodically:
-/// 1. Expires pending diagnostic requests that have passed their expiry time
+/// 1. Sweeps diagnostic requests past their expiry time into a terminal state —
+///    unclaimed `pending` requests become `expired`, abandoned `claimed`
+///    requests become `failed` (BROKKR-T-0300)
 /// 2. Deletes old completed/expired/failed diagnostic requests and their results
 ///
 /// # Arguments
@@ -56,11 +58,20 @@ pub fn start_diagnostic_cleanup_task(dal: DAL, config: DiagnosticCleanupConfig) 
         loop {
             ticker.tick().await;
 
-            // Expire pending requests that have passed their expiry time
+            // Sweep requests past their expiry time into a terminal state.
+            // Unclaimed and abandoned requests are logged separately: the
+            // former is routine, the latter means an agent took the work and
+            // died holding it (BROKKR-T-0300).
             match dal.diagnostic_requests().expire_old_requests() {
-                Ok(expired) => {
-                    if expired > 0 {
-                        info!("Expired {} pending diagnostic requests", expired);
+                Ok(sweep) => {
+                    if sweep.expired > 0 {
+                        info!("Expired {} unclaimed diagnostic requests", sweep.expired);
+                    }
+                    if sweep.failed > 0 {
+                        warn!(
+                            "Failed {} diagnostic requests abandoned by their claiming agent",
+                            sweep.failed
+                        );
                     }
                 }
                 Err(e) => {

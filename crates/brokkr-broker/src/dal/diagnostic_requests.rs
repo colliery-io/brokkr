@@ -24,6 +24,28 @@ pub struct DiagnosticRequestsDAL<'a> {
     pub dal: &'a DAL,
 }
 
+/// The outcome of one expiry sweep (BROKKR-T-0300).
+///
+/// The two counts are kept apart because they describe different operational
+/// events: `expired` means nobody ever picked the request up, `failed` means an
+/// agent claimed it and never came back.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ExpirySweep {
+    /// `pending` requests past `expires_at` that no agent ever claimed,
+    /// transitioned to `expired`.
+    pub expired: usize,
+    /// `claimed` requests past `expires_at` whose agent never submitted a
+    /// result, transitioned to `failed`.
+    pub failed: usize,
+}
+
+impl ExpirySweep {
+    /// Total number of requests moved to a terminal state by the sweep.
+    pub fn total(&self) -> usize {
+        self.expired + self.failed
+    }
+}
+
 impl DiagnosticRequestsDAL<'_> {
     /// Creates a new diagnostic request.
     ///
@@ -176,28 +198,63 @@ impl DiagnosticRequestsDAL<'_> {
             .load(conn)
     }
 
-    /// Expires all pending requests that have passed their expiry time.
+    /// Sweeps every non-terminal request that has passed its expiry time into a
+    /// terminal state (BROKKR-T-0300).
+    ///
+    /// Two distinct transitions, deliberately kept distinct:
+    ///
+    /// * `pending` → `expired` — the request sat in the queue until its
+    ///   deadline and no agent ever claimed it (the agent is offline, is not
+    ///   polling, or was never going to answer).
+    /// * `claimed` → `failed` — an agent took the request and never submitted a
+    ///   result, because it crashed, was evicted, lost its PAK, or its pod was
+    ///   rescheduled. `completed_at` is stamped to match [`Self::fail`], and
+    ///   `claimed_at` is left intact so the operator can still see which agent
+    ///   accepted the work and when.
+    ///
+    /// Before this sweep existed a `claimed` request had no reachable terminal
+    /// state at all: it was never expired, never failed, and therefore never
+    /// eligible for [`Self::cleanup_old_requests`].
     ///
     /// # Returns
     ///
-    /// Returns the number of requests expired.
-    pub fn expire_old_requests(&self) -> Result<usize, diesel::result::Error> {
+    /// Returns the per-transition counts as an [`ExpirySweep`].
+    pub fn expire_old_requests(&self) -> Result<ExpirySweep, diesel::result::Error> {
         let conn = &mut self.dal.conn()?;
 
-        diesel::update(
+        let now = Utc::now();
+
+        let expired = diesel::update(
             diagnostic_requests::table
                 .filter(diagnostic_requests::status.eq("pending"))
-                .filter(diagnostic_requests::expires_at.lt(Utc::now())),
+                .filter(diagnostic_requests::expires_at.lt(now)),
         )
         .set(diagnostic_requests::status.eq("expired"))
-        .execute(conn)
+        .execute(conn)?;
+
+        let failed = diesel::update(
+            diagnostic_requests::table
+                .filter(diagnostic_requests::status.eq("claimed"))
+                .filter(diagnostic_requests::expires_at.lt(now)),
+        )
+        .set((
+            diagnostic_requests::status.eq("failed"),
+            diagnostic_requests::completed_at.eq(now),
+        ))
+        .execute(conn)?;
+
+        Ok(ExpirySweep { expired, failed })
     }
 
-    /// Deletes expired and completed requests older than the given age in hours.
+    /// Deletes terminal requests older than the given age in hours.
+    ///
+    /// Reaps `expired`, `completed`, and `failed` requests — which is every
+    /// terminal state [`Self::expire_old_requests`] can produce, so nothing the
+    /// sweep touches is left behind. Associated results cascade on delete.
     ///
     /// # Arguments
     ///
-    /// * `max_age_hours` - Maximum age in hours for completed/expired requests.
+    /// * `max_age_hours` - Maximum age in hours for completed/expired/failed requests.
     ///
     /// # Returns
     ///

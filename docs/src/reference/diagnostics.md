@@ -5,27 +5,44 @@ Brokkr provides an on-demand diagnostic system for collecting Kubernetes pod inf
 ## Diagnostic Request Lifecycle
 
 ```
-Created (pending) → Claimed (by agent) → Result submitted (completed)
-                  → Expired (past retention)
+                     agent claims                agent submits result
+  pending ─────────────────────────→ claimed ──────────────────────────→ completed
+     │                                  │
+     │ past expires_at,                 │ past expires_at,
+     │ never claimed                    │ no result submitted
+     ↓                                  ↓
+  expired                            failed
 ```
+
+Every request reaches a terminal state. Which one it reaches records *why* the request ended:
+
+- **`completed`** — an agent submitted a result. This is the outcome even when the collection itself hit an error; see [Collection Errors](#collection-errors).
+- **`expired`** — the deadline passed and no agent ever claimed the request. Routine: the target agent is offline, is not polling, or has nothing to say.
+- **`failed`** — an agent claimed the request and never came back with a result before the deadline. The agent crashed, was evicted, lost its PAK, or its pod was rescheduled while holding the request.
+
+Both terminal transitions are performed by the broker's expiry sweep, which is the first step of the [automatic cleanup](#automatic-cleanup) task.
 
 ### Status Values
 
 | Status | Description | Emitted |
 |--------|-------------|---------|
-| `pending` | Request created, waiting for agent to claim | Yes |
-| `claimed` | Agent has claimed the request and is collecting data | Yes |
-| `completed` | Agent submitted a diagnostic result, whether or not collection succeeded | Yes |
-| `failed` | Terminal failure state defined by the data model | **No — not currently set by any code path** |
-| `expired` | Request exceeded its retention period without completion | Yes |
+| `pending` | Request created, waiting for agent to claim | Yes — on creation |
+| `claimed` | Agent has claimed the request and is collecting data | Yes — on `POST /diagnostics/{id}/claim` |
+| `completed` | Agent submitted a diagnostic result, whether or not collection succeeded | Yes — on `POST /diagnostics/{id}/result` |
+| `failed` | Agent claimed the request but never submitted a result before `expires_at` | Yes — by the expiry sweep |
+| `expired` | Deadline passed with the request still unclaimed | Yes — by the expiry sweep |
 
-`failed` is part of the diagnostic request model and is accepted wherever a status is read, but no code path assigns it today. Collection errors are reported through the *result payload* of a `completed` request instead — see [Collection Errors](#collection-errors). Treat `failed` as reserved: a request will never arrive in that state, so a query or alert filtering on it matches nothing.
+`failed` and `expired` are not interchangeable, and the difference is the useful part: `expired` says nobody picked the work up, `failed` says somebody picked it up and did not survive it. A run of `failed` diagnostics for one agent is a signal about that agent's stability; a run of `expired` ones is a signal that it is not connected. `claimed_at` is preserved on a `failed` request, so the agent and the time it accepted the work stay visible.
+
+`failed` requests carry no `DiagnosticResult` — the agent never submitted one. `GET /api/v1/diagnostics/{id}` returns them with `result: null` and a `completed_at` marking when the sweep gave up on the request.
 
 ---
 
 ## Collection Errors
 
-When an agent claims a request but fails to collect data — for example the Kubernetes API is unreachable, or the agent lacks RBAC permission to list pods, events, or logs — it does not abandon the request or mark it failed. It submits a well-formed result whose `events` array carries a single error object, and the broker transitions the request to `completed` exactly as it would for a successful collection.
+When an agent claims a request but fails to collect data — for example the Kubernetes API is unreachable, or the agent lacks RBAC permission to list pods, events, or logs — it does not abandon the request. It submits a well-formed result whose `events` array carries a single error object, and the broker transitions the request to `completed` exactly as it would for a successful collection.
+
+A collection error is therefore **not** a `failed` request. The agent never sets `failed` itself; that status only comes from the expiry sweep, and it means the agent stopped answering entirely rather than answering with an error. An agent that reaches the cluster and is told "forbidden" reports that in the result payload below; an agent that dies mid-collection reports nothing and its request is swept to `failed`.
 
 An error-bearing result has this shape:
 
@@ -53,7 +70,7 @@ The distinguishing marks are:
 - `events` contains exactly one object, and that object has an `error` key rather than the [event fields](#events)
 - `log_tails` is `null`
 
-Note that an empty `pod_statuses` alone does not mean an error occurred: a successful collection that matched no pods also returns `[]` (see [Known Limitations](#known-limitations)). The presence of an `error` key inside `events` is what separates the two.
+Note that an empty `pod_statuses` alone does not mean an error occurred: a successful collection that attributed no pods also returns `[]` (see [Pod attribution](#pod-attribution)). The presence of an `error` key inside `events` is what separates the two.
 
 ---
 
@@ -274,15 +291,44 @@ The broker runs a background task that periodically cleans up diagnostic data:
 | `broker.diagnostic_max_age_hours` | 1 | Max age for completed/expired/failed diagnostics |
 
 The cleanup task:
-1. Expires pending requests past their `expires_at` time
+1. Sweeps requests past their `expires_at` time into a terminal state — still-`pending` requests become `expired`, still-`claimed` requests become `failed`
 2. Deletes completed, expired, and failed requests older than `diagnostic_max_age_hours`
 3. Deletes associated diagnostic results
 
+Step 1 is what bounds the table: a request that an agent claims and never answers has no other route out of `claimed`, and step 2 only deletes terminal states. Both steps run on the same `diagnostic_cleanup_interval_seconds` tick, so a request can linger past its `expires_at` for up to one interval before its status changes.
+
 ---
+
+## Scope of a Collection
+
+### Namespaces
+
+The agent searches the namespaces declared in the deployment object's manifests (`metadata.namespace`, with `default` for documents that omit it) — see `crates/brokkr-agent/src/cli/commands.rs`. Resources the deployment object creates in a namespace it does not declare are not searched.
+
+### Pod attribution
+
+Within those namespaces, `pod_statuses` and `log_tails` cover the pods attributed to the deployment object by `PodAttributor` (`crates/brokkr-agent/src/deployment_health.rs`) — the same resolver continuous health checking uses, so the two always agree. A pod is attributed when, in order:
+
+1. it carries the `brokkr.io/deployment-object-id` **label** (manual opt-in; Brokkr does not add this itself),
+2. it carries the same key as an **annotation** — bare `Pod` manifests applied by Brokkr are stamped with it,
+3. an object in its **ownerReference chain** carries the annotation, walking up to four hops. This is the case that covers controller-managed workloads: Brokkr stamps the annotation on the top-level applied object, so `Deployment` → `ReplicaSet` → `Pod`, `Job` → `Pod`, and `StatefulSet`/`DaemonSet` → `Pod` all resolve to the object that produced them.
+
+An empty `pod_statuses` therefore means the deployment object genuinely has no pods in the searched namespaces — for example, it applies only non-workload resources (ConfigMap, Service, CRD), or its workload has not created any pods yet.
+
+### Events are namespace-scoped, by design
+
+`events` contains the most recent 50 events in each searched namespace, **not** only the events for the attributed pods. This is deliberate:
+
+- The Kubernetes events API cannot select by the involved object's labels or annotations, so there is no server-side filter equivalent to pod attribution.
+- The events that explain a failure are frequently recorded against something other than the pod: `FailedCreate` on the ReplicaSet, `FailedScheduling` for a pod that was never created, or quota, PVC, and node events on the namespace. Narrowing to the attributed pods would discard exactly those.
+
+Read `events` as "what is happening in this deployment object's namespaces", and use `involved_object` / `involved_object_kind` to decide what a given event refers to.
 
 ## Known Limitations
 
-The agent searches the namespaces declared in the deployment object's manifests (`metadata.namespace`, with `default` for documents that omit it), using the pod label selector `brokkr.io/deployment-object-id=<id>` (`crates/brokkr-agent/src/cli/commands.rs`). Pods are matched by that label, which Brokkr does not inject into pod templates — without it, the request completes successfully with empty results (`pod_statuses: []`).
+- Events are not attributed to the deployment object (see above); in a busy shared namespace they may be dominated by unrelated workloads.
+- Attribution walks at most four ownerReference hops (`MAX_OWNER_DEPTH`). Deeper controller chains than `CronJob` → `Job` → `Pod` will not resolve.
+- Log tails are capped at the last 100 lines per container (`MAX_LOG_LINES`) and are only available for pods that still exist; a pod that has already been replaced contributes nothing.
 
 ---
 
