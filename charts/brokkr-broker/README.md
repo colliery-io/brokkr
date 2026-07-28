@@ -355,6 +355,21 @@ containerSecurityContext:
 Each object is rendered verbatim, so overriding one replaces it wholesale — restate any
 defaults you want to keep.
 
+## Migration notes
+
+Two values were renamed or removed because neither ever had an effect. Helm ignores stale entries
+left in your values files, but you should delete them. (For the earlier removal of `tls.*`, see
+[TLS/SSL Configuration](#tlsssl-configuration).)
+
+| Old key | New key | Notes |
+|---------|---------|-------|
+| `metrics.enabled` | `networkPolicy.allowMetricsScraping` | The old name implied it turned the `/metrics` endpoint on or off. It never did; the broker always serves `/metrics`. Its only effect was gating the NetworkPolicy ingress rule, which is what the new name says. Default is unchanged (`true`). |
+| `telemetry.collector.*` | *(removed)* | The chart never rendered a collector sidecar. Setting `telemetry.collector.enabled: true` only repointed `BROKKR__TELEMETRY__OTLP_ENDPOINT` at `http://localhost:4317`, where nothing was listening — it silently broke otherwise-working telemetry. `BROKKR__TELEMETRY__OTLP_ENDPOINT` now always renders from `telemetry.otlpEndpoint`. |
+
+`service.annotations` is not a migration — it was documented but rendered nowhere, and now renders
+onto the Service's `metadata.annotations`. If you had set it, the annotations will appear on the
+next upgrade.
+
 ## Values
 
 This table covers **every key in `values.yaml`** for chart version 0.8.4, plus the keys the
@@ -383,16 +398,13 @@ removed, see [TLS/SSL Configuration](#tlsssl-configuration).
 |-----|------|---------|-------------|
 | `service.type` | string | `"ClusterIP"` | Service type (`ClusterIP`, `NodePort`, `LoadBalancer`) |
 | `service.port` | int | `3000` | Service port; targets the container's `http` port |
+| `service.annotations` | object | `{}` | Annotations set on the Service's `metadata`. This is where LoadBalancer configuration goes (e.g. `service.beta.kubernetes.io/aws-load-balancer-type: "nlb"`). Omitted from the manifest when empty. |
 | `service.nodePort` | int | unset (*not in values.yaml*) | Explicit node port; only honoured when `service.type: NodePort` |
 | `ingress.enabled` | bool | `false` | Create an Ingress |
 | `ingress.className` | string | `"nginx"` | `ingressClassName` |
 | `ingress.annotations` | object | `{}` | Ingress annotations — where cert-manager (`cert-manager.io/cluster-issuer`) and SSL-redirect settings go |
 | `ingress.hosts` | array | `[{host: brokkr.example.com, paths: [{path: /, pathType: Prefix}]}]` | Ingress hosts and paths |
 | `ingress.tls` | array | `[{secretName: brokkr-tls, hosts: [brokkr.example.com]}]` | Ingress TLS — the **only** supported TLS path, since the broker serves plain HTTP |
-
-> `service.annotations` appears as a commented example in `values.yaml`, but `templates/service.yaml`
-> renders no annotations, so setting it has no effect. Annotate the Service out-of-band if you need
-> LoadBalancer annotations.
 
 ### Database
 
@@ -480,9 +492,11 @@ which accepts many more keys than the chart's `values.yaml` lists.
 
 ### Metrics
 
+The broker serves `/metrics` on its HTTP port. The endpoint is always served; no chart value
+disables it.
+
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `metrics.enabled` | bool | `true` | In this chart it only gates the NetworkPolicy ingress rule for scraping. The broker's `/metrics` endpoint is served by the binary regardless of this value. |
 | `metrics.serviceMonitor.enabled` | bool | `false` | Create a Prometheus Operator `ServiceMonitor` scraping `/metrics` on the Service's `http` port |
 | `metrics.serviceMonitor.interval` | string | `"30s"` | Scrape interval |
 | `metrics.serviceMonitor.scrapeTimeout` | string | unset (commented in `values.yaml`) | Scrape timeout; must be shorter than `interval` |
@@ -494,7 +508,8 @@ which accepts many more keys than the chart's `values.yaml` lists.
 |-----|------|---------|-------------|
 | `networkPolicy.enabled` | bool | `false` | Create a NetworkPolicy for the broker pod (Ingress + Egress) |
 | `networkPolicy.allowIngressFrom` | array | `[]` | Selectors allowed to reach the broker's API port. Empty means any pod in the same namespace. |
-| `networkPolicy.allowMetricsFrom` | array | `[]` | Selectors allowed to scrape metrics. Only applied when `metrics.enabled` is true. |
+| `networkPolicy.allowMetricsScraping` | bool | `true` | Whether the metrics ingress rule is rendered at all. Set `false` to deny scraping outright even when `allowMetricsFrom` is populated. Does **not** turn off the `/metrics` endpoint — the broker always serves it. |
+| `networkPolicy.allowMetricsFrom` | array | `[]` | Selectors allowed to scrape metrics. Only applied when `allowMetricsScraping` is true. |
 | `networkPolicy.allowWebhookEgress` | bool | `true` | Permit egress so webhook deliveries can reach external HTTPS endpoints. Setting `false` breaks outbound webhooks. |
 | `networkPolicy.additionalEgressRules` | array | `[]` | Extra egress rules appended verbatim |
 
@@ -505,13 +520,10 @@ which accepts many more keys than the chart's `values.yaml` lists.
 | `telemetry.enabled` | bool | `false` | Set `BROKKR__TELEMETRY__ENABLED`; also sets the service name and sampling rate. Requires a pod restart to change. |
 | `telemetry.otlpEndpoint` | string | `"http://otel-collector:4317"` | OTLP/gRPC endpoint for trace export |
 | `telemetry.samplingRate` | float | `0.1` | Fraction of traces sampled (0.0–1.0) |
-| `telemetry.collector.enabled` | bool | `false` | Intended to run an OTel Collector sidecar. **Caveat:** this chart renders no sidecar container — setting it true only repoints `BROKKR__TELEMETRY__OTLP_ENDPOINT` at `http://localhost:4317`, where nothing is listening. Leave `false` and point `telemetry.otlpEndpoint` at a real collector. |
-| `telemetry.collector.image.repository` | string | `"otel/opentelemetry-collector-contrib"` | Sidecar image (unused — see above) |
-| `telemetry.collector.image.tag` | string | `"0.96.0"` | Sidecar image tag (unused) |
-| `telemetry.collector.image.pullPolicy` | string | `"IfNotPresent"` | Sidecar pull policy (unused) |
-| `telemetry.collector.resources` | object | requests `64Mi`/`50m`, limits `128Mi`/`100m` | Sidecar resources (unused) |
-| `telemetry.collector.exporters.otlpEndpoint` | string | `""` | Sidecar exporter endpoint (unused) |
-| `telemetry.collector.exporters.debug` | bool | `false` | Sidecar debug exporter (unused) |
+
+The chart does not run an OpenTelemetry Collector sidecar; point `telemetry.otlpEndpoint` at a
+collector you run yourself (or at your service mesh's OTLP receiver). See
+[Migration notes](#migration-notes) if you have `telemetry.collector.*` in your values.
 
 ## Examples
 

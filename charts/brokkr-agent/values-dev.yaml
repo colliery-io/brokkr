@@ -52,9 +52,9 @@ containerSecurityContext:
     drop:
       - ALL
 
-# Enable metrics for debugging
-metrics:
-  enabled: true
+# The /metrics endpoint is always served; nothing needs enabling here.
+# Scraping through a NetworkPolicy is governed by
+# networkPolicy.allowMetricsScraping, which defaults to true.
 
 # Lower resource requests for dev
 resources:

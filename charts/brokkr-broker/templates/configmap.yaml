@@ -22,12 +22,7 @@ data:
   # Telemetry configuration (static - requires restart)
   {{- if .Values.telemetry.enabled }}
   BROKKR__TELEMETRY__ENABLED: "true"
-  {{- if .Values.telemetry.collector.enabled }}
-  # When using sidecar collector, point to localhost
-  BROKKR__TELEMETRY__OTLP_ENDPOINT: "http://localhost:4317"
-  {{- else }}
   BROKKR__TELEMETRY__OTLP_ENDPOINT: {{ .Values.telemetry.otlpEndpoint | quote }}
-  {{- end }}
   BROKKR__TELEMETRY__BROKER__SERVICE_NAME: "brokkr-broker"
   BROKKR__TELEMETRY__SAMPLING_RATE: {{ .Values.telemetry.samplingRate | quote }}
   {{- else }}

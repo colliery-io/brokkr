@@ -22,6 +22,7 @@ This Helm chart deploys the Brokkr agent to a Kubernetes cluster. The agent conn
   installing from a local checkout works with any Helm 3.x)
 - A running Brokkr broker instance
 - Broker Pre-Authenticated Key (PAK) for agent authentication
+- (Optional) Prometheus Operator, if you enable `metrics.podMonitor`
 - For a **default** install, cluster-admin rights and a cluster with no existing Tekton or
   Shipwright installation — see the next section
 
@@ -341,6 +342,17 @@ containerSecurityContext:
 Each object is rendered verbatim, so overriding one replaces it wholesale — restate any
 defaults you want to keep.
 
+## Migration notes
+
+Three values were renamed or removed because none of them ever had an effect. Helm ignores stale
+entries left in your values files, but you should delete them.
+
+| Old key | New key | Notes |
+|---------|---------|-------|
+| `metrics.serviceMonitor.*` | `metrics.podMonitor.*` | Same sub-keys (`enabled`, `interval`, `scrapeTimeout`, `additionalLabels`). The old `ServiceMonitor` template selected a Service port named `health`, but this chart renders no Service, so it scraped nothing. The chart now renders a `PodMonitor` against a named container port. Nothing regresses — the old key never produced a working scrape. |
+| `metrics.enabled` | `networkPolicy.allowMetricsScraping` | The old name implied it turned the `/metrics` endpoint on or off. It never did; the agent always serves `/metrics`. Its only effect was gating the NetworkPolicy ingress rule, which is what the new name says. Default is unchanged (`true`). |
+| `telemetry.collector.*` | *(removed)* | The chart never rendered a collector sidecar. Setting `telemetry.collector.enabled: true` only repointed `BROKKR__TELEMETRY__OTLP_ENDPOINT` at `http://localhost:4317`, where nothing was listening — it silently broke otherwise-working telemetry. `BROKKR__TELEMETRY__OTLP_ENDPOINT` now always renders from `telemetry.otlpEndpoint`. |
+
 ## Values
 
 This table covers **every key in `values.yaml`** for chart version 0.8.4, plus the keys the
@@ -433,13 +445,22 @@ See [What a Default Install Does to Your Cluster](#what-a-default-install-does-t
 
 ### Metrics
 
+The agent serves `/metrics` — alongside `/healthz` and `/readyz` — on the container port named
+`health` (8080). The endpoint is always served; no chart value disables it. Because the agent
+chart renders no `Service` (nothing in the cluster calls the agent), Prometheus Operator scrapes
+the **pod** directly via a `PodMonitor`, not a `ServiceMonitor`.
+
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `metrics.enabled` | bool | `true` | In this chart it only gates the NetworkPolicy ingress rule for scraping port 8080. The agent's `/metrics` endpoint is served by the binary regardless of this value. |
-| `metrics.serviceMonitor.enabled` | bool | `false` | Create a Prometheus Operator `ServiceMonitor`. **Caveat:** the agent chart renders no `Service`, and the ServiceMonitor selects a service port named `health`, so nothing is scraped until you create a matching Service yourself. |
-| `metrics.serviceMonitor.interval` | string | `"30s"` | Scrape interval |
-| `metrics.serviceMonitor.scrapeTimeout` | string | unset (commented in `values.yaml`) | Scrape timeout; must be shorter than `interval` |
-| `metrics.serviceMonitor.additionalLabels` | object | unset (commented in `values.yaml`) | Extra labels so your Prometheus `serviceMonitorSelector` matches |
+| `metrics.podMonitor.enabled` | bool | `false` | Create a Prometheus Operator `PodMonitor` scraping `/metrics` on the pod's `health` container port |
+| `metrics.podMonitor.interval` | string | `"30s"` | Scrape interval |
+| `metrics.podMonitor.scrapeTimeout` | string | unset (commented in `values.yaml`) | Scrape timeout; must be shorter than `interval` |
+| `metrics.podMonitor.additionalLabels` | object | unset (commented in `values.yaml`) | Extra labels so your Prometheus `podMonitorSelector` matches |
+
+> **Note:** Prometheus Operator matches `PodMonitor` objects with its `podMonitorSelector`, which
+> is a *separate* selector from `serviceMonitorSelector`. If you previously set
+> `metrics.serviceMonitor.additionalLabels` to satisfy `serviceMonitorSelector`, check that your
+> Prometheus resource also selects `PodMonitor`s.
 
 ### NetworkPolicy
 
@@ -448,7 +469,8 @@ See [What a Default Install Does to Your Cluster](#what-a-default-install-does-t
 | `networkPolicy.enabled` | bool | `false` | Create a NetworkPolicy for the agent pod (Ingress + Egress) |
 | `networkPolicy.kubernetesApiCidr` | string | `"0.0.0.0/0"` | CIDR allowed for egress to the API server on 443/6443. The default allows any destination — narrow it to your API server for real restriction. |
 | `networkPolicy.brokerEndpoint` | object | unset (commented in `values.yaml`) | `podSelector`/`namespaceSelector` identifying the broker. When unset, broker egress falls back to `0.0.0.0/0` on `broker.port`. |
-| `networkPolicy.allowMetricsFrom` | array | `[]` | Selectors allowed to scrape port 8080. Only applied when `metrics.enabled` is true; empty means no metrics ingress is permitted. |
+| `networkPolicy.allowMetricsScraping` | bool | `true` | Whether the metrics ingress rule is rendered at all. Set `false` to deny scraping of port 8080 outright even when `allowMetricsFrom` is populated. Does **not** turn off the `/metrics` endpoint — the agent always serves it. |
+| `networkPolicy.allowMetricsFrom` | array | `[]` | Selectors allowed to scrape port 8080. Only applied when `allowMetricsScraping` is true; empty means no metrics ingress is permitted. |
 | `networkPolicy.additionalEgressRules` | array | `[]` | Extra egress rules appended verbatim |
 
 ### Telemetry (OpenTelemetry tracing)
@@ -458,13 +480,10 @@ See [What a Default Install Does to Your Cluster](#what-a-default-install-does-t
 | `telemetry.enabled` | bool | `false` | Set `BROKKR__TELEMETRY__ENABLED`; also sets the service name and sampling rate |
 | `telemetry.otlpEndpoint` | string | `"http://otel-collector:4317"` | OTLP/gRPC endpoint for trace export |
 | `telemetry.samplingRate` | float | `0.1` | Fraction of traces sampled (0.0–1.0) |
-| `telemetry.collector.enabled` | bool | `false` | Intended to run an OTel Collector sidecar. **Caveat:** this chart renders no sidecar container — setting it true only repoints `BROKKR__TELEMETRY__OTLP_ENDPOINT` at `http://localhost:4317`, where nothing is listening. Leave `false` and point `telemetry.otlpEndpoint` at a real collector. |
-| `telemetry.collector.image.repository` | string | `"otel/opentelemetry-collector-contrib"` | Sidecar image (unused — see above) |
-| `telemetry.collector.image.tag` | string | `"0.96.0"` | Sidecar image tag (unused) |
-| `telemetry.collector.image.pullPolicy` | string | `"IfNotPresent"` | Sidecar pull policy (unused) |
-| `telemetry.collector.resources` | object | requests `64Mi`/`50m`, limits `128Mi`/`100m` | Sidecar resources (unused) |
-| `telemetry.collector.exporters.otlpEndpoint` | string | `""` | Sidecar exporter endpoint (unused) |
-| `telemetry.collector.exporters.debug` | bool | `false` | Sidecar debug exporter (unused) |
+
+The chart does not run an OpenTelemetry Collector sidecar; point `telemetry.otlpEndpoint` at a
+collector you run yourself (or at your service mesh's OTLP receiver). See
+[Migration notes](#migration-notes) if you have `telemetry.collector.*` in your values.
 
 ## Examples
 
@@ -596,7 +615,7 @@ helm uninstall my-agent
 ```
 
 This removes the resources in the Helm release: the Deployment, ConfigMap, ServiceAccount, the
-agent's Role/ClusterRole and binding, and (if enabled) the NetworkPolicy and ServiceMonitor.
+agent's Role/ClusterRole and binding, and (if enabled) the NetworkPolicy and PodMonitor.
 
 **It does not remove Tekton Pipelines or Shipwright Build.** Those were applied by the
 pre-install hook Job with `kubectl apply`, so they are not tracked by the Helm release and

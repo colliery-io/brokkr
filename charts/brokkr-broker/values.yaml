@@ -97,8 +97,8 @@ service:
   # Service port for broker HTTP API
   port: 3000
   # Additional service annotations (useful for LoadBalancer configuration)
-  # annotations:
   #   service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+  annotations: {}
 
 # PostgreSQL database configuration
 postgresql:
@@ -344,10 +344,10 @@ ingress:
         - brokkr.example.com
 
 # Metrics and monitoring configuration
+#
+# The broker always serves /metrics on its HTTP port. There is no chart value
+# that turns the endpoint off; restrict access with networkPolicy instead.
 metrics:
-  # Enable Prometheus metrics endpoint at /metrics
-  enabled: true
-
   # ServiceMonitor configuration for Prometheus Operator
   serviceMonitor:
     # Enable ServiceMonitor CRD creation
@@ -381,7 +381,15 @@ networkPolicy:
   #           app.kubernetes.io/name: ingress-nginx
   allowIngressFrom: []
 
+  # Permit the metrics ingress rule below to be rendered at all.
+  # Set false to deny scraping outright even if allowMetricsFrom is populated.
+  # (Formerly metrics.enabled, which never gated the /metrics endpoint itself —
+  # only this rule.)
+  allowMetricsScraping: true
+
   # Allow metrics scraping from Prometheus namespace
+  # Only applied when allowMetricsScraping is true; empty means no metrics
+  # ingress rule is rendered.
   # Example:
   #   allowMetricsFrom:
   #     - namespaceSelector:
@@ -431,32 +439,3 @@ telemetry:
   # 0.1 = 10% of traces sampled (recommended for production)
   # 1.0 = 100% of traces sampled (development/debugging)
   samplingRate: 0.1
-
-  # Optional: Deploy OpenTelemetry Collector as a sidecar
-  # This is useful when the main collector is not accessible from the broker
-  collector:
-    # Enable OTel collector sidecar
-    enabled: false
-
-    # Collector image
-    image:
-      repository: otel/opentelemetry-collector-contrib
-      tag: "0.96.0"
-      pullPolicy: IfNotPresent
-
-    # Resource limits for collector sidecar
-    resources:
-      requests:
-        memory: 64Mi
-        cpu: 50m
-      limits:
-        memory: 128Mi
-        cpu: 100m
-
-    # OTLP exporters configuration
-    # Where the sidecar collector sends traces
-    exporters:
-      # OTLP exporter endpoint (e.g., central collector, Jaeger, Tempo)
-      otlpEndpoint: ""
-      # Enable debug exporter (logs traces to stdout)
-      debug: false
