@@ -4,7 +4,7 @@ This guide shows how to watch a fleet of Brokkr agents and spot trouble: pull a 
 
 This is **application-level** fleet observability — what your agents are doing right now. It is distinct from [Setting Up Monitoring](./monitoring-setup.md), which wires Prometheus/infra metrics for the broker and agent processes themselves. Use that guide for scrape configs and dashboards; use this one to query and stream fleet state.
 
-> The bundled web UI (`examples/ui-slim`) is a demo, not a product. To monitor a real fleet, call the API directly or build your own consumer against the endpoints below.
+> **You may not need to build anything.** Browsing to the broker's root URL (`http://<broker>:3000/`) opens the Operator Console, a supported read-only view whose Fleet page consumes exactly the endpoints below. Use this guide when you want to script against the fleet surface, feed it into your own alerting, or build a custom consumer. (`examples/ui-slim` is a separate demo, unrelated to the console.)
 
 ## Prerequisites
 
@@ -33,6 +33,7 @@ Each element looks like this:
 {
   "agent_id": "e5f6g7h8-1234-5678-9abc-def012345678",
   "name": "prod-us-east",
+  "cluster_name": "prod-us-east-cluster",
   "status": "ACTIVE",
   "ws_connected": true,
   "connected_since": "2026-06-14T09:00:00Z",
@@ -53,12 +54,26 @@ Each element looks like this:
 Scan each record for the signals that tell you an agent is in trouble:
 
 - **Heartbeat staleness** — `heartbeat_age_seconds` (rising means the agent has gone quiet).
+- **Cluster** — `cluster_name`, the natural grouping key when one broker serves several clusters.
 - **WebSocket connectivity** — `ws_connected`.
 - **Backpressure** — `pending_object_count`, `pending_work_orders`, `claimed_work_orders`.
 - **Health counts** — `health_failing`, `health_degraded`.
 - **Kubernetes reachability** — `k8s_reachable` (and `k8s_api_latency_ms`).
 
 For exact types, nullability, and how each is derived, see the [Fleet Reference](../reference/fleet.md).
+
+### Narrow the rollup to one tenant
+
+On a shared broker, `?pak_id=<generator-uuid>` trims the response to the agents registered with that generator — the same scoping the Operator Console's tenant selector applies:
+
+```bash
+curl "$BROKER/api/v1/fleet?pak_id=$GENERATOR_ID" \
+  -H "Authorization: Bearer $ADMIN_PAK"
+```
+
+List the generators you can scope by with `GET /api/v1/paks`, which returns `{id, name}` for every non-system generator.
+
+This is a **view filter, not an authorization boundary**. The endpoint is still admin-only, the caller could already see every agent, and an unrecognized `pak_id` simply yields an empty list. Do not use it to give a team a scoped view — give the team its own generator PAK instead.
 
 ## Step 2: Drill Into One Agent
 

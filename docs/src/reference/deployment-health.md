@@ -4,15 +4,15 @@ Reference for the agent's deployment health monitoring: how pods are discovered,
 
 ## Pod Discovery
 
-On each check interval, the agent lists pods **across all namespaces** once and attributes each pod to a deployment object by, in order:
+On each check interval, the agent lists pods once — **across all namespaces** by default, or within a single namespace when the agent is deployed namespace-scoped (`rbac.clusterWide=false`, which sets `BROKKR__AGENT__WATCH_NAMESPACE` to the agent's own namespace). A namespace-scoped agent needs no cluster-wide pod list permission, and pods outside its namespace are invisible to health reporting even when the deployment objects that created them belong to it.
+
+Each discovered pod is attributed to a deployment object by, in order:
 
 1. the `brokkr.io/deployment-object-id=<uuid>` **label** on the pod (manual opt-in),
 2. the same key as an **annotation** on the pod itself (bare `Pod` manifests applied by Brokkr are stamped with it),
 3. walking the pod's controller `ownerReferences` chain upward (Pod → ReplicaSet → Deployment, Job → Pod, StatefulSet/DaemonSet → Pod, up to four hops) until it reaches a Brokkr-applied object carrying the annotation.
 
-Standard controller-managed workloads submitted through Brokkr are therefore attributed automatically — no manual labeling is required. A deployment object reports `unknown` only when no pods can be attributed to it (for example, before pods are scheduled, or for objects that create no pods).
-
-Discovery is implemented in `crates/brokkr-agent/src/deployment_health.rs` (`discover_pods`).
+Standard controller-managed workloads submitted through Brokkr are therefore attributed automatically — no manual labeling is required. A deployment object reports `unknown` only when no pods can be attributed to it (for example, before pods are scheduled, for objects that create no pods, or when the pods live outside a namespace-scoped agent's watch namespace).
 
 ## Status Values
 
@@ -21,7 +21,7 @@ Discovery is implemented in `crates/brokkr-agent/src/deployment_health.rs` (`dis
 | `healthy` | All discovered pods are ready; no problematic conditions detected |
 | `degraded` | One or more pods have a detected problematic condition |
 | `failing` | A pod entered the `Failed` phase (`PodFailed`) |
-| `unknown` | No pods found for the label, a pod is in the `Unknown` phase, or the health check errored |
+| `unknown` | No pods were attributed to the deployment object, a pod is in the `Unknown` phase, or the health check errored |
 
 ## Detected Conditions
 

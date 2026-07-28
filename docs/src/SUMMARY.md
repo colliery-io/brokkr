@@ -27,6 +27,7 @@
   - [Working with Generators](./how-to/generators.md)
   - [Register Agents with Generators](./how-to/agent-registration.md)
   - [Managing PAKs (Key Rotation)](./how-to/pak-management.md)
+  - [Using the Operator Console](./how-to/operator-console.md)
   - [Monitoring Your Agent Fleet](./how-to/fleet-monitoring.md)
   - [Monitoring Deployment Health](./how-to/deployment-health.md)
   - [Streaming Pod Logs & Live Tail](./how-to/log-streaming.md)

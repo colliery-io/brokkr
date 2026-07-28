@@ -67,7 +67,7 @@ An Agent represents a Brokkr process running in a specific environment. Agents h
 
 An Agent Target is an *explicit* association between an Agent and a Stack, created only via `POST /api/v1/agents/{id}/targets`. Most agent-to-stack associations are not stored as rows at all — they are resolved at read time on each poll from label and annotation matches (see Targeting Mechanisms below). Agent Targets exist for cases where you want to pin a specific agent to a specific stack regardless of labels; a stack may be targeted by multiple agents and an agent may target multiple stacks.
 
-Before a target can be created, however, the agent must first be registered with the stack's owning generator (see Generators above). This registration requirement ensures agents opt into the application scopes they serve, making cross-application targeting structurally impossible. The requirement is enforced when a target is written; existing targets resolved at read time are unaffected by it.
+Before a target can be created, however, the agent must first be registered with the stack's owning generator (see Generators above). This registration requirement ensures agents opt into the application scopes they serve, making cross-application targeting structurally impossible. Explicit targets are checked when they are written, so they need no re-check later; label and annotation matches, which are resolved fresh on every poll, are filtered by registration at that moment.
 
 ### Agent Events
 
@@ -84,6 +84,8 @@ Brokkr provides flexible mechanisms for associating agents with stacks, allowing
 **Label-Based Targeting** enables dynamic, scalable associations. Both agents and stacks can carry labels, and you can configure stacks to target all agents with matching labels. This supports patterns like "all production agents should receive all production stacks" without maintaining explicit associations for each pair.
 
 **Annotation-Based Targeting** extends the label concept with key-value pairs that can encode more complex matching rules. Annotations are useful when targeting logic requires more nuance than simple label presence—for example, targeting agents in a specific region or with particular capabilities.
+
+Both matching mechanisms operate *within* the generators an agent has registered with, never across them: a matching label on a stack whose owning generator the agent never registered with produces no association at all. Matching selects among the stacks an agent has already consented to serve; it cannot be used to reach one that never opted in.
 
 | Targeting Method      | Example Use Case                        |
 |----------------------|-----------------------------------------|
@@ -155,7 +157,7 @@ Beyond authentication, Brokkr enforces role-based access control at every endpoi
 
 The system also enforces row-based access control within endpoints. After authenticating a request, the API verifies that the requesting entity has permission to access each specific resource. An agent fetching deployment objects receives only those for stacks it's assigned to. A generator creating a stack can only access stacks it created. This fine-grained control ensures that even authenticated entities can only see and modify what they're supposed to.
 
-Beyond role and ownership checks, Brokkr enforces a registration-based access boundary: an agent can only have explicit targets created for stacks owned by generators it is registered with. This check runs at target-write time and cannot be bypassed by an administrator. All agents are automatically registered with the system generator upon creation, enabling fleet-wide system stacks to reach every agent; any additional generator registrations must be configured explicitly, allowing agents to opt into application-specific scopes. See the [Security Model](./security-model.md#generator-registration-and-application-scopes) for the full treatment.
+Beyond role and ownership checks, Brokkr enforces a registration-based access boundary. An agent can only have explicit targets created for stacks owned by generators it is registered with; that check runs at target-write time and cannot be bypassed by an administrator. The same boundary applies on the read path: when an agent polls, the label and annotation matches that make up most of its served-stack set are restricted to generators it is registered with, so an unregistered generator's stacks never appear in its target state. All agents are automatically registered with the system generator upon creation, enabling fleet-wide system stacks to reach every agent; any additional generator registrations must be configured explicitly, allowing agents to opt into application-specific scopes. See the [Security Model](./security-model.md#generator-registration-and-application-scopes) for the full treatment.
 
 ```mermaid
 sequenceDiagram

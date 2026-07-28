@@ -8,7 +8,7 @@ Generators are identity principals that enable external systems (CI/CD pipelines
 
 **A generator is also Brokkr's tenant.** Onboarding a team or an application onto a shared broker means creating a generator and handing over its PAK: stacks carry the owning `generator_id`, templates are private to their generator unless they are system templates, and agents must register with a generator before its stacks reach them. Generators are what the operator console's tenant scope selector lists (`GET /api/v1/paks`) and what `?pak_id=` narrows a listing to. See [Multi-Tenancy](./multi-tenancy.md) for the full tenant model.
 
-An agent must be registered with a generator before any stack owned by that generator is associated with the agent. Registration is the agent's opt-in consent boundary and applies to every association path — explicit targets, label matches, and annotation matches — and cannot be bypassed by admin. A singleton system generator (`is_system = true`, excluded from the `GET /generators` and `GET /paks` listings) is provisioned at broker startup and auto-registers every agent at creation, carrying fleet/system stacks that reach all agents without per-agent registration. For the concept, see [Generator Registration and Application Scopes](../explanation/security-model.md#generator-registration-and-application-scopes); for operational steps, see [Agent Registration](../how-to/agent-registration.md).
+An agent must be registered with a generator before any stack owned by that generator is associated with the agent. Registration is the agent's opt-in consent boundary and applies to every association path — explicit targets, label matches, and annotation matches — and cannot be bypassed by admin. A singleton system generator (`is_system = true`, excluded from the `GET /generators` and `GET /paks` listings) is provisioned at broker startup and carries fleet/system stacks that reach all agents without per-agent registration. Agents are registered with it automatically: both agent-creation paths (`POST /api/v1/agents` and `brokkr-broker create agent`) register the new agent with it, and any agents that already existed when it was first provisioned are back-filled at that moment. For the concept, see [Generator Registration and Application Scopes](../explanation/security-model.md#generator-registration-and-application-scopes); for operational steps, see [Agent Registration](../how-to/agent-registration.md).
 
 ## Data Model
 
@@ -59,7 +59,8 @@ Authorization: Bearer <admin_pak>
     "updated_at": "2025-01-02T10:00:00Z",
     "deleted_at": null,
     "last_active_at": null,
-    "is_active": true
+    "is_active": true,
+    "is_system": false
   }
 ]
 ```
@@ -142,7 +143,8 @@ Content-Type: application/json
     "updated_at": "2025-01-02T10:00:00Z",
     "deleted_at": null,
     "last_active_at": null,
-    "is_active": true
+    "is_active": true,
+    "is_system": false
   },
   "pak": "brokkr_BRgen12ab_GeneratorLongTokenExample01"
 }
@@ -187,7 +189,8 @@ Authorization: Bearer <admin_pak | generator_pak>
   "updated_at": "2025-01-02T10:00:00Z",
   "deleted_at": null,
   "last_active_at": null,
-  "is_active": true
+  "is_active": true,
+  "is_system": false
 }
 ```
 
@@ -217,17 +220,34 @@ Content-Type: application/json
 |-----------|------|-------------|
 | `id` | UUID | Generator ID |
 
-**Request Body:**
+**Request Body:** a complete Generator object.
+
+This is a full replacement, not a patch. The body is deserialized as a whole Generator, so a partial body such as `{"name": "...", "description": "..."}` is rejected with `422` before the handler runs. The supported pattern is fetch-modify-PUT: `GET /api/v1/generators/{id}`, change the fields you want, and send the result back.
 
 ```json
 {
   "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
   "name": "github-actions-prod",
-  "description": "Updated description"
+  "description": "Updated description",
+  "created_at": "2025-01-02T10:00:00Z",
+  "updated_at": "2025-01-02T10:00:00Z",
+  "deleted_at": null,
+  "last_active_at": "2025-01-02T10:45:00Z",
+  "is_active": true,
+  "is_system": false
 }
 ```
 
-All fields from the Generator object can be provided, though `id`, `created_at`, and `pak_hash` are ignored if included.
+Field handling:
+
+| Field | Behavior on update |
+|-------|--------------------|
+| `id` | Ignored — the path parameter identifies the row |
+| `pak_hash` | Ignored — never accepted on input; rotate the PAK with the rotate endpoint |
+| `updated_at` | Ignored — a database trigger sets it to the current time on every update |
+| `created_at` | **Written as supplied.** Send back the value returned by `GET`, or the generator's creation timestamp is overwritten |
+| `name`, `description`, `is_active`, `is_system` | Written as supplied |
+| `deleted_at`, `last_active_at` | Written when non-null; a `null` leaves the stored value unchanged |
 
 **Response: 200 OK**
 
@@ -240,7 +260,8 @@ All fields from the Generator object can be provided, though `id`, `created_at`,
   "updated_at": "2025-01-02T11:00:00Z",
   "deleted_at": null,
   "last_active_at": "2025-01-02T10:45:00Z",
-  "is_active": true
+  "is_active": true,
+  "is_system": false
 }
 ```
 
@@ -250,6 +271,7 @@ All fields from the Generator object can be provided, though `id`, `created_at`,
 |--------|-------------|
 | 403 | Unauthorized access |
 | 404 | Generator not found |
+| 422 | Request body is not a complete Generator object (plain-text body, no error envelope) |
 | 500 | Internal server error |
 
 ---
@@ -310,7 +332,8 @@ Authorization: Bearer <admin_pak | generator_pak>
     "updated_at": "2025-01-02T12:00:00Z",
     "deleted_at": null,
     "last_active_at": "2025-01-02T11:30:00Z",
-    "is_active": true
+    "is_active": true,
+    "is_system": false
   },
   "pak": "brokkr_BRnew34cd_GeneratorLongTokenExample02"
 }
@@ -365,6 +388,7 @@ Content-Type: application/json
 
 | Status | Description |
 |--------|-------------|
+| 400 | `missing_agent_id` — an admin caller omitted `agent_id` from the body |
 | 403 | `forbidden` — caller is a generator (only an agent self or an admin may register) |
 | 404 | `generator_not_found` |
 | 409 | `already_registered` — the agent is already registered with this generator |
@@ -400,6 +424,7 @@ Content-Type: application/json
 
 | Status | Description |
 |--------|-------------|
+| 400 | `missing_agent_id` — an admin caller omitted `agent_id` from the body |
 | 403 | `forbidden` — caller is a generator (only an agent self or an admin may deregister) |
 | 404 | `generator_not_found` |
 | 500 | Internal server error |
@@ -506,7 +531,7 @@ Before any of a generator's stacks are associated with an agent, the agent must 
 
 An agent with no registrations therefore receives nothing from label or annotation matching, and two generators can safely reuse the same label and annotation vocabulary. The served set returned by `GET /agents/{id}/target-state` reflects this rule.
 
-The system generator auto-registers every agent at creation, so system/fleet stacks reach all agents without per-agent registration. Other generators are registered explicitly, via the registration endpoints above or at agent startup. See [Agent Registration](../how-to/agent-registration.md) for operations and [Multi-Tenancy](./multi-tenancy.md) for the tenant model this enforces.
+Registration with the system generator is automatic, so system/fleet stacks reach all agents without per-agent registration: both `POST /api/v1/agents` and `brokkr-broker create agent` register the new agent with it, and pre-existing agents are back-filled when it is first provisioned. An agent created by the CLI while the system generator does not yet exist (a broker whose `serve` has never run) is the one case that is left unregistered; the CLI logs a warning, and the agent must then be registered explicitly. Every other generator is registered explicitly, via the registration endpoints above or at agent startup. See [Agent Registration](../how-to/agent-registration.md) for operations and [Multi-Tenancy](./multi-tenancy.md) for the tenant model this enforces.
 
 ### Templates
 
@@ -527,9 +552,9 @@ Deployment objects inherit the `generator_id` from their parent stack.
 | Column | Type | Constraints |
 |--------|------|-------------|
 | `id` | UUID | PRIMARY KEY, DEFAULT uuid_generate_v4() |
-| `name` | VARCHAR(255) | NOT NULL, UNIQUE |
+| `name` | VARCHAR(255) | NOT NULL (uniqueness comes from the partial index below, not a column constraint) |
 | `description` | TEXT | |
-| `pak_hash` | VARCHAR(255) | |
+| `pak_hash` | TEXT | |
 | `created_at` | TIMESTAMP | NOT NULL, DEFAULT NOW() |
 | `updated_at` | TIMESTAMP | NOT NULL, DEFAULT NOW() |
 | `deleted_at` | TIMESTAMP | NULL (soft delete) |

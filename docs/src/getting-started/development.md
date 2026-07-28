@@ -62,9 +62,9 @@ angreal local rebuild agent
 |---------|-----------|-------|
 | PostgreSQL | `5433` | Mapped from container port 5432 to avoid conflicts |
 | Local container registry | `5050` | For Shipwright builds |
-| Broker | `3000` | Built from your working tree |
+| Broker | `3000` | Built from your working tree; also serves the Operator Console at <http://localhost:3000/> |
 | k3s | `6443` | Kubernetes cluster with Tekton + Shipwright installed |
-| Demo admin UI | `3001` | `examples/ui-slim` |
+| Demo admin UI | `3001` | `examples/ui-slim` — a standalone demo, not the supported console |
 | Webhook catcher | `8090` | `examples/webhook-catcher` |
 
 It also pre-creates an agent named `brokkr-integration-test-agent` (cluster `brokkr-dev-integration-cluster`) and starts an agent container with it. The broker runs with the default configuration, so the publicly known dev admin PAK (Prefixed API Key) `brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8` works against it.
@@ -77,12 +77,37 @@ The environment copies credentials to `/tmp/brokkr-keys/` on your host:
 - `kubeconfig.local.yaml` — kubeconfig for reaching the k3s cluster from your host (`https://localhost:6443`)
 - `kubeconfig.docker.yaml` — kubeconfig used by containers inside the compose network
 
-(When a broker runs with `broker.pak_hash` unset or empty, it writes a freshly generated admin PAK to `/tmp/brokkr-keys/key.txt` inside its container. The dev environment uses the default hash instead, so use the dev PAK above.)
+(A broker only generates its own admin PAK when `broker.pak_hash` is explicitly set to an empty string — for example `BROKKR__BROKER__PAK_HASH=""`. Leaving it alone is not the same thing: the embedded `default.toml` always supplies the publicly known development hash, which is what the dev environment runs with, so use the dev PAK above. When generation does happen, the fresh PAK is written to `/tmp/brokkr-keys/key.txt` inside the container.)
+
+### The Operator Console (`crates/brokkr-web`)
+
+The supported read-only console is a Leptos/WASM application that the broker embeds and serves at its own root URL. Two things about it will surprise you the first time.
+
+It is **excluded from the Cargo workspace**, so `cargo` commands run from the repository root do not see it — `cargo build -p brokkr-web` fails. It is deliberately kept out so that ordinary builds and test runs don't pull the WASM toolchain into every compile. Build it from its own directory instead, targeting WASM:
+
+```bash
+cd crates/brokkr-web
+trunk build --release          # produces dist/, what the broker embeds
+cargo check --target wasm32-unknown-unknown   # type-check without a full bundle
+```
+
+It is also **not compiled into the broker by default.** The broker only embeds the console when built with its `embed-ui` feature; a plain `cargo build` produces a broker that serves the full API and a short placeholder page in place of the console. The compose environment's broker image does build with the feature, which is why the console is there on port 3000 — but if you run a locally built `brokkr-broker` binary and find no console, this is why.
 
 ### Bundled Examples
 
-- **`examples/ui-slim`** — a React admin UI served on port `3001`, pre-wired to the broker with the dev admin PAK. This is why the broker's default CORS configuration allows `http://localhost:3001`.
+- **`examples/ui-slim`** — a React demo UI served on port `3001`, pre-wired to the broker with the dev admin PAK. It is a consumer example showing what can be built against the API — notably the live WebSocket tail, which the Operator Console does not use — and not the supported console. Its presence is why the broker's default CORS configuration allows `http://localhost:3001`.
 - **`examples/webhook-catcher`** — a small receiver on port `8090` for exercising [webhooks](../how-to/webhooks.md) end to end.
+
+## Running the Tests
+
+Tests run through angreal rather than `cargo test` directly, because the suites that need a database and a cluster bring their own environment up first:
+
+```bash
+angreal tests unit all           # or a single crate, e.g. `angreal tests unit brokkr-broker`
+angreal tests integration all    # brings the compose stack up; --skip-docker if it's already running
+```
+
+There is also `angreal tests sdk-contract` for the generated SDKs and `angreal tests e2e` for the full walkthrough; run `angreal tree` for the current task list. Remember the parallelism gotcha below — the suites share one compose project, so run them one at a time.
 
 ## Gotchas
 

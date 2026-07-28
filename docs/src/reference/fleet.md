@@ -6,7 +6,7 @@ A fleet record exposes **measured signals only** (no computed health verdicts), 
 
 The REST `FleetAgentRecord` (`crates/brokkr-broker/src/api/v1/fleet.rs`) is the authoritative `utoipa::ToSchema` type exposed by the OpenAPI surface. The live-push frames carry its `brokkr-wire` twin (`crates/brokkr-wire/src/lib.rs:FleetAgentRecord`), a plain serde struct kept field-for-field identical via the single conversion point `FleetAgentRecord::to_wire()`.
 
-> The Operator Console shipped in the broker image is a first-party consumer of this surface — its fleet view is built from the endpoints below. The separate `examples/ui-slim` demo is a sample of what you can build on the same surface; it is not a supported product. Either way, the REST endpoints and the live stream documented here are the contract.
+> Two first-party consumers read this surface, and they read different parts of it. The Operator Console shipped in the broker image uses **`GET /fleet` only**, re-reading it on a short timer; it opens no WebSocket. The separate `examples/ui-slim` demo is the one that consumes the `/fleet/live` stream — it is a sample of what you can build, not a supported product. Both the REST endpoints and the live stream documented here are the contract regardless of which one you build against.
 
 ## FleetAgentRecord
 
@@ -38,7 +38,7 @@ All time-relative fields (`heartbeat_age_seconds`, `seconds_since_last_event`) a
 
 ## REST Endpoints
 
-Both fleet REST endpoints are **admin-only**. Authentication is the standard v1 PAK middleware; the handler then requires `AuthPayload.admin` to be true (`require_admin`). A non-admin PAK (generator or agent PAK) receives `403 Forbidden` with error code `admin_required`. The broker's read-only console token also satisfies this gate on reads, which is how the Operator Console renders its fleet view.
+Both fleet REST endpoints are **admin-only**. Authentication is the standard v1 PAK middleware; the handler then requires `AuthPayload.admin` to be true (`require_admin`). A non-admin PAK (generator or agent PAK) receives `403 Forbidden` with error code `admin_required`. The broker's read-only console token also satisfies this gate, which is how the Operator Console reads `GET /fleet`.
 
 | Method | Path | Auth | Success body |
 |--------|------|------|--------------|

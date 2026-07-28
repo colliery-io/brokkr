@@ -18,7 +18,7 @@ Configuration precedence (highest wins): Environment variables > Config file > E
 | `BROKKR__LOG__LEVEL` | String | `debug` | Log level: `trace`, `debug`, `info`, `warn`, `error` |
 | `BROKKR__LOG__FORMAT` | String | `text` | Log format: `text` (human-readable) or `json` (structured) |
 
-The log level is **hot-reloadable** — changes take effect without restarting.
+Both are read once at process start. See [Configuration File and Hot-Reload](#configuration-file-and-hot-reload) for what a configuration reload does and does not change.
 
 ## Broker
 
@@ -35,7 +35,7 @@ The log level is **hot-reloadable** — changes take effect without restarting.
 | `BROKKR__BROKER__AUTH_CACHE_TTL_SECONDS` | Integer | `60` | TTL for PAK authentication cache (seconds). Set to `0` to disable caching. |
 | `BROKKR__BROKER__AGENT_EVENTS_RETENTION_DAYS` | Integer | `30` | How long to keep agent events before hard-deletion (days). Set to `0` (or leave unset) to disable eviction and retain all agent events indefinitely. |
 
-A fresh admin PAK is generated (and written to `/tmp/brokkr-keys/key.txt`) only when `BROKKR__BROKER__PAK_HASH` is explicitly set to an empty value; when left at the default, the embedded development hash — and its corresponding publicly known development PAK — remain in effect.
+A fresh admin PAK is generated (and written to `/tmp/brokkr-keys/key.txt`) only when `BROKKR__BROKER__PAK_HASH` is explicitly set to an empty value; when left at the default, the embedded development hash — and its corresponding publicly known development PAK — remain in effect. The admin credential is written on first startup against an empty database and by an explicit `brokkr-broker rotate admin`; a later restart with a different value does not change it, and the broker reports the still-in-use default through the `brokkr_default_admin_pak_hash_in_use` metric (see [Monitoring](./monitoring.md)).
 
 ## Agent
 
@@ -47,7 +47,7 @@ A fresh admin PAK is generated (and written to `/tmp/brokkr-keys/key.txt`) only 
 | `BROKKR__AGENT__GENERATOR_IDS` | String (comma-separated) | *(none)* | Generator UUIDs to self-register with on startup. Resolution precedence (highest wins): `--generator-ids` CLI flag > `BROKKR__AGENT__GENERATOR_IDS` > `agent.generator_ids` (config file) > legacy `BROKKR_GENERATOR_IDS`. When unset or empty, the agent serves system/fleet scope only. See [Agent Registration](../how-to/agent-registration.md). |
 | `BROKKR_GENERATOR_IDS` | String (comma-separated) | *(deprecated)* | **Deprecated** legacy form of `BROKKR__AGENT__GENERATOR_IDS`, outside the `BROKKR__` namespace. Still honored as a fallback when `BROKKR__AGENT__GENERATOR_IDS` is unset, but logs a deprecation warning on startup. Migrate to `BROKKR__AGENT__GENERATOR_IDS` or `agent.generator_ids` in the config file. |
 | `BROKKR__AGENT__MAX_RETRIES` | Integer | `60` | Max retries when waiting for broker on startup |
-| `BROKKR__AGENT__PAK` | String | *(required)* | Agent's PAK for broker authentication |
+| `BROKKR__AGENT__PAK` | String | *(embedded development PAK)* | Agent's PAK for broker authentication. Like `BROKKR__BROKER__PAK_HASH`, the compiled-in default is a publicly known development credential, so an unset value does not fail — the agent silently authenticates with it. Always set this explicitly outside local development. |
 | `BROKKR__AGENT__AGENT_NAME` | String | `DEFAULT` | Agent name (must match broker registration) |
 | `BROKKR__AGENT__CLUSTER_NAME` | String | `DEFAULT` | Cluster name (must match broker registration) |
 | `BROKKR__AGENT__HEALTH_PORT` | Integer | `8080` | Port for agent health check HTTP server |
@@ -123,13 +123,17 @@ These environment variables control the configuration system itself and are **no
 
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
-| `BROKKR_CONFIG_FILE` | String | *(none)* | Path to a TOML configuration file, loaded between embedded defaults and `BROKKR__*` variables; also arms the broker's hot-reload file watcher |
-| `BROKKR_CONFIG_WATCHER_ENABLED` | Boolean | *(auto)* | Enable/disable ConfigMap hot-reload watcher |
+| `BROKKR_CONFIG_FILE` | String | *(none)* | Path to a TOML configuration file, loaded between embedded defaults and `BROKKR__*` variables; also arms the broker's config-file watcher |
+| `BROKKR_CONFIG_WATCHER_ENABLED` | Boolean | `true` | Disable the config-file watcher by setting it to `false` or `0`. Has no effect unless `BROKKR_CONFIG_FILE` is set to an existing file |
 | `BROKKR_CONFIG_WATCHER_DEBOUNCE_SECONDS` | Integer | `5` | Debounce window for config file changes |
 
-### Hot-Reloadable Settings
+The watcher is a **config-file** watcher, not a ConfigMap watcher. It arms only when `BROKKR_CONFIG_FILE` names a file that exists at startup; if the variable is unset or points at a missing path, the watcher is silently disabled regardless of `BROKKR_CONFIG_WATCHER_ENABLED`.
 
-The following settings can be changed at runtime without restarting the broker (via config file change or admin API):
+This matters for Helm deployments. The broker chart supplies configuration as environment variables (`envFrom`) and mounts no configuration file, so `BROKKR_CONFIG_FILE` is unset and no watching occurs. The chart also renders a `BROKKR_CONFIGMAP_NAME` variable that no component reads. To change broker configuration under the chart, edit the values and let the pod restart.
+
+### What a Reload Does
+
+A reload is triggered by a config-file change (when the watcher is armed) or by `POST /api/v1/admin/config/reload`. It re-reads the configuration sources, compares them against the values captured at startup, and reports which keys changed — in the API response and in the broker log. The keys tracked for this comparison are:
 
 - `log.level`
 - `broker.diagnostic_cleanup_interval_seconds`
@@ -139,6 +143,8 @@ The following settings can be changed at runtime without restarting the broker (
 - `broker.webhook_cleanup_retention_days`
 - `cors.allowed_origins`
 - `cors.max_age_seconds`
+
+A reload is a **detection** mechanism, not an application mechanism. The running components — the log filter, the CORS layer, the webhook delivery worker, and the cleanup tasks — each captured their settings at startup and do not consult the reloaded values. Changing any of these settings takes effect on the next broker restart.
 
 ## Related Documentation
 

@@ -100,11 +100,13 @@ Because the endpoint is unauthenticated, the 2-second cache also bounds how much
 
 The broker does not implement a `/health` endpoint. For database connectivity, active agent counts, and request-level state, scrape `/metrics` (see [Monitoring & Observability](./monitoring.md)) or use the fleet API (see [Monitoring Your Agent Fleet](../how-to/fleet-monitoring.md)).
 
+A `GET http://<broker-host>:3000/health` does not return 404. Any path outside `/api` and `/internal` falls through to the operator console's single-page-app handler, so the request is answered with `200 OK` and an HTML document. An HTTP monitor pointed at `/health` therefore passes unconditionally, including while the database is down. Point broker health checks at `/healthz`, `/readyz`, or `/metrics`.
+
 The `/api/v1/.../health` routes are a different feature entirely: they report the health of *deployed workloads*, not of the broker process. See [Deployment Health](./deployment-health.md).
 
 ## Agent Health Endpoints
 
-The agent exposes `/healthz`, `/readyz`, `/health`, and `/metrics` on port 8080. The agent's readiness check differs from the broker's: it validates Kubernetes API connectivity rather than database connectivity, and its result is not cached.
+The agent exposes `/healthz`, `/readyz`, `/health`, and `/metrics` on port 8080 by default. The port is configurable via `agent.health_port` (`BROKKR__AGENT__HEALTH_PORT`); the examples below assume the default. The agent's readiness check differs from the broker's: it validates Kubernetes API connectivity rather than database connectivity, and its result is not cached.
 
 ### `/healthz` - Liveness Probe
 
@@ -198,7 +200,7 @@ curl http://brokkr-agent:8080/health
     "last_heartbeat": "2024-01-15T10:29:55Z"
   },
   "uptime_seconds": 3600,
-  "version": "0.8.0",
+  "version": "0.8.4",
   "timestamp": "2024-01-15T10:30:00Z"
 }
 ```
@@ -217,7 +219,7 @@ curl http://brokkr-agent:8080/health
     "last_heartbeat": "2024-01-15T10:29:55Z"
   },
   "uptime_seconds": 3600,
-  "version": "0.8.0",
+  "version": "0.8.4",
   "timestamp": "2024-01-15T10:30:00Z"
 }
 ```
@@ -234,7 +236,7 @@ curl http://brokkr-agent:8080/health
     "connected": false
   },
   "uptime_seconds": 3600,
-  "version": "0.8.0",
+  "version": "0.8.4",
   "timestamp": "2024-01-15T10:30:00Z"
 }
 ```

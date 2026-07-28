@@ -84,23 +84,9 @@ Entities with partial unique constraints:
 
 ## Querying Deleted Records
 
-Standard API endpoints automatically filter out soft-deleted records. However, some DAL methods allow querying including deleted records for administrative purposes:
+Every API endpoint filters out soft-deleted records; there is no query parameter that includes them. A soft-deleted resource is indistinguishable from a missing one over the API — `GET` returns `404`.
 
-```rust
-// Standard query - excludes deleted
-dal.stacks().get(vec![stack_id])
-
-// Include deleted records
-dal.stacks().get_including_deleted(stack_id)
-
-// List all including deleted
-dal.stacks().list_all()
-```
-
-These methods are primarily used internally for:
-- Audit trail queries
-- Database maintenance
-- Recovery operations
+Deleted rows are reachable only from inside the broker (the data-access layer keeps include-deleted variants used for audit trail queries, database maintenance, and recovery) or by querying the database directly.
 
 ## Hard Deletion
 

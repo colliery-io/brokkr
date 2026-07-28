@@ -360,7 +360,7 @@ When `target_labels` is set, matching agents deliver webhooks:
 
 1. Event occurs and is emitted
 2. Broker creates delivery with `target_labels`
-3. Agent polls for pending deliveries during heartbeat loop
+3. Agent polls for pending deliveries on its own fixed 10-second webhook interval, independent of the heartbeat and reconciliation loops
 4. Agent claims deliveries matching its labels
 5. Agent delivers via HTTP POST from inside cluster
 6. Agent reports result back to broker

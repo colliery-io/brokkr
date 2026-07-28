@@ -135,8 +135,8 @@ lookup.
 ## Telemetry track — short-lived buffer, not a log store
 
 Brokkr streams Kubernetes Events and pod logs for objects an agent
-manages, persists them, and lets a consumer (such as the `ui-slim`
-demo) tail them live. **It is not a log warehouse.** A hard 6-hour retention ceiling is enforced in-process
+manages, persists them, and lets a consumer tail them live. **It is not a
+log warehouse.** A hard 6-hour retention ceiling is enforced in-process
 by a continuous eviction worker. There is no user-facing retention
 setting: the window is fixed at the 6-hour ceiling and cannot be
 shortened or extended through configuration.
@@ -249,10 +249,14 @@ normal auth path and echoes back only the non-secret `brokkr.v1` marker.
 This is additive: clients that can set headers (agents, SDKs, the Node
 `ws` package) keep using `Authorization: Bearer` unchanged — the
 subprotocol PAK is consulted only when no auth header is present. See the
-"Browser WS auth" amendment in [ADR-0008](https://github.com/colliery-io/brokkr/blob/main/.metis/adrs/BROKKR-A-0008.md). The `ui-slim` demo's Telemetry panel uses
-this for its **Go Live** toggle, streaming `k8s_event` / `pod_log_line`
-frames (and rendering `log_gap` markers) into the same events/logs tabs —
-one illustration of what a consumer can build on the stream.
+"Browser WS auth" amendment in [ADR-0008](https://github.com/colliery-io/brokkr/blob/main/.metis/adrs/BROKKR-A-0008.md).
+
+The broker's own read-only Operator Console does **not** use this path — it
+reads history over REST and holds no live socket. The worked example of a
+browser consumer on the live tail is the `ui-slim` demo in
+`examples/ui-slim`, whose Telemetry panel streams `k8s_event` /
+`pod_log_line` frames behind a **Go Live** toggle and renders `log_gap`
+markers where lines were dropped.
 
 ### When NOT to use the live tail
 

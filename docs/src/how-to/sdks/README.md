@@ -30,7 +30,7 @@ There is no separate SDK-only release cadence. If the broker API changes, the SD
 
 ## Authentication
 
-Every Brokkr SDK uses a single credential: a **PAK** (Prefixed API Key). The wrapper sends it as `Authorization: Bearer <pak>` on every request.
+Every Brokkr SDK uses a single credential: a **PAK** (Prefixed API Key), attached to the `Authorization` header of every request. The Python and TypeScript wrappers send it as `Authorization: Bearer <pak>`; the Rust wrapper sends the bare token with no `Bearer` prefix. The broker accepts either, so this only matters if you are reading a packet capture or writing your own client.
 
 The OpenAPI spec declares three security schemes — `admin_pak`, `agent_pak`, `generator_pak` — but they all map to the same header. All PAKs share one format (by default `brokkr_BR<short>_<long>`); the role is not encoded in the token. The broker resolves the role at runtime by hashing the PAK and looking it up against the admin role, agents, and generators tables (`POST /api/v1/auth/pak` tells you which identity a PAK resolves to):
 
@@ -47,6 +47,8 @@ Where PAKs come from:
 - **Generator** — returned once when a generator is created (`POST /api/v1/generators`); rotate with `POST /api/v1/generators/{id}/rotate-pak`, which returns the new PAK once.
 
 Both the REST rotation endpoints and the `brokkr-broker rotate agent/generator` CLI commands print the new PAK once; the REST endpoints additionally invalidate the broker's auth cache immediately.
+
+`POST /api/v1/auth/pak` also returns a `readonly` flag alongside `admin`, `agent`, and `generator`. It is `false` for every PAK you provision through the API or CLI — it marks the broker's own ephemeral console credential, a fourth in-memory credential class that the Operator Console mints per process and that may only issue reads. You will not construct an SDK client with one, but do not assume the field is absent when introspecting.
 
 ## Error handling
 

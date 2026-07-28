@@ -112,7 +112,7 @@ Note that an empty `pod_statuses` alone does not mean an error occurred: a succe
 POST /api/v1/deployment-objects/{deployment_object_id}/diagnostics
 ```
 
-**Auth:** Admin only.
+**Auth:** Admin. This includes the operator console's ephemeral read-only PAK, which is classified as a read-only admin and is explicitly allowlisted for this route (it is treated as an observability action rather than a state mutation). Anyone who can load the console page can therefore create diagnostic requests.
 
 **Request body:**
 
@@ -277,7 +277,7 @@ A JSON object mapping `pod-name/container-name` to the last 100 lines of logs:
 }
 ```
 
-The maximum log lines collected per container is 100 (configured via `MAX_LOG_LINES`).
+At most 100 lines are collected per container. The limit is fixed; it is not configurable.
 
 ---
 
@@ -303,11 +303,11 @@ Step 1 is what bounds the table: a request that an agent claims and never answer
 
 ### Namespaces
 
-The agent searches the namespaces declared in the deployment object's manifests (`metadata.namespace`, with `default` for documents that omit it) — see `crates/brokkr-agent/src/cli/commands.rs`. Resources the deployment object creates in a namespace it does not declare are not searched.
+The agent searches the namespaces declared in the deployment object's manifests (`metadata.namespace`, with `default` for documents that omit it). Resources the deployment object creates in a namespace it does not declare are not searched.
 
 ### Pod attribution
 
-Within those namespaces, `pod_statuses` and `log_tails` cover the pods attributed to the deployment object by `PodAttributor` (`crates/brokkr-agent/src/deployment_health.rs`) — the same resolver continuous health checking uses, so the two always agree. A pod is attributed when, in order:
+Within those namespaces, `pod_statuses` and `log_tails` cover the pods attributed to the deployment object by the same resolver continuous health checking uses, so the two always agree. A pod is attributed when, in order:
 
 1. it carries the `brokkr.io/deployment-object-id` **label** (manual opt-in; Brokkr does not add this itself),
 2. it carries the same key as an **annotation** — bare `Pod` manifests applied by Brokkr are stamped with it,
@@ -327,8 +327,8 @@ Read `events` as "what is happening in this deployment object's namespaces", and
 ## Known Limitations
 
 - Events are not attributed to the deployment object (see above); in a busy shared namespace they may be dominated by unrelated workloads.
-- Attribution walks at most four ownerReference hops (`MAX_OWNER_DEPTH`). Deeper controller chains than `CronJob` → `Job` → `Pod` will not resolve.
-- Log tails are capped at the last 100 lines per container (`MAX_LOG_LINES`) and are only available for pods that still exist; a pod that has already been replaced contributes nothing.
+- Attribution walks at most four ownerReference hops. Deeper controller chains than `CronJob` → `Job` → `Pod` will not resolve.
+- Log tails are capped at the last 100 lines per container and are only available for pods that still exist; a pod that has already been replaced contributes nothing.
 
 ---
 

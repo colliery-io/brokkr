@@ -4,9 +4,11 @@ Brokkr agents continuously monitor the health of deployed Kubernetes resources a
 
 ## How Health Monitoring Works
 
-When an agent applies deployment objects to a Kubernetes cluster, it tracks those resources and periodically checks their health. The agent examines pod status, container states, and Kubernetes conditions to determine overall health. This information is reported to the broker, where it can be queried through the API (or any UI you build on top of it).
+When an agent applies deployment objects to a Kubernetes cluster, it tracks those resources and periodically checks their health. The agent examines pod status, container states, and Kubernetes conditions to determine overall health. This information is reported to the broker, where you can read it through the API or in the Operator Console's health view at the broker's root URL.
 
-Health monitoring runs as a background process on each agent. On each check interval, the agent lists pods across all namespaces, attributes each pod to its deployment object — by the `brokkr.io/deployment-object-id` label or annotation when present, otherwise by walking the pod's ownerReference chain up to the Brokkr-applied top-level object — analyzes pod status, and sends a consolidated health report to the broker. Standard controller-managed workloads are attributed automatically; see the [Deployment Health Reference](../reference/deployment-health.md) for the exact discovery rules.
+Health monitoring runs as a background process on each agent. On each check interval, the agent lists pods, attributes each pod to its deployment object — by the `brokkr.io/deployment-object-id` label or annotation when present, otherwise by walking the pod's ownerReference chain up to the Brokkr-applied top-level object — analyzes pod status, and sends a consolidated health report to the broker. Standard controller-managed workloads are attributed automatically; see the [Deployment Health Reference](../reference/deployment-health.md) for the exact discovery rules.
+
+Pod discovery spans all namespaces by default. An agent installed with namespace-scoped RBAC (`rbac.clusterWide=false`, which sets `BROKKR__AGENT__WATCH_NAMESPACE`) only discovers pods in its own namespace, and does not need cluster-wide pod list permission.
 
 ## Health Status Values
 
@@ -148,7 +150,7 @@ When containers are killed for memory:
 When status shows as `unknown`:
 
 1. Verify pods exist for the deployment object
-2. Check the agent has RBAC permissions to list pods
+2. Check the agent has RBAC permission to list pods in the namespaces the workload runs in — an agent installed with `rbac.clusterWide=false` sees only its own namespace
 3. Check agent logs for API errors:
    ```bash
    kubectl logs -l app.kubernetes.io/name=brokkr-agent -c agent
@@ -193,9 +195,9 @@ If health status isn't updating:
    kubectl get pods -l app.kubernetes.io/name=brokkr-agent
    ```
 
-2. Verify health monitoring is enabled:
+2. Verify health monitoring is enabled — the agent's settings live in the chart's ConfigMap, named after the release:
    ```bash
-   kubectl get configmap brokkr-agent-config -o yaml
+   kubectl get configmap -l app.kubernetes.io/name=brokkr-agent -o yaml
    ```
 
 3. Check agent logs for health check errors:
@@ -207,9 +209,9 @@ If health status isn't updating:
 
 If reported health doesn't match actual pod status:
 
-1. Verify pods have the correct deployment object ID label
-2. Check the health check interval - status may be stale
-3. Confirm the agent has permission to list pods across namespaces
+1. Check the health check interval — the status may simply be stale
+2. Confirm the agent can list pods in the workload's namespace (see [Unknown Status](#unknown-status))
+3. If pods are attributed to the wrong deployment object, or to none, inspect the chain the agent walks: an explicit `brokkr.io/deployment-object-id` label or annotation on the pod wins, otherwise the pod must be reachable by ownerReferences from a Brokkr-applied object. Pods created outside that chain — bare pods you applied yourself, or pods whose owner was adopted by another controller — are not attributed to any deployment object
 
 ### High API Load
 

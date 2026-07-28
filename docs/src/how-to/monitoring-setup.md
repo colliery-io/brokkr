@@ -84,9 +84,11 @@ helm install brokkr-broker oci://ghcr.io/colliery-io/charts/brokkr-broker \
 # Agent with ServiceMonitor
 helm install brokkr-agent oci://ghcr.io/colliery-io/charts/brokkr-agent \
   --set broker.url=http://brokkr-broker:3000 \
-  --set broker.pak="<PAK>" \
+  --set broker.existingSecret=brokkr-agent-credentials \
   --set metrics.serviceMonitor.enabled=true
 ```
+
+`broker.existingSecret` names a Secret you created beforehand (key `BROKKR__AGENT__PAK` by default), and the chart injects the PAK from it. The alternative, `--set broker.pak=<PAK>`, renders the credential in plaintext into the agent ConfigMap — acceptable for a scratch cluster, not for anything you keep.
 
 **Verify ServiceMonitor:**
 
@@ -146,6 +148,16 @@ spec:
           annotations:
             summary: "Broker p95 latency above 1s"
             description: "Endpoint {{ $labels.endpoint }} p95 latency is {{ $value }}s"
+
+        # Default admin PAK still in use
+        - alert: BrokerDefaultAdminPakInUse
+          expr: brokkr_default_admin_pak_hash_in_use == 1
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Broker still accepts the publicly-known default admin PAK"
+            description: "Replace the admin PAK hash; see the security hardening guide"
 
         # Stale agent heartbeat
         - alert: BrokerAgentHeartbeatStale

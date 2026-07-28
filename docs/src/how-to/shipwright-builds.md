@@ -30,15 +30,15 @@ kubectl version
 
 ## Installation Options
 
-### Option 1: Bundled Installation (Recommended)
+### Option 1: Chart-Managed Installation (Recommended)
 
-The brokkr-agent Helm chart includes Shipwright Build and Tekton Pipelines as vendored dependencies. This is enabled by default.
+Enabled by default. Nothing is vendored into the chart: on every `helm install` **and every `helm upgrade`**, a pre-install hook Job downloads the pinned upstream release manifests and `kubectl apply`s them.
 
 ```bash
-# Install agent with bundled Shipwright (default)
+# Install agent with chart-managed Shipwright (default)
 helm install brokkr-agent oci://ghcr.io/colliery-io/charts/brokkr-agent \
   --set broker.url=http://brokkr-broker:3000 \
-  --set broker.pak="<YOUR_PAK>" \
+  --set broker.existingSecret=brokkr-agent-credentials \
   --wait
 ```
 
@@ -46,18 +46,28 @@ This installs:
 - **Tekton Pipelines** (v0.68.1) - Task execution engine
 - **Shipwright Build** (v0.18.1) - Build orchestration
 - **Sample ClusterBuildStrategies** (buildah, kaniko, etc.)
+- A webhook TLS certificate for Shipwright — self-signed by the Job by default, or issued by cert-manager when `shipwright.certManagement=cert-manager`
 
-The bundled versions are pinned in the chart's values (`shipwright.install.tektonVersion` and `shipwright.install.shipwrightVersion` in `charts/brokkr-agent/values.yaml`) and are the versions the integration is tested against. Override them there if you need different releases.
+The versions are pinned in the chart's values (`shipwright.install.tektonVersion` and `shipwright.install.shipwrightVersion`) and are the versions the integration is tested against. Override them there if you need different releases.
+
+#### Before you enable it, know what the hook does
+
+The installer Job is not a scoped add-on. Two consequences are worth deciding on deliberately:
+
+- **It needs internet egress from the cluster.** The Job fetches release manifests from `storage.googleapis.com` and `github.com` at install time. In an air-gapped or egress-filtered cluster it will hang and then fail on `activeDeadlineSeconds`. Use Option 2 there.
+- **It runs as `cluster-admin`.** Installing CRDs, cluster-scoped controllers, and namespaces requires it, so the chart creates a ServiceAccount bound to `cluster-admin` for the duration of the hook. It also mutates cluster-wide state outside the release namespace — the `tekton-pipelines` and `shipwright-build` namespaces, four `shipwright.io` CRDs, and the cluster build strategies — none of which Helm will remove when you uninstall the agent.
+
+If either is unacceptable in your cluster, install Shipwright out-of-band and use Option 2.
 
 ### Option 2: Bring Your Own Shipwright
 
-If you already have Shipwright and Tekton installed, or need specific versions, disable the bundled installation but **keep `shipwright.enabled=true`** — that flag also gates the agent's RBAC for `shipwright.io` and `tekton.dev` resources, which build work orders require:
+If you already have Shipwright and Tekton installed, need specific versions, or cannot grant the installer Job cluster-admin and internet egress, turn the installation off but **keep `shipwright.enabled=true`** — that flag also gates the agent's RBAC for `shipwright.io` and `tekton.dev` resources, which build work orders require. With both `install.*` flags false the hook Job, its ServiceAccount, and its cluster-admin binding are not rendered at all:
 
 ```bash
-# Skip bundled installation, keep Shipwright integration (and RBAC) enabled
+# Skip the installer job, keep Shipwright integration (and RBAC) enabled
 helm install brokkr-agent oci://ghcr.io/colliery-io/charts/brokkr-agent \
   --set broker.url=http://brokkr-broker:3000 \
-  --set broker.pak="<YOUR_PAK>" \
+  --set broker.existingSecret=brokkr-agent-credentials \
   --set shipwright.install.tekton=false \
   --set shipwright.install.shipwright=false \
   --wait
@@ -67,7 +77,7 @@ Set `shipwright.enabled=false` only if you are not using build work orders at al
 
 #### Manual Shipwright Installation
 
-If installing Shipwright manually, prefer the versions the chart bundles (Tekton v0.68.1, Shipwright v0.18.1) — older releases may work but are not what Brokkr is tested against:
+If installing Shipwright manually, prefer the versions the chart pins (Tekton v0.68.1, Shipwright v0.18.1) — older releases may work but are not what Brokkr is tested against. These are the same manifests the hook Job applies, so running them yourself from a mirror is the supported air-gapped path:
 
 ```bash
 # Install Tekton Pipelines
@@ -149,7 +159,7 @@ kubectl logs -l buildrun.shipwright.io/name=test-build-run-xxxxx -c step-build
 
 ### Build Strategies
 
-The bundled installation includes the official sample ClusterBuildStrategies (buildah, kaniko, buildpacks, etc.) by default via `shipwright.install.sampleStrategies`:
+The chart-managed installation includes the official sample ClusterBuildStrategies (buildah, kaniko, buildpacks, etc.) by default via `shipwright.install.sampleStrategies`:
 
 ```bash
 # Sample strategies are installed by default; re-enable explicitly if needed
@@ -165,14 +175,14 @@ If you only want Shipwright without sample strategies:
 ```bash
 helm install brokkr-agent oci://ghcr.io/colliery-io/charts/brokkr-agent \
   --set broker.url=http://brokkr-broker:3000 \
-  --set broker.pak="<YOUR_PAK>" \
+  --set broker.existingSecret=brokkr-agent-credentials \
   --set shipwright.enabled=true \
   --set shipwright.install.sampleStrategies=false
 ```
 
 ## RBAC Configuration
 
-Build work orders require the agent to manage `shipwright.io` and `tekton.dev` resources. The brokkr-agent chart includes these RBAC rules in the agent ClusterRole whenever `shipwright.enabled=true` (even when the bundled installation is skipped):
+Build work orders require the agent to manage `shipwright.io` and `tekton.dev` resources. The brokkr-agent chart includes these RBAC rules in the agent ClusterRole whenever `shipwright.enabled=true` (even when the installer Job is skipped):
 
 ```yaml
 # Automatically included when shipwright.enabled=true
@@ -273,6 +283,16 @@ curl "http://broker:3000/api/v1/work-order-log?work_type=build" \
 See the [Work Orders Reference](../reference/work-orders.md) for the full request schema, targeting semantics, and retry behavior.
 
 ## Troubleshooting
+
+### Helm Install Hangs, Then Fails
+
+The pre-install hook Job is blocking the release. Read its logs before anything else — a stalled manifest download (no cluster egress) and a rejected `kubectl apply` (installer ServiceAccount missing its cluster-admin binding) look identical from Helm's side:
+
+```bash
+kubectl logs -l app.kubernetes.io/component=shipwright-installer --tail=100
+```
+
+The Job self-deletes shortly after success, so an empty result on a healthy install is expected.
 
 ### Build Pods Not Starting
 

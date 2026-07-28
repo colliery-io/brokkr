@@ -2,7 +2,7 @@
 
 This page catalogs Brokkr's three WebSocket surfaces and the wire messages they carry. For the design rationale, lane prioritization, and operating guidance, see [Internal Broker↔Agent WS Channel](../explanation/internal-ws-channel.md).
 
-The wire types are defined in the `brokkr-wire` crate (`crates/brokkr-wire/src/lib.rs`). They are **not** part of the OpenAPI surface and are not generated into the SDKs; external integrators use the REST API. `WIRE_VERSION` equals the crate version, which is released in lockstep with the broker and SDKs.
+The wire types are defined in the `brokkr-wire` crate. They are **not** part of the OpenAPI surface and are not generated into the SDKs; external integrators use the REST API. `WIRE_VERSION` equals the crate version, which is released in lockstep with the broker and SDKs.
 
 ## Endpoints
 
@@ -12,7 +12,7 @@ The wire types are defined in the `brokkr-wire` crate (`crates/brokkr-wire/src/l
 | `GET /api/v1/stacks/{id}/live` | server → client | Admin PAK or generator PAK owning the stack (agent PAKs are not accepted in v1) | Read-only live tail of a stack's telemetry frames |
 | `GET /api/v1/fleet/live` | server → client | Admin PAK only (same gate as `GET /fleet`) | Read-only consumer-facing live stream of per-agent fleet records |
 
-These endpoints are standard HTTP→WebSocket upgrades served by the broker (handlers: `crates/brokkr-broker/src/ws/handler.rs`, `crates/brokkr-broker/src/ws/subscribe.rs`, and `crates/brokkr-broker/src/ws/fleet_subscribe.rs`).
+These endpoints are standard HTTP→WebSocket upgrades served by the broker.
 
 ### Authentication
 
@@ -32,7 +32,7 @@ The broker extracts the PAK from the `brokkr.pak.` subprotocol (consulted only w
 
 ## Message Envelope
 
-Every frame is a JSON-encoded `WsMessage` with an external tag (`crates/brokkr-wire/src/lib.rs:WsMessage`):
+Every frame is a JSON-encoded `WsMessage` with an external tag:
 
 ```json
 { "type": "<variant>", "body": { ... } }
@@ -47,10 +47,15 @@ Variant names are `snake_case`.
 | `type` | Body | Meaning |
 |--------|------|---------|
 | `work_order` | `WorkOrder` (same shape as REST) | A work order this agent may claim was created |
-| `target_changed` | `AgentTarget` | A stack target was added for this agent |
+| `target_changed` | `AgentTarget` | Targets changed — re-poll. Sent when a stack target is added for this agent, and also as a synthetic nudge when the agent is deregistered from a generator |
 | `stack_changed` | `Stack` | A targeted stack's metadata or deployment objects changed |
 
 Control pushes are hints: they are fire-and-forget, sent after the database commit, and the agent's REST polling remains the source of truth (see [ADR-0008](https://github.com/colliery-io/brokkr/blob/main/.metis/adrs/BROKKR-A-0008.md)).
+
+`target_changed` should be read as a signal to re-poll, not as a description of what changed. Two cases carry a body that does not describe a real added target:
+
+- **Deregistration nudge.** When an agent is deregistered from a generator, the broker sends `target_changed` with a synthetic `AgentTarget` whose `id` and `stack_id` are the nil UUID. The agent inspects only the variant; a consumer that parses the body as an added target is misled.
+- **Removals are not pushed.** Deleting an individual target sends no frame in v1. The removal surfaces on the agent's next REST poll.
 
 ### Agent → broker (uplink)
 
@@ -98,23 +103,24 @@ Body shapes for the telemetry-only types:
 }
 ```
 
-`log_gap.reason` is one of `rate_limit`, `buffer_full`, `disconnected` (`crates/brokkr-wire/src/lib.rs:GapReason`).
+`log_gap.reason` is one of `rate_limit`, `buffer_full`, `disconnected`.
 
 ### Broker → consumer (fleet live-push)
 
-Carried only on `GET /api/v1/fleet/live` (BROKKR-I-0028). The broker pushes one frame whenever it observes a discrete fleet event for an agent — a broker↔agent WebSocket connect/disconnect, or a heartbeat receipt. It also pushes a frame from a periodic ~20-second sweep when an agent's computed signals (deployment-object backpressure counts or deployment-health counts) have changed since the last tick. See [Fleet Reference](./fleet.md) for the complete trigger model. The consumer pulls `GET /fleet` once for the baseline, then replaces a row in place keyed by `agent_id`.
+Carried only on `GET /api/v1/fleet/live`. The broker pushes one frame whenever it observes a discrete fleet event for an agent — a broker↔agent WebSocket connect/disconnect, or a heartbeat receipt. It also pushes a frame from a periodic ~20-second sweep when an agent's computed signals (deployment-object backpressure counts or deployment-health counts) have changed since the last tick. See [Fleet Reference](./fleet.md) for the complete trigger model. The consumer pulls `GET /fleet` once for the baseline, then replaces a row in place keyed by `agent_id`.
 
 | `type` | Body | Meaning |
 |--------|------|---------|
 | `fleet_update` | `FleetAgentRecord` | One agent's full fleet record (measured values only — same shape as a `GET /fleet` entry); replace by `agent_id` |
 
-The `fleet_update` body is the wire twin of the REST `FleetAgentRecord` (`crates/brokkr-wire/src/lib.rs:FleetAgentRecord`), field-for-field identical to the `GET /fleet` element — measured signals only, no health verdicts:
+The `fleet_update` body is the wire twin of the REST `FleetAgentRecord`, field-for-field identical to the `GET /fleet` element — measured signals only, no health verdicts:
 
 ```json
 // fleet_update
 {
   "agent_id": "<uuid>",
   "name": "demo-agent",
+  "cluster_name": "demo-cluster",
   "status": "ACTIVE",
   "ws_connected": true,
   "connected_since": "<ISO-8601 | null>",
@@ -136,16 +142,16 @@ Unlike the per-stack live tail, the fleet stream has **no gap marker**: a slow s
 
 ## Channel Behavior
 
-| Property | Value | Source |
-|----------|-------|--------|
-| Per-connection control lane capacity | 64 messages, drained before telemetry | `crates/brokkr-broker/src/ws/handler.rs` |
-| Per-connection telemetry lane capacity | 1024 messages | `crates/brokkr-broker/src/ws/handler.rs` |
-| Live-tail broadcast capacity (per stack) | 1024 frames; lagged subscribers receive a synthetic `log_gap` | `crates/brokkr-broker/src/ws/broadcaster.rs` |
-| Fleet live-push broadcast capacity (fleet-wide) | 1024 frames; lagged subscribers drop and continue (no gap marker — replace-by-`agent_id`) | `crates/brokkr-broker/src/ws/broadcaster.rs` |
-| Agent outbound/inbound queues | 256 messages each; a full outbound lane falls back to REST | `crates/brokkr-agent/src/broker_ws.rs` |
-| Agent reconnect backoff | Exponential, 1s initial, 60s max | `crates/brokkr-agent/src/broker_ws.rs` |
-| Auth-rejection limit | 5 consecutive 401/403s, then the agent stops dialing until restart | `crates/brokkr-agent/src/broker_ws.rs` |
-| Telemetry retention | 6-hour hard ceiling, evicted by server-side `created_at` | `crates/brokkr-broker/src/ws/eviction.rs` |
+| Property | Value | Enforced by |
+|----------|-------|-------------|
+| Per-connection control lane capacity | 64 messages, drained before telemetry | Broker |
+| Per-connection telemetry lane capacity | 1024 messages | Broker |
+| Live-tail broadcast capacity (per stack) | 1024 frames; lagged subscribers receive a synthetic `log_gap` | Broker |
+| Fleet live-push broadcast capacity (fleet-wide) | 1024 frames; lagged subscribers drop and continue (no gap marker — replace-by-`agent_id`) | Broker |
+| Agent outbound/inbound queues | 256 messages each; a full outbound lane falls back to REST | Agent |
+| Agent reconnect backoff | Exponential, 1s initial, 60s max | Agent |
+| Auth-rejection limit | 5 consecutive 401/403s, then the agent stops dialing until restart | Agent |
+| Telemetry retention | 6-hour hard ceiling, evicted by server-side `created_at` | Broker |
 
 ## Observability
 

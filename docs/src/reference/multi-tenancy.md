@@ -184,13 +184,14 @@ BROKKR__DATABASE__SCHEMA=brokkr_staging
 
 Schema names are validated to prevent SQL injection:
 
+- **Must be non-empty** and **must start with a letter** (`a-z`, `A-Z`)
 - **Allowed characters:** alphanumeric (`a-z`, `A-Z`, `0-9`) and underscores (`_`)
 - **Maximum length:** limited by PostgreSQL (63 characters)
 - **No special characters**, spaces, or SQL keywords
 
 Valid examples: `brokkr_staging`, `org_12345`, `production_v2`
 
-Invalid examples: `brokkr-staging` (hyphen), `drop table;` (SQL injection), `my schema` (space)
+Invalid examples: `brokkr-staging` (hyphen), `1tenant` (leading digit), `_internal` (leading underscore), `drop table;` (SQL injection), `my schema` (space)
 
 ### Deployment Topology
 

@@ -258,7 +258,7 @@ For query performance, the following indexes exist:
 
 **Access control**: The audit log API is gated on admin rights. Two credentials qualify: an admin PAK, and the broker's zero-config read-only console token. Agent and generator PAKs are rejected.
 
-**Console exposure**: The read-only console token is handed to any browser that can load the Operator Console from the broker's HTTP port, and read requests made with it — including audit-log queries — are allowed. Network reachability of that port is therefore the boundary protecting the audit trail, IP addresses and user agents included. Restrict access to the broker port accordingly.
+**Console exposure**: The read-only console token is handed to any browser that can load the Operator Console from the broker's HTTP port. The console itself has no audit-log screen, but the token is not limited to the screens the console draws — it is a read-only admin credential, so whoever holds it can query this API directly and read the whole trail, IP addresses and user agents included. Network reachability of the broker port is therefore the boundary protecting the audit trail. Restrict access to it accordingly.
 
 **Sensitive data**: The `details` field may contain resource names and identifiers but should not contain secrets. PAK values are never logged—only the action of creation or rotation is recorded.
 

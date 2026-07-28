@@ -1,6 +1,6 @@
 # How-To: Querying Audit Logs
 
-Brokkr maintains an immutable audit trail of all significant operations. This guide shows how to query audit logs to investigate events, track changes, and monitor security.
+Brokkr records significant operations to an append-only audit trail. This guide shows how to query it to investigate events, track changes, and monitor security. Entries are never edited or deleted except by the retention job — but writes are asynchronous and best-effort, so read [Delivery Guarantees](../reference/audit-logs.md#delivery-guarantees) before treating a query result as a complete record.
 
 ## Audit Log API
 
@@ -10,7 +10,7 @@ All audit log queries go through the admin API:
 GET /api/v1/admin/audit-logs
 ```
 
-**Auth:** Admin only.
+**Auth:** Admin rights. Both an admin PAK and the broker's zero-config read-only console token satisfy that gate; agent and generator PAKs are rejected. Anyone who can reach the broker's HTTP port can load the console and therefore read the audit trail, IP addresses and user agents included — restrict access to that port accordingly.
 
 ## Basic Query
 
@@ -22,6 +22,11 @@ curl -s "http://localhost:3000/api/v1/admin/audit-logs" \
 ```
 
 Default: returns the 100 most recent entries, ordered by timestamp (newest first). The response is a JSON object with a `logs` array, plus `total`, `count`, `limit`, and `offset` fields for pagination.
+
+Two things about entry shape will bite scripts that assume otherwise:
+
+- Every entry carries an `actor_name` alongside `actor_id`, resolved when you read it — the entity's *current* name, or `null` if the ID no longer resolves. Prefer it over joining against the agents/generators endpoints yourself.
+- `ip_address` and `user_agent` are **omitted from the JSON entirely** when they were not recorded, rather than serialized as `null`. Supply a fallback in `jq` (`.ip_address // "unknown"`) so those entries don't silently collapse into nulls.
 
 ## Filtering
 
@@ -102,7 +107,7 @@ Maximum `limit` is 1000.
 ```bash
 curl -s "http://localhost:3000/api/v1/admin/audit-logs?resource_type=agent&resource_id=${AGENT_ID}" \
   -H "Authorization: <admin-pak>" \
-  | jq '.logs[] | {actor_type, actor_id, action, timestamp, details}'
+  | jq '.logs[] | {actor_type, actor_name, actor_id, action, timestamp, details}'
 ```
 
 ### Failed Authentication Attempts
@@ -110,7 +115,7 @@ curl -s "http://localhost:3000/api/v1/admin/audit-logs?resource_type=agent&resou
 ```bash
 curl -s "http://localhost:3000/api/v1/admin/audit-logs?action=auth.failed" \
   -H "Authorization: <admin-pak>" \
-  | jq '.logs[] | {timestamp, ip_address, user_agent, details}'
+  | jq '.logs[] | {timestamp, ip_address: (.ip_address // "unrecorded"), user_agent: (.user_agent // "unrecorded"), details}'
 ```
 
 ### Security Monitoring: Failed Auth by Source IP
@@ -121,7 +126,7 @@ Aggregate failed attempts over the last 24 hours to spot attack patterns:
 FROM=$(date -u -v-24H +%Y-%m-%dT%H:%M:%SZ)  # GNU date: date -u -d '24 hours ago' ...
 curl -s "http://localhost:3000/api/v1/admin/audit-logs?action=auth.failed&from=${FROM}&limit=1000" \
   -H "Authorization: <admin-pak>" \
-  | jq '[.logs[].ip_address] | group_by(.) | map({ip: .[0], count: length}) | sort_by(-.count)'
+  | jq '[.logs[].ip_address // "unrecorded"] | group_by(.) | map({ip: .[0], count: length}) | sort_by(-.count)'
 ```
 
 ### Compliance Export
@@ -134,6 +139,8 @@ curl -s "http://localhost:3000/api/v1/admin/audit-logs?from=2025-01-01T00:00:00Z
 ```
 
 For periods with more than 1000 entries, page through with `offset` and concatenate.
+
+Do not present an export as a guaranteed-complete record without a caveat. Audit writes are queued in memory and flushed to the database in batches, so a batch whose insert fails is dropped rather than retried, and anything still queued when the broker stops abruptly never lands. Both cases show up in the broker's error logs, not in the export. If your compliance process needs a completeness guarantee, reconcile the export against broker logs for the same window.
 
 ### Recent PAK Rotations
 
@@ -164,8 +171,20 @@ curl -s "http://localhost:3000/api/v1/admin/audit-logs?action=webhook.*" \
 ```bash
 curl -s "http://localhost:3000/api/v1/admin/audit-logs?action=stack.deleted" \
   -H "Authorization: <admin-pak>" \
-  | jq '.logs[] | {actor_type, actor_id, resource_id, timestamp}'
+  | jq '.logs[] | {actor_type, actor_name, resource_id, timestamp}'
 ```
+
+### Who Granted This Agent Its Tenant Scopes?
+
+Registration is the consent boundary that decides which generators' stacks reach an agent, so its grants and revocations are audited:
+
+```bash
+curl -s "http://localhost:3000/api/v1/admin/audit-logs?action=agent.registered&resource_id=${AGENT_ID}" \
+  -H "Authorization: <admin-pak>" \
+  | jq '.logs[] | {actor_type, actor_name, timestamp, details}'
+```
+
+Swap in `action=agent.deregistered` to see revocations — the destructive direction, since deregistering prunes the agent's Kubernetes resources for that generator's stacks.
 
 ## Audit Event Types
 

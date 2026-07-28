@@ -186,6 +186,8 @@ This design makes network reachability of the broker URL the console's authentic
 
 Because each broker replica mints its own UI PAK, a token injected by one replica is rejected by another. Load-balanced deployments that expose the console therefore need sticky sessions (session affinity) so a browser keeps talking to the replica that issued its token.
 
+For the operational side of this credential — reaching the console, what each of its views shows, the tenant scope selector, and the build that includes it — see [Using the Operator Console](../how-to/operator-console.md).
+
 ## Authorization Model
 
 Brokkr implements implicit role-based access control (RBAC) where roles are determined by authentication type rather than explicit role assignments.

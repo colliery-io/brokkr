@@ -38,11 +38,32 @@ An agent can claim a work order if it matches ANY of the specified targeting cri
 
 ## Work Types
 
+`work_type` accepts exactly two values. Any other value fails the work order with `Unknown work type`.
+
 ### Build (`build`)
 
 Container image builds using Shipwright. The `yaml_content` should contain a Shipwright Build specification.
 
+The agent watches the resulting BuildRun to a terminal state, so success means the image was built.
+
 See [Container Builds with Shipwright](../how-to/shipwright-builds.md) for details.
+
+### Custom (`custom`)
+
+Arbitrary Kubernetes YAML, applied by the agent with server-side apply. `yaml_content` may hold multiple documents.
+
+Completion depends on what the work order contains:
+
+| Content | What "success" means |
+|---------|----------------------|
+| One or more `batch/v1` Job resources | Every Job reached a terminal state and succeeded. A Job that runs and fails is a **terminal** failure, not retried |
+| Any other kind (Deployment, ConfigMap, CronJob, custom resources) | The resources were applied. Nothing is watched, so a workload that later fails is still recorded as a successful work order. The result message names the kinds that were applied without monitoring |
+
+Additional constraints on the Job path:
+
+- Each watched Job must have an explicit `metadata.name`. `generateName` is not supported and fails the work order terminally.
+- The watch is bounded by a budget derived from `claim_timeout_seconds`, held back by 10% (minimum 60 seconds) so the watch cannot outlive the claim. A Job still running when the budget expires fails the work order terminally rather than being retried, because a retry would re-dispatch the order while the original Job is still executing.
+- A Job that is deleted before reaching a terminal state fails the work order terminally; its outcome is unknown.
 
 ## API Reference
 
@@ -70,7 +91,7 @@ Content-Type: application/json
 
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| `work_type` | string | Yes | - | Type of work (e.g., "build") |
+| `work_type` | string | Yes | - | `build` or `custom` (see [Work Types](#work-types)) |
 | `yaml_content` | string | Yes | - | YAML content for the work |
 | `max_retries` | integer | No | 3 | Maximum retry attempts |
 | `backoff_seconds` | integer | No | 60 | Base backoff for exponential retry |
@@ -151,6 +172,15 @@ Content-Type: application/json
 | `success` | boolean | Whether the work completed successfully |
 | `message` | string | Optional result message (image digest on success, error on failure) |
 | `retryable` | boolean | Whether the work order can be retried on failure (default: true) |
+
+**Responses:** this endpoint has two success shapes, and a client must branch on the status code.
+
+| Status | Body | When |
+|--------|------|------|
+| 200 OK | The `WorkOrderLog` entry | The work order reached a terminal state — success, a non-retryable failure, or a failure with no retries left. The work order has moved to the log |
+| 202 Accepted | `{"status": "retry_scheduled"}` | A retryable failure with retries remaining. The work order stays in the queue as `RETRY_PENDING` and no log entry exists yet |
+
+The 202 is deliberately omitted from the OpenAPI document, so SDKs generated from the spec do not model it.
 
 ### Get Work Order Details
 

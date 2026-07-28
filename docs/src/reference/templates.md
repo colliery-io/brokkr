@@ -12,7 +12,7 @@ Stack templates provide reusable, parameterized Kubernetes manifests with JSON S
 | `created_at` | DateTime | Creation timestamp |
 | `updated_at` | DateTime | Last update timestamp |
 | `deleted_at` | DateTime? | Soft deletion timestamp |
-| `generator_id` | UUID? | Owning generator (NULL = system template, admin-only) |
+| `generator_id` | UUID? | Owning generator (NULL = system template, created and modified by admins only) |
 | `name` | String | Template name (1-255 characters) |
 | `description` | String? | Optional description |
 | `version` | Integer | Version number (starts at 1, auto-increments) |

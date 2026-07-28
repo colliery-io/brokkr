@@ -40,13 +40,15 @@ sequenceDiagram
 
 The broker assigns each deployment object a sequence ID upon creation, establishing a strict ordering that agents use to process updates in the correct sequence. This sequence ID is monotonically increasing within each stack, ensuring that newer deployment objects always have higher sequence IDs than older ones. The combination of stack ID and sequence ID provides a reliable mechanism for agents to track which objects they have already processed.
 
-When a deployment object is created, the broker does not push it to agents, and it does not precompute which agents should receive it. The agent-to-stack association is resolved dynamically every time an agent polls: the broker unions the stacks explicitly targeted to the agent (rows in `agent_targets`, created only via `POST /api/v1/agents/{id}/targets`) with stacks that share *any* label with the agent and stacks that share *any* annotation key/value pair with the agent (OR semantics in both cases). Deployment objects from that union form the agent's target state. The union itself is unchanged by the registration model: registration gates whether an explicit target can be *created*, not what the read path returns. An `agent_targets` row can only be created — and an existing one only removed — when the agent is registered with the stack's owning generator; otherwise the broker rejects the mutation with a `403 agent_not_registered` (admins included, with no force override). This registration gate is the agent's opt-in consent boundary for application-scoped stacks. See [Generator Registration and Application Scopes](security-model.md#generator-registration-and-application-scopes).
+When a deployment object is created, the broker does not push it to agents, and it does not precompute which agents should receive it. The agent-to-stack association is resolved dynamically every time an agent polls: the broker unions the stacks explicitly targeted to the agent (rows in `agent_targets`, created only via `POST /api/v1/agents/{id}/targets`) with stacks that share *any* label with the agent and stacks that share *any* annotation key/value pair with the agent (OR semantics within each of those two legs). Deployment objects from that union form the agent's target state.
+
+Registration constrains that union at both ends. On the write side, an `agent_targets` row can only be created — and an existing one only removed — when the agent is registered with the stack's owning generator; otherwise the broker rejects the mutation with a `403 agent_not_registered` (admins included, with no force override). On the read side, the label and annotation legs contribute only stacks whose owning generator the agent is registered with, so a matching label on an unregistered generator's stack yields nothing. Explicit targets need no read-time filter, having been checked when they were created. The effect is that matching selects *within* the scopes an agent consented to rather than reaching across them. See [Generator Registration and Application Scopes](security-model.md#generator-registration-and-application-scopes).
 
 Every agent is auto-registered, at creation, with a built-in system generator (`__system__`) that the broker provisions at startup. That registration is what lets fleet- and system-scoped stacks reach every agent without an explicit opt-in. Beyond the system generator, an agent only sees an application's stacks once it is registered with that application's generator — either pre-registered when the agent is created or registered later. (The system generator is distinct from the admin generator; agents are not auto-registered with the latter.) The operational steps for registering and deregistering agents live in the [agent registration how-to](../how-to/agent-registration.md).
 
 ### Agent Reconciliation
 
-Agents continuously poll the broker and reconcile their cluster state to match the desired state defined by deployment objects. The reconciliation loop runs at a configurable interval, defaulting to 10 seconds.
+Agents continuously poll the broker and reconcile their cluster state to match the desired state defined by deployment objects. The reconciliation loop runs at a configurable interval: the agent binary's own default is 10 seconds, and the Helm chart — the documented install path — sets its own default of 30 seconds, so chart-installed fleets observe the slower cadence unless it is overridden.
 
 Which application-scoped stacks an agent is eligible to receive is shaped by the generator scopes it self-registers with at startup, resolved in precedence order (`--generator-ids` flag, then `BROKKR__AGENT__GENERATOR_IDS`, then the deprecated bare `BROKKR_GENERATOR_IDS`). An empty value leaves the agent in system/fleet scope only — it still receives system-scoped stacks regardless, because of the automatic system-generator registration. The configuration keys are documented under [`BROKKR__AGENT__GENERATOR_IDS`](../reference/environment-variables.md).
 
@@ -58,9 +60,9 @@ sequenceDiagram
     participant K8s as Kubernetes API
     participant Cluster as Cluster State
 
-    loop Every polling interval (default: 10s)
+    loop Every polling interval (binary default 10s; chart default 30s)
         Agent->>Broker: GET /api/v1/agents/{id}/target-state
-        Broker->>DB: Resolve associated stacks (targets ∪ labels ∪ annotations)
+        Broker->>DB: Resolve associated stacks (targets ∪ registered-generator label/annotation matches)
         Broker->>DB: Query their deployment objects
         DB-->>Broker: Deployment objects list
         Broker-->>Agent: Deployment objects (with sequence IDs)

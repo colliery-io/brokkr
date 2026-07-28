@@ -14,7 +14,7 @@ angreal build multi-arch <component> [--tag <tag>] [--push] [--platforms <platfo
 
 | Argument | Default | Description |
 |----------|---------|-------------|
-| `component` | (required) | `broker`, `agent`, `ui`, or `all` |
+| `component` | (required) | `broker` or `agent` (see the note on `ui`/`all` below) |
 | `--tag` | `dev` | Image tag |
 | `--platforms` | `linux/amd64,linux/arm64` | Comma-separated platform list |
 | `--registry` | `ghcr.io/colliery-io` | Registry URL prefix |
@@ -28,12 +28,13 @@ angreal build multi-arch broker --tag dev
 
 # Build the agent for a specific platform
 angreal build multi-arch agent --tag test --platforms linux/amd64
-
-# Build all components
-angreal build multi-arch all --tag 1.0.0
 ```
 
 The task creates (or reuses) a Docker Buildx builder named `brokkr-builder`.
+
+The broker image already contains the Operator Console — its Dockerfile compiles the web bundle and links it into the binary — so there is no separate UI image to build for a normal deployment.
+
+> The task also accepts `ui` and `all`, but the `ui` component builds a Dockerfile whose source directory no longer exists in the repository, so both invocations fail. Build `broker` and `agent` individually.
 
 ## Publish to a registry
 
@@ -43,8 +44,8 @@ Add `--push` to publish directly to the registry. With `--push`, the build targe
 # Push the broker with multi-arch support
 angreal build multi-arch broker --tag 1.0.0 --push
 
-# Push all components
-angreal build multi-arch all --tag 1.0.0 --push
+# Push the agent alongside it
+angreal build multi-arch agent --tag 1.0.0 --push
 
 # Push to a custom registry
 angreal build multi-arch broker --tag dev --registry myregistry.io/myorg --push

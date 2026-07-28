@@ -173,13 +173,18 @@ Brokkr chose [Tera](https://keats.github.io/tera/) over alternatives:
 | Syntax | `{{ var }}`, `{% if %}` | `{{ .Var }}`, `{{ if }}` | `{{ var }}`, `{% if %}` | `{{ var }}`, `{{#if}}` |
 | Filters | Rich built-in | Limited | Rich | Limited |
 | Whitespace control | Yes | Yes | Yes | Yes |
-| Safe by default | Yes (auto-escape) | No | Yes (configurable) | Yes |
 
 Tera was chosen because:
 - Native Rust integration (no FFI or subprocess)
 - Familiar Jinja2-like syntax widely known by DevOps engineers
 - Rich filter and function library
 - Syntax can be validated when a template is created, long before anything is rendered
+
+### No escaping happens
+
+Tera can auto-escape output, but only for templates it recognizes as markup by their name. Brokkr renders YAML, registers its templates under a plain internal name, and therefore gets **no escaping at all**: every parameter value lands in the rendered manifest exactly as supplied, including quotes, colons, newlines, and anything else that is structural in YAML.
+
+That is the right behaviour for manifests — escaping would corrupt them — but it means the JSON Schema is not a formatting convenience, it is the only thing standing between a caller's input and the YAML's structure. Constrain parameters with types, patterns, enums, and length limits rather than assuming the renderer will neutralize a surprising value.
 
 ## Why JSON Schema?
 
