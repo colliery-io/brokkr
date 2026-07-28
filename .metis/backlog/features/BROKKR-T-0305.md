@@ -4,15 +4,15 @@ level: task
 title: "Add stack_id to deployment.applied/failed webhook payloads so stack_id filters and consumers can use them"
 short_code: "BROKKR-T-0305"
 created_at: 2026-07-27T23:08:58.565436+00:00
-updated_at: 2026-07-27T23:08:58.565436+00:00
+updated_at: 2026-07-28T15:12:13.425586+00:00
 parent: 
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/backlog"
   - "#feature"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -51,6 +51,12 @@ Note the soft-delete case: by the time an apply is reported the deployment objec
 
 ## Acceptance Criteria
 
+## Acceptance Criteria
+
+## Acceptance Criteria
+
+## Acceptance Criteria
+
 - [ ] `deployment.applied` and `deployment.failed` payloads carry `stack_id` (nullable when the object is no longer resolvable).
 - [ ] A subscription filtered by `stack_id` receives apply and failure events for that stack, covered by an integration test.
 - [ ] The existing test pinning the current exclusion (`test_webhook_filter_stack_id_excludes_deployment_applied`) is updated rather than deleted, so the change in behavior is explicit in the diff.
@@ -58,4 +64,16 @@ Note the soft-delete case: by the time an apply is reported the deployment objec
 
 ## Status Updates
 
-*To be added during implementation*
+**2026-07-28 — IMPLEMENTED** on branch `docs/tenancy-review-2026-07`.
+
+The handler did **not** already have the object in hand — `create_event` only has `event.deployment_object_id` — so one `dal.deployment_objects().get(...)` was added at the emission site, before building `event_data`. One lookup serves every subscription; `emit_event` is untouched, per the rejected-alternative note.
+
+Null handling: `stack_id` is `Option<Uuid>`, so `json!` writes the key with JSON `null` rather than omitting it. Two paths produce `None` — the object being soft-deleted between apply and report (`get()` filters `deleted_at IS NULL`), and a DAL error, which is logged and degraded to `null` rather than failing the agent's event report.
+
+Tests: `test_webhook_filter_stack_id_excludes_deployment_applied` **renamed and inverted in place** to `test_webhook_filter_stack_id_delivers_deployment_applied` (so the behavior change is explicit in the diff), asserting delivery with a matching `stack_id` plus a second filter for a different stack that must still receive nothing; `test_webhook_filter_stack_id_delivers_deployment_failed`; and `test_deployment_applied_stack_id_is_null_when_object_soft_deleted`, which pins that the key is present-and-null and that a `stack_id` filter correctly excludes it.
+
+Docs: six places in `reference/webhooks.md` — payload field lists, the correlation prose, the JSON-null semantics bullet, two rows of the per-event-type filter table, the paragraph that previously described the exclusion and its now-obsolete workaround, and the example payload.
+
+**Design note worth a decision later:** the DAL also has `get_including_deleted`, which would preserve `stack_id` through a soft delete and close the null gap entirely. `get()` was used because this ticket explicitly specified null for that case and asked for a test pinning it. If the intent is really "always resolve the stack while the row physically exists", that is a one-line swap plus inverting the third test.
+
+**Stale references this change created, corrected here:** `how-to/webhooks.md` told readers a `stack_id` filter silently drops apply/failure events and that its example deliberately narrows to the two event types carrying `stack_id`; and two comments in `brokkr-models/src/models/webhooks.rs` described those payloads as carrying only `deployment_object_id`. The unit test beside the second one remains valid — it builds a synthetic payload to exercise the absent-field rule and asserts nothing about the real emitter.

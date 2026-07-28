@@ -4,15 +4,15 @@ level: task
 title: "Docs: Operator Console is completely undocumented (access, zero-config UI PAK auth, tenant scope selector, read-only limits)"
 short_code: "BROKKR-T-0276"
 created_at: 2026-07-27T14:13:05.180272+00:00
-updated_at: 2026-07-27T14:13:05.180272+00:00
+updated_at: 2026-07-28T15:13:16.251072+00:00
 parent: 
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/backlog"
   - "#tech-debt"
+  - "#phase/active"
 
 
 exit_criteria_met: false
@@ -46,6 +46,10 @@ Document the Operator Console (shipped PR #82 / BROKKR-I-0031, extended PR #87 /
 
 ### Carried over from BROKKR-T-0280 (closed 2026-07-27)
 security-model.md now has a "Read-Only Console Authentication (the UI PAK)" section describing the credential, its readonly allowlist, the network-as-auth-boundary design, and mitigations. When the console page lands, cross-link the two (page → security model for the threat model; security model → page for operational use) and make sure neither duplicates nor contradicts the other. That coordination was T-0280's last open criterion.
+
+## Acceptance Criteria
+
+## Acceptance Criteria
 
 ## Acceptance Criteria
 

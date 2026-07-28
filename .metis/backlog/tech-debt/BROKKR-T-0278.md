@@ -4,15 +4,15 @@ level: task
 title: "Docs: helm existing-Secret credential sourcing (PR #83) absent from docs/src install pages"
 short_code: "BROKKR-T-0278"
 created_at: 2026-07-27T14:13:07.610371+00:00
-updated_at: 2026-07-27T14:13:07.610371+00:00
+updated_at: 2026-07-28T15:21:07.906966+00:00
 parent: 
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/backlog"
   - "#tech-debt"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -48,10 +48,28 @@ Bring the existing-Secret credential flows from PR #83 into the mdbook install/o
 
 ## Acceptance Criteria
 
+## Acceptance Criteria
+
+## Acceptance Criteria
+
+## Acceptance Criteria
+
 - [ ] All six existingSecret-family values documented in docs/src with their default key names and ConfigMap-omission behavior.
 - [ ] installation.md shows the Secret-based install as the recommended path.
 - [ ] docs/src and chart READMEs agree on secret names/keys and commands.
 
 ## Status Updates
 
-*To be added during implementation*
+**2026-07-28 — COMPLETE** on branch `docs/tenancy-review-2026-07`. `angreal docs build` passes.
+
+`installation.md` gained a "Production Install: Credentials from Kubernetes Secrets" section between Quick Start and Detailed Installation, an existing-Secret values reference covering all six values with default keys and the precedence/ConfigMap-omission rule, post-install verification that the credential is *absent* from the ConfigMap and *present* in the pod env, and a `CreateContainerConfigError` troubleshooting entry — which is precisely the failure mode this feature introduces. Plaintext paths demoted to dev/test with links rather than deleted.
+
+`install-operations.md` gained two sections. **"Move an Existing Release onto Secrets"** documents the `--set <plaintext>=""` requirement, because `--reuse-values` otherwise carries the plaintext forward into the release's stored values. **"Rotating a Credential Held in a Secret"** records verified restart semantics rather than assumed ones: `secretKeyRef` and `envFrom` env vars resolve once at container start, neither chart watches Secrets, and neither puts a content hash on the *pod template* (the broker's `checksum/config` annotation is on the ConfigMap itself, not the pod spec), so `helm upgrade` will not roll pods on a Secret-content change — an explicit `kubectl rollout restart` is required.
+
+**Subtle correctness finding worth keeping:** `rotate admin` reads `BROKKR__BROKER__PAK_HASH` from its *own process environment*, so running it before the pod restart silently re-applies the **old** hash. The documented order is therefore update Secret → `kubectl rollout restart` → exec `rotate admin`, plus the auth-cache TTL tail. Getting this backwards looks like a successful rotation that did nothing.
+
+`security-hardening.md` gained "Keep Credentials Out of ConfigMaps", written to continue from the existing default-PAK section rather than bolt onto it, with three honest qualifications: Secrets are base64, not encrypted (this narrows the boundary, it does not eliminate it); the admin PAK hash is the least sensitive of the four since the PAK cannot be recovered from it; and the webhook key is also an *availability* measure, because an unset key means a random per-process key and, once any subscription exists, a broker that refuses to start.
+
+Cross-check against the chart READMEs found **no contradictions** — key names, precedence, ConfigMap-omission, and the generate-pak → Secret → rotate sequence all agree. Example Secret *names* differ between sources, but the READMEs already vary their own placeholders, so they read as illustrative rather than normative.
+
+**Defect found in a page outside this ticket's ownership, fixed here:** `how-to/pak-management.md` created an agent Secret with key `pak`, which does not match the agent chart's default `broker.existingSecretKey` of `BROKKR__AGENT__PAK`, and never mentioned `broker.existingSecret` — a reader wiring the two together would land in exactly the `CreateContainerConfigError` this ticket documents.

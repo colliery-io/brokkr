@@ -4,15 +4,15 @@ level: task
 title: "Docs drift sweep: remaining major/minor findings from the 2026-07-27 full-tree review (see docs/REVIEW-2026-07-27.md)"
 short_code: "BROKKR-T-0295"
 created_at: 2026-07-27T14:28:02.502537+00:00
-updated_at: 2026-07-27T14:28:02.502537+00:00
+updated_at: 2026-07-28T15:17:49.098960+00:00
 parent: 
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/backlog"
   - "#tech-debt"
+  - "#phase/active"
 
 
 exit_criteria_met: false
@@ -45,10 +45,31 @@ Representative remaining majors (not exhaustive — the artifact is the checklis
 
 ## Acceptance Criteria
 
+## Acceptance Criteria
+
+## Acceptance Criteria
+
 - [ ] Every finding in docs/REVIEW-2026-07-27.md is either fixed, covered by another ticket, or explicitly waived (annotate the artifact inline).
 - [ ] Fixes verified against code citations rather than trusting the reviewer text.
 - [ ] `angreal docs build` passes; SUMMARY/index pages link-checked.
 
 ## Status Updates
 
-*To be added during implementation*
+**2026-07-28 — PASS 1 COMPLETE** (11 files) on branch `docs/tenancy-review-2026-07`. `angreal docs build` passes. Scoped deliberately to files no concurrent agent owned; a second pass covers the rest.
+
+Files done: `reference/{audit-logs,error-codes,fleet,container-images,README,cli}.md`, `how-to/{README,managing-stacks}.md`, `how-to/sdks/{rust,regeneration}.md`, `explanation/publishing-strategy.md`.
+
+**Three findings in the review artifact were WRONG or stale — recorded so nobody re-applies them:**
+1. **audit-logs "drops on overflow" is wrong for the live path.** `AuditLogger::log` spawns and `send().await`s, so a full queue **back-pressures rather than discards**. `try_log` does drop, but nothing outside `audit.rs` calls it. The real loss modes are a failed batch insert being discarded without retry, and queued entries dying on an abrupt stop — those are what got documented.
+2. **cli.md's "create agent performs no registrations" is stale** — BROKKR-T-0289 fixed it, so the registration-parity statements on that page now read true.
+3. **how-to/README's "multi-tenant guide is really schema-per-tenant" is stale** — BROKKR-T-0277 rewrote it around generators-as-tenants. Only the title mismatch was real.
+
+Several cli.md findings were also already fixed by earlier tickets in this loop (the serve endpoint table already lists the console and `/docs/openapi.json`; the generate-pak hash is already bare hex) and were correctly left alone.
+
+**Two error codes the review missed** were added: `unsupported_field` (422, with `details.field`/`details.use_instead`) and `invalid_request_body` (422). The first belongs in the catalog because `reference/webhooks.md` already shows it in a response body while the catalog omitted it.
+
+**The rust.md retry fix was verified by compiling both versions**, not by inspection: the old example fails with `lifetime may not live long enough`; the replacement compiles clean against `brokkr-client` 0.8.4.
+
+Also corrected in passing: audit-log access control (the read-only console token satisfies the admin gate, so network reachability of the broker port is the real boundary protecting IP/user-agent data); the bodyless-response list in error-codes (three cases, not one); container-images (commit-SHA tags are never actually pushed; the cargo-chef claim was false); publishing-strategy (OCI chart publishing already ships).
+
+**PASS 2 STILL OWED** — files locked by concurrent work: `getting-started/**`, `explanation/{components,architecture,security-model,data-flows,core-concepts}.md`, `how-to/{install-operations,security-hardening,webhooks,diagnostics,fleet-monitoring,log-streaming,templates}.md`, `reference/{templates,multi-tenancy,generators,diagnostics,monitoring,health-endpoints,ws-protocol,work-orders,webhooks,soft-deletion,agent-annotations,network-ports,deployment-health}.md`, plus all 107 minors and the Diátaxis misfilings. The artifact remains the checklist; annotate it inline as items are resolved or waived.
