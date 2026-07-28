@@ -164,7 +164,10 @@ impl FleetAggregates {
             .work_orders()
             .pending_counts_by_agent()
             .map_err(|e| {
-                error!("Failed to compute work order pending_counts_by_agent: {:?}", e);
+                error!(
+                    "Failed to compute work order pending_counts_by_agent: {:?}",
+                    e
+                );
                 ApiError::internal("failed to compute fleet backpressure")
             })?
             .into_iter()
@@ -182,13 +185,13 @@ impl FleetAggregates {
 
         let mut health_failing: HashMap<Uuid, i64> = HashMap::new();
         let mut health_degraded: HashMap<Uuid, i64> = HashMap::new();
-        for (agent_id, status, count) in dal
-            .deployment_health()
-            .status_counts_by_agent()
-            .map_err(|e| {
-                error!("Failed to compute status_counts_by_agent: {:?}", e);
-                ApiError::internal("failed to compute fleet health counts")
-            })?
+        for (agent_id, status, count) in
+            dal.deployment_health()
+                .status_counts_by_agent()
+                .map_err(|e| {
+                    error!("Failed to compute status_counts_by_agent: {:?}", e);
+                    ApiError::internal("failed to compute fleet health counts")
+                })?
         {
             if status == HEALTH_STATUS_FAILING {
                 *health_failing.entry(agent_id).or_insert(0) += count;
@@ -229,8 +232,16 @@ impl FleetAggregates {
                 .last_heartbeat
                 .map(|hb| (now - hb).num_seconds().max(0)),
             pending_object_count: self.pending_objects.get(&agent.id).copied().unwrap_or(0),
-            pending_work_orders: self.pending_work_orders.get(&agent.id).copied().unwrap_or(0),
-            claimed_work_orders: self.claimed_work_orders.get(&agent.id).copied().unwrap_or(0),
+            pending_work_orders: self
+                .pending_work_orders
+                .get(&agent.id)
+                .copied()
+                .unwrap_or(0),
+            claimed_work_orders: self
+                .claimed_work_orders
+                .get(&agent.id)
+                .copied()
+                .unwrap_or(0),
             last_event_at,
             seconds_since_last_event: last_event_at.map(|e| (now - e).num_seconds().max(0)),
             health_failing: self.health_failing.get(&agent.id).copied().unwrap_or(0),

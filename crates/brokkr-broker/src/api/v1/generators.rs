@@ -17,9 +17,8 @@ use axum::{
     extract::{Extension, Path, State},
     routing::{delete, get, post, put},
 };
-use brokkr_models::models::agent_targets::AgentTarget;
-use std::sync::Arc;
 use brokkr_models::models::agent_generator_registrations::AgentGeneratorRegistration;
+use brokkr_models::models::agent_targets::AgentTarget;
 use brokkr_models::models::audit_logs::{
     ACTION_AGENT_DEREGISTERED, ACTION_AGENT_REGISTERED, ACTION_GENERATOR_CREATED,
     ACTION_GENERATOR_DELETED, ACTION_GENERATOR_UPDATED, ACTION_PAK_CREATED, ACTION_PAK_ROTATED,
@@ -28,6 +27,7 @@ use brokkr_models::models::audit_logs::{
 };
 use brokkr_models::models::generator::{Generator, NewGenerator};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use tracing::{error, info, warn};
 use utoipa::ToSchema;
 use uuid::Uuid;

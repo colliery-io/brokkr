@@ -233,7 +233,10 @@ pub fn configure_api_routes(
             fleet_broadcaster.clone(),
         ))
         .merge(subscribe_routes(dal.clone(), live_broadcaster.clone()))
-        .merge(fleet_subscribe_routes(dal.clone(), fleet_broadcaster.clone()))
+        .merge(fleet_subscribe_routes(
+            dal.clone(),
+            fleet_broadcaster.clone(),
+        ))
         // Make the registry + broadcasters available to v1 handlers
         // (post-commit push helpers in `ws::push`; fleet live-push producers
         // in `record_heartbeat`; future WS-13 metrics).

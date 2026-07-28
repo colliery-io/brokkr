@@ -399,10 +399,7 @@ async fn list_audit_logs(
 /// Attach human-readable actor names to a page of audit logs
 /// (BROKKR-T-0271). Names resolve in one batched query per entity type —
 /// never per-row. Dangling IDs (hard-deleted entities) resolve to `None`.
-fn enrich_with_actor_names(
-    dal: &DAL,
-    logs: Vec<AuditLog>,
-) -> Result<Vec<AuditLogEntry>, ApiError> {
+fn enrich_with_actor_names(dal: &DAL, logs: Vec<AuditLog>) -> Result<Vec<AuditLogEntry>, ApiError> {
     let mut agent_ids: Vec<Uuid> = Vec::new();
     let mut generator_ids: Vec<Uuid> = Vec::new();
     for log in &logs {
