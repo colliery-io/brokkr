@@ -58,7 +58,8 @@ fn unique_schema(prefix: &str) -> String {
 /// Creates `schema`, migrates the full schema into it, and seeds `admin_role`
 /// with `sentinel` so a subsequent rotation is observable.
 fn provision_schema(settings: &Settings, schema: &str, sentinel: &str) {
-    let pool = create_shared_connection_pool(&settings.database.url, "brokkr", 2, Some(schema));
+    let pool =
+        create_shared_connection_pool(&settings.database.url, Some("brokkr"), 2, Some(schema));
     pool.setup_schema(schema)
         .unwrap_or_else(|e| panic!("failed to set up schema {}: {}", schema, e));
 
@@ -79,7 +80,8 @@ fn provision_schema(settings: &Settings, schema: &str, sentinel: &str) {
 
 /// Reads the single `admin_role.pak_hash` from `schema`.
 fn admin_hash_in_schema(settings: &Settings, schema: &str) -> String {
-    let pool = create_shared_connection_pool(&settings.database.url, "brokkr", 1, Some(schema));
+    let pool =
+        create_shared_connection_pool(&settings.database.url, Some("brokkr"), 1, Some(schema));
     let mut conn = pool.get().expect("failed to get connection");
     let row: HashRow = sql_query("SELECT pak_hash FROM admin_role LIMIT 1")
         .get_result(&mut conn)
@@ -91,7 +93,7 @@ fn admin_hash_in_schema(settings: &Settings, schema: &str) -> String {
 /// `public` has no row — or no `admin_role` table at all, which is the case if
 /// this test runs before anything migrates `public`.
 fn admin_hash_in_public(settings: &Settings) -> Option<String> {
-    let pool = create_shared_connection_pool(&settings.database.url, "brokkr", 1, None);
+    let pool = create_shared_connection_pool(&settings.database.url, Some("brokkr"), 1, None);
     let mut conn = pool.get().expect("failed to get connection");
     sql_query("SELECT pak_hash FROM admin_role LIMIT 1")
         .get_result::<HashRow>(&mut conn)
@@ -100,7 +102,7 @@ fn admin_hash_in_public(settings: &Settings) -> Option<String> {
 }
 
 fn drop_schema(settings: &Settings, schema: &str) {
-    let pool = create_shared_connection_pool(&settings.database.url, "brokkr", 1, None);
+    let pool = create_shared_connection_pool(&settings.database.url, Some("brokkr"), 1, None);
     let mut conn = pool.get().expect("failed to get connection");
     sql_query(format!("DROP SCHEMA IF EXISTS {} CASCADE", schema))
         .execute(&mut conn)
@@ -169,7 +171,8 @@ fn test_connection_pool_from_settings_applies_configured_schema() {
     let base = Settings::new(None).expect("Failed to load settings");
     let schema = unique_schema("cli_pool");
 
-    let bootstrap = create_shared_connection_pool(&base.database.url, "brokkr", 1, Some(&schema));
+    let bootstrap =
+        create_shared_connection_pool(&base.database.url, Some("brokkr"), 1, Some(&schema));
     bootstrap
         .setup_schema(&schema)
         .unwrap_or_else(|e| panic!("failed to set up schema {}: {}", schema, e));

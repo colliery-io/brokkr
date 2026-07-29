@@ -4,7 +4,7 @@ level: task
 title: "Broker webhook delivery path has the same unbounded reclaim shape on subscription fetch error"
 short_code: "BROKKR-T-0307"
 created_at: 2026-07-28T00:42:12.388484+00:00
-updated_at: 2026-07-28T00:42:12.388484+00:00
+updated_at: 2026-07-29T06:00:00+00:00
 parent: 
 blocked_by: []
 archived: false
@@ -21,117 +21,53 @@ initiative_id: NULL
 
 # Broker webhook delivery path has the same unbounded reclaim shape on subscription fetch error
 
-*This template includes sections for various types of tasks. Delete sections that don't apply to your specific use case.*
+## Objective
 
-## Parent Initiative **[CONDITIONAL: Assigned Task]**
+Close the last arm of the reclaim-loop family on the **broker** delivery path, matching what BROKKR-T-0302 and BROKKR-T-0304 fixed on the agent path.
 
-[[Parent Initiative]]
+In `deliver_pending_webhooks` (`crates/brokkr-broker/src/utils/background_tasks.rs:344-365`), each already-claimed delivery fetches its subscription. The two failure arms are not symmetric:
 
-## Objective **[REQUIRED]**
+```rust
+Ok(None) => {
+    // ... mark_dead(delivery.id, "Subscription not found");
+    continue;                      // correct: terminal, row reaches `dead`
+}
+Err(e) => {
+    error!("Failed to get subscription {} for delivery {}: {:?}", ...);
+    continue;                      // no mark_dead, no attempt increment, no release
+}
+```
 
-{Clear statement of what this task accomplishes}
+The `Err` arm `continue`s **after the delivery has already been claimed**. The row sits `acquired` until its TTL lapses, is released by `release_expired`, is re-claimed on the next poll, and fails again. `attempts` never increments, so it never reaches `dead`.
 
-## Backlog Item Details **[CONDITIONAL: Backlog Item]**
-
-{Delete this section when task is assigned to an initiative}
+## Backlog Item Details
 
 ### Type
-- [ ] Bug - Production issue that needs fixing
-- [ ] Feature - New functionality or enhancement  
-- [ ] Tech Debt - Code improvement or refactoring
-- [ ] Chore - Maintenance or setup work
+- [x] Bug - Production issue that needs fixing
 
 ### Priority
-- [ ] P0 - Critical (blocks users/revenue)
-- [ ] P1 - High (important for user experience)
-- [ ] P2 - Medium (nice to have)
-- [ ] P3 - Low (when time permits)
+- [x] P2 - Medium (no data loss; a persistent fetch failure burns poll cycles indefinitely and the delivery never resolves either way)
 
-### Impact Assessment **[CONDITIONAL: Bug]**
-- **Affected Users**: {Number/percentage of users affected}
-- **Reproduction Steps**: 
-  1. {Step 1}
-  2. {Step 2}
-  3. {Step 3}
-- **Expected vs Actual**: {What should happen vs what happens}
+## 2026-07-29 — verified against the code
 
-### Business Justification **[CONDITIONAL: Feature]**
-- **User Value**: {Why users need this}
-- **Business Value**: {Impact on metrics/revenue}
-- **Effort Estimate**: {Rough size - S/M/L/XL}
+Confirmed by reading `background_tasks.rs:344-365`. The title was this ticket's only content — an unedited template otherwise — and the claim holds.
 
-### Technical Debt Impact **[CONDITIONAL: Tech Debt]**
-- **Current Problems**: {What's difficult/slow/buggy now}
-- **Benefits of Fixing**: {What improves after refactoring}
-- **Risk Assessment**: {Risks of not addressing this}
+**This is the third in a family, and the last known one.** BROKKR-T-0302 fixed the two decryption arms on the agent path; BROKKR-T-0304 fixed the `subscription not found` and fetch-error arms, also on the agent path. Both of those tickets cite the **broker** path as the well-behaved contrast — T-0302 explicitly notes it "marks such a delivery `dead` on first touch with an audit row (`background_tasks.rs:356-370`)". That is true of the `Ok(None)` arm and not of the `Err` arm three lines below it, which is presumably how it was missed.
 
-## Acceptance Criteria **[REQUIRED]**
+**Marking it `dead` is the wrong fix here**, and this is where it differs from its siblings. `Ok(None)` means the subscription is genuinely gone — terminal, so `dead` is right. `Err(e)` is a *database* failure: almost always transient (connection exhaustion, a restarting Postgres, a network blip). Killing a delivery because the broker briefly could not read its own subscription table would discard events for a reason that has nothing to do with the event or the subscriber.
 
-- [ ] {Specific, testable requirement 1}
-- [ ] {Specific, testable requirement 2}
-- [ ] {Specific, testable requirement 3}
+The right shape is bounded retry: increment `attempts` so the existing retry/backoff machinery applies and the delivery eventually reaches `dead` on its own terms, or explicitly release the claim so it is retried without burning the TTL window. Whichever is chosen, the invariant to restore is the one the family shares — **no path may leave a claimed delivery untouched.**
 
-## Test Cases **[CONDITIONAL: Testing Task]**
+Worth checking during the fix whether other arms in the same loop (`background_tasks.rs:371-460`) share the shape; the decrypt and send arms appear to mark dead or update correctly, but they were not audited as closely as the subscription fetch.
 
-{Delete unless this is a testing task}
+## Acceptance Criteria
 
-### Test Case 1: {Test Case Name}
-- **Test ID**: TC-001
-- **Preconditions**: {What must be true before testing}
-- **Steps**: 
-  1. {Step 1}
-  2. {Step 2}
-  3. {Step 3}
-- **Expected Results**: {What should happen}
-- **Actual Results**: {To be filled during execution}
-- **Status**: {Pass/Fail/Blocked}
+- [ ] A subscription-fetch error on a claimed delivery either increments `attempts` or releases the claim — it never leaves the row untouched.
+- [ ] A persistently failing fetch terminates (reaches `dead` via the normal attempt ceiling) rather than looping forever.
+- [ ] A *transient* fetch error still delivers the webhook on a later poll — the fix must not turn a blip into a discarded event.
+- [ ] The `Ok(None)` arm still marks dead immediately; its behaviour is correct and must not regress.
+- [ ] The remaining arms in the same loop are audited for the same shape, and any found are fixed or explicitly recorded as correct.
 
-### Test Case 2: {Test Case Name}
-- **Test ID**: TC-002
-- **Preconditions**: {What must be true before testing}
-- **Steps**: 
-  1. {Step 1}
-  2. {Step 2}
-- **Expected Results**: {What should happen}
-- **Actual Results**: {To be filled during execution}
-- **Status**: {Pass/Fail/Blocked}
-
-## Documentation Sections **[CONDITIONAL: Documentation Task]**
-
-{Delete unless this is a documentation task}
-
-### User Guide Content
-- **Feature Description**: {What this feature does and why it's useful}
-- **Prerequisites**: {What users need before using this feature}
-- **Step-by-Step Instructions**:
-  1. {Step 1 with screenshots/examples}
-  2. {Step 2 with screenshots/examples}
-  3. {Step 3 with screenshots/examples}
-
-### Troubleshooting Guide
-- **Common Issue 1**: {Problem description and solution}
-- **Common Issue 2**: {Problem description and solution}
-- **Error Messages**: {List of error messages and what they mean}
-
-### API Documentation **[CONDITIONAL: API Documentation]**
-- **Endpoint**: {API endpoint description}
-- **Parameters**: {Required and optional parameters}
-- **Example Request**: {Code example}
-- **Example Response**: {Expected response format}
-
-## Implementation Notes **[CONDITIONAL: Technical Task]**
-
-{Keep for technical tasks, delete for non-technical. Technical details, approach, or important considerations}
-
-### Technical Approach
-{How this will be implemented}
-
-### Dependencies
-{Other tasks or systems this depends on}
-
-### Risk Considerations
-{Technical risks and mitigation strategies}
-
-## Status Updates **[REQUIRED]**
+## Status Updates
 
 *To be added during implementation*

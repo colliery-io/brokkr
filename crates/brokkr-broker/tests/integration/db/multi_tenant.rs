@@ -74,8 +74,10 @@ fn test_schema_isolation() {
     let test_db_name = create_test_database(base_url);
 
     // Create two connection pools with different schemas
-    let pool_a = create_shared_connection_pool(base_url, &test_db_name, 5, Some("schema_a"));
-    let pool_b = create_shared_connection_pool(base_url, &test_db_name, 5, Some("schema_b"));
+    let pool_a =
+        create_shared_connection_pool(base_url, Some(test_db_name.as_str()), 5, Some("schema_a"));
+    let pool_b =
+        create_shared_connection_pool(base_url, Some(test_db_name.as_str()), 5, Some("schema_b"));
 
     // Setup schemas and run migrations
     pool_a
@@ -197,7 +199,8 @@ fn test_schema_auto_provisioning() {
     let test_db_name = create_test_database(base_url);
 
     // Create connection pool with a new schema
-    let pool = create_shared_connection_pool(base_url, &test_db_name, 5, Some("auto_test"));
+    let pool =
+        create_shared_connection_pool(base_url, Some(test_db_name.as_str()), 5, Some("auto_test"));
 
     // Setup schema - should create it automatically
     pool.setup_schema("auto_test")
@@ -253,7 +256,7 @@ fn test_backward_compatibility_no_schema() {
     let test_db_name = create_test_database(base_url);
 
     // Create connection pool with NO schema (backward compatibility)
-    let pool = create_shared_connection_pool(base_url, &test_db_name, 5, None);
+    let pool = create_shared_connection_pool(base_url, Some(test_db_name.as_str()), 5, None);
 
     // Run migrations in public schema
     let mut conn = pool.get().expect("Failed to get connection");

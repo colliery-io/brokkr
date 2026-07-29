@@ -47,7 +47,8 @@ fn unique_schema(prefix: &str) -> String {
 /// Creates `schema` and migrates the full schema into it. `admin_role` is left
 /// empty so the caller decides how the admin credential comes to exist.
 fn provision_schema(settings: &Settings, schema: &str) {
-    let pool = create_shared_connection_pool(&settings.database.url, "brokkr", 2, Some(schema));
+    let pool =
+        create_shared_connection_pool(&settings.database.url, Some("brokkr"), 2, Some(schema));
     pool.setup_schema(schema)
         .unwrap_or_else(|e| panic!("failed to set up schema {}: {}", schema, e));
 
@@ -57,7 +58,7 @@ fn provision_schema(settings: &Settings, schema: &str) {
 }
 
 fn drop_schema(settings: &Settings, schema: &str) {
-    let pool = create_shared_connection_pool(&settings.database.url, "brokkr", 1, None);
+    let pool = create_shared_connection_pool(&settings.database.url, Some("brokkr"), 1, None);
     let mut conn = pool.get().expect("failed to get connection");
     sql_query(format!("DROP SCHEMA IF EXISTS {} CASCADE", schema))
         .execute(&mut conn)
@@ -84,7 +85,7 @@ fn test_default_admin_pak_hash_is_detected_after_first_startup() {
 
     let settings = settings_for(&base, &schema, DEFAULT_ADMIN_PAK_HASH);
 
-    let pool = create_shared_connection_pool(&base.database.url, "brokkr", 1, Some(&schema));
+    let pool = create_shared_connection_pool(&base.database.url, Some("brokkr"), 1, Some(&schema));
     let mut conn = pool.get().expect("failed to get connection");
 
     // Same call `serve` makes on first startup.
@@ -128,7 +129,7 @@ fn test_overridden_admin_pak_hash_is_not_detected_after_first_startup() {
 
     let settings = settings_for(&base, &schema, OVERRIDE_HASH);
 
-    let pool = create_shared_connection_pool(&base.database.url, "brokkr", 1, Some(&schema));
+    let pool = create_shared_connection_pool(&base.database.url, Some("brokkr"), 1, Some(&schema));
     let mut conn = pool.get().expect("failed to get connection");
 
     let upsert = upsert_admin(&mut conn, &settings);
@@ -167,7 +168,7 @@ fn test_stale_stored_default_is_detected_when_config_was_corrected_later() {
     let schema = unique_schema("default_pak_stale");
     provision_schema(&base, &schema);
 
-    let pool = create_shared_connection_pool(&base.database.url, "brokkr", 1, Some(&schema));
+    let pool = create_shared_connection_pool(&base.database.url, Some("brokkr"), 1, Some(&schema));
     let mut conn = pool.get().expect("failed to get connection");
 
     // First startup ran with the default and wrote it to admin_role.
@@ -220,7 +221,7 @@ fn test_configured_hash_reapplies_without_minting() {
     provision_schema(&base, &schema);
 
     let settings = settings_for(&base, &schema, OVERRIDE_HASH);
-    let pool = create_shared_connection_pool(&base.database.url, "brokkr", 1, Some(&schema));
+    let pool = create_shared_connection_pool(&base.database.url, Some("brokkr"), 1, Some(&schema));
     let mut conn = pool.get().expect("failed to get connection");
 
     let outcome = upsert_admin(&mut conn, &settings);
@@ -260,7 +261,7 @@ fn test_unset_hash_mints_and_returns_the_plaintext_pak() {
     settings.database.schema = Some(schema.clone());
     settings.broker.pak_hash = None;
 
-    let pool = create_shared_connection_pool(&base.database.url, "brokkr", 1, Some(&schema));
+    let pool = create_shared_connection_pool(&base.database.url, Some("brokkr"), 1, Some(&schema));
     let mut conn = pool.get().expect("failed to get connection");
 
     let outcome = upsert_admin(&mut conn, &settings);

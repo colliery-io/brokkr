@@ -18,6 +18,16 @@ use std::time::Duration;
 use tokio::time::interval;
 use tracing::{debug, error, info, warn};
 
+/// Attempt ceiling applied when a claimed delivery's subscription cannot be
+/// *read* (BROKKR-T-0307), as distinct from being absent.
+///
+/// The subscription's own `max_retries` is unavailable by definition here — the
+/// read is what failed — and it would be the wrong number anyway: this bounds
+/// how long the broker retries its own database failure, not how tolerant a
+/// subscriber is. Matches the default `max_retries` on a new subscription so
+/// the behaviour is unsurprising when the two are compared.
+const SUBSCRIPTION_FETCH_MAX_ATTEMPTS: i32 = 5;
+
 /// Configuration for diagnostic cleanup task.
 pub struct DiagnosticCleanupConfig {
     /// How often to run the cleanup (in seconds).
@@ -357,10 +367,45 @@ pub fn start_webhook_delivery_task(dal: DAL, config: WebhookDeliveryConfig) {
                         continue;
                     }
                     Err(e) => {
+                        // The delivery is already claimed at this point, so
+                        // `continue`ing here left the row `acquired` until its
+                        // TTL lapsed, to be reclaimed and fail again forever,
+                        // with `attempts` never incrementing (BROKKR-T-0307 --
+                        // the broker-path sibling of T-0302/T-0304).
+                        //
+                        // `mark_dead` would be wrong, unlike the `Ok(None)` arm
+                        // above: that means the subscription is genuinely gone,
+                        // which is terminal, whereas this is a *database* read
+                        // failure and is almost always transient. Discarding a
+                        // subscriber's event because the broker briefly could
+                        // not read its own table is the worse outcome.
+                        //
+                        // `mark_failed` is the right shape: it counts the
+                        // attempt, releases the claim, schedules an exponential
+                        // backoff, and reaches `dead` on its own if the failure
+                        // persists. The ceiling is a fixed local constant
+                        // because the subscription's own `max_retries` is
+                        // exactly what could not be read -- and it bounds
+                        // broker-side breakage, not subscriber tolerance.
+                        let error = format!("Failed to load subscription: {e}");
                         error!(
                             "Failed to get subscription {} for delivery {}: {:?}",
                             delivery.subscription_id, delivery.id, e
                         );
+                        if let Err(update_err) = dal.webhook_deliveries().mark_failed(
+                            delivery.id,
+                            &error,
+                            SUBSCRIPTION_FETCH_MAX_ATTEMPTS,
+                        ) {
+                            // The same outage that broke the fetch can break
+                            // this write. Nothing more to do here; the TTL
+                            // release still applies, so the row is not lost --
+                            // it simply retries as it did before this fix.
+                            error!(
+                                "Failed to record subscription-load failure for delivery {}: {:?}",
+                                delivery.id, update_err
+                            );
+                        }
                         continue;
                     }
                 };

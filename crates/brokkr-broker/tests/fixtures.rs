@@ -104,7 +104,7 @@ impl TestFixture {
         dotenv().ok();
         let settings = Settings::new(None).expect("Failed to load settings");
         let connection_pool =
-            create_shared_connection_pool(&settings.database.url, "brokkr", 5, None);
+            create_shared_connection_pool(&settings.database.url, Some("brokkr"), 5, None);
         // Run migrations
         let mut conn = connection_pool
             .pool

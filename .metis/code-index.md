@@ -1,6 +1,6 @@
 # Code Index
 
-> Generated: 2026-07-29T04:37:27Z | 446 files | JavaScript, Python, Rust, TypeScript
+> Generated: 2026-07-29T15:21:37Z | 446 files | JavaScript, Python, Rust, TypeScript
 
 ## Project Structure
 
@@ -1587,11 +1587,17 @@
 #### crates/brokkr-broker/src/db.rs
 
 - pub `ConnectionPool` struct L17-22 — `{ pool: Pool<ConnectionManager<PgConnection>>, schema: Option<String> }` — Represents a pool of PostgreSQL database connections.
-- pub `create_shared_connection_pool` function L42-65 — `( base_url: &str, database_name: &str, max_size: u32, schema: Option<&str>, ) ->...` — Creates a shared connection pool for PostgreSQL databases.
-- pub `validate_schema_name` function L78-97 — `(schema: &str) -> Result<(), String>` — Validates a PostgreSQL schema name to prevent SQL injection.
-- pub `get` function L115-134 — `( &self, ) -> Result<diesel::r2d2::PooledConnection<ConnectionManager<PgConnecti...` — Gets a connection from the pool with automatic schema search_path configuration.
-- pub `setup_schema` function L148-172 — `(&self, schema: &str) -> Result<(), String>` — Sets up a PostgreSQL schema for multi-tenant isolation.
--  `ConnectionPool` type L99-173 — `= ConnectionPool` — For detailed documentation, see the [Brokkr Documentation](https://brokkr.io/explanation/components#database-module).
+- pub `create_shared_connection_pool` function L55-76 — `( base_url: &str, database_name: Option<&str>, max_size: u32, schema: Option<&st...` — Creates a shared connection pool for PostgreSQL databases.
+- pub `validate_schema_name` function L164-183 — `(schema: &str) -> Result<(), String>` — Validates a PostgreSQL schema name to prevent SQL injection.
+- pub `get` function L201-220 — `( &self, ) -> Result<diesel::r2d2::PooledConnection<ConnectionManager<PgConnecti...` — Gets a connection from the pool with automatic schema search_path configuration.
+- pub `setup_schema` function L234-258 — `(&self, schema: &str) -> Result<(), String>` — Sets up a PostgreSQL schema for multi-tenant isolation.
+-  `resolve_database_url` function L84-92 — `(base_url: &str, database_name: Option<&str>) -> String` — Resolves the URL a pool will actually connect to.
+-  `tests` module L95-151 — `-` — For detailed documentation, see the [Brokkr Documentation](https://brokkr.io/explanation/components#database-module).
+-  `configured_database_name_is_preserved_when_not_overridden` function L101-111 — `()` — The BROKKR-T-0306 regression: production passes `None`, and the database
+-  `explicit_override_replaces_the_database_name` function L116-125 — `()` — The override still works, because the test harnesses point one base URL
+-  `override_supplies_a_database_when_the_url_has_none` function L130-136 — `()` — A base URL carrying no database at all is the other harness shape
+-  `authority_is_untouched` function L142-150 — `()` — Credentials, host and port must be untouched by either path — the bug
+-  `ConnectionPool` type L185-259 — `= ConnectionPool` — For detailed documentation, see the [Brokkr Documentation](https://brokkr.io/explanation/components#database-module).
 
 #### crates/brokkr-broker/src/lib.rs
 
@@ -1653,16 +1659,16 @@
 #### crates/brokkr-broker/src/cli/commands.rs
 
 - pub `MIGRATIONS` variable L29 — `: EmbeddedMigrations`
-- pub `connection_pool_from_settings` function L56-63 — `(config: &Settings, max_size: u32) -> ConnectionPool` — Builds the database connection pool for a CLI entry point from `config`,
-- pub `serve` function L69-300 — `(config: &Settings) -> Result<(), Box<dyn std::error::Error>>` — Function to start the Brokkr Broker server
-- pub `rotate_admin` function L316-368 — `(config: &Settings) -> Result<(), Box<dyn std::error::Error>>` — Function to rotate the admin key
-- pub `generate_pak` function L383-409 — `(config: &Settings) -> Result<(), Box<dyn std::error::Error>>` — Mints a fresh PAK + hash pair offline, without touching the database or
-- pub `rotate_agent_key` function L429-455 — `( config: &Settings, uuid: Uuid, ) -> Result<String, Box<dyn std::error::Error>>`
-- pub `rotate_generator_key` function L457-488 — `( config: &Settings, uuid: Uuid, ) -> Result<String, Box<dyn std::error::Error>>`
-- pub `create_agent` function L497-562 — `( config: &Settings, name: String, cluster_name: String, generator_ids: Vec<uuid...` — Creates an agent and its initial PAK.
-- pub `create_generator` function L564-596 — `( config: &Settings, name: String, description: Option<String>, ) -> Result<(), ...`
+- pub `connection_pool_from_settings` function L56-66 — `(config: &Settings, max_size: u32) -> ConnectionPool` — Builds the database connection pool for a CLI entry point from `config`,
+- pub `serve` function L72-303 — `(config: &Settings) -> Result<(), Box<dyn std::error::Error>>` — Function to start the Brokkr Broker server
+- pub `rotate_admin` function L319-371 — `(config: &Settings) -> Result<(), Box<dyn std::error::Error>>` — Function to rotate the admin key
+- pub `generate_pak` function L386-412 — `(config: &Settings) -> Result<(), Box<dyn std::error::Error>>` — Mints a fresh PAK + hash pair offline, without touching the database or
+- pub `rotate_agent_key` function L432-458 — `( config: &Settings, uuid: Uuid, ) -> Result<String, Box<dyn std::error::Error>>`
+- pub `rotate_generator_key` function L460-491 — `( config: &Settings, uuid: Uuid, ) -> Result<String, Box<dyn std::error::Error>>`
+- pub `create_agent` function L500-565 — `( config: &Settings, name: String, cluster_name: String, generator_ids: Vec<uuid...` — Creates an agent and its initial PAK.
+- pub `create_generator` function L567-599 — `( config: &Settings, name: String, description: Option<String>, ) -> Result<(), ...`
 -  `Count` struct L33-36 — `{ count: i64 }`
--  `audit_cli_pak_event` function L414-427 — `(dal: &DAL, action: &str, resource_type: &str, id: Uuid, name: &str)` — Synchronously records a PAK lifecycle event performed via the CLI.
+-  `audit_cli_pak_event` function L417-430 — `(dal: &DAL, action: &str, resource_type: &str, id: Uuid, name: &str)` — Synchronously records a PAK lifecycle event performed via the CLI.
 
 #### crates/brokkr-broker/src/cli/mod.rs
 
@@ -2150,63 +2156,64 @@
 
 #### crates/brokkr-broker/src/utils/background_tasks.rs
 
-- pub `DiagnosticCleanupConfig` struct L22-27 — `{ interval_seconds: u64, max_age_hours: i64 }` — Configuration for diagnostic cleanup task.
-- pub `start_diagnostic_cleanup_task` function L49-101 — `(dal: DAL, config: DiagnosticCleanupConfig)` — Starts the diagnostic cleanup background task.
-- pub `WorkOrderMaintenanceConfig` struct L104-107 — `{ interval_seconds: u64 }` — Configuration for work order maintenance task.
-- pub `start_work_order_maintenance_task` function L126-163 — `(dal: DAL, config: WorkOrderMaintenanceConfig)` — Starts the work order maintenance background task.
-- pub `AgentMetricsRefreshConfig` struct L166-169 — `{ interval_seconds: u64 }` — Configuration for the agent-metrics refresh task.
-- pub `start_agent_metrics_refresh_task` function L190-204 — `(dal: DAL, config: AgentMetricsRefreshConfig)` — Starts the agent-metrics refresh background task (BROKKR-T-0226).
-- pub `WebhookDeliveryConfig` struct L235-240 — `{ interval_seconds: u64, batch_size: i64 }` — Configuration for webhook delivery worker.
-- pub `WebhookCleanupConfig` struct L252-257 — `{ interval_seconds: u64, retention_days: i64 }` — Configuration for webhook cleanup task.
-- pub `start_webhook_delivery_task` function L280-497 — `(dal: DAL, config: WebhookDeliveryConfig)` — Starts the webhook delivery worker background task.
-- pub `start_webhook_cleanup_task` function L588-615 — `(dal: DAL, config: WebhookCleanupConfig)` — Starts the webhook cleanup background task.
-- pub `AuditLogCleanupConfig` struct L618-623 — `{ interval_seconds: u64, retention_days: i64 }` — Configuration for audit log cleanup task.
-- pub `start_audit_log_cleanup_task` function L642-669 — `(dal: DAL, config: AuditLogCleanupConfig)` — Starts the audit log cleanup background task.
-- pub `AgentEventsCleanupConfig` struct L672-677 — `{ interval_seconds: u64, retention_days: i64 }` — Configuration for the agent-events cleanup task (BROKKR-T-0228).
-- pub `start_agent_events_cleanup_task` function L702-730 — `(dal: DAL, config: AgentEventsCleanupConfig)` — Starts the agent-events cleanup background task (BROKKR-T-0228).
-- pub `start_fleet_sweep_task` function L778-813 — `( dal: DAL, registry: std::sync::Arc<crate::ws::ConnectionRegistry>, fleet: std:...` — Starts the periodic fleet live-push sweep (the computed-signal half of the
--  `DiagnosticCleanupConfig` type L29-36 — `impl Default for DiagnosticCleanupConfig` — system health and cleanup expired data.
--  `default` function L30-35 — `() -> Self` — system health and cleanup expired data.
--  `WorkOrderMaintenanceConfig` type L109-115 — `impl Default for WorkOrderMaintenanceConfig` — system health and cleanup expired data.
--  `default` function L110-114 — `() -> Self` — system health and cleanup expired data.
--  `AgentMetricsRefreshConfig` type L171-177 — `impl Default for AgentMetricsRefreshConfig` — system health and cleanup expired data.
--  `default` function L172-176 — `() -> Self` — system health and cleanup expired data.
--  `refresh_agent_metrics` function L209-232 — `(dal: &DAL)` — Recomputes the active-agent and per-agent heartbeat-age gauges from the DB.
--  `WebhookDeliveryConfig` type L242-249 — `impl Default for WebhookDeliveryConfig` — system health and cleanup expired data.
--  `default` function L243-248 — `() -> Self` — system health and cleanup expired data.
--  `WebhookCleanupConfig` type L259-266 — `impl Default for WebhookCleanupConfig` — system health and cleanup expired data.
--  `default` function L260-265 — `() -> Self` — system health and cleanup expired data.
--  `DeliveryFailure` struct L505-514 — `{ message: String, status: Option<u16>, retryable: bool }` — A failed broker-side delivery attempt (BROKKR-T-0288).
--  `DeliveryFailure` type L516-535 — `= DeliveryFailure` — system health and cleanup expired data.
--  `transport` function L518-524 — `(message: String) -> Self` — A transport-level failure: no response, so always worth retrying.
--  `from_status` function L528-534 — `(status: u16, message: String) -> Self` — A response the endpoint actually returned; retryability comes from the
--  `attempt_delivery` function L542-578 — `( client: &reqwest::Client, url: &str, auth_header: Option<&str>, payload: &str,...` — Attempts to deliver a webhook payload via HTTP POST.
--  `AuditLogCleanupConfig` type L625-632 — `impl Default for AuditLogCleanupConfig` — system health and cleanup expired data.
--  `default` function L626-631 — `() -> Self` — system health and cleanup expired data.
--  `AgentEventsCleanupConfig` type L679-686 — `impl Default for AgentEventsCleanupConfig` — system health and cleanup expired data.
--  `default` function L680-685 — `() -> Self` — system health and cleanup expired data.
--  `FleetComputedSignals` type L743 — `= (i64, i64, i64, i64, i64)` — The computed (non-event-driven) fleet signals compared between sweep ticks:
--  `fleet_computed_signals` function L745-753 — `(r: &crate::api::v1::fleet::FleetAgentRecord) -> FleetComputedSignals` — system health and cleanup expired data.
--  `select_changed_fleet_records` function L758-771 — `( prev: &mut std::collections::HashMap<uuid::Uuid, FleetComputedSignals>, record...` — Returns the records whose computed signals changed versus `prev`, updating
--  `tests` module L816-1055 — `-` — system health and cleanup expired data.
--  `fleet_rec` function L821-845 — `( agent_id: uuid::Uuid, pending_objects: i64, failing: i64, ) -> crate::api::v1:...` — Minimal fleet record for the sweep diff test — only the computed fields
--  `fleet_sweep_selects_only_changed_computed_signals` function L848-867 — `()` — system health and cleanup expired data.
--  `test_default_agent_events_cleanup_config` function L870-874 — `()` — system health and cleanup expired data.
--  `test_custom_agent_events_cleanup_config` function L877-884 — `()` — system health and cleanup expired data.
--  `test_default_diagnostic_config` function L887-891 — `()` — system health and cleanup expired data.
--  `test_custom_diagnostic_config` function L894-901 — `()` — system health and cleanup expired data.
--  `test_default_work_order_config` function L904-907 — `()` — system health and cleanup expired data.
--  `test_custom_work_order_config` function L910-915 — `()` — system health and cleanup expired data.
--  `test_default_agent_metrics_refresh_config` function L918-921 — `()` — system health and cleanup expired data.
--  `test_custom_agent_metrics_refresh_config` function L924-929 — `()` — system health and cleanup expired data.
--  `test_default_webhook_delivery_config` function L932-936 — `()` — system health and cleanup expired data.
--  `test_custom_webhook_delivery_config` function L939-946 — `()` — system health and cleanup expired data.
--  `test_default_webhook_cleanup_config` function L949-953 — `()` — system health and cleanup expired data.
--  `test_custom_webhook_cleanup_config` function L956-963 — `()` — system health and cleanup expired data.
--  `test_attempt_delivery_invalid_url` function L966-983 — `()` — system health and cleanup expired data.
--  `test_attempt_delivery_with_auth_header_invalid_url` function L986-999 — `()` — system health and cleanup expired data.
--  `test_attempt_delivery_honors_per_request_timeout` function L1002-1035 — `()` — system health and cleanup expired data.
--  `test_delivery_failure_classifies_status` function L1038-1054 — `()` — system health and cleanup expired data.
+- pub `DiagnosticCleanupConfig` struct L32-37 — `{ interval_seconds: u64, max_age_hours: i64 }` — Configuration for diagnostic cleanup task.
+- pub `start_diagnostic_cleanup_task` function L59-111 — `(dal: DAL, config: DiagnosticCleanupConfig)` — Starts the diagnostic cleanup background task.
+- pub `WorkOrderMaintenanceConfig` struct L114-117 — `{ interval_seconds: u64 }` — Configuration for work order maintenance task.
+- pub `start_work_order_maintenance_task` function L136-173 — `(dal: DAL, config: WorkOrderMaintenanceConfig)` — Starts the work order maintenance background task.
+- pub `AgentMetricsRefreshConfig` struct L176-179 — `{ interval_seconds: u64 }` — Configuration for the agent-metrics refresh task.
+- pub `start_agent_metrics_refresh_task` function L200-214 — `(dal: DAL, config: AgentMetricsRefreshConfig)` — Starts the agent-metrics refresh background task (BROKKR-T-0226).
+- pub `WebhookDeliveryConfig` struct L245-250 — `{ interval_seconds: u64, batch_size: i64 }` — Configuration for webhook delivery worker.
+- pub `WebhookCleanupConfig` struct L262-267 — `{ interval_seconds: u64, retention_days: i64 }` — Configuration for webhook cleanup task.
+- pub `start_webhook_delivery_task` function L290-542 — `(dal: DAL, config: WebhookDeliveryConfig)` — Starts the webhook delivery worker background task.
+- pub `start_webhook_cleanup_task` function L633-660 — `(dal: DAL, config: WebhookCleanupConfig)` — Starts the webhook cleanup background task.
+- pub `AuditLogCleanupConfig` struct L663-668 — `{ interval_seconds: u64, retention_days: i64 }` — Configuration for audit log cleanup task.
+- pub `start_audit_log_cleanup_task` function L687-714 — `(dal: DAL, config: AuditLogCleanupConfig)` — Starts the audit log cleanup background task.
+- pub `AgentEventsCleanupConfig` struct L717-722 — `{ interval_seconds: u64, retention_days: i64 }` — Configuration for the agent-events cleanup task (BROKKR-T-0228).
+- pub `start_agent_events_cleanup_task` function L747-775 — `(dal: DAL, config: AgentEventsCleanupConfig)` — Starts the agent-events cleanup background task (BROKKR-T-0228).
+- pub `start_fleet_sweep_task` function L823-858 — `( dal: DAL, registry: std::sync::Arc<crate::ws::ConnectionRegistry>, fleet: std:...` — Starts the periodic fleet live-push sweep (the computed-signal half of the
+-  `SUBSCRIPTION_FETCH_MAX_ATTEMPTS` variable L29 — `: i32` — Attempt ceiling applied when a claimed delivery's subscription cannot be
+-  `DiagnosticCleanupConfig` type L39-46 — `impl Default for DiagnosticCleanupConfig` — system health and cleanup expired data.
+-  `default` function L40-45 — `() -> Self` — system health and cleanup expired data.
+-  `WorkOrderMaintenanceConfig` type L119-125 — `impl Default for WorkOrderMaintenanceConfig` — system health and cleanup expired data.
+-  `default` function L120-124 — `() -> Self` — system health and cleanup expired data.
+-  `AgentMetricsRefreshConfig` type L181-187 — `impl Default for AgentMetricsRefreshConfig` — system health and cleanup expired data.
+-  `default` function L182-186 — `() -> Self` — system health and cleanup expired data.
+-  `refresh_agent_metrics` function L219-242 — `(dal: &DAL)` — Recomputes the active-agent and per-agent heartbeat-age gauges from the DB.
+-  `WebhookDeliveryConfig` type L252-259 — `impl Default for WebhookDeliveryConfig` — system health and cleanup expired data.
+-  `default` function L253-258 — `() -> Self` — system health and cleanup expired data.
+-  `WebhookCleanupConfig` type L269-276 — `impl Default for WebhookCleanupConfig` — system health and cleanup expired data.
+-  `default` function L270-275 — `() -> Self` — system health and cleanup expired data.
+-  `DeliveryFailure` struct L550-559 — `{ message: String, status: Option<u16>, retryable: bool }` — A failed broker-side delivery attempt (BROKKR-T-0288).
+-  `DeliveryFailure` type L561-580 — `= DeliveryFailure` — system health and cleanup expired data.
+-  `transport` function L563-569 — `(message: String) -> Self` — A transport-level failure: no response, so always worth retrying.
+-  `from_status` function L573-579 — `(status: u16, message: String) -> Self` — A response the endpoint actually returned; retryability comes from the
+-  `attempt_delivery` function L587-623 — `( client: &reqwest::Client, url: &str, auth_header: Option<&str>, payload: &str,...` — Attempts to deliver a webhook payload via HTTP POST.
+-  `AuditLogCleanupConfig` type L670-677 — `impl Default for AuditLogCleanupConfig` — system health and cleanup expired data.
+-  `default` function L671-676 — `() -> Self` — system health and cleanup expired data.
+-  `AgentEventsCleanupConfig` type L724-731 — `impl Default for AgentEventsCleanupConfig` — system health and cleanup expired data.
+-  `default` function L725-730 — `() -> Self` — system health and cleanup expired data.
+-  `FleetComputedSignals` type L788 — `= (i64, i64, i64, i64, i64)` — The computed (non-event-driven) fleet signals compared between sweep ticks:
+-  `fleet_computed_signals` function L790-798 — `(r: &crate::api::v1::fleet::FleetAgentRecord) -> FleetComputedSignals` — system health and cleanup expired data.
+-  `select_changed_fleet_records` function L803-816 — `( prev: &mut std::collections::HashMap<uuid::Uuid, FleetComputedSignals>, record...` — Returns the records whose computed signals changed versus `prev`, updating
+-  `tests` module L861-1100 — `-` — system health and cleanup expired data.
+-  `fleet_rec` function L866-890 — `( agent_id: uuid::Uuid, pending_objects: i64, failing: i64, ) -> crate::api::v1:...` — Minimal fleet record for the sweep diff test — only the computed fields
+-  `fleet_sweep_selects_only_changed_computed_signals` function L893-912 — `()` — system health and cleanup expired data.
+-  `test_default_agent_events_cleanup_config` function L915-919 — `()` — system health and cleanup expired data.
+-  `test_custom_agent_events_cleanup_config` function L922-929 — `()` — system health and cleanup expired data.
+-  `test_default_diagnostic_config` function L932-936 — `()` — system health and cleanup expired data.
+-  `test_custom_diagnostic_config` function L939-946 — `()` — system health and cleanup expired data.
+-  `test_default_work_order_config` function L949-952 — `()` — system health and cleanup expired data.
+-  `test_custom_work_order_config` function L955-960 — `()` — system health and cleanup expired data.
+-  `test_default_agent_metrics_refresh_config` function L963-966 — `()` — system health and cleanup expired data.
+-  `test_custom_agent_metrics_refresh_config` function L969-974 — `()` — system health and cleanup expired data.
+-  `test_default_webhook_delivery_config` function L977-981 — `()` — system health and cleanup expired data.
+-  `test_custom_webhook_delivery_config` function L984-991 — `()` — system health and cleanup expired data.
+-  `test_default_webhook_cleanup_config` function L994-998 — `()` — system health and cleanup expired data.
+-  `test_custom_webhook_cleanup_config` function L1001-1008 — `()` — system health and cleanup expired data.
+-  `test_attempt_delivery_invalid_url` function L1011-1028 — `()` — system health and cleanup expired data.
+-  `test_attempt_delivery_with_auth_header_invalid_url` function L1031-1044 — `()` — system health and cleanup expired data.
+-  `test_attempt_delivery_honors_per_request_timeout` function L1047-1080 — `()` — system health and cleanup expired data.
+-  `test_delivery_failure_classifies_status` function L1083-1099 — `()` — system health and cleanup expired data.
 
 #### crates/brokkr-broker/src/utils/config_watcher.rs
 
@@ -3346,26 +3353,26 @@
 -  `HashRow` struct L40-43 — `{ pak_hash: String }` — inside that database rather than on a throwaway database.
 -  `SearchPathRow` struct L46-49 — `{ search_path: String }` — inside that database rather than on a throwaway database.
 -  `unique_schema` function L54-56 — `(prefix: &str) -> String` — Generates a collision-free schema name.
--  `provision_schema` function L60-78 — `(settings: &Settings, schema: &str, sentinel: &str)` — Creates `schema`, migrates the full schema into it, and seeds `admin_role`
--  `admin_hash_in_schema` function L81-88 — `(settings: &Settings, schema: &str) -> String` — Reads the single `admin_role.pak_hash` from `schema`.
--  `admin_hash_in_public` function L93-100 — `(settings: &Settings) -> Option<String>` — Reads `public`'s `admin_role.pak_hash`, if there is one.
--  `drop_schema` function L102-108 — `(settings: &Settings, schema: &str)` — inside that database rather than on a throwaway database.
--  `test_rotate_admin_writes_to_configured_schema` function L119-162 — `()` — `rotate admin` must write to the schema named by `database.schema` and to no
--  `test_connection_pool_from_settings_applies_configured_schema` function L168-216 — `()` — The shared helper every CLI subcommand now uses must carry
+-  `provision_schema` function L60-79 — `(settings: &Settings, schema: &str, sentinel: &str)` — Creates `schema`, migrates the full schema into it, and seeds `admin_role`
+-  `admin_hash_in_schema` function L82-90 — `(settings: &Settings, schema: &str) -> String` — Reads the single `admin_role.pak_hash` from `schema`.
+-  `admin_hash_in_public` function L95-102 — `(settings: &Settings) -> Option<String>` — Reads `public`'s `admin_role.pak_hash`, if there is one.
+-  `drop_schema` function L104-110 — `(settings: &Settings, schema: &str)` — inside that database rather than on a throwaway database.
+-  `test_rotate_admin_writes_to_configured_schema` function L121-164 — `()` — `rotate admin` must write to the schema named by `database.schema` and to no
+-  `test_connection_pool_from_settings_applies_configured_schema` function L170-219 — `()` — The shared helper every CLI subcommand now uses must carry
 
 #### crates/brokkr-broker/tests/integration/db/default_admin_pak.rs
 
 -  `MIGRATIONS` variable L37 — `: EmbeddedMigrations` — throwaway schema inside the `brokkr` database and drops it afterwards.
 -  `OVERRIDE_HASH` variable L41 — `: &str` — A valid-shaped SHA-256 hash that is not the shipped default — what an
 -  `unique_schema` function L43-45 — `(prefix: &str) -> String` — throwaway schema inside the `brokkr` database and drops it afterwards.
--  `provision_schema` function L49-57 — `(settings: &Settings, schema: &str)` — Creates `schema` and migrates the full schema into it.
--  `drop_schema` function L59-65 — `(settings: &Settings, schema: &str)` — throwaway schema inside the `brokkr` database and drops it afterwards.
--  `settings_for` function L68-73 — `(base: &Settings, schema: &str, hash: &str) -> Settings` — Settings scoped to `schema` with `broker.pak_hash` pinned to `hash`.
--  `test_default_admin_pak_hash_is_detected_after_first_startup` function L80-118 — `()` — The zero-configuration path: `angreal local up`, the docker-compose harness
--  `test_overridden_admin_pak_hash_is_not_detected_after_first_startup` function L124-156 — `()` — The hardened path: an operator who ran `generate-pak` and set
--  `test_stale_stored_default_is_detected_when_config_was_corrected_later` function L165-205 — `()` — The case a config-only check would miss, and the reason the stored hash is
--  `test_configured_hash_reapplies_without_minting` function L217-247 — `()` — `rotate admin` reports what it did based on this outcome, and the two
--  `test_unset_hash_mints_and_returns_the_plaintext_pak` function L254-298 — `()` — With no hash configured, a fresh PAK is minted and the plaintext is returned
+-  `provision_schema` function L49-58 — `(settings: &Settings, schema: &str)` — Creates `schema` and migrates the full schema into it.
+-  `drop_schema` function L60-66 — `(settings: &Settings, schema: &str)` — throwaway schema inside the `brokkr` database and drops it afterwards.
+-  `settings_for` function L69-74 — `(base: &Settings, schema: &str, hash: &str) -> Settings` — Settings scoped to `schema` with `broker.pak_hash` pinned to `hash`.
+-  `test_default_admin_pak_hash_is_detected_after_first_startup` function L81-119 — `()` — The zero-configuration path: `angreal local up`, the docker-compose harness
+-  `test_overridden_admin_pak_hash_is_not_detected_after_first_startup` function L125-157 — `()` — The hardened path: an operator who ran `generate-pak` and set
+-  `test_stale_stored_default_is_detected_when_config_was_corrected_later` function L166-206 — `()` — The case a config-only check would miss, and the reason the stored hash is
+-  `test_configured_hash_reapplies_without_minting` function L218-248 — `()` — `rotate admin` reports what it did based on this outcome, and the two
+-  `test_unset_hash_mints_and_returns_the_plaintext_pak` function L255-299 — `()` — With no hash configured, a fresh PAK is minted and the plaintext is returned
 
 #### crates/brokkr-broker/tests/integration/db/mod.rs
 
@@ -3373,17 +3380,17 @@
 -  `default_admin_pak` module L8 — `-`
 -  `multi_tenant` module L9 — `-`
 -  `TestRecord` struct L27-32 — `{ id: i32, name: String }` — Represents a record in the test database table.
--  `test_connection_pool_integration` function L48-143 — `()` — Integration test for the connection pool functionality.
+-  `test_connection_pool_integration` function L48-147 — `()` — Integration test for the connection pool functionality.
 
 #### crates/brokkr-broker/tests/integration/db/multi_tenant.rs
 
 -  `MIGRATIONS` variable L20 — `: EmbeddedMigrations` — Integration tests for multi-tenant schema isolation functionality
 -  `create_test_database` function L23-37 — `(base_url: &str) -> String` — Helper function to create a test database
 -  `drop_test_database` function L40-58 — `(base_url: &str, db_name: &str)` — Helper function to drop a test database
--  `test_schema_isolation` function L67-181 — `()` — Test complete data isolation between different schemas
--  `test_schema_auto_provisioning` function L190-237 — `()` — Test automatic schema provisioning on first connection
--  `test_backward_compatibility_no_schema` function L246-285 — `()` — Test backward compatibility with no schema (public schema)
--  `test_invalid_schema_name` function L294-331 — `()` — Test schema name validation
+-  `test_schema_isolation` function L67-183 — `()` — Test complete data isolation between different schemas
+-  `test_schema_auto_provisioning` function L192-240 — `()` — Test automatic schema provisioning on first connection
+-  `test_backward_compatibility_no_schema` function L249-288 — `()` — Test backward compatibility with no schema (public schema)
+-  `test_invalid_schema_name` function L297-334 — `()` — Test schema name validation
 
 ### crates/brokkr-cli/src
 

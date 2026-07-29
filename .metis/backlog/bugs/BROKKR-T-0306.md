@@ -4,7 +4,7 @@ level: task
 title: "create_shared_connection_pool discards the database name from database.url and always connects to 'brokkr'"
 short_code: "BROKKR-T-0306"
 created_at: 2026-07-28T00:16:12.719642+00:00
-updated_at: 2026-07-28T00:16:12.719642+00:00
+updated_at: 2026-07-29T06:00:00+00:00
 parent: 
 blocked_by: []
 archived: false
@@ -21,117 +21,60 @@ initiative_id: NULL
 
 # create_shared_connection_pool discards the database name from database.url and always connects to 'brokkr'
 
-*This template includes sections for various types of tasks. Delete sections that don't apply to your specific use case.*
+## Objective
 
-## Parent Initiative **[CONDITIONAL: Assigned Task]**
+Make the broker connect to the database the operator configured, instead of silently rewriting it to `brokkr`.
 
-[[Parent Initiative]]
+`create_shared_connection_pool` (`crates/brokkr-broker/src/db.rs:42-65`) takes the configured URL and immediately overwrites its path:
 
-## Objective **[REQUIRED]**
+```rust
+let mut url = Url::parse(base_url).expect("Invalid base URL");
+url.set_path(database_name);
+```
 
-{Clear statement of what this task accomplishes}
+Every production caller reaches it through `connection_pool_from_settings` (`cli/commands.rs:56-63`), which passes the string literal `"brokkr"`. So whatever database name appears in `BROKKR__DATABASE__URL` is parsed, discarded, and replaced.
 
-## Backlog Item Details **[CONDITIONAL: Backlog Item]**
-
-{Delete this section when task is assigned to an initiative}
+## Backlog Item Details
 
 ### Type
-- [ ] Bug - Production issue that needs fixing
-- [ ] Feature - New functionality or enhancement  
-- [ ] Tech Debt - Code improvement or refactoring
-- [ ] Chore - Maintenance or setup work
+- [x] Bug - Production issue that needs fixing
 
 ### Priority
-- [ ] P0 - Critical (blocks users/revenue)
-- [ ] P1 - High (important for user experience)
-- [ ] P2 - Medium (nice to have)
-- [ ] P3 - Low (when time permits)
+- [x] P1 - High (a documented, chart-exposed setting is silently ignored; the failure is either a confusing connection error or, worse, successful use of the wrong database)
 
-### Impact Assessment **[CONDITIONAL: Bug]**
-- **Affected Users**: {Number/percentage of users affected}
-- **Reproduction Steps**: 
-  1. {Step 1}
-  2. {Step 2}
-  3. {Step 3}
-- **Expected vs Actual**: {What should happen vs what happens}
+## 2026-07-29 — verified against the code
 
-### Business Justification **[CONDITIONAL: Feature]**
-- **User Value**: {Why users need this}
-- **Business Value**: {Impact on metrics/revenue}
-- **Effort Estimate**: {Rough size - S/M/L/XL}
+Confirmed by reading `db.rs:49-50` and `cli/commands.rs:56-63`. The title was the only content this ticket had — it was an unedited template otherwise — and the claim holds exactly as written.
 
-### Technical Debt Impact **[CONDITIONAL: Tech Debt]**
-- **Current Problems**: {What's difficult/slow/buggy now}
-- **Benefits of Fixing**: {What improves after refactoring}
-- **Risk Assessment**: {Risks of not addressing this}
+**The chart exposes the setting this bug ignores.** `_helpers.tpl:87-93` defines `brokkr-broker.databaseName` as `postgresql.auth.database` (bundled) or `postgresql.external.database` (external), and `templates/configmap.yaml:17` renders it into `BROKKR__DATABASE__URL`. Both default to `brokkr`, which is why nobody has hit this: the default masks it completely.
 
-## Acceptance Criteria **[REQUIRED]**
+An operator pointing at an existing external Postgres with any other database name — the entire point of `postgresql.external` — gets one of two outcomes:
 
-- [ ] {Specific, testable requirement 1}
-- [ ] {Specific, testable requirement 2}
-- [ ] {Specific, testable requirement 3}
+- **No database named `brokkr` on that server** → connection failure naming a database the operator never configured. Loud, but misleading.
+- **A database named `brokkr` does exist** → the broker silently runs against the wrong one. Migrations, agents, stacks and audit logs all land somewhere the operator is not looking.
 
-## Test Cases **[CONDITIONAL: Testing Task]**
+The second is the dangerous case, and it is plausible on a shared Postgres already hosting another Brokkr install.
 
-{Delete unless this is a testing task}
-
-### Test Case 1: {Test Case Name}
-- **Test ID**: TC-001
-- **Preconditions**: {What must be true before testing}
-- **Steps**: 
-  1. {Step 1}
-  2. {Step 2}
-  3. {Step 3}
-- **Expected Results**: {What should happen}
-- **Actual Results**: {To be filled during execution}
-- **Status**: {Pass/Fail/Blocked}
-
-### Test Case 2: {Test Case Name}
-- **Test ID**: TC-002
-- **Preconditions**: {What must be true before testing}
-- **Steps**: 
-  1. {Step 1}
-  2. {Step 2}
-- **Expected Results**: {What should happen}
-- **Actual Results**: {To be filled during execution}
-- **Status**: {Pass/Fail/Blocked}
-
-## Documentation Sections **[CONDITIONAL: Documentation Task]**
-
-{Delete unless this is a documentation task}
-
-### User Guide Content
-- **Feature Description**: {What this feature does and why it's useful}
-- **Prerequisites**: {What users need before using this feature}
-- **Step-by-Step Instructions**:
-  1. {Step 1 with screenshots/examples}
-  2. {Step 2 with screenshots/examples}
-  3. {Step 3 with screenshots/examples}
-
-### Troubleshooting Guide
-- **Common Issue 1**: {Problem description and solution}
-- **Common Issue 2**: {Problem description and solution}
-- **Error Messages**: {List of error messages and what they mean}
-
-### API Documentation **[CONDITIONAL: API Documentation]**
-- **Endpoint**: {API endpoint description}
-- **Parameters**: {Required and optional parameters}
-- **Example Request**: {Code example}
-- **Example Response**: {Expected response format}
-
-## Implementation Notes **[CONDITIONAL: Technical Task]**
-
-{Keep for technical tasks, delete for non-technical. Technical details, approach, or important considerations}
+**Related to but distinct from BROKKR-T-0297.** That was the `search_path`/schema component being lost on bare connections; this is the *database* component of the same URL. Both stem from the broker not simply using the URL it was given.
 
 ### Technical Approach
-{How this will be implemented}
 
-### Dependencies
-{Other tasks or systems this depends on}
+Use the URL as configured. `set_path` should apply only when a caller genuinely needs to override the database — the test fixtures do, to target per-test databases — so the sensible shape is to make the override optional:
 
-### Risk Considerations
-{Technical risks and mitigation strategies}
+- `create_shared_connection_pool(base_url, database_name: Option<&str>, ...)`, applying `set_path` only for `Some`.
+- `connection_pool_from_settings` passes `None`, so production honours `database.url` verbatim.
+- Test fixtures keep passing an explicit name.
 
-## Status Updates **[REQUIRED]**
+Worth deciding at the same time whether `Url::parse(...).expect("Invalid base URL")` should stop panicking: a typo in `BROKKR__DATABASE__URL` currently aborts the process without naming the offending value.
+
+## Acceptance Criteria
+
+- [ ] A `BROKKR__DATABASE__URL` naming a non-`brokkr` database connects to that database.
+- [ ] A test asserts the resolved connection URL retains the configured database name — not merely that a pool is constructed.
+- [ ] Test fixtures that deliberately target a different database still work (the override path is kept, just no longer forced on production).
+- [ ] A chart install with `postgresql.external.database` set to a non-default name reaches that database.
+- [ ] Schema handling from BROKKR-T-0297 is verified unaffected — both live on the same connection setup.
+
+## Status Updates
 
 *To be added during implementation*

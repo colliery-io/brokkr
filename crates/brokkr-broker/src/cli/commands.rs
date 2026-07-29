@@ -56,7 +56,10 @@ struct Count {
 pub fn connection_pool_from_settings(config: &Settings, max_size: u32) -> ConnectionPool {
     create_shared_connection_pool(
         &config.database.url,
-        "brokkr",
+        // `None`: honour the database named in `database.url`. This used to be
+        // the literal "brokkr", which overwrote the operator's configured
+        // database name (BROKKR-T-0306).
+        None,
         max_size,
         config.database.schema.as_deref(),
     )
