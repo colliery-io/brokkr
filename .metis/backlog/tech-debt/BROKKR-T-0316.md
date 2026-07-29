@@ -83,10 +83,31 @@ Note that `enforce_admins` is `false` and `required_approving_review_count` is `
 ## Acceptance Criteria
 
 - [ ] A decision is recorded on which checks block a merge and which stay advisory, with the reasoning.
-- [ ] `integration_tests` and `sdk_contract_tests` are added to required contexts, or a reason not to is recorded.
+- [x] `integration_tests` and `sdk_contract_tests` are added to required contexts, or a reason not to is recorded.
 - [ ] Before any `build-and-test.yml` job is marked required, that workflow reports on every PR (jobs skipped via `if:`, not workflows skipped via `paths:`) — verified on a docs-only PR that it reports rather than hangs.
 - [ ] Verify by observation, not by reading settings: open a PR that breaks a newly-required check and confirm merge is actually blocked.
 
 ## Status Updates
 
-*To be added during implementation*
+**2026-07-29 — PARTIALLY DONE (Dylan): `integration_tests` and `sdk_contract_tests` are now required.** Required contexts on `main` went from four to ten:
+
+```
+unit_tests / unit_tests (brokkr-agent | brokkr-broker | brokkr-models | brokkr-utils)
+openapi / drift_and_lint
+integration_tests / integration_tests (brokkr-agent | brokkr-broker)
+sdk_contract_tests / sdk_contract_tests (rust | python | typescript)
+```
+
+Safe with no restructuring, and checked rather than assumed: both are `workflow_call` reusables invoked from `main.yml` behind the `changes` job's `if:`, so on a PR that touches neither they report **skipped** (accepted) rather than never reporting (hangs forever). Both matrices are static literals with `fail-fast: false`, so every leg reports its own status — no context can silently fail to materialize. The five names were taken from what the live PR actually reported, not inferred from the YAML.
+
+**What this changes in practice:** `integration_tests` is the suite that exercises the API and DAL against a real database, and it could previously be red on every push without blocking anything. That was the largest gap between "CI ran" and "CI mattered".
+
+### Still open — the Helm jobs
+
+`build-and-test.yml` continues to self-trigger behind a top-level `paths:` filter, so its jobs are still advisory and **still cannot be required without restructuring** — the trap documented above would make every docs-only PR unmergeable. Most valuable target remains `Helm Template Validation`: since BROKKR-T-0313 it is a ~20s check that proves chart values actually take effect, and it currently blocks nothing. The fix is the same shape applied to `openapi.yml`: convert to `workflow_call` and invoke from `main.yml` behind a `changes` filter.
+
+`Helm Deployment Tests` and the multi-arch image builds are still judged better left advisory — slow and infrastructure-flaky, and nightly already covers them.
+
+### Acceptance criterion 4 is deliberately still open
+
+Nobody has yet confirmed by observation that a broken required check actually blocks a merge. The settings say it does; that is not the same as having seen it. Given this ticket exists because a red check blocked nothing for ten pushes, the distinction is the whole point.
