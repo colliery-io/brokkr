@@ -190,13 +190,25 @@ jobs:
             echo "imagetools inspect failed (attempt $attempt); retrying in 15s"; sleep 15
           done
 
-  # Helm template validation - fast, reliable chart structure tests
+  # Helm render assertions - fast, no cluster. Asserts what the charts actually
+  # render, not merely that rendering exits zero.
   helm-template-tests:
     name: Helm Template Validation
     runs-on: ubuntu-latest
     needs: merge-manifests
     steps:
       - uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      # PyYAML: the render assertions parse the rendered manifests rather than
+      # grepping them, so they can assert cross-resource linkage (e.g. that a
+      # PodMonitor's port names a container port the Deployment declares).
+      - name: Install angreal
+        run: pip install angreal pyyaml
 
       - name: Set up Helm
         uses: azure/setup-helm@v5.0.0
@@ -213,25 +225,20 @@ jobs:
           helm dependency build charts/brokkr-broker
           helm dependency build charts/brokkr-agent
 
-      - name: Validate broker chart templates
-        run: |
-          echo "Testing broker chart with default values..."
-          helm template test charts/brokkr-broker --kube-version 1.30.0 > /dev/null
-          echo "Testing broker chart with production values..."
-          helm template test charts/brokkr-broker --kube-version 1.30.0 -f charts/brokkr-broker/values/production.yaml > /dev/null
-          echo "Testing broker chart with development values..."
-          helm template test charts/brokkr-broker --kube-version 1.30.0 -f charts/brokkr-broker/values/development.yaml > /dev/null
-          echo "✓ All broker template tests passed"
-
-      - name: Validate agent chart templates
-        run: |
-          echo "Testing agent chart with default values..."
-          helm template test charts/brokkr-agent --kube-version 1.30.0 > /dev/null
-          echo "Testing agent chart with production values..."
-          helm template test charts/brokkr-agent --kube-version 1.30.0 -f charts/brokkr-agent/values/production.yaml > /dev/null
-          echo "Testing agent chart with development values..."
-          helm template test charts/brokkr-agent --kube-version 1.30.0 -f charts/brokkr-agent/values/development.yaml > /dev/null
-          echo "✓ All agent template tests passed"
+      # Replaces the previous `helm template ... > /dev/null` steps. Those
+      # asserted only that helm exited zero, and rendering *nothing* is not a
+      # non-zero exit -- which is how four accepted, documented, inert chart
+      # values shipped for multiple releases (BROKKR-T-0308, BROKKR-T-0313).
+      #
+      # This task subsumes them: same `helm template`, same pinned
+      # --kube-version 1.30.0, and it covers every shipped values file
+      # (values.yaml, values-dev.yaml, values/{development,production,staging})
+      # rather than only production + development. On top of that it asserts
+      # that setting a value changes the rendered output in the expected way,
+      # and that every leaf key in every values file is referenced by some
+      # template. Runs in a couple of seconds.
+      - name: Assert chart values affect rendered output
+        run: angreal helm check-values
 
   # Helm deployment tests - validates charts deploy and work correctly
   helm-deployment-tests:

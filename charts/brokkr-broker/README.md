@@ -681,6 +681,34 @@ kubectl run -it --rm debug --image=postgres:16 --restart=Never -- psql <database
 kubectl logs -l app.kubernetes.io/name=brokkr-broker --tail=100 -f
 ```
 
+## Validating chart changes
+
+`helm lint` checks syntax and schema. It cannot tell you that a value is accepted, documented,
+and renders nothing — four values shipped in exactly that state and were only caught by reading
+the templates by hand (BROKKR-T-0308). The render assertions guard against a repeat:
+
+```bash
+angreal helm check-values
+```
+
+`helm template` only — no cluster, no docker, a couple of seconds. It fails if:
+
+- a shipped values file (`values.yaml`, `values-dev.yaml`, `values/*.yaml`) stops rendering, or
+  renders nothing;
+- one of the security- or capability-relevant values stops changing the rendered output:
+  `service.annotations`, the ServiceMonitor's `port` naming a port the Service actually declares,
+  `networkPolicy.allowMetricsScraping`, `telemetry.otlpEndpoint`, each `existingSecret` pairing
+  (plaintext omitted from the ConfigMap **and** a `secretKeyRef` added), and `broker.pakHash`
+  rendering only when non-empty;
+- any leaf key in any shipped values file is not referenced under `templates/`. Keys that are
+  legitimately unreferenced — the Bitnami PostgreSQL subchart's own values, for instance — are
+  listed with a reason in `VALUES_KEY_ALLOWLIST` in `.angreal/task_helm.py`. Add a reason when
+  you add an entry.
+
+CI runs this on every PR touching `charts/**`, as the "Helm Template Validation" job. If PyYAML
+is not importable from your angreal interpreter, run
+`uvx --from angreal --with pyyaml angreal helm check-values`.
+
 ## Uninstallation
 
 ```bash

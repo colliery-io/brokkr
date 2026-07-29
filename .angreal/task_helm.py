@@ -1,9 +1,13 @@
 import angreal
 import json
+import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import uuid
+from pathlib import Path
 from utils import docker_up, docker_down, docker_clean, cwd
 import os
 
@@ -175,92 +179,48 @@ def verify_kubectl_connectivity():
     print("kubectl connectivity verified")
 
 
-def helm_template_test(chart_name, values_file=None, extra_values=None, tag="local", registry="registry:5000"):
-    """Validate chart renders correctly without deploying.
-
-    Args:
-        chart_name: Name of the chart (brokkr-broker, brokkr-agent)
-        values_file: Optional values file path (relative to charts dir)
-        extra_values: Optional dict of --set values
-        tag: Image tag for template rendering
-        registry: Registry URL for template rendering
-
-    Returns:
-        tuple: (test_name, success)
-    """
-    test_name = f"template-{chart_name}"
-    if values_file:
-        # Extract values file name for test naming
-        values_name = values_file.split('/')[-1].replace('.yaml', '')
-        test_name = f"template-{chart_name}-{values_name}"
-
-    # Build helm template command
-    cmd = f"helm template test-{chart_name} /charts/{chart_name}"
-
-    if values_file:
-        cmd += f" -f /{values_file}"
-
-    # Add common test values
-    values = extra_values or {}
-    values.update({
-        "image.tag": tag,
-        "image.repository": f"{registry}/{chart_name}",
-    })
-
-    for k, v in values.items():
-        cmd += f" --set {k}={v}"
-
-    # Redirect output to /dev/null, we only care about exit code
-    cmd += " > /dev/null 2>&1"
-
-    success = run_in_k8s_container(cmd, f"Template validation: {test_name}")
-
-    if success:
-        print(f"  ✓ {test_name}")
-    else:
-        print(f"  ✗ {test_name}")
-
-    return (test_name, success)
-
-
 def run_parallel_template_tests(tag, registry):
-    """Run all helm template validation tests.
+    """Phase 1 of the cluster suite: chart rendering must be sound before we
+    spend minutes deploying.
+
+    This used to run `helm template ... > /dev/null 2>&1` inside an alpine/k8s
+    container, once per chart per values file, and assert only that helm exited
+    zero. Rendering *nothing* is not a non-zero exit, which is how four inert
+    values (BROKKR-T-0308) passed this phase for multiple releases. It now
+    delegates to `angreal helm check-values`, which renders the same charts
+    against the same values files -- plus values.yaml and values-dev.yaml, which
+    this phase never covered -- and asserts what the output actually contains.
+
+    Delegating also drops the docker round-trip: rendering never needed the
+    cluster, and the new suite runs on the host in about two seconds instead of
+    ~30s of container startup. It does require `helm` on PATH; the CI job that
+    runs the deployment suite already installs it, and the task prints an
+    install hint if it is missing.
+
+    `tag` and `registry` are accepted for call-site compatibility and are
+    deliberately unused: image coordinates do not change which capabilities a
+    chart renders, and the deployment phases that follow set them for real.
 
     Returns:
         list: List of (test_name, success) tuples
     """
+    del tag, registry  # see docstring
 
     print("\n" + "=" * 60)
-    print("Phase 1: Helm Template Validation")
+    print("Phase 1: Helm Template Validation (render assertions)")
     print("=" * 60)
 
-    # Define all template tests to run
-    template_tests = [
-        # Broker chart tests
-        ("brokkr-broker", None, None),
-        ("brokkr-broker", "charts/brokkr-broker/values/production.yaml", None),
-        ("brokkr-broker", "charts/brokkr-broker/values/development.yaml", None),
-        ("brokkr-broker", "charts/brokkr-broker/values/staging.yaml", None),
-        # Agent chart tests
-        ("brokkr-agent", None, {"broker.url": "http://test:3000", "broker.pak": "test-pak"}),
-        ("brokkr-agent", "charts/brokkr-agent/values/production.yaml", {"broker.url": "http://test:3000", "broker.pak": "test-pak"}),
-        ("brokkr-agent", "charts/brokkr-agent/values/development.yaml", {"broker.url": "http://test:3000", "broker.pak": "test-pak"}),
-        ("brokkr-agent", "charts/brokkr-agent/values/staging.yaml", {"broker.url": "http://test:3000", "broker.pak": "test-pak"}),
-    ]
+    success = run_render_assertions() == 0
 
-    results = []
+    if success:
+        print("\nTemplate validation: render assertions passed")
+    else:
+        print(
+            "\nTemplate validation FAILED. Reproduce without a cluster:\n"
+            "  angreal helm check-values"
+        )
 
-    # Run template tests (could be parallelized but docker containers have overhead)
-    # For now run sequentially which is still fast (~30s total)
-    for chart_name, values_file, extra_values in template_tests:
-        result = helm_template_test(chart_name, values_file, extra_values, tag, registry)
-        results.append(result)
-
-    passed = sum(1 for _, success in results if success)
-    total = len(results)
-    print(f"\nTemplate validation: {passed}/{total} passed")
-
-    return results
+    return [("template-render-assertions", success)]
 
 
 def helm_install(chart_name, release_name, values, namespace="default", values_file=None):
@@ -2065,3 +2025,954 @@ def test_helm_chart(tier, no_cleanup=False, tag="local"):
             docker_down(project=project)
             docker_clean(project=project)
         sys.exit(1)
+
+
+# =============================================================================
+# Render assertions: `angreal helm check-values`  (BROKKR-T-0313)
+# =============================================================================
+#
+# `helm lint` checks syntax and schema, not effect. BROKKR-T-0308 found four
+# chart values that were accepted, documented, and rendered nothing -- a
+# ServiceMonitor selecting a port no Service declared, a collector endpoint
+# pointing at a sidecar that was never rendered, a `metrics.enabled` that only
+# gated a NetworkPolicy rule, and a `service.annotations` that appeared nowhere.
+# All four passed lint and survived multiple releases.
+#
+# This task closes that gap with `helm template` alone -- no cluster, no docker,
+# runs in about a second. It has two parts:
+#
+#   1. Targeted assertions. For each security- or capability-relevant value,
+#      render with it set and with it unset and assert the output differs in
+#      the expected way (including cross-resource linkage, e.g. that a monitor's
+#      `port` names a port some other manifest actually declares).
+#
+#   2. A generic guard: every leaf key in a chart's values files must be
+#      referenced somewhere under that chart's `templates/`, modulo an explicit
+#      allowlist. This is the part that catches an inert value mechanically,
+#      without anyone having to suspect it first.
+#
+# Deliberately NOT part of `angreal helm test`: that needs a live k3s cluster.
+# This is meant to run on every PR that touches a chart.
+
+CHARTS_DIR = Path(cwd) / "charts"
+BROKER_CHART = "brokkr-broker"
+AGENT_CHART = "brokkr-agent"
+
+# Pinned so a runner's default Kubernetes version can't change what renders.
+# Matches the version the Helm Template Validation CI job has always used, and
+# satisfies the agent chart's `kubeVersion: ">=1.29.0-0"`.
+RENDER_KUBE_VERSION = "1.30.0"
+
+# Values files scanned by the generic guard. `values.yaml` is the chart's
+# documented surface; the `values/` overlays and `values-dev.yaml` ship in the
+# chart too, so a key that does nothing is just as misleading there.
+def _values_files(chart_dir):
+    """Return every shipped values file for a chart, values.yaml first."""
+    files = [chart_dir / "values.yaml"]
+    files += sorted(chart_dir.glob("values-*.yaml"))
+    files += sorted((chart_dir / "values").glob("*.yaml"))
+    return [f for f in files if f.is_file()]
+
+
+# Leaf keys that are legitimately absent from a chart's templates/. Entries are
+# exact dotted paths or `prefix.*` globs, mapped to the reason they are exempt.
+# Anything not listed here MUST appear in a template -- that is the whole point.
+#
+# Keep this list short and keep the reasons true. A growing allowlist is
+# evidence the charts are accumulating inert values, not evidence the check is
+# too strict.
+VALUES_KEY_ALLOWLIST = {
+    BROKER_CHART: {
+        # Consumed by the bundled Bitnami postgresql subchart (see Chart.yaml
+        # dependencies), which reads them from its own values namespace. Our
+        # templates never touch them. NOTE: `postgresql.auth.*` is deliberately
+        # NOT allowlisted -- _helpers.tpl reads username/password/database to
+        # build BROKKR__DATABASE__URL, so it must stay referenced.
+        "postgresql.primary.*": "consumed by the Bitnami postgresql subchart",
+        # DEFECT, pre-existing: values/{development,production,staging}.yaml set
+        # a top-level `securityContext`, but the chart implements
+        # `podSecurityContext` and `containerSecurityContext`. The block renders
+        # nothing. Left allowlisted so this check can land green; remove the
+        # entry when the overlays are fixed.
+        "securityContext.*": (
+            "DEFECT: set by values/ overlays but the chart uses "
+            "podSecurityContext/containerSecurityContext; renders nothing"
+        ),
+    },
+    AGENT_CHART: {
+        # DEFECT, pre-existing: same inert `securityContext` block as the broker
+        # overlays.
+        "securityContext.*": (
+            "DEFECT: set by values/ overlays but the chart uses "
+            "podSecurityContext/containerSecurityContext; renders nothing"
+        ),
+        # DEFECT, pre-existing: values/{development,production,staging}.yaml set
+        # `extraEnv`, but only the *broker* deployment renders extraEnv. The
+        # agent deployment has no such block, so these entries are dropped.
+        "extraEnv*": (
+            "DEFECT: set by agent values/ overlays but only the broker "
+            "deployment renders extraEnv"
+        ),
+    },
+}
+
+# A Helm action, e.g. `{{- toYaml .Values.resources | nindent 10 }}`. Scanning
+# per-action (rather than the raw file text) means a plain YAML `# .Values.foo`
+# comment cannot fake a reference.
+_ACTION_RE = re.compile(r"\{\{-?(.*?)-?\}\}", re.DOTALL)
+_VALUES_REF_RE = re.compile(r"\.Values\.([A-Za-z0-9_.]+)")
+# Actions that emit or iterate a whole subtree, so every leaf under the
+# referenced path is genuinely rendered.
+_WHOLESALE_RE = re.compile(r"\b(toYaml|with|range)\b")
+
+
+def _require(binary, hint):
+    """Return True if `binary` is on PATH, else print an actionable message."""
+    if shutil.which(binary) is None:
+        print(f"{binary} not found on PATH. {hint}", file=sys.stderr)
+        return False
+    return True
+
+
+def _load_yaml_module():
+    """Import PyYAML, or explain how to get it. Returns the module or None."""
+    try:
+        import yaml  # noqa: PLC0415  (optional dependency, checked at call time)
+
+        return yaml
+    except ImportError:
+        print(
+            "PyYAML is required to parse rendered manifests but is not "
+            "importable from this interpreter.\n"
+            "  pip install pyyaml\n"
+            "or, if angreal was installed with uv as a tool:\n"
+            "  uvx --from angreal --with pyyaml angreal helm check-values",
+            file=sys.stderr,
+        )
+        return None
+
+
+def helm_render(yaml_mod, chart, values=None, values_file=None, release="render-check"):
+    """Render a chart with `helm template` and return the parsed manifests.
+
+    Args:
+        yaml_mod: the PyYAML module.
+        chart: chart directory name under charts/.
+        values: optional dict written to a temp values file and passed with -f.
+                Using a file rather than --set avoids all escaping questions and
+                lets assertions set nested lists/maps directly.
+        values_file: optional path to an existing values file, passed with -f.
+        release: helm release name.
+
+    Returns:
+        list of parsed manifest dicts (empty documents removed).
+
+    Raises:
+        RuntimeError if helm exits non-zero.
+    """
+    chart_dir = CHARTS_DIR / chart
+    cmd = ["helm", "template", release, str(chart_dir),
+           "--kube-version", RENDER_KUBE_VERSION]
+    if values_file:
+        cmd += ["-f", str(values_file)]
+
+    tmp_path = None
+    try:
+        if values:
+            fd, tmp_path = tempfile.mkstemp(prefix="render-check-", suffix=".yaml")
+            with os.fdopen(fd, "w") as fh:
+                yaml_mod.safe_dump(values, fh)
+            cmd += ["-f", tmp_path]
+
+        result = subprocess.run(cmd, capture_output=True, text=True)
+    finally:
+        if tmp_path:
+            os.unlink(tmp_path)
+
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"helm template failed for {chart} with values {values!r}:\n"
+            f"{result.stderr.strip()}"
+        )
+
+    return [d for d in yaml_mod.safe_load_all(result.stdout) if d]
+
+
+def own_manifests(docs, chart):
+    """Only the manifests the chart itself renders.
+
+    The broker chart bundles the Bitnami postgresql subchart, which also emits a
+    Service, a ConfigMap and a Secret -- and emits them first. Selecting by kind
+    alone would assert against postgres's Service instead of the broker's. Both
+    charts stamp `app.kubernetes.io/name` with their own chart name, so that is
+    the discriminator.
+    """
+    return [
+        d
+        for d in docs
+        if (d.get("metadata", {}).get("labels") or {}).get("app.kubernetes.io/name")
+        == chart
+    ]
+
+
+def render_own(yaml_mod, chart, values=None):
+    """Render a chart and keep only its own manifests. See own_manifests()."""
+    return own_manifests(helm_render(yaml_mod, chart, values), chart)
+
+
+def manifests_of_kind(docs, kind):
+    """All rendered manifests of a given kind."""
+    return [d for d in docs if d.get("kind") == kind]
+
+
+def single_manifest(docs, kind):
+    """The one manifest of a given kind, or None if absent."""
+    found = manifests_of_kind(docs, kind)
+    return found[0] if found else None
+
+
+def container_port_names(deployment):
+    """Every container port *name* declared by a Deployment's pod spec."""
+    names = set()
+    containers = (
+        deployment.get("spec", {})
+        .get("template", {})
+        .get("spec", {})
+        .get("containers", [])
+    )
+    for container in containers:
+        for port in container.get("ports", []) or []:
+            if port.get("name"):
+                names.add(port["name"])
+    return names
+
+
+def service_port_names(service):
+    """Every port *name* declared by a Service."""
+    return {
+        p["name"] for p in service.get("spec", {}).get("ports", []) or [] if p.get("name")
+    }
+
+
+def container_env(deployment, container_name=None):
+    """Map of env var name -> env entry for a Deployment's containers."""
+    env = {}
+    containers = (
+        deployment.get("spec", {})
+        .get("template", {})
+        .get("spec", {})
+        .get("containers", [])
+    )
+    for container in containers:
+        if container_name and container.get("name") != container_name:
+            continue
+        for entry in container.get("env", []) or []:
+            env[entry["name"]] = entry
+    return env
+
+
+def secret_key_ref(env_entry):
+    """(secretName, key) for an env entry sourced from a Secret, else (None, None)."""
+    ref = (env_entry or {}).get("valueFrom", {}).get("secretKeyRef", {})
+    return ref.get("name"), ref.get("key")
+
+
+class RenderChecks:
+    """Accumulates pass/fail results for one run, so a single invocation reports
+    every broken value rather than stopping at the first."""
+
+    def __init__(self):
+        self.failures = []
+        self.passes = 0
+
+    def expect(self, chart, value, expectation, ok, actual=None):
+        """Record one assertion.
+
+        Args:
+            chart: chart name, named in the failure so it is actionable.
+            value: the values.yaml path under test.
+            expectation: plain-English statement of what should render.
+            ok: whether it held.
+            actual: what was rendered instead (only shown on failure).
+        """
+        if ok:
+            self.passes += 1
+            print(f"  ok    [{chart}] {value}: {expectation}")
+            return
+        message = f"[{chart}] {value}: expected {expectation}"
+        if actual is not None:
+            message += f"; got {actual!r}"
+        self.failures.append(message)
+        print(f"  FAIL  {message}")
+
+
+def check_broker_values(yaml_mod, checks):
+    """Targeted render assertions for the brokkr-broker chart."""
+    print(f"\n{BROKER_CHART}: targeted value assertions")
+
+    default_docs = render_own(yaml_mod, BROKER_CHART)
+
+    # --- service.annotations -------------------------------------------------
+    # BROKKR-T-0308: this value was accepted and documented but the Service
+    # template never emitted an annotations block.
+    marker = "brokkr.io/render-check"
+    annotated = render_own(
+        yaml_mod, BROKER_CHART, {"service": {"annotations": {marker: "present"}}}
+    )
+    svc = single_manifest(annotated, "Service")
+    got = (svc or {}).get("metadata", {}).get("annotations", {})
+    checks.expect(
+        BROKER_CHART,
+        "service.annotations",
+        f"Service.metadata.annotations to carry {marker}",
+        got.get(marker) == "present",
+        got,
+    )
+    baseline_svc = single_manifest(default_docs, "Service")
+    checks.expect(
+        BROKER_CHART,
+        "service.annotations",
+        "no such annotation when the value is unset",
+        marker not in baseline_svc.get("metadata", {}).get("annotations", {}),
+        baseline_svc.get("metadata", {}).get("annotations"),
+    )
+
+    # --- metrics.serviceMonitor.enabled + port linkage -----------------------
+    # BROKKR-T-0308: the ServiceMonitor selected a port name the Service did not
+    # declare, so Prometheus silently scraped nothing. Assert the linkage, not
+    # merely that a ServiceMonitor appears.
+    checks.expect(
+        BROKER_CHART,
+        "metrics.serviceMonitor.enabled",
+        "no ServiceMonitor when disabled (the default)",
+        single_manifest(default_docs, "ServiceMonitor") is None,
+    )
+    monitored = render_own(
+        yaml_mod, BROKER_CHART, {"metrics": {"serviceMonitor": {"enabled": True}}}
+    )
+    sm = single_manifest(monitored, "ServiceMonitor")
+    checks.expect(
+        BROKER_CHART,
+        "metrics.serviceMonitor.enabled",
+        "a ServiceMonitor to render when true",
+        sm is not None,
+    )
+    if sm is not None:
+        declared = service_port_names(single_manifest(monitored, "Service"))
+        endpoint_ports = {
+            e.get("port") for e in sm.get("spec", {}).get("endpoints", []) or []
+        }
+        checks.expect(
+            BROKER_CHART,
+            "metrics.serviceMonitor.enabled",
+            f"every ServiceMonitor endpoint port to name a declared Service "
+            f"port ({sorted(declared)})",
+            endpoint_ports and endpoint_ports <= declared,
+            sorted(endpoint_ports),
+        )
+
+    # --- networkPolicy.allowMetricsScraping ----------------------------------
+    # Formerly metrics.enabled, which never gated the /metrics endpoint at all.
+    scrape_from = [
+        {"namespaceSelector": {"matchLabels": {"kubernetes.io/metadata.name": "monitoring"}}}
+    ]
+
+    def metrics_rules(docs):
+        np = single_manifest(docs, "NetworkPolicy")
+        return [
+            rule
+            for rule in (np or {}).get("spec", {}).get("ingress", []) or []
+            if rule.get("from") == scrape_from
+        ]
+
+    on = render_own(
+        yaml_mod,
+        BROKER_CHART,
+        {
+            "networkPolicy": {
+                "enabled": True,
+                "allowMetricsScraping": True,
+                "allowMetricsFrom": scrape_from,
+            }
+        },
+    )
+    off = render_own(
+        yaml_mod,
+        BROKER_CHART,
+        {
+            "networkPolicy": {
+                "enabled": True,
+                "allowMetricsScraping": False,
+                "allowMetricsFrom": scrape_from,
+            }
+        },
+    )
+    checks.expect(
+        BROKER_CHART,
+        "networkPolicy.allowMetricsScraping",
+        "a metrics ingress rule for allowMetricsFrom when true",
+        len(metrics_rules(on)) == 1,
+        len(metrics_rules(on)),
+    )
+    checks.expect(
+        BROKER_CHART,
+        "networkPolicy.allowMetricsScraping",
+        "that same rule to disappear when false",
+        len(metrics_rules(off)) == 0,
+        len(metrics_rules(off)),
+    )
+
+    # --- telemetry.otlpEndpoint ----------------------------------------------
+    endpoint = "http://render-check-collector:4317"
+    tele = render_own(
+        yaml_mod,
+        BROKER_CHART,
+        {"telemetry": {"enabled": True, "otlpEndpoint": endpoint}},
+    )
+    tele_cm = single_manifest(tele, "ConfigMap").get("data", {})
+    checks.expect(
+        BROKER_CHART,
+        "telemetry.otlpEndpoint",
+        "to reach BROKKR__TELEMETRY__OTLP_ENDPOINT in the ConfigMap",
+        tele_cm.get("BROKKR__TELEMETRY__OTLP_ENDPOINT") == endpoint,
+        tele_cm.get("BROKKR__TELEMETRY__OTLP_ENDPOINT"),
+    )
+    default_cm = single_manifest(default_docs, "ConfigMap").get("data", {})
+    checks.expect(
+        BROKER_CHART,
+        "telemetry.enabled",
+        "no OTLP endpoint in the ConfigMap when telemetry is off (the default)",
+        "BROKKR__TELEMETRY__OTLP_ENDPOINT" not in default_cm
+        and default_cm.get("BROKKR__TELEMETRY__ENABLED") == "false",
+        default_cm.get("BROKKR__TELEMETRY__OTLP_ENDPOINT"),
+    )
+
+    # --- existingSecret pairings ---------------------------------------------
+    # Each of these has to do two things at once: keep the plaintext out of the
+    # ConfigMap AND inject a secretKeyRef. A refactor could half-break either
+    # side -- dropping the secretKeyRef silently unconfigures the credential;
+    # dropping the ConfigMap exclusion silently leaks it. Assert the pair.
+    checks.expect(
+        BROKER_CHART,
+        "postgresql.existingSecret (unset)",
+        "BROKKR__DATABASE__URL in the ConfigMap by default",
+        "BROKKR__DATABASE__URL" in default_cm,
+    )
+    db = render_own(
+        yaml_mod,
+        BROKER_CHART,
+        {"postgresql": {"existingSecret": "db-cred", "existingSecretKey": "url-key"}},
+    )
+    db_cm = single_manifest(db, "ConfigMap").get("data", {})
+    db_env = container_env(single_manifest(db, "Deployment"), "broker")
+    checks.expect(
+        BROKER_CHART,
+        "postgresql.existingSecret",
+        "BROKKR__DATABASE__URL omitted from the ConfigMap",
+        "BROKKR__DATABASE__URL" not in db_cm,
+        db_cm.get("BROKKR__DATABASE__URL"),
+    )
+    checks.expect(
+        BROKER_CHART,
+        "postgresql.existingSecret",
+        "BROKKR__DATABASE__URL injected via secretKeyRef(db-cred, url-key)",
+        secret_key_ref(db_env.get("BROKKR__DATABASE__URL")) == ("db-cred", "url-key"),
+        secret_key_ref(db_env.get("BROKKR__DATABASE__URL")),
+    )
+
+    plain_wh = render_own(
+        yaml_mod, BROKER_CHART, {"broker": {"webhookEncryptionKey": "deadbeef"}}
+    )
+    checks.expect(
+        BROKER_CHART,
+        "broker.webhookEncryptionKey",
+        "the plaintext key in the ConfigMap when no existingSecret is set",
+        single_manifest(plain_wh, "ConfigMap")
+        .get("data", {})
+        .get("BROKKR__BROKER__WEBHOOK_ENCRYPTION_KEY")
+        == "deadbeef",
+    )
+    wh = render_own(
+        yaml_mod,
+        BROKER_CHART,
+        {
+            "broker": {
+                "webhookEncryptionKey": "deadbeef",
+                "webhookEncryptionKeyExistingSecret": "wh-cred",
+                "webhookEncryptionKeyExistingSecretKey": "wh-key",
+            }
+        },
+    )
+    wh_cm = single_manifest(wh, "ConfigMap").get("data", {})
+    wh_env = container_env(single_manifest(wh, "Deployment"), "broker")
+    checks.expect(
+        BROKER_CHART,
+        "broker.webhookEncryptionKeyExistingSecret",
+        "the plaintext webhook key omitted from the ConfigMap",
+        "BROKKR__BROKER__WEBHOOK_ENCRYPTION_KEY" not in wh_cm,
+        wh_cm.get("BROKKR__BROKER__WEBHOOK_ENCRYPTION_KEY"),
+    )
+    checks.expect(
+        BROKER_CHART,
+        "broker.webhookEncryptionKeyExistingSecret",
+        "BROKKR__BROKER__WEBHOOK_ENCRYPTION_KEY via secretKeyRef(wh-cred, wh-key)",
+        secret_key_ref(wh_env.get("BROKKR__BROKER__WEBHOOK_ENCRYPTION_KEY"))
+        == ("wh-cred", "wh-key"),
+        secret_key_ref(wh_env.get("BROKKR__BROKER__WEBHOOK_ENCRYPTION_KEY")),
+    )
+
+    pak_secret = render_own(
+        yaml_mod,
+        BROKER_CHART,
+        {
+            "broker": {
+                "pakHash": "0123456789abcdef",
+                "pakHashExistingSecret": "pak-cred",
+                "pakHashExistingSecretKey": "pak-key",
+            }
+        },
+    )
+    pak_secret_cm = single_manifest(pak_secret, "ConfigMap").get("data", {})
+    pak_secret_env = container_env(single_manifest(pak_secret, "Deployment"), "broker")
+    checks.expect(
+        BROKER_CHART,
+        "broker.pakHashExistingSecret",
+        "the plaintext PAK hash omitted from the ConfigMap",
+        "BROKKR__BROKER__PAK_HASH" not in pak_secret_cm,
+        pak_secret_cm.get("BROKKR__BROKER__PAK_HASH"),
+    )
+    checks.expect(
+        BROKER_CHART,
+        "broker.pakHashExistingSecret",
+        "BROKKR__BROKER__PAK_HASH via secretKeyRef(pak-cred, pak-key)",
+        secret_key_ref(pak_secret_env.get("BROKKR__BROKER__PAK_HASH"))
+        == ("pak-cred", "pak-key"),
+        secret_key_ref(pak_secret_env.get("BROKKR__BROKER__PAK_HASH")),
+    )
+
+    # --- broker.pakHash: the empty-value trap --------------------------------
+    # An empty pakHash must render nothing at all. Rendering the key with an
+    # empty value is what previously left the publicly-known dev credential
+    # live, because the broker fell back to its built-in default.
+    empty_pak = render_own(yaml_mod, BROKER_CHART, {"broker": {"pakHash": ""}})
+    empty_pak_cm = single_manifest(empty_pak, "ConfigMap").get("data", {})
+    checks.expect(
+        BROKER_CHART,
+        "broker.pakHash",
+        "BROKKR__BROKER__PAK_HASH absent from the ConfigMap when empty",
+        "BROKKR__BROKER__PAK_HASH" not in empty_pak_cm,
+        empty_pak_cm.get("BROKKR__BROKER__PAK_HASH"),
+    )
+    set_pak = render_own(
+        yaml_mod, BROKER_CHART, {"broker": {"pakHash": "0123456789abcdef"}}
+    )
+    set_pak_cm = single_manifest(set_pak, "ConfigMap").get("data", {})
+    checks.expect(
+        BROKER_CHART,
+        "broker.pakHash",
+        "BROKKR__BROKER__PAK_HASH rendered when non-empty",
+        set_pak_cm.get("BROKKR__BROKER__PAK_HASH") == "0123456789abcdef",
+        set_pak_cm.get("BROKKR__BROKER__PAK_HASH"),
+    )
+
+
+def check_agent_values(yaml_mod, checks):
+    """Targeted render assertions for the brokkr-agent chart."""
+    print(f"\n{AGENT_CHART}: targeted value assertions")
+
+    default_docs = render_own(yaml_mod, AGENT_CHART)
+
+    # --- metrics.podMonitor.enabled + port linkage ---------------------------
+    # The agent renders no Service, so Prometheus scrapes the pod directly and
+    # the PodMonitor's `port` is a *container* port name. The BROKKR-T-0308 bug
+    # was a monitor naming a port nothing declared -- so assert the linkage.
+    checks.expect(
+        AGENT_CHART,
+        "metrics.podMonitor.enabled",
+        "no PodMonitor when disabled (the default)",
+        single_manifest(default_docs, "PodMonitor") is None,
+    )
+    monitored = render_own(
+        yaml_mod, AGENT_CHART, {"metrics": {"podMonitor": {"enabled": True}}}
+    )
+    pm = single_manifest(monitored, "PodMonitor")
+    checks.expect(
+        AGENT_CHART,
+        "metrics.podMonitor.enabled",
+        "a PodMonitor to render when true",
+        pm is not None,
+    )
+    if pm is not None:
+        declared = container_port_names(single_manifest(monitored, "Deployment"))
+        endpoint_ports = {
+            e.get("port")
+            for e in pm.get("spec", {}).get("podMetricsEndpoints", []) or []
+        }
+        checks.expect(
+            AGENT_CHART,
+            "metrics.podMonitor.enabled",
+            f"every PodMonitor endpoint port to name a container port declared "
+            f"in the Deployment ({sorted(declared)})",
+            endpoint_ports and endpoint_ports <= declared,
+            sorted(endpoint_ports),
+        )
+
+    # --- networkPolicy.allowMetricsScraping ----------------------------------
+    scrape_from = [
+        {"namespaceSelector": {"matchLabels": {"kubernetes.io/metadata.name": "monitoring"}}}
+    ]
+
+    def metrics_rules(docs):
+        np = single_manifest(docs, "NetworkPolicy")
+        return [
+            rule
+            for rule in (np or {}).get("spec", {}).get("ingress", []) or []
+            if rule.get("from") == scrape_from
+        ]
+
+    on = render_own(
+        yaml_mod,
+        AGENT_CHART,
+        {
+            "networkPolicy": {
+                "enabled": True,
+                "allowMetricsScraping": True,
+                "allowMetricsFrom": scrape_from,
+            }
+        },
+    )
+    off = render_own(
+        yaml_mod,
+        AGENT_CHART,
+        {
+            "networkPolicy": {
+                "enabled": True,
+                "allowMetricsScraping": False,
+                "allowMetricsFrom": scrape_from,
+            }
+        },
+    )
+    checks.expect(
+        AGENT_CHART,
+        "networkPolicy.allowMetricsScraping",
+        "a metrics ingress rule for allowMetricsFrom when true",
+        len(metrics_rules(on)) == 1,
+        len(metrics_rules(on)),
+    )
+    checks.expect(
+        AGENT_CHART,
+        "networkPolicy.allowMetricsScraping",
+        "that same rule to disappear when false",
+        len(metrics_rules(off)) == 0,
+        len(metrics_rules(off)),
+    )
+
+    # --- telemetry.otlpEndpoint ----------------------------------------------
+    endpoint = "http://render-check-collector:4317"
+    tele = render_own(
+        yaml_mod,
+        AGENT_CHART,
+        {"telemetry": {"enabled": True, "otlpEndpoint": endpoint}},
+    )
+    tele_cm = single_manifest(tele, "ConfigMap").get("data", {})
+    checks.expect(
+        AGENT_CHART,
+        "telemetry.otlpEndpoint",
+        "to reach BROKKR__TELEMETRY__OTLP_ENDPOINT in the ConfigMap",
+        tele_cm.get("BROKKR__TELEMETRY__OTLP_ENDPOINT") == endpoint,
+        tele_cm.get("BROKKR__TELEMETRY__OTLP_ENDPOINT"),
+    )
+    default_cm = single_manifest(default_docs, "ConfigMap").get("data", {})
+    checks.expect(
+        AGENT_CHART,
+        "telemetry.enabled",
+        "no OTLP endpoint in the ConfigMap when telemetry is off (the default)",
+        "BROKKR__TELEMETRY__OTLP_ENDPOINT" not in default_cm
+        and default_cm.get("BROKKR__TELEMETRY__ENABLED") == "false",
+        default_cm.get("BROKKR__TELEMETRY__OTLP_ENDPOINT"),
+    )
+
+    # --- broker.existingSecret pairing ---------------------------------------
+    plaintext = "brokkr_render_check_plaintext_pak"
+    plain = render_own(yaml_mod, AGENT_CHART, {"broker": {"pak": plaintext}})
+    plain_cm = single_manifest(plain, "ConfigMap").get("data", {})
+    plain_env = container_env(single_manifest(plain, "Deployment"), "agent")
+    checks.expect(
+        AGENT_CHART,
+        "broker.pak",
+        "the plaintext PAK in the ConfigMap when no existingSecret is set",
+        plain_cm.get("BROKKR__AGENT__PAK") == plaintext,
+        plain_cm.get("BROKKR__AGENT__PAK"),
+    )
+    checks.expect(
+        AGENT_CHART,
+        "broker.pak",
+        "no BROKKR__AGENT__PAK env override on the container in that case",
+        "BROKKR__AGENT__PAK" not in plain_env,
+        sorted(plain_env),
+    )
+    sourced = render_own(
+        yaml_mod,
+        AGENT_CHART,
+        {
+            "broker": {
+                "pak": plaintext,
+                "existingSecret": "agent-pak",
+                "existingSecretKey": "PAK_KEY",
+            }
+        },
+    )
+    sourced_cm = single_manifest(sourced, "ConfigMap").get("data", {})
+    sourced_env = container_env(single_manifest(sourced, "Deployment"), "agent")
+    checks.expect(
+        AGENT_CHART,
+        "broker.existingSecret",
+        "the plaintext PAK kept out of the ConfigMap",
+        sourced_cm.get("BROKKR__AGENT__PAK") == "",
+        sourced_cm.get("BROKKR__AGENT__PAK"),
+    )
+    checks.expect(
+        AGENT_CHART,
+        "broker.existingSecret",
+        "BROKKR__AGENT__PAK injected via secretKeyRef(agent-pak, PAK_KEY)",
+        secret_key_ref(sourced_env.get("BROKKR__AGENT__PAK")) == ("agent-pak", "PAK_KEY"),
+        secret_key_ref(sourced_env.get("BROKKR__AGENT__PAK")),
+    )
+
+
+def check_chart_renders(yaml_mod, chart, checks):
+    """Every shipped values file must render without error, and produce output.
+
+    This subsumes the old `helm template ... > /dev/null` CI steps: same command,
+    same pinned --kube-version, but covering *every* shipped values file rather
+    than production + development, and asserting the render is non-empty rather
+    than merely non-erroring. (Rendering nothing was never an error, which is
+    how four inert values passed this job for multiple releases.)
+    """
+    chart_dir = CHARTS_DIR / chart
+    print(f"\n{chart}: every shipped values file renders")
+    # `None` is the chart's own defaults, i.e. the bare `helm template` case.
+    for values_file in [None] + _values_files(chart_dir):
+        label = "default values" if values_file is None else str(
+            values_file.relative_to(chart_dir)
+        )
+        # values.yaml is the chart default; passing it with -f is a no-op but
+        # harmless, and keeps the loop honest if the file is ever renamed.
+        try:
+            docs = helm_render(yaml_mod, chart, values_file=values_file)
+        except RuntimeError as e:
+            checks.expect(chart, label, "the chart to render", False, str(e))
+            continue
+        checks.expect(
+            chart,
+            label,
+            f"the chart to render at least one manifest "
+            f"(kube-version {RENDER_KUBE_VERSION})",
+            bool(docs),
+            len(docs),
+        )
+
+
+def template_value_references(chart_dir):
+    """Scan a chart's templates/ for `.Values.<path>` references.
+
+    Returns:
+        (exact, wholesale) sets of dotted paths. `exact` is every referenced
+        path; `wholesale` is the subset referenced inside a toYaml/with/range
+        action, meaning the entire subtree below it is rendered.
+    """
+    exact, wholesale = set(), set()
+    for path in sorted((chart_dir / "templates").rglob("*")):
+        if not path.is_file():
+            continue
+        for action in _ACTION_RE.findall(path.read_text()):
+            # `{{/* ... */}}` is a Helm comment -- a .Values mention inside one
+            # documents a reference, it is not a reference.
+            if action.strip().startswith("/*"):
+                continue
+            emits_subtree = bool(_WHOLESALE_RE.search(action))
+            for ref in _VALUES_REF_RE.findall(action):
+                ref = ref.rstrip(".")
+                exact.add(ref)
+                if emits_subtree:
+                    wholesale.add(ref)
+    return exact, wholesale
+
+
+def values_leaf_keys(node, prefix=()):
+    """Yield the dotted path of every leaf in a parsed values file.
+
+    Empty maps (`annotations: {}`) and lists count as leaves: they are settable
+    surface, and `service.annotations: {}` rendering nowhere was one of the four
+    original defects.
+    """
+    if isinstance(node, dict) and node:
+        for key, child in node.items():
+            yield from values_leaf_keys(child, prefix + (str(key),))
+    else:
+        yield ".".join(prefix)
+
+
+def allowlisted(key, allowlist):
+    """Return the allowlist reason for a key, or None."""
+    for pattern, reason in allowlist.items():
+        if pattern.endswith("*"):
+            if key.startswith(pattern[:-1]):
+                return reason
+        elif key == pattern:
+            return reason
+    return None
+
+
+def check_values_are_referenced(yaml_mod, chart, checks):
+    """Generic guard: every leaf key in the chart's values files must be
+    referenced somewhere under templates/.
+
+    This is the mechanical version of the BROKKR-T-0308 investigation: it does
+    not need anyone to suspect a specific value first.
+    """
+    chart_dir = CHARTS_DIR / chart
+    exact, wholesale = template_value_references(chart_dir)
+    allowlist = VALUES_KEY_ALLOWLIST.get(chart, {})
+
+    print(f"\n{chart}: every values key is referenced under templates/")
+    for values_file in _values_files(chart_dir):
+        data = yaml_mod.safe_load(values_file.read_text()) or {}
+        rel = values_file.relative_to(chart_dir)
+        orphans = []
+        for key in values_leaf_keys(data):
+            if not key:
+                continue
+            parts = key.split(".")
+            referenced = key in exact or any(
+                ".".join(parts[:i]) in wholesale for i in range(1, len(parts))
+            )
+            if referenced or allowlisted(key, allowlist):
+                continue
+            orphans.append(key)
+        checks.expect(
+            chart,
+            str(rel),
+            "every leaf key to be referenced under templates/ "
+            "(or listed in VALUES_KEY_ALLOWLIST in .angreal/task_helm.py)",
+            not orphans,
+            orphans,
+        )
+
+
+def print_allowlist_notice():
+    """Print the allowlist so its contents are visible on every run rather than
+    buried in the source. Entries whose reason starts with DEFECT are live bugs
+    the check is knowingly tolerating."""
+    defects = [
+        (chart, pattern, reason)
+        for chart, entries in VALUES_KEY_ALLOWLIST.items()
+        for pattern, reason in entries.items()
+        if reason.startswith("DEFECT")
+    ]
+    if not defects:
+        return
+    print("\nKnown-inert values tolerated by the allowlist (fix and remove):")
+    for chart, pattern, reason in defects:
+        print(f"  [{chart}] {pattern}: {reason}")
+
+
+def run_render_assertions():
+    """Run every render assertion. Returns 0 on success, 1 on failure.
+
+    Kept separate from the `check-values` command so Phase 1 of the cluster
+    suite can call it directly rather than shelling out to angreal.
+    """
+    if not _require("helm", "Install Helm 3: https://helm.sh/docs/intro/install/"):
+        return 1
+
+    yaml_mod = _load_yaml_module()
+    if yaml_mod is None:
+        return 1
+
+    checks = RenderChecks()
+    print("=" * 72)
+    print("Helm chart render assertions (helm template only -- no cluster)")
+    print("=" * 72)
+
+    try:
+        for chart in (BROKER_CHART, AGENT_CHART):
+            check_chart_renders(yaml_mod, chart, checks)
+        check_broker_values(yaml_mod, checks)
+        check_agent_values(yaml_mod, checks)
+        for chart in (BROKER_CHART, AGENT_CHART):
+            check_values_are_referenced(yaml_mod, chart, checks)
+    except RuntimeError as e:
+        print(f"\nFAIL: {e}", file=sys.stderr)
+        return 1
+    except Exception:
+        # angreal reports the exception type but swallows the traceback, which
+        # makes a bug in this check very hard to localise. Print it.
+        import traceback
+
+        traceback.print_exc()
+        return 1
+
+    print_allowlist_notice()
+
+    print("\n" + "=" * 72)
+    if checks.failures:
+        print(
+            f"FAIL: {len(checks.failures)} of {len(checks.failures) + checks.passes} "
+            f"chart render assertions failed",
+            file=sys.stderr,
+        )
+        for failure in checks.failures:
+            print(f"  {failure}", file=sys.stderr)
+        print(
+            "\nA value that no longer changes the rendered output is a value "
+            "operators can set with no effect.\nInspect what actually renders "
+            "with:\n"
+            "  helm template check charts/<chart> --set <value>=<x> | less\n"
+            "Reproduce locally with: angreal helm check-values",
+            file=sys.stderr,
+        )
+        return 1
+
+    print(f"OK: {checks.passes} chart render assertions passed")
+    return 0
+
+
+@helm()
+@angreal.command(
+    name="check-values",
+    about="assert chart values actually change rendered output (no cluster needed)",
+)
+def check_values():
+    """Render-level assertions over both Helm charts.
+
+    `helm lint` validates syntax and schema; it cannot tell you that a value is
+    accepted, documented, and renders nothing. This task uses `helm template`
+    only -- no cluster, no docker, about two seconds -- and returns non-zero
+    when a value stops taking effect.
+
+    Three layers:
+
+      0. Every shipped values file renders without error and produces output.
+         (This replaces the CI job's old `helm template ... > /dev/null` steps,
+         and Phase 1 of `angreal helm test`, which did the same thing in a
+         container.)
+
+      1. Targeted assertions for the security- and capability-relevant values:
+         monitor-to-declared-port linkage, NetworkPolicy metrics rules,
+         Service annotations, telemetry endpoints, every existingSecret pairing
+         (plaintext omitted AND secretKeyRef added), and broker.pakHash's
+         empty-value trap.
+
+      2. A generic guard that every leaf key in every shipped values file is
+         referenced under that chart's templates/, with an explicit allowlist.
+
+    Run it directly:
+
+        angreal helm check-values
+
+    If PyYAML is not importable from your angreal interpreter:
+
+        uvx --from angreal --with pyyaml angreal helm check-values
+    """
+    return run_render_assertions()
