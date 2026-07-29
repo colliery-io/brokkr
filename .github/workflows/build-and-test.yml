@@ -195,7 +195,11 @@ jobs:
   helm-template-tests:
     name: Helm Template Validation
     runs-on: ubuntu-latest
-    needs: merge-manifests
+    # Deliberately depends on nothing: this renders charts with `helm template`
+    # and never pulls an image, so waiting on the multi-arch build made a
+    # ~2s check land ~20min late. The publish jobs below carry their own
+    # explicit `merge-manifests` edge -- do not restore one here to give it
+    # to them transitively.
     steps:
       - uses: actions/checkout@v6
 
@@ -243,6 +247,9 @@ jobs:
   # Helm deployment tests - validates charts deploy and work correctly
   helm-deployment-tests:
     name: Helm Deployment Tests
+    # No `merge-manifests` edge either: `angreal helm test smoke` builds broker
+    # and agent images from source and pushes them to a local registry inside
+    # its own k3s cluster, so it never consumes the GHCR multi-arch images.
     needs: helm-template-tests
     runs-on: ubuntu-latest
     steps:
@@ -278,7 +285,11 @@ jobs:
 
   publish-dev-charts:
     name: Publish Development Helm Charts
-    needs: [helm-template-tests, helm-deployment-tests]
+    # `merge-manifests` is required for ordering, not for artifacts: this stamps
+    # the chart's appVersion with the branch name, which is the tag
+    # merge-manifests pushes. Publishing first would ship a chart naming an
+    # image that does not exist yet.
+    needs: [helm-template-tests, helm-deployment-tests, merge-manifests]
     runs-on: ubuntu-latest
     if: github.event_name != 'pull_request'
     permissions:
@@ -328,7 +339,9 @@ jobs:
 
   publish-pr-charts:
     name: Publish PR Helm Charts
-    needs: helm-template-tests
+    # Same ordering constraint as publish-dev-charts: appVersion is stamped
+    # `pr-<number>`, the tag merge-manifests pushes for pull requests.
+    needs: [helm-template-tests, merge-manifests]
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     permissions:
