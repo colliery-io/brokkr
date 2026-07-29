@@ -215,9 +215,17 @@ def run_parallel_template_tests(tag, registry):
     if success:
         print("\nTemplate validation: render assertions passed")
     else:
+        # The specific reason goes to stderr, which does not reliably interleave
+        # into a grouped CI log -- so name the likeliest cause here on stdout
+        # rather than leaving a bare "FAILED" with no diagnosis.
         print(
             "\nTemplate validation FAILED. Reproduce without a cluster:\n"
-            "  angreal helm check-values"
+            "  angreal helm check-values\n"
+            "\n"
+            "If no assertion failure is shown above, check the prerequisites --\n"
+            "this phase needs PyYAML and `helm` on PATH, and reports a missing\n"
+            "one on stderr:\n"
+            "  pip install pyyaml"
         )
 
     return [("template-render-assertions", success)]

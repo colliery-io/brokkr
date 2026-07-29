@@ -260,8 +260,12 @@ jobs:
         with:
           python-version: '3.11'
 
+      # PyYAML is required: Phase 1 of `angreal helm test` delegates to the
+      # render assertions, which parse rendered manifests rather than grepping
+      # them (BROKKR-T-0313). Without it the phase fails before any cluster work
+      # starts. Kept in step with the helm-template-tests job above.
       - name: Install angreal
-        run: pip install angreal
+        run: pip install angreal pyyaml
 
       - name: Set up Helm
         uses: azure/setup-helm@v5.0.0
