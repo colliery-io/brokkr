@@ -58,7 +58,19 @@ Checked against the code before filing. The work is smaller than the title sugge
 
 If a system-generator PAK were ever issuable, this feature would turn it into an admin-equivalent fleet read through a non-admin credential. **Today it is not**: `provision_system_generator` inserts only `name`/`description`/`is_system` and never sets a `pak_hash`, so nothing can authenticate as `__system__`.
 
-That is a property worth *enforcing* rather than relying on, since it holds by omission. Decide one of:
+**There are two special generators, and only one of them is `is_system`** — worth stating because a guard phrased as "reject special generators" will silently cover only half:
+
+| | `__system__` | `admin-generator` |
+|---|---|---|
+| `is_system` | `true` | **`false`** |
+| Created by | `provision_system_generator()`, `dal/generators.rs:255` | admin PAK provisioning, `utils/mod.rs:157-166` |
+| `pak_hash` | **never set** | **the admin PAK's hash** |
+| Agents auto-registered? | **yes, all of them** | no |
+| Purpose | fleet-wide scope reaching every agent | gives admin-created stacks an owner |
+
+`admin-generator` needs no guard here, and the reason is non-obvious: in `verify_pak` (`api/v1/middleware.rs:234-259`) the **admin-role check runs before the generator lookup**, so the admin PAK resolves to `admin: true, generator: None` and never reaches the generator branch. Its `pak_hash` is a shadow owner record, not a usable generator identity — anyone presenting it is already admin and takes the admin path through this handler regardless.
+
+So `__system__` is the only case needing a decision. That property holds by omission, so it is worth *enforcing* rather than relying on. Decide one of:
 - **(a)** Explicitly reject `is_system` generators in this handler, so the fleet-wide read cannot be reached this way even if a PAK is later mintable for one. Cheap, and documents the invariant in the place that depends on it.
 - **(b)** Treat it as already covered by "the system generator has no PAK" and add a test asserting that instead.
 
