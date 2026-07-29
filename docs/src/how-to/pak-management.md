@@ -56,8 +56,10 @@ Presetting the hash this way is also the safest bootstrap: you hold the admin PA
 
 What `rotate admin` does depends on `broker.pak_hash`:
 
-- **If `broker.pak_hash` is set** (it is by default, to a publicly-known development hash), the command validates and re-applies that hash — **nothing rotates**. This is the path to use when you manage the hash yourself: mint a new pair with `brokkr-broker generate-pak`, update the hash everywhere the broker config defines it (`BROKKR__BROKER__PAK_HASH`, or the chart's `broker.pakHash` / `broker.pakHashExistingSecret`), then run `rotate admin` to store it.
-- **If `broker.pak_hash` is unset or empty**, the command generates a fresh PAK itself, stores its hash, and writes the PAK to `/tmp/brokkr-keys/key.txt`. It is never printed to stdout, so read the file immediately — the broker deletes it when it shuts down gracefully.
+- **If `broker.pak_hash` is set** (it is by default, to a publicly-known development hash), the command validates and re-applies that hash — **nothing rotates**, and it says so rather than reporting success. This is the path to use when you manage the hash yourself: mint a new pair with `brokkr-broker generate-pak`, update the hash everywhere the broker config defines it (`BROKKR__BROKER__PAK_HASH`, or the chart's `broker.pakHash` / `broker.pakHashExistingSecret`), then run `rotate admin` to store it.
+- **If `broker.pak_hash` is unset or empty**, the command mints a fresh PAK and **prints both the PAK and its hash**. The PAK is shown once and cannot be recovered from the hash. It is also written to `/tmp/brokkr-keys/key.txt` as a fallback, which the broker deletes on graceful shutdown.
+
+> **Take both values.** The PAK is the secret — store it in a vault. The hash is not secret and belongs in configuration. If you keep only the PAK you cannot set the configured hash to match: it is a SHA-256 of the PAK's long-token component, not of the whole string, so `sha256sum` will not reproduce it. Configuration and database would then disagree, and a later `rotate admin` would overwrite your new credential with whatever the config still holds.
 
 Rotating with a hash you minted yourself:
 
@@ -86,6 +88,43 @@ cat /tmp/brokkr-keys/key.txt
 ```
 
 Either way the old admin PAK stops working once the new hash is in the database, subject to the auth cache — a `rotate admin` run from the CLI cannot reach a running broker's cache, so the previous PAK may keep authenticating for up to `broker.auth_cache_ttl_seconds` (default 60). See [Cache Considerations After CLI Rotation](#cache-considerations-after-cli-rotation).
+
+### In Kubernetes (cold start from inside the pod)
+
+`rotate admin` is CLI-only, so on a chart install you run it in the broker pod. The broker image ships the same binary that serves the API.
+
+**Use `generate-pak`, not `rotate admin`, as the first step.** The chart always sets `broker.pakHash`, so an exec'd shell inherits `BROKKR__BROKER__PAK_HASH` and `rotate admin` takes the re-apply branch — it will tell you it minted nothing. `generate-pak` needs no database and prints both values you need:
+
+```bash
+kubectl exec -n brokkr-system deploy/brokkr-broker -- brokkr-broker generate-pak
+```
+
+Store the PAK in your secret manager, then put the hash where the chart reads it — preferably a Secret rather than a values file:
+
+```bash
+kubectl create secret generic brokkr-admin-pak \
+  --from-literal=BROKKR__BROKER__PAK_HASH='<hash>' \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+helm upgrade brokkr-broker ... --set broker.pakHashExistingSecret=brokkr-admin-pak
+```
+
+Once the pod is running with the new hash configured, commit it to the database:
+
+```bash
+kubectl exec -n brokkr-system deploy/brokkr-broker -- brokkr-broker rotate admin
+```
+
+That run takes the re-apply branch on purpose — configuration and `admin_role` now agree, and the old admin PAK stops working.
+
+> Do not skip the last step. Authentication reads `admin_role.pak_hash` from the database, and `upsert_admin` runs only on a database that has never been initialized. Changing the chart value alone leaves the *old* hash stored and still accepted — the case the startup warning calls out as a stale **stored** hash.
+
+The alternative — clearing the hash so the broker mints one for you — works but leaves configuration and database disagreeing until you set the printed hash back into the chart, so it is the longer road:
+
+```bash
+kubectl exec -n brokkr-system deploy/brokkr-broker -- \
+  sh -c 'BROKKR__BROKER__PAK_HASH="" brokkr-broker rotate admin'
+```
 
 ### Via API
 

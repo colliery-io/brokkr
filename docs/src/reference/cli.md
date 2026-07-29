@@ -101,12 +101,14 @@ Re-runs the admin-key upsert.
 brokkr-broker rotate admin
 ```
 
-Behavior depends on `broker.pak_hash`:
+Behavior depends on `broker.pak_hash`, and the command reports which branch it took:
 
-- If `broker.pak_hash` is set and non-empty, the configured hash is validated and stored; no new PAK is generated.
-- If `broker.pak_hash` is unset or empty, a new admin PAK is generated and its hash stored. The PAK is written to `/tmp/brokkr-keys/key.txt`; it is never printed to stdout.
+- If `broker.pak_hash` is set and non-empty, the configured hash is validated and stored; **no new PAK is generated and nothing is revoked**. Any PAK matching that hash keeps working. The output says so and lists the two ways to actually replace the credential.
+- If `broker.pak_hash` is unset or empty, a new admin PAK is generated and its hash stored. **Both the PAK and its hash are printed**; the PAK is shown once and cannot be recovered from the hash. It is also written to `/tmp/brokkr-keys/key.txt`, which is deleted on graceful shutdown.
 
-The previously stored hash is replaced, so the old admin PAK stops working.
+The old admin PAK stops working only on the second branch, where the stored hash actually changes. Take the printed hash as well as the PAK — it belongs in `BROKKR__BROKER__PAK_HASH` (or the chart's `broker.pakHash` / `broker.pakHashExistingSecret`), and it cannot be derived from the PAK with `sha256sum` because only the long-token component is hashed.
+
+See [Managing PAKs](../how-to/pak-management.md#rotating-the-admin-pak) for the full flow, including the Kubernetes cold start.
 
 ---
 

@@ -62,6 +62,25 @@ pub struct NewAdminKey {
     pub pak_hash: String,
 }
 
+/// What [`upsert_admin`] actually did.
+///
+/// The two branches look identical from the outside — both end with a hash on
+/// `admin_role` and the admin generator — but only one produces a new
+/// credential. `rotate admin` reports "rotated successfully" for both unless it
+/// is told them apart, which is misleading on the branch that mints nothing
+/// (BROKKR-T-0317).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AdminPakOutcome {
+    /// No hash was configured, so a fresh PAK was minted. The plaintext is
+    /// returned *and* written to [`BOOTSTRAP_KEY_FILE`]; it cannot be recovered
+    /// from the hash afterwards.
+    Minted { pak: String, hash: String },
+    /// `broker.pak_hash` was set, so it was validated and re-applied verbatim.
+    /// **No credential was created** and whatever PAK matches that hash keeps
+    /// working — including, on a default install, the publicly-known one.
+    ReappliedConfigured { hash: String },
+}
+
 /// Performs first-time startup operations.
 ///
 /// This function is called when the broker starts for the first time and
@@ -70,7 +89,11 @@ pub fn first_startup(
     conn: &mut PgConnection,
     config: &Settings,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    upsert_admin(conn, config)
+    // `serve` deliberately does not surface the PAK on stdout: it is a
+    // long-running process whose output is a log stream, and a secret written
+    // there would persist in `kubectl logs` for the pod's lifetime. The
+    // bootstrap key file remains that path's channel.
+    upsert_admin(conn, config).map(|_| ())
 }
 
 /// Creates a new PAK (Privileged Access Key) and its hash.
@@ -94,27 +117,34 @@ fn create_pak() -> Result<(String, String), Box<dyn std::error::Error>> {
 pub fn upsert_admin(
     conn: &mut PgConnection,
     config: &Settings,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let pak_hash = match &config.broker.pak_hash {
+) -> Result<AdminPakOutcome, Box<dyn std::error::Error>> {
+    let outcome = match &config.broker.pak_hash {
         Some(hash) if !hash.is_empty() => {
             // Validate the provided hash
             if !validate_pak_hash(hash) {
                 return Err("Invalid PAK hash provided in configuration".into());
             }
-            hash.clone()
+            AdminPakOutcome::ReappliedConfigured { hash: hash.clone() }
         }
         _ => {
             // Generate new PAK and hash
             let (pak, hash) = create_pak()?;
 
-            // Write PAK to temporary file
+            // Write PAK to temporary file. Retained as the channel for
+            // `serve`'s first startup, which cannot print secrets; `rotate
+            // admin` also returns the plaintext so it can be shown directly.
             info!("Writing PAK to temporary file");
             let key_path = Path::new(BOOTSTRAP_KEY_FILE);
             fs::create_dir_all(key_path.parent().unwrap())?;
-            fs::write(key_path, pak)?;
+            fs::write(key_path, &pak)?;
 
-            hash
+            AdminPakOutcome::Minted { pak, hash }
         }
+    };
+
+    let pak_hash = match &outcome {
+        AdminPakOutcome::Minted { hash, .. } => hash.clone(),
+        AdminPakOutcome::ReappliedConfigured { hash } => hash.clone(),
     };
 
     // Update or insert admin key
@@ -166,7 +196,7 @@ pub fn upsert_admin(
         }
     }
 
-    Ok(())
+    Ok(outcome)
 }
 
 fn validate_pak_hash(hash: &str) -> bool {

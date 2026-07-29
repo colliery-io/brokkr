@@ -24,7 +24,9 @@
 //! throwaway schema inside the `brokkr` database and drops it afterwards.
 
 use brokkr_broker::db::create_shared_connection_pool;
-use brokkr_broker::utils::{detect_default_admin_pak_hash, stored_admin_pak_hash, upsert_admin};
+use brokkr_broker::utils::{
+    AdminPakOutcome, detect_default_admin_pak_hash, stored_admin_pak_hash, upsert_admin,
+};
 use brokkr_utils::Settings;
 use brokkr_utils::config::DEFAULT_ADMIN_PAK_HASH;
 use diesel::prelude::*;
@@ -199,5 +201,98 @@ fn test_stale_stored_default_is_detected_when_config_was_corrected_later() {
     assert!(
         status.in_use(),
         "the public PAK still authenticates here; startup must warn"
+    );
+}
+
+/// `rotate admin` reports what it did based on this outcome, and the two
+/// branches were previously indistinguishable to the caller — both returned
+/// `()`, so the command printed "rotated successfully" even when it had minted
+/// nothing (BROKKR-T-0317).
+///
+/// With a hash configured, the hash is re-applied verbatim and **no credential
+/// is created**. This is the common case: the chart always sets
+/// `broker.pakHash`, so an operator exec-ing into a pod and running `rotate
+/// admin` lands here.
+#[test]
+fn test_configured_hash_reapplies_without_minting() {
+    let base = Settings::new(None).expect("Failed to load settings");
+    let schema = unique_schema("admin_outcome_configured");
+    provision_schema(&base, &schema);
+
+    let settings = settings_for(&base, &schema, OVERRIDE_HASH);
+    let pool = create_shared_connection_pool(&base.database.url, "brokkr", 1, Some(&schema));
+    let mut conn = pool.get().expect("failed to get connection");
+
+    let outcome = upsert_admin(&mut conn, &settings);
+    let stored = stored_admin_pak_hash(&mut conn);
+
+    drop(conn);
+    drop(pool);
+    drop_schema(&base, &schema);
+
+    let outcome = outcome.expect("upsert_admin must accept a configured hash");
+    assert_eq!(
+        outcome,
+        AdminPakOutcome::ReappliedConfigured {
+            hash: OVERRIDE_HASH.to_string()
+        },
+        "a configured hash must report that nothing was minted, so `rotate admin` \
+         cannot claim to have replaced the credential"
+    );
+    assert_eq!(
+        stored.expect("reading admin_role must succeed").as_deref(),
+        Some(OVERRIDE_HASH),
+        "the configured hash must still reach the admin role"
+    );
+}
+
+/// With no hash configured, a fresh PAK is minted and the plaintext is returned
+/// so `rotate admin` can display it. Previously the only channel was
+/// `/tmp/brokkr-keys/key.txt`, which nothing in the tree reads and which is
+/// deleted on graceful shutdown.
+#[test]
+fn test_unset_hash_mints_and_returns_the_plaintext_pak() {
+    let base = Settings::new(None).expect("Failed to load settings");
+    let schema = unique_schema("admin_outcome_minted");
+    provision_schema(&base, &schema);
+
+    let mut settings = base.clone();
+    settings.database.schema = Some(schema.clone());
+    settings.broker.pak_hash = None;
+
+    let pool = create_shared_connection_pool(&base.database.url, "brokkr", 1, Some(&schema));
+    let mut conn = pool.get().expect("failed to get connection");
+
+    let outcome = upsert_admin(&mut conn, &settings);
+    let stored = stored_admin_pak_hash(&mut conn);
+
+    drop(conn);
+    drop(pool);
+    drop_schema(&base, &schema);
+
+    let outcome = outcome.expect("upsert_admin must mint when no hash is configured");
+    let (pak, hash) = match outcome {
+        AdminPakOutcome::Minted { pak, hash } => (pak, hash),
+        other => panic!("expected a minted PAK, got {other:?}"),
+    };
+
+    assert!(
+        !pak.is_empty(),
+        "the plaintext PAK must be returned — it is unrecoverable from the hash"
+    );
+    assert_ne!(
+        pak, hash,
+        "the PAK and its hash must not be conflated; printing the hash as the \
+         credential would hand out something that does not authenticate"
+    );
+    assert_eq!(
+        stored.expect("reading admin_role must succeed").as_deref(),
+        Some(hash.as_str()),
+        "the minted hash must be what lands on the admin role, so the returned \
+         PAK actually authenticates"
+    );
+    assert_ne!(
+        hash, DEFAULT_ADMIN_PAK_HASH,
+        "a minted credential must not collide with the shipped default"
     );
 }

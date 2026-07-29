@@ -1,6 +1,6 @@
 # Code Index
 
-> Generated: 2026-07-29T04:09:08Z | 446 files | JavaScript, Python, Rust, TypeScript
+> Generated: 2026-07-29T04:37:27Z | 446 files | JavaScript, Python, Rust, TypeScript
 
 ## Project Structure
 
@@ -1655,14 +1655,14 @@
 - pub `MIGRATIONS` variable L29 — `: EmbeddedMigrations`
 - pub `connection_pool_from_settings` function L56-63 — `(config: &Settings, max_size: u32) -> ConnectionPool` — Builds the database connection pool for a CLI entry point from `config`,
 - pub `serve` function L69-300 — `(config: &Settings) -> Result<(), Box<dyn std::error::Error>>` — Function to start the Brokkr Broker server
-- pub `rotate_admin` function L311-323 — `(config: &Settings) -> Result<(), Box<dyn std::error::Error>>` — Function to rotate the admin key
-- pub `generate_pak` function L338-364 — `(config: &Settings) -> Result<(), Box<dyn std::error::Error>>` — Mints a fresh PAK + hash pair offline, without touching the database or
-- pub `rotate_agent_key` function L384-410 — `( config: &Settings, uuid: Uuid, ) -> Result<String, Box<dyn std::error::Error>>`
-- pub `rotate_generator_key` function L412-443 — `( config: &Settings, uuid: Uuid, ) -> Result<String, Box<dyn std::error::Error>>`
-- pub `create_agent` function L452-517 — `( config: &Settings, name: String, cluster_name: String, generator_ids: Vec<uuid...` — Creates an agent and its initial PAK.
-- pub `create_generator` function L519-551 — `( config: &Settings, name: String, description: Option<String>, ) -> Result<(), ...`
+- pub `rotate_admin` function L316-368 — `(config: &Settings) -> Result<(), Box<dyn std::error::Error>>` — Function to rotate the admin key
+- pub `generate_pak` function L383-409 — `(config: &Settings) -> Result<(), Box<dyn std::error::Error>>` — Mints a fresh PAK + hash pair offline, without touching the database or
+- pub `rotate_agent_key` function L429-455 — `( config: &Settings, uuid: Uuid, ) -> Result<String, Box<dyn std::error::Error>>`
+- pub `rotate_generator_key` function L457-488 — `( config: &Settings, uuid: Uuid, ) -> Result<String, Box<dyn std::error::Error>>`
+- pub `create_agent` function L497-562 — `( config: &Settings, name: String, cluster_name: String, generator_ids: Vec<uuid...` — Creates an agent and its initial PAK.
+- pub `create_generator` function L564-596 — `( config: &Settings, name: String, description: Option<String>, ) -> Result<(), ...`
 -  `Count` struct L33-36 — `{ count: i64 }`
--  `audit_cli_pak_event` function L369-382 — `(dal: &DAL, action: &str, resource_type: &str, id: Uuid, name: &str)` — Synchronously records a PAK lifecycle event performed via the CLI.
+-  `audit_cli_pak_event` function L414-427 — `(dal: &DAL, action: &str, resource_type: &str, id: Uuid, name: &str)` — Synchronously records a PAK lifecycle event performed via the CLI.
 
 #### crates/brokkr-broker/src/cli/mod.rs
 
@@ -2315,30 +2315,31 @@
 - pub `shutdown` function L42-46 — `(shutdown_rx: oneshot::Receiver<()>)` — Handles the shutdown process for the broker.
 - pub `AdminKey` struct L51-56 — `{ id: Uuid, created_at: chrono::DateTime<Utc>, updated_at: chrono::DateTime<Utc>...` — Represents an admin key in the database.
 - pub `NewAdminKey` struct L61-63 — `{ pak_hash: String }` — Represents a new admin key to be inserted into the database.
-- pub `first_startup` function L69-74 — `( conn: &mut PgConnection, config: &Settings, ) -> Result<(), Box<dyn std::error...` — Performs first-time startup operations.
-- pub `upsert_admin` function L94-170 — `( conn: &mut PgConnection, config: &Settings, ) -> Result<(), Box<dyn std::error...` — Updates or inserts the admin key and related generator.
-- pub `DefaultAdminPakStatus` struct L230-235 — `{ configured: bool, stored: bool }` — Which admin credential sources still carry the shipped default hash.
-- pub `in_use` function L239-241 — `(&self) -> bool` — True when the publicly-known PAK is accepted as admin by this broker.
-- pub `detect_default_admin_pak_hash` function L253-261 — `( configured: Option<&str>, stored: Option<&str>, ) -> DefaultAdminPakStatus` — Compares the effective admin credential against the shipped default.
-- pub `stored_admin_pak_hash` function L267-272 — `(conn: &mut PgConnection) -> QueryResult<Option<String>>` — Reads the persisted admin PAK hash, if the admin role has been provisioned.
-- pub `report_default_admin_pak_hash` function L331-338 — `(status: &DefaultAdminPakStatus)` — Logs the default-admin-PAK banner (if applicable) and publishes
-- pub `start_default_admin_pak_reminder_task` function L345-356 — `(status: DefaultAdminPakStatus)` — Spawns the hourly re-warning task described on
+- pub `AdminPakOutcome` enum L73-82 — `Minted | ReappliedConfigured` — What [`upsert_admin`] actually did.
+- pub `first_startup` function L88-97 — `( conn: &mut PgConnection, config: &Settings, ) -> Result<(), Box<dyn std::error...` — Performs first-time startup operations.
+- pub `upsert_admin` function L117-200 — `( conn: &mut PgConnection, config: &Settings, ) -> Result<AdminPakOutcome, Box<d...` — Updates or inserts the admin key and related generator.
+- pub `DefaultAdminPakStatus` struct L260-265 — `{ configured: bool, stored: bool }` — Which admin credential sources still carry the shipped default hash.
+- pub `in_use` function L269-271 — `(&self) -> bool` — True when the publicly-known PAK is accepted as admin by this broker.
+- pub `detect_default_admin_pak_hash` function L283-291 — `( configured: Option<&str>, stored: Option<&str>, ) -> DefaultAdminPakStatus` — Compares the effective admin credential against the shipped default.
+- pub `stored_admin_pak_hash` function L297-302 — `(conn: &mut PgConnection) -> QueryResult<Option<String>>` — Reads the persisted admin PAK hash, if the admin role has been provisioned.
+- pub `report_default_admin_pak_hash` function L361-368 — `(status: &DefaultAdminPakStatus)` — Logs the default-admin-PAK banner (if applicable) and publishes
+- pub `start_default_admin_pak_reminder_task` function L375-386 — `(status: DefaultAdminPakStatus)` — Spawns the hourly re-warning task described on
 -  `BOOTSTRAP_KEY_FILE` variable L37 — `: &str` — Path of the bootstrap key file written when the broker generates an admin
--  `create_pak` function L79-87 — `() -> Result<(String, String), Box<dyn std::error::Error>>` — Creates a new PAK (Privileged Access Key) and its hash.
--  `validate_pak_hash` function L172-176 — `(hash: &str) -> bool` — the broker, including admin key management and shutdown procedures.
--  `DEFAULT_ADMIN_PAK_HASH_IN_USE` variable L195-205 — `: Lazy<IntGauge>` — `1` when this broker's admin credential is the publicly-known development
--  `DEFAULT_ADMIN_PAK_REMINDER_INTERVAL` variable L218 — `: Duration` — How often the startup warning is repeated while the default admin PAK is
--  `DefaultAdminPakStatus` type L237-242 — `= DefaultAdminPakStatus` — the broker, including admin key management and shutdown procedures.
--  `default_admin_pak_warning` function L279-323 — `(status: &DefaultAdminPakStatus) -> Option<String>` — Renders the operator-facing warning for a default-PAK `status`.
--  `tests` module L359-498 — `-` — the broker, including admin key management and shutdown procedures.
--  `minted_hash_passes_config_validation` function L367-378 — `()` — The offline `generate-pak` day-zero flow only works if the hash it mints
--  `OVERRIDE_HASH` variable L381 — `: &str` — A hash that is neither the default nor equal to any other fixture.
--  `default_configured_admin_pak_hash_is_detected` function L384-393 — `()` — the broker, including admin key management and shutdown procedures.
--  `overridden_admin_pak_hash_is_not_detected` function L396-406 — `()` — the broker, including admin key management and shutdown procedures.
--  `stale_stored_default_is_detected_despite_overridden_config` function L413-431 — `()` — The case a config-only check misses: the operator set
--  `unset_admin_pak_hash_is_not_detected` function L436-441 — `()` — An unset (or empty) hash means the broker mints its own PAK on first
--  `default_admin_pak_warning_carries_full_remediation` function L446-470 — `()` — "Unmissable" is a wording property, so pin it: the banner must say what
--  `report_default_admin_pak_hash_publishes_gauge` function L476-497 — `()` — The gauge must exist on `/metrics` in both states, so an alert on
+-  `create_pak` function L102-110 — `() -> Result<(String, String), Box<dyn std::error::Error>>` — Creates a new PAK (Privileged Access Key) and its hash.
+-  `validate_pak_hash` function L202-206 — `(hash: &str) -> bool` — the broker, including admin key management and shutdown procedures.
+-  `DEFAULT_ADMIN_PAK_HASH_IN_USE` variable L225-235 — `: Lazy<IntGauge>` — `1` when this broker's admin credential is the publicly-known development
+-  `DEFAULT_ADMIN_PAK_REMINDER_INTERVAL` variable L248 — `: Duration` — How often the startup warning is repeated while the default admin PAK is
+-  `DefaultAdminPakStatus` type L267-272 — `= DefaultAdminPakStatus` — the broker, including admin key management and shutdown procedures.
+-  `default_admin_pak_warning` function L309-353 — `(status: &DefaultAdminPakStatus) -> Option<String>` — Renders the operator-facing warning for a default-PAK `status`.
+-  `tests` module L389-528 — `-` — the broker, including admin key management and shutdown procedures.
+-  `minted_hash_passes_config_validation` function L397-408 — `()` — The offline `generate-pak` day-zero flow only works if the hash it mints
+-  `OVERRIDE_HASH` variable L411 — `: &str` — A hash that is neither the default nor equal to any other fixture.
+-  `default_configured_admin_pak_hash_is_detected` function L414-423 — `()` — the broker, including admin key management and shutdown procedures.
+-  `overridden_admin_pak_hash_is_not_detected` function L426-436 — `()` — the broker, including admin key management and shutdown procedures.
+-  `stale_stored_default_is_detected_despite_overridden_config` function L443-461 — `()` — The case a config-only check misses: the operator set
+-  `unset_admin_pak_hash_is_not_detected` function L466-471 — `()` — An unset (or empty) hash means the broker mints its own PAK on first
+-  `default_admin_pak_warning_carries_full_remediation` function L476-500 — `()` — "Unmissable" is a wording property, so pin it: the banner must say what
+-  `report_default_admin_pak_hash_publishes_gauge` function L506-527 — `()` — The gauge must exist on `/metrics` in both states, so an alert on
 
 #### crates/brokkr-broker/src/utils/pak.rs
 
@@ -3354,15 +3355,17 @@
 
 #### crates/brokkr-broker/tests/integration/db/default_admin_pak.rs
 
--  `MIGRATIONS` variable L35 — `: EmbeddedMigrations` — throwaway schema inside the `brokkr` database and drops it afterwards.
--  `OVERRIDE_HASH` variable L39 — `: &str` — A valid-shaped SHA-256 hash that is not the shipped default — what an
--  `unique_schema` function L41-43 — `(prefix: &str) -> String` — throwaway schema inside the `brokkr` database and drops it afterwards.
--  `provision_schema` function L47-55 — `(settings: &Settings, schema: &str)` — Creates `schema` and migrates the full schema into it.
--  `drop_schema` function L57-63 — `(settings: &Settings, schema: &str)` — throwaway schema inside the `brokkr` database and drops it afterwards.
--  `settings_for` function L66-71 — `(base: &Settings, schema: &str, hash: &str) -> Settings` — Settings scoped to `schema` with `broker.pak_hash` pinned to `hash`.
--  `test_default_admin_pak_hash_is_detected_after_first_startup` function L78-116 — `()` — The zero-configuration path: `angreal local up`, the docker-compose harness
--  `test_overridden_admin_pak_hash_is_not_detected_after_first_startup` function L122-154 — `()` — The hardened path: an operator who ran `generate-pak` and set
--  `test_stale_stored_default_is_detected_when_config_was_corrected_later` function L163-203 — `()` — The case a config-only check would miss, and the reason the stored hash is
+-  `MIGRATIONS` variable L37 — `: EmbeddedMigrations` — throwaway schema inside the `brokkr` database and drops it afterwards.
+-  `OVERRIDE_HASH` variable L41 — `: &str` — A valid-shaped SHA-256 hash that is not the shipped default — what an
+-  `unique_schema` function L43-45 — `(prefix: &str) -> String` — throwaway schema inside the `brokkr` database and drops it afterwards.
+-  `provision_schema` function L49-57 — `(settings: &Settings, schema: &str)` — Creates `schema` and migrates the full schema into it.
+-  `drop_schema` function L59-65 — `(settings: &Settings, schema: &str)` — throwaway schema inside the `brokkr` database and drops it afterwards.
+-  `settings_for` function L68-73 — `(base: &Settings, schema: &str, hash: &str) -> Settings` — Settings scoped to `schema` with `broker.pak_hash` pinned to `hash`.
+-  `test_default_admin_pak_hash_is_detected_after_first_startup` function L80-118 — `()` — The zero-configuration path: `angreal local up`, the docker-compose harness
+-  `test_overridden_admin_pak_hash_is_not_detected_after_first_startup` function L124-156 — `()` — The hardened path: an operator who ran `generate-pak` and set
+-  `test_stale_stored_default_is_detected_when_config_was_corrected_later` function L165-205 — `()` — The case a config-only check would miss, and the reason the stored hash is
+-  `test_configured_hash_reapplies_without_minting` function L217-247 — `()` — `rotate admin` reports what it did based on this outcome, and the two
+-  `test_unset_hash_mints_and_returns_the_plaintext_pak` function L254-298 — `()` — With no hash configured, a fresh PAK is minted and the plaintext is returned
 
 #### crates/brokkr-broker/tests/integration/db/mod.rs
 

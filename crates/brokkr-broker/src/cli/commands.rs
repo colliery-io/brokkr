@@ -308,6 +308,11 @@ pub async fn serve(config: &Settings) -> Result<(), Box<dyn std::error::Error>> 
 /// bare connection no `search_path` was ever set and the rotation silently hit
 /// the `public` schema — failing to find the configured schema's `admin_role`
 /// row, or rewriting `public`'s (BROKKR-T-0297).
+/// Output mirrors the sibling rotate commands, which print the new credential
+/// directly (`rotate agent`, `rotate generator`), and `generate-pak`, which
+/// prints both halves. This one used to print nothing at all and leave the
+/// minted PAK in a file nothing in the tree reads — and, worse, to report
+/// success on the branch that mints nothing (BROKKR-T-0317).
 pub fn rotate_admin(config: &Settings) -> Result<(), Box<dyn std::error::Error>> {
     info!("Rotating admin key");
 
@@ -315,10 +320,50 @@ pub fn rotate_admin(config: &Settings) -> Result<(), Box<dyn std::error::Error>>
     let pool = connection_pool_from_settings(config, 1);
     let mut conn = pool.get()?;
 
-    // Run the first_startup function to generate a new admin key
-    utils::upsert_admin(&mut conn, config)?;
+    let outcome = utils::upsert_admin(&mut conn, config)?;
 
-    info!("Admin key rotated successfully");
+    match outcome {
+        utils::AdminPakOutcome::Minted { pak, hash } => {
+            info!("Admin key rotated successfully");
+            println!("Admin PAK rotated. A new credential was minted:");
+            println!();
+            println!("  PAK (secret — send as `Authorization: Bearer <PAK>`; store securely):");
+            println!("    {pak}");
+            println!();
+            println!("  PAK hash (set as BROKKR__BROKER__PAK_HASH / the chart's broker.pakHash):");
+            println!("    {hash}");
+            println!();
+            println!("The PAK is shown once and cannot be recovered from the hash. It was also");
+            println!("written to /tmp/brokkr-keys/key.txt, which is deleted on graceful shutdown.");
+            println!();
+            println!("Set the hash in this broker's configuration now: it is currently unset, so");
+            println!("the stored hash and the configured one disagree, and a later `rotate admin`");
+            println!("would overwrite this credential with whatever the config then holds.");
+        }
+        utils::AdminPakOutcome::ReappliedConfigured { hash } => {
+            // Deliberately not an error: re-applying the configured hash is the
+            // supported way to commit a hash you minted yourself. It is only
+            // misleading when the caller expected a new credential.
+            info!("Admin hash re-applied from configuration; no new PAK was minted");
+            println!("No new admin PAK was minted.");
+            println!();
+            println!("`broker.pak_hash` is set, so the configured hash was validated and");
+            println!("re-applied to the admin role and admin generator:");
+            println!();
+            println!("    {hash}");
+            println!();
+            println!("Any PAK matching that hash keeps working; nothing was rotated or revoked.");
+            println!("This is the correct path when committing a hash you minted yourself.");
+            println!();
+            println!("To actually replace the credential, either:");
+            println!("  * run `brokkr-broker generate-pak`, set the printed hash as");
+            println!("    BROKKR__BROKER__PAK_HASH (or the chart's broker.pakHash /");
+            println!("    broker.pakHashExistingSecret), then re-run `rotate admin`; or");
+            println!("  * clear the setting and let the broker mint one:");
+            println!("      BROKKR__BROKER__PAK_HASH=\"\" brokkr-broker rotate admin");
+        }
+    }
+
     Ok(())
 }
 
