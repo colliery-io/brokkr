@@ -1,6 +1,6 @@
 # Code Index
 
-> Generated: 2026-07-29T00:52:10Z | 445 files | JavaScript, Python, Rust, TypeScript
+> Generated: 2026-07-29T04:09:08Z | 446 files | JavaScript, Python, Rust, TypeScript
 
 ## Project Structure
 
@@ -138,6 +138,7 @@
 │   │           │   ├── deployment_objects.rs
 │   │           │   ├── diagnostics.rs
 │   │           │   ├── fleet.rs
+│   │           │   ├── generator_agent_listing.rs
 │   │           │   ├── generator_registration.rs
 │   │           │   ├── generators.rs
 │   │           │   ├── health.rs
@@ -1256,36 +1257,36 @@
 #### crates/brokkr-broker/src/api/v1/agents.rs
 
 - pub `routes` function L43-73 — `() -> Router<DAL>` — Agent management API endpoints.
-- pub `CreateAgentRequest` struct L135-140 — `{ name: String, cluster_name: String, generator_ids: Vec<Uuid> }` — Request body for [`create_agent`].
-- pub `CreateAgentResponse` struct L145-148 — `{ agent: Agent, initial_pak: String }` — Response body for [`create_agent`]: the newly-created agent plus the
-- pub `HeartbeatReport` struct L958-963 — `{ k8s_reachable: Option<bool>, k8s_api_latency_ms: Option<i32> }` — Optional heartbeat report body (BROKKR-T-0227).
+- pub `CreateAgentRequest` struct L155-160 — `{ name: String, cluster_name: String, generator_ids: Vec<Uuid> }` — Request body for [`create_agent`].
+- pub `CreateAgentResponse` struct L165-168 — `{ agent: Agent, initial_pak: String }` — Response body for [`create_agent`]: the newly-created agent plus the
+- pub `HeartbeatReport` struct L978-983 — `{ k8s_reachable: Option<bool>, k8s_api_latency_ms: Option<i32> }` — Optional heartbeat report body (BROKKR-T-0227).
 -  `require_admin` function L75-84 — `(auth: &AuthPayload) -> Result<(), ApiError>` — Agent management API endpoints.
 -  `require_admin_or_agent` function L86-95 — `(auth: &AuthPayload, id: Uuid) -> Result<(), ApiError>` — Agent management API endpoints.
--  `list_agents` function L106-129 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, ) -> ...` — Agent management API endpoints.
--  `create_agent` function L161-254 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Json(...` — Agent management API endpoints.
--  `AgentQuery` struct L257-260 — `{ name: Option<String>, cluster_name: Option<String> }` — Agent management API endpoints.
--  `get_agent` function L273-290 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `search_agent` function L307-340 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Query...` — Agent management API endpoints.
--  `update_agent` function L354-404 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `delete_agent` function L416-450 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Exten...` — Agent management API endpoints.
--  `list_events` function L462-484 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `create_event` function L497-560 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `list_labels` function L574-591 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `add_label` function L606-626 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `remove_label` function L644-672 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `list_annotations` function L686-704 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `add_annotation` function L719-743 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `remove_annotation` function L761-789 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `list_targets` function L801-813 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `add_target` function L827-851 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Exten...` — Agent management API endpoints.
--  `authorize_target_mutation` function L858-905 — `( dal: &DAL, auth: &AuthPayload, agent_id: Uuid, stack_id: Uuid, ) -> Result<(),...` — Authorize a target create/delete operation.
--  `remove_target` function L921-949 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `record_heartbeat` function L976-1030 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Exten...` — Agent management API endpoints.
--  `TargetStateParams` struct L1033-1035 — `{ mode: Option<String> }` — Agent management API endpoints.
--  `get_target_state` function L1050-1083 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `get_associated_stacks` function L1095-1113 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `rotate_agent_pak` function L1126-1182 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Exten...` — Agent management API endpoints.
--  `list_agent_registrations` function L1195-1210 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `list_agents` function L106-149 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, ) -> ...` — Agent management API endpoints.
+-  `create_agent` function L181-274 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Json(...` — Agent management API endpoints.
+-  `AgentQuery` struct L277-280 — `{ name: Option<String>, cluster_name: Option<String> }` — Agent management API endpoints.
+-  `get_agent` function L293-310 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `search_agent` function L327-360 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Query...` — Agent management API endpoints.
+-  `update_agent` function L374-424 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `delete_agent` function L436-470 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Exten...` — Agent management API endpoints.
+-  `list_events` function L482-504 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `create_event` function L517-580 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `list_labels` function L594-611 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `add_label` function L626-646 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `remove_label` function L664-692 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `list_annotations` function L706-724 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `add_annotation` function L739-763 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `remove_annotation` function L781-809 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `list_targets` function L821-833 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `add_target` function L847-871 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Exten...` — Agent management API endpoints.
+-  `authorize_target_mutation` function L878-925 — `( dal: &DAL, auth: &AuthPayload, agent_id: Uuid, stack_id: Uuid, ) -> Result<(),...` — Authorize a target create/delete operation.
+-  `remove_target` function L941-969 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `record_heartbeat` function L996-1050 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Exten...` — Agent management API endpoints.
+-  `TargetStateParams` struct L1053-1055 — `{ mode: Option<String> }` — Agent management API endpoints.
+-  `get_target_state` function L1070-1103 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `get_associated_stacks` function L1115-1133 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `rotate_agent_pak` function L1146-1202 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Exten...` — Agent management API endpoints.
+-  `list_agent_registrations` function L1215-1230 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
 
 #### crates/brokkr-broker/src/api/v1/auth.rs
 
@@ -1369,7 +1370,7 @@
 -  `resolve_registration_agent` function L443-462 — `( auth: &AuthPayload, body: &AgentRegistrationBody, ) -> Result<Uuid, ApiError>` — Generators API module for Brokkr.
 -  `register_agent` function L477-521 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Generators API module for Brokkr.
 -  `deregister_agent` function L535-588 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Exten...` — Generators API module for Brokkr.
--  `list_generator_registered_agents` function L601-623 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Generators API module for Brokkr.
+-  `list_generator_registered_agents` function L601-637 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Generators API module for Brokkr.
 
 #### crates/brokkr-broker/src/api/v1/health.rs
 
@@ -1387,10 +1388,11 @@
 #### crates/brokkr-broker/src/api/v1/middleware.rs
 
 - pub `AuthPayload` struct L34-44 — `{ admin: bool, agent: Option<Uuid>, generator: Option<Uuid>, readonly: bool }` — Represents the authenticated entity's payload.
-- pub `AuthResponse` struct L48-57 — `{ admin: bool, agent: Option<String>, generator: Option<String>, readonly: bool ...` — Represents the response structure for authentication information.
-- pub `auth_middleware` function L73-148 — `( State(dal): State<DAL>, mut request: Request<Body>, next: Next, ) -> Result<Re...` — Middleware function for authenticating requests.
--  `readonly_request_allowed` function L160-177 — `(method: &axum::http::Method, path: &str) -> bool` — Whether a request from a read-only credential may proceed.
--  `verify_pak` function L192-309 — `(dal: &DAL, pak: &str) -> Result<AuthPayload, StatusCode>` — Verifies the provided PAK and returns the corresponding `AuthPayload`.
+- pub `require_tenant_generator` function L69-100 — `( auth: &AuthPayload, dal: &DAL, ) -> Result<Uuid, crate::api::v1::error::ApiErr...` — Resolves the caller's generator identity as a **tenant**, rejecting the
+- pub `AuthResponse` struct L104-113 — `{ admin: bool, agent: Option<String>, generator: Option<String>, readonly: bool ...` — Represents the response structure for authentication information.
+- pub `auth_middleware` function L129-204 — `( State(dal): State<DAL>, mut request: Request<Body>, next: Next, ) -> Result<Re...` — Middleware function for authenticating requests.
+-  `readonly_request_allowed` function L216-233 — `(method: &axum::http::Method, path: &str) -> bool` — Whether a request from a read-only credential may proceed.
+-  `verify_pak` function L248-365 — `(dal: &DAL, pak: &str) -> Result<AuthPayload, StatusCode>` — Verifies the provided PAK and returns the corresponding `AuthPayload`.
 
 #### crates/brokkr-broker/src/api/v1/mod.rs
 
@@ -1757,26 +1759,27 @@
 
 #### crates/brokkr-broker/src/dal/agents.rs
 
-- pub `AgentFilter` struct L24-29 — `{ labels: Vec<String>, annotations: Vec<(String, String)>, agent_targets: Vec<Uu...` — Struct for filtering agents based on various criteria.
-- pub `AgentsDAL` struct L32-35 — `{ dal: &'a DAL }` — Data Access Layer for Agent operations.
-- pub `create` function L59-79 — `(&self, new_agent: &NewAgent) -> Result<Agent, diesel::result::Error>` — Creates a new agent in the database.
-- pub `get` function L91-98 — `(&self, agent_uuid: Uuid) -> Result<Option<Agent>, diesel::result::Error>` — Retrieves a non-deleted agent by its UUID.
-- pub `get_including_deleted` function L110-119 — `( &self, agent_uuid: Uuid, ) -> Result<Option<Agent>, diesel::result::Error>` — Retrieves an agent by its UUID, including deleted agents.
-- pub `list` function L127-132 — `(&self) -> Result<Vec<Agent>, diesel::result::Error>` — Lists all non-deleted agents from the database.
-- pub `get_names_by_ids` function L137-146 — `( &self, ids: &[Uuid], ) -> Result<Vec<(Uuid, String)>, diesel::result::Error>` — Resolves agent names for a set of IDs in one query (audit-log actor
-- pub `list_all` function L154-157 — `(&self) -> Result<Vec<Agent>, diesel::result::Error>` — Lists all agents from the database, including deleted ones.
-- pub `update` function L170-179 — `( &self, agent_uuid: Uuid, updated_agent: &Agent, ) -> Result<Agent, diesel::res...` — Updates an existing agent in the database.
-- pub `soft_delete` function L191-210 — `(&self, agent_uuid: Uuid) -> Result<usize, diesel::result::Error>` — Soft deletes an agent by setting its deleted_at timestamp to the current time.
-- pub `hard_delete` function L222-225 — `(&self, agent_uuid: Uuid) -> Result<usize, diesel::result::Error>` — Hard deletes an agent from the database.
-- pub `filter_by_labels` function L259-292 — `( &self, labels: Vec<String>, filter_type: FilterType, ) -> Result<Vec<Agent>, d...` — Filters agents by labels.
-- pub `filter_by_annotations` function L331-394 — `( &self, annotations: Vec<(String, String)>, filter_type: FilterType, ) -> Resul...` — Filters agents by annotations.
-- pub `get_agent_by_target_id` function L406-418 — `( &self, agent_target_id: Uuid, ) -> Result<Option<Agent>, diesel::result::Error...` — Retrieves an agent by its target ID.
-- pub `get_agent_details` function L431-451 — `( &self, agent_id: Uuid, ) -> Result<(Vec<AgentLabel>, Vec<AgentTarget>, Vec<Age...` — Retrieves labels, targets, and annotations associated with a specific agent.
-- pub `record_heartbeat` function L462-470 — `(&self, agent_id: Uuid) -> Result<(), diesel::result::Error>` — Records a heartbeat for the specified agent.
-- pub `record_k8s_connectivity` function L490-507 — `( &self, agent_id: Uuid, reachable: bool, latency_ms: Option<i32>, ) -> Result<(...` — Stores the latest agent-reported Kubernetes connectivity snapshot
-- pub `update_pak_hash` function L520-529 — `( &self, agent_uuid: Uuid, new_pak_hash: String, ) -> Result<Agent, diesel::resu...` — Updates the pak_hash for an agent.
-- pub `get_by_name_and_cluster_name` function L542-554 — `( &self, name: String, cluster_name: String, ) -> Result<Option<Agent>, diesel::...` — Retrieves an agent by its name and cluster name.
-- pub `get_by_pak_hash` function L569-576 — `(&self, pak_hash: &str) -> Result<Option<Agent>, diesel::result::Error>` — Retrieves an agent by its PAK hash.
+- pub `AgentFilter` struct L26-31 — `{ labels: Vec<String>, annotations: Vec<(String, String)>, agent_targets: Vec<Uu...` — Struct for filtering agents based on various criteria.
+- pub `AgentsDAL` struct L34-37 — `{ dal: &'a DAL }` — Data Access Layer for Agent operations.
+- pub `create` function L61-81 — `(&self, new_agent: &NewAgent) -> Result<Agent, diesel::result::Error>` — Creates a new agent in the database.
+- pub `get` function L93-100 — `(&self, agent_uuid: Uuid) -> Result<Option<Agent>, diesel::result::Error>` — Retrieves a non-deleted agent by its UUID.
+- pub `get_including_deleted` function L112-121 — `( &self, agent_uuid: Uuid, ) -> Result<Option<Agent>, diesel::result::Error>` — Retrieves an agent by its UUID, including deleted agents.
+- pub `list` function L129-134 — `(&self) -> Result<Vec<Agent>, diesel::result::Error>` — Lists all non-deleted agents from the database.
+- pub `list_for_generator` function L148-159 — `( &self, generator_id: Uuid, ) -> Result<Vec<Agent>, diesel::result::Error>` — Lists the non-deleted agents registered with `generator_id`.
+- pub `get_names_by_ids` function L164-173 — `( &self, ids: &[Uuid], ) -> Result<Vec<(Uuid, String)>, diesel::result::Error>` — Resolves agent names for a set of IDs in one query (audit-log actor
+- pub `list_all` function L181-184 — `(&self) -> Result<Vec<Agent>, diesel::result::Error>` — Lists all agents from the database, including deleted ones.
+- pub `update` function L197-206 — `( &self, agent_uuid: Uuid, updated_agent: &Agent, ) -> Result<Agent, diesel::res...` — Updates an existing agent in the database.
+- pub `soft_delete` function L218-237 — `(&self, agent_uuid: Uuid) -> Result<usize, diesel::result::Error>` — Soft deletes an agent by setting its deleted_at timestamp to the current time.
+- pub `hard_delete` function L249-252 — `(&self, agent_uuid: Uuid) -> Result<usize, diesel::result::Error>` — Hard deletes an agent from the database.
+- pub `filter_by_labels` function L286-319 — `( &self, labels: Vec<String>, filter_type: FilterType, ) -> Result<Vec<Agent>, d...` — Filters agents by labels.
+- pub `filter_by_annotations` function L358-421 — `( &self, annotations: Vec<(String, String)>, filter_type: FilterType, ) -> Resul...` — Filters agents by annotations.
+- pub `get_agent_by_target_id` function L433-445 — `( &self, agent_target_id: Uuid, ) -> Result<Option<Agent>, diesel::result::Error...` — Retrieves an agent by its target ID.
+- pub `get_agent_details` function L458-478 — `( &self, agent_id: Uuid, ) -> Result<(Vec<AgentLabel>, Vec<AgentTarget>, Vec<Age...` — Retrieves labels, targets, and annotations associated with a specific agent.
+- pub `record_heartbeat` function L489-497 — `(&self, agent_id: Uuid) -> Result<(), diesel::result::Error>` — Records a heartbeat for the specified agent.
+- pub `record_k8s_connectivity` function L517-534 — `( &self, agent_id: Uuid, reachable: bool, latency_ms: Option<i32>, ) -> Result<(...` — Stores the latest agent-reported Kubernetes connectivity snapshot
+- pub `update_pak_hash` function L547-556 — `( &self, agent_uuid: Uuid, new_pak_hash: String, ) -> Result<Agent, diesel::resu...` — Updates the pak_hash for an agent.
+- pub `get_by_name_and_cluster_name` function L569-581 — `( &self, name: String, cluster_name: String, ) -> Result<Option<Agent>, diesel::...` — Retrieves an agent by its name and cluster name.
+- pub `get_by_pak_hash` function L596-603 — `(&self, pak_hash: &str) -> Result<Option<Agent>, diesel::result::Error>` — Retrieves an agent by its PAK hash.
 
 #### crates/brokkr-broker/src/dal/audit_logs.rs
 
@@ -2691,6 +2694,18 @@
 
 -  `test_fleet_surfaces_agent_reported_k8s_connectivity` function L23-72 — `()` — An agent that reports `k8s_reachable = false` surfaces as `false` in its
 
+#### crates/brokkr-broker/tests/integration/api/generator_agent_listing.rs
+
+-  `list_agents` function L33-50 — `(fixture: &TestFixture, pak: &str) -> (StatusCode, Value)` — Calls `GET /api/v1/agents` with `pak` and returns (status, body).
+-  `agent_ids` function L53-59 — `(body: &Value) -> Vec<Uuid>` — Extracts agent ids from a successful listing body.
+-  `test_generator_lists_its_registered_agents` function L63-84 — `()` — The core promise: a generator sees the agents registered with it.
+-  `test_generator_does_not_see_another_generators_agents` function L89-118 — `()` — The isolation property: one tenant's agents are invisible to another.
+-  `test_system_generator_pak_is_not_a_tenant` function L129-177 — `()` — The decision under test: a system generator is not a tenant.
+-  `test_admin_still_lists_every_agent` function L183-205 — `()` — Admin behavior is unchanged, and `admin-generator` is correctly unaffected:
+-  `test_soft_deleted_agents_are_excluded` function L210-240 — `()` — Soft-delete handling must match the admin `list()` path, or the two branches
+-  `test_agent_pak_cannot_list_agents` function L245-259 — `()` — An agent PAK is neither admin nor generator: it still gets 403, and the code
+-  `test_generator_with_no_agents_gets_empty_list` function L264-279 — `()` — A generator with no registered agents gets an empty list, not an error and
+
 #### crates/brokkr-broker/tests/integration/api/generator_registration.rs
 
 -  `test_create_agent_via_api_auto_registers_with_system_generator` function L24-64 — `()` — Integration tests for the generator registration model (BROKKR-I-0030).
@@ -2743,18 +2758,19 @@
 -  `deployment_objects` module L12 — `-`
 -  `diagnostics` module L13 — `-`
 -  `fleet` module L14 — `-`
--  `generator_registration` module L15 — `-`
--  `generators` module L16 — `-`
--  `health` module L17 — `-`
--  `pak_scoping` module L18 — `-`
--  `paks` module L19 — `-`
--  `registration_consent` module L20 — `-`
--  `stacks` module L21 — `-`
--  `templates` module L22 — `-`
--  `ui_pak` module L23 — `-`
--  `webhooks` module L24 — `-`
--  `work_orders` module L25 — `-`
--  `ws` module L26 — `-`
+-  `generator_agent_listing` module L15 — `-`
+-  `generator_registration` module L16 — `-`
+-  `generators` module L17 — `-`
+-  `health` module L18 — `-`
+-  `pak_scoping` module L19 — `-`
+-  `paks` module L20 — `-`
+-  `registration_consent` module L21 — `-`
+-  `stacks` module L22 — `-`
+-  `templates` module L23 — `-`
+-  `ui_pak` module L24 — `-`
+-  `webhooks` module L25 — `-`
+-  `work_orders` module L26 — `-`
+-  `ws` module L27 — `-`
 
 #### crates/brokkr-broker/tests/integration/api/pak_scoping.rs
 
