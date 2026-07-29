@@ -435,6 +435,8 @@ Content-Type: application/json
 
 List the agents registered with the generator. Accessible by admin or the generator itself.
 
+Returns **registration records** — `agent_id` and `registered_at` — not agent detail. To resolve those ids into names, clusters, status, and heartbeats, use `GET /api/v1/agents`, which a generator PAK may call for exactly the agents registered with it (see [Agents](api/README.md)).
+
 ```
 GET /api/v1/generators/{id}/registered-agents
 Authorization: Bearer <admin_pak | generator_pak>
@@ -452,9 +454,11 @@ Authorization: Bearer <admin_pak | generator_pak>
 
 | Status | Description |
 |--------|-------------|
-| 403 | Unauthorized access |
+| 403 | Unauthorized access, or `system_generator_not_a_tenant` when a non-admin caller scopes to the system generator |
 | 404 | Generator not found |
 | 500 | Internal server error |
+
+> The system generator is excluded from the generator-PAK path. Every agent is auto-registered with it, so scoping this read to it would enumerate the whole fleet through a non-admin credential. Admin callers are unaffected.
 
 ---
 

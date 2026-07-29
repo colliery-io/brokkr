@@ -55,7 +55,7 @@ Agents run in Kubernetes clusters and apply deployment objects.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/agents` | List all agents |
+| GET | `/agents` | List agents. Admin sees the whole fleet; a generator PAK sees exactly the agents registered with it (the system generator is excluded — `system_generator_not_a_tenant`) |
 | POST | `/agents` | Register a new agent (optional `generator_ids` pre-registers additional generators) |
 | GET | `/agents/:id` | Get agent by ID |
 | PUT | `/agents/:id` | Update an agent |

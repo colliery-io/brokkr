@@ -25,7 +25,7 @@ A second, unrelated feature is sometimes mistaken for the tenant model: the `dat
 | Tenant ID | The generator's `id` — the value used as `generator_id` on stacks and as `?pak_id=` in scoped listings |
 | Lifecycle | Soft-delete cascades to the tenant's stacks and their deployment objects |
 
-Creating, listing, and deleting generators is admin-only. A generator PAK can read and update its own generator record and rotate its own PAK, but cannot create other generators or manage agents. See [Generators Reference](generators.md) for the full endpoint and permission matrix.
+Creating, listing, and deleting generators is admin-only. A generator PAK can read and update its own generator record, rotate its own PAK, and **list the agents registered with it** (`GET /agents`, scoped; `GET /generators/{id}/registered-agents` for the raw registration records) — but it cannot create other generators or manage agents. See [Generators Reference](generators.md) for the full endpoint and permission matrix.
 
 ### What a Generator PAK Is Scoped To
 
@@ -67,8 +67,11 @@ For the rationale, see [Security Model](../explanation/security-model.md#generat
 | Auto-registration | Every agent created through `POST /agents` is registered with it |
 | Purpose | Carries fleet/system stacks that reach all agents without per-tenant registration |
 | Listing | Excluded from `GET /generators` and from `GET /paks` |
+| Tenant-scoped reads | Refused with `system_generator_not_a_tenant` (403) for non-admin callers |
 
 The system generator is **not** the admin generator. The admin generator is a separate entity tied to the admin role/PAK; agents are not auto-registered with it.
+
+It is also **not a tenant**, which is why it is excluded from every tenant-facing surface: the generator and PAK listings, the console's scope selector, and the tenant-scoped agent reads. Because every agent is auto-registered with it, treating it as a tenant would quietly turn any scoped query into a fleet-wide one. The broker provisions it without a PAK, so nothing can authenticate as it; the 403 is defense in depth rather than a reachable path today.
 
 ### Agent Self-Registration at Startup
 

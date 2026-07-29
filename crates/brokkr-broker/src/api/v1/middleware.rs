@@ -43,6 +43,62 @@ pub struct AuthPayload {
     pub readonly: bool,
 }
 
+/// Resolves the caller's generator identity as a **tenant**, rejecting the
+/// system generator (BROKKR-T-0315).
+///
+/// Tenant-scoped read paths use this instead of reading
+/// [`AuthPayload::generator`] directly, because not every generator is a
+/// tenant. `__system__` (`is_system = true`) is internal delivery
+/// infrastructure that *every* agent is auto-registered with, so scoping a
+/// query to it silently widens that query to the entire fleet. It is already
+/// excluded from `GET /generators` and from the console's tenant selector on
+/// the same reasoning.
+///
+/// This checks `is_system` explicitly rather than relying on the fact that
+/// `provision_system_generator` never sets a `pak_hash` (so no PAK can
+/// currently authenticate as it). That invariant lives far from the handlers
+/// that depend on it, and nothing here would notice if it changed.
+///
+/// `admin-generator` is deliberately *not* rejected: it is `is_system = false`,
+/// and the admin-role check in [`verify_pak`] runs before the generator lookup,
+/// so an admin PAK never reaches the generator branch anyway.
+///
+/// Returns the generator's id on success. Errors are 403 and distinguish the
+/// three failure modes: not a generator at all, a system generator, or a
+/// generator id that no longer resolves.
+pub fn require_tenant_generator(
+    auth: &AuthPayload,
+    dal: &DAL,
+) -> Result<Uuid, crate::api::v1::error::ApiError> {
+    use crate::api::v1::error::ApiError;
+
+    let generator_id = auth
+        .generator
+        .ok_or_else(|| ApiError::forbidden("generator_required", "generator access required"))?;
+
+    let generator = dal
+        .generators()
+        .get(generator_id)
+        .map_err(|e| {
+            error!("Failed to look up generator {}: {:?}", generator_id, e);
+            ApiError::internal("failed to look up generator")
+        })?
+        .ok_or_else(|| {
+            // Authenticated moments ago, so this means the generator was
+            // deleted mid-request rather than that the caller is lying.
+            ApiError::forbidden("generator_not_found", "generator no longer exists")
+        })?;
+
+    if generator.is_system {
+        return Err(ApiError::forbidden(
+            "system_generator_not_a_tenant",
+            "the system generator is not a tenant and has no tenant-scoped view",
+        ));
+    }
+
+    Ok(generator_id)
+}
+
 /// Represents the response structure for authentication information.
 #[derive(Serialize, ToSchema)]
 pub struct AuthResponse {

@@ -7,7 +7,7 @@
 //! Agent management API endpoints.
 
 use crate::api::v1::error::{ApiError, ErrorResponse};
-use crate::api::v1::middleware::AuthPayload;
+use crate::api::v1::middleware::{AuthPayload, require_tenant_generator};
 use crate::dal::DAL;
 use crate::metrics;
 use crate::utils::{audit, event_bus, pak};
@@ -97,34 +97,54 @@ fn require_admin_or_agent(auth: &AuthPayload, id: Uuid) -> Result<(), ApiError> 
 #[utoipa::path(
     get, path = "/agents", tag = "agents",
     responses(
-        (status = 200, description = "Successfully retrieved agents", body = Vec<Agent>),
-        (status = 403, description = "Forbidden", body = ErrorResponse),
+        (status = 200, description = "List of agents (admin: all; generator: those registered with it)", body = Vec<Agent>),
+        (status = 403, description = "Forbidden — not admin, not a generator, or a system generator", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse),
     ),
-    security(("admin_pak" = []))
+    security(("admin_pak" = []), ("generator_pak" = []))
 )]
 async fn list_agents(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
 ) -> Result<Json<Vec<Agent>>, ApiError> {
     info!("Handling request to list agents");
-    require_admin(&auth_payload)?;
 
-    let agents = dal.agents().list().map_err(|e| {
-        error!("Failed to fetch agents: {:?}", e);
-        ApiError::internal("failed to fetch agents")
-    })?;
+    // Admin sees the fleet; a tenant generator sees only the agents that have
+    // registered with it (BROKKR-T-0315). Mirrors `list_stacks`.
+    let agents = if auth_payload.admin {
+        dal.agents().list().map_err(|e| {
+            error!("Failed to fetch agents: {:?}", e);
+            ApiError::internal("failed to fetch agents")
+        })?
+    } else {
+        let generator_id = require_tenant_generator(&auth_payload, &dal)?;
+        dal.agents().list_for_generator(generator_id).map_err(|e| {
+            error!(
+                "Failed to fetch agents for generator {}: {:?}",
+                generator_id, e
+            );
+            ApiError::internal("failed to fetch agents")
+        })?
+    };
+
     info!("Successfully retrieved {} agents", agents.len());
-    let active_count = agents.iter().filter(|a| a.status == "ACTIVE").count();
-    metrics::set_active_agents(active_count as i64);
 
-    let now = chrono::Utc::now();
-    for agent in &agents {
-        if let Some(last_hb) = agent.last_heartbeat {
-            let age_seconds = (now - last_hb).num_seconds().max(0) as f64;
-            metrics::set_agent_heartbeat_age(&agent.id.to_string(), &agent.name, age_seconds);
+    // Metrics are fleet-wide gauges, so only the admin listing may write them.
+    // A tenant-scoped listing observes a subset; publishing that would make
+    // `brokkr_active_agents` report whichever tenant polled most recently.
+    if auth_payload.admin {
+        let active_count = agents.iter().filter(|a| a.status == "ACTIVE").count();
+        metrics::set_active_agents(active_count as i64);
+
+        let now = chrono::Utc::now();
+        for agent in &agents {
+            if let Some(last_hb) = agent.last_heartbeat {
+                let age_seconds = (now - last_hb).num_seconds().max(0) as f64;
+                metrics::set_agent_heartbeat_age(&agent.id.to_string(), &agent.name, age_seconds);
+            }
         }
     }
+
     Ok(Json(agents))
 }
 

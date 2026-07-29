@@ -12,6 +12,7 @@ mod auth;
 mod deployment_objects;
 mod diagnostics;
 mod fleet;
+mod generator_agent_listing;
 mod generator_registration;
 mod generators;
 mod health;

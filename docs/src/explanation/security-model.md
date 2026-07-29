@@ -215,8 +215,9 @@ The following table summarizes which roles can access each API endpoint category
 | `/api/v1/agents/{id}/work-orders/*` | Own ID only | No | Yes |
 | `/api/v1/agents/{id}/registrations` | Own ID only | No | Yes |
 | `/api/v1/generators/{id}/register` (POST/DELETE) | Own ID only | No | Yes |
-| `/api/v1/generators/{id}/registered-agents` | No | Own ID only | Yes |
+| `/api/v1/generators/{id}/registered-agents` | No | Own ID only (not the system generator) | Yes |
 | `/api/v1/stacks/*` | No | Own stacks | Yes |
+| `/api/v1/agents` (GET, listing) | No | Own registered agents (not the system generator) | Yes (whole fleet) |
 | `/api/v1/agents/*` (management) | No | No | Yes |
 | `/api/v1/admin/*` | No | No | Yes |
 | `/api/v1/webhooks/*` | No | No | Yes |
@@ -224,6 +225,10 @@ The following table summarizes which roles can access each API endpoint category
 | `/healthz`, `/readyz` | Public (no auth) | Public (no auth) | Public (no auth) |
 | `/metrics` | Public (no auth) | Public (no auth) | Public (no auth) |
 | Console routes (any non-`/api` GET, embed-ui builds) | Public (no auth) | Public (no auth) | Public (no auth) |
+
+Two of those rows are tenant-scoped reads rather than all-or-nothing gates. `GET /api/v1/agents` returns the whole fleet to an admin and, to a generator, exactly the agents registered with that generator — so a tenant can answer "which agents serve me?" without an admin credential. `GET /api/v1/generators/{id}/registered-agents` answers the narrower question with registration records (agent *ids* and timestamps) rather than agent detail; use the agent listing when you need names, clusters, status, or heartbeats.
+
+Neither is available to the **system generator**, which is why both rows carry that exclusion. `__system__` is internal delivery infrastructure rather than a tenant, and every agent is auto-registered with it — so scoping either read to it would return the entire fleet through a non-admin credential. Both endpoints reject it with `system_generator_not_a_tenant` (403). This is defense in depth: the system generator is provisioned without a PAK, so nothing can authenticate as it today.
 
 The read-only UI PAK is not a separate column: it passes every admin **read** check in the table (GET/HEAD), plus the two allowlisted POSTs, and fails everything else with 403. `GET /api/v1/paks` lists the non-system generators as `{id, name}` pairs so the console can offer a tenant selector; the `?pak_id=` parameter it feeds on `/fleet`, `/stacks`, and `/agent-events` is a **view filter**, not an authorization boundary — real isolation comes from generator ownership checks, not from `pak_id`.
 
