@@ -1,10 +1,10 @@
 ---
-id: rotate-admin-reports-success-when-nothing-rotated
+id: rotate-admin-reports-success-when
 level: task
 title: "rotate admin reports success when it mints nothing, and hides the PAK it does mint in a file nothing reads"
 short_code: "BROKKR-T-0317"
 created_at: 2026-07-29T05:00:00+00:00
-updated_at: 2026-07-29T05:00:00+00:00
+updated_at: 2026-07-29T04:56:02.128348+00:00
 parent: 
 blocked_by: []
 archived: false
@@ -12,7 +12,7 @@ archived: false
 tags:
   - "#task"
   - "#bug"
-  - "#phase/active"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -61,17 +61,19 @@ That divergence is not theoretical — it is exactly what `DefaultAdminPakStatus
 
 ## Acceptance Criteria
 
+## Acceptance Criteria
+
 - [x] `rotate admin` distinguishes the two branches and never claims to have rotated when it minted nothing.
 - [x] The no-op branch states plainly what it did, that nothing was revoked, and both routes to actually replacing the credential.
 - [x] The minting branch prints the PAK **and** the hash, noting the PAK is shown once.
 - [x] `serve`'s first-startup behaviour is unchanged — it must not print secrets into a long-running process's log stream.
 - [x] The key file is still written, so nothing depending on it breaks.
 - [x] Tests pin the branch distinction rather than the wording.
-- [ ] `how-to/pak-management.md` reflects the new output, and documents the exec-into-the-pod cold start it currently omits.
+- [x] `how-to/pak-management.md` reflects the new output, and documents the exec-into-the-pod cold start it previously omitted.
 
 ## Status Updates
 
-**2026-07-29 — DONE** (except the docs criterion, tracked below).
+**2026-07-29 — DONE** on branch `docs/tenancy-review-2026-07` (commit `73bac4e`). 531 integration tests pass (2 new), 147 unit, `angreal docs build` clean.
 
 `upsert_admin` now returns `AdminPakOutcome::{Minted { pak, hash }, ReappliedConfigured { hash }}` instead of `()`. That is the whole fix: the information existed inside the function and was thrown away at the boundary.
 
@@ -80,3 +82,6 @@ That divergence is not theoretical — it is exactly what `DefaultAdminPakStatus
 **The no-op branch is not an error.** Re-applying a configured hash is the supported way to commit a hash you minted yourself, which is the documented flow. It was only ever misleading, so the fix is the message, not the exit code.
 
 Two integration tests pin the branches (`tests/integration/db/default_admin_pak.rs`), asserting the outcome variant rather than the printed strings so wording can change freely. The minting test also asserts the returned PAK is not the hash and that the stored hash is the minted one — i.e. the printed credential actually authenticates. Printing the hash as though it were the PAK would hand out a string that silently fails to authenticate, which is the obvious way to get this wrong.
+**Docs corrected, including two claims that this change falsified:** `reference/cli.md` said the minted PAK "is never printed to stdout" and that "the previously stored hash is replaced, so the old admin PAK stops working" — the latter was already misleading before this change, since nothing is replaced or revoked on the re-apply branch. Both fixed. `how-to/pak-management.md` gained the Kubernetes cold start, which was genuinely undocumented: the page's only `kubectl` material was for *agent* Secrets.
+
+Checked the rest of the tree for stale `key.txt` claims. The remaining references (`multi-tenant-setup.md`, `sdks/README.md`, `configuration.md`, `development.md`, `installation.md`) all describe `serve`'s first-startup path, which is unchanged and still file-only — they stay accurate.
