@@ -1,10 +1,10 @@
 ---
-id: generator-pak-list-registered-agents
+id: generators-cannot-list-their-own
 level: task
-title: "Generators cannot list their own agents: GET /agents is admin-only, so tenant tooling needs an admin PAK to answer \"which agents serve me?\""
+title: "Generators cannot list their own agents: GET /agents is admin-only, so tenant tooling needs an admin PAK for a tenant-scoped read"
 short_code: "BROKKR-T-0315"
-created_at: 2026-07-28T22:30:00.000000+00:00
-updated_at: 2026-07-28T22:30:00.000000+00:00
+created_at: 2026-07-28T22:30:00+00:00
+updated_at: 2026-07-29T04:08:47.855014+00:00
 parent: 
 blocked_by: []
 archived: false
@@ -12,7 +12,7 @@ archived: false
 tags:
   - "#task"
   - "#feature"
-  - "#phase/backlog"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -99,6 +99,12 @@ Whatever is decided here, these should follow or be explicitly deferred:
 
 ## Acceptance Criteria
 
+## Acceptance Criteria
+
+## Acceptance Criteria
+
+## Acceptance Criteria
+
 - [ ] A generator PAK calling `GET /api/v1/agents` receives exactly the agents registered to that generator, and admin behavior (including the `scope.pak_id` tenant-view filter) is unchanged.
 - [ ] A generator PAK does not see agents registered only to other generators — asserted by an integration test with two generators and at least one agent each.
 - [ ] A generator PAK whose generator has `is_system = true` is rejected with 403 and a distinct error code, **not** given a fleet-wide listing — asserted by a test that provisions a PAK for the system generator directly at the DAL layer rather than assuming the API cannot mint one.
@@ -111,4 +117,46 @@ Whatever is decided here, these should follow or be explicitly deferred:
 
 ## Status Updates
 
-*To be added during implementation*
+**2026-07-29 — DONE** on branch `docs/tenancy-review-2026-07` (commit `ac958b5`). **529 integration tests pass (7 new), 147 unit, `angreal openapi check` + both SDK drift checks clean, `angreal docs build` passes.**
+
+### Correction to this ticket's premise: `GET /generators/{id}/registered-agents` already exists
+
+Found while updating the docs, not while writing the ticket — the endpoint is at `api/v1/generators.rs:601`, is already `security(("admin_pak"), ("generator_pak"))`, and already lets a generator ask which agents are registered with it. The Objective above says a generator "cannot ask which agents are registered to it." **That is wrong as written.**
+
+What is true, and is the actual gap: that endpoint returns `Vec<AgentGeneratorRegistration>` — `{id, agent_id, generator_id, registered_at}`. A tenant gets a list of **opaque UUIDs** and no way to resolve them, because `GET /agents` *and* `GET /agents/{id}` are both admin-only. So the tenant can learn that four agents serve it and nothing else: not a name, not a cluster, not whether any of them is alive. Answering "which agents serve me?" in any useful sense still required an admin PAK.
+
+So the feature stands and the fix is unchanged, but the framing was sloppy: this is **resolving ids into detail**, not discovering the ids. Recorded rather than silently rewritten because the mistake is instructive — the ticket asserted absence after checking `agents.rs` and not `generators.rs`.
+
+### That correction surfaced a real hole
+
+`list_generator_registered_agents` had **no system-generator guard**. Since every agent is auto-registered with `__system__`, a system-generator PAK could have enumerated the entire fleet's agent ids through it — the same hole this ticket closes for `GET /agents`, already present on a shipped endpoint. Guarded it there too, reusing the generator lookup that handler already performs (no extra query). Non-admin only: an admin scoping to the system generator is legitimate and unaffected.
+
+Not reachable today — `provision_system_generator` sets no `pak_hash` — so this is defense in depth, consistent with the decision to guard rather than rely on that omission.
+
+### Implemented
+
+- `agents().list_for_generator()` (`dal/agents.rs`) — inner join on `agent_generator_registrations`, filtered `deleted_at.is_null()` to match `list()`. **Resolves the ticket's open question**: `list()` filters soft-deleted and `stacks::list_for_generator` does too, so the new method does as well; admin and generator branches cannot disagree about which agents exist.
+- `require_tenant_generator()` (`api/v1/middleware.rs`) — shared, next to `AuthPayload` so `stacks.rs`/`generators.rs` can use it, not private to `agents.rs`. Resolves the generator, rejects `is_system`, returns the id. Three distinct 403s: `generator_required`, `system_generator_not_a_tenant`, `generator_not_found`.
+- `list_agents` branches admin → `list()`, else → `require_tenant_generator` + `list_for_generator`, mirroring `list_stacks`.
+
+**Caught while editing, not by the tests:** `list_agents` writes `brokkr_active_agents` and per-agent heartbeat-age gauges on every call. These are **fleet-wide**, so a tenant-scoped listing would have made the gauge report whichever tenant polled most recently — a monitoring corruption with no visible symptom. Metrics writes are now admin-path-only, matching the "only an unscoped admin listing reflects the true total" comment already in `list_stacks`.
+
+**Deliberately not done:** no `?pak_id=` scope parameter on `GET /agents`. `list_stacks` has one, but `list_agents` never did, and adding it is a console feature rather than part of this. Noted as a follow-up, not silently absorbed.
+
+### Tests — `tests/integration/api/generator_agent_listing.rs` (7)
+
+Isolation between two tenants; the core listing; empty listing for a generator with no registrations; soft-delete parity; agent PAK rejected with `generator_required`; admin still sees the fleet.
+
+The system-generator test **mints a PAK for `__system__` at the DAL layer** rather than asserting the API cannot mint one — testing the latter would exercise `provision_system_generator`, not this handler. It also asserts no agent id appears in the refusal body, so the test fails loudly if the guard is removed and the fleet leaks.
+
+### Docs updated
+
+`security-model.md` endpoint matrix (the `/api/v1/agents/*` row said "No / No / Yes" and is now split), `reference/multi-tenancy.md` (the "cannot manage agents" claim was stale), `reference/generators.md`, `reference/api/README.md`, and `reference/error-codes.md` (both new codes). OpenAPI annotation now `admin_pak` + `generator_pak`.
+
+### Pre-existing spec drift found by regenerating
+
+`angreal openapi check` was **already failing on this branch before this change** — verified by stashing the work and re-running (exit 1). Commit `39f2b0a` edited the `WebhookFilters` docstring (correcting which `deployment.*` payloads carry `stack_id`) without re-exporting the spec, so `openapi/brokkr-v1.json` and both generated SDKs were stale against the source. The committed spec and committed SDKs agreed with *each other*, which is why the SDK drift checks passed and nothing surfaced it.
+
+Regenerating here corrected all of it: spec, its `crates/brokkr-client/spec/` mirror, the Python SDK (4 webhook models), and the TypeScript schema. Unrelated to this feature but folded in because the export could not be done partially.
+
+**Worth a follow-up:** e2e runs only on release/nightly, and `angreal openapi check` evidently is not gating this branch either — a docstring edit silently invalidated the published spec and both SDKs for several commits.
