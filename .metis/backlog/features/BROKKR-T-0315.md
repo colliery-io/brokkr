@@ -70,11 +70,20 @@ If a system-generator PAK were ever issuable, this feature would turn it into an
 
 `admin-generator` needs no guard here, and the reason is non-obvious: in `verify_pak` (`api/v1/middleware.rs:234-259`) the **admin-role check runs before the generator lookup**, so the admin PAK resolves to `admin: true, generator: None` and never reaches the generator branch. Its `pak_hash` is a shadow owner record, not a usable generator identity — anyone presenting it is already admin and takes the admin path through this handler regardless.
 
-So `__system__` is the only case needing a decision. That property holds by omission, so it is worth *enforcing* rather than relying on. Decide one of:
-- **(a)** Explicitly reject `is_system` generators in this handler, so the fleet-wide read cannot be reached this way even if a PAK is later mintable for one. Cheap, and documents the invariant in the place that depends on it.
-- **(b)** Treat it as already covered by "the system generator has no PAK" and add a test asserting that instead.
+So `__system__` is the only case needing a decision. That property holds by omission, so it is worth *enforcing* rather than relying on.
 
-**(a) plus the test is the recommendation** — the guard is a few lines and the invariant currently lives nowhere near the code that would break if it changed.
+### DECIDED (Dylan, 2026-07-28): reject system generators — they are not "real"
+
+**A system generator is not a tenant, so it does not get a tenant's view.** `__system__` is internal infrastructure — a delivery scope that reaches every agent — not an application scope owned by anyone. It is already excluded from `GET /generators` and from the console's tenant selector on exactly this reasoning; a generator-scoped agent listing is the same kind of surface and should be consistent with them.
+
+Implement as an explicit guard: if the authenticated generator has `is_system = true`, return 403 rather than a fleet-wide listing. Do **not** rely on "it has no PAK, so this is unreachable" — that invariant lives in `provision_system_generator` and nothing near this handler would notice if it changed.
+
+Consequences to carry through:
+
+- **Put the guard in a shared helper, not inline.** The ticket's "secondary surfaces" section already anticipates generator-scoped `get_agent`, `search_agent`, and per-agent reads. Each would need the identical check, and a guard copied four times is a guard that will be forgotten on the fifth. Something like `require_tenant_generator(&auth_payload, &dal) -> Result<Uuid, ApiError>` that resolves the generator, rejects `is_system`, and hands back the id.
+- **The guard must load the generator**, since `AuthPayload` carries only `generator: Option<Uuid>` and not the `is_system` flag. That is one extra read per scoped request; the auth cache stores `AuthPayload`, not the generator row, so it does not help here. If that read shows up in profiles, the fix is to widen the cached payload rather than to drop the check.
+- **`admin-generator` is unaffected** and must stay that way — it is `is_system = false`, and an `is_system` guard correctly ignores it. It never reaches the generator branch of `verify_pak` anyway (admin is checked first), so nothing changes for admin callers.
+- **The error should be distinguishable** from "you are not a generator at all". A caller holding a system-generator credential is in a genuinely different situation from an unauthenticated one, and a distinct code (e.g. `system_generator_not_a_tenant`) makes that legible instead of looking like a broken PAK.
 
 ### Open question: soft-deleted agents
 
@@ -92,7 +101,9 @@ Whatever is decided here, these should follow or be explicitly deferred:
 
 - [ ] A generator PAK calling `GET /api/v1/agents` receives exactly the agents registered to that generator, and admin behavior (including the `scope.pak_id` tenant-view filter) is unchanged.
 - [ ] A generator PAK does not see agents registered only to other generators — asserted by an integration test with two generators and at least one agent each.
-- [ ] The system-generator case is resolved per (a) or (b) above, with a test pinning whichever invariant is chosen.
+- [ ] A generator PAK whose generator has `is_system = true` is rejected with 403 and a distinct error code, **not** given a fleet-wide listing — asserted by a test that provisions a PAK for the system generator directly at the DAL layer rather than assuming the API cannot mint one.
+- [ ] The `is_system` rejection lives in a shared helper reusable by the secondary surfaces, not inline in `list_agents`.
+- [ ] `admin-generator` is confirmed unaffected: an admin caller still takes the admin branch and sees every agent.
 - [ ] Soft-delete semantics match the admin `list()` path.
 - [ ] A caller with neither admin nor generator identity still gets 403, with an error code consistent with `stacks_list_denied`.
 - [ ] OpenAPI security annotation updated, `angreal openapi check` passes, and the SDK docs no longer claim admin-only.
