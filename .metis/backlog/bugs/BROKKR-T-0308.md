@@ -12,7 +12,7 @@ archived: false
 tags:
   - "#task"
   - "#bug"
-  - "#phase/active"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -77,5 +77,9 @@ Agent metrics port confirmed as 8080 from `cli/commands.rs` (`health_port.unwrap
 **Dead keys fixed beyond the agent's file ownership:** `charts/brokkr-agent/values-dev.yaml` and `charts/brokkr-broker/values-dev.yaml` both still set `metrics.enabled: true` — exactly the defect class this ticket closes. Both replaced with a comment pointing at `networkPolicy.allowMetricsScraping`.
 
 **Still open — acceptance criterion 3.** No `helm template` assertions or chart-test coverage was added, so nothing prevents these from regressing. Verification was by hand. The chart test harness (`angreal helm test`) needs a live cluster and was out of scope here; this is the criterion that would actually keep the fix from rotting, and it deserves its own follow-up rather than being quietly dropped.
+
+**2026-07-28 — acceptance criterion 3 now closed by BROKKR-T-0313** (commit `3678bec`): `angreal helm check-values` asserts these four render as intended, and was proven by deleting the `service.annotations` block and watching it fail. Closing this ticket.
+
+Worth recording: T-0313's generic "every values key is referenced" guard would have caught only **one** of these four (`service.annotations`). `metrics.enabled` and `telemetry.collector.enabled` were both *referenced* and would have passed it, and the ServiceMonitor port mismatch has no unreferenced key at all. Three of the four needed targeted assertions.
 
 **Not done: `Chart.yaml` version bump.** Both charts remain 0.8.4 and both README values tables are stamped for that version. These are breaking interface changes that would normally warrant a bump, but the project uses lockstep versioning driven by git tags, so bumping by hand here would fight the release process. The stamps need updating together with whatever bump the next release applies.

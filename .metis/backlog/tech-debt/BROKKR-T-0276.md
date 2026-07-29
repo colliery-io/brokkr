@@ -12,7 +12,7 @@ archived: false
 tags:
   - "#task"
   - "#tech-debt"
-  - "#phase/active"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -60,4 +60,12 @@ security-model.md now has a "Read-Only Console Authentication (the UI PAK)" sect
 
 ## Status Updates
 
-*To be added during implementation*
+**2026-07-28 — DONE** on branch `docs/tenancy-review-2026-07` (commit `3ba49db`). All four acceptance criteria verified against the files, not assumed:
+
+- `docs/src/how-to/operator-console.md` (133 lines), linked from `SUMMARY.md`, covering access, what the console authenticates as, the tenant scope selector, diagnostics, multi-replica behaviour, and troubleshooting.
+- `security-model.md` documents the UI PAK as one of four credential classes, with its own section and the constant-time in-memory compare in the auth-flow diagram.
+- `components.md` and `architecture.md` both carry `brokkr-web` and explicitly disambiguate `examples/ui-slim` as an unsupported React demo that is neither built nor shipped.
+
+**The single most useful thing this page says is that network reach is the authentication boundary.** The console needs no configuration because the broker hands the page an ephemeral read-only credential — which is a genuine usability win and also means anyone who can reach the broker port gets a read-only admin view of the tenant. That was previously discoverable only by reading the middleware.
+
+This ticket sat `active` with an empty Status Updates section after the work had already shipped, which is how it nearly got redone.
