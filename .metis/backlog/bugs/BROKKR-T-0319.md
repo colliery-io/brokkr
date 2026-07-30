@@ -77,3 +77,17 @@ Worth checking specifically because it has bitten twice already in this codebase
 ## Status Updates
 
 *To be added during implementation*
+
+## 2026-07-29 — the screenshot harness cannot be trusted as a baseline yet
+
+Found while adding tenant scenes for BROKKR-T-0318, and it lands squarely in this ticket's scope.
+
+`web-e2e/shots.mjs` ended every interaction in `.catch(() => {})`, so a click that did nothing still printed `shot: <name>` and wrote a plausible-looking PNG **of the default Overview view**. Most `nav:` scenes were affected. Root cause was not the clicks: `trunk serve` watched `web-e2e/`, which contains the harness's own PNG output, so each screenshot triggered a rebuild whose live-reload reset the route mid-scene (310 rebuilds in one run).
+
+T-0318 fixed the harness itself — `Trunk.toml` watch exclusion, a `navigateTo()` that verifies the page header and retries, method-aware mocks, and a `fill` primitive. **It did not re-review the pre-existing scenes' screenshots**, which is this ticket's job:
+
+- [ ] Re-run the harness and actually *look* at all 23 scenes. Any that were previously capturing Overview have never been visually reviewed at all.
+- [ ] Only then consider committing them as golden-image baselines. A diff built on the current PNGs would enshrine whatever was wrong.
+- [ ] Two scenes are worth specific suspicion because their assertions were the weakest: `fleet-scoped` (the only scene that failed even the permissive early check) and the three `fleet-diagnostic*` scenes, which depend on a `then_click` inside a modal — a nested interaction with the same silent-failure shape.
+
+**Also note the harness's limits, so the sweep does not over-trust it.** It renders with fixtures and screenshots; it cannot see a control that renders correctly and *does nothing* — which is exactly this ticket's headline defect (the Live/Paused toggle). Pixel coverage and no-op coverage are different problems: the toggle would look perfect in every golden image. The signal-with-no-consumer grep remains the tool for that class.

@@ -13,8 +13,8 @@ use crate::models::{
 };
 use aurora_leptos::tokens::ApiError;
 use gloo_net::http::Request;
-use serde::Serialize;
 use serde::de::DeserializeOwned;
+use serde::Serialize;
 
 /// Operator-pasted PAK, if any (the write-capable override — see module docs).
 pub fn pak() -> Option<String> {
@@ -206,8 +206,14 @@ pub async fn post_json<B: Serialize, T: DeserializeOwned>(
     let status = resp.status();
     if !(200..300).contains(&status) {
         let message = resp.text().await.unwrap_or_default();
-        let code = serde_json::from_str::<ErrorBody>(&message).ok().map(|b| b.code);
-        return Err(ApiError::Http { status, message, code });
+        let code = serde_json::from_str::<ErrorBody>(&message)
+            .ok()
+            .map(|b| b.code);
+        return Err(ApiError::Http {
+            status,
+            message,
+            code,
+        });
     }
     resp.json::<T>().await.map_err(|e| ApiError::Http {
         status,
@@ -260,11 +266,93 @@ pub async fn stack_health(id: &str) -> Result<crate::models::StackHealth, ApiErr
 }
 
 /// `GET /api/v1/webhooks/:id/deliveries` — recent delivery attempts.
-pub async fn webhook_deliveries(id: &str) -> Result<Vec<crate::models::WebhookDeliveryDto>, ApiError> {
+pub async fn webhook_deliveries(
+    id: &str,
+) -> Result<Vec<crate::models::WebhookDeliveryDto>, ApiError> {
     get(&format!("/webhooks/{id}/deliveries")).await
 }
 
 /// `GET /api/v1/work-orders` — full work-order list (admin-gated).
 pub async fn work_orders() -> Result<Vec<crate::models::WorkOrder>, ApiError> {
     get("/work-orders").await
+}
+
+/// `GET /api/v1/generators` — the tenant list. Admin-gated, so the injected
+/// read-only UI token is admitted (it is a read-only *admin*). The broker
+/// excludes the system generator from this listing, so what comes back is
+/// exactly the set of real tenants.
+pub async fn generators() -> Result<Vec<crate::models::Generator>, ApiError> {
+    get("/generators").await
+}
+
+/// POST `/api/v1{path}` authenticating with an **explicitly supplied** bearer
+/// token rather than [`token()`] (BROKKR-T-0318).
+///
+/// This exists so a privileged one-shot action can carry an operator-pasted
+/// admin PAK **without that PAK ever being stored**. Deliberately does *not*
+/// reuse [`pak()`]: that override lives in `localStorage`, which survives
+/// reloads and is readable by any script on the origin. An admin credential —
+/// the strongest in the system — should not persist there just to create one
+/// generator.
+///
+/// The token is borrowed for the duration of the call and never captured,
+/// logged, or written anywhere. Failures return [`ApiError`] built from the
+/// broker's `ErrorResponse` body, which never echoes the request's
+/// `Authorization` header.
+async fn post_json_with_token<B: Serialize, T: DeserializeOwned>(
+    path: &str,
+    body: &B,
+    bearer: &str,
+) -> Result<T, ApiError> {
+    let url = format!("/api/v1{path}");
+    let resp = Request::post(&url)
+        .header("Authorization", &format!("Bearer {bearer}"))
+        .json(body)
+        .map_err(|_| ApiError::Network)?
+        .send()
+        .await
+        .map_err(|_| ApiError::Network)?;
+    let status = resp.status();
+    if !(200..300).contains(&status) {
+        let message = resp.text().await.unwrap_or_default();
+        let code = serde_json::from_str::<ErrorBody>(&message)
+            .ok()
+            .map(|b| b.code);
+        return Err(ApiError::Http {
+            status,
+            message,
+            code,
+        });
+    }
+    resp.json::<T>().await.map_err(|e| ApiError::Http {
+        status,
+        message: e.to_string(),
+        code: None,
+    })
+}
+
+/// `POST /api/v1/generators` — mint a new generator tenant, authenticating with
+/// the operator's admin PAK for this one request (BROKKR-T-0318).
+///
+/// The console's own credential cannot do this and is deliberately not used:
+/// the injected UI token is read-only, so the broker would reject the write.
+/// Requiring the operator to supply an admin PAK per action is what keeps
+/// "network reach is the console's authentication boundary" true — reaching the
+/// page grants no ability to mint anything.
+///
+/// The response carries the new generator's PAK in plaintext, exactly once.
+pub async fn create_generator(
+    name: &str,
+    description: Option<&str>,
+    admin_pak: &str,
+) -> Result<crate::models::CreateGeneratorResponse, ApiError> {
+    post_json_with_token(
+        "/generators",
+        &serde_json::json!({
+            "name": name,
+            "description": description,
+        }),
+        admin_pak,
+    )
+    .await
 }

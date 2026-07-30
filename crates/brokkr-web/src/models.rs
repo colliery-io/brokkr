@@ -425,3 +425,35 @@ impl WorkOrder {
         )
     }
 }
+
+/// One generator (tenant) from `GET /api/v1/generators`.
+///
+/// The broker never serializes `pak_hash` (`#[serde(skip_serializing)]`), so no
+/// credential material reaches the console on this path — only the minting
+/// response below carries a secret, and only once.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct Generator {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub is_active: bool,
+    #[serde(default)]
+    pub is_system: bool,
+    #[serde(default)]
+    pub created_at: Option<String>,
+    #[serde(default)]
+    pub last_active_at: Option<String>,
+}
+
+/// `POST /api/v1/generators` response — the created generator plus its
+/// one-time PAK (BROKKR-T-0318).
+///
+/// `pak` is the only secret the console ever receives. It is unrecoverable
+/// afterwards: the broker stores a hash, so losing it means rotating.
+#[derive(Debug, Clone, Deserialize)]
+pub struct CreateGeneratorResponse {
+    pub generator: Generator,
+    pub pak: String,
+}

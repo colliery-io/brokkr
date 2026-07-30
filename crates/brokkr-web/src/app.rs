@@ -20,8 +20,14 @@ const NAV: &[(&str, &[(&str, &str)])] = &[
             ("telemetry", "Telemetry"),
         ],
     ),
-    ("Operations", &[("jobs", "Work orders"), ("webhooks", "Webhooks")]),
-    ("System", &[("system", "Broker health")]),
+    (
+        "Operations",
+        &[("jobs", "Work orders"), ("webhooks", "Webhooks")],
+    ),
+    (
+        "System",
+        &[("system", "Broker health"), ("tenants", "Tenants")],
+    ),
 ];
 
 /// (title, subtitle) for a view id.
@@ -34,6 +40,7 @@ fn meta(id: &str) -> (&'static str, &'static str) {
         "jobs" => ("Work orders", "active · history"),
         "webhooks" => ("Webhooks", "subscriptions · deliveries"),
         "system" => ("Broker health", "metrics · connections"),
+        "tenants" => ("Tenants", "generators · PAK minting"),
         _ => ("Brokkr", ""),
     }
 }
@@ -62,7 +69,9 @@ const SCOPE_STORAGE_KEY: &str = "brokkr_scope";
 
 fn load_scope() -> Option<String> {
     let ls = web_sys::window()?.local_storage().ok()??;
-    ls.get_item(SCOPE_STORAGE_KEY).ok()?.filter(|s| !s.is_empty())
+    ls.get_item(SCOPE_STORAGE_KEY)
+        .ok()?
+        .filter(|s| !s.is_empty())
 }
 
 fn save_scope(scope: &Option<String>) {
@@ -70,8 +79,12 @@ fn save_scope(scope: &Option<String>) {
         return;
     };
     match scope {
-        Some(id) => { let _ = ls.set_item(SCOPE_STORAGE_KEY, id); }
-        None => { let _ = ls.remove_item(SCOPE_STORAGE_KEY); }
+        Some(id) => {
+            let _ = ls.set_item(SCOPE_STORAGE_KEY, id);
+        }
+        None => {
+            let _ = ls.remove_item(SCOPE_STORAGE_KEY);
+        }
     }
 }
 
@@ -283,6 +296,7 @@ fn Main(
                     "webhooks" => view! { <crate::views::webhooks::WebhooksView /> }.into_any(),
                     "deployments" => view! { <crate::views::deployments::DeploymentsView /> }.into_any(),
                     "telemetry" => view! { <crate::views::telemetry::TelemetryView /> }.into_any(),
+                    "tenants" => view! { <crate::views::tenants::TenantsView /> }.into_any(),
                     other => {
                         let (title, _) = meta(other);
                         view! {

@@ -287,3 +287,50 @@ async fn test_admin_pak_is_not_readonly() {
     assert_eq!(auth["admin"], true);
     assert_eq!(auth["readonly"], false);
 }
+
+/// The console's tenant-minting panel (BROKKR-T-0318) works by having the
+/// *operator* supply an admin PAK for that one request. This pins the reason
+/// that design is safe: the console's **own** credential still cannot mint a
+/// generator, so reaching the page grants no ability to create credentials.
+///
+/// If this ever starts passing with a 201, the console's security model has
+/// changed and the "network reach is the authentication boundary" statements in
+/// `security-model.md` are no longer true.
+#[tokio::test]
+async fn test_ui_pak_cannot_mint_a_generator() {
+    let fixture = TestFixture::new();
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/generators")
+                .header("Content-Type", "application/json")
+                .header("Authorization", format!("Bearer {}", ui_token()))
+                .body(Body::from(
+                    json!({"name": "minted-by-the-console", "description": null}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.status(),
+        StatusCode::FORBIDDEN,
+        "the read-only console credential must not be able to mint a tenant"
+    );
+
+    // The generator must not exist either -- a 403 that still wrote the row
+    // would be worse than no check at all.
+    let generators = fixture
+        .dal
+        .generators()
+        .list()
+        .expect("failed to list generators");
+    assert!(
+        !generators.iter().any(|g| g.name == "minted-by-the-console"),
+        "no generator may be created on the rejected path"
+    );
+}

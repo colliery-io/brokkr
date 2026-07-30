@@ -1,0 +1,17 @@
+# Trunk configuration for the operator console.
+#
+# The only thing here is a watch exclusion, and it is load-bearing.
+#
+# `trunk serve` watches this crate directory, which contains `web-e2e/` — the
+# Playwright screenshot harness. That harness writes PNGs into
+# `web-e2e/shots/` and carries its own `node_modules/`, so with the default
+# watch set **every screenshot it takes triggers a rebuild, and the rebuild
+# live-reloads the page it is currently driving.**
+#
+# The symptom was thoroughly misleading: scenes navigated correctly, verified
+# correctly, and then screenshotted the default Overview view, because the
+# reload reset the route signal a moment after the assertion passed. It looked
+# like a click race and survived several rounds of settle-delay tuning
+# (BROKKR-T-0318). A run logged 310 rebuilds.
+[watch]
+ignore = ["web-e2e"]
