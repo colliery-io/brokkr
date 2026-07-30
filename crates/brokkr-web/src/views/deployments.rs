@@ -5,10 +5,10 @@
 //! health is a follow-up (logged on the task).
 
 use crate::api;
+use crate::components::sev;
 use crate::components::DetailRow;
 use crate::models::Stack;
 use aurora_leptos::components::*;
-use crate::components::sev;
 use leptos::prelude::*;
 
 #[component]

@@ -14,10 +14,12 @@ pub fn sev(status: &str) -> &'static str {
     match status.to_ascii_lowercase().as_str() {
         "healthy" | "delivered" | "active" | "completed" | "success" | "succeeded" | "ok"
         | "ready" => token::OK,
-        "degraded" | "pending" | "claimed" | "retrying" | "in_progress" | "warning"
-        | "queued" => token::GOLD,
-        "failing" | "failed" | "error" | "errored" | "unhealthy" | "inactive"
-        | "offline" => token::BAD,
+        "degraded" | "pending" | "claimed" | "retrying" | "in_progress" | "warning" | "queued" => {
+            token::GOLD
+        }
+        "failing" | "failed" | "error" | "errored" | "unhealthy" | "inactive" | "offline" => {
+            token::BAD
+        }
         _ => token::MUTED,
     }
 }

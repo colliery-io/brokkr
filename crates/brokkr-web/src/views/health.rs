@@ -41,9 +41,17 @@ const CARDS: &[(&str, &str, &str)] = &[
     ("Active agents", "brokkr_active_agents", "var(--fg-bright)"),
     ("WS connected", "brokkr_ws_connected_agents", token::TEAL),
     ("HTTP requests", "brokkr_http_requests_total", token::ICE),
-    ("Live subscribers", "brokkr_fleet_live_subscribers", token::VIOLET),
+    (
+        "Live subscribers",
+        "brokkr_fleet_live_subscribers",
+        token::VIOLET,
+    ),
     ("Stacks", "brokkr_stacks_total", "var(--fg-bright)"),
-    ("Deploy objects", "brokkr_deployment_objects_total", "var(--fg-bright)"),
+    (
+        "Deploy objects",
+        "brokkr_deployment_objects_total",
+        "var(--fg-bright)",
+    ),
 ];
 
 #[component]

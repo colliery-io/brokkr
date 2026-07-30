@@ -107,9 +107,7 @@ fn events_view(events: Result<Vec<DiagEvent>, String>) -> AnyView {
     const SHOW: usize = 25;
     match events {
         Err(e) => note(format!("events unreadable: {e}")),
-        Ok(v) if v.is_empty() => {
-            note("No events in the searched namespaces.".to_string())
-        }
+        Ok(v) if v.is_empty() => note("No events in the searched namespaces.".to_string()),
         Ok(v) => {
             let total = v.len();
             let rows = v
@@ -141,8 +139,7 @@ fn events_view(events: Result<Vec<DiagEvent>, String>) -> AnyView {
                     }
                 })
                 .collect_view();
-            let more = (total > SHOW)
-                .then(|| note(format!("showing {SHOW} of {total} events")));
+            let more = (total > SHOW).then(|| note(format!("showing {SHOW} of {total} events")));
             view! { <Stack gap="sm">{rows}{more}</Stack> }.into_any()
         }
     }

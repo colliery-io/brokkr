@@ -5,11 +5,11 @@
 //! broker enhancement (logged on the task).
 
 use crate::api;
+use crate::components::sev;
 use crate::components::DetailRow;
 use crate::models::WebhookSummary;
 use aurora_leptos::components::*;
 use aurora_leptos::tokens::token;
-use crate::components::sev;
 use leptos::prelude::*;
 
 fn event_chip(e: String) -> impl IntoView {
