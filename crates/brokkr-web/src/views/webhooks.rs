@@ -21,7 +21,7 @@ fn event_chip(e: String) -> impl IntoView {
 
 #[component]
 pub fn WebhooksView() -> impl IntoView {
-    let data = LocalResource::new(|| api::webhooks());
+    let data = LocalResource::new(api::webhooks);
     let selected = RwSignal::new(None::<WebhookSummary>);
     let open = RwSignal::new(false);
     // Recent delivery attempts for the selected subscription.

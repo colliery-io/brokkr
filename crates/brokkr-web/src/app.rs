@@ -207,7 +207,7 @@ fn Sidebar(route: RwSignal<&'static str>) -> impl IntoView {
 #[component]
 fn ScopeSelector() -> impl IntoView {
     let scope = use_scope();
-    let paks = LocalResource::new(|| crate::api::paks());
+    let paks = LocalResource::new(crate::api::paks);
 
     view! {
         {move || match paks.get() {

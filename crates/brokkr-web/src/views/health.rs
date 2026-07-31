@@ -56,8 +56,8 @@ const CARDS: &[(&str, &str, &str)] = &[
 
 #[component]
 pub fn BrokerHealthView() -> impl IntoView {
-    let metrics = LocalResource::new(|| api::metrics_text());
-    let conns = LocalResource::new(|| api::ws_connections());
+    let metrics = LocalResource::new(api::metrics_text);
+    let conns = LocalResource::new(api::ws_connections);
     set_interval(
         move || {
             metrics.refetch();
