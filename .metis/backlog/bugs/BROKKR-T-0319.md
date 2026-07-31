@@ -91,3 +91,40 @@ T-0318 fixed the harness itself — `Trunk.toml` watch exclusion, a `navigateTo(
 - [ ] Two scenes are worth specific suspicion because their assertions were the weakest: `fleet-scoped` (the only scene that failed even the permissive early check) and the three `fleet-diagnostic*` scenes, which depend on a `then_click` inside a modal — a nested interaction with the same silent-failure shape.
 
 **Also note the harness's limits, so the sweep does not over-trust it.** It renders with fixtures and screenshots; it cannot see a control that renders correctly and *does nothing* — which is exactly this ticket's headline defect (the Live/Paused toggle). Pixel coverage and no-op coverage are different problems: the toggle would look perfect in every golden image. The signal-with-no-consumer grep remains the tool for that class.
+
+## 2026-07-30 — DECISION (Dylan): remove the toggle; a real pause is per-agent and authorized
+
+> *"the live/paused toggle probably shouldn't exist unless it takes a pak (admin or agent) to authorize the change in state on the agent itself. it also shouldn't be in a spot that makes it appear 'global'"*
+
+This reframes the defect and makes it worse than filed. The ticket above treated "Live/Paused" as a client-side refresh control that happens to be inert. Read as an operator would read it in a deployment tool, it says **pause the agents** — and its placement in the global page header says **all of them**.
+
+So there are two problems, and the ambiguity is the more dangerous one:
+
+1. **It does nothing** (established above).
+2. **What it appears to do is a privileged, fleet-wide operation** — with no credential, no target, and no confirmation. An operator who believes they have paused deployment, and has not, is worse off than one who never had the control.
+
+### Pausing an agent is real, and already implemented — just not here
+
+Checked before deciding, because "it needs a PAK to change agent state" is only actionable if that state exists:
+
+| Piece | Where |
+|---|---|
+| Writable state | `PUT /api/v1/agents/{id}` sets `status` (`api/v1/agents.rs:398`), **admin-only** |
+| Agent honours it | `brokkr-agent/src/cli/commands.rs:427` skips deployment-object fetches, `:545` skips work orders, when `status != "ACTIVE"` |
+| Takes effect live | the agent re-fetches its own record each heartbeat (`commands.rs:409-412`), so a change lands within a poll cycle |
+
+So the control Dylan describes is buildable today with no broker work: per-agent, in the Fleet view's agent modal, authorized by an admin PAK supplied per action — exactly the BROKKR-T-0318 pattern, which now exists to copy.
+
+**But that is a feature, not this bug.** Removing the misleading control is the fix here; building the real one is separate and should not gate the UI sweep.
+
+### Decision
+
+- **Remove** the `Live/Paused` `SegmentedControl` and the `live` signal from `app.rs`. It ships as neither a working refresh toggle nor a working pause.
+- **Do not** relocate or relabel it as a stopgap. A working per-agent pause belongs in the agent modal next to the diagnostic action, where it has a target and a credential prompt.
+- The clock beside it stays — that one is honest.
+
+### Acceptance Criteria (supersedes the first criterion above)
+
+- [ ] The `Live/Paused` control and its `live` signal are gone from `app.rs` and `Main`.
+- [ ] No global header control implies a fleet-wide state change.
+- [ ] A follow-up ticket exists for a per-agent pause (admin-PAK-authorized, in the Fleet modal), so the capability is not silently dropped along with the control.
