@@ -4,15 +4,15 @@ level: task
 title: "Broker webhook delivery path has the same unbounded reclaim shape on subscription fetch error"
 short_code: "BROKKR-T-0307"
 created_at: 2026-07-28T00:42:12.388484+00:00
-updated_at: 2026-07-29T06:00:00+00:00
+updated_at: 2026-07-31T05:23:34.324963+00:00
 parent: 
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/backlog"
   - "#bug"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -62,6 +62,12 @@ Worth checking during the fix whether other arms in the same loop (`background_t
 
 ## Acceptance Criteria
 
+## Acceptance Criteria
+
+## Acceptance Criteria
+
+## Acceptance Criteria
+
 - [ ] A subscription-fetch error on a claimed delivery either increments `attempts` or releases the claim — it never leaves the row untouched.
 - [ ] A persistently failing fetch terminates (reaches `dead` via the normal attempt ceiling) rather than looping forever.
 - [ ] A *transient* fetch error still delivers the webhook on a later poll — the fix must not turn a blip into a discarded event.
@@ -70,4 +76,4 @@ Worth checking during the fix whether other arms in the same loop (`background_t
 
 ## Status Updates
 
-*To be added during implementation*
+**2026-07-30 — FIXED** on branch `docs/tenancy-review-2026-07` (commit `737c7dd`). 531 integration tests pass, 151 unit (4 new). Details in the commit message and in BROKKR-T-0315's neighbours; this ticket was one of two unedited template shells whose titles carried the entire finding, and both turned out to be real.

@@ -4,15 +4,15 @@ level: task
 title: "create_shared_connection_pool discards the database name from database.url and always connects to 'brokkr'"
 short_code: "BROKKR-T-0306"
 created_at: 2026-07-28T00:16:12.719642+00:00
-updated_at: 2026-07-29T06:00:00+00:00
+updated_at: 2026-07-31T05:23:34.113814+00:00
 parent: 
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/backlog"
   - "#bug"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -69,6 +69,12 @@ Worth deciding at the same time whether `Url::parse(...).expect("Invalid base UR
 
 ## Acceptance Criteria
 
+## Acceptance Criteria
+
+## Acceptance Criteria
+
+## Acceptance Criteria
+
 - [ ] A `BROKKR__DATABASE__URL` naming a non-`brokkr` database connects to that database.
 - [ ] A test asserts the resolved connection URL retains the configured database name — not merely that a pool is constructed.
 - [ ] Test fixtures that deliberately target a different database still work (the override path is kept, just no longer forced on production).
@@ -77,4 +83,4 @@ Worth deciding at the same time whether `Url::parse(...).expect("Invalid base UR
 
 ## Status Updates
 
-*To be added during implementation*
+**2026-07-30 — FIXED** on branch `docs/tenancy-review-2026-07` (commit `737c7dd`). 531 integration tests pass, 151 unit (4 new). Details in the commit message and in BROKKR-T-0315's neighbours; this ticket was one of two unedited template shells whose titles carried the entire finding, and both turned out to be real.
