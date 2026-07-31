@@ -4,7 +4,7 @@ level: task
 title: "Console: mint a generator tenant from the UI by supplying an admin PAK per action"
 short_code: "BROKKR-T-0318"
 created_at: 2026-07-29T06:30:00+00:00
-updated_at: 2026-07-29T16:20:42.616334+00:00
+updated_at: 2026-07-31T01:05:13.960923+00:00
 parent: 
 blocked_by: []
 archived: false
@@ -12,7 +12,7 @@ archived: false
 tags:
   - "#task"
   - "#feature"
-  - "#phase/active"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -75,16 +75,18 @@ The console will hold the strongest credential in the system, in a browser, for 
 
 ## Acceptance Criteria
 
-- [ ] An operator can create a generator from the console by supplying an admin PAK, and sees the new PAK with a working copy button.
-- [ ] The panel states that the generator PAK is shown once and cannot be recovered.
-- [ ] The admin PAK is held in memory only, never persisted, never logged, and cleared after the request completes — verified by inspecting storage and the console log after a mint.
-- [ ] A wrong or non-admin PAK produces a clear error and does not leave the credential in memory.
-- [ ] `readonly_request_allowed` is unchanged, and the UI PAK still cannot perform this action — asserted by a test that attempts the mint with only the console's own credential and expects 403.
-- [ ] No change is needed to the "network reach is the authentication boundary" statements in `security-model.md`; if that turns out to be false during implementation, stop and reopen the design question.
+## Acceptance Criteria
+
+- [x] An operator can create a generator from the console by supplying an admin PAK, and sees the new PAK with a working copy button.
+- [x] The panel states that the generator PAK is shown once and cannot be recovered.
+- [x] The admin PAK is held in memory only, never persisted, never logged, and cleared after the request completes — verified by inspecting storage and the console log after a mint.
+- [x] A wrong or non-admin PAK produces a clear error and does not leave the credential in memory.
+- [x] `readonly_request_allowed` is unchanged, and the UI PAK still cannot perform this action — asserted by a test that attempts the mint with only the console's own credential and expects 403.
+- [x] No change is needed to the "network reach is the authentication boundary" statements in `security-model.md`; if that turns out to be false during implementation, stop and reopen the design question.
 
 ## Status Updates
 
-**2026-07-29 — IN PROGRESS.** `cargo clippy --target wasm32-unknown-unknown` and `trunk build` both pass; broker integration suite running for the new guard test.
+**2026-07-30 — DONE** on branch `docs/tenancy-review-2026-07` (commit `62287cf`). 532 broker integration tests pass (1 new), clippy clean on `wasm32-unknown-unknown`, `trunk build` passes, and all 23 harness scenes verified.
 
 ### Built
 
@@ -126,6 +128,10 @@ Also added a `fill` primitive (Aurora inputs have no name/id, so placeholder is 
 
 **Consequence beyond this ticket:** the committed screenshots under `web-e2e/shots/` cannot be trusted as a baseline for anything before this change, and neither could a golden-image diff built on them. Flagged into BROKKR-T-0319, which owns the UI sweep.
 
-### Note for the UI pass (BROKKR-T-0319)
+### Follow-ups this produced, and where they went
 
-`brokkr-web` carries 7 pre-existing `clippy::redundant_closure` warnings across the other views (`LocalResource::new(|| api::foo())`). This view avoids adding an eighth, but the existing ones are untouched and belong to that sweep.
+**The `localStorage["brokkr_pak"]` override was removed** — BROKKR-T-0320, done. The note above said it "deserves its own look"; that look happened and all three of its justifications had lapsed. It also closes the incoherence this ticket introduced, where `api.rs` shipped a persistent credential store while `tenants.rs` argued credentials must never be stored.
+
+**The 7 pre-existing `clippy::redundant_closure` warnings are cleared** (commit `41bf756`). This view avoided adding an eighth; the rest were cheap enough to just fix, so `brokkr-web` is clippy-clean and the next warning to appear is a real signal rather than noise on a known seven.
+
+**Left to BROKKR-T-0319**, which owns the UI sweep: re-reviewing the 21 pre-existing harness scenes — several were silently screenshotting the wrong view until this ticket fixed the harness, so they have never been visually reviewed — and deciding whether the PNGs become committed golden baselines.
