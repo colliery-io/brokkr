@@ -111,3 +111,48 @@ Safe with no restructuring, and checked rather than assumed: both are `workflow_
 ### Acceptance criterion 4 is deliberately still open
 
 Nobody has yet confirmed by observation that a broken required check actually blocks a merge. The settings say it does; that is not the same as having seen it. Given this ticket exists because a red check blocked nothing for ten pushes, the distinction is the whole point.
+
+## 2026-07-31 — CORRECTION: the skipped-job claim above is half wrong, and it blocked a PR
+
+The table above says a job skipped by an `if:` "reports `skipped`, which branch protection accepts". True — but it reports under a **different context name** than the one that appears when the job runs, and I registered the wrong one.
+
+For a `uses:` (reusable-workflow) job, GitHub creates check runs named:
+
+| State | Context reported |
+|---|---|
+| Ran | `integration_tests / integration_tests (brokkr-broker)` — the **nested** job, per matrix leg |
+| Skipped by `if:` | `integration_tests` — the **caller** job, alone |
+
+The two sets are **disjoint**. I made the nested names required, so on any PR whose `changes` filter did not select that suite, the required contexts never materialized at all — the same permanent-block failure this ticket was filed about, reintroduced by its own fix.
+
+**Observed on PR #91** (a one-file e2e test change): every check `SUCCESS` or `SKIPPED`, `mergeStateStatus=BLOCKED`, six required contexts missing.
+
+**Immediate remedy applied:** required contexts reduced to `unit_tests / unit_tests` only. That job has no `if:`, so it always runs and its nested name always reports — it is the one context that is safe under this scheme. The six conditional ones were dropped.
+
+That is a deliberate step *backwards* in coverage, and it should not stand: `integration_tests` is again advisory, which is what this ticket exists to fix.
+
+### The actual fix: an aggregating gate job
+
+Requiring per-suite contexts cannot work while those suites are path-filtered, because no single name is present in both states. The standard shape is one always-running job that summarizes the rest:
+
+```yaml
+  ci-gate:
+    name: CI gate
+    needs: [unit_tests, integration_tests, sdk_contract_tests, openapi]
+    if: always()          # must run even when its dependencies are skipped
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if any required suite failed
+        run: |
+          # `skipped` and `success` are both acceptable; `failure`/`cancelled` are not.
+          for r in "${{ needs.unit_tests.result }}" "${{ needs.integration_tests.result }}" \
+                   "${{ needs.sdk_contract_tests.result }}" "${{ needs.openapi.result }}"; do
+            case "$r" in success|skipped) ;; *) echo "::error::suite result: $r"; exit 1 ;; esac
+          done
+```
+
+`ci-gate` then reports on every PR under one stable name, and is the only context branch protection needs.
+
+- [ ] Add the aggregating gate job to `main.yml`.
+- [ ] Make `ci-gate` the required context and drop the per-suite names.
+- [ ] **Verify by observation on a docs-only PR** that it reports (not hangs) — the check this ticket's own fix skipped, twice now.
