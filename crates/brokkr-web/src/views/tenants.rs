@@ -11,8 +11,8 @@
 //!
 //! The supplied PAK lives in a signal for the duration of one request and is
 //! cleared the moment it completes, success or failure. It is never written to
-//! `localStorage` (unlike the long-lived `brokkr_pak` override in `api`), never
-//! logged, and never rendered.
+//! storage, never logged, and never rendered. The console has no persistent
+//! credential store at all — BROKKR-T-0320 removed the one it used to have.
 
 use crate::api;
 use crate::components::{sev, toast, DetailRow, ToastBus};

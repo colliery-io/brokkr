@@ -159,7 +159,7 @@ const GENERATORS = [
     is_active: false, is_system: false, last_active_at: null },
 ];
 // The one-time secret the reveal panel shows. Distinct from the seeded
-// `brokkr_pak` so the persistence assertion below cannot pass by accident.
+// any real credential, so the persistence assertion below cannot pass by accident.
 const MINTED_PAK = "brokkr_MINTED9_Zx7QvT2mKp8sLd4NrB6yCw3EfH5jA1gU";
 const CREATED_GENERATOR = {
   generator: { id: "f00dcafe-1234", name: "team-checkout", description: "new tenant",
@@ -235,7 +235,10 @@ page.on("console", (m) => m.type() === "error" && errs.push(`[console] ${m.text(
 page.on("pageerror", (e) => errs.push(`[pageerror] ${e.message}`));
 
 // seed a PAK so the fetch layer attaches auth (the mock ignores it).
-await page.addInitScript(() => localStorage.setItem("brokkr_pak", "brokkr_BRtest_e2e"));
+// No PAK is seeded: the route mocks below fulfil regardless of headers, so the
+// console needs no credential here. The old `localStorage["brokkr_pak"]` seed
+// was cosmetic even before that override was removed (BROKKR-T-0320) -- its own
+// comment conceded "the mock ignores it".
 
 // /metrics is top-level (not under /api/v1) and Prometheus text.
 await page.route("**/metrics", (route) =>

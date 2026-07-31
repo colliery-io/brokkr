@@ -2,10 +2,14 @@
 //! so the API is at `/api/v1/...`. Auth (BROKKR-I-0032): the broker injects an
 //! ephemeral **read-only** UI PAK into the served HTML as
 //! `<meta name="brokkr-ui-token">`; the console reads it on boot, so no
-//! configuration is needed. An operator-pasted `localStorage["brokkr_pak"]`
-//! still takes precedence — it's the write-capable override (and the only
-//! auth path under `trunk serve`, where no broker injects a token). Errors
-//! map to Aurora's `ApiError` for `ErrorState`.
+//! configuration is needed. Errors map to Aurora's `ApiError` for `ErrorState`.
+//!
+//! That injected token is the console's **only** ambient credential, and it is
+//! read-only — so reaching the page grants visibility and nothing more. The one
+//! privileged action (minting a generator tenant) takes an admin PAK the
+//! operator supplies per request via [`post_json_with_token`]; it is never
+//! stored. There is deliberately no persistent credential store here
+//! (BROKKR-T-0320).
 
 use crate::models::{
     DiagnosticRequestDto, DiagnosticResponse, ErrorBody, FleetAgentRecord, PakSummary,
@@ -15,15 +19,6 @@ use aurora_leptos::tokens::ApiError;
 use gloo_net::http::Request;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-
-/// Operator-pasted PAK, if any (the write-capable override — see module docs).
-pub fn pak() -> Option<String> {
-    let ls = web_sys::window()?.local_storage().ok()??;
-    match ls.get_item("brokkr_pak").ok()? {
-        Some(s) if !s.is_empty() => Some(s),
-        _ => None,
-    }
-}
 
 /// The broker-injected read-only UI token, read from the `<meta>` tag once
 /// and cached for the page lifetime (the token never changes within a page
@@ -44,10 +39,21 @@ fn injected_token() -> Option<String> {
     })
 }
 
-/// Bearer token for API calls: pasted PAK first (write-capable), then the
-/// injected read-only UI token.
+/// Bearer token for API calls: the broker-injected read-only UI token, and
+/// nothing else.
+///
+/// There used to be an operator-pasted `localStorage["brokkr_pak"]` override
+/// that took **precedence** over this, so setting it silently upgraded the
+/// entire console from read-only to full admin write, for every request,
+/// persistently (BROKKR-T-0320). Removed: all three of its justifications had
+/// lapsed. The e2e harness does not need it (its route mocks ignore auth
+/// headers), `trunk serve` cannot reach a real broker to authenticate to (no
+/// proxy is configured), and the "full-write operator use" it existed for is
+/// now served properly by the per-action admin PAK prompt in the tenants view,
+/// which holds the credential in memory for one request instead of parking it
+/// in browser storage indefinitely.
 fn token() -> Option<String> {
-    pak().or_else(injected_token)
+    injected_token()
 }
 
 /// GET `/api/v1{path}` with `params` as the query string, and deserialize the
@@ -290,7 +296,8 @@ pub async fn generators() -> Result<Vec<crate::models::Generator>, ApiError> {
 ///
 /// This exists so a privileged one-shot action can carry an operator-pasted
 /// admin PAK **without that PAK ever being stored**. Deliberately does *not*
-/// reuse [`pak()`]: that override lives in `localStorage`, which survives
+/// reuse a stored credential: the console deliberately has no persistent PAK
+/// store (BROKKR-T-0320 removed the `localStorage` override, which survived
 /// reloads and is readable by any script on the origin. An admin credential —
 /// the strongest in the system — should not persist there just to create one
 /// generator.

@@ -45,7 +45,7 @@ The consequences follow directly:
 
 **Mitigate this at the network layer.** Restrict who can reach port `3000` with a NetworkPolicy or firewall rules; if the console must be available beyond the cluster, put authentication in front of it at the ingress (OIDC or basic auth on the ingress controller, for example). Treat the broker port as sensitive for read access, the same way you would treat `/metrics`. The [Security Hardening](./security-hardening.md) checklist carries this item, and the [Security Model](../explanation/security-model.md#read-only-console-authentication-the-ui-pak) explains the credential class and the threat model behind the decision.
 
-> If a write-capable PAK has been placed in the browser's local storage under `brokkr_pak`, the console prefers it over the embedded read-only credential. Nothing in the interface puts it there, and no step in this guide needs it — but it is worth knowing if you are trying to work out which identity a console session is using.
+> **The embedded read-only credential is the only identity a console session has.** Earlier versions also honoured a write-capable PAK placed in the browser's local storage under `brokkr_pak`, and preferred it over the embedded one — so setting it silently made the whole console write-capable. That override was removed in 0.9.0. The one action that needs more than read access, [creating a tenant](#step-6-create-a-tenant), asks for an admin PAK at the moment you use it and does not keep it.
 
 ## Step 3: Find Your Way Around
 
@@ -95,6 +95,25 @@ Diagnostics are the console's one action, and they are read-shaped: you are aski
 Collection is not instantaneous — the agent picks up pending requests on its own timer and then has to query the Kubernetes API. The console waits a bounded amount of time and then stops, offering a **Check again** button. Stopping is not evidence that collection failed; it only means no result had arrived yet.
 
 For the request lifecycle, retention, and how to drive the same capability from the API or CLI, see [Running On-Demand Diagnostics](./diagnostics.md) and the [Diagnostics reference](../reference/diagnostics.md).
+
+## Step 6: Create a Tenant
+
+**Tenants** lists the generators on this broker, and is the one place the console writes anything. Because a tenant's PAK is a credential, the console will not mint one on the strength of the read-only identity it carries — you supply an admin PAK for that single request.
+
+1. Open **Tenants** in the sidebar and choose **+ New tenant**.
+2. Give the tenant a name, and a description if it helps whoever inherits it.
+3. Paste an **admin PAK**. This is the only step in the console that asks for a credential.
+4. Choose **Create tenant**.
+
+The new tenant's PAK is then shown once, with a **Copy** button.
+
+> **Copy it before you close the dialog.** The broker stores only a hash, so a PAK that is not captured cannot be recovered — the only remedy is [rotating it](./pak-management.md#rotating-generator-paks). This is the same one-shot behaviour as `brokkr-broker create generator`.
+
+The admin PAK you pasted is held in memory for that one request and cleared as soon as it finishes, whether it succeeded or not. It is never written to browser storage and never logged, so creating a second tenant asks for it again — deliberately, so that a browser left open is not a standing admin credential.
+
+If the PAK is rejected, the dialog says whether it was not an admin credential (403) or the name was already taken (409). Nothing is created in either case.
+
+The equivalent outside the console is `POST /api/v1/generators` or `brokkr-broker create generator`; see [Generators](../reference/generators.md). Creating **agents** is not available here — only tenants.
 
 ## Running More Than One Broker Replica
 
