@@ -170,6 +170,16 @@ const CREATED_GENERATOR = {
 // after the mint scene.
 const TYPED_ADMIN_PAK = "brokkr_ADMINxx_TypedByOperatorNeverPersisted00";
 
+// Pause/resume (BROKKR-T-0322). PUT /agents/:id answers with the updated agent;
+// the modal reads back `status` so the pill flips without waiting for the 5s
+// fleet refetch. Method-aware key so it does not collide with any GET.
+const AGENT_PAUSED = { id: "1b9d6bcd", name: "prod-agent-01", status: "INACTIVE" };
+const PAUSE_MOCKS = {
+  "/fleet": FLEET,
+  "/agents/1b9d6bcd/target-state": TARGET_STATE,
+  "PUT /agents/1b9d6bcd": AGENT_PAUSED,
+};
+
 const SCENES = [
   { name: "overview", mocks: { "/fleet": FLEET, "/agent-events": EVENTS } },
   { name: "fleet", nav: "Fleet", mocks: { "/fleet": FLEET } },
@@ -210,6 +220,12 @@ const SCENES = [
   // Tenants (BROKKR-T-0318): list, empty state, the mint dialog, and the
   // reveal-once panel. The last one is the whole point of the feature, so it is
   // driven end to end rather than screenshotted mid-form.
+  // The agent modal's pause control, and the state after pausing.
+  { name: "fleet-pause", nav: "Fleet", click: "prod-agent-01", mocks: PAUSE_MOCKS },
+  { name: "fleet-paused", nav: "Fleet", click: "prod-agent-01",
+    fill: [["brokkr_\u2026", TYPED_ADMIN_PAK]], then_click: "Pause",
+    assert_no_stored: TYPED_ADMIN_PAK,
+    mocks: PAUSE_MOCKS },
   { name: "tenants", nav: "Tenants", mocks: { "/generators": GENERATORS } },
   { name: "tenants-empty", nav: "Tenants", mocks: { "/generators": [] } },
   { name: "tenants-new", nav: "Tenants", click: "+ New tenant",

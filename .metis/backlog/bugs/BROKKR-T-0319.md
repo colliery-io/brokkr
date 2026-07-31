@@ -125,6 +125,6 @@ So the control Dylan describes is buildable today with no broker work: per-agent
 
 ### Acceptance Criteria (supersedes the first criterion above)
 
-- [ ] The `Live/Paused` control and its `live` signal are gone from `app.rs` and `Main`.
-- [ ] No global header control implies a fleet-wide state change.
-- [ ] A follow-up ticket exists for a per-agent pause (admin-PAK-authorized, in the Fleet modal), so the capability is not silently dropped along with the control.
+- [x] The `Live/Paused` control and its `live` signal are gone from `app.rs` and `Main` (BROKKR-T-0322).
+- [x] No global header control implies a fleet-wide state change (BROKKR-T-0322).
+- [x] A follow-up ticket exists for a per-agent pause — BROKKR-T-0322, built rather than deferred.

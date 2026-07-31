@@ -457,3 +457,15 @@ pub struct CreateGeneratorResponse {
     pub generator: Generator,
     pub pak: String,
 }
+
+/// The broker's `Agent` as returned by `PUT /api/v1/agents/{id}`
+/// (BROKKR-T-0322).
+///
+/// Deliberately only `status` — the console reads back the new state to render
+/// it without waiting for the next fleet refetch, and nothing else. Serde
+/// ignores the rest of the body, and the broker never serializes `pak_hash` on
+/// any path.
+#[derive(Debug, Clone, Deserialize)]
+pub struct AgentRecord {
+    pub status: String,
+}

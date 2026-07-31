@@ -71,7 +71,9 @@ The sidebar groups seven views:
 
 The console reads the REST API and nothing else — it opens no WebSocket and streams nothing. Most views simply re-read their endpoints on a short timer, so the page stays roughly current on its own without you reloading it.
 
-The header carries a wall clock and a Live/Paused control. **The Live/Paused control is not yet wired to anything**: switching it to Paused does not stop the periodic re-reads. Treat it as decoration for now.
+The header carries a wall clock. It once also carried a Live/Paused control that was wired to nothing; it was removed in 0.9.0 rather than left as decoration, because in a deployment tool a global "Paused" reads as *the fleet is paused* — which it never was. Pausing is now a real, per-agent action: see [Pause or Resume an Agent](#pause-or-resume-an-agent).
+
+There is no way to stop the console's periodic re-reads. They are read-only and cheap; close the tab if you need them to stop.
 
 If you want a genuine live stream of fleet state, that is an API capability rather than a console one — see [Monitoring Your Agent Fleet](./fleet-monitoring.md).
 
@@ -95,6 +97,20 @@ Diagnostics are the console's one action, and they are read-shaped: you are aski
 Collection is not instantaneous — the agent picks up pending requests on its own timer and then has to query the Kubernetes API. The console waits a bounded amount of time and then stops, offering a **Check again** button. Stopping is not evidence that collection failed; it only means no result had arrived yet.
 
 For the request lifecycle, retention, and how to drive the same capability from the API or CLI, see [Running On-Demand Diagnostics](./diagnostics.md) and the [Diagnostics reference](../reference/diagnostics.md).
+
+## Pause or Resume an Agent
+
+Open **Fleet**, click the agent, and use the control under **Agent state**. Like tenant creation, it asks for an admin PAK for that one request — the console's own credential is read-only and cannot change agent state.
+
+**What pausing does:** the agent stops fetching deployment objects and stops picking up work orders. It keeps heartbeating, so it stays visible and healthy in the console rather than looking offline.
+
+**What it does not do:** it does not roll anything back. Resources the agent has already applied stay in the cluster exactly as they are. Pausing stops new work being taken up; it is not an undo.
+
+The change takes effect within a poll cycle — the agent re-reads its own record on each heartbeat. Resuming is the same control, which flips to **Resume** while the agent is paused.
+
+> **This is the agent honouring its own status, not the broker enforcing it.** The broker will still serve deployment objects to a paused agent that asks for them; the shipped agent simply does not ask. For most purposes that distinction does not matter, but do not rely on paused as a containment measure for an agent you do not trust — use [network policy or credential rotation](./pak-management.md#rotating-agent-paks) for that.
+
+The equivalent outside the console is `PUT /api/v1/agents/{id}` with `{"status": "INACTIVE"}`. A newly created agent starts paused (`INACTIVE`) and must be activated before it applies anything — the same control does that.
 
 ## Step 6: Create a Tenant
 

@@ -363,3 +363,71 @@ pub async fn create_generator(
     )
     .await
 }
+
+/// PUT `/api/v1{path}` authenticating with an **explicitly supplied** bearer
+/// token, mirroring [`post_json_with_token`] (BROKKR-T-0322).
+///
+/// Same rule: the token is borrowed for one request and never captured,
+/// logged, or stored. The console has no persistent credential store.
+async fn put_json_with_token<B: Serialize, T: DeserializeOwned>(
+    path: &str,
+    body: &B,
+    bearer: &str,
+) -> Result<T, ApiError> {
+    let url = format!("/api/v1{path}");
+    let resp = Request::put(&url)
+        .header("Authorization", &format!("Bearer {bearer}"))
+        .json(body)
+        .map_err(|_| ApiError::Network)?
+        .send()
+        .await
+        .map_err(|_| ApiError::Network)?;
+    let status = resp.status();
+    if !(200..300).contains(&status) {
+        let message = resp.text().await.unwrap_or_default();
+        let code = serde_json::from_str::<ErrorBody>(&message)
+            .ok()
+            .map(|b| b.code);
+        return Err(ApiError::Http {
+            status,
+            message,
+            code,
+        });
+    }
+    resp.json::<T>().await.map_err(|e| ApiError::Http {
+        status,
+        message: e.to_string(),
+        code: None,
+    })
+}
+
+/// `PUT /api/v1/agents/{id}` — set an agent's `status`, pausing or resuming the
+/// work it picks up (BROKKR-T-0322).
+///
+/// **This is what "paused" actually means.** The broker does not withhold
+/// anything: the *agent* skips deployment-object fetches and work-order
+/// processing while its status is not `ACTIVE`
+/// (`brokkr-agent/src/cli/commands.rs:427` and `:545`), and re-reads its own
+/// record each heartbeat, so a change here lands within a poll cycle. It is
+/// agent-side self-restraint rather than an enforced boundary — see
+/// BROKKR-T-0321, which tracks that distinction and whether the broker should
+/// enforce it too.
+///
+/// The endpoint is `require_admin_or_agent`, and the console's injected token
+/// is read-only, so the middleware rejects this before the handler runs. Hence
+/// the operator-supplied admin PAK, per action.
+///
+/// The body is a partial update: the handler applies only the fields present,
+/// so sending `status` alone cannot clobber the agent's name or cluster.
+pub async fn set_agent_status(
+    agent_id: &str,
+    status: &str,
+    admin_pak: &str,
+) -> Result<crate::models::AgentRecord, ApiError> {
+    put_json_with_token(
+        &format!("/agents/{agent_id}"),
+        &serde_json::json!({ "status": status }),
+        admin_pak,
+    )
+    .await
+}

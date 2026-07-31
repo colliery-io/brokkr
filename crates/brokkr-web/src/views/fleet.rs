@@ -213,6 +213,22 @@ pub fn FleetView() -> impl IntoView {
     // from a previous agent can never leak across.
     let chosen = RwSignal::new(String::new());
 
+    // Pause/resume (BROKKR-T-0322). Changing an agent's status is a privileged
+    // write, so it takes an admin PAK supplied for that one request — the same
+    // shape as tenant minting. Memory only, cleared as soon as the request
+    // resolves on either path.
+    let pause_pak = RwSignal::new(String::new());
+    let pause_busy = RwSignal::new(false);
+    let pause_error = RwSignal::new(None::<String>);
+    // Set once the agent's status has been changed here, so the modal can show
+    // the new state without waiting for the 5s fleet refetch to come round.
+    let pause_status = RwSignal::new(None::<String>);
+    let reset_pause = move || {
+        pause_pak.set(String::new());
+        pause_error.set(None);
+        pause_status.set(None);
+    };
+
     // --- diagnostic result polling (BROKKR-T-0301) ------------------------
     // `diag_id` is the id returned by the create call; `polls` counts attempts
     // (bumping it is what re-runs the fetch, since the id itself doesn't change
@@ -299,6 +315,7 @@ pub fn FleetView() -> impl IntoView {
                                      on:click=move |_| {
                                          chosen.set(String::new());
                                          reset_diagnostic();
+                                         reset_pause();
                                          selected.set(Some(a_sel.clone()));
                                          open.set(true);
                                      }>
@@ -346,8 +363,12 @@ pub fn FleetView() -> impl IntoView {
                 None => ().into_any(),
                 Some(a) => {
                     let (h, hc) = a.health();
-                    let sc = status_color(&a.status);
                     let agent_id = a.agent_id.clone();
+                    // Owned copies for the pause/resume closures, which outlive `a`.
+                    // Two status clones: the pill and the control each move one.
+                    let a_status_pill = a.status.clone();
+                    let a_status_ctl = a.status.clone();
+                    let a_id = a.agent_id.clone();
                     view! {
                         <Stack gap="md">
                             <span style="font:600 15px var(--font-mono);color:var(--fg-bright);">{a.name.clone()}</span>
@@ -356,7 +377,15 @@ pub fn FleetView() -> impl IntoView {
                                 <crate::components::DetailRow label="cluster">{if a.cluster_name.is_empty() { "(unknown)".to_string() } else { a.cluster_name.clone() }}</crate::components::DetailRow>
                             </div>
                             <Group gap="sm">
-                                <Pill color=sc>{a.status.to_lowercase()}</Pill>
+                                // Reflects a pause/resume done here immediately; otherwise
+                                // the agent's status as of the last fleet refetch.
+                                {move || {
+                                    let shown = pause_status
+                                        .get()
+                                        .unwrap_or_else(|| a_status_pill.clone());
+                                    let c = status_color(&shown);
+                                    view! { <Pill color=c>{shown.to_lowercase()}</Pill> }
+                                }}
                                 <Pill color=hc>{h}</Pill>
                                 {a.ws_connected.then(|| view! {
                                     <span style="font:9.5px var(--font-mono);color:var(--teal);">"\u{21c4} ws"</span>
@@ -365,6 +394,109 @@ pub fn FleetView() -> impl IntoView {
                             <span style="font:11px var(--font-mono);color:var(--muted);">
                                 {format!("last heartbeat {}", ago(a.heartbeat_age_seconds))}
                             </span>
+
+                            // ---- pause / resume (BROKKR-T-0322) ----------------
+                            <span style="font:600 10px var(--font-mono);text-transform:uppercase;\
+                                         letter-spacing:.05em;color:var(--muted);">"agent state"</span>
+                            {move || {
+                                let current =
+                                    pause_status.get().unwrap_or_else(|| a_status_ctl.clone());
+                                let paused = !current.eq_ignore_ascii_case("ACTIVE");
+                                let (target, verb) = if paused {
+                                    ("ACTIVE", "Resume")
+                                } else {
+                                    ("INACTIVE", "Pause")
+                                };
+                                let id_for_click = a_id.clone();
+                                view! {
+                                    <span style="font:11px var(--font-mono);color:var(--muted);\
+                                                 line-height:1.5;">
+                                        {if paused {
+                                            "Paused: this agent stops fetching deployment objects and \
+                                             work orders. Already-applied resources stay in the cluster \
+                                             — pausing does not roll anything back."
+                                        } else {
+                                            "Active: this agent fetches and applies the deployment \
+                                             objects targeted at it."
+                                        }}
+                                    </span>
+                                    <PasswordInput
+                                        label="Admin PAK"
+                                        placeholder="brokkr_\u{2026}"
+                                        value=pause_pak
+                                    />
+                                    <Group gap="sm">
+                                        <Button on_click=Callback::new(move |_| {
+                                            let pak = pause_pak.get();
+                                            if pak.trim().is_empty() {
+                                                pause_error.set(Some(
+                                                    "An admin PAK is required to change agent state.".into(),
+                                                ));
+                                                return;
+                                            }
+                                            let id = id_for_click.clone();
+                                            pause_busy.set(true);
+                                            pause_error.set(None);
+                                            spawn_local(async move {
+                                                let result =
+                                                    api::set_agent_status(&id, target, &pak).await;
+                                                // Clear the credential first, on both paths.
+                                                pause_pak.set(String::new());
+                                                pause_busy.set(false);
+                                                match result {
+                                                    Ok(updated) => {
+                                                        pause_status.set(Some(updated.status.clone()));
+                                                        data.refetch();
+                                                        if let Some(b) = bus {
+                                                            toast(
+                                                                b,
+                                                                if target == "ACTIVE" {
+                                                                    "agent resumed"
+                                                                } else {
+                                                                    "agent paused"
+                                                                },
+                                                                token::OK,
+                                                            );
+                                                        }
+                                                    }
+                                                    Err(e) => {
+                                                        pause_error.set(Some(match e {
+                                                            aurora_leptos::tokens::ApiError::Http {
+                                                                status: 403,
+                                                                ..
+                                                            } => "Rejected: that PAK is not an admin \
+                                                                  credential."
+                                                                .to_string(),
+                                                            aurora_leptos::tokens::ApiError::Http {
+                                                                status,
+                                                                ..
+                                                            } => format!(
+                                                                "Broker rejected the request (HTTP {status})."
+                                                            ),
+                                                            aurora_leptos::tokens::ApiError::Network => {
+                                                                "Could not reach the broker.".to_string()
+                                                            }
+                                                            _ => "The request failed.".to_string(),
+                                                        }));
+                                                        if let Some(b) = bus {
+                                                            toast(b, "agent state change failed", token::BAD);
+                                                        }
+                                                    }
+                                                }
+                                            });
+                                        })>
+                                            {move || if pause_busy.get() {
+                                                "Working\u{2026}".to_string()
+                                            } else {
+                                                verb.to_string()
+                                            }}
+                                        </Button>
+                                    </Group>
+                                    {move || pause_error.get().map(|e| view! {
+                                        <Alert color=token::BAD.to_string()>{e}</Alert>
+                                    })}
+                                }
+                            }}
                             <span style="font:600 10px var(--font-mono);text-transform:uppercase;\
                                          letter-spacing:.05em;color:var(--muted);">"diagnostics"</span>
                             {move || match objects.get() {
