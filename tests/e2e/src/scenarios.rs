@@ -916,7 +916,13 @@ pub async fn test_agent_reconciliation_existing_deployments(client: &Client) -> 
     client
         .update_agent(agent2_id, json!({"status": "ACTIVE"}))
         .await?;
-    println!("    Created agent: {}", agent2_id);
+    // Registration is the consent boundary for label matching too
+    // (BROKKR-T-0287), so the agent must be registered with the stack's
+    // generator before a match can deliver anything.
+    client
+        .register_agent_with_generator(generator_id, agent2_id)
+        .await?;
+    println!("    Created agent: {} (registered with generator)", agent2_id);
 
     // 2c. NOW add matching label to agent (after deployment exists)
     client
@@ -964,7 +970,12 @@ pub async fn test_agent_reconciliation_existing_deployments(client: &Client) -> 
     client
         .update_agent(agent3_id, json!({"status": "ACTIVE"}))
         .await?;
-    println!("    Created agent: {}", agent3_id);
+    // Annotation matching is gated by registration exactly as label matching
+    // is (BROKKR-T-0287).
+    client
+        .register_agent_with_generator(generator_id, agent3_id)
+        .await?;
+    println!("    Created agent: {} (registered with generator)", agent3_id);
 
     // 3c. NOW add matching annotation to agent (after deployment exists)
     client
@@ -1261,6 +1272,12 @@ pub async fn test_ws_smoke(client: &Client) -> Result<()> {
         "    baseline brokkr_ws_messages_total{{direction=out,type=target_changed}} = {}",
         baseline
     );
+
+    // Explicit targets are refused with 403 `agent_not_registered` unless the
+    // agent is registered with the stack's generator (BROKKR-T-0246/T-0287).
+    client
+        .register_agent_with_generator(gen_id, agent_id)
+        .await?;
 
     // Add the target — this triggers push_target_changed on the broker.
     client.add_agent_target(agent_id, stack_id).await?;
