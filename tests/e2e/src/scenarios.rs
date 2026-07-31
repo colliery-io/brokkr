@@ -259,17 +259,26 @@ pub async fn test_targeting(client: &Client) -> Result<()> {
     client.add_stack_label(stack_id, "targeting-test").await?;
     println!("    Created stack with label 'targeting-test'");
 
+    // Registration is the consent boundary for **every** association path,
+    // label matching included (BROKKR-T-0287). Before that change this call sat
+    // below the label assertion, because only explicit targets required it —
+    // so a label match reached across a generator the agent had never
+    // registered with. It now has to happen first or the stack is correctly
+    // withheld.
+    client
+        .register_agent_with_generator(generator_id, agent_id)
+        .await?;
+    println!("    Registered agent with generator");
+
     // Verify label matching
     println!("  → Verifying label-based targeting...");
     let agent_stacks = client.get_agent_stacks(agent_id).await?;
     let has_stack = agent_stacks.iter().any(|s| s["id"] == stack_id.to_string());
-    assert!(has_stack, "Agent should see stack via label matching");
+    assert!(
+        has_stack,
+        "Agent should see stack via label matching once registered with its generator"
+    );
     println!("    Agent sees stack via label matching ✓");
-
-    // Register agent with generator before explicit targeting.
-    client
-        .register_agent_with_generator(generator_id, agent_id)
-        .await?;
 
     // Test explicit targeting
     println!("  → Testing explicit targeting...");
