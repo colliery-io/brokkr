@@ -355,7 +355,7 @@ entries left in your values files, but you should delete them.
 
 ## Values
 
-This table covers **every key in `values.yaml`** for chart version 0.9.0, plus the keys the
+This table covers **every key in `values.yaml`** as of this revision of the chart, plus the keys the
 templates read that `values.yaml` only mentions in comments (marked *not in values.yaml*).
 It is hand-maintained, so `values.yaml` remains the authoritative source — check it with
 `helm show values charts/brokkr-agent` (or `oci://ghcr.io/colliery-io/charts/brokkr-agent`)
