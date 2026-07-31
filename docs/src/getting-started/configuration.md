@@ -10,7 +10,7 @@ The `brokkr-broker` and `brokkr-agent` binaries load configuration from three la
 2. **Configuration file** (optional) — set `BROKKR_CONFIG_FILE` to a TOML file path
 3. **Environment variables** prefixed with `BROKKR__`
 
-Environment variables always win: defaults work out of the box, a file can carry environment-specific settings, and `BROKKR__*` variables override both. In Kubernetes, the Helm charts render environment variables from chart values, and `BROKKR_CONFIG_FILE` also arms the broker's change watcher (see [Hot-Reload Configuration](#hot-reload-configuration)).
+Environment variables always win: defaults work out of the box, a file can carry environment-specific settings, and `BROKKR__*` variables override both. In Kubernetes, the Helm charts take the third route exclusively — they render your chart values into a ConfigMap of `BROKKR__*` variables and inject it into the pod as environment, never as a file. A chart install therefore has no configuration file at all, which has consequences for reloading (see [Hot-Reload Configuration](#hot-reload-configuration)).
 
 ## Environment Variable Naming
 
@@ -77,14 +77,21 @@ The same list can be supplied by the `--generator-ids` CLI flag (highest precede
 
 A subset of broker settings can change at runtime without a restart: the log level, CORS origins and preflight max-age, and the diagnostic/webhook background-task tunables. The authoritative list is in the [Environment Variables Reference](../reference/environment-variables.md#configuration-file-and-hot-reload); everything else requires a restart.
 
-Trigger a reload manually:
+Trigger a reload explicitly:
 
 ```bash
 curl -X POST https://broker.example.com/api/v1/admin/config/reload \
   -H "Authorization: Bearer $ADMIN_PAK"
 ```
 
-When `BROKKR_CONFIG_FILE` is set, the broker also watches that file and reloads automatically on change (5-second debounce, tunable via `BROKKR_CONFIG_WATCHER_DEBOUNCE_SECONDS`; disable with `BROKKR_CONFIG_WATCHER_ENABLED=false`) — this is how ConfigMap-driven reconfiguration works in Kubernetes. Reloads re-read all three layers, including the file, and each reload is recorded in the audit log as `config.reloaded` with the change set.
+A reload re-reads all three layers and records the change set in the audit log as `config.reloaded`.
+
+There is also an automatic path, but it depends on how the broker was deployed:
+
+- **Deployed with a configuration file** — when `BROKKR_CONFIG_FILE` points at an existing file, the broker watches that file and reloads on its own whenever the contents change (5-second debounce, tunable via `BROKKR_CONFIG_WATCHER_DEBOUNCE_SECONDS`; turn it off with `BROKKR_CONFIG_WATCHER_ENABLED=false`).
+- **Deployed with the Helm chart** — the watcher never starts. The chart delivers settings as environment variables and sets no `BROKKR_CONFIG_FILE`, so there is no file to watch. Editing chart values and upgrading changes the ConfigMap, but the running process keeps the environment it started with; **restart the broker pods to pick the new values up**. The explicit reload endpoint above still works, though with no file layer to re-read it only reflects what the process can already see.
+
+To get automatic reload under Kubernetes today you would have to depart from the chart: mount a ConfigMap as a file and set `BROKKR_CONFIG_FILE` to its path yourself. Note that a mounted ConfigMap's contents propagate on the kubelet's own sync schedule, so the change is not instantaneous even then. Making the chart-installed broker reload without a restart is an open design question for Brokkr, so expect this area to improve.
 
 ## Next Steps
 

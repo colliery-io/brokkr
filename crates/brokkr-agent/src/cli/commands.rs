@@ -637,8 +637,12 @@ pub async fn start(
                                     // search are derived from the deployment
                                     // object's manifests (BROKKR-T-0190);
                                     // documents without an explicit namespace
-                                    // contribute "default".
-                                    let label_selector = format!("brokkr.io/deployment-object-id={}", request.deployment_object_id);
+                                    // contribute "default". Within those
+                                    // namespaces pods are attributed by the
+                                    // shared resolver (label → annotation →
+                                    // ownerReference chain), not by a label
+                                    // selector Brokkr never applies to pod
+                                    // templates (BROKKR-T-0299).
                                     let namespaces = match broker::fetch_deployment_object(&sdk_client, request.deployment_object_id).await {
                                         Ok(obj) => crate::utils::manifest_namespaces(&obj.yaml_content),
                                         Err(e) => {
@@ -648,7 +652,7 @@ pub async fn start(
                                         }
                                     };
 
-                                    match diagnostics_handler.collect_diagnostics_in(&namespaces, &label_selector).await {
+                                    match diagnostics_handler.collect_diagnostics_in(&namespaces, request.deployment_object_id).await {
                                         Ok(result) => {
                                             // Submit the result
                                             match broker::submit_diagnostic_result(

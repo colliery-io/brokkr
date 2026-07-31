@@ -6,7 +6,7 @@ A fleet record exposes **measured signals only** (no computed health verdicts), 
 
 The REST `FleetAgentRecord` (`crates/brokkr-broker/src/api/v1/fleet.rs`) is the authoritative `utoipa::ToSchema` type exposed by the OpenAPI surface. The live-push frames carry its `brokkr-wire` twin (`crates/brokkr-wire/src/lib.rs:FleetAgentRecord`), a plain serde struct kept field-for-field identical via the single conversion point `FleetAgentRecord::to_wire()`.
 
-> The Brokkr web UI (`examples/ui-slim`) is a demonstration of what a consumer can build on this surface. It is not a supported product or the consumption path. The REST endpoints and the live stream below are the consumption surface.
+> Two first-party consumers read this surface, and they read different parts of it. The Operator Console shipped in the broker image uses **`GET /fleet` only**, re-reading it on a short timer; it opens no WebSocket. The separate `examples/ui-slim` demo is the one that consumes the `/fleet/live` stream — it is a sample of what you can build, not a supported product. Both the REST endpoints and the live stream documented here are the contract regardless of which one you build against.
 
 ## FleetAgentRecord
 
@@ -18,6 +18,7 @@ All time-relative fields (`heartbeat_age_seconds`, `seconds_since_last_event`) a
 |-------|------|---------|--------|
 | `agent_id` | UUID | The agent's unique identifier | `agents.id` |
 | `name` | string | The agent's name | `agents.name` |
+| `cluster_name` | string | The Kubernetes cluster the agent runs in; used to group the fleet | `agents.cluster_name` |
 | `status` | string | The agent's lifecycle status (e.g. `"ACTIVE"`) | `agents.status` |
 | `ws_connected` | boolean | Whether the agent currently holds a broker↔agent WebSocket connection | `true` iff the agent has an entry in the in-memory `ConnectionRegistry` snapshot |
 | `connected_since` | ISO-8601 datetime or null | When the current WebSocket connection was established; `null` when not connected | `ConnectionRegistry` snapshot (`connected_since`) |
@@ -37,11 +38,11 @@ All time-relative fields (`heartbeat_age_seconds`, `seconds_since_last_event`) a
 
 ## REST Endpoints
 
-Both fleet REST endpoints are **admin-only**. Authentication is the standard v1 PAK middleware; the handler then requires `AuthPayload.admin` to be true (`require_admin`). A non-admin PAK (generator or agent PAK) receives `403 Forbidden` with error code `admin_required`.
+Both fleet REST endpoints are **admin-only**. Authentication is the standard v1 PAK middleware; the handler then requires `AuthPayload.admin` to be true (`require_admin`). A non-admin PAK (generator or agent PAK) receives `403 Forbidden` with error code `admin_required`. The broker's read-only console token also satisfies this gate, which is how the Operator Console reads `GET /fleet`.
 
 | Method | Path | Auth | Success body |
 |--------|------|------|--------------|
-| GET | `/api/v1/fleet` | Admin PAK only | `Vec<FleetAgentRecord>` |
+| GET | `/api/v1/fleet` | Admin PAK only | `Vec<FleetAgentRecord>` (optionally scoped by `?pak_id=`) |
 | GET | `/api/v1/agents/{id}/fleet-status` | Admin PAK only | `AgentFleetStatusResponse` |
 
 There is **no `/fleet/{id}` route**. The per-agent detail view is mounted under `/api/v1/agents/{id}/fleet-status`.
@@ -50,9 +51,16 @@ There is **no `/fleet/{id}` route**. The per-agent detail view is mounted under 
 
 Handler: `list_fleet`. Returns one `FleetAgentRecord` per agent (every agent returned by `dal.agents().list()`), assembled from the shared `FleetAggregates`.
 
+| Query parameter | Type | Meaning |
+|-----------------|------|---------|
+| `pak_id` | UUID (optional) | Narrow the response to agents registered with the named generator |
+
+`pak_id` is a **view filter, not an authorization boundary**. The endpoint is still admin-only, and the aggregates behind the records are still computed across the whole fleet; the parameter only drops records for agents that have no registration with the given generator. Passing a generator ID that does not exist returns `200` with an empty array. A value that is not a well-formed UUID is rejected during query parsing with a plain `400` that carries no `ErrorResponse` body.
+
 | Status | Body | Condition |
 |--------|------|-----------|
 | 200 | `Vec<FleetAgentRecord>` | Success |
+| 400 | none | `pak_id` is not a well-formed UUID |
 | 403 | `ErrorResponse` (`admin_required`) | Caller PAK is not admin |
 | 500 | `ErrorResponse` | Aggregate computation or agent fetch failed |
 
@@ -76,7 +84,7 @@ Handler: `get_agent_fleet_status`. Path parameter `id` (`Uuid`) is the agent ID.
 
 ## Live Push: GET /api/v1/fleet/live
 
-A read-only, server → client WebSocket stream (`crates/brokkr-broker/src/ws/fleet_subscribe.rs`). The broker pushes a frame whenever an agent's fleet record changes (see [Update Triggers](#update-triggers)). Each frame carries one agent's full record, keyed by `agent_id`; frames are not deltas.
+A read-only, server → client WebSocket stream (`crates/brokkr-broker/src/ws/fleet_subscribe.rs`). The broker pushes a frame whenever an agent's fleet record changes (see [Update Triggers](#update-triggers)). Each frame carries one agent's full record, keyed by `agent_id`; frames are not deltas. The stream accepts no scope parameter — unlike `GET /fleet`, it is always fleet-wide. A consumer that wants a tenant-scoped live view filters frames client-side.
 
 ### Authentication
 
@@ -112,6 +120,7 @@ Only the `fleet_update` variant is emitted on this stream. The `body` is the wir
   "body": {
     "agent_id": "<uuid>",
     "name": "demo-agent",
+    "cluster_name": "prod-us-east",
     "status": "ACTIVE",
     "ws_connected": true,
     "connected_since": "<ISO-8601 | null>",

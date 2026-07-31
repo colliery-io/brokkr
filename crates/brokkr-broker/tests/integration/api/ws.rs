@@ -1621,7 +1621,10 @@ async fn fleet_live_pushes_fleet_update_on_heartbeat() {
 
     let got = await_message(&mut subscriber, |m| matches!(m, WsMessage::FleetUpdate(_))).await;
     if let WsMessage::FleetUpdate(rec) = got {
-        assert_eq!(rec.agent_id, agent.id, "pushed record is for the heartbeating agent");
+        assert_eq!(
+            rec.agent_id, agent.id,
+            "pushed record is for the heartbeating agent"
+        );
         assert_eq!(rec.name, "fleet-live hb");
         assert!(rec.last_heartbeat.is_some(), "heartbeat just recorded");
     }

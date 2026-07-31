@@ -765,6 +765,7 @@
         "type": "object"
       },
       "CreateWebhookRequest": {
+        "description": "Body of `POST /webhooks`.\n\nUnknown keys are ignored rather than rejected, with two deliberate\nexceptions that this endpoint used to accept and silently ignore\n(BROKKR-T-0288). Both are now **rejected with 422** by\n[`reject_removed_write_fields`] before this struct is deserialized:\n\n* `validate` (\"send test request on creation\") was documented and parsed but\n  never read by `create_webhook` — it did nothing, ever. The real mechanism\n  is `POST /webhooks/{id}/test`.\n* `filters.labels` was stored and echoed but never evaluated; label-based\n  routing is `target_labels`, which is real.\n\nRejecting is the lesser evil. A caller who sends `filters.labels` believes\ntheir deliveries are scoped; accepting the request and dropping the key\nleaves them with a subscription that fires on everything and a response they\nhave no reason to re-read. A 422 naming the field and its replacement is\nnoisy exactly once, at the moment the operator can still fix it.\n\nThis is a **write-path** rule only. Subscription rows already stored with a\n`labels` key keep loading and keep delivering — see [`WebhookFilters`],\nwhose deserialization stays tolerant of unknown keys.",
         "properties": {
           "auth_header": {
             "nullable": true,
@@ -777,7 +778,8 @@
             "type": "array"
           },
           "filters": {
-            "$ref": "#/components/schemas/WebhookFilters"
+            "$ref": "#/components/schemas/WebhookFilters",
+            "description": "Payload filters (`agent_id`, `stack_id`). An event that does not carry a\nfiltered field does not match; see [`WebhookFilters`]."
           },
           "max_retries": {
             "format": "int32",
@@ -801,9 +803,6 @@
           },
           "url": {
             "type": "string"
-          },
-          "validate": {
-            "type": "boolean"
           }
         },
         "required": [
@@ -2340,7 +2339,8 @@
             "type": "array"
           },
           "filters": {
-            "$ref": "#/components/schemas/WebhookFilters"
+            "$ref": "#/components/schemas/WebhookFilters",
+            "description": "Payload filters. `null` clears them; omitted leaves them unchanged. A\nlegacy `labels` key inside the object is rejected with 422 rather than\nsilently dropped — see [`CreateWebhookRequest`]."
           },
           "max_retries": {
             "format": "int32",
@@ -2468,21 +2468,13 @@
         "type": "object"
       },
       "WebhookFilters": {
-        "description": "Filters for webhook subscriptions.",
+        "description": "Filters for webhook subscriptions.\n\nA filter narrows an event-type match further, using field values carried in\nthe event payload. Evaluated by [`WebhookFilters::matches`] at emission time\n(see `brokkr_broker::utils::event_bus::emit_event`).\n\nSemantics (BROKKR-T-0288):\n\n* Every filter field that is set must match: the fields are ANDed.\n* **An event that does not carry a filtered field does not match.** A\n  subscription filtering on `stack_id` therefore receives nothing for event\n  types whose payload has no `stack_id` (`agent.*` and `workorder.*`; the\n  whole `deployment.*` family does carry it). This is deliberate: a filter\n  is a narrowing\n  statement, and widening it to \"…or the event didn't say\" would deliver\n  precisely the events the operator asked to exclude.\n* A JSON `null` counts as absent, not as a value. Several payloads emit\n  `\"stack_id\": null` / `\"agent_id\": null` when the source column is NULL\n  (e.g. `deployment.deleted` for an already-purged object,\n  `workorder.completed` for an unclaimed order).\n\n# Read/write asymmetry\n\nThis type is the **read** path: deserialization deliberately ignores unknown\nkeys, so rows written before a field was removed still load — notably the\ndropped `labels` filter, which was never evaluated and is superseded by\n`target_labels` delivery routing. A legacy row must keep delivering exactly\nas it does today; a broker that refused to load it would silently stop the\nsubscription instead. **Do not add `deny_unknown_fields` here.**\n\nThe **write** path is strict, and intentionally not symmetric: `POST` and\n`PUT /webhooks` reject a body carrying `filters.labels` with a 422 that names\n`target_labels` as the replacement (see\n`brokkr_broker::api::v1::webhooks::reject_removed_write_fields`). Accepting\nthe key and dropping it would leave the caller believing their deliveries\nwere scoped when they were not — the failure mode that motivated\nBROKKR-T-0288 in the first place. Rejection is enforced on the raw request\nbody, above this type, precisely so the tolerant deserialization below is\npreserved.",
         "properties": {
           "agent_id": {
             "description": "Filter by specific agent ID.",
             "format": "uuid",
             "nullable": true,
             "type": "string"
-          },
-          "labels": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "description": "Filter by labels (all must match).",
-            "nullable": true,
-            "type": "object"
           },
           "stack_id": {
             "description": "Filter by specific stack ID.",
@@ -2513,7 +2505,8 @@
             "type": "array"
           },
           "filters": {
-            "$ref": "#/components/schemas/WebhookFilters"
+            "$ref": "#/components/schemas/WebhookFilters",
+            "description": "Payload filters as stored, showing exactly what is evaluated at emission\ntime. New writes can no longer introduce keys the broker does not\nunderstand, but rows predating BROKKR-T-0288 may still carry a `labels`\nkey; it is not echoed here because it is not evaluated."
           },
           "has_auth_header": {
             "type": "boolean"
@@ -2957,7 +2950,7 @@
       "url": "https://www.elastic.co/licensing/elastic-license"
     },
     "title": "brokkr-broker",
-    "version": "0.8.4"
+    "version": "0.9.0"
   },
   "openapi": "3.0.3",
   "paths": {
@@ -3346,7 +3339,7 @@
                 }
               }
             },
-            "description": "Successfully retrieved agents"
+            "description": "List of agents (admin: all; generator: those registered with it)"
           },
           "403": {
             "content": {
@@ -3356,7 +3349,7 @@
                 }
               }
             },
-            "description": "Forbidden"
+            "description": "Forbidden — not admin, not a generator, or a system generator"
           },
           "500": {
             "content": {
@@ -3372,6 +3365,9 @@
         "security": [
           {
             "admin_pak": []
+          },
+          {
+            "generator_pak": []
           }
         ],
         "tags": [
@@ -8675,6 +8671,16 @@
             },
             "description": "Forbidden - Admin access required"
           },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable - out-of-range value, or a removed field (`validate`, `filters.labels`)"
+          },
           "500": {
             "content": {
               "application/json": {
@@ -8922,6 +8928,16 @@
               }
             },
             "description": "Webhook subscription not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable - out-of-range value, or the removed `filters.labels` field"
           },
           "500": {
             "content": {

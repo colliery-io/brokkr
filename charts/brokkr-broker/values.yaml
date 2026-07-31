@@ -9,17 +9,16 @@
 #   - log.level
 #   - broker.diagnosticCleanupIntervalSeconds
 #   - broker.diagnosticMaxAgeHours
-#   - broker.webhookDeliveryIntervalSeconds
-#   - broker.webhookDeliveryBatchSize
-#   - broker.webhookCleanupRetentionDays
 #   - cors.allowedOrigins
 #   - cors.maxAgeSeconds
 #
 # Static settings (require pod restart):
 #   - database.url, database.schema
+#   - broker.webhookDeliveryIntervalSeconds
+#   - broker.webhookDeliveryBatchSize
+#   - broker.webhookCleanupRetentionDays
 #   - broker.webhookEncryptionKey
 #   - telemetry.* (all telemetry settings)
-#   - tls.* (all TLS settings)
 #
 # To trigger a manual reload, call: POST /api/v1/admin/config/reload
 # In Kubernetes, the broker automatically watches its ConfigMap for changes.
@@ -98,8 +97,8 @@ service:
   # Service port for broker HTTP API
   port: 3000
   # Additional service annotations (useful for LoadBalancer configuration)
-  # annotations:
   #   service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+  annotations: {}
 
 # PostgreSQL database configuration
 postgresql:
@@ -195,9 +194,14 @@ broker:
   diagnosticMaxAgeHours: 1
 
   # Webhook delivery settings
-  # @hot-reload: true - changes apply without restart
+  # @hot-reload: false - read once when the delivery worker starts; changing
+  # either value requires a pod restart to take effect
   webhookDeliveryIntervalSeconds: 5
   webhookDeliveryBatchSize: 50
+
+  # Webhook delivery retention
+  # @hot-reload: false - read once when the cleanup worker starts; changing
+  # this requires a pod restart to take effect
   webhookCleanupRetentionDays: 7
 
   # Webhook encryption key (hex-encoded 32-byte key)
@@ -300,30 +304,13 @@ containerSecurityContext:
     # add:
     #   - NET_BIND_SERVICE
 
-# TLS/SSL configuration for secure communications
-tls:
-  # Enable TLS for the broker (requires certificates)
-  enabled: false
-
-  # Use an existing Kubernetes TLS secret
-  # The secret should be of type kubernetes.io/tls with tls.crt and tls.key
-  existingSecret: ''
-
-  # Provide certificates inline (base64 encoded)
-  # WARNING: Only use for testing. Production should use existingSecret or cert-manager
-  # To generate self-signed cert: openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-  #   -keyout tls.key -out tls.crt -subj "/CN=brokkr.example.com"
-  cert: ''
-  key: ''
-
-  # Cert-manager integration for automatic certificate management
-  certManager:
-    # Enable cert-manager certificate generation
-    enabled: false
-    # Name of the cert-manager issuer to use
-    issuer: 'letsencrypt-prod'
-    # Issuer kind: Issuer or ClusterIssuer
-    issuerKind: 'ClusterIssuer'
+# TLS
+#
+# The broker serves plain HTTP on port 3000 and cannot terminate TLS itself.
+# Terminate TLS at the ingress (see `ingress.tls` below) or at a service mesh /
+# reverse proxy in front of the broker. For automatic certificates, annotate the
+# ingress for cert-manager (e.g. cert-manager.io/cluster-issuer) rather than
+# issuing a certificate for the broker pod.
 
 # Ingress configuration for external access
 ingress:
@@ -357,10 +344,10 @@ ingress:
         - brokkr.example.com
 
 # Metrics and monitoring configuration
+#
+# The broker always serves /metrics on its HTTP port. There is no chart value
+# that turns the endpoint off; restrict access with networkPolicy instead.
 metrics:
-  # Enable Prometheus metrics endpoint at /metrics
-  enabled: true
-
   # ServiceMonitor configuration for Prometheus Operator
   serviceMonitor:
     # Enable ServiceMonitor CRD creation
@@ -394,7 +381,15 @@ networkPolicy:
   #           app.kubernetes.io/name: ingress-nginx
   allowIngressFrom: []
 
+  # Permit the metrics ingress rule below to be rendered at all.
+  # Set false to deny scraping outright even if allowMetricsFrom is populated.
+  # (Formerly metrics.enabled, which never gated the /metrics endpoint itself —
+  # only this rule.)
+  allowMetricsScraping: true
+
   # Allow metrics scraping from Prometheus namespace
+  # Only applied when allowMetricsScraping is true; empty means no metrics
+  # ingress rule is rendered.
   # Example:
   #   allowMetricsFrom:
   #     - namespaceSelector:
@@ -444,32 +439,3 @@ telemetry:
   # 0.1 = 10% of traces sampled (recommended for production)
   # 1.0 = 100% of traces sampled (development/debugging)
   samplingRate: 0.1
-
-  # Optional: Deploy OpenTelemetry Collector as a sidecar
-  # This is useful when the main collector is not accessible from the broker
-  collector:
-    # Enable OTel collector sidecar
-    enabled: false
-
-    # Collector image
-    image:
-      repository: otel/opentelemetry-collector-contrib
-      tag: "0.96.0"
-      pullPolicy: IfNotPresent
-
-    # Resource limits for collector sidecar
-    resources:
-      requests:
-        memory: 64Mi
-        cpu: 50m
-      limits:
-        memory: 128Mi
-        cpu: 100m
-
-    # OTLP exporters configuration
-    # Where the sidecar collector sends traces
-    exporters:
-      # OTLP exporter endpoint (e.g., central collector, Jaeger, Tempo)
-      otlpEndpoint: ""
-      # Enable debug exporter (logs traces to stdout)
-      debug: false

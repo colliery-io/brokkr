@@ -46,7 +46,7 @@ C4Context
 
 Four principles guide Brokkr's security architecture:
 
-**Zero Trust by Default** requires all external requests to authenticate; the middleware rejects uncredentialed requests before any handler runs. The only anonymous endpoints are the health checks (`/healthz`, `/readyz`) and Prometheus `/metrics`, which sit outside the auth middleware.
+**Zero Trust by Default** requires all API requests to authenticate; the middleware rejects uncredentialed requests before any handler runs. The anonymous surface is deliberately small but larger than health checks alone: the health checks (`/healthz`, `/readyz`) and Prometheus `/metrics` sit outside the auth middleware, and in builds that embed the operator console — which includes the published container image — so does the console itself. Every GET of a non-`/api`, non-`/internal` path on the broker port serves the console HTML, and that HTML carries a live read-only admin credential. Network reachability of the broker URL is therefore the console's authentication boundary — see [Read-Only Console Authentication](#read-only-console-authentication-the-ui-pak) for the design and the mitigations.
 
 **Least Privilege** restricts each identity to the minimum permissions necessary — agents to their associated stacks (explicit targets plus label/annotation matches), generators to stacks they created.
 
@@ -56,7 +56,7 @@ Four principles guide Brokkr's security architecture:
 
 ## Authentication Mechanisms
 
-Brokkr implements three authentication mechanisms, each designed for different actor types and usage patterns.
+Brokkr recognizes four credential classes — admin, agent, generator, and the ephemeral read-only UI PAK that authenticates the operator console — each designed for different actor types and usage patterns.
 
 ### Prefixed API Keys (PAKs)
 
@@ -103,26 +103,38 @@ sequenceDiagram
 
     Client->>Middleware: Request with PAK header
     Middleware->>Middleware: Parse PAK, hash long token (SHA-256)
-    Middleware->>DB: Fetch admin role pak_hash, compare
-    alt Not admin
-        Middleware->>DB: Lookup agents by pak_hash (indexed)
-        alt Not an agent
-            Middleware->>DB: Lookup generators by pak_hash (indexed)
+    Middleware->>Middleware: Compare against in-memory UI PAK (constant time)
+    alt Not the UI PAK
+        Middleware->>Middleware: Check auth cache (TTL, default 60s)
+        alt Cache miss
+            Middleware->>DB: Fetch admin role pak_hash, compare
+            alt Not admin
+                Middleware->>DB: Lookup agents by pak_hash (indexed)
+                alt Not an agent
+                    Middleware->>DB: Lookup generators by pak_hash (indexed)
+                end
+            end
         end
     end
 
     alt Matching record found
         Middleware-->>Client: Authenticated (continue to handler)
     else No match
-        Middleware-->>Client: 401 Unauthorized
+        Middleware-->>Client: 401 Unauthorized (audit-logged)
     end
 ```
 
-The middleware parses the presented PAK and hashes its long token with the same SHA-256 algorithm used at generation time. A malformed PAK is rejected with 401 at this step. It then resolves the identity by that hash, in order: it fetches the admin role row and compares hashes, then performs an indexed lookup in the agents table by `pak_hash`, then in the generators table. The partial indexes on `pak_hash` exclude soft-deleted records, so lookups stay O(1) regardless of how many credentials exist.
+The middleware parses the presented PAK and hashes its long token with the same SHA-256 algorithm used at generation time. A malformed PAK is rejected with 401 at this step. It then resolves the identity by that hash, in order:
+
+1. **UI PAK compare** — the hash is compared against the process's in-memory read-only UI PAK using a constant-time primitive; no database is involved. A match yields a read-only admin identity (see [Read-Only Console Authentication](#read-only-console-authentication-the-ui-pak)).
+2. **Auth cache** — successful database-backed verifications are cached by hash for a configurable TTL (`broker.auth_cache_ttl_seconds`, default 60 seconds; 0 disables caching), so repeated requests from the same credential skip the database entirely.
+3. **Database lookups** — on a cache miss, the middleware fetches the admin role row and compares hashes, then performs an indexed lookup in the agents table by `pak_hash`, then in the generators table. The partial indexes on `pak_hash` exclude soft-deleted records, so lookups stay O(1) regardless of how many credentials exist.
 
 Hash comparison uses a constant-time equality primitive (`subtle::ConstantTimeEq`) on the hex-encoded SHA-256 digests.
 
-If verification succeeds, the middleware populates an `AuthPayload` structure identifying the authenticated entity (agent, generator, or admin) and attaches it to the request for downstream handlers. If verification fails, the request is rejected with a 401 status before reaching any route handler.
+The auth cache has one operational consequence worth knowing: rotation and revocation through the REST API invalidate the cache entry immediately, but CLI-driven rotation (`brokkr-broker rotate ...`) operates directly on the database from a separate process and cannot reach a running broker's cache — the old PAK may keep authenticating until the TTL expires. If that window is unacceptable, restart the broker after a CLI rotation. See [Managing PAKs](../how-to/pak-management.md) for details.
+
+If verification succeeds, the middleware populates an `AuthPayload` structure identifying the authenticated entity (agent, generator, admin, or read-only admin) and attaches it to the request for downstream handlers. If verification fails, the request is rejected with a 401 status before reaching any route handler, and the failure is recorded as an `auth.failed` audit event.
 
 #### PAK Security Properties
 
@@ -164,6 +176,20 @@ curl -X POST https://broker.example.com/api/v1/stacks \
 
 Generators cannot access admin endpoints regardless of their PAK. The authorization layer checks identity type before granting access to protected routes.
 
+### Read-Only Console Authentication (the UI PAK)
+
+The fourth credential class exists so the operator console works with zero configuration. At startup, the broker mints one random PAK per process and holds it in memory only — it is never persisted, never written to the database, and never logged. There is no rotation command for it; restarting the broker mints a fresh one.
+
+In builds that embed the console (the published container image is built this way), the broker serves the console HTML for any GET of a non-`/api`, non-`/internal` path on its port, and injects the raw UI PAK into that HTML as a meta tag. The console picks it up and authenticates its API calls with it. The auth middleware recognizes the credential by an in-memory constant-time comparison and treats it as a **read-only admin**: it may GET or HEAD any endpoint — including admin-only listings across all tenants — plus exactly two POSTs that do not mutate desired state: credential introspection (`POST /auth/pak`) and diagnostic requests (`POST /deployment-objects/{id}/diagnostics`). Every other mutation is rejected with 403.
+
+**That injected token is the console's only ambient credential**, and the console has no persistent credential store. Through 0.8.x it also honoured an operator-pasted PAK in browser local storage (`brokkr_pak`) and *preferred* it over the injected token, so setting it silently promoted the entire console from read-only to full admin write — for every request, indefinitely, readable by any script on the origin that also serves the API. That override was removed in 0.9.0. Its stated purpose, giving an operator write access from the browser, is now served by a narrower mechanism: the console's one privileged action, creating a generator tenant, prompts for an admin PAK at the moment it is used, sends it on that single request, and clears it — so no admin credential is ever at rest in a browser.
+
+This design makes network reachability of the broker URL the console's authentication boundary: **anyone who can fetch the console page holds a working read-only admin credential**. That is intentional — the console is an operations tool for people already inside the trust boundary — but it means the broker port must be treated as sensitive even for read access. As with `/metrics`, restrict it at the network level: limit who can reach port 3000 with a NetworkPolicy or firewall rules, and if the console must be exposed beyond the cluster, put authentication at the ingress (for example OIDC or basic auth on the ingress controller). Builds without the embedded console serve a plain placeholder page instead, with no credential.
+
+Because each broker replica mints its own UI PAK, a token injected by one replica is rejected by another. Load-balanced deployments that expose the console therefore need sticky sessions (session affinity) so a browser keeps talking to the replica that issued its token.
+
+For the operational side of this credential — reaching the console, what each of its views shows, the tenant scope selector, and the build that includes it — see [Using the Operator Console](../how-to/operator-console.md).
+
 ## Authorization Model
 
 Brokkr implements implicit role-based access control (RBAC) where roles are determined by authentication type rather than explicit role assignments.
@@ -175,6 +201,7 @@ Brokkr implements implicit role-based access control (RBAC) where roles are dete
 | **Agent** | PAK via agents table | Read targeted deployments, report events, claim work orders |
 | **Generator** | PAK via generators table | Manage own stacks and deployment objects |
 | **Admin** | PAK via admin_role table | Full system access including configuration and audit logs; cannot bypass generator registration when targeting stacks |
+| **Read-only admin (UI PAK)** | Ephemeral in-memory PAK, minted per broker process | GET/HEAD on any endpoint (admin-level visibility), plus `POST /auth/pak` and `POST /deployment-objects/{id}/diagnostics`; all other mutations rejected with 403 |
 | **System** | Internal only | Background tasks, automated cleanup |
 
 Registration enforcement — the requirement that an agent be registered with a generator before explicit targets can be created within that generator's stacks — applies uniformly to all identities, including admins. There is no bypass or force flag. See [Generator Registration and Application Scopes](#generator-registration-and-application-scopes) below.
@@ -190,25 +217,36 @@ The following table summarizes which roles can access each API endpoint category
 | `/api/v1/agents/{id}/work-orders/*` | Own ID only | No | Yes |
 | `/api/v1/agents/{id}/registrations` | Own ID only | No | Yes |
 | `/api/v1/generators/{id}/register` (POST/DELETE) | Own ID only | No | Yes |
-| `/api/v1/generators/{id}/registered-agents` | No | Own ID only | Yes |
+| `/api/v1/generators/{id}/registered-agents` | No | Own ID only (not the system generator) | Yes |
 | `/api/v1/stacks/*` | No | Own stacks | Yes |
+| `/api/v1/agents` (GET, listing) | No | Own registered agents (not the system generator) | Yes (whole fleet) |
 | `/api/v1/agents/*` (management) | No | No | Yes |
 | `/api/v1/admin/*` | No | No | Yes |
 | `/api/v1/webhooks/*` | No | No | Yes |
+| `/api/v1/paks` (GET) | No | No | Yes (the read-only UI PAK qualifies) |
 | `/healthz`, `/readyz` | Public (no auth) | Public (no auth) | Public (no auth) |
 | `/metrics` | Public (no auth) | Public (no auth) | Public (no auth) |
+| Console routes (any non-`/api` GET, embed-ui builds) | Public (no auth) | Public (no auth) | Public (no auth) |
+
+Two of those rows are tenant-scoped reads rather than all-or-nothing gates. `GET /api/v1/agents` returns the whole fleet to an admin and, to a generator, exactly the agents registered with that generator — so a tenant can answer "which agents serve me?" without an admin credential. `GET /api/v1/generators/{id}/registered-agents` answers the narrower question with registration records (agent *ids* and timestamps) rather than agent detail; use the agent listing when you need names, clusters, status, or heartbeats.
+
+Neither is available to the **system generator**, which is why both rows carry that exclusion. `__system__` is internal delivery infrastructure rather than a tenant, and every agent is auto-registered with it — so scoping either read to it would return the entire fleet through a non-admin credential. Both endpoints reject it with `system_generator_not_a_tenant` (403). This is defense in depth: the system generator is provisioned without a PAK, so nothing can authenticate as it today.
+
+The read-only UI PAK is not a separate column: it passes every admin **read** check in the table (GET/HEAD), plus the two allowlisted POSTs, and fails everything else with 403. `GET /api/v1/paks` lists the non-system generators as `{id, name}` pairs so the console can offer a tenant selector; the `?pak_id=` parameter it feeds on `/fleet`, `/stacks`, and `/agent-events` is a **view filter**, not an authorization boundary — real isolation comes from generator ownership checks, not from `pak_id`.
 
 Note that `/metrics` is mounted outside the authentication middleware, exactly like `/healthz` and `/readyz`—any client that can reach the broker port can scrape it. Metrics can reveal operational details (request rates, agent counts), so restrict access at the network level: use a NetworkPolicy (`networkPolicy.allowMetricsFrom`) or firewall rules to limit scraping to your monitoring infrastructure.
+
+The console routes are likewise mounted outside the auth middleware in embed-ui builds, and the page they serve embeds a live read-only admin credential ([details above](#read-only-console-authentication-the-ui-pak)). Anyone who can reach the broker port gets read-only admin visibility, so apply the same network-level restrictions — NetworkPolicy or firewall rules on port 3000, or ingress-level authentication when exposing the console beyond the cluster — and use sticky sessions when running multiple replicas.
 
 ### Resource-Level Access Control
 
 Beyond endpoint-level authorization, Brokkr enforces resource-level access control through database queries.
 
-**Agent Scope** limits agents to resources from stacks associated with them. When an agent requests deployment objects, the broker resolves the agent's associated stacks as the union of explicit targets (`agent_targets` rows), stacks sharing any of the agent's labels, and stacks sharing any of the agent's annotations—then serves only those stacks' objects.
+**Agent Scope** limits agents to resources from stacks associated with them. When an agent requests deployment objects, the broker resolves the agent's associated stacks as the union of explicit targets (`agent_targets` rows), stacks sharing any of the agent's labels, and stacks sharing any of the agent's annotations—then serves only those stacks' objects. The label and annotation legs of that union are themselves confined to generators the agent is registered with, so matching narrows within an agent's consented scopes rather than reaching outside them.
 
 This resolution happens server-side on every request, so agents can never see deployment objects from stacks outside that union, regardless of what parameters they provide in API requests.
 
-The read-time union above governs what an agent *sees*; a separate gate governs what explicit targets can be *created*. An explicit target can only be created when the agent is registered with the stack's owning generator — an attempt to target a stack whose generator the agent is not registered with fails with `agent_not_registered` (HTTP 403). Label and annotation matching operate purely at read time and require no registration, so an agent may read stacks from generators it is not registered with via label/annotation matches, yet still cannot create explicit targets within them. See [Generator Registration and Application Scopes](#generator-registration-and-application-scopes).
+Registration is the consent boundary on both sides of that union. An explicit target can only be created when the agent is registered with the stack's owning generator — an attempt to target a stack whose generator the agent is not registered with fails with `agent_not_registered` (HTTP 403). Label and annotation matching is filtered by the same rule at read time, so a stack reaches an agent through a selector only when the agent has registered with that stack's generator. An agent with no registrations receives nothing from matching at all, and two tenants can reuse the same label vocabulary without colliding. See [Generator Registration and Application Scopes](#generator-registration-and-application-scopes).
 
 **Generator Scope** restricts generators to stacks they created:
 
@@ -224,7 +262,7 @@ Generators cannot list, read, or modify stacks created by other generators or th
 
 Generator ownership scopes what a generator can touch; *registration* scopes which agents a generator's stacks can reach. A generator is an application scope, and an agent must be **registered** with that generator before any stack the generator owns can be targeted at the agent. Registration is the agent's opt-in consent boundary — it prevents one application from accidentally (or maliciously) scheduling its workloads onto agents that never agreed to run them, an application-level tenancy boundary inside a single broker.
 
-Registration gates the *creation* of explicit targets, not read-time resolution. Adding a target (`POST /agents/{id}/targets`) or removing one (`DELETE /agents/{id}/targets/{stack_id}`) is rejected with `agent_not_registered` (HTTP 403) when the agent is not registered with the stack's owning generator. This check is enforced uniformly across every identity — there is no admin override or force flag. The read path (`GET /agents/{id}/target-state`) is unchanged: an agent's served-stack set remains the union of explicit targets, label matches, and annotation matches, so label- and annotation-based reach never requires registration.
+Registration gates both the *creation* of explicit targets and read-time resolution. Adding a target (`POST /agents/{id}/targets`) or removing one (`DELETE /agents/{id}/targets/{stack_id}`) is rejected with `agent_not_registered` (HTTP 403) when the agent is not registered with the stack's owning generator. This check is enforced uniformly across every identity — there is no admin override or force flag. On the read path (`GET /agents/{id}/target-state`), the label and annotation legs of the served-stack union are restricted to stacks owned by generators the agent is registered with; explicit targets need no read-time check, having been gated at creation. The practical consequence is that a generator declares which labels it publishes to, an agent's registrations declare which generators it accepts work from, and no selector can cross that line.
 
 Two scopes deserve special mention:
 
@@ -404,7 +442,7 @@ Brokkr implements several controls relevant to data protection regulations, summ
 |-------------|----------------|
 | Access control | PAK authentication + implicit RBAC |
 | Audit trail | Immutable audit logs with comprehensive action recording |
-| Data encryption | TLS in transit, AES-256-GCM for secrets at rest |
+| Data encryption | TLS in transit (terminated at the ingress/mesh — the broker itself serves plain HTTP), AES-256-GCM for secrets at rest |
 | Least privilege | Scoped agent and generator access |
 | Monitoring | Metrics endpoint, audit log queries |
 | Incident response | Credential revocation, audit log forensics |

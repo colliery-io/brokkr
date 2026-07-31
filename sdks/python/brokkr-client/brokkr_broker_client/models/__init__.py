@@ -76,7 +76,6 @@ from .update_template_request import UpdateTemplateRequest
 from .update_webhook_request import UpdateWebhookRequest
 from .webhook_delivery import WebhookDelivery
 from .webhook_filters import WebhookFilters
-from .webhook_filters_labels_type_0 import WebhookFiltersLabelsType0
 from .webhook_response import WebhookResponse
 from .webhook_subscription import WebhookSubscription
 from .work_order import WorkOrder
@@ -163,7 +162,6 @@ __all__ = (
     "UpdateWebhookRequest",
     "WebhookDelivery",
     "WebhookFilters",
-    "WebhookFiltersLabelsType0",
     "WebhookResponse",
     "WebhookSubscription",
     "WorkOrder",

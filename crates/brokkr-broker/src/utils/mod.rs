@@ -12,10 +12,13 @@
 use brokkr_models::schema::admin_role;
 use chrono::Utc;
 use diesel::prelude::*;
+use once_cell::sync::Lazy;
+use prometheus::{IntGauge, Opts};
 use std::fs;
 use std::path::Path;
+use std::time::Duration;
 use tokio::sync::oneshot;
-use tracing::info;
+use tracing::{info, warn};
 use uuid::Uuid;
 pub mod audit;
 pub mod background_tasks;
@@ -26,7 +29,7 @@ pub mod matching;
 pub mod pak;
 pub mod templating;
 pub mod ui_pak;
-use brokkr_utils::config::Settings;
+use brokkr_utils::config::{DEFAULT_ADMIN_PAK_HASH, Settings};
 
 /// Path of the bootstrap key file written when the broker generates an admin
 /// PAK itself (i.e. no `pak_hash` was configured). Defined once so the write in
@@ -59,6 +62,25 @@ pub struct NewAdminKey {
     pub pak_hash: String,
 }
 
+/// What [`upsert_admin`] actually did.
+///
+/// The two branches look identical from the outside — both end with a hash on
+/// `admin_role` and the admin generator — but only one produces a new
+/// credential. `rotate admin` reports "rotated successfully" for both unless it
+/// is told them apart, which is misleading on the branch that mints nothing
+/// (BROKKR-T-0317).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AdminPakOutcome {
+    /// No hash was configured, so a fresh PAK was minted. The plaintext is
+    /// returned *and* written to [`BOOTSTRAP_KEY_FILE`]; it cannot be recovered
+    /// from the hash afterwards.
+    Minted { pak: String, hash: String },
+    /// `broker.pak_hash` was set, so it was validated and re-applied verbatim.
+    /// **No credential was created** and whatever PAK matches that hash keeps
+    /// working — including, on a default install, the publicly-known one.
+    ReappliedConfigured { hash: String },
+}
+
 /// Performs first-time startup operations.
 ///
 /// This function is called when the broker starts for the first time and
@@ -67,7 +89,11 @@ pub fn first_startup(
     conn: &mut PgConnection,
     config: &Settings,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    upsert_admin(conn, config)
+    // `serve` deliberately does not surface the PAK on stdout: it is a
+    // long-running process whose output is a log stream, and a secret written
+    // there would persist in `kubectl logs` for the pod's lifetime. The
+    // bootstrap key file remains that path's channel.
+    upsert_admin(conn, config).map(|_| ())
 }
 
 /// Creates a new PAK (Privileged Access Key) and its hash.
@@ -91,27 +117,34 @@ fn create_pak() -> Result<(String, String), Box<dyn std::error::Error>> {
 pub fn upsert_admin(
     conn: &mut PgConnection,
     config: &Settings,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let pak_hash = match &config.broker.pak_hash {
+) -> Result<AdminPakOutcome, Box<dyn std::error::Error>> {
+    let outcome = match &config.broker.pak_hash {
         Some(hash) if !hash.is_empty() => {
             // Validate the provided hash
             if !validate_pak_hash(hash) {
                 return Err("Invalid PAK hash provided in configuration".into());
             }
-            hash.clone()
+            AdminPakOutcome::ReappliedConfigured { hash: hash.clone() }
         }
         _ => {
             // Generate new PAK and hash
             let (pak, hash) = create_pak()?;
 
-            // Write PAK to temporary file
+            // Write PAK to temporary file. Retained as the channel for
+            // `serve`'s first startup, which cannot print secrets; `rotate
+            // admin` also returns the plaintext so it can be shown directly.
             info!("Writing PAK to temporary file");
             let key_path = Path::new(BOOTSTRAP_KEY_FILE);
             fs::create_dir_all(key_path.parent().unwrap())?;
-            fs::write(key_path, pak)?;
+            fs::write(key_path, &pak)?;
 
-            hash
+            AdminPakOutcome::Minted { pak, hash }
         }
+    };
+
+    let pak_hash = match &outcome {
+        AdminPakOutcome::Minted { hash, .. } => hash.clone(),
+        AdminPakOutcome::ReappliedConfigured { hash } => hash.clone(),
     };
 
     // Update or insert admin key
@@ -163,13 +196,193 @@ pub fn upsert_admin(
         }
     }
 
-    Ok(())
+    Ok(outcome)
 }
 
 fn validate_pak_hash(hash: &str) -> bool {
     // Implement hash validation logic here
     // For example, check if it's a valid SHA-256 hash
     hash.len() == 64 && hash.chars().all(|c| c.is_ascii_hexdigit())
+}
+
+// =============================================================================
+// Default admin PAK backstop (BROKKR-T-0298)
+// =============================================================================
+
+/// `1` when this broker's admin credential is the publicly-known development
+/// PAK shipped in `default.toml`, `0` when it has been replaced.
+///
+/// This is the console/monitoring-visible half of the backstop. It is a gauge on
+/// the existing `/metrics` endpoint rather than a new route or health field
+/// because it costs one metric definition, needs no API surface or client
+/// change, and is directly alertable (`brokkr_default_admin_pak_hash_in_use == 1`).
+/// It is set exactly once, at startup, and never changes for the life of the
+/// process — the admin hash is not hot-reloadable.
+///
+/// It is registered here rather than in `crate::metrics` so the definition sits
+/// next to the detection logic it describes; the registry it publishes into is
+/// the same one `/metrics` encodes.
+static DEFAULT_ADMIN_PAK_HASH_IN_USE: Lazy<IntGauge> = Lazy::new(|| {
+    let opts = Opts::new(
+        "brokkr_default_admin_pak_hash_in_use",
+        "1 if the broker's admin PAK hash is the publicly-known default shipped in default.toml, 0 otherwise",
+    );
+    let gauge = IntGauge::with_opts(opts).expect("Failed to create default admin PAK hash gauge");
+    crate::metrics::REGISTRY
+        .register(Box::new(gauge.clone()))
+        .expect("Failed to register default admin PAK hash gauge");
+    gauge
+});
+
+/// How often the startup warning is repeated while the default admin PAK is
+/// still in use.
+///
+/// Hourly, deliberately. The startup banner alone scrolls out of a busy log
+/// within minutes, so an operator who attaches to the logs of a broker that has
+/// been up for a week would see nothing; repeating keeps the condition
+/// discoverable at any point in the process's life. But a warning on a short
+/// cycle is noise that trains people to filter the line out — the failure mode
+/// the banner exists to avoid. Once an hour is ~24 lines a day: impossible to
+/// miss when grepping, impossible to drown in. Continuous monitoring is the
+/// gauge's job, not the log's.
+const DEFAULT_ADMIN_PAK_REMINDER_INTERVAL: Duration = Duration::from_secs(3600);
+
+/// Which admin credential sources still carry the shipped default hash.
+///
+/// The two are tracked separately because they have different causes and
+/// different fixes. `configured` is the live config value; `stored` is what is
+/// actually in `admin_role.pak_hash` — and those can disagree, because
+/// `upsert_admin` only runs on first startup (or an explicit `rotate admin`).
+/// An install that first booted with the default and *later* had
+/// `BROKKR__BROKER__PAK_HASH` set keeps accepting the public PAK until the
+/// admin row is rotated, which is the case a config-only check would miss.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DefaultAdminPakStatus {
+    /// The configured `broker.pak_hash` is the shipped default.
+    pub configured: bool,
+    /// The admin hash stored in the database is the shipped default.
+    pub stored: bool,
+}
+
+impl DefaultAdminPakStatus {
+    /// True when the publicly-known PAK is accepted as admin by this broker.
+    pub fn in_use(&self) -> bool {
+        self.configured || self.stored
+    }
+}
+
+/// Compares the effective admin credential against the shipped default.
+///
+/// Pure and exact: byte equality against [`DEFAULT_ADMIN_PAK_HASH`], no
+/// heuristics, no I/O. `serve` binds a port and installs process-global state,
+/// so the decision lives here where it can be tested directly.
+///
+/// # Arguments
+/// * `configured` - `config.broker.pak_hash` after the full config layering.
+/// * `stored` - `admin_role.pak_hash` as currently persisted, if the row exists.
+pub fn detect_default_admin_pak_hash(
+    configured: Option<&str>,
+    stored: Option<&str>,
+) -> DefaultAdminPakStatus {
+    DefaultAdminPakStatus {
+        configured: configured == Some(DEFAULT_ADMIN_PAK_HASH),
+        stored: stored == Some(DEFAULT_ADMIN_PAK_HASH),
+    }
+}
+
+/// Reads the persisted admin PAK hash, if the admin role has been provisioned.
+///
+/// Runs against whatever schema the connection's `search_path` selects, so on a
+/// multi-tenant install it reports the tenant the broker is actually serving.
+pub fn stored_admin_pak_hash(conn: &mut PgConnection) -> QueryResult<Option<String>> {
+    admin_role::table
+        .select(admin_role::pak_hash)
+        .first::<String>(conn)
+        .optional()
+}
+
+/// Renders the operator-facing warning for a default-PAK `status`.
+///
+/// Split out from the logging so the wording — specifically, that it always
+/// carries a remediation — can be asserted in tests. Returns `None` when the
+/// default is not in use.
+fn default_admin_pak_warning(status: &DefaultAdminPakStatus) -> Option<String> {
+    if !status.in_use() {
+        return None;
+    }
+
+    // Every line is hard-wrapped to the banner width: the block only reads as a
+    // banner if nothing in it wraps unpredictably in a terminal or log viewer.
+    let what = match (status.configured, status.stored) {
+        (true, _) => "WHAT: broker.pak_hash is set to the value shipped in Brokkr's default.toml.",
+        (false, true) => {
+            "WHAT: the admin PAK hash stored in the database is Brokkr's shipped default.\n\
+             The configured hash was overridden, but the stored one was never rotated —\n\
+             admin_role is written only on first startup or by an explicit rotation, so\n\
+             the public PAK is still accepted."
+        }
+        (false, false) => unreachable!("in_use() is true"),
+    };
+
+    let fix = if status.stored && !status.configured {
+        "FIX: run `brokkr-broker generate-pak`; set BROKKR__BROKER__PAK_HASH to the minted\n\
+         hash (Helm: broker.pakHash, or broker.pakHashExistingSecret to source it from an\n\
+         existing Secret); then run `brokkr-broker rotate admin` to write it to the\n\
+         database. Restarting alone will NOT fix this."
+    } else {
+        "FIX: run `brokkr-broker generate-pak`; set BROKKR__BROKER__PAK_HASH to the minted\n\
+         hash (Helm: broker.pakHash, or broker.pakHashExistingSecret to source it from an\n\
+         existing Secret); restart. On an install that has already started once, also run\n\
+         `brokkr-broker rotate admin` so the stored hash is replaced."
+    };
+
+    Some(format!(
+        "\n\
+         ==============================================================================\n\
+         !! SECURITY: THIS BROKER ACCEPTS A PUBLICLY-KNOWN ADMIN CREDENTIAL !!\n\
+         ==============================================================================\n\
+         {what}\n\
+         WHY IT MATTERS: the PAK matching that hash is published in Brokkr's public\n\
+         source tree. Anyone who can reach this broker's API can authenticate as admin:\n\
+         full read/write access to every agent, generator, stack and secret it serves.\n\
+         {fix}\n\
+         This is expected in local development and in the test harnesses, which rely on\n\
+         the default. It must never be true in production.\n\
+         =============================================================================="
+    ))
+}
+
+/// Logs the default-admin-PAK banner (if applicable) and publishes
+/// `brokkr_default_admin_pak_hash_in_use`.
+///
+/// Always sets the gauge, including to `0`, so the metric is present and
+/// alertable on a correctly-configured broker rather than only appearing on a
+/// broken one.
+pub fn report_default_admin_pak_hash(status: &DefaultAdminPakStatus) {
+    DEFAULT_ADMIN_PAK_HASH_IN_USE.set(i64::from(status.in_use()));
+
+    match default_admin_pak_warning(status) {
+        Some(banner) => warn!("{}", banner),
+        None => info!("Admin PAK hash is not the shipped default"),
+    }
+}
+
+/// Spawns the hourly re-warning task described on
+/// [`DEFAULT_ADMIN_PAK_REMINDER_INTERVAL`]. No-op when the default is not in
+/// use, so a correctly-configured broker carries no extra task.
+///
+/// Must be called from within a Tokio runtime.
+pub fn start_default_admin_pak_reminder_task(status: DefaultAdminPakStatus) {
+    let Some(banner) = default_admin_pak_warning(&status) else {
+        return;
+    };
+
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(DEFAULT_ADMIN_PAK_REMINDER_INTERVAL).await;
+            warn!("{}", banner);
+        }
+    });
 }
 
 #[cfg(test)]
@@ -191,6 +404,125 @@ mod tests {
             validate_pak_hash(&hash),
             "minted hash {hash:?} must satisfy validate_pak_hash so the \
              BROKKR__BROKER__PAK_HASH bootstrap path accepts it"
+        );
+    }
+
+    /// A hash that is neither the default nor equal to any other fixture.
+    const OVERRIDE_HASH: &str = "1111111111111111111111111111111111111111111111111111111111111111";
+
+    #[test]
+    fn default_configured_admin_pak_hash_is_detected() {
+        let status = detect_default_admin_pak_hash(
+            Some(DEFAULT_ADMIN_PAK_HASH),
+            Some(DEFAULT_ADMIN_PAK_HASH),
+        );
+
+        assert!(status.configured, "configured default must be flagged");
+        assert!(status.stored, "stored default must be flagged");
+        assert!(status.in_use());
+    }
+
+    #[test]
+    fn overridden_admin_pak_hash_is_not_detected() {
+        let status = detect_default_admin_pak_hash(Some(OVERRIDE_HASH), Some(OVERRIDE_HASH));
+
+        assert!(!status.configured);
+        assert!(!status.stored);
+        assert!(!status.in_use(), "an overridden hash must not warn");
+        assert!(
+            default_admin_pak_warning(&status).is_none(),
+            "no banner when the default has been replaced"
+        );
+    }
+
+    /// The case a config-only check misses: the operator set
+    /// `BROKKR__BROKER__PAK_HASH` on an install that first booted with the
+    /// default, so `admin_role` still holds — and still accepts — the public
+    /// hash.
+    #[test]
+    fn stale_stored_default_is_detected_despite_overridden_config() {
+        let status =
+            detect_default_admin_pak_hash(Some(OVERRIDE_HASH), Some(DEFAULT_ADMIN_PAK_HASH));
+
+        assert!(!status.configured);
+        assert!(status.stored);
+        assert!(status.in_use());
+
+        let banner = default_admin_pak_warning(&status).expect("stale stored default must warn");
+        assert!(
+            banner.contains("rotate admin"),
+            "the stored-only case is not fixed by a restart, so the banner must \
+             prescribe `rotate admin`: {banner}"
+        );
+        assert!(
+            banner.contains("Restarting alone will NOT fix this"),
+            "banner must say that a restart is insufficient: {banner}"
+        );
+    }
+
+    /// An unset (or empty) hash means the broker mints its own PAK on first
+    /// startup — not the public credential — so it must not trip the backstop.
+    #[test]
+    fn unset_admin_pak_hash_is_not_detected() {
+        let status = detect_default_admin_pak_hash(None, None);
+
+        assert!(!status.in_use());
+        assert!(default_admin_pak_warning(&status).is_none());
+    }
+
+    /// "Unmissable" is a wording property, so pin it: the banner must say what
+    /// is wrong, why it matters, and every supported way to fix it.
+    #[test]
+    fn default_admin_pak_warning_carries_full_remediation() {
+        let status = detect_default_admin_pak_hash(
+            Some(DEFAULT_ADMIN_PAK_HASH),
+            Some(DEFAULT_ADMIN_PAK_HASH),
+        );
+        let banner = default_admin_pak_warning(&status).expect("default in use must warn");
+
+        for needle in [
+            "SECURITY",
+            "PUBLICLY-KNOWN",
+            "generate-pak",
+            "BROKKR__BROKER__PAK_HASH",
+            "broker.pakHash",
+            "broker.pakHashExistingSecret",
+        ] {
+            assert!(
+                banner.contains(needle),
+                "banner must mention {needle:?}: {banner}"
+            );
+        }
+        assert!(
+            banner.lines().count() >= 8,
+            "banner must be a multi-line block that is hard to scroll past: {banner}"
+        );
+    }
+
+    /// The gauge must exist on `/metrics` in both states, so an alert on
+    /// `brokkr_default_admin_pak_hash_in_use == 1` is meaningful rather than
+    /// silently absent on a healthy broker.
+    #[test]
+    fn report_default_admin_pak_hash_publishes_gauge() {
+        let clean = detect_default_admin_pak_hash(Some(OVERRIDE_HASH), Some(OVERRIDE_HASH));
+        report_default_admin_pak_hash(&clean);
+
+        let output = crate::metrics::encode_metrics();
+        assert!(
+            output.contains("brokkr_default_admin_pak_hash_in_use 0"),
+            "gauge must be exported as 0 on a hardened broker: {output}"
+        );
+
+        let dirty = detect_default_admin_pak_hash(
+            Some(DEFAULT_ADMIN_PAK_HASH),
+            Some(DEFAULT_ADMIN_PAK_HASH),
+        );
+        report_default_admin_pak_hash(&dirty);
+
+        let output = crate::metrics::encode_metrics();
+        assert!(
+            output.contains("brokkr_default_admin_pak_hash_in_use 1"),
+            "gauge must be exported as 1 while the default is in use: {output}"
         );
     }
 }

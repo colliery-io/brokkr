@@ -6,7 +6,7 @@
 
 use crate::api;
 use crate::dal::DAL;
-use crate::db::create_shared_connection_pool;
+use crate::db::{ConnectionPool, create_shared_connection_pool};
 use crate::utils;
 use crate::utils::pak;
 use brokkr_models::models::agents::NewAgent;
@@ -22,7 +22,7 @@ use diesel::sql_query;
 use diesel::sql_types::BigInt;
 use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
 use tokio::signal;
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 use uuid::Uuid;
 
 // Assuming MIGRATIONS is defined in the bin.rs file, we need to import it
@@ -33,6 +33,36 @@ pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("../brokkr-models/m
 struct Count {
     #[diesel(sql_type = BigInt)]
     count: i64,
+}
+
+/// Builds the database connection pool for a CLI entry point from `config`,
+/// honoring `database.schema` (`BROKKR__DATABASE__SCHEMA`).
+///
+/// Every command in this module that talks to the database must go through
+/// this: it is the single place that plumbs the configured schema into the
+/// pool. The schema is *not* applied once at construction — it is applied per
+/// connection by [`ConnectionPool::get`], which issues
+/// `SET search_path TO <schema>, public` on each checkout. Callers must
+/// therefore take connections via `pool.get()` (which the DAL does internally),
+/// never `pool.pool.get()`, or the connection lands on `public` regardless of
+/// configuration.
+///
+/// Opening a bare `PgConnection::establish(&config.database.url)` bypasses all
+/// of this and silently operates on `public`; that was BROKKR-T-0297.
+///
+/// `max_size` is per-command: `serve` needs a large pool, one-shot subcommands
+/// need one connection (two where the operation emits webhook events, which
+/// need a second connection while the first is still held).
+pub fn connection_pool_from_settings(config: &Settings, max_size: u32) -> ConnectionPool {
+    create_shared_connection_pool(
+        &config.database.url,
+        // `None`: honour the database named in `database.url`. This used to be
+        // the literal "brokkr", which overwrote the operator's configured
+        // database name (BROKKR-T-0306).
+        None,
+        max_size,
+        config.database.schema.as_deref(),
+    )
 }
 
 /// Function to start the Brokkr Broker server
@@ -48,12 +78,7 @@ pub async fn serve(config: &Settings) -> Result<(), Box<dyn std::error::Error>> 
     // - HTTP requests (middleware holds 1 connection while DAL methods need another)
     // - Concurrent request handling and webhook event emission
     info!("Creating database connection pool");
-    let connection_pool = create_shared_connection_pool(
-        &config.database.url,
-        "brokkr",
-        50,
-        config.database.schema.as_deref(),
-    );
+    let connection_pool = connection_pool_from_settings(config, 50);
     info!("Database connection pool created successfully");
 
     // Set up schema if configured (for multi-tenant deployments)
@@ -96,6 +121,31 @@ pub async fn serve(config: &Settings) -> Result<(), Box<dyn std::error::Error>> 
         info!("Existing application detected. Proceeding with normal startup.");
     }
 
+    // Backstop for the publicly-known default admin PAK (BROKKR-T-0298).
+    //
+    // Deliberately a warning, not a refusal — the opposite of the webhook
+    // encryption-key guard below. Refusing here would need a development
+    // opt-out flag (`angreal local up`, the compose harness and the integration
+    // suites all boot with the shipped default), and such flags end up copied
+    // into production manifests: a worse footgun than the one being closed.
+    // Documentation (BROKKR-T-0286) is the primary control; this is the net
+    // under it.
+    //
+    // Runs after the first-run branch so `admin_role` reflects whatever
+    // `upsert_admin` just wrote, and reads the stored hash as well as the
+    // configured one: an install that first booted with the default keeps
+    // accepting it even after the config is corrected.
+    let stored_admin_hash = utils::stored_admin_pak_hash(&mut conn).unwrap_or_else(|e| {
+        warn!("Could not read the stored admin PAK hash to check it against the shipped default (the check is a backstop, so startup continues): {}", e);
+        None
+    });
+    let default_admin_pak = utils::detect_default_admin_pak_hash(
+        config.broker.pak_hash.as_deref(),
+        stored_admin_hash.as_deref(),
+    );
+    utils::report_default_admin_pak_hash(&default_admin_pak);
+    utils::start_default_admin_pak_reminder_task(default_admin_pak);
+
     // Initialize Data Access Layer
     info!("Initializing Data Access Layer");
     let auth_cache_ttl = config.broker.auth_cache_ttl_seconds.unwrap_or(60);
@@ -109,6 +159,27 @@ pub async fn serve(config: &Settings) -> Result<(), Box<dyn std::error::Error>> 
             "disabled"
         }
     );
+
+    // Guard against the unset-encryption-key trap (BROKKR-T-0288) before the
+    // key is initialized. An unset key means a fresh random per-process key, so
+    // any subscription written by a previous process is already undecryptable
+    // and can never deliver again. Runs here because it needs migrations to
+    // have created `webhook_subscriptions` and must precede
+    // `init_encryption_key`, which would otherwise silently install the random
+    // key. Fresh installs (zero rows) fall through to the warning path.
+    let existing_webhook_subscriptions: Count =
+        sql_query("SELECT COUNT(*) as count FROM webhook_subscriptions")
+            .get_result(&mut conn)
+            .expect("Failed to count webhook subscriptions");
+    if let Err(e) = utils::encryption::check_webhook_encryption_key(
+        config.broker.webhook_encryption_key.as_deref(),
+        existing_webhook_subscriptions.count,
+    ) {
+        // Log as well as return: `main` renders the error with `Debug`, which
+        // would escape this message into an unreadable single quoted string.
+        error!("{}", e);
+        return Err(e.into());
+    }
 
     // Initialize encryption key for webhooks
     info!("Initializing encryption key");
@@ -190,7 +261,9 @@ pub async fn serve(config: &Settings) -> Result<(), Box<dyn std::error::Error>> 
             agent_events_cleanup_config,
         );
     } else {
-        info!("Agent-events retention disabled (agent_events_retention_days = 0); skipping eviction task");
+        info!(
+            "Agent-events retention disabled (agent_events_retention_days = 0); skipping eviction task"
+        );
     }
 
     // Create reloadable configuration for hot-reload support
@@ -232,17 +305,68 @@ pub async fn serve(config: &Settings) -> Result<(), Box<dyn std::error::Error>> 
 /// Function to rotate the admin key
 ///
 /// This function generates a new admin key and updates it in the database.
+///
+/// The connection comes from [`connection_pool_from_settings`] rather than a
+/// bare `PgConnection::establish`, so `database.schema` is applied to it. With a
+/// bare connection no `search_path` was ever set and the rotation silently hit
+/// the `public` schema — failing to find the configured schema's `admin_role`
+/// row, or rewriting `public`'s (BROKKR-T-0297).
+/// Output mirrors the sibling rotate commands, which print the new credential
+/// directly (`rotate agent`, `rotate generator`), and `generate-pak`, which
+/// prints both halves. This one used to print nothing at all and leave the
+/// minted PAK in a file nothing in the tree reads — and, worse, to report
+/// success on the branch that mints nothing (BROKKR-T-0317).
 pub fn rotate_admin(config: &Settings) -> Result<(), Box<dyn std::error::Error>> {
     info!("Rotating admin key");
 
-    // Create database connection
-    let mut conn = PgConnection::establish(&config.database.url)
-        .expect("Failed to establish database connection");
+    // Create database connection (search_path applied on checkout)
+    let pool = connection_pool_from_settings(config, 1);
+    let mut conn = pool.get()?;
 
-    // Run the first_startup function to generate a new admin key
-    utils::upsert_admin(&mut conn, config)?;
+    let outcome = utils::upsert_admin(&mut conn, config)?;
 
-    info!("Admin key rotated successfully");
+    match outcome {
+        utils::AdminPakOutcome::Minted { pak, hash } => {
+            info!("Admin key rotated successfully");
+            println!("Admin PAK rotated. A new credential was minted:");
+            println!();
+            println!("  PAK (secret — send as `Authorization: Bearer <PAK>`; store securely):");
+            println!("    {pak}");
+            println!();
+            println!("  PAK hash (set as BROKKR__BROKER__PAK_HASH / the chart's broker.pakHash):");
+            println!("    {hash}");
+            println!();
+            println!("The PAK is shown once and cannot be recovered from the hash. It was also");
+            println!("written to /tmp/brokkr-keys/key.txt, which is deleted on graceful shutdown.");
+            println!();
+            println!("Set the hash in this broker's configuration now: it is currently unset, so");
+            println!("the stored hash and the configured one disagree, and a later `rotate admin`");
+            println!("would overwrite this credential with whatever the config then holds.");
+        }
+        utils::AdminPakOutcome::ReappliedConfigured { hash } => {
+            // Deliberately not an error: re-applying the configured hash is the
+            // supported way to commit a hash you minted yourself. It is only
+            // misleading when the caller expected a new credential.
+            info!("Admin hash re-applied from configuration; no new PAK was minted");
+            println!("No new admin PAK was minted.");
+            println!();
+            println!("`broker.pak_hash` is set, so the configured hash was validated and");
+            println!("re-applied to the admin role and admin generator:");
+            println!();
+            println!("    {hash}");
+            println!();
+            println!("Any PAK matching that hash keeps working; nothing was rotated or revoked.");
+            println!("This is the correct path when committing a hash you minted yourself.");
+            println!();
+            println!("To actually replace the credential, either:");
+            println!("  * run `brokkr-broker generate-pak`, set the printed hash as");
+            println!("    BROKKR__BROKER__PAK_HASH (or the chart's broker.pakHash /");
+            println!("    broker.pakHashExistingSecret), then re-run `rotate admin`; or");
+            println!("  * clear the setting and let the broker mint one:");
+            println!("      BROKKR__BROKER__PAK_HASH=\"\" brokkr-broker rotate admin");
+        }
+    }
+
     Ok(())
 }
 
@@ -311,12 +435,7 @@ pub fn rotate_agent_key(
 ) -> Result<String, Box<dyn std::error::Error>> {
     info!("Rotating agent key");
 
-    let pool = create_shared_connection_pool(
-        &config.database.url,
-        "brokkr",
-        1,
-        config.database.schema.as_deref(),
-    );
+    let pool = connection_pool_from_settings(config, 1);
     let dal = DAL::new(pool.clone());
 
     let agent = dal.agents().get(uuid)?.ok_or("Agent not found")?;
@@ -344,12 +463,7 @@ pub fn rotate_generator_key(
 ) -> Result<String, Box<dyn std::error::Error>> {
     info!("Rotating generator key");
 
-    let pool = create_shared_connection_pool(
-        &config.database.url,
-        "brokkr",
-        1,
-        config.database.schema.as_deref(),
-    );
+    let pool = connection_pool_from_settings(config, 1);
     let dal = DAL::new(pool.clone());
 
     let generator = dal.generators().get(uuid)?.ok_or("Generator not found")?;
@@ -376,22 +490,33 @@ pub fn rotate_generator_key(
     Ok(new_pak)
 }
 
+/// Creates an agent and its initial PAK.
+///
+/// Mirrors `POST /api/v1/agents` (BROKKR-T-0289): the agent is always
+/// registered with the system generator, and additionally with any generators
+/// named in `generator_ids`, which are validated before anything is written.
+/// Registration is the consent boundary — an agent with no registrations
+/// receives no stacks from label or annotation matching (BROKKR-T-0287).
 pub fn create_agent(
     config: &Settings,
     name: String,
     cluster_name: String,
+    generator_ids: Vec<uuid::Uuid>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     info!("Creating new agent: {}", name);
 
     // Use pool size 2 because agent creation emits webhook events
     // which require a second connection while the first is still held
-    let pool = create_shared_connection_pool(
-        &config.database.url,
-        "brokkr",
-        2,
-        config.database.schema.as_deref(),
-    );
+    let pool = connection_pool_from_settings(config, 2);
     let dal = DAL::new(pool.clone());
+
+    // Validate every requested generator before creating anything, so a typo
+    // doesn't leave a half-registered agent behind.
+    for gid in &generator_ids {
+        if dal.generators().get(*gid)?.is_none() {
+            return Err(format!("generator {} does not exist", gid).into());
+        }
+    }
 
     let new_agent = NewAgent::new(name, cluster_name)
         .map_err(|e| format!("Failed to create NewAgent: {}", e))?;
@@ -408,12 +533,33 @@ pub fn create_agent(
         &agent.name,
     );
 
+    // Register with the system generator (always), matching the API path.
+    let mut registered: Vec<String> = Vec::new();
+    if let Some(system_id) = dal.generators().get_system_generator_id()? {
+        dal.agent_generator_registrations()
+            .create(agent.id, system_id)?;
+        registered.push("system (fleet scope)".to_string());
+    } else {
+        warn!(
+            "System generator not found; agent {} created without fleet-scope registration. \
+             Start the broker once to provision it, then register the agent.",
+            agent.id
+        );
+    }
+
+    // Register with any additional generators requested.
+    for gid in &generator_ids {
+        dal.agent_generator_registrations().create(agent.id, *gid)?;
+        registered.push(gid.to_string());
+    }
+
     info!("Successfully created agent with ID: {}", agent.id);
     println!("Agent created successfully:");
     println!("ID: {}", agent.id);
     println!("Name: {}", agent.name);
     println!("Cluster: {}", agent.cluster_name);
     println!("Initial PAK: {}", pak);
+    println!("Registered with: {}", registered.join(", "));
 
     Ok(())
 }
@@ -425,12 +571,7 @@ pub fn create_generator(
 ) -> Result<(), Box<dyn std::error::Error>> {
     info!("Creating new generator: {}", name);
 
-    let pool = create_shared_connection_pool(
-        &config.database.url,
-        "brokkr",
-        1,
-        config.database.schema.as_deref(),
-    );
+    let pool = connection_pool_from_settings(config, 1);
     let dal = DAL::new(pool.clone());
 
     let new_generator = NewGenerator::new(name, description)

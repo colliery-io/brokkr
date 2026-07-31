@@ -34,6 +34,44 @@ class WebhookResponse:
         updated_at (datetime.datetime):
         created_by (None | str | Unset):
         filters (WebhookFilters | Unset): Filters for webhook subscriptions.
+
+            A filter narrows an event-type match further, using field values carried in
+            the event payload. Evaluated by [`WebhookFilters::matches`] at emission time
+            (see `brokkr_broker::utils::event_bus::emit_event`).
+
+            Semantics (BROKKR-T-0288):
+
+            * Every filter field that is set must match: the fields are ANDed.
+            * **An event that does not carry a filtered field does not match.** A
+              subscription filtering on `stack_id` therefore receives nothing for event
+              types whose payload has no `stack_id` (`agent.*` and `workorder.*`; the
+              whole `deployment.*` family does carry it). This is deliberate: a filter
+              is a narrowing
+              statement, and widening it to "…or the event didn't say" would deliver
+              precisely the events the operator asked to exclude.
+            * A JSON `null` counts as absent, not as a value. Several payloads emit
+              `"stack_id": null` / `"agent_id": null` when the source column is NULL
+              (e.g. `deployment.deleted` for an already-purged object,
+              `workorder.completed` for an unclaimed order).
+
+            # Read/write asymmetry
+
+            This type is the **read** path: deserialization deliberately ignores unknown
+            keys, so rows written before a field was removed still load — notably the
+            dropped `labels` filter, which was never evaluated and is superseded by
+            `target_labels` delivery routing. A legacy row must keep delivering exactly
+            as it does today; a broker that refused to load it would silently stop the
+            subscription instead. **Do not add `deny_unknown_fields` here.**
+
+            The **write** path is strict, and intentionally not symmetric: `POST` and
+            `PUT /webhooks` reject a body carrying `filters.labels` with a 422 that names
+            `target_labels` as the replacement (see
+            `brokkr_broker::api::v1::webhooks::reject_removed_write_fields`). Accepting
+            the key and dropping it would leave the caller believing their deliveries
+            were scoped when they were not — the failure mode that motivated
+            BROKKR-T-0288 in the first place. Rejection is enforced on the raw request
+            body, above this type, precisely so the tolerant deserialization below is
+            preserved.
         target_labels (list[str] | None | Unset):
     """
 

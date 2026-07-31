@@ -17,8 +17,8 @@ use brokkr_models::models::webhooks::{
     BrokkrEvent, EVENT_DEPLOYMENT_CREATED, EVENT_DEPLOYMENT_DELETED,
 };
 use brokkr_models::schema::{
-    agent_annotations, agent_events, agent_labels, agent_targets, deployment_objects,
-    stack_annotations, stack_labels, stacks,
+    agent_annotations, agent_events, agent_generator_registrations, agent_labels, agent_targets,
+    deployment_objects, stack_annotations, stack_labels, stacks,
 };
 use chrono::Utc;
 use diesel::prelude::*;
@@ -282,7 +282,10 @@ impl DeploymentObjectsDAL<'_> {
     /// Agent→stack responsibility mirrors `stacks::get_associated_stacks`: the
     /// UNION of hard targets (`agent_targets`), stacks sharing any label with the
     /// agent, and stacks sharing any `(key, value)` annotation with the agent.
-    /// Only non-deleted stacks participate.
+    /// Only non-deleted stacks participate. Per BROKKR-T-0287, the label and
+    /// annotation legs are additionally restricted to stacks whose owning
+    /// generator the agent is registered with (registration is the consent
+    /// boundary); hard targets are exempt, being gated at creation time.
     ///
     /// # Returns
     ///
@@ -303,16 +306,23 @@ impl DeploymentObjectsDAL<'_> {
             .load::<(Uuid, Uuid)>(conn)?;
         associations.extend(target_pairs);
 
-        // Shared label: agent_labels.label == stack_labels.label.
+        // Shared label: agent_labels.label == stack_labels.label, and the agent
+        // is registered with the stack's owning generator.
         let label_pairs: Vec<(Uuid, Uuid)> = agent_labels::table
             .inner_join(stack_labels::table.on(stack_labels::label.eq(agent_labels::label)))
             .inner_join(stacks::table.on(stacks::id.eq(stack_labels::stack_id)))
+            .inner_join(
+                agent_generator_registrations::table.on(agent_generator_registrations::agent_id
+                    .eq(agent_labels::agent_id)
+                    .and(agent_generator_registrations::generator_id.eq(stacks::generator_id))),
+            )
             .filter(stacks::deleted_at.is_null())
             .select((agent_labels::agent_id, stack_labels::stack_id))
             .load::<(Uuid, Uuid)>(conn)?;
         associations.extend(label_pairs);
 
-        // Shared annotation: agent_annotations.(key,value) == stack_annotations.(key,value).
+        // Shared annotation: agent_annotations.(key,value) == stack_annotations.(key,value),
+        // and the agent is registered with the stack's owning generator.
         let annotation_pairs: Vec<(Uuid, Uuid)> = agent_annotations::table
             .inner_join(
                 stack_annotations::table.on(stack_annotations::key
@@ -320,6 +330,11 @@ impl DeploymentObjectsDAL<'_> {
                     .and(stack_annotations::value.eq(agent_annotations::value))),
             )
             .inner_join(stacks::table.on(stacks::id.eq(stack_annotations::stack_id)))
+            .inner_join(
+                agent_generator_registrations::table.on(agent_generator_registrations::agent_id
+                    .eq(agent_annotations::agent_id)
+                    .and(agent_generator_registrations::generator_id.eq(stacks::generator_id))),
+            )
             .filter(stacks::deleted_at.is_null())
             .select((agent_annotations::agent_id, stack_annotations::stack_id))
             .load::<(Uuid, Uuid)>(conn)?;
@@ -353,10 +368,7 @@ impl DeploymentObjectsDAL<'_> {
         // non-deleted agent_event.
         let event_pairs: Vec<(Uuid, Uuid)> = agent_events::table
             .filter(agent_events::deleted_at.is_null())
-            .select((
-                agent_events::agent_id,
-                agent_events::deployment_object_id,
-            ))
+            .select((agent_events::agent_id, agent_events::deployment_object_id))
             .load::<(Uuid, Uuid)>(conn)?;
         let acknowledged: HashSet<(Uuid, Uuid)> = event_pairs.into_iter().collect();
 

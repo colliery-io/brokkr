@@ -37,7 +37,7 @@ The constructor also accepts keyword-only tuning knobs:
 |-------|---------|---------|
 | `request_timeout` | `30.0` | Overall per-request timeout in seconds |
 | `connect_timeout` | `10.0` | Connection-establishment timeout in seconds |
-| `max_retries` | `3` | Maximum retries used by `client.retry()` |
+| `max_retries` | `3` | Retries after the initial attempt, used by `client.retry()` |
 | `initial_backoff` | `0.2` | First backoff in seconds; doubles per attempt, capped at 10 s |
 
 The `brokkr` package exports five names: `BrokkrClient`, `BrokkrError`, `ApplyResult`, `ErrorResponse` (the typed error body, re-exported from the generated package), and `TemplateGenerator` (the generated `Generator` model, re-exported under a clearer name to avoid clashing with `typing.Generator`).
@@ -111,7 +111,7 @@ The `*_detailed` endpoint variants return the HTTP status code alongside the bod
 
 ## Retry on transient failures
 
-`BrokkrClient.retry` re-runs an async closure with exponential backoff (200 ms, doubling, capped at 10 s; 3 attempts by default). Transport errors and HTTP `408/429/502/503/504` retry; everything else surfaces immediately with its real status.
+`BrokkrClient.retry` re-runs an async closure with exponential backoff (200 ms, doubling, capped at 10 s; 3 retries by default, so up to 4 attempts in total). Transport errors and HTTP `408/429/502/503/504` retry; everything else surfaces immediately with its real status.
 
 The closure must return a generated **`*_detailed`** response (it carries the HTTP `status_code`); `retry` returns its `.parsed` body on success. The plain `.asyncio` form is unusable here — it returns `None` on an undocumented status (e.g. a 503), which `retry` cannot tell apart from an empty success.
 

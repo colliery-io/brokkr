@@ -7,14 +7,17 @@ In this tutorial, you'll create a reusable deployment template with parameterize
 - How to create a template with Tera syntax
 - How to define a parameter schema using JSON Schema
 - How to instantiate a template into a stack
-- How template versioning works
+- How template versioning works, and why an update hands you a new template ID
 - How template targeting restricts which stacks can use a template
 
 **Prerequisites:**
 
-- A running Brokkr development environment (`angreal local up`)
-- Your admin PAK
-- Completed the [Deploy Your First Application](./first-deployment.md) tutorial
+- A broker you can reach at `http://localhost:3000` — either a [Helm install](../getting-started/installation.md) with `kubectl port-forward svc/brokkr-broker 3000:3000` running, or the [local development environment](../getting-started/development.md) (`angreal local up`)
+- Your admin PAK for that broker (see [Adapting the commands to your install](./README.md#adapting-the-commands-to-your-install))
+- `curl` and `jq` installed
+- Recommended: [Deploy Your First Application](./first-deployment.md), for stacks and deployment objects. Nothing here depends on the resources it created.
+
+**No agent is required.** Templates are validated and rendered by the broker, and this tutorial stops at the deployment object it produces — it never targets an agent, so nothing reaches a cluster.
 
 ## Step 1: Understand the Template Concept
 
@@ -57,6 +60,8 @@ Save the template ID:
 ```bash
 TEMPLATE_ID="t1234567-..."  # use the actual ID from the response
 ```
+
+Because you created this with an admin PAK, it is a **system template**: its `generator_id` is null and every generator can instantiate it. A template created with a generator PAK belongs to that generator, and no other generator can read or instantiate it — system templates are how a template gets shared across teams.
 
 ## Step 3: Understand the Parameters Schema
 
@@ -220,9 +225,56 @@ TEMPLATE_ID=$(echo "${UPDATED}" | jq -r '.id')
 echo "${UPDATED}"
 ```
 
-The response shows `version: 2` — and a **new template ID**. Updating a template inserts a new versioned row; the old ID keeps pointing at version 1. Instantiation always uses the exact template ID you reference, so capture the new ID (done above) to use version 2; deployment objects already rendered from version 1 are unaffected.
+The response shows `version: 2` — and a **new template ID**. Updating a template inserts a new versioned row; the old ID keeps pointing at version 1. Instantiation always uses the exact template ID you reference, so capture the new ID (done above) to use version 2; deployment objects already rendered from version 1 are unaffected. There is no "latest" shortcut: anything that keeps sending the old ID keeps deploying version 1, silently.
 
-## Step 8: Schema Validation in Action
+## Step 8: Target the Template at Specific Stacks
+
+Labels restrict which stacks a template may be instantiated into. Right now version 2 has none, so it goes anywhere. Add one:
+
+```bash
+curl -s -X POST "http://localhost:3000/api/v1/templates/${TEMPLATE_ID}/labels" \
+  -H "Authorization: Bearer <your-admin-pak>" \
+  -H "Content-Type: application/json" \
+  -d '"env=production"' | jq '{label}'
+```
+
+Now instantiate version 2 into the `frontend-app` stack, which carries no labels:
+
+```bash
+curl -s -X POST "http://localhost:3000/api/v1/stacks/${STACK_ID}/deployment-objects/from-template" \
+  -H "Authorization: Bearer <your-admin-pak>" \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"template_id\": \"${TEMPLATE_ID}\",
+    \"parameters\": {
+      \"service_name\": \"frontend\",
+      \"namespace\": \"frontend-app\",
+      \"image_repository\": \"myregistry.example.com/frontend\",
+      \"image_tag\": \"v2.1.0\",
+      \"replicas\": 3,
+      \"container_port\": 3000,
+      \"cpu_request\": \"100m\",
+      \"memory_request\": \"128Mi\",
+      \"cpu_limit\": \"500m\",
+      \"memory_limit\": \"512Mi\"
+    }
+  }" | jq .
+```
+
+The request is refused with `template_stack_mismatch`, and the response names the label the stack is missing. Give the stack that label and retry:
+
+```bash
+curl -s -X POST "http://localhost:3000/api/v1/stacks/${STACK_ID}/labels" \
+  -H "Authorization: Bearer <your-admin-pak>" \
+  -H "Content-Type: application/json" \
+  -d '"env=production"' | jq '{label}'
+```
+
+Re-run the instantiation command above and it succeeds.
+
+Two things to take away. First, labels are attached to **one template version**, not to the template name — the label you just added lives on version 2 only. Second, a version with no labels matches every stack, so the *next* update starts unrestricted: `PUT` gives you a fresh row with no labels, and your targeting quietly disappears until you re-apply it to the new ID. Re-applying labels is part of publishing a new version.
+
+## Step 9: Schema Validation in Action
 
 Try instantiating with invalid parameters to see validation:
 
@@ -276,8 +328,9 @@ Both template versions are deleted — each version is its own row with its own 
 ## What You've Learned
 
 - **Templates** combine Tera-syntax YAML with JSON Schema parameter validation
-- **Instantiation** validates parameters, renders the template, and creates a deployment object
-- **Versioning** preserves old template versions while allowing updates
+- **Instantiation** checks access and stack matching, validates parameters, renders the template, and creates a deployment object
+- **Versioning** preserves old versions: each version is its own row with its own ID, and instantiation renders the exact ID you reference — updating means picking up the new ID
+- **Targeting** with labels restricts a template to matching stacks, and applies to a single version — re-apply labels after every update
 - **JSON Schema** enforces types, required fields, ranges, and string constraints
 - Templates reduce duplication — one template serves many stacks with different parameters
 

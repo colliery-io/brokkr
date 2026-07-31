@@ -54,9 +54,11 @@ do anything at all.
 
 So the broker draws the line at *measurement* and hands *severity* to the
 consumer. **The broker computes; the consumer decides.** A consumer — an
-operator's script, a Datadog monitor fed from the API, or the `ui-slim`
-demo that ships in `examples/ui-slim` — is where the thresholds live,
-because that is where the deployment-specific knowledge lives. It is the
+operator's script, a Datadog monitor fed from the API, or the read-only
+Operator Console the broker serves at its own root URL — is where the
+thresholds live, because that is where the deployment-specific knowledge
+lives. The console is the first-party illustration of the stance: it
+renders the measured values and leaves the reader to judge them. It is the
 same restraint the telemetry track shows in [the internal WS
 channel](./internal-ws-channel.md): surface the signal, point at the right
 tool for the verdict, refuse to grow into a role that belongs elsewhere.
@@ -116,8 +118,14 @@ The **push** surface — `/fleet/live` — answers a different question:
 "tell me *when something changes*." It is a WebSocket a consumer holds
 open; the broker streams a per-agent update each time that agent's record
 moves. This is the right model for a live view that should reflect the
-fleet without the consumer polling in a tight loop — exactly what a
-consumer like the `ui-slim` demo uses to keep its fleet panel current.
+fleet without the consumer polling in a tight loop — a wall-mounted
+dashboard, or any client that wants to react the moment an agent drops.
+
+The two surfaces genuinely serve different consumers, and not every
+consumer needs the second one. The broker's own Operator Console, for
+instance, is built entirely on the pull surface: it re-reads `GET /fleet`
+rather than holding a socket open, which is the right trade for a view
+somebody opens, reads, and closes.
 
 The two are not redundant; they answer genuinely different questions
 (*what is true now* vs *what just changed*), and live push is built as an
@@ -193,12 +201,12 @@ and swallows its own failures by design. Legibility is a layer *over* the
 control plane, never a thing the control plane waits on; the fleet view
 going dark must never be able to wedge a heartbeat.
 
-## Admin-only scoping
+## Admin-only authorization
 
 The whole fleet surface — pull and push alike — is **admin-only.** This is
-a sharper scoping rule than some of Brokkr's other endpoints, which allow
-an owner to see their own resources, and the reason is structural rather
-than cautious.
+a sharper rule than some of Brokkr's other endpoints, which allow an owner
+to see their own resources, and the reason is structural rather than
+cautious.
 
 A fleet record is inherently **cross-cutting.** It spans every agent, and
 agents span tenants; the rollup is a view of the entire deployment at
@@ -212,6 +220,32 @@ authority, so the broker gates both the `GET /fleet` rollup and the
 live subscription's auth is *simpler* than the stack live-tail's
 admin-or-owner rule precisely because there is no owner dimension to
 reason about — for fleet, it's admin or nothing.
+
+The ephemeral read-only credential that the served Operator Console
+authenticates with is an admin credential, so it satisfies this gate. That
+is a deliberate consequence of the console's zero-configuration design and
+it means the practical boundary on the fleet view is **who can reach the
+broker's port**, not who holds a key. Treat exposing that port as
+exposing the whole fleet view, read-only.
+
+### Tenant filtering is a view, not a boundary
+
+Against that admin-only backdrop, the pull surface does accept a tenant
+filter: `GET /fleet` takes a generator identifier and narrows the returned
+records to the agents registered under that generator. This exists so a
+console or dashboard can offer a scope selector and let an operator look
+at one application's agents at a time without wading through the whole
+fleet.
+
+It is worth being blunt about what that filter is not. It is **cosmetic —
+a view filter, not an authorization boundary.** The caller was already
+admin before the filter ran; the filter narrows what is *shown*, not what
+is *permitted*. Anyone who can pass the filter can equally omit it and see
+everything, and an unrecognised identifier simply yields an empty list
+rather than an error. Nothing about it makes the fleet surface safe to
+hand to a tenant. The principle from the top of this page holds here too:
+the broker supplies the raw view and leaves the framing to the consumer —
+but framing is all it is.
 
 ## Related
 

@@ -189,6 +189,28 @@ pub static WS_TELEMETRY_EVICTED_TOTAL: Lazy<IntCounterVec> = Lazy::new(|| {
     c
 });
 
+/// Webhook payload decryption failures (BROKKR-T-0288).
+///
+/// A wrong-but-set `BROKKR__BROKER__WEBHOOK_ENCRYPTION_KEY` — most often the
+/// random per-process key generated when the variable is unset, after a
+/// restart — makes every stored webhook URL and auth header unreadable. That
+/// surfaces only as failed deliveries, so this counter distinguishes a
+/// misconfigured key from a subscriber whose endpoint is down.
+///
+/// field ∈ {url, auth_header}; path ∈ {broker, agent}. Both are bounded, so
+/// there is no per-subscription cardinality here.
+pub static WEBHOOK_DECRYPT_FAILURES_TOTAL: Lazy<IntCounterVec> = Lazy::new(|| {
+    let opts = Opts::new(
+        "brokkr_webhook_decrypt_failures_total",
+        "Webhook subscription decryption failures by encrypted field and delivery path",
+    );
+    let c = IntCounterVec::new(opts, &["field", "path"]).expect("webhook decrypt failures counter");
+    REGISTRY
+        .register(Box::new(c.clone()))
+        .expect("register webhook_decrypt_failures_total");
+    c
+});
+
 /// Convenience accessors keep call sites short and avoid the static names
 /// leaking into call-site readability.
 pub fn ws_connected_agents() -> &'static IntGauge {
@@ -215,6 +237,17 @@ pub fn ws_telemetry_evicted_total(table: &str) -> prometheus::IntCounter {
     WS_TELEMETRY_EVICTED_TOTAL.with_label_values(&[table])
 }
 
+/// Records a webhook decryption failure.
+///
+/// # Arguments
+/// * `field` - The encrypted field that failed: `url` or `auth_header`
+/// * `path` - Which delivery path hit it: `broker` or `agent`
+pub fn record_webhook_decrypt_failure(field: &str, path: &str) {
+    WEBHOOK_DECRYPT_FAILURES_TOTAL
+        .with_label_values(&[field, path])
+        .inc();
+}
+
 /// Initializes all metrics by forcing lazy static evaluation
 ///
 /// This ensures all metric definitions are registered with the registry
@@ -229,6 +262,7 @@ pub fn init() {
     let _ = &*FLEET_LIVE_SUBSCRIBERS;
     let _ = &*WS_LOG_EVICTION_RUNS_TOTAL;
     let _ = &*WS_TELEMETRY_EVICTED_TOTAL;
+    let _ = &*WEBHOOK_DECRYPT_FAILURES_TOTAL;
     let _ = &*ACTIVE_AGENTS;
     let _ = &*AGENT_HEARTBEAT_AGE_SECONDS;
     let _ = &*STACKS_TOTAL;
@@ -324,8 +358,18 @@ pub fn set_agent_heartbeat_age(agent_id: &str, agent_name: &str, age_seconds: f6
 mod tests {
     use super::*;
 
+    /// The registry is process-global, so tests that assert on an exact gauge
+    /// value must not run while another test is setting that same gauge.
+    /// Counters are monotonic and label-scoped, so they need no such guard.
+    static GAUGE_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn lock_gauges() -> std::sync::MutexGuard<'static, ()> {
+        GAUGE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
     #[test]
     fn test_init_registers_all_metrics() {
+        let _guard = lock_gauges();
         init();
 
         // Record at least one value for each counter/histogram to make them visible
@@ -361,6 +405,22 @@ mod tests {
         assert!(
             output.contains("brokkr_deployment_objects_total"),
             "Should contain deployment objects total gauge"
+        );
+    }
+
+    #[test]
+    fn test_record_webhook_decrypt_failure() {
+        init();
+        record_webhook_decrypt_failure("url", "broker");
+
+        let output = encode_metrics();
+        assert!(
+            output.contains("brokkr_webhook_decrypt_failures_total"),
+            "Should contain webhook decrypt failures counter"
+        );
+        assert!(
+            output.contains("field=\"url\"") && output.contains("path=\"broker\""),
+            "Should have field and path labels"
         );
     }
 
@@ -408,6 +468,7 @@ mod tests {
 
     #[test]
     fn test_set_active_agents() {
+        let _guard = lock_gauges();
         init();
         set_active_agents(5);
 
@@ -420,6 +481,7 @@ mod tests {
 
     #[test]
     fn test_set_stacks_total() {
+        let _guard = lock_gauges();
         init();
         set_stacks_total(10);
 

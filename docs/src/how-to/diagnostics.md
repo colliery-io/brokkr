@@ -80,7 +80,30 @@ curl -s "http://localhost:3000/api/v1/diagnostics/${DIAG_ID}" \
 
 Status progression: `pending` → `claimed` → `completed`
 
-## Step 5: Read the Results
+A request that is never claimed eventually becomes `expired`. A request that an agent claimed but never finished becomes `failed` once it passes its expiry — that is the signal an agent took the work and stopped answering, usually because it crashed, was evicted, or was rescheduled.
+
+Note that a collection *error* is not a `failed` request: if the agent hits an error while collecting, it still reports a `completed` request and puts the error in the result payload. Check the payload rather than waiting for a failure status.
+
+## Step 5: Check Whether Collection Actually Succeeded
+
+`completed` means the agent submitted a result, not that the result contains data. Before reading the results, check the `events` array for an error entry:
+
+```bash
+curl -s "http://localhost:3000/api/v1/diagnostics/${DIAG_ID}" \
+  -H "Authorization: <admin-pak>" \
+  | jq -r '.result.events' \
+  | jq -e 'if (type == "array" and length == 1 and .[0].error) then .[0].error else empty end'
+```
+
+If that prints an error string, collection failed on the agent — jump to [Troubleshooting](#troubleshooting). An error result also has `pod_statuses` set to `[]` and `log_tails` set to `null`, for example:
+
+```json
+[{"error":"Failed to list pods in namespace default: ApiError: pods is forbidden"}]
+```
+
+If it prints nothing, collection succeeded and you can read the results below. Note that a successful collection can still be empty (`pod_statuses: []`) when no pods carry the expected label — that case has no `error` entry.
+
+## Step 6: Read the Results
 
 Once the status is `completed`, the full results are available:
 
@@ -144,10 +167,18 @@ Each container's last 100 log lines are included.
 - Increase `retention_minutes` and try again
 - Check if the agent is running and polling
 
-**Diagnostic moves to `failed`:**
-- The agent encountered an error collecting data
-- Check the agent logs for Kubernetes API errors
-- Verify the agent has RBAC permissions to read pods, events, and logs
+**Diagnostic is `completed` but the result contains an `error` entry:**
+- The agent claimed the request and then failed to collect data; it reports this through the result payload rather than a `failed` status
+- Read the error string itself — it carries the Kubernetes API error verbatim
+- Verify the agent has RBAC permissions to read pods, events, and logs in the target namespaces
+- Check the agent logs for the same failure with surrounding context
+- Fix the cause and issue a new diagnostic request; results are never retried in place
+
+**Diagnostic is `failed`:**
+- An agent claimed the request and never submitted a result before it expired. The agent process most likely died, was evicted, lost its credential, or was rescheduled mid-collection
+- Check that agent's health and recent restarts; repeated `failed` diagnostics against one agent are evidence about that agent's stability, not about the diagnostic itself
+- Note the distinction from `expired`, which means nobody ever claimed the request — that points at an agent being offline or not polling, rather than crashing
+- A collection error does **not** produce `failed`; it produces a `completed` request with an error in the payload (Step 5)
 
 ## Cleanup
 

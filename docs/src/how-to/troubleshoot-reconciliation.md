@@ -8,11 +8,20 @@ If resources aren't appearing in your cluster:
 
 1. **Check agent status**: Verify the agent is running and in ACTIVE status. Inactive agents skip deployment object requests.
 
-2. **Check targeting**: Confirm the stack is associated with the agent—either explicitly via `GET /api/v1/agents/{id}/targets`, or dynamically through a shared label or annotation (see [Managing Stacks](./managing-stacks.md#label-based-targeting)).
+2. **Check registration**: Confirm the agent is registered with the generator that owns the stack. Registration is enforced on the read path, so an unregistered agent is served nothing from that generator no matter how the stack is targeted:
 
-3. **Check agent logs**: Look for validation errors or API failures in the agent container logs.
+   ```bash
+   curl -s "$BROKER/api/v1/agents/$AGENT_ID/registrations" \
+     -H "Authorization: Bearer $ADMIN_PAK"
+   ```
 
-4. **Check events**: Query the broker for events related to the deployment object to see if failures were reported.
+   If the owning generator is missing from that list, register it — see [Register Agents with Generators](./agent-registration.md).
+
+3. **Check targeting**: Confirm the stack is associated with the agent — either explicitly via `GET /api/v1/agents/{id}/targets`, or dynamically through a shared label or annotation (see [Managing Stacks](./managing-stacks.md#label-based-targeting)). A label match on a generator the agent never registered with looks correct in the stack's labels and still delivers nothing, which is the most common false lead here.
+
+4. **Check agent logs**: Look for validation errors or API failures in the agent container logs.
+
+5. **Check events**: Query the broker for events related to the deployment object to see if failures were reported.
 
 ## Resources Not Being Deleted
 
@@ -58,3 +67,4 @@ Brokkr doesn't continuously monitor for drift—it only reconciles during pollin
 - [Agent Annotations Reference](../reference/agent-annotations.md) - Tracking keys on applied resources
 - [Deployment Health](./deployment-health.md) - Monitoring applied resources
 - [Managing Stacks](./managing-stacks.md) - Stack lifecycle and deletion
+- [Register Agents with Generators](./agent-registration.md) - The registration gate that decides which stacks an agent is served

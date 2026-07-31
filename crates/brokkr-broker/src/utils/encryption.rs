@@ -220,9 +220,63 @@ impl EncryptionKey {
     }
 }
 
+/// Normalizes the configured key: both `None` and `Some("")` mean "unset".
+///
+/// [`init_encryption_key`] falls back to a random per-process key in either
+/// case. This is the single source of truth for that decision so the startup
+/// guard in [`check_webhook_encryption_key`] cannot drift from what the
+/// initializer actually does.
+fn configured_key(key_hex: Option<&str>) -> Option<&str> {
+    key_hex.filter(|hex| !hex.is_empty())
+}
+
+/// Startup guard for the webhook encryption key (BROKKR-T-0288).
+///
+/// The key protects `webhook_subscriptions.url_encrypted` and
+/// `auth_header_encrypted`. When it is unset the broker generates a fresh random
+/// key on every start, so subscriptions written by a previous process become
+/// permanently undecryptable: they still *list* fine (the API only exposes
+/// `has_url` / `has_auth_header`) but can never deliver again, and can only be
+/// repaired by recreating them.
+///
+/// Unset key + existing subscriptions is therefore an unambiguous
+/// misconfiguration and the broker refuses to start. A fresh install (zero
+/// subscriptions) stays frictionless — that case is only warned about, by
+/// [`init_encryption_key`]. A key that is *set but wrong* is deliberately not
+/// caught here: that fault is webhook-local and fails loudly at delivery time,
+/// which is a better trade than taking the whole broker down.
+///
+/// # Arguments
+/// * `key_hex` - The configured key, exactly as it will be passed to [`init_encryption_key`].
+/// * `existing_subscriptions` - Row count of `webhook_subscriptions`.
+///
+/// # Returns
+/// `Ok(())` if startup may proceed, `Err` with an operator-actionable message otherwise.
+pub fn check_webhook_encryption_key(
+    key_hex: Option<&str>,
+    existing_subscriptions: i64,
+) -> Result<(), String> {
+    if configured_key(key_hex).is_some() || existing_subscriptions <= 0 {
+        return Ok(());
+    }
+
+    Err(format!(
+        "BROKKR__BROKER__WEBHOOK_ENCRYPTION_KEY is not set, but {existing_subscriptions} webhook \
+         subscription(s) already exist. Without a configured key the broker generates a new random \
+         key on every start, so those subscriptions' encrypted URLs and auth headers cannot be \
+         decrypted by this process: every delivery would fail permanently while the subscriptions \
+         continue to list as healthy. Fix: set BROKKR__BROKER__WEBHOOK_ENCRYPTION_KEY to the \
+         64-character hex (32-byte) key the subscriptions were created with. If that key is lost, \
+         delete the existing subscription(s), set a fresh key (`openssl rand -hex 32`), and \
+         recreate them. Refusing to start."
+    ))
+}
+
 /// Initializes the global encryption key from configuration.
 ///
-/// This should be called once during broker startup.
+/// This should be called once during broker startup, after
+/// [`check_webhook_encryption_key`] has cleared the unset-key-with-existing-data
+/// case.
 ///
 /// # Arguments
 /// * `key_hex` - Optional hex-encoded 32-byte key. If None, a random key is generated.
@@ -230,15 +284,18 @@ impl EncryptionKey {
 /// # Returns
 /// Ok(()) if initialization succeeded, Err if already initialized or key is invalid.
 pub fn init_encryption_key(key_hex: Option<&str>) -> Result<(), String> {
-    let key = match key_hex {
-        Some(hex) if !hex.is_empty() => {
+    let key = match configured_key(key_hex) {
+        Some(hex) => {
             info!("Initializing encryption key from configuration");
             EncryptionKey::from_hex(hex)?
         }
-        _ => {
+        None => {
             warn!(
-                "No encryption key configured, generating random key. \
-                 Configure BROKKR__BROKER__WEBHOOK_ENCRYPTION_KEY for production use."
+                "No encryption key configured, generating a random per-process key. \
+                 Configure BROKKR__BROKER__WEBHOOK_ENCRYPTION_KEY for production use. \
+                 Any webhook subscription created while this is unset becomes permanently \
+                 undeliverable after the next broker restart, because the key that encrypted \
+                 its URL and auth header is discarded when this process exits."
             );
             EncryptionKey::generate()
         }
@@ -401,6 +458,50 @@ mod tests {
 
         // First byte should be version
         assert_eq!(encrypted[0], VERSION_AES_GCM);
+    }
+
+    const VALID_KEY: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
+    #[test]
+    fn test_startup_guard_blocks_unset_key_with_existing_subscriptions() {
+        for key in [None, Some("")] {
+            let err = check_webhook_encryption_key(key, 3)
+                .expect_err("unset key with existing subscriptions must refuse startup");
+
+            // The operator has to be told exactly which knob to turn.
+            assert!(
+                err.contains("BROKKR__BROKER__WEBHOOK_ENCRYPTION_KEY"),
+                "error must name the env var, got: {err}"
+            );
+            assert!(
+                err.contains('3'),
+                "error must report how many subscriptions are at risk, got: {err}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_startup_guard_allows_fresh_install() {
+        // No key and no subscriptions: nothing can be bricked, so a fresh
+        // install must stay frictionless (warning only).
+        assert!(check_webhook_encryption_key(None, 0).is_ok());
+        assert!(check_webhook_encryption_key(Some(""), 0).is_ok());
+    }
+
+    #[test]
+    fn test_startup_guard_allows_any_set_key() {
+        // A set key never blocks boot, even a wrong or malformed one: that
+        // fault is webhook-local and surfaces at delivery time.
+        assert!(check_webhook_encryption_key(Some(VALID_KEY), 0).is_ok());
+        assert!(check_webhook_encryption_key(Some(VALID_KEY), 100).is_ok());
+        assert!(check_webhook_encryption_key(Some("not-a-valid-key"), 100).is_ok());
+    }
+
+    #[test]
+    fn test_configured_key_matches_init_semantics() {
+        assert_eq!(configured_key(None), None);
+        assert_eq!(configured_key(Some("")), None);
+        assert_eq!(configured_key(Some(VALID_KEY)), Some(VALID_KEY));
     }
 
     #[test]

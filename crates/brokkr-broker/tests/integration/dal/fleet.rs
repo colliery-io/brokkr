@@ -79,13 +79,7 @@ fn test_fleet_grouped_methods_match_per_agent_ground_truth() {
     // touch the other "latest" handles so they are not flagged unused.
     let _ = (&s_annot_latest,);
 
-    let all_agents = [
-        a_target.id,
-        a_label.id,
-        a_annot.id,
-        a_multi.id,
-        a_none.id,
-    ];
+    let all_agents = [a_target.id, a_label.id, a_annot.id, a_multi.id, a_none.id];
 
     // ====================================================================
     // 1. pending_object_count: grouped == per-agent ground truth
@@ -185,10 +179,7 @@ fn test_fleet_grouped_methods_match_per_agent_ground_truth() {
     // 4. health status counts: grouped == per-agent list_by_agent counts
     // ====================================================================
     use brokkr_models::models::deployment_health::NewDeploymentHealth;
-    for (status, obj) in [
-        ("failing", &s_target_latest),
-        ("degraded", &s_label_latest),
-    ] {
+    for (status, obj) in [("failing", &s_target_latest), ("degraded", &s_label_latest)] {
         let h = NewDeploymentHealth::new(
             a_target.id,
             obj.id,

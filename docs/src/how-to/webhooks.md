@@ -15,6 +15,38 @@ Brokkr supports two delivery modes:
 - Admin PAK for creating webhook subscriptions
 - Target endpoint accessible from the broker or agent (depending on delivery mode)
 - HTTPS recommended for production endpoints
+- A webhook encryption key configured on the broker — see below
+
+## Setting the Encryption Key
+
+Do this **before** creating any subscription. Webhook URLs and auth headers are encrypted at rest, and if `BROKKR__BROKER__WEBHOOK_ENCRYPTION_KEY` is unset the broker generates a random key that it discards when the process exits. Subscriptions created under a random key can never deliver again after a restart, and there is no way to recover their stored URL and auth header.
+
+Generate a key:
+
+```bash
+openssl rand -hex 32
+```
+
+For Helm installs, put it in a Kubernetes Secret and point the chart at it rather than writing it into your values file:
+
+```bash
+kubectl create secret generic brokkr-webhook-key \
+  --from-literal=BROKKR__BROKER__WEBHOOK_ENCRYPTION_KEY="$(openssl rand -hex 32)"
+
+helm upgrade --install brokkr-broker oci://ghcr.io/colliery-io/charts/brokkr-broker \
+  --set broker.webhookEncryptionKeyExistingSecret=brokkr-webhook-key
+```
+
+To set the key inline instead — acceptable for development, but it renders into the broker ConfigMap in plaintext:
+
+```bash
+helm upgrade --install brokkr-broker oci://ghcr.io/colliery-io/charts/brokkr-broker \
+  --set broker.webhookEncryptionKey=<64-hex-character-key>
+```
+
+Store the key somewhere you can retrieve it. If it is lost, the only repair is deleting and recreating every subscription.
+
+Once at least one subscription exists, the broker refuses to start with the key unset, and logs an error naming `BROKKR__BROKER__WEBHOOK_ENCRYPTION_KEY`. If you hit that, see [Broker Refuses to Start](#broker-refuses-to-start).
 
 ## Creating a Webhook Subscription
 
@@ -108,13 +140,17 @@ curl -X POST "http://broker:3000/api/v1/webhooks" \
 ```
 
 Retry behavior:
-- Failed deliveries use exponential backoff: 2, 4, 8, 16... seconds
-- After `max_retries` failures, deliveries are marked as "dead"
-- Delivery timeouts count as failures
+- `max_retries` counts **total attempts**, not retries after the first one. The default of 5 means 5 attempts; the `10` above means 10 attempts. Accepted range is 0-10.
+- Retryable failures use exponential backoff: 2, 4, 8, 16... seconds
+- Retryable failures are HTTP 408, 425, 429, any 5xx, connection failures, and timeouts
+- Every other 4xx — 400, 401, 403, 404, 422 and so on — is permanent. The delivery is marked `dead` on the **first** attempt with the status recorded in `last_error`, and no retries are made. If you expect retries against an endpoint that returns 404 while it warms up, that will not happen; fix the endpoint or the URL.
+- `timeout_seconds` applies per request and is honored on every delivery path. Accepted range is 1-300 seconds, default 30. A value above 30 now genuinely waits that long.
+
+Because the broker attempts a batch of deliveries sequentially, a long timeout on an unresponsive endpoint delays other webhooks. Prefer a timeout that reflects how fast the endpoint actually answers.
 
 ### Filters
 
-Filter events by specific agents or stacks:
+Filter events down to a single agent or a single stack. Filters are evaluated before the delivery record is created, so excluded events produce no delivery at all:
 
 ```bash
 curl -X POST "http://broker:3000/api/v1/webhooks" \
@@ -123,12 +159,32 @@ curl -X POST "http://broker:3000/api/v1/webhooks" \
   -d '{
     "name": "Production Stack Alerts",
     "url": "https://slack.example.com/webhook",
-    "event_types": ["deployment.*"],
+    "event_types": ["deployment.created", "deployment.deleted"],
     "filters": {
-      "labels": {"env": "production"}
+      "stack_id": "b7e4d1c0-1111-4222-8333-444455556666"
     }
   }'
 ```
+
+Only `agent_id` and `stack_id` are recognized. Two rules decide what you actually receive:
+
+- Both fields must match if both are set.
+- **An event that does not carry the field you filtered on is never delivered.** A `stack_id` filter receives nothing from event types whose payload has no `stack_id` — `workorder.*` and the `agent.*` events, for instance. The whole `deployment.*` family carries `stack_id`, so filtering `deployment.*` by stack delivers the full lifecycle for that stack. The one gap is an event whose `stack_id` is `null` because the deployment object was already soft-deleted when the event was emitted; a JSON `null` counts as absent, not as a value.
+
+Check the [filter fields by event type table](../reference/webhooks.md#filter-fields-by-event-type) before setting a filter, and confirm the response echoes the filter you intended.
+
+A `labels` key inside `filters` is **rejected with 422** — it never filtered anything. For label-based routing use `target_labels`, described under [Webhook with Agent Delivery](#webhook-with-agent-delivery). If you are updating a script that sent `filters.labels`, drop the key; see [Removed Fields](../reference/webhooks.md#removed-fields) for the full migration.
+
+Subscriptions already stored with a legacy `labels` key are unaffected and keep delivering. They only need attention if you send a `PUT` that echoes their filters back — strip `labels` from the object first, or the update is rejected.
+
+To confirm the filter the broker will actually evaluate:
+
+```bash
+curl "http://broker:3000/api/v1/webhooks/{webhook_id}" \
+  -H "Authorization: Bearer $ADMIN_PAK"
+```
+
+The `filters` object in the response is exactly what is applied at emission time.
 
 ## Managing Webhooks
 
@@ -173,6 +229,8 @@ curl -X POST "http://broker:3000/api/v1/webhooks/{webhook_id}/test" \
   -H "Authorization: Bearer $ADMIN_PAK"
 ```
 
+The test is sent immediately, using the subscription's own `timeout_seconds`, and creates no delivery record. Use this after creating a subscription instead of the removed `validate` field, which is now rejected with 422.
+
 ## Viewing Delivery Status
 
 ### List Deliveries for a Subscription
@@ -198,7 +256,7 @@ See [Delivery Status](../reference/webhooks.md#delivery-status) for what each st
 
 ## Webhook Payload Format
 
-Deliveries are JSON POSTs carrying `X-Brokkr-Event-Type` and `X-Brokkr-Delivery-Id` headers (plus your configured auth header) and a body with `id`, `event_type`, `timestamp`, and event-specific `data`. See the [Webhook Payload Format reference](../reference/webhooks.md#webhook-payload-format) for headers, body structure, and example payloads.
+Deliveries are JSON POSTs with your configured auth header and a body containing `id`, `event_type`, `timestamp`, and event-specific `data`. Agent-delivered webhooks additionally carry `X-Brokkr-Event-Type` and `X-Brokkr-Delivery-Id` headers; broker-delivered webhooks do not, so do not route on them unless the subscription uses `target_labels`. See the [Webhook Payload Format reference](../reference/webhooks.md#webhook-payload-format) for headers, body structure, and example payloads.
 
 ## Common Patterns
 
@@ -261,6 +319,60 @@ curl -X POST "http://broker:3000/api/v1/webhooks" \
    ```
 
 3. Verify endpoint is reachable from broker/agent
+
+4. If the delivery list is **empty** rather than failing, no deliveries were ever created. Either no matching event occurred, or a filter excluded them. Confirm the subscription's `filters` against the [filter fields by event type table](../reference/webhooks.md#filter-fields-by-event-type) — a filter on a field the event type does not carry excludes that event type entirely. Clear the filter to confirm:
+   ```bash
+   curl -X PUT "http://broker:3000/api/v1/webhooks/{id}" \
+     -H "Authorization: Bearer $ADMIN_PAK" \
+     -H "Content-Type: application/json" \
+     -d '{"filters": null}'
+   ```
+   Broker logs also record an error for a subscription whose stored filter cannot be parsed; such a subscription delivers nothing until the filter is rewritten.
+
+### Deliveries Dead on the First Attempt
+
+A delivery in `dead` with `attempts: 1` means the failure was classified as permanent. Read `last_error`:
+
+```bash
+curl "http://broker:3000/api/v1/webhooks/{id}/deliveries?status=dead" \
+  -H "Authorization: Bearer $ADMIN_PAK"
+```
+
+- `HTTP 404` / `HTTP 401` / `HTTP 403` / `HTTP 422` and other 4xx statuses are not retried. Fix the URL, the auth header, or the receiving handler, then recreate the events or wait for new ones — dead deliveries are not replayed.
+- `Failed to decrypt URL` or `Failed to decrypt auth header` means the broker's encryption key does not match the one that created the subscription. See below.
+
+### Deliveries Failing to Decrypt
+
+Check the broker's metrics endpoint:
+
+```bash
+curl -s "http://broker:3000/metrics" | grep brokkr_webhook_decrypt_failures_total
+```
+
+Any nonzero value means `BROKKR__BROKER__WEBHOOK_ENCRYPTION_KEY` differs from the key those subscriptions were created with — most often because they were created while the key was unset and the broker has since restarted. The `field` label shows whether the URL or the auth header failed; `path` shows whether the broker or an agent hit it.
+
+To fix, either restore the original key and restart the broker, or delete and recreate the affected subscriptions under the current key. Updating a subscription's `url` and `auth_header` re-encrypts them under the current key and repairs it in place:
+
+```bash
+curl -X PUT "http://broker:3000/api/v1/webhooks/{id}" \
+  -H "Authorization: Bearer $ADMIN_PAK" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://my-service.example.com/webhooks/brokkr",
+    "auth_header": "Bearer my-webhook-secret"
+  }'
+```
+
+### Broker Refuses to Start
+
+If the broker exits at startup with an error naming `BROKKR__BROKER__WEBHOOK_ENCRYPTION_KEY`, the key is unset while webhook subscriptions already exist. The broker stops rather than come up with a random key that would make those subscriptions permanently undeliverable.
+
+1. Set the key the subscriptions were created with and restart. Delivery resumes.
+2. If that key is lost, set a fresh one (`openssl rand -hex 32`), restart, then delete and recreate the subscriptions — their stored URLs and auth headers cannot be recovered.
+
+### Changing Delivery Batch Size or Interval Has No Effect
+
+`broker.webhookDeliveryIntervalSeconds` and `broker.webhookDeliveryBatchSize` are read once when the broker starts. A configuration reload does not apply them; restart the broker pod after changing either.
 
 ### Agent-Delivered Webhooks Failing
 

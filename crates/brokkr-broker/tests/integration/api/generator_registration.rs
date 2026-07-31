@@ -12,7 +12,7 @@ use axum::{
     http::{Request, StatusCode},
 };
 use brokkr_models::models::agent_targets::NewAgentTarget;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tower::ServiceExt;
 use uuid::Uuid;
 
@@ -57,7 +57,10 @@ async fn test_create_agent_via_api_auto_registers_with_system_generator() {
         .agent_generator_registrations()
         .is_registered(agent_id, sys_gen_id)
         .expect("db error");
-    assert!(registered, "agent must be auto-registered with system generator");
+    assert!(
+        registered,
+        "agent must be auto-registered with system generator"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -221,7 +224,8 @@ async fn test_deregister_cascades_agent_targets() {
 
     let (generator, _) = fixture.create_test_generator_with_pak("Deregister Gen".to_string(), None);
     let stack = fixture.create_test_stack("Deregister Stack".to_string(), None, generator.id);
-    let (agent, _) = fixture.create_bare_agent_with_pak("Cascade Agent".to_string(), "c1".to_string());
+    let (agent, _) =
+        fixture.create_bare_agent_with_pak("Cascade Agent".to_string(), "c1".to_string());
 
     // Register and add target via DAL to skip the API enforcement.
     fixture.register_agent_with_generator(agent.id, generator.id);
@@ -229,8 +233,7 @@ async fn test_deregister_cascades_agent_targets() {
         .dal
         .agent_targets()
         .create(
-            &brokkr_models::models::agent_targets::NewAgentTarget::new(agent.id, stack.id)
-                .unwrap(),
+            &brokkr_models::models::agent_targets::NewAgentTarget::new(agent.id, stack.id).unwrap(),
         )
         .expect("Failed to create agent target");
 
@@ -333,7 +336,10 @@ async fn test_list_generator_registered_agents() {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri(format!("/api/v1/generators/{}/registered-agents", generator.id))
+                .uri(format!(
+                    "/api/v1/generators/{}/registered-agents",
+                    generator.id
+                ))
                 .header("Authorization", format!("Bearer {}", admin_pak))
                 .body(Body::empty())
                 .unwrap(),

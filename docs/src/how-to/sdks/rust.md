@@ -1,11 +1,11 @@
 # Rust SDK
 
-The `brokkr-client` crate is generated from `openapi/brokkr-v1.json` by `progenitor` at compile time. An ergonomic wrapper (`BrokkrClient`) sits on top to handle auth, retries, and typed errors.
+The `brokkr-client` crate is generated from the broker's OpenAPI spec by `progenitor` at compile time. An ergonomic wrapper (`BrokkrClient`) sits on top to handle auth, retries, and typed errors.
 
 ## Install
 
 ```bash
-cargo add brokkr-client tokio --features tokio/macros,tokio/rt-multi-thread
+cargo add brokkr-client tokio uuid --features tokio/macros,tokio/rt-multi-thread
 ```
 
 Or by hand in `Cargo.toml`:
@@ -14,7 +14,10 @@ Or by hand in `Cargo.toml`:
 [dependencies]
 brokkr-client = "0.8"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+uuid = "1"
 ```
+
+`uuid` is not required by the client itself, but resource IDs are UUIDs, so you will almost always want it.
 
 For in-tree workspace consumers, swap the dependency for a path dep:
 
@@ -32,7 +35,7 @@ let client = BrokkrClient::builder("https://broker.example.com/api/v1")
     .build()?;
 ```
 
-The constructor takes a base URL and one PAK. **The base URL must include the `/api/v1` prefix** — the OpenAPI spec declares its server as `/api/v1`, and the generated operations append unprefixed paths like `/agents` to whatever base you provide, so omitting the prefix makes every call 404. The wrapper attaches `Authorization: Bearer <pak>` on every request — you do not need to know which of the three `*_pak` security schemes your role maps to.
+The constructor takes a base URL and one PAK. **The base URL must include the `/api/v1` prefix** — the OpenAPI spec declares its server as `/api/v1`, and the generated operations append unprefixed paths like `/agents` to whatever base you provide, so omitting the prefix makes every call 404. The wrapper attaches the PAK to every request as a bare `Authorization: <pak>` header, with no `Bearer` prefix — the broker accepts both forms, but expect the raw value when inspecting traffic through a proxy. You do not need to know which of the three `*_pak` security schemes your role maps to.
 
 ## Call one endpoint
 
@@ -91,15 +94,20 @@ See [stable error codes](../../reference/error-codes.md) for the full list.
 
 ## Retry on transient failures
 
-`BrokkrClient::retry` re-runs a closure with exponential backoff (200 ms, doubling, capped at 10 s; 3 attempts by default). Transport errors and HTTP `408/429/502/503/504` retry; everything else returns immediately.
+`BrokkrClient::retry` re-runs a closure with exponential backoff (200 ms, doubling, capped at 10 s; 3 retries by default, so 4 attempts in total). Transport errors and HTTP `408/429/502/503/504` retry; everything else returns immediately.
+
+The closure receives the raw client, but the future it returns must not borrow from that argument — clone the client once up front and move a clone into each attempt instead:
 
 ```rust
 use brokkr_client::BrokkrError;
 
+let api = client.api().clone();
+
 let response = client
-    .retry(|api| Box::pin(async move {
-        api.list_agents().send().await.map_err(BrokkrError::from)
-    }))
+    .retry(move |_| {
+        let api = api.clone();
+        async move { api.list_agents().send().await.map_err(BrokkrError::from) }
+    })
     .await?;
 ```
 
@@ -137,7 +145,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-The real agent (`crates/brokkr-agent/src/broker.rs`) layers on metrics, logging, and `401 → "rotate PAK"` handling, but the call shape is the same.
+The real Brokkr agent layers on metrics, logging, and `401 → "rotate PAK"` handling, but the call shape is the same.
 
 ## When you need to drop to the raw client
 

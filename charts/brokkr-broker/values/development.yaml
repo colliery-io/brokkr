@@ -79,10 +79,8 @@ securityContext:
   # Note: No seccompProfile for development (easier debugging with strace, etc.)
 
 # TLS/SSL Configuration
-tls:
-  # Development: Disable TLS for simplicity
-  # Access via http://localhost:3000 after port-forward
-  enabled: false
+# TLS: the broker serves plain HTTP and cannot terminate TLS. In development
+# access it directly via http://localhost:3000 after a port-forward.
 
 # Ingress Configuration
 ingress:

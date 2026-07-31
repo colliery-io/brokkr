@@ -1,5 +1,7 @@
 # Regenerating SDKs
 
+> **For contributors to Brokkr itself.** If you are *using* an SDK, nothing on this page applies — the published packages already contain generated code. Start from [Using the SDKs](./README.md) instead.
+
 The broker's OpenAPI spec and the three SDKs are checked into the repo and verified by CI. When you change the API surface, regenerate all four artifacts in the same PR.
 
 ## Workflow
@@ -15,26 +17,29 @@ angreal openapi gen-python
 angreal openapi gen-typescript
 ```
 
-The Rust SDK is regenerated automatically on every `cargo build` — `progenitor::generate_api!` reads `openapi/brokkr-v1.json` at compile time, so updating the spec is enough.
+The Rust SDK needs no separate generator step: `progenitor::generate_api!` regenerates it inline on every `cargo build`. It does **not** read the workspace spec, though — it reads the crate-local mirror `crates/brokkr-client/spec/brokkr-v1.json`, which lives inside the crate so the spec survives `cargo package`. `angreal openapi export` writes both copies and keeps them byte-identical.
 
-Commit the regenerated files alongside your broker changes:
+Commit all four paths alongside your broker changes:
 
 - `openapi/brokkr-v1.json`
+- `crates/brokkr-client/spec/brokkr-v1.json` — forgetting this one fails CI even though nothing else looks stale
 - `sdks/python/brokkr-client/**`
 - `sdks/typescript/brokkr-client/src/schema.d.ts`
 
 ## CI drift check
 
-`.github/workflows/openapi.yml` runs four checks on every PR:
+The OpenAPI workflow runs six gates on every PR:
 
-| Task                              | Fails if…                                                       |
+| Gate                              | Fails if…                                                       |
 |-----------------------------------|-----------------------------------------------------------------|
-| `angreal openapi check`           | `openapi/brokkr-v1.json` is stale relative to the broker schema.|
+| `angreal openapi check`           | `openapi/brokkr-v1.json` is stale relative to the broker schema, or the crate-local mirror has drifted from it (or is missing). |
+| `redocly lint`                    | The spec has structural problems the Rust build cannot catch — missing summaries, malformed examples, and similar. |
+| `cargo build -p brokkr-client --tests` | The Rust SDK fails to regenerate against the committed spec. |
 | `angreal openapi check-python`    | `sdks/python/brokkr-client` is stale relative to the spec.      |
 | `angreal openapi check-typescript`| `sdks/typescript/brokkr-client/src/schema.d.ts` is stale.       |
-| `cargo build -p brokkr-client`    | The Rust SDK fails to regenerate against the committed spec.    |
+| `npm run typecheck` + `npm test`  | The TypeScript SDK no longer typechecks or its surface tests fail. |
 
-If a check fails, run the matching `gen-*` task locally and commit the result.
+If a drift check fails, run the matching `export`/`gen-*` task locally and commit the result.
 
 ## Adding a new endpoint
 

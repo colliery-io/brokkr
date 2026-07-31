@@ -25,15 +25,19 @@ brokkr-broker serve
 | `/readyz` | Readiness probe |
 | `/metrics` | Prometheus metrics |
 | `/swagger-ui` | Interactive API documentation |
+| `/docs/openapi.json` | OpenAPI 3 specification |
+| `/` | Operator Console — the read-only web view of fleet, deployments, and telemetry. Any path not owned by `/api` or `/internal` falls back to the console shell |
+
+The console is served only by builds that include the `embed-ui` feature. The published broker container image is built that way, so a stock `brokkr-broker` container serves the console on the same port as the API; a binary you build yourself without the feature serves a placeholder instead.
 
 ---
 
 #### `brokkr-broker create agent`
 
-Creates a new agent record and generates its initial PAK.
+Creates a new agent record, generates its initial PAK, and registers it with the system generator plus any generators you name.
 
 ```bash
-brokkr-broker create agent --name <name> --cluster-name <cluster>
+brokkr-broker create agent --name <name> --cluster-name <cluster> [--generator-ids <uuid,...>]
 ```
 
 **Flags:**
@@ -42,6 +46,9 @@ brokkr-broker create agent --name <name> --cluster-name <cluster>
 |------|----------|-------------|
 | `--name` | Yes | Human-readable agent name |
 | `--cluster-name` | Yes | Name of the Kubernetes cluster this agent represents |
+| `--generator-ids` | No | Additional generators to register the agent with. Accepts a comma-separated list, and may be repeated. |
+
+Every agent is registered with the system generator (the fleet scope) whether or not you pass `--generator-ids`, which matches what `POST /api/v1/agents` does. Each ID you pass is checked before anything is created, so a typo fails the whole command rather than leaving a half-registered agent behind.
 
 **Output:**
 
@@ -51,9 +58,12 @@ ID: a1b2c3d4-e5f6-7890-abcd-ef1234567890
 Name: production-us-east
 Cluster: us-east-1-prod
 Initial PAK: brokkr_BRx9y2Kq_A1B2C3D4E5F6G7H8I9J0K1L2
+Registered with: system (fleet scope), f8e7d6c5-b4a3-2109-8765-432109876543
 ```
 
 > **Important:** The PAK is only displayed once. Store it securely.
+
+If the broker has never been started against this database, the system generator does not exist yet. The agent is still created, but the command logs a warning and the `Registered with:` line omits the fleet scope — start the broker once to provision the system generator, then register the agent with [`brokkr register`](#brokkr-register).
 
 ---
 
@@ -91,12 +101,14 @@ Re-runs the admin-key upsert.
 brokkr-broker rotate admin
 ```
 
-Behavior depends on `broker.pak_hash`:
+Behavior depends on `broker.pak_hash`, and the command reports which branch it took:
 
-- If `broker.pak_hash` is set and non-empty, the configured hash is validated and stored; no new PAK is generated.
-- If `broker.pak_hash` is unset or empty, a new admin PAK is generated and its hash stored. The PAK is written to `/tmp/brokkr-keys/key.txt`; it is never printed to stdout.
+- If `broker.pak_hash` is set and non-empty, the configured hash is validated and stored; **no new PAK is generated and nothing is revoked**. Any PAK matching that hash keeps working. The output says so and lists the two ways to actually replace the credential.
+- If `broker.pak_hash` is unset or empty, a new admin PAK is generated and its hash stored. **Both the PAK and its hash are printed**; the PAK is shown once and cannot be recovered from the hash. It is also written to `/tmp/brokkr-keys/key.txt`, which is deleted on graceful shutdown.
 
-The previously stored hash is replaced, so the old admin PAK stops working.
+The old admin PAK stops working only on the second branch, where the stored hash actually changes. Take the printed hash as well as the PAK — it belongs in `BROKKR__BROKER__PAK_HASH` (or the chart's `broker.pakHash` / `broker.pakHashExistingSecret`), and it cannot be derived from the PAK with `sha256sum` because only the long-token component is hashed.
+
+See [Managing PAKs](../how-to/pak-management.md#rotating-the-admin-pak) for the full flow, including the Kubernetes cold start.
 
 ---
 
@@ -151,12 +163,21 @@ Prints the PAK (the admin credential — store securely) and its hash. Set the h
 ```
 Minted admin PAK (offline — nothing was written to the database):
 
-  PAK (secret — send as `Authorization: Bearer <PAK>`):
+  PAK (secret — send as `Authorization: Bearer <PAK>`; store securely):
     brokkr_BRx9y2Kq_A1B2C3D4E5F6G7H8I9J0K1L2
 
   PAK hash (set as BROKKR__BROKER__PAK_HASH before first startup):
-    sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+    9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+
+Day-zero flow:
+  1. export BROKKR__BROKER__PAK_HASH=9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+  2. Start the broker. First startup stores this hash on the admin role
+     and the admin generator; no key file is written to /tmp/brokkr-keys/.
+  3. Authenticate with the PAK above. It cannot be recovered from the hash,
+     so the hash is safe to keep in config while the PAK stays secret.
 ```
+
+The hash is printed as bare hexadecimal — exactly 64 characters, with no `sha256:` or other prefix. Copy it verbatim; the broker validates the configured hash at startup and refuses to boot with "Invalid PAK hash provided in configuration" if it is anything other than 64 hex characters.
 
 See the [Environment Variables Reference](./environment-variables.md) for `BROKKR__BROKER__PAK_HASH`.
 
@@ -195,7 +216,9 @@ On startup the agent registers itself with the generator scopes it resolves, in 
 | 2 | `BROKKR__AGENT__GENERATOR_IDS` (config key `agent.generator_ids`) | Comma-separated UUIDs, or a YAML list in the config file. |
 | 3 | `BROKKR_GENERATOR_IDS` | Deprecated legacy bare variable; still honored, logs a warning. |
 
-Malformed UUIDs are skipped with a warning. An agent must be registered with a generator before any of that generator's stacks can be targeted at it. Every agent is auto-registered with the system generator regardless of this setting; if no scopes are set the agent has the system/fleet scope only. See [Generator Registration](../explanation/security-model.md#generator-registration-and-application-scopes) and [`BROKKR__AGENT__GENERATOR_IDS`](./environment-variables.md).
+Malformed UUIDs are skipped with a warning. An agent must be registered with a generator before any of that generator's stacks can be targeted at it.
+
+Agents are registered with the system generator (the fleet scope) at creation time, by both `POST /api/v1/agents` and [`brokkr-broker create agent`](#brokkr-broker-create-agent) — this setting only adds application scopes on top. An agent with no scopes set therefore has the system/fleet scope only. See [Generator Registration](../explanation/security-model.md#generator-registration-and-application-scopes) and [`BROKKR__AGENT__GENERATOR_IDS`](./environment-variables.md).
 
 ---
 
@@ -225,11 +248,11 @@ See the [Configuration Guide](../getting-started/configuration.md) for all avail
 
 ## brokkr
 
-`brokkr` is the control-plane client. It submits a folder of Kubernetes manifests as a stack's desired state. It is built from the `brokkr-cli` crate (`crates/brokkr-cli`) and wraps the Rust SDK's `BrokkrClient::apply`.
+`brokkr` is the control-plane client. It submits a folder of Kubernetes manifests as a stack's desired state. It wraps the Rust SDK's `apply` operation.
 
 ### Connection settings
 
-Every command resolves a broker URL and a PAK from three sources, in precedence order: **command-line flag → environment variable → config file**. A blank value in one source is treated as unset and falls through to the next (`crates/brokkr-cli/src/config.rs`, `resolve`).
+Every command resolves a broker URL and a PAK from three sources, in precedence order: **command-line flag → environment variable → config file**. A blank value in one source is treated as unset and falls through to the next.
 
 | Setting | Flag | Environment variable | Config-file key |
 |---------|------|----------------------|-----------------|
@@ -244,7 +267,7 @@ broker_url = "https://broker.example.com"
 pak = "brokkr_BRabcd1234_GeneratorTokenExample0001"
 ```
 
-The broker URL may be given with or without the `/api/v1` suffix — it is appended when absent and never doubled (`normalize_base_url`). The flags are global and may appear before or after the subcommand.
+The broker URL may be given with or without the `/api/v1` suffix — it is appended when absent and never doubled. The flags are global and may appear before or after the subcommand.
 
 ### `brokkr apply`
 
@@ -340,6 +363,10 @@ BROKKR__LOG__FORMAT=json \
 
 # Create an agent and capture its PAK
 brokkr-broker create agent --name prod-1 --cluster-name us-east-1 2>&1 | grep "Initial PAK"
+
+# Create an agent already registered with two application scopes
+brokkr-broker create agent --name prod-1 --cluster-name us-east-1 \
+  --generator-ids f8e7d6c5-b4a3-2109-8765-432109876543,a1b2c3d4-e5f6-7890-abcd-ef1234567890
 
 # Start agent with environment config
 BROKKR__AGENT__BROKER_URL=https://broker.example.com \

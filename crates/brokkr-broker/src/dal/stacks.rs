@@ -16,7 +16,8 @@ use crate::utils::event_bus;
 use brokkr_models::models::stacks::{NewStack, Stack};
 use brokkr_models::models::webhooks::{BrokkrEvent, EVENT_STACK_CREATED, EVENT_STACK_DELETED};
 use brokkr_models::schema::{
-    agent_annotations, agent_labels, agent_targets, stack_annotations, stack_labels, stacks,
+    agent_annotations, agent_generator_registrations, agent_labels, agent_targets,
+    stack_annotations, stack_labels, stacks,
 };
 use chrono::Utc;
 use diesel::prelude::*;
@@ -310,6 +311,14 @@ impl StacksDAL<'_> {
     /// This method uses OR logic when matching labels and annotations, meaning a stack will be included
     /// if it matches any of the agent's labels or annotations.
     ///
+    /// Registration is the consent boundary (BROKKR-T-0287): label and annotation
+    /// matches only associate stacks whose owning generator the agent is
+    /// registered with. A generator declares which labels it pushes to; an
+    /// agent's registrations declare which generators it accepts stacks from, so
+    /// matching selects *within* consented generators rather than creating
+    /// responsibility across them. Explicit targets are exempt — they are
+    /// already gated at creation time (403 `agent_not_registered`).
+    ///
     /// # Arguments
     ///
     /// * `agent_id` - The UUID of the agent.
@@ -341,20 +350,36 @@ impl StacksDAL<'_> {
             .select(agent_targets::stack_id)
             .load::<Uuid>(conn)?;
 
+        // Generators this agent has consented to receive stacks from.
+        let registered_generators: HashSet<Uuid> = agent_generator_registrations::table
+            .filter(agent_generator_registrations::agent_id.eq(agent_id))
+            .select(agent_generator_registrations::generator_id)
+            .load::<Uuid>(conn)?
+            .into_iter()
+            .collect();
+
         let mut associated_stacks = HashSet::new();
 
-        // Get stacks matching labels
-        if !labels.is_empty() {
+        // Get stacks matching labels, restricted to consented generators.
+        if !labels.is_empty() && !registered_generators.is_empty() {
             let label_stacks = self.filter_by_labels(labels, FilterType::Or)?;
 
-            associated_stacks.extend(label_stacks);
+            associated_stacks.extend(
+                label_stacks
+                    .into_iter()
+                    .filter(|s| registered_generators.contains(&s.generator_id)),
+            );
         }
 
-        // Get stacks matching annotations
-        if !annotations.is_empty() {
+        // Get stacks matching annotations, restricted to consented generators.
+        if !annotations.is_empty() && !registered_generators.is_empty() {
             let annotation_stacks = self.filter_by_annotations(annotations, FilterType::Or)?;
 
-            associated_stacks.extend(annotation_stacks);
+            associated_stacks.extend(
+                annotation_stacks
+                    .into_iter()
+                    .filter(|s| registered_generators.contains(&s.generator_id)),
+            );
         }
 
         // Get stacks matching targets

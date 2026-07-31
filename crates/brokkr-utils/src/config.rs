@@ -115,6 +115,26 @@ where
 // Include the default settings file as a string constant
 const DEFAULT_SETTINGS: &str = include_str!("../default.toml");
 
+/// The admin PAK hash shipped in the embedded `default.toml`.
+///
+/// This is a *publicly known* credential: the raw PAK it hashes is written in a
+/// comment directly above it in `default.toml`, and both are in the public
+/// source tree. It exists so the development and test harnesses work with zero
+/// configuration; a broker that still has it as its admin credential accepts an
+/// admin PAK that anyone can read out of the repository.
+///
+/// It lives here, next to the `include_str!` of the file it mirrors, so the
+/// literal and its source can be compared without a runtime config load — and
+/// `default_admin_pak_hash_constant_matches_default_toml` in this module's test
+/// suite fails the build if they ever drift. Consumers must compare against this
+/// constant rather than re-deriving the value, so there is exactly one
+/// definition of "the shipped default" in the codebase.
+///
+/// See `brokkr_broker::utils::detect_default_admin_pak_hash` for the startup
+/// backstop that acts on it (BROKKR-T-0298).
+pub const DEFAULT_ADMIN_PAK_HASH: &str =
+    "4c697273df3d764cba950bb5c04368097685f09259f5bd880d892cf1ff9f4cdd";
+
 /// Represents the main settings structure for the application
 #[derive(Debug, Deserialize, Clone)]
 #[allow(unused)]
@@ -177,8 +197,9 @@ pub struct Broker {
     /// Auth cache TTL in seconds (default: 60). Set to 0 to disable caching.
     pub auth_cache_ttl_seconds: Option<u64>,
     /// Agent-events retention in days (default: 30). Events older than this are
-    /// hard-deleted by the eviction worker. Set to 0 (or leave unset) to
-    /// DISABLE eviction and retain all agent events indefinitely.
+    /// hard-deleted by the eviction worker. Leaving this unset applies the
+    /// 30-day default; set it explicitly to 0 to DISABLE eviction and retain
+    /// all agent events indefinitely.
     pub agent_events_retention_days: Option<i64>,
 }
 
@@ -741,6 +762,39 @@ impl ReloadableConfig {
 #[cfg(test)]
 mod tests {
     use super::{DynamicConfig, ReloadableConfig, Settings, Telemetry, TelemetryOverride};
+
+    /// `DEFAULT_ADMIN_PAK_HASH` is a hand-copied literal, and the whole point of
+    /// the BROKKR-T-0298 startup backstop is that it recognizes the credential
+    /// the repository actually ships. If the two ever disagree, the broker would
+    /// silently stop warning about the very hash it is distributing — a security
+    /// check that fails open and looks healthy.
+    ///
+    /// Parse the embedded `default.toml` on its own (no external file, no
+    /// environment layer, so an exported `BROKKR__BROKER__PAK_HASH` in the
+    /// developer's shell cannot mask a drift) and compare.
+    #[test]
+    fn default_admin_pak_hash_constant_matches_default_toml() {
+        let defaults = super::Config::builder()
+            .add_source(super::File::from_str(
+                super::DEFAULT_SETTINGS,
+                config::FileFormat::Toml,
+            ))
+            .build()
+            .expect("embedded default.toml must parse");
+
+        let shipped = defaults
+            .get_string("broker.pak_hash")
+            .expect("default.toml must define broker.pak_hash");
+
+        assert_eq!(
+            shipped,
+            super::DEFAULT_ADMIN_PAK_HASH,
+            "default.toml ships broker.pak_hash = {shipped:?} but DEFAULT_ADMIN_PAK_HASH is \
+             {:?}. Update the constant to match, or the default-admin-PAK startup warning \
+             (BROKKR-T-0298) will never fire for the credential actually being shipped.",
+            super::DEFAULT_ADMIN_PAK_HASH
+        );
+    }
 
     #[test]
     /// Test the creation of Settings with default values

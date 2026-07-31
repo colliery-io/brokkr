@@ -8,7 +8,11 @@ Every documented 4xx/5xx response from the broker's v1 API carries a JSON body c
 
 The `code` string is **part of the API contract**: SDK consumers pattern-match on it, so the broker treats renames as breaking changes. The `message` is human-readable and is **not** stable. The `details` map carries structured context (e.g. the ID that wasn't found); keys are documented per code when present.
 
-One exception: 401 responses produced by the authentication middleware itself (missing `Authorization` header, malformed PAK, or PAK that matches no identity) are bare `401 Unauthorized` status responses without an `ErrorResponse` body.
+Some responses are produced before a handler runs and therefore carry no `ErrorResponse` body and no `code`. Client code must not assume every 4xx is parseable:
+
+- **401 from the authentication middleware** — missing `Authorization` header, malformed PAK, or a PAK that matches no identity. Bare `401 Unauthorized`.
+- **403 from the authentication middleware** — a read-only credential (the console token) attempting anything other than a read. Reads plus two allowlisted `POST` routes are permitted; every other method is a bare `403 Forbidden`. See [Read-only credentials](#read-only-credentials).
+- **400 from request parsing** — a query parameter or request body that fails to deserialize before dispatch (for example a malformed UUID in `?pak_id=`) is rejected by the HTTP framework with its own plain response.
 
 ## SDK mapping
 
@@ -31,6 +35,10 @@ See the [SDK guides](../how-to/sdks/README.md) for per-language error-handling e
 | `agent_pak_required` | 403 | Operation requires an agent PAK (e.g. reporting a webhook delivery result). |
 | `agent_pak_mismatch` | 403 | Agent PAK does not match the agent referenced in the path. |
 
+### Read-only credentials
+
+The broker's zero-config console token authenticates as a read-only admin. It passes the admin gate on `GET`/`HEAD` requests anywhere in the API, plus `POST /auth/pak` and `POST /deployment-objects/{id}/diagnostics`. Any other request is rejected by the authentication middleware with a bare `403 Forbidden` — no `ErrorResponse` body and no `code`, so an SDK's error-code accessor returns nothing. Distinguish this case by the absence of a body rather than by a code.
+
 ## Database-mapped codes
 
 These come from the database classifier (`ApiError::from_diesel`) on create/update paths. For `unique_violation` and `foreign_key_violation`, the constraint name is included under `details.constraint` when available.
@@ -49,6 +57,8 @@ These come from the database classifier (`ApiError::from_diesel`) on create/upda
 | Code | Status | Meaning |
 |------|--------|---------|
 | `agent_not_found` | 404 | No agent with the given ID. |
+| `invalid_agent` | 400 | Agent payload rejected by validation on `POST /agents` (e.g. empty `name` or `cluster_name`). |
+| `agent_id_mismatch` | 400 | The `agent_id` in the body does not match the agent ID in the path. Raised on the agent event, label, annotation, and target creation endpoints. |
 | `name_and_cluster_required` | 400 | Agent search requires both `name` and `cluster_name` query parameters. |
 | `agent_label_not_found` | 404 | The named label does not exist on the agent. |
 | `agent_annotation_not_found` | 404 | The named annotation does not exist on the agent. |
@@ -65,6 +75,10 @@ These come from the database classifier (`ApiError::from_diesel`) on create/upda
 |------|--------|---------|
 | `generator_not_found` | 404 | No generator with the given ID. |
 | `generator_not_owned` | 403 | Caller is neither admin nor the generator referenced in the path. |
+| `not_authorized` | 403 | Listing a generator's registered agents (`GET /generators/{id}/registered-agents`) requires admin or that same generator's PAK. |
+| `cannot_delete_system_generator` | 403 | `DELETE /generators/{id}` targeted the built-in system generator, which cannot be deleted. |
+| `system_generator_not_a_tenant` | 403 | A non-admin caller asked for a tenant-scoped view of the system generator (`GET /agents` under a system-generator PAK, or `GET /generators/{id}/registered-agents` with that id). Every agent is auto-registered with the system generator, so it is not a tenant and has no scoped view; admin callers are unaffected. |
+| `generator_required` | 403 | `GET /agents` was called by a credential that is neither admin nor a generator — an agent PAK, for example. Distinct from `system_generator_not_a_tenant`, which means the caller *is* a generator but not a tenant one. |
 | `missing_agent_id` | 400 | An admin caller invoked `POST /generators/{id}/register` without an `agent_id` in the body; only an agent self-registering may omit it. |
 | `already_registered` | 409 | The agent is already registered with this generator. `POST /generators/{id}/register` is not idempotent; a repeat returns this. (The agent's startup self-registration treats it as success.) |
 | `invalid_generator_id` | 400 | A `generator_ids` entry supplied to `POST /agents` references a generator that does not exist. |
@@ -128,6 +142,8 @@ These come from the database classifier (`ApiError::from_diesel`) on create/upda
 |------|--------|---------|
 | `webhook_not_found` | 404 | No webhook subscription with the given ID. |
 | `invalid_webhook` | 400 | Webhook subscription payload rejected by validation. |
+| `unsupported_field` | 422 | The request body carries a field the webhook API no longer accepts. `details.field` names the offending key and `details.use_instead` names its replacement. |
+| `invalid_request_body` | 422 | A webhook create/update body parsed as JSON but did not match the expected shape. |
 | `url_required` | 400 | Webhook URL is empty. |
 | `invalid_url_scheme` | 400 | Webhook URL must start with `http://` or `https://`. |
 | `webhook_test_failed` | 400 | Test delivery failed: the endpoint returned a non-success status (status and truncated body under `details.status_code` / `details.body`) or the request itself failed. |
@@ -144,6 +160,12 @@ These come from the database classifier (`ApiError::from_diesel`) on create/upda
 | `work_order_not_claimable` | 404 | Work order does not exist or is not claimable by this agent. |
 | `work_order_not_claimed_by_agent` | 403 | Work order is not claimed by the agent attempting to complete it. |
 | `work_order_log_entry_not_found` | 404 | No work order log entry with the given ID. |
+
+## Deployment health
+
+| Code | Status | Meaning |
+|------|--------|---------|
+| `invalid_health_record` | 422 | A health record in a `PATCH /agents/{id}/health-status` batch failed validation. The whole batch is rejected. |
 
 ## Admin
 

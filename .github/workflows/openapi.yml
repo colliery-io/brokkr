@@ -1,38 +1,19 @@
 ---
 name: OpenAPI Spec
+# Reusable, called by main.yml ("Fast Code Validation") behind its `changes`
+# path filter — deliberately NOT triggered directly on push/pull_request.
+#
+# This used to trigger itself with a top-level `paths:` filter. That made it
+# unusable as a required status check: when the filter did not match, the
+# workflow never ran, so the check never reported, and branch protection would
+# block the PR forever waiting on a run that will never exist. A job skipped by
+# an `if:` inside a workflow that DID run reports "skipped", which branch
+# protection accepts. Hence the move (BROKKR-T-0315 follow-up).
+#
+# The path filter itself now lives in main.yml's `changes` job, alongside the
+# equivalent gates for the integration and SDK-contract suites.
 on:
-  push:
-    branches: [main]
-    # Mirror the PR paths so a docs-only / unrelated main push doesn't pay the
-    # full drift suite (cargo build + SDK regen + npm ci).
-    paths:
-      - "crates/brokkr-broker/src/api/**"
-      - "crates/brokkr-broker/examples/openapi_export.rs"
-      - "crates/brokkr-broker/Cargo.toml"
-      - "crates/brokkr-models/src/models/**"
-      - "crates/brokkr-client/**"
-      - "sdks/python/brokkr-client/**"
-      - "sdks/typescript/brokkr-client/**"
-      - "openapi/**"
-      - ".angreal/task_openapi.py"
-      - ".github/workflows/openapi.yml"
-  pull_request:
-    branches: [main]
-    paths:
-      - "crates/brokkr-broker/src/api/**"
-      - "crates/brokkr-broker/examples/openapi_export.rs"
-      - "crates/brokkr-broker/Cargo.toml"
-      - "crates/brokkr-models/src/models/**"
-      - "crates/brokkr-client/**"
-      - "sdks/python/brokkr-client/**"
-      - "sdks/typescript/brokkr-client/**"
-      - "openapi/**"
-      - ".angreal/task_openapi.py"
-      - ".github/workflows/openapi.yml"
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  workflow_call:
 
 jobs:
   drift_and_lint:

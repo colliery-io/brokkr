@@ -14,7 +14,7 @@ spec:
     - Egress
   ingress:
     # Allow metrics scraping from Prometheus (if enabled)
-    {{- if .Values.metrics.enabled }}
+    {{- if .Values.networkPolicy.allowMetricsScraping }}
     {{- if .Values.networkPolicy.allowMetricsFrom }}
     - from:
         {{- toYaml .Values.networkPolicy.allowMetricsFrom | nindent 8 }}

@@ -877,8 +877,7 @@ async fn test_create_deployment_object_yaml_body() {
     let fixture = TestFixture::new();
     let app = fixture.create_test_router().with_state(fixture.dal.clone());
     let admin_pak = fixture.admin_pak.clone();
-    let generator =
-        fixture.create_test_generator("yaml-gen".to_string(), None, "h".to_string());
+    let generator = fixture.create_test_generator("yaml-gen".to_string(), None, "h".to_string());
     let stack = fixture.create_test_stack("yaml-stack".to_string(), None, generator.id);
 
     let yaml = "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: foo\n---\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: bar\n";
@@ -909,8 +908,7 @@ async fn test_create_deployment_object_yaml_deletion_marker_empty() {
     let fixture = TestFixture::new();
     let app = fixture.create_test_router().with_state(fixture.dal.clone());
     let admin_pak = fixture.admin_pak.clone();
-    let generator =
-        fixture.create_test_generator("del-gen".to_string(), None, "h".to_string());
+    let generator = fixture.create_test_generator("del-gen".to_string(), None, "h".to_string());
     let stack = fixture.create_test_stack("del-stack".to_string(), None, generator.id);
 
     let response = app
@@ -945,8 +943,7 @@ async fn test_create_deployment_object_malformed_yaml_rejected() {
     let fixture = TestFixture::new();
     let app = fixture.create_test_router().with_state(fixture.dal.clone());
     let admin_pak = fixture.admin_pak.clone();
-    let generator =
-        fixture.create_test_generator("bad-gen".to_string(), None, "h".to_string());
+    let generator = fixture.create_test_generator("bad-gen".to_string(), None, "h".to_string());
     let stack = fixture.create_test_stack("bad-stack".to_string(), None, generator.id);
 
     let response = app
@@ -969,8 +966,7 @@ async fn test_create_deployment_object_malformed_yaml_rejected() {
 async fn test_get_deployment_object_accept_yaml_roundtrip() {
     let fixture = TestFixture::new();
     let admin_pak = fixture.admin_pak.clone();
-    let generator =
-        fixture.create_test_generator("rt-gen".to_string(), None, "h".to_string());
+    let generator = fixture.create_test_generator("rt-gen".to_string(), None, "h".to_string());
     let stack = fixture.create_test_stack("rt-stack".to_string(), None, generator.id);
     let yaml = "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: rt\n";
 
@@ -1026,8 +1022,7 @@ async fn test_create_deployment_object_json_still_works() {
     let fixture = TestFixture::new();
     let app = fixture.create_test_router().with_state(fixture.dal.clone());
     let admin_pak = fixture.admin_pak.clone();
-    let generator =
-        fixture.create_test_generator("json-gen".to_string(), None, "h".to_string());
+    let generator = fixture.create_test_generator("json-gen".to_string(), None, "h".to_string());
     let stack = fixture.create_test_stack("json-stack".to_string(), None, generator.id);
 
     let payload = serde_json::json!({

@@ -251,10 +251,7 @@ impl AgentEventsDAL<'_> {
     ///
     /// Returns a Result containing the number of rows deleted on success, or a
     /// diesel::result::Error on failure.
-    pub fn delete_older_than(
-        &self,
-        cutoff: DateTime<Utc>,
-    ) -> Result<usize, diesel::result::Error> {
+    pub fn delete_older_than(&self, cutoff: DateTime<Utc>) -> Result<usize, diesel::result::Error> {
         let conn = &mut self.dal.conn()?;
         diesel::delete(agent_events::table.filter(agent_events::created_at.lt(cutoff)))
             .execute(conn)

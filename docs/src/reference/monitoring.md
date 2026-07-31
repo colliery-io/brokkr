@@ -12,7 +12,19 @@ Both broker and agent expose Prometheus metrics in standard text exposition form
 
 ### Agent Metrics
 
-**Endpoint:** `http://<agent-host>:8080/metrics`
+**Endpoint:** `http://<agent-host>:8080/metrics` (8080 is the default; the port is configurable via `agent.health_port` / `BROKKR__AGENT__HEALTH_PORT`)
+
+### Endpoint Label Normalization
+
+The `endpoint` label on the broker's HTTP metrics carries a *normalized* path, not the raw request path. Every path segment that is a UUID or is entirely numeric is replaced with `:id` before the metric is recorded, which keeps label cardinality bounded as resources are created.
+
+| Request path | `endpoint` label value |
+|--------------|------------------------|
+| `/api/v1/stacks` | `/api/v1/stacks` |
+| `/api/v1/stacks/6f1b0f2e-1c3a-4a1e-9c2b-9a7f1d5e3b04` | `/api/v1/stacks/:id` |
+| `/api/v1/agents/42/events` | `/api/v1/agents/:id/events` |
+
+PromQL that matches on a literal resource path containing a UUID or number therefore never matches; match on the normalized form instead.
 
 ## Broker Metrics Catalog
 
@@ -22,7 +34,7 @@ Both broker and agent expose Prometheus metrics in standard text exposition form
 - **Type:** Counter
 - **Description:** Total number of HTTP requests by endpoint and status
 - **Labels:**
-  - `endpoint` - API endpoint path
+  - `endpoint` - Normalized API endpoint path (see [Endpoint Label Normalization](#endpoint-label-normalization))
   - `method` - HTTP method (GET, POST, PUT, DELETE)
   - `status` - HTTP status code (200, 404, 500, etc.)
 
@@ -43,7 +55,7 @@ sum(rate(brokkr_http_requests_total{status=~"[45].."}[5m])) by (endpoint)
 - **Type:** Histogram
 - **Description:** HTTP request latency distribution in seconds
 - **Labels:**
-  - `endpoint` - API endpoint path
+  - `endpoint` - Normalized API endpoint path (see [Endpoint Label Normalization](#endpoint-label-normalization))
   - `method` - HTTP method
 - **Buckets:** 0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0 seconds
 
@@ -60,6 +72,21 @@ rate(brokkr_http_request_duration_seconds_sum[5m])
 ```
 
 ### System State Metrics
+
+#### `brokkr_default_admin_pak_hash_in_use`
+- **Type:** Gauge
+- **Description:** `1` when the broker's admin credential is still the publicly-known development PAK hash shipped in the binary, `0` otherwise. The gauge is always published, so a healthy broker reports `0` rather than omitting the series — an `== 1` alert is therefore meaningful rather than silently absent.
+- **Labels:** None
+
+The check covers both the configured hash and the one actually stored on the admin role. Those can differ: an install that first started with the default and only later set `BROKKR__BROKER__PAK_HASH` keeps the public hash in the database and keeps accepting the public PAK, because the admin bootstrap runs only on first startup or an explicit rotation. In that case a restart does not help — rotate the credential.
+
+**Example PromQL:**
+```promql
+# Alert while the public development admin credential is accepted
+brokkr_default_admin_pak_hash_in_use == 1
+```
+
+See [Replace the Default Admin PAK](../how-to/security-hardening.md) for the remediation.
 
 #### `brokkr_active_agents`
 - **Type:** Gauge

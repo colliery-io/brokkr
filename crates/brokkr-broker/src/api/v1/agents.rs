@@ -7,7 +7,7 @@
 //! Agent management API endpoints.
 
 use crate::api::v1::error::{ApiError, ErrorResponse};
-use crate::api::v1::middleware::AuthPayload;
+use crate::api::v1::middleware::{AuthPayload, require_tenant_generator};
 use crate::dal::DAL;
 use crate::metrics;
 use crate::utils::{audit, event_bus, pak};
@@ -20,8 +20,8 @@ use axum::{
 };
 use brokkr_models::models::agent_annotations::{AgentAnnotation, NewAgentAnnotation};
 use brokkr_models::models::agent_events::{AgentEvent, NewAgentEvent};
-use brokkr_models::models::agent_labels::{AgentLabel, NewAgentLabel};
 use brokkr_models::models::agent_generator_registrations::AgentGeneratorRegistration;
+use brokkr_models::models::agent_labels::{AgentLabel, NewAgentLabel};
 use brokkr_models::models::agent_targets::{AgentTarget, NewAgentTarget};
 use brokkr_models::models::agents::{Agent, NewAgent};
 use brokkr_models::models::audit_logs::{
@@ -97,34 +97,54 @@ fn require_admin_or_agent(auth: &AuthPayload, id: Uuid) -> Result<(), ApiError> 
 #[utoipa::path(
     get, path = "/agents", tag = "agents",
     responses(
-        (status = 200, description = "Successfully retrieved agents", body = Vec<Agent>),
-        (status = 403, description = "Forbidden", body = ErrorResponse),
+        (status = 200, description = "List of agents (admin: all; generator: those registered with it)", body = Vec<Agent>),
+        (status = 403, description = "Forbidden — not admin, not a generator, or a system generator", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse),
     ),
-    security(("admin_pak" = []))
+    security(("admin_pak" = []), ("generator_pak" = []))
 )]
 async fn list_agents(
     State(dal): State<DAL>,
     Extension(auth_payload): Extension<AuthPayload>,
 ) -> Result<Json<Vec<Agent>>, ApiError> {
     info!("Handling request to list agents");
-    require_admin(&auth_payload)?;
 
-    let agents = dal.agents().list().map_err(|e| {
-        error!("Failed to fetch agents: {:?}", e);
-        ApiError::internal("failed to fetch agents")
-    })?;
+    // Admin sees the fleet; a tenant generator sees only the agents that have
+    // registered with it (BROKKR-T-0315). Mirrors `list_stacks`.
+    let agents = if auth_payload.admin {
+        dal.agents().list().map_err(|e| {
+            error!("Failed to fetch agents: {:?}", e);
+            ApiError::internal("failed to fetch agents")
+        })?
+    } else {
+        let generator_id = require_tenant_generator(&auth_payload, &dal)?;
+        dal.agents().list_for_generator(generator_id).map_err(|e| {
+            error!(
+                "Failed to fetch agents for generator {}: {:?}",
+                generator_id, e
+            );
+            ApiError::internal("failed to fetch agents")
+        })?
+    };
+
     info!("Successfully retrieved {} agents", agents.len());
-    let active_count = agents.iter().filter(|a| a.status == "ACTIVE").count();
-    metrics::set_active_agents(active_count as i64);
 
-    let now = chrono::Utc::now();
-    for agent in &agents {
-        if let Some(last_hb) = agent.last_heartbeat {
-            let age_seconds = (now - last_hb).num_seconds().max(0) as f64;
-            metrics::set_agent_heartbeat_age(&agent.id.to_string(), &agent.name, age_seconds);
+    // Metrics are fleet-wide gauges, so only the admin listing may write them.
+    // A tenant-scoped listing observes a subset; publishing that would make
+    // `brokkr_active_agents` report whichever tenant polled most recently.
+    if auth_payload.admin {
+        let active_count = agents.iter().filter(|a| a.status == "ACTIVE").count();
+        metrics::set_active_agents(active_count as i64);
+
+        let now = chrono::Utc::now();
+        for agent in &agents {
+            if let Some(last_hb) = agent.last_heartbeat {
+                let age_seconds = (now - last_hb).num_seconds().max(0) as f64;
+                metrics::set_agent_heartbeat_age(&agent.id.to_string(), &agent.name, age_seconds);
+            }
         }
     }
+
     Ok(Json(agents))
 }
 
@@ -209,7 +229,9 @@ async fn create_agent(
     {
         dal.agent_generator_registrations()
             .create(agent.id, system_id)
-            .map_err(|e| ApiError::from_diesel(e, "failed to register agent with system generator"))?;
+            .map_err(|e| {
+                ApiError::from_diesel(e, "failed to register agent with system generator")
+            })?;
     }
 
     // Register with any additional generators supplied in the request.
@@ -520,10 +542,33 @@ async fn create_event(
     } else {
         EVENT_DEPLOYMENT_FAILED
     };
+    // Resolve the owning stack once, here, so every subscription filtering on
+    // `stack_id` can match these events (BROKKR-T-0305). Doing it lazily inside
+    // the event bus would cost a DAL round trip per subscription on this hot
+    // write path. `None` becomes JSON `null` rather than an omitted key, which
+    // the filter predicate treats as absent — the same shape `deployment.deleted`
+    // already emits. The object is only unresolvable when it was soft-deleted
+    // between the apply and the report; a lookup failure is logged and treated
+    // the same way rather than failing the agent's report.
+    let stack_id = match dal
+        .deployment_objects()
+        .get(event.deployment_object_id)
+        .map(|object| object.map(|object| object.stack_id))
+    {
+        Ok(stack_id) => stack_id,
+        Err(e) => {
+            error!(
+                "Failed to resolve stack for deployment object {}: {:?}",
+                event.deployment_object_id, e
+            );
+            None
+        }
+    };
     let event_data = serde_json::json!({
         "agent_event_id": event.id,
         "agent_id": event.agent_id,
         "deployment_object_id": event.deployment_object_id,
+        "stack_id": stack_id,
         "event_type": event.event_type,
         "status": event.status,
         "message": event.message,
@@ -837,7 +882,10 @@ fn authorize_target_mutation(
     stack_id: Uuid,
 ) -> Result<(), ApiError> {
     let mut stacks = dal.stacks().get(vec![stack_id]).map_err(|e| {
-        error!("Failed to fetch stack {} for target auth: {:?}", stack_id, e);
+        error!(
+            "Failed to fetch stack {} for target auth: {:?}",
+            stack_id, e
+        );
         ApiError::internal("failed to fetch stack")
     })?;
     let stack = stacks
@@ -996,12 +1044,7 @@ async fn record_heartbeat(
     // after the heartbeat + T-0227 k8s fields are persisted, so the pushed
     // record reflects the just-recorded values. A push failure must never
     // affect the heartbeat response.
-    crate::api::v1::fleet::broadcast_agent_fleet_update(
-        &dal,
-        &ws_registry,
-        &fleet_broadcaster,
-        id,
-    );
+    crate::api::v1::fleet::broadcast_agent_fleet_update(&dal, &ws_registry, &fleet_broadcaster, id);
 
     Ok(StatusCode::NO_CONTENT)
 }

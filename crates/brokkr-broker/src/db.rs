@@ -25,8 +25,12 @@ pub struct ConnectionPool {
 ///
 /// # Arguments
 ///
-/// * `base_url` - The base URL of the database server (e.g., "postgres://username:password@localhost:5432")
-/// * `database_name` - The name of the database to connect to
+/// * `base_url` - The full database URL, including the database name
+///   (e.g. `postgres://username:password@localhost:5432/mydb`)
+/// * `database_name` - Optional override for the database component of
+///   `base_url`. **Pass `None` in production**, so the operator's configured
+///   URL is honoured verbatim; it exists for test harnesses that point a
+///   shared base URL at a per-test database.
 /// * `max_size` - The maximum number of connections the pool should maintain
 /// * `schema` - Optional schema name for multi-tenant isolation
 ///
@@ -39,15 +43,22 @@ pub struct ConnectionPool {
 /// This function will panic if:
 /// * The base URL is invalid
 /// * The connection pool creation fails
+///
+/// # History
+///
+/// `database_name` was once a required `&str` and every production caller
+/// passed the literal `"brokkr"`, so `set_path` silently discarded whatever
+/// database the operator had configured (BROKKR-T-0306). The chart renders
+/// `postgresql.external.database` into that URL, so any non-default name was
+/// ignored — connecting to a database the operator never named, or failing
+/// with an error that named one they had never heard of.
 pub fn create_shared_connection_pool(
     base_url: &str,
-    database_name: &str,
+    database_name: Option<&str>,
     max_size: u32,
     schema: Option<&str>,
 ) -> ConnectionPool {
-    // Parse the base URL and set the database name
-    let mut url = Url::parse(base_url).expect("Invalid base URL");
-    url.set_path(database_name);
+    let url = resolve_database_url(base_url, database_name);
 
     // Create a connection manager
     let manager = ConnectionManager::<PgConnection>::new(url.as_str());
@@ -61,6 +72,81 @@ pub fn create_shared_connection_pool(
     ConnectionPool {
         pool,
         schema: schema.map(String::from),
+    }
+}
+
+/// Resolves the URL a pool will actually connect to.
+///
+/// Split out from [`create_shared_connection_pool`] so the override rule can be
+/// tested without a database: building the pool eagerly opens a connection, so
+/// the interesting behaviour was previously unobservable in a unit test — which
+/// is part of why BROKKR-T-0306 went unnoticed.
+fn resolve_database_url(base_url: &str, database_name: Option<&str>) -> String {
+    let mut url = Url::parse(base_url).expect("Invalid base URL");
+    // Only override when a caller explicitly asks; otherwise the configured
+    // URL's database name stands.
+    if let Some(database_name) = database_name {
+        url.set_path(database_name);
+    }
+    url.to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_database_url;
+
+    /// The BROKKR-T-0306 regression: production passes `None`, and the database
+    /// named in the configured URL must survive.
+    #[test]
+    fn configured_database_name_is_preserved_when_not_overridden() {
+        let url = resolve_database_url("postgres://user:pw@db.internal:5432/tenant_prod", None);
+        assert!(
+            url.ends_with("/tenant_prod"),
+            "the operator's database name must be honoured verbatim, got: {url}"
+        );
+        assert!(
+            !url.contains("/brokkr"),
+            "the old behaviour rewrote every URL to /brokkr, got: {url}"
+        );
+    }
+
+    /// The override still works, because the test harnesses point one base URL
+    /// at many per-test databases.
+    #[test]
+    fn explicit_override_replaces_the_database_name() {
+        let url = resolve_database_url(
+            "postgres://user:pw@db.internal:5432/ignored",
+            Some("brokkr_test_42"),
+        );
+        assert!(
+            url.ends_with("/brokkr_test_42"),
+            "an explicit override must win, got: {url}"
+        );
+    }
+
+    /// A base URL carrying no database at all is the other harness shape
+    /// (`base_url_without_db` in the integration suite).
+    #[test]
+    fn override_supplies_a_database_when_the_url_has_none() {
+        let url = resolve_database_url("postgres://user:pw@db.internal:5432", Some("brokkr_test"));
+        assert!(
+            url.ends_with("/brokkr_test"),
+            "override must supply the missing database, got: {url}"
+        );
+    }
+
+    /// Credentials, host and port must be untouched by either path — the bug
+    /// was in the path component only, and a fix that mangled the rest would be
+    /// worse than what it replaced.
+    #[test]
+    fn authority_is_untouched() {
+        for name in [None, Some("other")] {
+            let url = resolve_database_url("postgres://user:pw@db.internal:5432/mydb", name);
+            assert!(
+                url.starts_with("postgres://user:pw@db.internal:5432/"),
+                "authority must survive, got: {url}"
+            );
+        }
     }
 }
 

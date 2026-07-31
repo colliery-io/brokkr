@@ -195,8 +195,7 @@ async fn test_audit_logs_actor_name_enrichment() {
     let fixture = TestFixture::new();
     let app = fixture.create_test_router().with_state(fixture.dal.clone());
 
-    let (generator, _) =
-        fixture.create_test_generator_with_pak("team-payments".to_string(), None);
+    let (generator, _) = fixture.create_test_generator_with_pak("team-payments".to_string(), None);
 
     let generator_log = NewAuditLog::new(
         ACTOR_TYPE_GENERATOR,

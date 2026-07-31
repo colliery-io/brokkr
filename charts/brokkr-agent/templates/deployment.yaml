@@ -37,10 +37,18 @@ spec:
         securityContext:
           {{- toYaml .Values.containerSecurityContext | nindent 10 }}
         args: ["start"]
+        ports:
+        # The agent's axum server serves /healthz, /readyz and /metrics on this
+        # one port (BROKKR__AGENT__HEALTH_PORT, default 8080). Naming it lets
+        # the probes and the PodMonitor reference the name instead of repeating
+        # the number.
+        - name: health
+          containerPort: 8080
+          protocol: TCP
         livenessProbe:
           httpGet:
             path: /healthz
-            port: 8080
+            port: health
           initialDelaySeconds: 30
           periodSeconds: 10
           timeoutSeconds: 5
@@ -48,7 +56,7 @@ spec:
         readinessProbe:
           httpGet:
             path: /readyz
-            port: 8080
+            port: health
           initialDelaySeconds: 10
           periodSeconds: 5
           timeoutSeconds: 3

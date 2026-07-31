@@ -87,20 +87,9 @@ spec:
         # Writable /tmp directory (required for read-only root filesystem)
         - name: tmp
           mountPath: /tmp
-        {{- if .Values.tls.enabled }}
-        - name: tls-certs
-          mountPath: /etc/tls
-          readOnly: true
-        {{- end }}
         resources:
           {{- toYaml .Values.resources | nindent 10 }}
       volumes:
       # EmptyDir for temporary files
       - name: tmp
         emptyDir: {}
-      {{- if .Values.tls.enabled }}
-      - name: tls-certs
-        secret:
-          secretName: {{ include "brokkr-broker.tlsSecretName" . }}
-          defaultMode: 0400
-      {{- end }}

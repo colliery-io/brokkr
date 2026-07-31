@@ -11,13 +11,16 @@ In this tutorial, you'll deploy different configurations to different clusters u
 
 **Prerequisites:**
 
-- A running Brokkr development environment (`angreal local up`)
-- Your admin PAK
-- Completed the [Deploy Your First Application](./first-deployment.md) tutorial
+- A broker you can reach at `http://localhost:3000` — either a [Helm install](../getting-started/installation.md) with `kubectl port-forward svc/brokkr-broker 3000:3000` running, or the [local development environment](../getting-started/development.md) (`angreal local up`)
+- Your admin PAK for that broker (see [Adapting the commands to your install](./README.md#adapting-the-commands-to-your-install))
+- `curl` and `jq` installed
+- Recommended: [Deploy Your First Application](./first-deployment.md), for stacks, deployment objects, and targets. Nothing here depends on the resources it created.
+
+**No running agent is required.** This tutorial creates its own two agents through the API and works with them as broker-side records only, so it behaves identically on a Helm install and in the development environment. It never touches the pre-created `brokkr-integration-test-agent`, and nothing is applied to a real cluster.
 
 ## Step 1: Create Two Agents
 
-In a real deployment, each agent runs in a different Kubernetes cluster. For this tutorial, we'll create two agent records in the broker to simulate a multi-cluster setup. (You can also create agents with the `brokkr-broker` CLI — see the [CLI Reference](../reference/cli.md); in docker-based setups the CLI lives inside the broker container, e.g. `docker compose exec broker brokkr-broker create agent --name staging-agent --cluster-name staging-cluster`.)
+In a real deployment, each agent runs in a different Kubernetes cluster. For this tutorial, we'll create two agent records in the broker to simulate a multi-cluster setup. (You can also create agents with the `brokkr-broker` CLI — see the [CLI Reference](../reference/cli.md). The CLI ships inside the broker image, so it runs wherever the broker does: `kubectl exec deploy/brokkr-broker -- brokkr-broker create agent --name staging-agent --cluster-name staging-cluster` on a Helm install, or `docker compose exec broker brokkr-broker create agent ...` in the development environment.)
 
 We pass `generator_ids` so each agent is **registered** with the `admin-generator` at creation time. Registration is the agent's opt-in consent boundary: before you can create an explicit target (Step 4) for a stack, the agent must be registered with that stack's owning generator. (Every agent is also auto-registered with the system generator for fleet-wide stacks.) See [agent registration](../how-to/agent-registration.md) for the full operational picture.
 

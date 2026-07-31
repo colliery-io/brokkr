@@ -39,7 +39,7 @@ Authentication establishes *who* is calling; a second layer establishes *which g
 
 The enforcement point is `authorize_target_mutation` in the agents handler. It gates *both* directions of an explicit target — adding one (`POST /agents/{id}/targets`) and removing one (`DELETE /agents/{id}/targets/{stack_id}`). If the calling context is not registered with the stack's owning generator, the broker rejects the mutation with HTTP 403 and the error code `agent_not_registered`. This gate is absolute: there is no admin override or force flag, so even an admin PAK cannot create a target that crosses an agent's registration boundary.
 
-Registration gates only the *creation* of explicit targets. The read path (`GET /agents/{id}/target-state`) is unchanged: the served-stack set remains the union of explicit `agent_targets`, label matches, and annotation matches. Existing targets stay valid (a migration back-fills registrations from any `agent_targets` that predate this model), so registration controls what can be wired up, not what is read back at reconcile time.
+Registration gates both the *creation* of explicit targets and what the read path serves. On `GET /agents/{id}/target-state` the served-stack set is the union of explicit `agent_targets`, label matches, and annotation matches — with the label and annotation legs restricted to stacks owned by generators the agent is registered with. Explicit targets carry no such restriction, having been checked at creation. Existing targets stay valid (a migration back-fills registrations from any `agent_targets` that predate this model).
 
 This application-level isolation is complementary to — and separate from — the deployment-level [schema-per-tenant](#multi-tenant-schema-support) isolation described below; one partitions data across PostgreSQL schemas, the other scopes targeting within a single broker.
 
@@ -61,6 +61,18 @@ pub struct Cors {
 ```
 
 For debugging, the `RUST_LOG` environment variable controls log verbosity (e.g., `RUST_LOG=debug`, `RUST_LOG=brokkr_broker=trace`, or `RUST_LOG=tower_http=debug` for the HTTP layer).
+
+### Operator Console and Asset Serving
+
+The Operator Console is a separate crate, `brokkr-web` — a Leptos application compiled to WebAssembly and built into a static bundle. It is not a service of its own: when the broker is compiled with the console feature enabled (as the published broker image is), that bundle is embedded directly into the broker binary and served by it. There is no console container, no console port, and no console configuration.
+
+Serving is a fallback on the broker's outer router, mounted after every real route group. API routes therefore always win. Any other request serves the matching embedded asset, or the console shell for paths the browser router owns, so client-side routes survive a page reload. Paths under `/api` and `/internal` are excluded from the fallback and return honest 404s rather than the console shell.
+
+The shell is rewritten on the way out: the broker injects the process's ephemeral read-only UI PAK into the served HTML as a meta tag, which is what makes the console zero-configuration for the operator. That HTML is served with `Cache-Control: no-store`, since the token embedded in it does not outlive the process; the other assets are content-hashed at build time and remain cacheable. Builds compiled without the console feature serve a small placeholder page instead — the API is unaffected and the binary needs no bundle to compile.
+
+The console is strictly a consumer of the public v1 REST API, calling it same-origin. It opens no WebSocket of its own and holds no privileged channel into the broker; anything it displays is available to any admin-credentialed API client. Its capability set is exactly what the read-only credential permits — see [Read-Only Console Authentication](./security-model.md#read-only-console-authentication-the-ui-pak) — and the operational guide is [Using the Operator Console](../how-to/operator-console.md).
+
+The repository's `examples/ui-slim` is a different artifact entirely: an unsupported React demo that is not built, embedded, or shipped by the broker, requires an operator-supplied admin PAK, and exercises write endpoints and the consumer live-tail WebSocket to show what a custom consumer can do. It is a sample, not the console.
 
 ### DAL (Data Access Layer) Module
 
@@ -161,6 +173,8 @@ The utils module provides shared functionality:
 **Encryption** implements AES-256-GCM encryption for webhook secrets with versioned format for algorithm upgrades.
 
 **PAK Controller** generates and verifies Prefixed API Keys using SHA-256 hashing with indexed lookups.
+
+**UI PAK** mints and holds the process's ephemeral read-only console credential in memory — never persisted, never logged — and exposes its hash for the auth middleware's constant-time comparison.
 
 ## Agent Components
 
@@ -364,10 +378,11 @@ The broker supports hot-reloading a limited set of values without a restart: the
 3. **Migration Check** - Verify database schema is current
 4. **System Generator Provisioning** - Idempotently provision the `__system__` generator and ensure every existing agent is registered with it
 5. **Encryption Initialization** - Load or generate webhook encryption key
-6. **Event Emission Setup** - Database-centric: events are matched against subscriptions and inserted directly into `webhook_deliveries`; no in-memory event bus exists
-7. **Audit Logger Initialization** - Start background writer with batching
-8. **Background Tasks** - Spawn the maintenance task set (diagnostic, work order, webhook delivery/cleanup, audit, agent-metrics-refresh, agent-events-cleanup, fleet-sweep, and WebSocket-eviction)
-9. **API Server** - Bind to configured port and start accepting requests
+6. **UI PAK Minting** - Mint the process's ephemeral read-only credential for the Operator Console, held in memory only
+7. **Event Emission Setup** - Database-centric: events are matched against subscriptions and inserted directly into `webhook_deliveries`; no in-memory event bus exists
+8. **Audit Logger Initialization** - Start background writer with batching
+9. **Background Tasks** - Spawn the maintenance task set (diagnostic, work order, webhook delivery/cleanup, audit, agent-metrics-refresh, agent-events-cleanup, fleet-sweep, and WebSocket-eviction)
+10. **API Server** - Bind to configured port and start accepting requests, with the embedded Operator Console mounted as the fallback behind them
 
 ### Agent Startup Sequence
 

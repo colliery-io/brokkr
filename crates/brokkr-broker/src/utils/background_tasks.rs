@@ -10,12 +10,23 @@
 //! system health and cleanup expired data.
 
 use crate::dal::DAL;
+use crate::dal::webhook_deliveries::is_retryable_status;
 use brokkr_models::models::audit_logs::{
     ACTION_WEBHOOK_DELIVERY_FAILED, ACTOR_TYPE_SYSTEM, RESOURCE_TYPE_WEBHOOK,
 };
 use std::time::Duration;
 use tokio::time::interval;
 use tracing::{debug, error, info, warn};
+
+/// Attempt ceiling applied when a claimed delivery's subscription cannot be
+/// *read* (BROKKR-T-0307), as distinct from being absent.
+///
+/// The subscription's own `max_retries` is unavailable by definition here — the
+/// read is what failed — and it would be the wrong number anyway: this bounds
+/// how long the broker retries its own database failure, not how tolerant a
+/// subscriber is. Matches the default `max_retries` on a new subscription so
+/// the behaviour is unsurprising when the two are compared.
+const SUBSCRIPTION_FETCH_MAX_ATTEMPTS: i32 = 5;
 
 /// Configuration for diagnostic cleanup task.
 pub struct DiagnosticCleanupConfig {
@@ -37,7 +48,9 @@ impl Default for DiagnosticCleanupConfig {
 /// Starts the diagnostic cleanup background task.
 ///
 /// This task periodically:
-/// 1. Expires pending diagnostic requests that have passed their expiry time
+/// 1. Sweeps diagnostic requests past their expiry time into a terminal state —
+///    unclaimed `pending` requests become `expired`, abandoned `claimed`
+///    requests become `failed` (BROKKR-T-0300)
 /// 2. Deletes old completed/expired/failed diagnostic requests and their results
 ///
 /// # Arguments
@@ -55,11 +68,20 @@ pub fn start_diagnostic_cleanup_task(dal: DAL, config: DiagnosticCleanupConfig) 
         loop {
             ticker.tick().await;
 
-            // Expire pending requests that have passed their expiry time
+            // Sweep requests past their expiry time into a terminal state.
+            // Unclaimed and abandoned requests are logged separately: the
+            // former is routine, the latter means an agent took the work and
+            // died holding it (BROKKR-T-0300).
             match dal.diagnostic_requests().expire_old_requests() {
-                Ok(expired) => {
-                    if expired > 0 {
-                        info!("Expired {} pending diagnostic requests", expired);
+                Ok(sweep) => {
+                    if sweep.expired > 0 {
+                        info!("Expired {} unclaimed diagnostic requests", sweep.expired);
+                    }
+                    if sweep.failed > 0 {
+                        warn!(
+                            "Failed {} diagnostic requests abandoned by their claiming agent",
+                            sweep.failed
+                        );
                     }
                 }
                 Err(e) => {
@@ -271,8 +293,11 @@ pub fn start_webhook_delivery_task(dal: DAL, config: WebhookDeliveryConfig) {
         config.interval_seconds, config.batch_size
     );
 
+    // No client-wide timeout: each request carries the timeout of its own
+    // subscription (BROKKR-T-0288). A client-level timeout would silently cap
+    // any subscription configured above it, which is exactly the broker-vs-agent
+    // inconsistency this replaces.
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
         .build()
         .expect("Failed to create HTTP client");
 
@@ -336,18 +361,51 @@ pub fn start_webhook_delivery_task(dal: DAL, config: WebhookDeliveryConfig) {
                             "Subscription {} not found for delivery {}, marking as dead",
                             delivery.subscription_id, delivery.id
                         );
-                        let _ = dal.webhook_deliveries().mark_failed(
-                            delivery.id,
-                            "Subscription not found",
-                            0, // Force dead
-                        );
+                        let _ = dal
+                            .webhook_deliveries()
+                            .mark_dead(delivery.id, "Subscription not found");
                         continue;
                     }
                     Err(e) => {
+                        // The delivery is already claimed at this point, so
+                        // `continue`ing here left the row `acquired` until its
+                        // TTL lapsed, to be reclaimed and fail again forever,
+                        // with `attempts` never incrementing (BROKKR-T-0307 --
+                        // the broker-path sibling of T-0302/T-0304).
+                        //
+                        // `mark_dead` would be wrong, unlike the `Ok(None)` arm
+                        // above: that means the subscription is genuinely gone,
+                        // which is terminal, whereas this is a *database* read
+                        // failure and is almost always transient. Discarding a
+                        // subscriber's event because the broker briefly could
+                        // not read its own table is the worse outcome.
+                        //
+                        // `mark_failed` is the right shape: it counts the
+                        // attempt, releases the claim, schedules an exponential
+                        // backoff, and reaches `dead` on its own if the failure
+                        // persists. The ceiling is a fixed local constant
+                        // because the subscription's own `max_retries` is
+                        // exactly what could not be read -- and it bounds
+                        // broker-side breakage, not subscriber tolerance.
+                        let error = format!("Failed to load subscription: {e}");
                         error!(
                             "Failed to get subscription {} for delivery {}: {:?}",
                             delivery.subscription_id, delivery.id, e
                         );
+                        if let Err(update_err) = dal.webhook_deliveries().mark_failed(
+                            delivery.id,
+                            &error,
+                            SUBSCRIPTION_FETCH_MAX_ATTEMPTS,
+                        ) {
+                            // The same outage that broke the fetch can break
+                            // this write. Nothing more to do here; the TTL
+                            // release still applies, so the row is not lost --
+                            // it simply retries as it did before this fix.
+                            error!(
+                                "Failed to record subscription-load failure for delivery {}: {:?}",
+                                delivery.id, update_err
+                            );
+                        }
                         continue;
                     }
                 };
@@ -360,11 +418,10 @@ pub fn start_webhook_delivery_task(dal: DAL, config: WebhookDeliveryConfig) {
                             "Failed to decrypt URL for subscription {}: {}",
                             subscription.id, e
                         );
-                        let _ = dal.webhook_deliveries().mark_failed(
-                            delivery.id,
-                            &format!("Failed to decrypt URL: {}", e),
-                            0,
-                        );
+                        crate::metrics::record_webhook_decrypt_failure("url", "broker");
+                        let _ = dal
+                            .webhook_deliveries()
+                            .mark_dead(delivery.id, &format!("Failed to decrypt URL: {}", e));
                         continue;
                     }
                 };
@@ -382,19 +439,28 @@ pub fn start_webhook_delivery_task(dal: DAL, config: WebhookDeliveryConfig) {
                             "Failed to decrypt auth header for subscription {}: {}",
                             subscription.id, e
                         );
-                        let _ = dal.webhook_deliveries().mark_failed(
+                        crate::metrics::record_webhook_decrypt_failure("auth_header", "broker");
+                        let _ = dal.webhook_deliveries().mark_dead(
                             delivery.id,
                             &format!("Failed to decrypt auth header: {}", e),
-                            0,
                         );
                         continue;
                     }
                 };
 
-                // Attempt delivery
-                let result =
-                    attempt_delivery(&client, &url, auth_header.as_deref(), &delivery.payload)
-                        .await;
+                // Attempt delivery, honoring this subscription's own timeout.
+                // Clamped defensively: a row written before validation existed
+                // could hold 0 or a negative, which would sign-extend into an
+                // absurd timeout (mirrors `test_webhook`).
+                let timeout = Duration::from_secs(subscription.timeout_seconds.max(1) as u64);
+                let result = attempt_delivery(
+                    &client,
+                    &url,
+                    auth_header.as_deref(),
+                    &delivery.payload,
+                    timeout,
+                )
+                .await;
 
                 match result {
                     Ok(_) => match dal.webhook_deliveries().mark_success(delivery.id) {
@@ -411,12 +477,26 @@ pub fn start_webhook_delivery_task(dal: DAL, config: WebhookDeliveryConfig) {
                             );
                         }
                     },
-                    Err(error) => {
-                        match dal.webhook_deliveries().mark_failed(
-                            delivery.id,
-                            &error,
-                            subscription.max_retries,
-                        ) {
+                    Err(failure) => {
+                        let DeliveryFailure {
+                            message: error,
+                            status,
+                            retryable,
+                        } = failure;
+                        // A non-retryable status (see `is_retryable_status`)
+                        // will be returned identically on every attempt, so the
+                        // delivery dies now instead of burning the whole
+                        // attempt budget on it (BROKKR-T-0288).
+                        let outcome = if retryable {
+                            dal.webhook_deliveries().mark_failed(
+                                delivery.id,
+                                &error,
+                                subscription.max_retries,
+                            )
+                        } else {
+                            dal.webhook_deliveries().mark_dead(delivery.id, &error)
+                        };
+                        match outcome {
                             Ok(updated) => {
                                 if updated.status == "dead" {
                                     warn!(
@@ -434,6 +514,8 @@ pub fn start_webhook_delivery_task(dal: DAL, config: WebhookDeliveryConfig) {
                                             "event_type": delivery.event_type,
                                             "attempts": updated.attempts,
                                             "error": error,
+                                            "status_code": status,
+                                            "retryable": retryable,
                                         })),
                                         None,
                                         None,
@@ -459,15 +541,59 @@ pub fn start_webhook_delivery_task(dal: DAL, config: WebhookDeliveryConfig) {
     });
 }
 
+/// A failed broker-side delivery attempt (BROKKR-T-0288).
+///
+/// Carries the endpoint's HTTP status when there was one, so the caller can
+/// decide between scheduling a retry and killing the delivery outright instead
+/// of inferring intent from a flat error string.
+#[derive(Debug, Clone)]
+struct DeliveryFailure {
+    /// Human-readable failure, recorded as the delivery's `last_error`. Always
+    /// includes the HTTP status when the endpoint answered.
+    message: String,
+    /// The endpoint's status, or `None` for a transport-level failure
+    /// (connection refused, DNS, timeout) where no response arrived.
+    status: Option<u16>,
+    /// Whether another attempt could plausibly succeed.
+    retryable: bool,
+}
+
+impl DeliveryFailure {
+    /// A transport-level failure: no response, so always worth retrying.
+    fn transport(message: String) -> Self {
+        Self {
+            message,
+            status: None,
+            retryable: true,
+        }
+    }
+
+    /// A response the endpoint actually returned; retryability comes from the
+    /// shared policy so the broker and agent paths cannot diverge.
+    fn from_status(status: u16, message: String) -> Self {
+        Self {
+            message,
+            status: Some(status),
+            retryable: is_retryable_status(status),
+        }
+    }
+}
+
 /// Attempts to deliver a webhook payload via HTTP POST.
+///
+/// `timeout` is the subscription's own `timeout_seconds`; it is applied
+/// per-request rather than on the shared client so each subscription gets the
+/// timeout it was configured with.
 async fn attempt_delivery(
     client: &reqwest::Client,
     url: &str,
     auth_header: Option<&str>,
     payload: &str,
-) -> Result<(), String> {
+    timeout: Duration,
+) -> Result<(), DeliveryFailure> {
     let mut request = client
         .post(url)
+        .timeout(timeout)
         .header("Content-Type", "application/json")
         .body(payload.to_string());
 
@@ -478,17 +604,20 @@ async fn attempt_delivery(
     let response = request
         .send()
         .await
-        .map_err(|e| format!("Request failed: {}", e))?;
+        .map_err(|e| DeliveryFailure::transport(format!("Request failed: {}", e)))?;
 
     let status = response.status();
     if status.is_success() {
         Ok(())
     } else {
         let body = response.text().await.unwrap_or_default();
-        Err(format!(
-            "HTTP {}: {}",
-            status,
-            body.chars().take(200).collect::<String>()
+        Err(DeliveryFailure::from_status(
+            status.as_u16(),
+            format!(
+                "HTTP {}: {}",
+                status,
+                body.chars().take(200).collect::<String>()
+            ),
         ))
     }
 }
@@ -886,12 +1015,16 @@ mod tests {
             "http://invalid.invalid.invalid:12345/webhook",
             None,
             r#"{"test": "data"}"#,
+            Duration::from_secs(5),
         )
         .await;
 
         // Should fail with a connection error
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Request failed"));
+        let failure = result.expect_err("unresolvable host must fail");
+        assert!(failure.message.contains("Request failed"));
+        // Transport failures carry no status and are always worth retrying.
+        assert_eq!(failure.status, None);
+        assert!(failure.retryable);
     }
 
     #[tokio::test]
@@ -902,10 +1035,66 @@ mod tests {
             "http://invalid.invalid.invalid:12345/webhook",
             Some("Bearer test-token"),
             r#"{"event": "test"}"#,
+            Duration::from_secs(5),
         )
         .await;
 
         // Should fail, but auth header should be accepted without panic
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_attempt_delivery_honors_per_request_timeout() {
+        // The worker's client no longer carries a fixed 30s timeout, so the
+        // per-request timeout is the only thing that can end this request: the
+        // listener accepts the connection and never answers (BROKKR-T-0288).
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let mut held = Vec::new();
+            while let Ok((stream, _)) = listener.accept().await {
+                held.push(stream);
+            }
+        });
+
+        let client = reqwest::Client::builder().build().unwrap();
+        let started = std::time::Instant::now();
+        let result = attempt_delivery(
+            &client,
+            &format!("http://{}/webhook", addr),
+            None,
+            r#"{"test":"data"}"#,
+            Duration::from_millis(250),
+        )
+        .await;
+        let elapsed = started.elapsed();
+
+        let failure = result.expect_err("a silent endpoint must time out");
+        assert_eq!(failure.status, None, "a timeout yields no HTTP status");
+        assert!(failure.retryable, "timeouts are retryable");
+        assert!(
+            elapsed < Duration::from_secs(5),
+            "the subscription's timeout must be applied per request, took {:?}",
+            elapsed
+        );
+    }
+
+    #[test]
+    fn test_delivery_failure_classifies_status() {
+        // Non-retryable 4xx: dead on the first attempt, status kept in the
+        // message so it lands in `last_error` (BROKKR-T-0288).
+        let f = DeliveryFailure::from_status(404, "HTTP 404 Not Found: ".to_string());
+        assert_eq!(f.status, Some(404));
+        assert!(!f.retryable);
+        assert!(f.message.contains("404"));
+
+        // Transient 4xx and all 5xx keep retrying.
+        assert!(DeliveryFailure::from_status(429, String::new()).retryable);
+        assert!(DeliveryFailure::from_status(408, String::new()).retryable);
+        assert!(DeliveryFailure::from_status(503, String::new()).retryable);
+
+        let f = DeliveryFailure::transport("Request failed: connection refused".to_string());
+        assert_eq!(f.status, None);
+        assert!(f.retryable);
     }
 }

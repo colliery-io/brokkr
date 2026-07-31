@@ -49,6 +49,10 @@ pub struct CreateCommands {
 #[derive(Subcommand)]
 pub enum CreateSubcommands {
     /// Create a new agent
+    ///
+    /// The agent is always registered with the system generator (fleet scope),
+    /// matching `POST /api/v1/agents`. Registration is the consent boundary: an
+    /// agent only receives stacks from generators it is registered with.
     Agent {
         /// Name of the agent
         #[arg(long)]
@@ -56,6 +60,9 @@ pub enum CreateSubcommands {
         /// Name of the cluster the agent belongs to
         #[arg(long)]
         cluster_name: String,
+        /// Additional generator UUIDs to register the agent with (repeat or comma-separate)
+        #[arg(long, value_delimiter = ',')]
+        generator_ids: Vec<Uuid>,
     },
 
     /// Create a new generator

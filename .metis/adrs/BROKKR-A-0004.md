@@ -23,6 +23,16 @@ initiative_id: BROKKR-I-0004
 
 # ADR-4: Schema-Per-Tenant Multi-Tenancy Architecture
 
+> **AMENDED 2026-07-27 (Dylan Storey): scope narrowed to DEPLOYMENT ISOLATION. This ADR no longer defines Brokkr's tenancy model.**
+>
+> **[BROKKR-A-0009](BROKKR-A-0009.md) owns the tenant model**: a tenant is a *generator*. Generator PAKs are tenant credentials, stacks carry `generator_id`, and agents register with generators to declare which tenants' work they accept. That registration is the enforced consent boundary on every stack→agent association path.
+>
+> What this ADR still decides, and decides correctly: schema separation as a **deployment isolation** mechanism — running multiple broker *instances* against one PostgreSQL server, each with its own complete set of tables. That remains supported, implemented, and useful for separating environments (dev/staging/prod) or for cases needing hard data separation at the database layer.
+>
+> What it no longer implies: that schemas are how teams are onboarded onto a shared control plane, or that schema separation substitutes for generator tenancy. The two are orthogonal — a schema-separated instance still has generators inside it, and that is where its tenancy lives. The "multi-customer SaaS" framing in the Context and Consequences below should be read as one deployment topology, not as the tenancy design.
+>
+> Docs were reframed accordingly under BROKKR-T-0277: `reference/multi-tenancy.md` and `how-to/multi-tenant-setup.md` now lead with generator tenancy and present schema separation as a separate-instances deployment option.
+
 > **Implementation Status: Core Infrastructure Implemented**
 > The schema-per-tenant multi-tenancy infrastructure has been implemented:
 > - `ConnectionPool` has `schema: Option<String>` field (in `brokkr-broker/src/db.rs`)

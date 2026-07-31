@@ -1,0 +1,90 @@
+---
+id: configreload-documented-as
+level: task
+title: "configReload documented as automatic in chart installs, but the chart never sets BROKKR_CONFIG_FILE or mounts the ConfigMap; BROKKR_CONFIGMAP_NAME is read by nothing"
+short_code: "BROKKR-T-0292"
+created_at: 2026-07-27T14:27:57.085741+00:00
+updated_at: 2026-07-27T14:27:57.085741+00:00
+parent: 
+blocked_by: []
+archived: false
+
+tags:
+  - "#task"
+  - "#phase/backlog"
+  - "#bug"
+
+
+exit_criteria_met: false
+initiative_id: NULL
+---
+
+# configReload documented as automatic in chart installs, but the chart never sets BROKKR_CONFIG_FILE or mounts the ConfigMap; BROKKR_CONFIGMAP_NAME is read by nothing
+
+## Objective
+
+Resolve a feature that is documented and templated but non-functional in the delivery vehicle everyone uses. `getting-started/installation.md` and `getting-started/configuration.md` claim `configReload.enabled=true` (default true) makes the broker watch the ConfigMap and hot-reload settings. In code, the config watcher activates only when `BROKKR_CONFIG_FILE` points at an existing file; the chart consumes the ConfigMap via `envFrom` only — it never mounts it as a file nor sets `BROKKR_CONFIG_FILE` — and `BROKKR_CONFIGMAP_NAME` (rendered by the chart) is referenced nowhere in broker code. The documented mechanism works only for hand-configured file deployments. (2026-07-27 review, two independent reviewers; `docs/REVIEW-2026-07-27.md`, search "configReload". Ground truth note: `charts/brokkr-broker/templates/configmap.yaml:79-87` renders the watcher env vars.)
+
+## 2026-07-27 — verification: the defect is deeper than filed
+
+All filed claims verified correct (`config_watcher.rs:45-62` gates on `BROKKR_CONFIG_FILE` existing before it ever consults `BROKKR_CONFIG_WATCHER_ENABLED`; `deployment.yaml:55-57` is `envFrom` only; `BROKKR_CONFIGMAP_NAME` appears once in the chart and zero times in `crates/`). Cosmetic correction: the configmap watcher block is lines 72-80, not 79-87.
+
+**Two findings neither this ticket nor the review recorded — both larger than the filed bug:**
+
+1. **Hot reload changes nothing even when the watcher runs.** `ReloadableConfig::reload()` (`brokkr-utils/src/config.rs:586-665`) recomputes `DynamicConfig` and swaps it under the `RwLock`, but **no code outside config.rs and its own tests ever reads it back**. Every accessor (`log_level()`, `webhook_delivery_batch_size()`, `cors_allowed_origins()`, …) has zero call sites in the broker. The real consumers capture startup `Settings`: background tasks at `cli/commands.rs:137-194`, the CORS layer built once at `api/v1/mod.rs:50`, log level at `bin.rs:34`. A successful reload logs a diff, emits a `config.reloaded` audit event, and alters no behavior.
+2. **`POST /api/v1/admin/config/reload` cannot detect changes in a chart install.** It never 503s (ReloadableConfig is always layered) but calls `Settings::new(None)`, re-reading embedded defaults + process env — and env is frozen for the pod's lifetime. It always reports "No changes detected". **This invalidates the acceptance criterion below that proposed documenting it as a real operator path.**
+
+Nominally-dynamic keys (all currently unread after reload): `log.level`, `broker.diagnostic_cleanup_interval_seconds`, `broker.diagnostic_max_age_hours`, `broker.webhook_delivery_interval_seconds`, `broker.webhook_delivery_batch_size`, `broker.webhook_cleanup_retention_days`, `cors.allowed_origins`, `cors.max_age_seconds`.
+
+**Why Option 1 (mount the ConfigMap) is worse than it sounds:** the ConfigMap holds `BROKKR__FOO__BAR` env keys, not TOML, so it needs a second ConfigMap rendered as `config.toml`; env beats file in the precedence chain (`config.rs:419-438`), so unless the hot keys are *removed* from `envFrom` the file is silently overridden — two sources of truth, and `helm upgrade` on a hot key would no longer restart the pod. It must be a directory mount (subPath never receives updates), adding ~60s kubelet sync on top of the 5s debounce. And after all that it still delivers nothing until the eight values are actually consumed at runtime.
+
+### DECISION (Dylan, 2026-07-27): make hot reload REAL — Option 1, not the recommendation below
+
+This ticket is therefore **no longer a bug fix; it is a feature** whose current filed scope (chart plumbing) is the *last* step, not the first. Sequencing matters because doing the chart work first delivers nothing:
+
+**Slice 1 — make dynamic config actually consumable (the real work, no chart changes).**
+- Move `ReloadableConfig` construction in `cli/commands.rs` *above* the background-task spawns (currently built at `:198-208`, after `:137-194`), and pass a clone into each task.
+- Background tasks re-read their settings per tick instead of capturing startup values (webhook delivery batch size + interval, diagnostic cleanup interval + max age, webhook cleanup retention). Interval changes must rebuild the `tokio::time::interval`, not just the value.
+- CORS layer must be rebuildable rather than built once at `api/v1/mod.rs:50`.
+- `log.level` needs a `tracing` reload handle (captured once at `bin.rs:34` today).
+- Exit criterion for the slice: changing a dynamic value through `ReloadableConfig` demonstrably alters runtime behavior, provable by test without any file or chart involvement.
+
+**Slice 2 — chart delivery.**
+- Render a second ConfigMap (or key) as parseable TOML; the existing one holds `BROKKR__FOO__BAR` env keys, which `File::with_name` cannot consume.
+- **Remove the hot keys from `envFrom`** — env beats file in the precedence chain (`config.rs:419-438`), so leaving them there silently overrides every reload.
+- Mount as a **directory, not `subPath`** (subPath mounts never receive ConfigMap updates). Expect ~60s kubelet sync on top of the 5s debounce.
+- Accept the consequence that `helm upgrade` on a hot key no longer restarts the pod (the checksum annotation covers all values), and that static-vs-dynamic keys now live in two ConfigMaps that must stay consistent.
+
+**Also in scope:** `POST /admin/config/reload` only becomes meaningful once slice 1 lands *and* a config file exists; until then it must not be documented as an operator path. Delete `BROKKR_CONFIGMAP_NAME` (referenced nowhere in `crates/`) regardless of slice.
+
+**Chart annotations must be reconciled as part of slice 1 (added 2026-07-27).** The chart marks values `@hot-reload: true` in `values.yaml` and `templates/configmap.yaml`. Because no code reads `ReloadableConfig` back after a reload, **every one of those annotations is currently false** — `log.level`, `broker.diagnosticCleanupIntervalSeconds`, `broker.diagnosticMaxAgeHours`, `cors.allowedOrigins`, `cors.maxAgeSeconds`.
+
+Three webhook values were corrected to `@hot-reload: false` during BROKKR-T-0288 because they are captured into their worker's config struct at spawn and are restart-only even after slice 1 unless that slice explicitly makes those loops re-read per tick: `webhookDeliveryIntervalSeconds`, `webhookDeliveryBatchSize`, and `webhookCleanupRetentionDays` (verified: `WebhookCleanupConfig { retention_days: ... }` is built in `cli/commands.rs` and moved into the spawned task).
+
+So slice 1 must finish with the chart telling the truth in whichever direction it lands: flip these three back to `true` if the loops are made to re-read, and leave the remaining five as `true` only once consumers genuinely read the reloaded values. Do not let the annotations drift from behavior again — they are the operator-facing contract and were wrong in three separate places today.
+
+**Note:** this is multi-day and spans two distinct deliverables — consider promoting to an initiative and decomposing, rather than carrying it as one backlog task.
+
+---
+
+*Superseded recommendation, retained for context:* **Option 2** — remove the dead plumbing (`configReload.*` values, the watcher block, `BROKKR_CONFIGMAP_NAME`), correct the doc claims, and document `helm upgrade` / `kubectl rollout restart` as the mechanism. Keep the file-watcher code for hand-rolled file deployments, described honestly as a config-*file* watcher. Do **not** document the admin reload endpoint as a working path. If hot reload is wanted later, file it as a feature whose first slice is *consumers reading `ReloadableConfig`* — chart plumbing is the last step, not the first.
+
+Doc claims to correct: `getting-started/installation.md:340-341`, `getting-started/configuration.md:13,87`, `reference/cli.md:210`, `reference/environment-variables.md:126`, `explanation/architecture.md:147`, plus comments at `configmap.yaml:8-10,33-36` and `values.yaml:23-24`.
+
+## Backlog Item Details
+
+### Type
+- [x] Bug - Production issue that needs fixing (chart/code gap plus doc overclaim)
+
+### Priority
+- [x] P1 - High (operators will edit ConfigMaps expecting live reload; changes silently don't apply until pod restart)
+
+## Acceptance Criteria
+
+- [ ] Decision recorded: mount the ConfigMap as a file + set BROKKR_CONFIG_FILE in the chart (making the docs true), or remove the dead configReload plumbing and document `kubectl rollout restart` + POST /api/v1/admin/config/reload as the real paths.
+- [ ] Helm-install hot-reload behavior verified end-to-end (`angreal helm test`) and the docs match the outcome.
+- [ ] Dead env var `BROKKR_CONFIGMAP_NAME` removed from templates or wired to something real.
+
+## Status Updates
+
+*To be added during implementation*

@@ -56,7 +56,9 @@ classDiagram
 
 `agent_generator_registrations` is the join entity that records an agent's opt-in to a generator's application scope. It is the enforcement boundary for targeting: an agent must be registered with a generator before any of that generator's stacks can be targeted at it. See [Why Generators?](#why-generators) below and the [security model](security-model.md#generator-registration-and-application-scopes).
 
-Labels and annotations are omitted from the diagram for legibility: stacks, agents, templates, and work orders each have their own `*_labels` (single string values) and `*_annotations` (key-value pairs) tables. `audit_logs` stands alone — it records actor/action/resource tuples without foreign keys, so rows survive the deletion of what they describe. `agent_k8s_events` and `agent_pod_logs` are short-lived telemetry buffers evicted on a 6-hour ceiling, not part of the relational core.
+Two further groups of tables are omitted from the diagram. Labels and annotations are left out for legibility: stacks, agents, templates, and work orders each have their own `*_labels` (single string values) and `*_annotations` (key-value pairs) tables. `admin_role` and `app_initialization` are left out because they are bootstrap state rather than part of the relational core — the former holds the single administrative credential, the latter records that first-start provisioning has run — and neither has a foreign key into anything above.
+
+`audit_logs` stands alone — it records actor/action/resource tuples without foreign keys, so rows survive the deletion of what they describe. `agent_k8s_events` and `agent_pod_logs` are short-lived telemetry buffers evicted on a 6-hour ceiling, not part of the relational core.
 
 ## Design Philosophy
 
@@ -103,11 +105,13 @@ Generators serve a dual purpose. Historically they represented external systems 
 - Rate limiting and access control per generator
 - An audit trail of automated deployments
 
-They now also partition stacks into **application scopes**. Each generator owns a set of stacks, and an agent must register with a generator to declare that it serves that generator's scope. Registration is the agent's opt-in consent boundary, and it is enforced at target-creation time: an explicit target can only be created for a stack when the agent is registered with the stack's owning generator. This prevents accidental cross-application targeting — one application's stacks cannot be aimed at an agent that never agreed to serve them. The conceptual treatment lives in the [security model](security-model.md#generator-registration-and-application-scopes); the operational steps are in the [agent-registration how-to](../how-to/agent-registration.md).
+They now also partition stacks into **application scopes**, and this is what makes a generator Brokkr's tenant entity. Each generator owns a set of stacks, and an agent must register with a generator to declare that it serves that generator's scope. Registration is the agent's opt-in consent boundary, enforced both when an explicit target is created and when label and annotation matches are resolved on each poll. This prevents accidental cross-application targeting — one application's stacks cannot be aimed at, or drift onto, an agent that never agreed to serve them. The conceptual treatment lives in the [security model](security-model.md#generator-registration-and-application-scopes); the operational steps are in the [agent-registration how-to](../how-to/agent-registration.md).
+
+Because generators *are* the tenants, they are also what tenant-facing surfaces enumerate: a slim `{id, name}` listing of the non-system generators is what populates a scope selector in the operator console, deliberately carrying no credential material. Tenancy in Brokkr is generator-level; running separate broker instances against separate databases is a deployment topology, not a second tenancy model.
 
 ### The System Generator
 
-One generator is special. Brokkr provisions a **system generator** (`is_system = true`) at broker startup and auto-registers every agent with it at creation time. It carries fleet-wide and system-management stacks — cluster provisioning, telemetry collection, and similar concerns — so those reach all agents without per-agent opt-in. Because it is internal infrastructure rather than an application scope, it is excluded from the public `GET /generators` listing.
+One generator is special. Brokkr provisions a **system generator** (`is_system = true`) at broker startup and auto-registers every agent with it at creation time. It carries fleet-wide and system-management stacks — cluster provisioning, telemetry collection, and similar concerns — so those reach all agents without per-agent opt-in. Because it is internal infrastructure rather than an application scope, it is excluded from generator listings — and therefore from the tenant listing the console's scope selector draws on, since it is not a tenant.
 
 The system generator is the inverse of an ordinary application-scope generator: it reaches every agent by default, whereas application-scope generators require explicit per-agent registration. It is also distinct from the admin generator, which is tied to the admin role and does not auto-register agents.
 
@@ -119,7 +123,9 @@ The many-to-many relationship between agents and stacks enables:
 - Gradual rollouts
 - Environment-specific targeting
 
-Creating a target is gated by registration: an agent may only target a stack when it is registered with that stack's owning generator (the system generator aside, since every agent is registered with it). The registration check applies to both adding and removing explicit targets, and admins cannot bypass it — there is no force flag. Registration governs only whether an explicit target may be *created*; it does not change what an agent is served at read time, which remains the union of explicit targets, label matches, and annotation matches.
+Creating a target is gated by registration: an agent may only target a stack when it is registered with that stack's owning generator (the system generator aside, since every agent is registered with it). The registration check applies to both adding and removing explicit targets, and admins cannot bypass it — there is no force flag.
+
+Registration also governs the read path. An agent's served-stack set is the union of explicit targets, label matches, and annotation matches, but the label and annotation legs only ever contribute stacks whose owning generator the agent is registered with. Matching therefore selects *within* the generators an agent has consented to, rather than reaching across them: a stack labelled to attract agents cannot reach an agent that never registered with its generator. Explicit targets need no such filter, because registration was already checked when the target was created.
 
 ### Labels vs Annotations
 

@@ -4,6 +4,8 @@
  * See LICENSE file in the project root for full license text.
  */
 
+mod cli_schema;
+mod default_admin_pak;
 mod multi_tenant;
 
 use brokkr_utils::Settings;
@@ -65,8 +67,12 @@ fn test_connection_pool_integration() {
 
     // Create connection pool for test database
     let max_size: usize = 10;
-    let test_pool =
-        create_shared_connection_pool(base_url_without_db, &test_db_name, max_size as u32, None);
+    let test_pool = create_shared_connection_pool(
+        base_url_without_db,
+        Some(test_db_name.as_str()),
+        max_size as u32,
+        None,
+    );
     let test_pool = Arc::new(test_pool);
 
     // Run tests

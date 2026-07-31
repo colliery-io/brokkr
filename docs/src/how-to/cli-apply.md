@@ -44,7 +44,12 @@ brokkr apply -f ./manifests --stack payments \
 
 Labels are additive and applied every run; a label that already exists is left as-is.
 
-`--target-label` is **label-based fan-out**: any agent whose labels match reconciles the stack, and label/annotation matching does **not** consult generator registration. Registration is enforced separately, only when an admin creates an *explicit* per-agent target (`POST /agents/{id}/targets`): the agent must be registered with the stack's owning generator or the request is rejected with HTTP `403` / `agent_not_registered`. So `brokkr apply --target-label` is unaffected by registration; if you instead bind a specific agent explicitly, register it first with `brokkr register --agent <id> --generator <id>` (admin PAK) or by setting `BROKKR__AGENT__GENERATOR_IDS` on the agent at startup. See [Registering agents with generators](./agent-registration.md) and the [error code reference](../reference/error-codes.md).
+`--target-label` is **label-based fan-out**: any agent whose labels match reconciles the stack — but only if that agent is registered with the generator that owns it. Registration is the tenant consent boundary and it gates both targeting paths:
+
+- **Label and annotation matching** is filtered at read time. An agent that never registered with your generator is served nothing, however its labels are set, and no error is raised anywhere — the stack simply doesn't arrive.
+- **Explicit per-agent targets** (`POST /agents/{id}/targets`, created by an admin or by the stack's owning generator) are rejected outright with HTTP `403` / `agent_not_registered` when the agent isn't registered.
+
+So register the agents you intend to reach before you rely on labels: `brokkr register --agent <id> --generator <id>` with an admin PAK, or set `BROKKR__AGENT__GENERATOR_IDS` on the agent at startup so it self-registers. See [Registering agents with generators](./agent-registration.md) and the [error code reference](../reference/error-codes.md).
 
 ## Re-run safely in CI
 

@@ -182,13 +182,18 @@ containerSecurityContext:
     #   - NET_BIND_SERVICE
 
 # Metrics and monitoring configuration
+#
+# The agent always serves /metrics (alongside /healthz and /readyz) on the
+# container's named "health" port, 8080. There is no chart value that turns the
+# endpoint off; restrict access with networkPolicy instead.
 metrics:
-  # Enable Prometheus metrics endpoint at /metrics
-  enabled: true
-
-  # ServiceMonitor configuration for Prometheus Operator
-  serviceMonitor:
-    # Enable ServiceMonitor CRD creation
+  # PodMonitor configuration for Prometheus Operator
+  #
+  # The agent renders no Service — nothing in the cluster calls it — so
+  # Prometheus scrapes the pod directly via a PodMonitor rather than a
+  # ServiceMonitor.
+  podMonitor:
+    # Enable PodMonitor CRD creation
     # Requires Prometheus Operator to be installed in the cluster
     enabled: false
 
@@ -198,7 +203,7 @@ metrics:
     # Scrape timeout (must be shorter than interval)
     # scrapeTimeout: 10s
 
-    # Additional labels for ServiceMonitor (for Prometheus selector matching)
+    # Additional labels for PodMonitor (for Prometheus selector matching)
     # additionalLabels:
     #   prometheus: kube-prometheus
 
@@ -221,7 +226,15 @@ networkPolicy:
   #     matchLabels:
   #       kubernetes.io/metadata.name: brokkr
 
+  # Permit the metrics ingress rule below to be rendered at all.
+  # Set false to deny scraping of port 8080 outright even if allowMetricsFrom
+  # is populated. (Formerly metrics.enabled, which never gated the /metrics
+  # endpoint itself — only this rule.)
+  allowMetricsScraping: true
+
   # Allow metrics scraping from Prometheus namespace
+  # Only applied when allowMetricsScraping is true; empty means no metrics
+  # ingress is permitted.
   # Example:
   #   allowMetricsFrom:
   #     - namespaceSelector:
@@ -256,31 +269,3 @@ telemetry:
   # 0.1 = 10% of traces sampled (recommended for production)
   # 1.0 = 100% of traces sampled (development/debugging)
   samplingRate: 0.1
-
-  # Optional: Deploy OpenTelemetry Collector as a sidecar
-  # Useful for agents in air-gapped or restricted network environments
-  collector:
-    # Enable OTel collector sidecar
-    enabled: false
-
-    # Collector image
-    image:
-      repository: otel/opentelemetry-collector-contrib
-      tag: "0.96.0"
-      pullPolicy: IfNotPresent
-
-    # Resource limits for collector sidecar
-    resources:
-      requests:
-        memory: 64Mi
-        cpu: 50m
-      limits:
-        memory: 128Mi
-        cpu: 100m
-
-    # OTLP exporters configuration
-    exporters:
-      # OTLP exporter endpoint
-      otlpEndpoint: ""
-      # Enable debug exporter
-      debug: false

@@ -26,7 +26,10 @@ impl AgentGeneratorRegistrationsDAL<'_> {
         generator_id: Uuid,
     ) -> Result<AgentGeneratorRegistration, diesel::result::Error> {
         let conn = &mut self.dal.conn()?;
-        let new = NewAgentGeneratorRegistration { agent_id, generator_id };
+        let new = NewAgentGeneratorRegistration {
+            agent_id,
+            generator_id,
+        };
         diesel::insert_into(agent_generator_registrations::table)
             .values(&new)
             .get_result(conn)

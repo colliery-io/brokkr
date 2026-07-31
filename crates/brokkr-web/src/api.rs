@@ -2,25 +2,23 @@
 //! so the API is at `/api/v1/...`. Auth (BROKKR-I-0032): the broker injects an
 //! ephemeral **read-only** UI PAK into the served HTML as
 //! `<meta name="brokkr-ui-token">`; the console reads it on boot, so no
-//! configuration is needed. An operator-pasted `localStorage["brokkr_pak"]`
-//! still takes precedence — it's the write-capable override (and the only
-//! auth path under `trunk serve`, where no broker injects a token). Errors
-//! map to Aurora's `ApiError` for `ErrorState`.
+//! configuration is needed. Errors map to Aurora's `ApiError` for `ErrorState`.
+//!
+//! That injected token is the console's **only** ambient credential, and it is
+//! read-only — so reaching the page grants visibility and nothing more. The one
+//! privileged action (minting a generator tenant) takes an admin PAK the
+//! operator supplies per request via [`post_json_with_token`]; it is never
+//! stored. There is deliberately no persistent credential store here
+//! (BROKKR-T-0320).
 
-use crate::models::{ErrorBody, FleetAgentRecord, PakSummary};
+use crate::models::{
+    DiagnosticRequestDto, DiagnosticResponse, ErrorBody, FleetAgentRecord, PakSummary,
+    TargetStateObject,
+};
 use aurora_leptos::tokens::ApiError;
 use gloo_net::http::Request;
-use serde::Serialize;
 use serde::de::DeserializeOwned;
-
-/// Operator-pasted PAK, if any (the write-capable override — see module docs).
-pub fn pak() -> Option<String> {
-    let ls = web_sys::window()?.local_storage().ok()??;
-    match ls.get_item("brokkr_pak").ok()? {
-        Some(s) if !s.is_empty() => Some(s),
-        _ => None,
-    }
-}
+use serde::Serialize;
 
 /// The broker-injected read-only UI token, read from the `<meta>` tag once
 /// and cached for the page lifetime (the token never changes within a page
@@ -41,23 +39,35 @@ fn injected_token() -> Option<String> {
     })
 }
 
-/// Bearer token for API calls: pasted PAK first (write-capable), then the
-/// injected read-only UI token.
+/// Bearer token for API calls: the broker-injected read-only UI token, and
+/// nothing else.
+///
+/// There used to be an operator-pasted `localStorage["brokkr_pak"]` override
+/// that took **precedence** over this, so setting it silently upgraded the
+/// entire console from read-only to full admin write, for every request,
+/// persistently (BROKKR-T-0320). Removed: all three of its justifications had
+/// lapsed. The e2e harness does not need it (its route mocks ignore auth
+/// headers), `trunk serve` cannot reach a real broker to authenticate to (no
+/// proxy is configured), and the "full-write operator use" it existed for is
+/// now served properly by the per-action admin PAK prompt in the tenants view,
+/// which holds the credential in memory for one request instead of parking it
+/// in browser storage indefinitely.
 fn token() -> Option<String> {
-    pak().or_else(injected_token)
+    injected_token()
 }
 
-/// GET `/api/v1{path}` and deserialize the JSON body. `scope` becomes a
-/// `?pak_id=` query param (tenant filter, BROKKR-I-0032) — attached via the
-/// builder's query API so the URL stays canonical (no stray separators).
-pub async fn get_scoped<T: DeserializeOwned>(
+/// GET `/api/v1{path}` with `params` as the query string, and deserialize the
+/// JSON body. Params go through the builder's query API rather than being baked
+/// into `path` so the URL stays canonical (no stray separators — gloo-net
+/// concatenates an existing query with its own and would leave a trailing `&`).
+async fn get_query<T: DeserializeOwned>(
     path: &str,
-    scope: Option<String>,
+    params: &[(&str, &str)],
 ) -> Result<T, ApiError> {
     let url = format!("/api/v1{path}");
     let mut req = Request::get(&url);
-    if let Some(pak_id) = scope.filter(|s| !s.is_empty()) {
-        req = req.query([("pak_id", pak_id.as_str())]);
+    if !params.is_empty() {
+        req = req.query(params.iter().copied());
     }
     if let Some(t) = token() {
         req = req.header("Authorization", &format!("Bearer {t}"));
@@ -80,6 +90,18 @@ pub async fn get_scoped<T: DeserializeOwned>(
         message: e.to_string(),
         code: None,
     })
+}
+
+/// GET `/api/v1{path}` and deserialize the JSON body. `scope` becomes a
+/// `?pak_id=` query param (tenant filter, BROKKR-I-0032).
+pub async fn get_scoped<T: DeserializeOwned>(
+    path: &str,
+    scope: Option<String>,
+) -> Result<T, ApiError> {
+    match scope.filter(|s| !s.is_empty()) {
+        Some(pak_id) => get_query(path, &[("pak_id", pak_id.as_str())]).await,
+        None => get_query(path, &[]).await,
+    }
 }
 
 /// GET `/api/v1{path}` (unscoped) and deserialize the JSON body.
@@ -166,8 +188,16 @@ pub async fn agent_events(
     get_scoped("/agent-events", scope).await
 }
 
-/// POST `/api/v1{path}` with a JSON body; discards the response on success.
-pub async fn post<B: Serialize>(path: &str, body: &B) -> Result<(), ApiError> {
+/// POST `/api/v1{path}` with a JSON body, deserializing the response body
+/// (BROKKR-T-0301 — the previous `post` discarded it, which threw away the
+/// created diagnostic request's id and made the feature write-only). The
+/// console's only write is diagnostic creation, which answers `201` with the
+/// created record, so every caller wants the body; there is no body-discarding
+/// variant left to keep in step.
+pub async fn post_json<B: Serialize, T: DeserializeOwned>(
+    path: &str,
+    body: &B,
+) -> Result<T, ApiError> {
     let url = format!("/api/v1{path}");
     let mut req = Request::post(&url);
     if let Some(t) = token() {
@@ -182,15 +212,58 @@ pub async fn post<B: Serialize>(path: &str, body: &B) -> Result<(), ApiError> {
     let status = resp.status();
     if !(200..300).contains(&status) {
         let message = resp.text().await.unwrap_or_default();
-        let code = serde_json::from_str::<ErrorBody>(&message).ok().map(|b| b.code);
-        return Err(ApiError::Http { status, message, code });
+        let code = serde_json::from_str::<ErrorBody>(&message)
+            .ok()
+            .map(|b| b.code);
+        return Err(ApiError::Http {
+            status,
+            message,
+            code,
+        });
     }
-    Ok(())
+    resp.json::<T>().await.map_err(|e| ApiError::Http {
+        status,
+        message: e.to_string(),
+        code: None,
+    })
 }
 
-/// `POST /api/v1/diagnostics` — request a diagnostic for an agent (the v1 write).
-pub async fn create_diagnostic(agent_id: &str) -> Result<(), ApiError> {
-    post("/diagnostics", &serde_json::json!({ "agent_id": agent_id })).await
+/// `GET /api/v1/agents/:id/target-state?mode=full` — every deployment object
+/// currently targeted at an agent (`mode=full` includes already-deployed ones,
+/// not just the undeployed delta). Admin-readable, so the read-only UI PAK
+/// passes. Populates the Fleet modal's diagnostic picker.
+pub async fn agent_target_state(agent_id: &str) -> Result<Vec<TargetStateObject>, ApiError> {
+    get_query(
+        &format!("/agents/{agent_id}/target-state"),
+        &[("mode", "full")],
+    )
+    .await
+}
+
+/// `POST /api/v1/deployment-objects/:id/diagnostics` — ask `agent_id` to collect
+/// diagnostics for one deployment object (the console's only write).
+///
+/// Diagnostics are inherently deployment-object-scoped — there is no bare
+/// `POST /diagnostics` route, and this path is the one the broker's read-only
+/// PAK allowlist admits (BROKKR-I-0032), so the injected UI token can drive it.
+/// Returns the created request (201 body) so the caller can poll
+/// [`diagnostic`] for its outcome (BROKKR-T-0301).
+pub async fn create_diagnostic(
+    deployment_object_id: &str,
+    agent_id: &str,
+) -> Result<DiagnosticRequestDto, ApiError> {
+    post_json(
+        &format!("/deployment-objects/{deployment_object_id}/diagnostics"),
+        &serde_json::json!({ "agent_id": agent_id, "requested_by": "operator-console" }),
+    )
+    .await
+}
+
+/// `GET /api/v1/diagnostics/:id` — the request plus, once an agent has submitted
+/// one, its result. A plain read, so the injected read-only UI token (which the
+/// broker treats as a read-only *admin*) is admitted.
+pub async fn diagnostic(id: &str) -> Result<DiagnosticResponse, ApiError> {
+    get(&format!("/diagnostics/{id}")).await
 }
 
 /// `GET /api/v1/stacks/:id/health` — per-stack deployment-object health rollup.
@@ -199,11 +272,162 @@ pub async fn stack_health(id: &str) -> Result<crate::models::StackHealth, ApiErr
 }
 
 /// `GET /api/v1/webhooks/:id/deliveries` — recent delivery attempts.
-pub async fn webhook_deliveries(id: &str) -> Result<Vec<crate::models::WebhookDeliveryDto>, ApiError> {
+pub async fn webhook_deliveries(
+    id: &str,
+) -> Result<Vec<crate::models::WebhookDeliveryDto>, ApiError> {
     get(&format!("/webhooks/{id}/deliveries")).await
 }
 
 /// `GET /api/v1/work-orders` — full work-order list (admin-gated).
 pub async fn work_orders() -> Result<Vec<crate::models::WorkOrder>, ApiError> {
     get("/work-orders").await
+}
+
+/// `GET /api/v1/generators` — the tenant list. Admin-gated, so the injected
+/// read-only UI token is admitted (it is a read-only *admin*). The broker
+/// excludes the system generator from this listing, so what comes back is
+/// exactly the set of real tenants.
+pub async fn generators() -> Result<Vec<crate::models::Generator>, ApiError> {
+    get("/generators").await
+}
+
+/// POST `/api/v1{path}` authenticating with an **explicitly supplied** bearer
+/// token rather than [`token()`] (BROKKR-T-0318).
+///
+/// This exists so a privileged one-shot action can carry an operator-pasted
+/// admin PAK **without that PAK ever being stored**. Deliberately does *not*
+/// reuse a stored credential: the console deliberately has no persistent PAK
+/// store (BROKKR-T-0320 removed the `localStorage` override, which survived
+/// reloads and is readable by any script on the origin. An admin credential —
+/// the strongest in the system — should not persist there just to create one
+/// generator.
+///
+/// The token is borrowed for the duration of the call and never captured,
+/// logged, or written anywhere. Failures return [`ApiError`] built from the
+/// broker's `ErrorResponse` body, which never echoes the request's
+/// `Authorization` header.
+async fn post_json_with_token<B: Serialize, T: DeserializeOwned>(
+    path: &str,
+    body: &B,
+    bearer: &str,
+) -> Result<T, ApiError> {
+    let url = format!("/api/v1{path}");
+    let resp = Request::post(&url)
+        .header("Authorization", &format!("Bearer {bearer}"))
+        .json(body)
+        .map_err(|_| ApiError::Network)?
+        .send()
+        .await
+        .map_err(|_| ApiError::Network)?;
+    let status = resp.status();
+    if !(200..300).contains(&status) {
+        let message = resp.text().await.unwrap_or_default();
+        let code = serde_json::from_str::<ErrorBody>(&message)
+            .ok()
+            .map(|b| b.code);
+        return Err(ApiError::Http {
+            status,
+            message,
+            code,
+        });
+    }
+    resp.json::<T>().await.map_err(|e| ApiError::Http {
+        status,
+        message: e.to_string(),
+        code: None,
+    })
+}
+
+/// `POST /api/v1/generators` — mint a new generator tenant, authenticating with
+/// the operator's admin PAK for this one request (BROKKR-T-0318).
+///
+/// The console's own credential cannot do this and is deliberately not used:
+/// the injected UI token is read-only, so the broker would reject the write.
+/// Requiring the operator to supply an admin PAK per action is what keeps
+/// "network reach is the console's authentication boundary" true — reaching the
+/// page grants no ability to mint anything.
+///
+/// The response carries the new generator's PAK in plaintext, exactly once.
+pub async fn create_generator(
+    name: &str,
+    description: Option<&str>,
+    admin_pak: &str,
+) -> Result<crate::models::CreateGeneratorResponse, ApiError> {
+    post_json_with_token(
+        "/generators",
+        &serde_json::json!({
+            "name": name,
+            "description": description,
+        }),
+        admin_pak,
+    )
+    .await
+}
+
+/// PUT `/api/v1{path}` authenticating with an **explicitly supplied** bearer
+/// token, mirroring [`post_json_with_token`] (BROKKR-T-0322).
+///
+/// Same rule: the token is borrowed for one request and never captured,
+/// logged, or stored. The console has no persistent credential store.
+async fn put_json_with_token<B: Serialize, T: DeserializeOwned>(
+    path: &str,
+    body: &B,
+    bearer: &str,
+) -> Result<T, ApiError> {
+    let url = format!("/api/v1{path}");
+    let resp = Request::put(&url)
+        .header("Authorization", &format!("Bearer {bearer}"))
+        .json(body)
+        .map_err(|_| ApiError::Network)?
+        .send()
+        .await
+        .map_err(|_| ApiError::Network)?;
+    let status = resp.status();
+    if !(200..300).contains(&status) {
+        let message = resp.text().await.unwrap_or_default();
+        let code = serde_json::from_str::<ErrorBody>(&message)
+            .ok()
+            .map(|b| b.code);
+        return Err(ApiError::Http {
+            status,
+            message,
+            code,
+        });
+    }
+    resp.json::<T>().await.map_err(|e| ApiError::Http {
+        status,
+        message: e.to_string(),
+        code: None,
+    })
+}
+
+/// `PUT /api/v1/agents/{id}` — set an agent's `status`, pausing or resuming the
+/// work it picks up (BROKKR-T-0322).
+///
+/// **This is what "paused" actually means.** The broker does not withhold
+/// anything: the *agent* skips deployment-object fetches and work-order
+/// processing while its status is not `ACTIVE`
+/// (`brokkr-agent/src/cli/commands.rs:427` and `:545`), and re-reads its own
+/// record each heartbeat, so a change here lands within a poll cycle. It is
+/// agent-side self-restraint rather than an enforced boundary — see
+/// BROKKR-T-0321, which tracks that distinction and whether the broker should
+/// enforce it too.
+///
+/// The endpoint is `require_admin_or_agent`, and the console's injected token
+/// is read-only, so the middleware rejects this before the handler runs. Hence
+/// the operator-supplied admin PAK, per action.
+///
+/// The body is a partial update: the handler applies only the fields present,
+/// so sending `status` alone cannot clobber the agent's name or cluster.
+pub async fn set_agent_status(
+    agent_id: &str,
+    status: &str,
+    admin_pak: &str,
+) -> Result<crate::models::AgentRecord, ApiError> {
+    put_json_with_token(
+        &format!("/agents/{agent_id}"),
+        &serde_json::json!({ "status": status }),
+        admin_pak,
+    )
+    .await
 }

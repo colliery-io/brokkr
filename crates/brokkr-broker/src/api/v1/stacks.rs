@@ -387,12 +387,18 @@ fn resolve_create_body(
 ) -> Result<(String, bool), ApiError> {
     if content_type_is_yaml(headers) {
         let yaml_content = String::from_utf8(body.to_vec()).map_err(|_| {
-            ApiError::bad_request("invalid_deployment_object", "request body is not valid UTF-8")
+            ApiError::bad_request(
+                "invalid_deployment_object",
+                "request body is not valid UTF-8",
+            )
         })?;
         Ok((yaml_content, query.deletion_marker.unwrap_or(false)))
     } else {
         let req: CreateDeploymentObjectRequest = serde_json::from_slice(body).map_err(|e| {
-            ApiError::bad_request("invalid_deployment_object", format!("invalid JSON body: {e}"))
+            ApiError::bad_request(
+                "invalid_deployment_object",
+                format!("invalid JSON body: {e}"),
+            )
         })?;
         Ok((req.yaml_content, req.is_deletion_marker))
     }
@@ -758,6 +764,12 @@ async fn instantiate_template(
         })?
         .ok_or_else(|| ApiError::not_found("template_not_found", "template not found"))?;
 
+    // BROKKR-T-0290: instantiate used to be the only template path that skipped
+    // the read-access check, letting any generator render another tenant's
+    // template body into its own stack. System templates (generator_id = NULL)
+    // remain instantiable by anyone — that is the sanctioned sharing mechanism.
+    crate::api::v1::templates::check_read_access(&auth_payload, &template)?;
+
     let template_labels: Vec<String> = dal
         .template_labels()
         .list_for_template(template.id)
@@ -1037,13 +1049,19 @@ mod create_body_tests {
 
     #[test]
     fn content_type_detection() {
-        assert!(content_type_is_yaml(&headers_with(Some("application/yaml"))));
+        assert!(content_type_is_yaml(&headers_with(Some(
+            "application/yaml"
+        ))));
         assert!(content_type_is_yaml(&headers_with(Some("text/yaml"))));
         assert!(content_type_is_yaml(&headers_with(Some(
             "application/yaml; charset=utf-8"
         ))));
-        assert!(content_type_is_yaml(&headers_with(Some("application/x-yaml"))));
-        assert!(!content_type_is_yaml(&headers_with(Some("application/json"))));
+        assert!(content_type_is_yaml(&headers_with(Some(
+            "application/x-yaml"
+        ))));
+        assert!(!content_type_is_yaml(&headers_with(Some(
+            "application/json"
+        ))));
         assert!(!content_type_is_yaml(&headers_with(None)));
     }
 
@@ -1056,15 +1074,21 @@ mod create_body_tests {
         let (yaml, marker) =
             resolve_create_body(&headers_with(Some("application/yaml")), &q, body).unwrap();
         assert_eq!(yaml, String::from_utf8(body.to_vec()).unwrap());
-        assert!(marker, "deletion_marker query flag should be honored on the YAML path");
+        assert!(
+            marker,
+            "deletion_marker query flag should be honored on the YAML path"
+        );
     }
 
     #[test]
     fn yaml_body_defaults_marker_false() {
         let q = CreateDeploymentObjectQuery::default();
-        let (_, marker) =
-            resolve_create_body(&headers_with(Some("application/yaml")), &q, b"kind: ConfigMap")
-                .unwrap();
+        let (_, marker) = resolve_create_body(
+            &headers_with(Some("application/yaml")),
+            &q,
+            b"kind: ConfigMap",
+        )
+        .unwrap();
         assert!(!marker);
     }
 
@@ -1092,9 +1116,8 @@ mod create_body_tests {
     #[test]
     fn malformed_json_is_rejected() {
         let q = CreateDeploymentObjectQuery::default();
-        let err =
-            resolve_create_body(&headers_with(Some("application/json")), &q, b"{not json")
-                .unwrap_err();
+        let err = resolve_create_body(&headers_with(Some("application/json")), &q, b"{not json")
+            .unwrap_err();
         assert_eq!(err.code, "invalid_deployment_object");
     }
 

@@ -22,6 +22,12 @@ initiative_id: NULL
 
 # ADR-009: Generator Registration — Agent Scope Subscription Model
 
+> **SCOPE NOTE, 2026-07-27 (Dylan Storey): this ADR owns Brokkr's tenancy model.** A tenant is a generator. [BROKKR-A-0004](BROKKR-A-0004.md) was amended the same day to narrow it to *deployment isolation* (separate broker instances sharing a PostgreSQL server); it no longer defines tenancy.
+>
+> **Enforcement was completed 2026-07-27 (BROKKR-T-0287).** As originally shipped, registration gated only explicit target *creation*; the read path still served the union of explicit targets, label matches, and annotation matches with no registration filter, so an agent could receive stacks from generators it had never registered with whenever selectors collided. Registration is now enforced on the label and annotation legs as well, in `dal/stacks.rs::get_associated_stacks` and the mirrored `dal/deployment_objects.rs::pending_counts_by_agent`. Explicit targets remain exempt because they are already gated at creation.
+>
+> The consent semantics are therefore now complete as this ADR intended: a generator declares which labels it pushes to; an agent's registrations declare which generators it accepts stacks from; matching selects *within* consented generators rather than creating responsibility across them.
+
 ## Context
 
 Brokkr operates as a single-tenant control plane: one admin PAK, a shared pool of agents, and one set of generators each representing an application scope. As adoption grows, multiple independent applications need to share a single Brokkr deployment safely.

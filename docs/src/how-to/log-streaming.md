@@ -73,7 +73,7 @@ ws.onmessage = (e) => {
 };
 ```
 
-With the TypeScript SDK, `client.liveSubscriptionUrl(stackId)` computes the WebSocket URL from your configured base URL, and `client.listTelemetryLogs(stackId)` / `client.listTelemetryEvents(stackId)` wrap the REST history endpoints (see [TypeScript SDK](./sdks/typescript.md)).
+With the TypeScript SDK, `client.liveSubscriptionUrl(stackId)` computes the WebSocket URL from your configured base URL, and `client.listTelemetryLogs(stackId)` / `client.listTelemetryEvents(stackId)` wrap the REST history endpoints (see [TypeScript SDK](./sdks/typescript.md)). If you only want to read a tail rather than script against it, the Operator Console at the broker's root URL has a telemetry view over the same data.
 
 ## Stopping the Stream
 
@@ -82,6 +82,7 @@ Remove the `brokkr.io/stream-logs` annotation (or set it to anything other than 
 ## Troubleshooting
 
 - **No lines appear**: confirm both annotations are on the *pod* (`kubectl get pod <pod> -o jsonpath='{.metadata.annotations}'`), not only on the Deployment. Annotations on the top-level object do not propagate to pods.
+- **No lines from one namespace only**: an agent installed with namespace-scoped RBAC (`rbac.clusterWide=false`) only watches its own namespace, so annotated pods elsewhere are never tailed.
 - **Gaps in the tail**: `log_gap` frames with `reason: "rate_limit"` mean a container exceeded 100 lines/second; the limit is a product stance, not a tunable — ship high-volume logs to a dedicated platform.
 - **History shorter than 6 hours**: the window is a ceiling, not a guarantee; `oldest_available_ts` in the response tells you what is actually retained.
 

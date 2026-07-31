@@ -39,8 +39,7 @@ fn seed_two_tenants(fixture: &TestFixture) -> TwoTenants {
     fixture.register_agent_with_generator(payments_agent.id, payments.id);
     fixture.register_agent_with_generator(ingest_agent.id, ingest.id);
 
-    let payments_stack =
-        fixture.create_test_stack("payments-stack".to_string(), None, payments.id);
+    let payments_stack = fixture.create_test_stack("payments-stack".to_string(), None, payments.id);
     let ingest_stack = fixture.create_test_stack("ingest-stack".to_string(), None, ingest.id);
 
     let payments_object = fixture.create_test_deployment_object(
@@ -48,11 +47,8 @@ fn seed_two_tenants(fixture: &TestFixture) -> TwoTenants {
         "kind: ConfigMap".to_string(),
         false,
     );
-    let ingest_object = fixture.create_test_deployment_object(
-        ingest_stack.id,
-        "kind: Secret".to_string(),
-        false,
-    );
+    let ingest_object =
+        fixture.create_test_deployment_object(ingest_stack.id, "kind: Secret".to_string(), false);
     fixture.create_test_agent_event(
         &payments_agent,
         &payments_object,
@@ -141,12 +137,7 @@ async fn test_fleet_scoped_by_pak_id() {
     assert!(body.unwrap().is_empty());
 
     // Malformed pak_id: 400 from query deserialization.
-    let (status, _) = get_json(
-        app,
-        &fixture.admin_pak,
-        "/api/v1/fleet?pak_id=not-a-uuid",
-    )
-    .await;
+    let (status, _) = get_json(app, &fixture.admin_pak, "/api/v1/fleet?pak_id=not-a-uuid").await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }
 

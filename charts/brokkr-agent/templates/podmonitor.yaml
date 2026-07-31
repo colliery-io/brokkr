@@ -1,0 +1,28 @@
+{{- if .Values.metrics.podMonitor.enabled }}
+{{- /*
+  The agent chart renders no Service, so Prometheus Operator scrapes the pod
+  directly. `port` here is the *container* port name declared on the agent
+  container in deployment.yaml ("health"), which serves /metrics alongside
+  /healthz and /readyz.
+*/}}
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: {{ include "brokkr-agent.fullname" . }}
+  labels:
+    {{- include "brokkr-agent.labels" . | nindent 4 }}
+    {{- with .Values.metrics.podMonitor.additionalLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "brokkr-agent.selectorLabels" . | nindent 6 }}
+  podMetricsEndpoints:
+  - port: health
+    path: /metrics
+    interval: {{ .Values.metrics.podMonitor.interval }}
+    {{- with .Values.metrics.podMonitor.scrapeTimeout }}
+    scrapeTimeout: {{ . }}
+    {{- end }}
+{{- end }}

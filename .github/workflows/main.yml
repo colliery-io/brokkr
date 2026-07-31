@@ -27,6 +27,7 @@ jobs:
     outputs:
       code: ${{ steps.filter.outputs.code }}
       sdk_contract: ${{ steps.filter.outputs.sdk_contract }}
+      openapi: ${{ steps.filter.outputs.openapi }}
     steps:
       - uses: actions/checkout@v6
       - uses: dorny/paths-filter@v4.0.1
@@ -51,6 +52,22 @@ jobs:
               - '.angreal/task_tests.py'
               - '.github/workflows/main.yml'
               - '.github/workflows/sdk_contract_tests.yml'
+            # Anything that can change the emitted spec. `models/**` matters as
+            # much as `api/**`: a doc comment on a model is rendered into the
+            # spec description, and exactly that went undetected for several
+            # commits (BROKKR-T-0315).
+            openapi:
+              - 'crates/brokkr-broker/src/api/**'
+              - 'crates/brokkr-broker/examples/openapi_export.rs'
+              - 'crates/brokkr-broker/Cargo.toml'
+              - 'crates/brokkr-models/src/models/**'
+              - 'crates/brokkr-client/**'
+              - 'sdks/python/brokkr-client/**'
+              - 'sdks/typescript/brokkr-client/**'
+              - 'openapi/**'
+              - '.angreal/task_openapi.py'
+              - '.github/workflows/main.yml'
+              - '.github/workflows/openapi.yml'
 
   integration_tests:
     needs: [setup, changes]
@@ -62,4 +79,13 @@ jobs:
     needs: [setup, changes]
     if: needs.changes.outputs.sdk_contract == 'true'
     uses: ./.github/workflows/sdk_contract_tests.yml
+    secrets: inherit
+
+  # Spec/SDK drift. Lives here rather than self-triggering so it reports a
+  # status on every PR (running or skipped) and can therefore be a required
+  # check — see the header comment in openapi.yml.
+  openapi:
+    needs: [setup, changes]
+    if: needs.changes.outputs.openapi == 'true'
+    uses: ./.github/workflows/openapi.yml
     secrets: inherit

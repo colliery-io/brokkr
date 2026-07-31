@@ -5,11 +5,11 @@
 //! broker enhancement (logged on the task).
 
 use crate::api;
+use crate::components::sev;
 use crate::components::DetailRow;
 use crate::models::WebhookSummary;
 use aurora_leptos::components::*;
 use aurora_leptos::tokens::token;
-use crate::components::sev;
 use leptos::prelude::*;
 
 fn event_chip(e: String) -> impl IntoView {
@@ -21,7 +21,7 @@ fn event_chip(e: String) -> impl IntoView {
 
 #[component]
 pub fn WebhooksView() -> impl IntoView {
-    let data = LocalResource::new(|| api::webhooks());
+    let data = LocalResource::new(api::webhooks);
     let selected = RwSignal::new(None::<WebhookSummary>);
     let open = RwSignal::new(false);
     // Recent delivery attempts for the selected subscription.

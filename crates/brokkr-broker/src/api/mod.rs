@@ -165,15 +165,15 @@ use crate::ws::{
 use axum::{
     Router,
     body::Body,
-    extract::Request,
+    extract::{Request, State},
     middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::get,
 };
 use brokkr_utils::config::{Cors, ReloadableConfig};
 use hyper::StatusCode;
-use std::sync::Arc;
-use std::time::Instant;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use tower_http::catch_panic::CatchPanicLayer;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
@@ -233,7 +233,10 @@ pub fn configure_api_routes(
             fleet_broadcaster.clone(),
         ))
         .merge(subscribe_routes(dal.clone(), live_broadcaster.clone()))
-        .merge(fleet_subscribe_routes(dal.clone(), fleet_broadcaster.clone()))
+        .merge(fleet_subscribe_routes(
+            dal.clone(),
+            fleet_broadcaster.clone(),
+        ))
         // Make the registry + broadcasters available to v1 handlers
         // (post-commit push helpers in `ws::push`; fleet live-push producers
         // in `record_heartbeat`; future WS-13 metrics).
@@ -243,6 +246,8 @@ pub fn configure_api_routes(
         .route("/healthz", get(healthz))
         .route("/readyz", get(readyz))
         .route("/metrics", get(metrics_handler))
+        // Must be layered *after* the /readyz route so the handler can see it.
+        .layer(axum::Extension(ReadinessCache::default()))
         .layer(root_cors)
         .layer(middleware::from_fn(metrics_middleware))
         .layer(
@@ -291,16 +296,113 @@ async fn healthz() -> impl IntoResponse {
     (StatusCode::OK, "OK")
 }
 
+/// How long a `/readyz` result is reused before the database is probed again.
+///
+/// The kubelet probes every 5s per pod and the endpoint is unauthenticated, so
+/// an uncached check would let anyone with network reach turn readiness into a
+/// connection-pool amplifier. Two seconds keeps the answer fresh enough that a
+/// real outage still shows up on the next probe.
+const READYZ_CACHE_TTL: Duration = Duration::from_secs(2);
+
+/// Budget for the readiness pool checkout.
+///
+/// The r2d2 pool is built with only `.max_size` (see [`crate::db`]), so a plain
+/// `get()` waits out r2d2's 30s default connection timeout — an order of
+/// magnitude past the chart's 3s probe timeout, which would make the probe fail
+/// on timeout rather than on a clean 503. Bound the wait explicitly instead.
+const READYZ_DB_TIMEOUT: Duration = Duration::from_millis(750);
+
+/// Cached readiness verdict: `(observed_at, ready)`.
+///
+/// Owned by the router rather than being a process global so that each
+/// `configure_api_routes` call — notably each integration-test router — gets its
+/// own cache and cannot inherit another's verdict.
+#[derive(Clone, Default)]
+struct ReadinessCache(Arc<Mutex<Option<(Instant, bool)>>>);
+
+impl ReadinessCache {
+    /// Returns the cached verdict if it is still within the TTL.
+    fn get(&self) -> Option<bool> {
+        let guard = self.0.lock().ok()?;
+        let (observed_at, ready) = (*guard)?;
+        (observed_at.elapsed() < READYZ_CACHE_TTL).then_some(ready)
+    }
+
+    /// Records a verdict for subsequent probes inside the TTL window.
+    fn store(&self, ready: bool) {
+        if let Ok(mut guard) = self.0.lock() {
+            *guard = Some((Instant::now(), ready));
+        }
+    }
+}
+
+/// Checks that the database is reachable: a bounded pool checkout plus
+/// `SELECT 1`.
+///
+/// Deliberately does *not* verify migrations — those run once at startup and
+/// abort the process on failure, so re-checking them per probe buys nothing.
+async fn check_db_ready(dal: &DAL) -> Result<(), String> {
+    let pool = dal.pool.pool.clone();
+
+    // Both the checkout and the query are blocking, so keep them off the async
+    // runtime's worker threads.
+    tokio::task::spawn_blocking(move || {
+        use diesel::prelude::*;
+
+        let mut conn = pool
+            .get_timeout(READYZ_DB_TIMEOUT)
+            .map_err(|e| format!("database pool checkout failed: {}", e))?;
+
+        diesel::sql_query("SELECT 1")
+            .execute(&mut conn)
+            .map(|_| ())
+            .map_err(|e| format!("database readiness query failed: {}", e))
+    })
+    .await
+    .map_err(|e| format!("readiness check task failed: {}", e))?
+}
+
 /// Ready check endpoint handler
 ///
-/// This handler responds to GET requests at the "/readyz" endpoint.
-/// It's used to verify that the API is ready for use.
+/// This handler responds to GET requests at the "/readyz" endpoint. Readiness
+/// gates Service endpoints, so it reports whether the broker can actually serve
+/// traffic — which means the database must be reachable.
+///
+/// Deliberately distinct from `/healthz`: liveness stays process-only, because
+/// a database blip that restart-loops every broker pod turns a recoverable
+/// outage into a total one.
 ///
 /// # Returns
 ///
-/// Returns a 200 OK status code with "Ready" in the body.
-async fn readyz() -> impl IntoResponse {
-    (StatusCode::OK, "Ready")
+/// 200 OK with "Ready" when the database answers, 503 Service Unavailable with
+/// a short reason otherwise. Results are cached for [`READYZ_CACHE_TTL`].
+async fn readyz(
+    State(dal): State<DAL>,
+    axum::Extension(cache): axum::Extension<ReadinessCache>,
+) -> impl IntoResponse {
+    if let Some(ready) = cache.get() {
+        return readyz_response(ready);
+    }
+
+    let ready = match check_db_ready(&dal).await {
+        Ok(()) => true,
+        Err(e) => {
+            tracing::error!("readiness check failed: {}", e);
+            false
+        }
+    };
+
+    cache.store(ready);
+    readyz_response(ready)
+}
+
+/// Maps a readiness verdict onto the HTTP response the kubelet sees.
+fn readyz_response(ready: bool) -> (StatusCode, &'static str) {
+    if ready {
+        (StatusCode::OK, "Ready")
+    } else {
+        (StatusCode::SERVICE_UNAVAILABLE, "database unavailable")
+    }
 }
 
 /// Metrics endpoint handler

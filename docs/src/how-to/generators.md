@@ -1,6 +1,10 @@
 # Working with Generators
 
-A generator is an external identity principal — a CI/CD pipeline, automation tool, or service — that creates and manages Brokkr resources. Each generator also serves as an application scope: an agent must register with a generator before any stack owned by that generator can be targeted at the agent, giving each agent an opt-in consent boundary and enforcing application-level isolation (see the [security model](../explanation/security-model.md#generator-registration-and-application-scopes)). Each generator receives a Prefixed API Key (PAK) scoped to itself: it can create stacks, templates, and deployment objects, but can only access resources it created, providing natural isolation between pipelines or teams. Unlike the admin PAK, a generator PAK cannot perform administrative operations such as creating other generators or managing agents. This guide covers creating generators, integrating them with CI/CD systems, registering agents, and managing their lifecycle.
+A generator is an identity principal — a CI/CD pipeline, automation tool, service, or team — that creates and manages Brokkr resources. Each generator receives a Prefixed API Key (PAK) scoped to itself: it can create stacks, templates, and deployment objects, but can only access resources it created. Unlike the admin PAK, a generator PAK cannot perform administrative operations such as creating other generators or managing agents.
+
+**The generator is also Brokkr's tenant.** Creating a generator and handing over its PAK is how you onboard a team or an application onto a shared broker: its stacks are its own, its templates are private to it, and an agent only receives its stacks after registering with it. Generators are what the operator console's tenant scope selector lists, and what `?pak_id=` narrows admin listings to. If you are standing up a multi-team install, start from [Multi-Tenant Setup](./multi-tenant-setup.md), which uses the steps below as its onboarding path; for the tenancy rules themselves see [Multi-Tenancy](../reference/multi-tenancy.md).
+
+This guide covers creating generators, integrating them with CI/CD systems, registering agents, and managing their lifecycle.
 
 ## Prerequisites
 
@@ -49,6 +53,30 @@ The PAK is only returned once at creation time, and the generator's UUID is what
 - **Vault/AWS Secrets Manager**: Store with appropriate access policies
 
 If you lose the PAK, you'll need to rotate it (see PAK Rotation below).
+
+If you have the PAK but not the ID, read it back from the credential itself — the `generator` field is the tenant ID:
+
+```bash
+curl -s -X POST "http://broker:3000/api/v1/auth/pak" \
+  -H "Authorization: Bearer $GENERATOR_PAK" | jq -r '.generator'
+```
+
+### Step 3: Confirm It Appears as a Tenant
+
+A new generator is immediately a tenant. Confirm it shows up in the tenant list that backs the operator console's scope selector (admin credential required):
+
+```bash
+curl -s "http://broker:3000/api/v1/paks" \
+  -H "Authorization: Bearer $ADMIN_PAK"
+```
+
+```json
+[
+  { "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890", "name": "github-actions-prod" }
+]
+```
+
+The path is `/api/v1/paks`, not `/api/v1/auth/paks`. Operators can then narrow the admin fleet, stack, and agent-event listings to this generator with `?pak_id=<generator-id>`. That parameter is a display filter for an admin who could already see everything — it is not an access boundary, so never substitute it for handing a team its own generator PAK.
 
 ## CI/CD Integration
 
@@ -148,6 +176,8 @@ curl -X POST "http://broker:3000/api/v1/stacks/$STACK_ID/deployment-objects/from
 
 The instantiation endpoint returns `201 Created` with the rendered deployment object. See [Stack Templates](./templates.md) for the full workflow.
 
+A generator can read and instantiate its own templates plus admin-owned system templates; another generator's template returns `403 template_not_accessible`. Publish anything meant to be shared across teams as a system template using the admin PAK.
+
 ## Managing Generators
 
 ### List Generators
@@ -195,7 +225,12 @@ Deleting a generator cascades the soft-delete to all stacks owned by the generat
 
 ## Registering Agents
 
-An agent must be registered with a generator before any stack owned by that generator can be targeted at the agent. Targeting an unregistered agent returns `403 agent_not_registered`, and admin cannot bypass it. Registration is the agent's opt-in consent boundary. This section covers registration from the generator admin's side; for the full operational workflow (including agent self-registration at startup) see [Agent Registration](./agent-registration.md).
+An agent must be registered with a generator before any of that generator's stacks reach it. Registration is the agent's opt-in consent boundary, and it applies to every way a stack can be associated with an agent:
+
+- Creating an explicit target for an unregistered agent returns `403 agent_not_registered`, and admin cannot bypass it.
+- A shared label or annotation only associates a stack with an agent that is registered with the stack's owning generator. An agent with no registrations receives nothing from label or annotation matching, and two generators can safely reuse the same label vocabulary without crossing into each other.
+
+Registration is performed by an admin or by the agent itself — a generator PAK cannot register agents on its own behalf. This section covers registration from the admin's side; for the full operational workflow (including agent self-registration at startup) see [Agent Registration](./agent-registration.md).
 
 ### Step 1: Register an Agent
 
@@ -301,9 +336,9 @@ Generators operate under a scoped permission model: a generator PAK can manage t
 
 ## Best Practices
 
-### One Generator Per Pipeline
+### One Generator Per Pipeline or Team
 
-Create a separate generator for each deployment pipeline or team, giving you clear resource ownership, independent PAK rotation, environment isolation, and easier auditing.
+Create a separate generator for each deployment pipeline or team. Because the generator is the tenant, this is what gives you clear resource ownership, independent PAK rotation, per-team separation, scoped operator views, and easier auditing. Sharing one generator across two teams merges them into one tenant.
 
 ### Naming Conventions
 
@@ -315,8 +350,8 @@ Use descriptive names that identify purpose and scope, e.g. `github-actions-prod
 
 If API calls fail with 401 or 403:
 
-1. Verify the PAK is correct and not expired
-2. Check if the PAK was rotated
+1. Verify the PAK is correct — PAKs do not expire, so a previously working key has been rotated or revoked
+2. Check whether the PAK was rotated elsewhere, or the generator deleted (deleting a generator revokes its PAK)
 3. Ensure you're using the generator PAK, not the admin PAK (for generator-scoped operations)
 
 ### Cannot See Resources
@@ -324,8 +359,19 @@ If API calls fail with 401 or 403:
 If a generator cannot see expected stacks or templates:
 
 1. Verify the resources were created with this generator's PAK
-2. Resources created by other generators are not visible
+2. Resources created by other generators are not visible; another generator's template returns `403 template_not_accessible`
 3. Use admin PAK to view all resources across generators
+
+### Agent Not Receiving Stacks
+
+If an agent applies nothing despite matching labels, check its registrations first — a label match is only honored for generators the agent has registered with:
+
+```bash
+curl -s "http://broker:3000/api/v1/agents/$AGENT_ID/registrations" \
+  -H "Authorization: Bearer $ADMIN_PAK"
+```
+
+An agent with no registrations, or one missing this generator, receives nothing from label or annotation matching. Register it (above) or set `broker.generatorIds` on the agent deployment.
 
 ### PAK Lost
 
@@ -338,6 +384,8 @@ If you've lost a generator's PAK:
 ## Related Documentation
 
 - [Generators API Reference](../reference/generators.md) - Complete API documentation
-- [Agent Registration](./agent-registration.md) - Registering agents with generators (application scopes)
+- [Multi-Tenancy](../reference/multi-tenancy.md) - The tenant model, tenant listing, and `pak_id` scoped views
+- [Multi-Tenant Setup](./multi-tenant-setup.md) - Onboarding multiple teams onto one broker
+- [Agent Registration](./agent-registration.md) - Registering agents with generators (tenant consent)
 - [Stack Templates](./templates.md) - Using templates with generators
 - [Authentication](../explanation/security-model.md) - Understanding Brokkr authentication

@@ -1580,9 +1580,37 @@ export interface components {
             parameters_schema: string;
             template_content: string;
         };
+        /**
+         * @description Body of `POST /webhooks`.
+         *
+         *     Unknown keys are ignored rather than rejected, with two deliberate
+         *     exceptions that this endpoint used to accept and silently ignore
+         *     (BROKKR-T-0288). Both are now **rejected with 422** by
+         *     [`reject_removed_write_fields`] before this struct is deserialized:
+         *
+         *     * `validate` ("send test request on creation") was documented and parsed but
+         *       never read by `create_webhook` — it did nothing, ever. The real mechanism
+         *       is `POST /webhooks/{id}/test`.
+         *     * `filters.labels` was stored and echoed but never evaluated; label-based
+         *       routing is `target_labels`, which is real.
+         *
+         *     Rejecting is the lesser evil. A caller who sends `filters.labels` believes
+         *     their deliveries are scoped; accepting the request and dropping the key
+         *     leaves them with a subscription that fires on everything and a response they
+         *     have no reason to re-read. A 422 naming the field and its replacement is
+         *     noisy exactly once, at the moment the operator can still fix it.
+         *
+         *     This is a **write-path** rule only. Subscription rows already stored with a
+         *     `labels` key keep loading and keep delivering — see [`WebhookFilters`],
+         *     whose deserialization stays tolerant of unknown keys.
+         */
         CreateWebhookRequest: {
             auth_header?: string | null;
             event_types: string[];
+            /**
+             * @description Payload filters (`agent_id`, `stack_id`). An event that does not carry a
+             *     filtered field does not match; see [`WebhookFilters`].
+             */
             filters?: components["schemas"]["WebhookFilters"];
             /** Format: int32 */
             max_retries?: number | null;
@@ -1591,7 +1619,6 @@ export interface components {
             /** Format: int32 */
             timeout_seconds?: number | null;
             url: string;
-            validate?: boolean;
         };
         CreateWorkOrderRequest: {
             /** Format: int32 */
@@ -2444,6 +2471,11 @@ export interface components {
             auth_header?: string | null;
             enabled?: boolean | null;
             event_types?: string[] | null;
+            /**
+             * @description Payload filters. `null` clears them; omitted leaves them unchanged. A
+             *     legacy `labels` key inside the object is rejected with 422 rather than
+             *     silently dropped — see [`CreateWebhookRequest`].
+             */
             filters?: components["schemas"]["WebhookFilters"];
             /** Format: int32 */
             max_retries?: number | null;
@@ -2516,17 +2548,53 @@ export interface components {
             /** @description Labels for delivery targeting (copied from subscription). */
             target_labels?: (string | null)[] | null;
         };
-        /** @description Filters for webhook subscriptions. */
+        /**
+         * @description Filters for webhook subscriptions.
+         *
+         *     A filter narrows an event-type match further, using field values carried in
+         *     the event payload. Evaluated by [`WebhookFilters::matches`] at emission time
+         *     (see `brokkr_broker::utils::event_bus::emit_event`).
+         *
+         *     Semantics (BROKKR-T-0288):
+         *
+         *     * Every filter field that is set must match: the fields are ANDed.
+         *     * **An event that does not carry a filtered field does not match.** A
+         *       subscription filtering on `stack_id` therefore receives nothing for event
+         *       types whose payload has no `stack_id` (`agent.*` and `workorder.*`; the
+         *       whole `deployment.*` family does carry it). This is deliberate: a filter
+         *       is a narrowing
+         *       statement, and widening it to "…or the event didn't say" would deliver
+         *       precisely the events the operator asked to exclude.
+         *     * A JSON `null` counts as absent, not as a value. Several payloads emit
+         *       `"stack_id": null` / `"agent_id": null` when the source column is NULL
+         *       (e.g. `deployment.deleted` for an already-purged object,
+         *       `workorder.completed` for an unclaimed order).
+         *
+         *     # Read/write asymmetry
+         *
+         *     This type is the **read** path: deserialization deliberately ignores unknown
+         *     keys, so rows written before a field was removed still load — notably the
+         *     dropped `labels` filter, which was never evaluated and is superseded by
+         *     `target_labels` delivery routing. A legacy row must keep delivering exactly
+         *     as it does today; a broker that refused to load it would silently stop the
+         *     subscription instead. **Do not add `deny_unknown_fields` here.**
+         *
+         *     The **write** path is strict, and intentionally not symmetric: `POST` and
+         *     `PUT /webhooks` reject a body carrying `filters.labels` with a 422 that names
+         *     `target_labels` as the replacement (see
+         *     `brokkr_broker::api::v1::webhooks::reject_removed_write_fields`). Accepting
+         *     the key and dropping it would leave the caller believing their deliveries
+         *     were scoped when they were not — the failure mode that motivated
+         *     BROKKR-T-0288 in the first place. Rejection is enforced on the raw request
+         *     body, above this type, precisely so the tolerant deserialization below is
+         *     preserved.
+         */
         WebhookFilters: {
             /**
              * Format: uuid
              * @description Filter by specific agent ID.
              */
             agent_id?: string | null;
-            /** @description Filter by labels (all must match). */
-            labels?: {
-                [key: string]: string;
-            } | null;
             /**
              * Format: uuid
              * @description Filter by specific stack ID.
@@ -2539,6 +2607,12 @@ export interface components {
             created_by?: string | null;
             enabled: boolean;
             event_types: string[];
+            /**
+             * @description Payload filters as stored, showing exactly what is evaluated at emission
+             *     time. New writes can no longer introduce keys the broker does not
+             *     understand, but rows predating BROKKR-T-0288 may still carry a `labels`
+             *     key; it is not echoed here because it is not evaluated.
+             */
             filters?: components["schemas"]["WebhookFilters"];
             has_auth_header: boolean;
             has_url: boolean;
@@ -3058,7 +3132,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successfully retrieved agents */
+            /** @description List of agents (admin: all; generator: those registered with it) */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3067,7 +3141,7 @@ export interface operations {
                     "application/json": components["schemas"]["Agent"][];
                 };
             };
-            /** @description Forbidden */
+            /** @description Forbidden — not admin, not a generator, or a system generator */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -6838,6 +6912,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description Unprocessable - out-of-range value, or a removed field (`validate`, `filters.labels`) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Internal server error */
             500: {
                 headers: {
@@ -6973,6 +7056,15 @@ export interface operations {
             };
             /** @description Webhook subscription not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable - out-of-range value, or the removed `filters.labels` field */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

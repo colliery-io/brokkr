@@ -35,6 +35,7 @@ C4Container
 
     Container_Boundary(brokkr, "Control Plane") {
         Container(broker, "Broker", "Rust, Axum", "REST API, background tasks, webhook dispatch")
+        Container(console, "Operator Console", "Rust, Leptos/WASM (brokkr-web)", "Read-only browser view; compiled into the broker binary and served at its root URL")
         ContainerDb(db, "PostgreSQL", "PostgreSQL 15+", "Stacks, deployment objects, events, audit logs")
     }
 
@@ -46,12 +47,16 @@ C4Container
     System_Ext(webhooks, "Webhook Endpoints", "External notification receivers")
 
     Rel(engineer, broker, "Manages", "brokkr CLI / SDKs / REST API")
+    Rel(engineer, console, "Watches", "Browser, broker root URL")
+    Rel(console, broker, "Reads fleet, deployments, telemetry", "Same-origin REST /api/v1")
     Rel(cicd, broker, "Deploys", "brokkr CLI / SDKs / REST API")
     Rel(agent, broker, "Polls for state, reports events", "HTTPS REST + internal WebSocket")
     Rel(broker, db, "Reads/writes state", "SQL :5432")
     Rel(agent, k8s, "Applies/deletes resources", "HTTPS :6443")
     Rel(broker, webhooks, "Delivers events", "HTTPS")
 ```
+
+The Operator Console is drawn as a separate container because operators experience it as one, but it deploys as part of the broker: the `brokkr-web` crate compiles to WebAssembly, the bundle is embedded into the broker binary at build time (the published image is built this way), and the broker serves it as a fallback behind the API on the same port. It is an ordinary read-only client of the v1 REST API with no privileged channel of its own, and the page the broker serves carries an ephemeral read-only credential so it needs no configuration — which makes network reach its authentication boundary. See [Using the Operator Console](../how-to/operator-console.md) and [Read-Only Console Authentication](./security-model.md#read-only-console-authentication-the-ui-pak). The unsupported `examples/ui-slim` React demo is a separate consumer sample, neither built nor shipped with the broker.
 
 The broker and database form the control plane and typically run together; each agent runs inside the cluster it manages, reaching the broker over outbound connections only. Alongside REST polling, the agent maintains an internal WebSocket channel to the broker for low-latency pushes and telemetry streaming — REST remains the load-bearing path (see [Internal Broker↔Agent WS Channel](./internal-ws-channel.md)).
 
@@ -71,13 +76,13 @@ Diesel migrations then run automatically to bring the schema up to date, and the
 
 The broker also provisions a system generator (named `__system__`), which serves as the default application scope for fleet-level and system stacks that reach every agent without per-agent opt-in. Every agent is automatically registered with the system generator when it is created, so it can always receive system-level deployments; this registration is excluded from the public generator listing. The admin generator is a separate entity tied to administrative operations, and agents are *not* automatically registered with it. The system generator is the foundation of Brokkr's application-level tenancy model — see [Generator Registration and Application Scopes](./security-model.md#generator-registration-and-application-scopes).
 
-With the database ready, the broker initializes its runtime subsystems in sequence: the Data Access Layer (DAL), the encryption subsystem for webhook secrets, the event emission system for webhook dispatch, the audit logger for compliance tracking, and finally a set of background maintenance tasks. If a configuration file is specified, it also starts a filesystem watcher for hot-reload capability.
+With the database ready, the broker initializes its runtime subsystems in sequence: the Data Access Layer (DAL), the encryption subsystem for webhook secrets, the ephemeral read-only UI PAK that authenticates the embedded Operator Console (minted in memory, never persisted), the event emission system for webhook dispatch, the audit logger for compliance tracking, and finally a set of background maintenance tasks. If a configuration file is specified, it also starts a filesystem watcher for hot-reload capability.
 
 ### API Layer
 
 The API layer exposes a RESTful interface under the `/api/v1` prefix, with all endpoints documented via OpenAPI annotations that generate Swagger documentation. Every request to an API endpoint passes through authentication middleware that extracts and validates the PAK from the Authorization header.
 
-The authentication middleware performs verification against three possible identity types in order: first checking the admin role table, then the agents table, and finally the generators table. This lookup is optimized with partial database indexes on the `pak_hash` column that exclude soft-deleted records, enabling O(1) lookup performance rather than full table scans.
+The authentication middleware resolves one of four identity classes. It first compares the presented PAK's hash, in constant time, against the ephemeral read-only UI PAK the broker mints in memory at startup for the embedded operator console — a match yields a read-only admin identity without touching the database. It then consults a short-lived auth cache of recent verifications (TTL configurable, default 60 seconds), and on a cache miss checks the remaining identity types in order: the admin role table, then the agents table, and finally the generators table. The database lookups are optimized with partial indexes on the `pak_hash` column that exclude soft-deleted records, enabling O(1) lookup performance rather than full table scans.
 
 Upon successful authentication, the middleware injects an `AuthPayload` structure into the request context containing the authenticated identity's type and ID. Individual endpoint handlers then perform authorization checks against this payload to determine if the caller has permission for the requested operation.
 
@@ -249,7 +254,7 @@ The deployment lifecycle begins when an administrator or CI/CD system (acting as
 
 Creating a deployment object does not trigger any matching or write any agent associations. Instead, the agent-to-stack association is resolved dynamically at read time, on every poll. Rows in the `agent_targets` table exist only when an operator explicitly creates them via `POST /api/v1/agents/{id}/targets`. When an agent requests its target state, the broker computes the union of three sets: stacks explicitly targeted to the agent, stacks sharing *any* label with the agent (OR semantics), and stacks sharing *any* annotation key/value pair with the agent (also OR). Deployment objects are then served from that union.
 
-Creating an explicit target is gated by generator registration: before an operator can add an `agent_targets` row via `POST /api/v1/agents/{id}/targets`, the agent must be registered with the stack's owning generator — otherwise the request is rejected. The gate applies to target creation and removal only; it does not change the read-time association logic above, which still serves the union of explicit targets, label matches, and annotation matches. This is how an agent's opt-in consent boundary is enforced — see [Generator Registration and Application Scopes](./security-model.md#generator-registration-and-application-scopes).
+Creating an explicit target is gated by generator registration: before an operator can add an `agent_targets` row via `POST /api/v1/agents/{id}/targets`, the agent must be registered with the stack's owning generator — otherwise the request is rejected. Registration also constrains the read-time association above: the label and annotation legs of that union contribute only stacks whose owning generator the agent is registered with, so matching narrows within consented generators instead of reaching across them. Explicit targets need no read-time filter, having been checked at creation. This is how an agent's opt-in consent boundary is enforced — see [Generator Registration and Application Scopes](./security-model.md#generator-registration-and-application-scopes).
 
 ```mermaid
 sequenceDiagram
@@ -304,13 +309,15 @@ The figures below are illustrative design targets, not measured guarantees; real
 
 **Agent Performance**: Reconciliation applies resources via server-side apply and is designed to converge a poll's worth of changes promptly, with low-latency event reporting back to the broker.
 
-For larger deployments, the broker can be horizontally scaled behind a load balancer since it maintains no in-memory state beyond caches—all persistent state lives in PostgreSQL.
+For larger deployments, the broker can be horizontally scaled behind a load balancer since it maintains no in-memory state beyond caches—all persistent state lives in PostgreSQL. One caveat: each replica mints its own ephemeral UI PAK for the embedded operator console, so console traffic needs sticky sessions (see [Horizontal Broker Scaling](#horizontal-broker-scaling)).
 
 ## Scaling Patterns
 
 ### Horizontal Broker Scaling
 
 The broker's stateless design enables straightforward horizontal scaling. Multiple broker instances can run behind a load balancer, all connecting to the same PostgreSQL database. Each instance runs its own background tasks, but these are designed to be safe for concurrent execution through database-level coordination (e.g., work order claiming uses atomic updates to prevent double-claiming).
+
+The API is fully stateless across replicas, but the embedded operator console is not: each broker process mints its own ephemeral read-only UI PAK at startup, and the console page served by one replica carries a token that other replicas reject. When multiple replicas serve console traffic behind a load balancer, enable sticky sessions (session affinity) so a browser stays with the replica that issued its token. Agent, generator, and admin PAK authentication is unaffected — those credentials verify identically on every replica.
 
 ```mermaid
 C4Container

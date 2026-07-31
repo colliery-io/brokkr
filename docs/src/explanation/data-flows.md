@@ -40,13 +40,15 @@ sequenceDiagram
 
 The broker assigns each deployment object a sequence ID upon creation, establishing a strict ordering that agents use to process updates in the correct sequence. This sequence ID is monotonically increasing within each stack, ensuring that newer deployment objects always have higher sequence IDs than older ones. The combination of stack ID and sequence ID provides a reliable mechanism for agents to track which objects they have already processed.
 
-When a deployment object is created, the broker does not push it to agents, and it does not precompute which agents should receive it. The agent-to-stack association is resolved dynamically every time an agent polls: the broker unions the stacks explicitly targeted to the agent (rows in `agent_targets`, created only via `POST /api/v1/agents/{id}/targets`) with stacks that share *any* label with the agent and stacks that share *any* annotation key/value pair with the agent (OR semantics in both cases). Deployment objects from that union form the agent's target state. The union itself is unchanged by the registration model: registration gates whether an explicit target can be *created*, not what the read path returns. An `agent_targets` row can only be created — and an existing one only removed — when the agent is registered with the stack's owning generator; otherwise the broker rejects the mutation with a `403 agent_not_registered` (admins included, with no force override). This registration gate is the agent's opt-in consent boundary for application-scoped stacks. See [Generator Registration and Application Scopes](security-model.md#generator-registration-and-application-scopes).
+When a deployment object is created, the broker does not push it to agents, and it does not precompute which agents should receive it. The agent-to-stack association is resolved dynamically every time an agent polls: the broker unions the stacks explicitly targeted to the agent (rows in `agent_targets`, created only via `POST /api/v1/agents/{id}/targets`) with stacks that share *any* label with the agent and stacks that share *any* annotation key/value pair with the agent (OR semantics within each of those two legs). Deployment objects from that union form the agent's target state.
+
+Registration constrains that union at both ends. On the write side, an `agent_targets` row can only be created — and an existing one only removed — when the agent is registered with the stack's owning generator; otherwise the broker rejects the mutation with a `403 agent_not_registered` (admins included, with no force override). On the read side, the label and annotation legs contribute only stacks whose owning generator the agent is registered with, so a matching label on an unregistered generator's stack yields nothing. Explicit targets need no read-time filter, having been checked when they were created. The effect is that matching selects *within* the scopes an agent consented to rather than reaching across them. See [Generator Registration and Application Scopes](security-model.md#generator-registration-and-application-scopes).
 
 Every agent is auto-registered, at creation, with a built-in system generator (`__system__`) that the broker provisions at startup. That registration is what lets fleet- and system-scoped stacks reach every agent without an explicit opt-in. Beyond the system generator, an agent only sees an application's stacks once it is registered with that application's generator — either pre-registered when the agent is created or registered later. (The system generator is distinct from the admin generator; agents are not auto-registered with the latter.) The operational steps for registering and deregistering agents live in the [agent registration how-to](../how-to/agent-registration.md).
 
 ### Agent Reconciliation
 
-Agents continuously poll the broker and reconcile their cluster state to match the desired state defined by deployment objects. The reconciliation loop runs at a configurable interval, defaulting to 10 seconds.
+Agents continuously poll the broker and reconcile their cluster state to match the desired state defined by deployment objects. The reconciliation loop runs at a configurable interval: the agent binary's own default is 10 seconds, and the Helm chart — the documented install path — sets its own default of 30 seconds, so chart-installed fleets observe the slower cadence unless it is overridden.
 
 Which application-scoped stacks an agent is eligible to receive is shaped by the generator scopes it self-registers with at startup, resolved in precedence order (`--generator-ids` flag, then `BROKKR__AGENT__GENERATOR_IDS`, then the deprecated bare `BROKKR_GENERATOR_IDS`). An empty value leaves the agent in system/fleet scope only — it still receives system-scoped stacks regardless, because of the automatic system-generator registration. The configuration keys are documented under [`BROKKR__AGENT__GENERATOR_IDS`](../reference/environment-variables.md).
 
@@ -58,9 +60,9 @@ sequenceDiagram
     participant K8s as Kubernetes API
     participant Cluster as Cluster State
 
-    loop Every polling interval (default: 10s)
+    loop Every polling interval (binary default 10s; chart default 30s)
         Agent->>Broker: GET /api/v1/agents/{id}/target-state
-        Broker->>DB: Resolve associated stacks (targets ∪ labels ∪ annotations)
+        Broker->>DB: Resolve associated stacks (targets ∪ registered-generator label/annotation matches)
         Broker->>DB: Query their deployment objects
         DB-->>Broker: Deployment objects list
         Broker-->>Agent: Deployment objects (with sequence IDs)
@@ -245,7 +247,7 @@ sequenceDiagram
     end
 ```
 
-The webhook worker runs as a background task, polling for pending deliveries every 5 seconds (configurable via `broker.webhookDeliveryIntervalSeconds`). Each polling cycle processes up to 50 deliveries (configurable via `broker.webhookDeliveryBatchSize`), enabling high throughput while controlling resource usage.
+The webhook worker runs as a background task, polling for pending deliveries every 5 seconds (configurable via `broker.webhook_delivery_interval_seconds`). Each polling cycle processes up to 50 deliveries (configurable via `broker.webhook_delivery_batch_size`), enabling high throughput while controlling resource usage.
 
 #### Agent Delivery
 
@@ -288,7 +290,7 @@ Delivery URLs and authentication headers are stored encrypted in the database us
 
 #### Retry Behavior
 
-Failed deliveries are retried with exponential backoff. The first retry occurs after 2 seconds, the second after 4 seconds, then 8, 16, and so on. After exhausting the maximum retry count (configurable), deliveries are marked as "dead" and no longer retried. A cleanup task removes old delivery records after 7 days (configurable via `broker.webhookCleanupRetentionDays`).
+Failed deliveries are retried with exponential backoff. The first retry occurs after 2 seconds, the second after 4 seconds, then 8, 16, and so on. After exhausting the maximum retry count (configurable), deliveries are marked as "dead" and no longer retried. A cleanup task removes old delivery records after 7 days (configurable via `broker.webhook_cleanup_retention_days`).
 
 ### Event Types
 
@@ -305,7 +307,7 @@ Webhook subscriptions can filter by event type using exact matches or wildcards 
 
 ## Authentication Flows
 
-All actors in Brokkr authenticate using Prefixed API Keys (PAKs) sent via the `Authorization: Bearer` header. The authentication middleware checks the PAK against three tables in order—admin roles, agents, and generators—to determine the identity type.
+All actors in Brokkr authenticate using Prefixed API Keys (PAKs) sent via the `Authorization: Bearer` header. The middleware resolves one of four identity classes. It first compares the presented PAK's hash against the ephemeral read-only UI PAK held in broker memory (a constant-time, database-free check that authenticates the operator console), then consults a short-lived auth cache of recent verifications, and only on a cache miss checks three tables in order—admin roles, agents, and generators—to determine the identity type.
 
 ### PAK Authentication
 
@@ -326,6 +328,7 @@ sequenceDiagram
 
     Broker->>Auth: Validate PAK
     Auth->>Auth: Parse PAK and hash long token (SHA-256)
+    Auth->>Auth: UI PAK compare + auth cache check (miss)
     Auth->>DB: Lookup agent by pak_hash (indexed)
     DB-->>Auth: Agent record (if hash matches)
 
@@ -341,7 +344,7 @@ sequenceDiagram
 
 PAK structure follows a defined format: `brokkr_BR{short_token}_{long_token}`. The short token serves as an identifier that can be safely logged and displayed. The long token is the secret component—it is hashed with SHA-256 before storage, and the plaintext is never persisted.
 
-When an agent authenticates, the middleware hashes the presented PAK's long token with SHA-256 and looks the result up directly in the indexed `pak_hash` column (checking the admin role first, then agents, then generators). A request authenticates if and only if a live record with that hash exists.
+When an agent authenticates, the middleware hashes the presented PAK's long token with SHA-256, rules out the in-memory UI PAK with a constant-time compare, and checks the auth cache (TTL configurable via `broker.auth_cache_ttl_seconds`, default 60 seconds; 0 disables it). On a cache miss it looks the hash up directly in the indexed `pak_hash` column (checking the admin role first, then agents, then generators) and caches a successful result. A request authenticates if and only if a live record with that hash exists — or the hash matches the process's UI PAK, which yields a read-only admin identity for the operator console (see the [Security Model](./security-model.md#read-only-console-authentication-the-ui-pak)).
 
 PAKs can be rotated through the `POST /api/v1/agents/{id}/rotate-pak` endpoint, which generates a new PAK and invalidates the previous one. The new PAK is returned only once—it cannot be retrieved later.
 
@@ -473,7 +476,7 @@ Stale claims are automatically detected and reset. If an agent claims a work ord
 
 ## Data Retention
 
-Brokkr maintains extensive data for auditing, debugging, and compliance purposes. Different data types have different retention characteristics based on their importance and storage requirements.
+Brokkr keeps different classes of data for very different lengths of time, and by two different mechanisms. Understanding which mechanism applies to a table tells you whether old data is merely hidden or actually gone.
 
 ### Immutability Pattern
 
@@ -481,17 +484,32 @@ As established above, deployment objects are append-only: updates create new obj
 
 The `deleted_at` timestamp implements soft deletion across most entity types. Queries filter by `deleted_at IS NULL` by default, hiding deleted records from normal operations while preserving them for auditing. Special "include deleted" query variants provide access to the full history when needed.
 
+Soft deletion is a *visibility* mechanism, not a retention mechanism. Rows marked `deleted_at` still occupy storage indefinitely. Tables that would otherwise grow without bound are additionally subject to a background eviction task that issues real `DELETE` statements — those rows are unrecoverable once the window passes, whether or not they were ever soft-deleted.
+
 ### Retention Policies
 
 | Data Type | Default Retention | Cleanup Method |
 |-----------|-------------------|----------------|
-| Deployment objects | Permanent | Soft delete only |
-| Agent events | Permanent | Soft delete only |
-| Webhook deliveries | 7 days | Background cleanup task |
-| Audit logs | 90 days | Background cleanup task |
-| Diagnostic results | 1 hour | Background cleanup task |
+| Deployment objects | Indefinite | Soft delete only — no eviction |
+| Agent events | 30 days (`broker.agent_events_retention_days`; set to `0` to keep indefinitely) | Hourly hard-delete task |
+| Webhook deliveries | 7 days (`broker.webhook_cleanup_retention_days`) | Hourly hard-delete task |
+| Audit logs | 90 days (`broker.audit_log_retention_days`) | Daily hard-delete task |
+| Diagnostic requests and results | 1 hour (`broker.diagnostic_max_age_hours`) | Hard-delete task every 15 minutes |
+| Streamed Kubernetes events and pod logs | 6 hours (hard ceiling, not configurable upward) | Continuous eviction, every 60 seconds |
 
-Background tasks run at regular intervals to enforce retention policies. The webhook cleanup task runs hourly, removing deliveries older than the configured retention period. The audit log cleanup task runs daily, removing entries beyond the retention window. Diagnostic results have a short retention period (1 hour by default) as they contain point-in-time debugging information.
+Deployment objects are the only class with no eviction at all — they are the system's record of what was deployed, so they are kept indefinitely and only soft-deleted.
+
+Agent events are evicted on an hourly sweep that hard-deletes every row whose server-side `created_at` is older than the window. This matters for anyone treating the agent event stream as a durable deployment history: by default, events older than thirty days are gone from the database, not merely hidden. The window is configurable, and setting it to `0` disables eviction entirely at the cost of unbounded table growth at fleet scale. Eviction keys off the broker's own ingestion timestamp rather than any timestamp supplied by the agent, so a misbehaving agent cannot backdate events to keep them alive past the window.
+
+Audit logs and webhook deliveries follow the same pattern on longer and shorter windows respectively. Diagnostic results are the shortest-lived of the request-scoped data, since they capture point-in-time debugging snapshots that lose value quickly; their cleanup task also expires unclaimed diagnostic requests past their `expires_at`.
+
+### Telemetry Is Not a Log Store
+
+The streamed Kubernetes events and pod logs that reach the broker over the agent WebSocket channel are governed by a deliberately different rule: a **hard six-hour ceiling** that cannot be raised. A shorter window can be configured; a longer one cannot — any larger value is silently clamped back to six hours.
+
+This is a product stance, not an implementation limit. These buffers exist to support immediate operational work — watching a rollout, reading the events behind a crash loop that is happening right now — and nothing else. Brokkr is explicitly not a log aggregation or long-term log retention system, and it should not be positioned as one or made the system of record for logs. Ship logs to a purpose-built platform for anything that must be queryable tomorrow; treat what Brokkr holds as a live tail that will be gone by the end of the shift.
+
+Eviction here runs continuously rather than on a long interval — a sweep every sixty seconds — so the ceiling is enforced closely rather than approximately, and it keys off the broker's ingestion timestamp for the same reason agent-event eviction does.
 
 ### Incremental Target-State Filtering
 

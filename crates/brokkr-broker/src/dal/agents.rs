@@ -14,7 +14,9 @@ use brokkr_models::models::agents::{Agent, NewAgent};
 use brokkr_models::models::webhooks::{
     BrokkrEvent, EVENT_AGENT_DEREGISTERED, EVENT_AGENT_REGISTERED,
 };
-use brokkr_models::schema::{agent_annotations, agent_labels, agent_targets, agents};
+use brokkr_models::schema::{
+    agent_annotations, agent_generator_registrations, agent_labels, agent_targets, agents,
+};
 use chrono::Utc;
 use diesel::prelude::*;
 use std::collections::HashSet;
@@ -128,6 +130,31 @@ impl AgentsDAL<'_> {
         let conn = &mut self.dal.conn()?;
         agents::table
             .filter(agents::deleted_at.is_null())
+            .load::<Agent>(conn)
+    }
+
+    /// Lists the non-deleted agents registered with `generator_id`.
+    ///
+    /// This is the tenant-scoped counterpart to [`Self::list`] (BROKKR-T-0315):
+    /// a generator sees the agents that have explicitly registered with it, and
+    /// nothing else. Soft-delete handling deliberately matches `list`, so the
+    /// admin and generator paths through `GET /agents` cannot disagree about
+    /// which agents exist.
+    ///
+    /// Note that **every** agent is registered with the system generator, so
+    /// calling this with the system generator's id returns the whole fleet.
+    /// Callers on the API path must reject system generators first; see
+    /// `require_tenant_generator` in `api/v1/agents.rs`.
+    pub fn list_for_generator(
+        &self,
+        generator_id: Uuid,
+    ) -> Result<Vec<Agent>, diesel::result::Error> {
+        let conn = &mut self.dal.conn()?;
+        agents::table
+            .inner_join(agent_generator_registrations::table)
+            .filter(agent_generator_registrations::generator_id.eq(generator_id))
+            .filter(agents::deleted_at.is_null())
+            .select(agents::all_columns)
             .load::<Agent>(conn)
     }
 

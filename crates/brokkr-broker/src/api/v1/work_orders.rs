@@ -242,7 +242,10 @@ async fn create_work_order(
             .work_orders()
             .add_annotations(work_order.id, &annotations)
     {
-        targeting_failed = Some(ApiError::from_diesel(e, "failed to add work order annotations"));
+        targeting_failed = Some(ApiError::from_diesel(
+            e,
+            "failed to add work order annotations",
+        ));
     }
 
     if let Some(err) = targeting_failed {

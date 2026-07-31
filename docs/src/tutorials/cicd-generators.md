@@ -13,9 +13,18 @@ In this tutorial, you'll set up a generator — Brokkr's mechanism for CI/CD int
 
 **Prerequisites:**
 
-- A running Brokkr development environment (`angreal local up`)
-- Your admin PAK
-- Completed the [Deploy Your First Application](./first-deployment.md) tutorial
+- A broker you can reach at `http://localhost:3000` — either a [Helm install](../getting-started/installation.md) with `kubectl port-forward svc/brokkr-broker 3000:3000` running, or the [local development environment](../getting-started/development.md) (`angreal local up`)
+- Your admin PAK for that broker (see [Adapting the commands to your install](./README.md#adapting-the-commands-to-your-install))
+- `curl` and `jq` installed
+- **One existing agent**, which Step 4 registers with your new generator. A broker-side record is enough to follow every step; a *running* agent attached to a cluster is what makes the pushed deployment actually appear there.
+- Completed the [Deploy Your First Application](./first-deployment.md) tutorial — including its Step 3 agent activation. Agents start `INACTIVE` and apply nothing until activated; this tutorial assumes yours is already `ACTIVE`.
+
+As in the first tutorial, export the agent's name up front:
+
+```bash
+export AGENT_NAME=brokkr-integration-test-agent   # development environment
+# export AGENT_NAME=my-agent                      # Helm install: your broker.agentName
+```
 
 ## Step 1: Create a Generator
 
@@ -84,11 +93,12 @@ The key rule: generators can create, update, and delete their own stacks and pus
 
 Before pushing deployment objects, an agent must be targeted to the stack. Otherwise the deployment exists in the broker but no agent will apply it. Targeting has a prerequisite: the agent must first be **registered** with the stack's generator. Targeting an unregistered agent is rejected with a `403` (`agent_not_registered`) — admins can't bypass this gate either.
 
-First, grab the default agent's ID and register it with your generator. With no `agent_id` in the body the agent would register itself; as admin you supply the `agent_id` you want to register:
+First, grab your agent's ID by name and register it with your generator. (This is the agent you activated in the [first tutorial](./first-deployment.md) — if it is still `INACTIVE`, deployments will sit in the broker unapplied.) With no `agent_id` in the body the agent would register itself; as admin you supply the `agent_id` you want to register:
 
 ```bash
 AGENT_ID=$(curl -s http://localhost:3000/api/v1/agents \
-  -H "Authorization: Bearer <your-admin-pak>" | jq -r '.[0].id')
+  -H "Authorization: Bearer <your-admin-pak>" \
+  | jq -r --arg name "$AGENT_NAME" '.[] | select(.name==$name) | .id')
 
 curl -s -X POST "http://localhost:3000/api/v1/generators/${GENERATOR_ID}/register" \
   -H "Authorization: Bearer <your-admin-pak>" \
@@ -176,7 +186,7 @@ curl -s -X POST "http://localhost:3000/api/v1/stacks/${STACK_ID}/deployment-obje
   --data-binary @myapp.yaml | jq '{id, sequence_id, yaml_checksum}'
 ```
 
-Each push creates a new deployment object with an incrementing `sequence_id`. The agent sees the new sequence and applies the latest version.
+Each push creates a new deployment object with an incrementing `sequence_id`. The agent sees the new sequence and applies the latest version — allow one poll cycle (about 10 seconds in the development environment; the Helm chart's default is 30 seconds) before checking the cluster.
 
 ## Step 6: Simulate a Deployment Update
 

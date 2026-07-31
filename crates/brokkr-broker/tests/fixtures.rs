@@ -104,7 +104,7 @@ impl TestFixture {
         dotenv().ok();
         let settings = Settings::new(None).expect("Failed to load settings");
         let connection_pool =
-            create_shared_connection_pool(&settings.database.url, "brokkr", 5, None);
+            create_shared_connection_pool(&settings.database.url, Some("brokkr"), 5, None);
         // Run migrations
         let mut conn = connection_pool
             .pool
@@ -448,7 +448,10 @@ impl TestFixture {
     /// compatible with the registration enforcement added in T-0246.
     pub fn register_agent_with_defaults(&self, agent_id: Uuid) {
         if let Ok(Some(sys_id)) = self.dal.generators().get_system_generator_id() {
-            let _ = self.dal.agent_generator_registrations().create(agent_id, sys_id);
+            let _ = self
+                .dal
+                .agent_generator_registrations()
+                .create(agent_id, sys_id);
         }
         let _ = self
             .dal

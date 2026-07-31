@@ -110,7 +110,7 @@ Shipwright provides a Kubernetes-native build abstraction:
 - **Strategy flexibility** — swap between Buildah, Kaniko, ko, S2I without changing build definitions
 - **Build caching** — strategies can cache layers for faster rebuilds
 
-Builds have a 15-minute timeout — if the BuildRun doesn't complete in time, it's reported as failed. These timeouts are compile-time constants in the agent, not configurable at runtime.
+Builds have a 15-minute timeout — if the BuildRun doesn't complete in time, it's reported as failed. That limit is a compile-time constant in the agent, not configurable at runtime. The custom work-order path derives its watch window differently, from the work order itself — see [Custom Work Orders](#custom-work-orders).
 
 ## Work Order Log
 
@@ -136,7 +136,28 @@ Beyond builds, work orders support arbitrary YAML:
 }
 ```
 
-Custom work orders apply the YAML to the cluster and monitor completion. This enables arbitrary Kubernetes jobs, CronJobs, or any other resource to be orchestrated through Brokkr.
+Custom work orders server-side-apply every document in the YAML to the cluster. What happens next depends on the kind, and this distinction is the whole point of the feature:
+
+- **`batch/v1` `Job`** — the agent watches each applied Job until the Job controller writes a terminal condition. `Complete` completes the work order with `success: true`; `Failed` completes it with `success: false` and the Job's own reason and message. A Job that lands in `ImagePullBackOff`, or whose pod exits non-zero, is a failed work order.
+- **Every other kind** — applied only. The work order succeeds once the apply succeeds, and the result message names the kinds that were not monitored. Brokkr does not wait on them.
+
+### Why only Jobs
+
+`Job` is the only kind with an unambiguous terminal state. A `Deployment` never "completes" — it is continuous desired state. A `CronJob` completes repeatedly, forever. A `ConfigMap` has no notion of running at all. Inventing a completion signal for those would mean inventing a definition of "done" that the Kubernetes API does not have, and gating a CI/CD pipeline on a guess is worse than gating it on an honest "applied".
+
+Ongoing health of continuously-running resources is a different question with a different answer: the deployment-object reconciler reports it as health status, not as work-order completion. See [Data Flows](./data-flows.md).
+
+Note that the terminal *condition* is the signal, not the `succeeded`/`failed` pod counters. A Job with a `backoffLimit` above zero shows `failed: 1` while it is still retrying and may yet succeed; only the condition means the Job is finished.
+
+### The watch window, and why it is bounded
+
+The agent cannot watch a Job forever. The broker releases a claim once `claim_timeout_seconds` has elapsed (see [Stale Claim Detection](#stale-claim-detection)), and a watch that outlived its claim would get the work order handed to a second agent while the first Job was still running — your migration, twice.
+
+So the watch window is derived from the work order's own `claim_timeout_seconds`, minus a safety margin of 10% (never less than 60 seconds) covering the apply, the poll interval, the completion report, and broker/agent clock skew. At the 3600-second default that is a 54-minute window. Raising `claim_timeout_seconds` on the work order raises the window with it; there is no separate knob and no fixed constant to tune.
+
+If the window runs out with the Job still going, the work order is completed with `success: false` — but the result message says the Job *did not finish within the window*, explicitly distinct from the message for a Job that *ran and failed*. These are different operator situations: in the timeout case the Job is still running in the cluster, Brokkr did not cancel it, and its final outcome is unknown to Brokkr. Neither outcome is marked retryable, because re-dispatching a work order whose Job may still be running is the failure mode the bounded window exists to prevent.
+
+> **Contrast with builds:** the build path also watches to completion, but against a fixed 15-minute compile-time constant and a Shipwright `BuildRun`'s `Succeeded` condition, and it monitors exactly one resource — the BuildRun it created. The custom path monitors whichever applied objects happen to be Jobs, against a window derived from the work order, and applies everything else without waiting.
 
 ## Related Documentation
 

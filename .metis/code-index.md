@@ -1,6 +1,6 @@
 # Code Index
 
-> Generated: 2026-06-29T11:24:06Z | 434 files | JavaScript, Python, Rust, TypeScript
+> Generated: 2026-07-29T15:21:37Z | 446 files | JavaScript, Python, Rust, TypeScript
 
 ## Project Structure
 
@@ -44,7 +44,8 @@
 │   │           │   ├── api.rs
 │   │           │   ├── mod.rs
 │   │           │   └── objects.rs
-│   │           └── main.rs
+│   │           ├── main.rs
+│   │           └── work_orders.rs
 │   ├── brokkr-broker/
 │   │   ├── examples/
 │   │   │   └── openapi_export.rs
@@ -66,6 +67,7 @@
 │   │   │   │       ├── middleware.rs
 │   │   │   │       ├── mod.rs
 │   │   │   │       ├── openapi.rs
+│   │   │   │       ├── paks.rs
 │   │   │   │       ├── stacks.rs
 │   │   │   │       ├── templates.rs
 │   │   │   │       ├── webhooks.rs
@@ -113,7 +115,8 @@
 │   │   │   │   ├── matching.rs
 │   │   │   │   ├── mod.rs
 │   │   │   │   ├── pak.rs
-│   │   │   │   └── templating.rs
+│   │   │   │   ├── templating.rs
+│   │   │   │   └── ui_pak.rs
 │   │   │   └── ws/
 │   │   │       ├── broadcaster.rs
 │   │   │       ├── eviction.rs
@@ -135,12 +138,17 @@
 │   │           │   ├── deployment_objects.rs
 │   │           │   ├── diagnostics.rs
 │   │           │   ├── fleet.rs
+│   │           │   ├── generator_agent_listing.rs
 │   │           │   ├── generator_registration.rs
 │   │           │   ├── generators.rs
 │   │           │   ├── health.rs
 │   │           │   ├── mod.rs
+│   │           │   ├── pak_scoping.rs
+│   │           │   ├── paks.rs
+│   │           │   ├── registration_consent.rs
 │   │           │   ├── stacks.rs
 │   │           │   ├── templates.rs
+│   │           │   ├── ui_pak.rs
 │   │           │   ├── webhooks.rs
 │   │           │   ├── work_orders.rs
 │   │           │   └── ws.rs
@@ -168,6 +176,8 @@
 │   │           │   ├── webhook_subscriptions.rs
 │   │           │   └── work_orders.rs
 │   │           ├── db/
+│   │           │   ├── cli_schema.rs
+│   │           │   ├── default_admin_pak.rs
 │   │           │   ├── mod.rs
 │   │           │   └── multi_tenant.rs
 │   │           └── main.rs
@@ -313,6 +323,7 @@
 │   │       │   │   │   └── update_agent.py
 │   │       │   │   ├── auth/
 │   │       │   │   │   ├── __init__.py
+│   │       │   │   │   ├── list_paks.py
 │   │       │   │   │   └── verify_pak.py
 │   │       │   │   ├── deployment_objects/
 │   │       │   │   │   ├── __init__.py
@@ -417,6 +428,7 @@
 │   │       │   │   ├── agent_registration_body.py
 │   │       │   │   ├── agent_target.py
 │   │       │   │   ├── audit_log.py
+│   │       │   │   ├── audit_log_entry.py
 │   │       │   │   ├── audit_log_list_response.py
 │   │       │   │   ├── auth_response.py
 │   │       │   │   ├── claim_work_order_request.py
@@ -462,6 +474,7 @@
 │   │       │   │   ├── new_stack_template.py
 │   │       │   │   ├── new_template_annotation.py
 │   │       │   │   ├── new_template_label.py
+│   │       │   │   ├── pak_summary.py
 │   │       │   │   ├── pending_webhook_delivery.py
 │   │       │   │   ├── pod_log_history_response.py
 │   │       │   │   ├── resource_health.py
@@ -479,7 +492,6 @@
 │   │       │   │   ├── update_webhook_request.py
 │   │       │   │   ├── webhook_delivery.py
 │   │       │   │   ├── webhook_filters.py
-│   │       │   │   ├── webhook_filters_labels_type_0.py
 │   │       │   │   ├── webhook_response.py
 │   │       │   │   ├── webhook_subscription.py
 │   │       │   │   ├── work_order.py
@@ -622,58 +634,85 @@
 - pub `new` function L105-110 — `(k8s_client: Client) -> Self` — Creates a new HealthChecker instance watching the whole cluster
 - pub `with_watch_namespace` function L114-117 — `(mut self, namespace: Option<String>) -> Self` — Restricts pod discovery to a single namespace when `namespace` is
 - pub `check_deployment_object` function L120-127 — `( &self, deployment_object_id: Uuid, ) -> Result<DeploymentHealthStatus, Box<dyn...` — Checks the health of a specific deployment object by ID.
-- pub `check_deployment_objects` function L370-398 — `( &self, deployment_object_ids: &[Uuid], ) -> Vec<DeploymentHealthStatus>` — Checks health for multiple deployment objects with one cluster-wide
-- pub `HealthStatusUpdate` struct L452-455 — `{ deployment_objects: Vec<DeploymentObjectHealthUpdate> }` — Request body for sending health status updates to the broker
-- pub `DeploymentObjectHealthUpdate` struct L459-468 — `{ id: Uuid, status: String, summary: Option<HealthSummary>, checked_at: DateTime...` — Health update for a single deployment object (matches broker API)
+- pub `check_deployment_objects` function L269-297 — `( &self, deployment_object_ids: &[Uuid], ) -> Vec<DeploymentHealthStatus>` — Checks health for multiple deployment objects with one cluster-wide
+- pub `PodAttributor` struct L323-326 — `{ fetcher: KubeOwnerFetcher, cache: HashMap<OwnerKey, Option<Uuid>> }` — Attributes pods to the Brokkr deployment object that produced them.
+- pub `new` function L330-338 — `(client: Client) -> Self` — Creates an attributor bound to a Kubernetes client.
+- pub `deployment_object_of` function L341-346 — `(&mut self, pod: &Pod) -> Option<Uuid>` — Resolves the deployment object a single pod belongs to, if any.
+- pub `group_by_deployment_object` function L350-364 — `( &mut self, pods: impl IntoIterator<Item = Pod>, wanted: &HashSet<Uuid>, ) -> H...` — Groups pods by the deployment object they belong to, keeping only the
+- pub `pods_for` function L367-377 — `( &mut self, pods: impl IntoIterator<Item = Pod>, deployment_object_id: Uuid, ) ...` — Returns the subset of `pods` belonging to one deployment object.
+- pub `HealthStatusUpdate` struct L528-531 — `{ deployment_objects: Vec<DeploymentObjectHealthUpdate> }` — Request body for sending health status updates to the broker
+- pub `DeploymentObjectHealthUpdate` struct L535-544 — `{ id: Uuid, status: String, summary: Option<HealthSummary>, checked_at: DateTime...` — Health update for a single deployment object (matches broker API)
 -  `MAX_OWNER_DEPTH` variable L29 — `: usize` — Maximum ownerReference hops walked when attributing a pod to a
 -  `OwnerKey` type L33 — `= (String, String, String, String)` — Cache key for owner-chain resolution within one discovery pass:
 -  `DEGRADED_CONDITIONS` variable L36-44 — `: &[&str]` — Known problematic waiting conditions that indicate degraded health
 -  `PENDING_CONDITIONS` variable L49 — `: &[&str]` — Conditions that indicate pending state (not yet problematic but not ready)
 -  `TERMINATED_ISSUES` variable L52 — `: &[&str]` — Reasons from terminated containers that indicate issues
--  `HealthChecker` type L103-399 — `= HealthChecker` — OOMKilled, and other problematic conditions.
+-  `HealthChecker` type L103-298 — `= HealthChecker` — OOMKilled, and other problematic conditions.
 -  `analyze_pods` function L131-248 — `(&self, deployment_object_id: Uuid, pods: &[Pod]) -> DeploymentHealthStatus` — Analyzes a set of pods attributed to one deployment object and
--  `discover_pods` function L262-296 — `( &self, deployment_object_ids: &[Uuid], ) -> Result<HashMap<Uuid, Vec<Pod>>, Bo...` — Discovers the pods belonging to each requested deployment object in a
--  `resolve_owner_doid` function L302-366 — `( &self, pod: &Pod, discovery: &mut Option<Discovery>, cache: &mut HashMap<Owner...` — Walks a pod's controller ownerReference chain upward until an object
--  `pod_direct_doid` function L404-411 — `(pod: &Pod) -> Option<Uuid>` — Extracts the deployment-object id directly carried by a pod: the
--  `annotations_doid` function L414-418 — `(annotations: Option<&BTreeMap<String, String>>) -> Option<Uuid>` — Extracts the deployment-object id from an annotation map.
--  `controller_owner` function L422-427 — `(refs: Option<&[OwnerReference]>) -> Option<&OwnerReference>` — Picks the owner to walk: the controller reference when present, otherwise
--  `gvk_of` function L430-435 — `(api_version: &str, kind: &str) -> GroupVersionKind` — Builds a GroupVersionKind from an ownerReference's apiVersion + kind.
--  `is_pod_ready` function L438-448 — `(pod: &Pod) -> bool` — Checks if a pod is in ready state
--  `DeploymentObjectHealthUpdate` type L470-479 — `= DeploymentObjectHealthUpdate` — OOMKilled, and other problematic conditions.
--  `from` function L471-478 — `(status: DeploymentHealthStatus) -> Self` — OOMKilled, and other problematic conditions.
--  `tests` module L482-632 — `-` — OOMKilled, and other problematic conditions.
--  `pod_with` function L485-493 — `( labels: Option<BTreeMap<String, String>>, annotations: Option<BTreeMap<String,...` — OOMKilled, and other problematic conditions.
--  `test_pod_direct_doid_prefers_label_then_annotation` function L496-524 — `()` — OOMKilled, and other problematic conditions.
--  `test_controller_owner_prefers_controller_ref` function L527-550 — `()` — OOMKilled, and other problematic conditions.
--  `test_gvk_of_grouped_and_core` function L553-564 — `()` — OOMKilled, and other problematic conditions.
--  `test_degraded_conditions_are_detected` function L567-573 — `()` — OOMKilled, and other problematic conditions.
--  `test_terminated_issues_include_oomkilled` function L576-579 — `()` — OOMKilled, and other problematic conditions.
--  `test_health_summary_default` function L582-588 — `()` — OOMKilled, and other problematic conditions.
--  `test_deployment_health_status_serialization` function L591-610 — `()` — OOMKilled, and other problematic conditions.
--  `test_health_update_conversion` function L613-631 — `()` — OOMKilled, and other problematic conditions.
+-  `discover_pods` function L252-265 — `( &self, deployment_object_ids: &[Uuid], ) -> Result<HashMap<Uuid, Vec<Pod>>, Bo...` — Discovers the pods belonging to each requested deployment object in a
+-  `PodAttributor` type L328-378 — `= PodAttributor` — OOMKilled, and other problematic conditions.
+-  `OwnerFetcher` interface L385-390 — `{ fn fetch() }` — Looks up the metadata of an ownerReference target.
+-  `KubeOwnerFetcher` struct L393-398 — `{ client: Client, discovery: Option<Discovery> }` — Fetches owner objects from the API server via dynamic discovery.
+-  `KubeOwnerFetcher` type L400-429 — `impl OwnerFetcher for KubeOwnerFetcher` — OOMKilled, and other problematic conditions.
+-  `fetch` function L401-428 — `(&mut self, namespace: &str, owner: &OwnerReference) -> Option<ObjectMeta>` — OOMKilled, and other problematic conditions.
+-  `resolve_owner_doid` function L435-475 — `( fetcher: &mut F, pod: &Pod, cache: &mut HashMap<OwnerKey, Option<Uuid>>, ) -> ...` — Walks a pod's controller ownerReference chain upward until an object
+-  `pod_direct_doid` function L480-487 — `(pod: &Pod) -> Option<Uuid>` — Extracts the deployment-object id directly carried by a pod: the
+-  `annotations_doid` function L490-494 — `(annotations: Option<&BTreeMap<String, String>>) -> Option<Uuid>` — Extracts the deployment-object id from an annotation map.
+-  `controller_owner` function L498-503 — `(refs: Option<&[OwnerReference]>) -> Option<&OwnerReference>` — Picks the owner to walk: the controller reference when present, otherwise
+-  `gvk_of` function L506-511 — `(api_version: &str, kind: &str) -> GroupVersionKind` — Builds a GroupVersionKind from an ownerReference's apiVersion + kind.
+-  `is_pod_ready` function L514-524 — `(pod: &Pod) -> bool` — Checks if a pod is in ready state
+-  `DeploymentObjectHealthUpdate` type L546-555 — `= DeploymentObjectHealthUpdate` — OOMKilled, and other problematic conditions.
+-  `from` function L547-554 — `(status: DeploymentHealthStatus) -> Self` — OOMKilled, and other problematic conditions.
+-  `tests` module L558-891 — `-` — OOMKilled, and other problematic conditions.
+-  `pod_with` function L561-569 — `( labels: Option<BTreeMap<String, String>>, annotations: Option<BTreeMap<String,...` — OOMKilled, and other problematic conditions.
+-  `test_pod_direct_doid_prefers_label_then_annotation` function L572-600 — `()` — OOMKilled, and other problematic conditions.
+-  `test_controller_owner_prefers_controller_ref` function L603-626 — `()` — OOMKilled, and other problematic conditions.
+-  `FakeOwnerFetcher` struct L633-636 — `{ objects: HashMap<(String, String), ObjectMeta>, fetches: usize }` — In-memory stand-in for the API server, keyed by (kind, name).
+-  `FakeOwnerFetcher` type L638-644 — `= FakeOwnerFetcher` — OOMKilled, and other problematic conditions.
+-  `with` function L639-643 — `(mut self, kind: &str, name: &str, meta: ObjectMeta) -> Self` — OOMKilled, and other problematic conditions.
+-  `FakeOwnerFetcher` type L646-653 — `impl OwnerFetcher for FakeOwnerFetcher` — OOMKilled, and other problematic conditions.
+-  `fetch` function L647-652 — `(&mut self, _namespace: &str, owner: &OwnerReference) -> Option<ObjectMeta>` — OOMKilled, and other problematic conditions.
+-  `owner_ref` function L655-664 — `(kind: &str, name: &str) -> OwnerReference` — OOMKilled, and other problematic conditions.
+-  `meta_with` function L666-676 — `(annotation: Option<Uuid>, owner: Option<OwnerReference>) -> ObjectMeta` — OOMKilled, and other problematic conditions.
+-  `owned_pod` function L681-687 — `(namespace: &str, name: &str, replicaset: &str) -> Pod` — Pod → ReplicaSet → Deployment, where the pod carries neither the
+-  `test_owner_chain_resolves_deployment_replicaset_pod` function L690-712 — `()` — OOMKilled, and other problematic conditions.
+-  `test_owner_chain_memoizes_shared_replicaset` function L715-740 — `()` — OOMKilled, and other problematic conditions.
+-  `test_owner_chain_misses_are_cached_and_bounded` function L743-766 — `()` — OOMKilled, and other problematic conditions.
+-  `test_owner_chain_stops_at_max_depth` function L769-785 — `()` — OOMKilled, and other problematic conditions.
+-  `test_owner_chain_skipped_without_namespace_or_owner` function L788-809 — `()` — OOMKilled, and other problematic conditions.
+-  `test_gvk_of_grouped_and_core` function L812-823 — `()` — OOMKilled, and other problematic conditions.
+-  `test_degraded_conditions_are_detected` function L826-832 — `()` — OOMKilled, and other problematic conditions.
+-  `test_terminated_issues_include_oomkilled` function L835-838 — `()` — OOMKilled, and other problematic conditions.
+-  `test_health_summary_default` function L841-847 — `()` — OOMKilled, and other problematic conditions.
+-  `test_deployment_health_status_serialization` function L850-869 — `()` — OOMKilled, and other problematic conditions.
+-  `test_health_update_conversion` function L872-890 — `()` — OOMKilled, and other problematic conditions.
 
 #### crates/brokkr-agent/src/diagnostics.rs
 
-- pub `DiagnosticRequest` struct L28-47 — `{ id: Uuid, agent_id: Uuid, deployment_object_id: Uuid, status: String, requeste...` — Diagnostic request received from the broker.
-- pub `SubmitDiagnosticResult` struct L51-60 — `{ pod_statuses: String, events: String, log_tails: Option<String>, collected_at:...` — Result to submit back to the broker.
-- pub `PodStatus` struct L64-75 — `{ name: String, namespace: String, phase: String, conditions: Vec<PodCondition>,...` — Pod status information for diagnostics.
-- pub `PodCondition` struct L79-88 — `{ condition_type: String, status: String, reason: Option<String>, message: Optio...` — Pod condition information.
-- pub `ContainerStatus` struct L92-105 — `{ name: String, ready: bool, restart_count: i32, state: String, state_reason: Op...` — Container status information.
-- pub `EventInfo` struct L109-124 — `{ event_type: Option<String>, reason: Option<String>, message: Option<String>, i...` — Kubernetes event information.
-- pub `DiagnosticsHandler` struct L127-130 — `{ client: Client }` — Diagnostics handler for collecting Kubernetes diagnostics.
-- pub `new` function L134-136 — `(client: Client) -> Self` — Creates a new DiagnosticsHandler.
-- pub `collect_diagnostics` function L146-171 — `( &self, namespace: &str, label_selector: &str, ) -> Result<SubmitDiagnosticResu...` — Collects diagnostics for resources matching the given labels in the namespace.
-- pub `collect_diagnostics_in` function L184-218 — `( &self, namespaces: &[String], label_selector: &str, ) -> Result<SubmitDiagnost...` — Collects diagnostics across multiple namespaces and merges the results.
--  `MAX_LOG_LINES` variable L24 — `: i64` — Maximum number of log lines to collect per container.
--  `DiagnosticsHandler` type L132-439 — `= DiagnosticsHandler` — about Kubernetes resources, including pod statuses, events, and log tails.
--  `collect_pod_statuses` function L221-329 — `( &self, namespace: &str, label_selector: &str, ) -> Result<Vec<PodStatus>, Box<...` — Collects pod statuses for matching pods.
--  `collect_events` function L332-371 — `( &self, namespace: &str, _label_selector: &str, ) -> Result<Vec<EventInfo>, Box...` — Collects events for matching resources.
--  `collect_log_tails` function L374-415 — `( &self, namespace: &str, label_selector: &str, ) -> Result<HashMap<String, Stri...` — Collects log tails for matching pods.
--  `get_container_logs` function L418-438 — `( &self, namespace: &str, pod_name: &str, container_name: &str, ) -> Result<Stri...` — Gets logs for a specific container.
--  `tests` module L442-502 — `-` — about Kubernetes resources, including pod statuses, events, and log tails.
--  `test_pod_status_serialization` function L446-470 — `()` — about Kubernetes resources, including pod statuses, events, and log tails.
--  `test_event_info_serialization` function L473-487 — `()` — about Kubernetes resources, including pod statuses, events, and log tails.
--  `test_submit_diagnostic_result_serialization` function L490-501 — `()` — about Kubernetes resources, including pod statuses, events, and log tails.
+- pub `DiagnosticRequest` struct L32-51 — `{ id: Uuid, agent_id: Uuid, deployment_object_id: Uuid, status: String, requeste...` — Diagnostic request received from the broker.
+- pub `SubmitDiagnosticResult` struct L55-64 — `{ pod_statuses: String, events: String, log_tails: Option<String>, collected_at:...` — Result to submit back to the broker.
+- pub `PodStatus` struct L68-79 — `{ name: String, namespace: String, phase: String, conditions: Vec<PodCondition>,...` — Pod status information for diagnostics.
+- pub `PodCondition` struct L83-92 — `{ condition_type: String, status: String, reason: Option<String>, message: Optio...` — Pod condition information.
+- pub `ContainerStatus` struct L96-109 — `{ name: String, ready: bool, restart_count: i32, state: String, state_reason: Op...` — Container status information.
+- pub `EventInfo` struct L113-133 — `{ event_type: Option<String>, reason: Option<String>, message: Option<String>, i...` — Kubernetes event information.
+- pub `DiagnosticsHandler` struct L136-139 — `{ client: Client }` — Diagnostics handler for collecting Kubernetes diagnostics.
+- pub `new` function L143-145 — `(client: Client) -> Self` — Creates a new DiagnosticsHandler.
+- pub `collect_diagnostics` function L155-162 — `( &self, namespace: &str, deployment_object_id: Uuid, ) -> Result<SubmitDiagnost...` — Collects diagnostics for one deployment object within a single namespace.
+- pub `collect_diagnostics_in` function L182-221 — `( &self, namespaces: &[String], deployment_object_id: Uuid, ) -> Result<SubmitDi...` — Collects diagnostics across multiple namespaces and merges the results.
+-  `MAX_LOG_LINES` variable L25 — `: i64` — Maximum number of log lines to collect per container.
+-  `MAX_EVENTS` variable L28 — `: usize` — Maximum number of (most recent) namespace events returned per namespace.
+-  `DiagnosticsHandler` type L141-372 — `= DiagnosticsHandler` — about Kubernetes resources, including pod statuses, events, and log tails.
+-  `resolve_pods` function L231-248 — `( &self, attributor: &mut PodAttributor, namespace: &str, deployment_object_id: ...` — Lists the pods in `namespace` and keeps the ones belonging to
+-  `collect_events` function L269-308 — `( &self, namespace: &str, ) -> Result<Vec<EventInfo>, Box<dyn std::error::Error ...` — Collects the most recent events in a namespace.
+-  `collect_log_tails` function L315-348 — `(&self, namespace: &str, pods: &[Pod]) -> HashMap<String, String>` — Collects log tails for the already-resolved pods of a deployment object.
+-  `get_container_logs` function L351-371 — `( &self, namespace: &str, pod_name: &str, container_name: &str, ) -> Result<Stri...` — Gets logs for a specific container.
+-  `pod_status_of` function L379-470 — `(pod: &Pod) -> PodStatus` — Projects a `Pod` onto the diagnostic [`PodStatus`] wire shape.
+-  `tests` module L473-595 — `-` — about Kubernetes resources, including pod statuses, events, and log tails.
+-  `test_pod_status_serialization` function L477-501 — `()` — about Kubernetes resources, including pod statuses, events, and log tails.
+-  `test_event_info_serialization` function L504-519 — `()` — about Kubernetes resources, including pod statuses, events, and log tails.
+-  `test_submit_diagnostic_result_serialization` function L522-533 — `()` — about Kubernetes resources, including pod statuses, events, and log tails.
+-  `test_pod_status_of_projects_waiting_container` function L536-582 — `()` — about Kubernetes resources, including pod statuses, events, and log tails.
+-  `test_pod_status_of_without_status_is_unknown` function L585-594 — `()` — about Kubernetes resources, including pod statuses, events, and log tails.
 
 #### crates/brokkr-agent/src/health.rs
 
@@ -813,22 +852,22 @@
 
 #### crates/brokkr-agent/src/cli/commands.rs
 
-- pub `start` function L124-741 — `( generator_ids_override: Option<String>, ) -> Result<(), Box<dyn std::error::Er...` — - Contextual information
+- pub `start` function L124-745 — `( generator_ids_override: Option<String>, ) -> Result<(), Box<dyn std::error::Er...` — - Contextual information
 -  `PushAction` enum L82-89 — `Reconcile | PollWorkOrders | Ignore` — What an inbound broker→agent WS push frame should trigger in the control
 -  `classify_push_frame` function L92-98 — `(msg: &WsMessage) -> PushAction` — Route an inbound WS frame to the control-loop action it should trigger.
 -  `resolve_generator_ids` function L107-122 — `( flag: Option<String>, config: Option<String>, legacy_env: Option<String>, ) ->...` — Resolve the comma-separated generator-scope string in precedence order:
--  `tests` module L744-859 — `-` — - Contextual information
--  `stack` function L749-759 — `() -> Stack` — - Contextual information
--  `target` function L761-767 — `() -> AgentTarget` — - Contextual information
--  `work_order` function L769-787 — `() -> WorkOrder` — - Contextual information
--  `stack_and_target_changes_trigger_reconcile` function L790-799 — `()` — - Contextual information
--  `work_order_triggers_poll` function L802-807 — `()` — - Contextual information
--  `uplink_frames_are_ignored` function L810-818 — `()` — - Contextual information
--  `generator_ids_flag_wins_over_config_and_env` function L821-829 — `()` — - Contextual information
--  `generator_ids_config_wins_over_legacy_env` function L832-837 — `()` — - Contextual information
--  `generator_ids_falls_back_to_legacy_env_and_flags_it` function L840-844 — `()` — - Contextual information
--  `generator_ids_empty_legacy_env_is_not_flagged` function L847-851 — `()` — - Contextual information
--  `generator_ids_default_when_all_absent` function L854-858 — `()` — - Contextual information
+-  `tests` module L748-863 — `-` — - Contextual information
+-  `stack` function L753-763 — `() -> Stack` — - Contextual information
+-  `target` function L765-771 — `() -> AgentTarget` — - Contextual information
+-  `work_order` function L773-791 — `() -> WorkOrder` — - Contextual information
+-  `stack_and_target_changes_trigger_reconcile` function L794-803 — `()` — - Contextual information
+-  `work_order_triggers_poll` function L806-811 — `()` — - Contextual information
+-  `uplink_frames_are_ignored` function L814-822 — `()` — - Contextual information
+-  `generator_ids_flag_wins_over_config_and_env` function L825-833 — `()` — - Contextual information
+-  `generator_ids_config_wins_over_legacy_env` function L836-841 — `()` — - Contextual information
+-  `generator_ids_falls_back_to_legacy_env_and_flags_it` function L844-848 — `()` — - Contextual information
+-  `generator_ids_empty_legacy_env_is_not_flagged` function L851-855 — `()` — - Contextual information
+-  `generator_ids_default_when_all_absent` function L858-862 — `()` — - Contextual information
 
 #### crates/brokkr-agent/src/cli/mod.rs
 
@@ -949,11 +988,47 @@
 
 - pub `broker` module L26 — `-` — # Work Orders Module
 - pub `build` module L27 — `-` — ```
-- pub `process_pending_work_orders` function L122-166 — `( config: &Settings, http_client: &BrokkrClient, k8s_client: &K8sClient, agent: ...` — Processes pending work orders for the agent.
--  `is_error_retryable` function L50-104 — `(error: &dyn std::error::Error) -> bool` — Determines if an error is retryable by inspecting the error message.
--  `process_single_work_order` function L169-227 — `( config: &Settings, http_client: &BrokkrClient, k8s_client: &K8sClient, agent: ...` — Processes a single work order through its complete lifecycle.
--  `execute_build_work_order` function L230-266 — `( _config: &Settings, _http_client: &BrokkrClient, k8s_client: &K8sClient, agent...` — Executes a build work order using Shipwright.
--  `execute_custom_work_order` function L269-331 — `( k8s_client: &K8sClient, agent: &Agent, work_order: &WorkOrder, ) -> Result<Opt...` — Executes a custom work order by applying YAML resources to the cluster.
+- pub `WorkOrderOutcomeError` struct L69-72 — `{ message: String, retryable: bool }` — An outcome the agent has classified itself, so that
+- pub `is_retryable` function L84-86 — `(&self) -> bool` — Whether the broker should schedule a retry of this work order.
+- pub `process_pending_work_orders` function L183-227 — `( config: &Settings, http_client: &BrokkrClient, k8s_client: &K8sClient, agent: ...` — Processes pending work orders for the agent.
+- pub `watch_job_completion` function L441-510 — `( k8s_client: &K8sClient, namespace: &str, name: &str, deadline: Instant, ) -> R...` — Watches an applied `batch/v1` Job until it reaches a terminal state or the
+- pub `execute_custom_work_order` function L523-633 — `( k8s_client: &K8sClient, agent: &Agent, work_order: &WorkOrder, watch_deadline:...` — Executes a custom work order by applying YAML resources to the cluster.
+-  `JOB_API_VERSION` variable L42 — `: &str` — `apiVersion` of the only kind whose completion the custom work-order path
+-  `JOB_KIND` variable L44 — `: &str` — `kind` of the watched resource.
+-  `JOB_STATUS_POLL_INTERVAL_SECS` variable L48 — `: u64` — How often the Job watch re-reads `status` from the API server.
+-  `MIN_CLAIM_SAFETY_MARGIN_SECS` variable L52 — `: u64` — Smallest slice of `claim_timeout_seconds` held back as safety margin, in
+-  `CLAIM_SAFETY_MARGIN_PERCENT` variable L56 — `: u64` — Percentage of `claim_timeout_seconds` held back as safety margin when that
+-  `WorkOrderOutcomeError` type L74-87 — `= WorkOrderOutcomeError` — ```
+-  `non_retryable` function L76-81 — `(message: impl Into<String>) -> Self` — A terminal outcome the broker must not retry.
+-  `WorkOrderOutcomeError` type L89-93 — `= WorkOrderOutcomeError` — ```
+-  `fmt` function L90-92 — `(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result` — ```
+-  `WorkOrderOutcomeError` type L95 — `= WorkOrderOutcomeError` — ```
+-  `is_error_retryable` function L111-165 — `(error: &dyn std::error::Error) -> bool` — Determines if an error is retryable by inspecting the error message.
+-  `process_single_work_order` function L230-303 — `( config: &Settings, http_client: &BrokkrClient, k8s_client: &K8sClient, agent: ...` — Processes a single work order through its complete lifecycle.
+-  `execute_build_work_order` function L306-342 — `( _config: &Settings, _http_client: &BrokkrClient, k8s_client: &K8sClient, agent...` — Executes a build work order using Shipwright.
+-  `job_watch_budget` function L363-368 — `(claim_timeout_seconds: i32) -> Duration` — How long the agent may watch an applied `batch/v1` Job before it must stop
+-  `is_batch_v1_job` function L372-377 — `(object: &DynamicObject) -> bool` — Whether an applied object is a `batch/v1` Job, the one kind this path
+-  `JobOutcome` enum L381-388 — `Succeeded | Failed | Running` — Terminal (or not-yet-terminal) reading of a `batch/v1` Job's status.
+-  `interpret_job_status` function L399-424 — `(status: &JobStatus) -> JobOutcome` — Interprets a `batch/v1` Job status.
+-  `describe_unmonitored_kinds` function L638-660 — `(others: &[&DynamicObject]) -> String` — Renders the kinds that were applied without being watched, for the result
+-  `tests` module L663-911 — `-` — ```
+-  `condition` function L667-673 — `(type_: &str, status: &str) -> JobCondition` — ```
+-  `test_job_watch_budget_default_claim_timeout_leaves_headroom` function L678-684 — `()` — ```
+-  `test_job_watch_budget_is_always_strictly_below_claim_timeout` function L687-698 — `()` — ```
+-  `test_job_watch_budget_uses_percentage_margin_above_the_floor` function L701-706 — `()` — ```
+-  `test_job_watch_budget_saturates_at_zero_for_short_or_invalid_timeouts` function L709-717 — `()` — ```
+-  `test_interpret_job_status_complete_is_success` function L722-729 — `()` — ```
+-  `test_interpret_job_status_failed_carries_reason_and_message` function L732-751 — `()` — ```
+-  `test_interpret_job_status_failed_without_reason_or_message` function L754-763 — `()` — ```
+-  `test_interpret_job_status_no_status_or_conditions_is_running` function L766-778 — `()` — ```
+-  `test_interpret_job_status_running_pods_are_not_terminal` function L781-788 — `()` — ```
+-  `test_interpret_job_status_failed_pod_within_backoff_limit_is_not_terminal` function L791-801 — `()` — ```
+-  `test_interpret_job_status_ignores_false_and_non_terminal_conditions` function L804-818 — `()` — ```
+-  `test_interpret_job_status_terminal_condition_wins_over_earlier_ones` function L821-830 — `()` — ```
+-  `object` function L834-843 — `(api_version: &str, kind: &str) -> DynamicObject` — ```
+-  `test_only_batch_v1_jobs_are_watched` function L846-859 — `()` — ```
+-  `test_describe_unmonitored_kinds_lists_distinct_sorted_kinds` function L862-874 — `()` — ```
+-  `test_job_outcomes_are_never_retryable` function L879-910 — `()` — ```
 
 ### crates/brokkr-agent/tests
 
@@ -1016,7 +1091,7 @@
 -  `setup_namespace` function L32-51 — `(client: &K8sClient, namespace: &str)`
 -  `cleanup` function L53-57 — `(client: &K8sClient, namespace: &str)`
 -  `create_labeled_pod` function L61-105 — `( client: &K8sClient, namespace: &str, name: &str, deployment_object_id: &Uuid, ...` — Creates a bare Pod carrying the deployment-object-id label and waits until
--  `test_diagnostics_collects_pods_across_namespaces` function L108-158 — `()`
+-  `test_diagnostics_collects_pods_across_namespaces` function L108-157 — `()`
 
 #### crates/brokkr-agent/tests/integration/health.rs
 
@@ -1035,6 +1110,20 @@
 -  `fixtures` module L12 — `-`
 -  `health` module L13 — `-`
 -  `k8s` module L14 — `-`
+-  `work_orders` module L15 — `-`
+
+#### crates/brokkr-agent/tests/integration/work_orders.rs
+
+-  `setup` function L31-43 — `() -> K8sClient` — real API server correctly.
+-  `setup_namespace` function L45-61 — `(client: &K8sClient, namespace: &str)` — real API server correctly.
+-  `cleanup` function L63-66 — `(client: &K8sClient, namespace: &str)` — real API server correctly.
+-  `test_agent` function L68-83 — `() -> Agent` — real API server correctly.
+-  `custom_work_order` function L85-103 — `(yaml_content: &str) -> WorkOrder` — real API server correctly.
+-  `job_yaml` function L107-125 — `(namespace: &str, name: &str, command: &str) -> String` — A Job whose single pod runs `command` and never restarts, so the Job
+-  `test_custom_work_order_succeeding_job_is_reported_successful` function L130-165 — `()` — A Job that exits 0 must be reported as a success, and only after the Job
+-  `test_custom_work_order_failing_job_is_reported_failed` function L170-204 — `()` — A Job whose pod exits non-zero is the regression this ticket exists for:
+-  `test_custom_work_order_unfinished_job_is_reported_as_timeout_not_failure` function L211-247 — `()` — A Job still running when the watch budget expires must be reported
+-  `test_custom_work_order_without_a_job_is_apply_only` function L251-278 — `()` — Work orders with no Job stay apply-only, and say so.
 
 ### crates/brokkr-agent/tests/integration/k8s
 
@@ -1107,19 +1196,33 @@
 -  `is_api_path` function L38-43 — `(path: &str) -> bool` — Paths the API owns; these must 404 rather than fall back to the SPA shell.
 -  `static_handler` function L45-51 — `(uri: Uri) -> Response` — placeholder is served instead and the binary needs no `dist/` to compile.
 -  `embedded` module L54-61 — `-` — placeholder is served instead and the binary needs no `dist/` to compile.
--  `serve_asset` function L66-87 — `(path: &str) -> Response` — Serve `path` from the embedded bundle, falling back to `index.html` for
--  `serve_asset` function L92-102 — `(_path: &str) -> Response` — Placeholder served when the binary was built without `embed-ui`: the broker
--  `PLACEHOLDER` variable L93-100 — `: &str` — placeholder is served instead and the binary needs no `dist/` to compile.
+-  `serve_asset` function L66-84 — `(path: &str) -> Response` — Serve `path` from the embedded bundle, falling back to `index.html` for
+-  `serve_index` function L92-108 — `() -> Response` — Serve the SPA shell with the ephemeral UI PAK injected (BROKKR-T-0268).
+-  `inject_ui_token` function L115-126 — `(html: String, token: Option<&str>) -> String` — Inject the ephemeral UI PAK as a `<meta>` tag before `</head>` so the WASM
+-  `serve_asset` function L131-141 — `(_path: &str) -> Response` — Placeholder served when the binary was built without `embed-ui`: the broker
+-  `PLACEHOLDER` variable L132-139 — `: &str` — placeholder is served instead and the binary needs no `dist/` to compile.
+-  `tests` module L144-171 — `-` — placeholder is served instead and the binary needs no `dist/` to compile.
+-  `injects_meta_tag_before_head_close` function L148-157 — `()` — placeholder is served instead and the binary needs no `dist/` to compile.
+-  `injects_only_once` function L160-164 — `()` — placeholder is served instead and the binary needs no `dist/` to compile.
+-  `no_token_leaves_document_untouched` function L167-170 — `()` — placeholder is served instead and the binary needs no `dist/` to compile.
 
 #### crates/brokkr-broker/src/api/mod.rs
 
 - pub `assets` module L157 — `-` — # API Module
 - pub `v1` module L158 — `-` — - Required PAK: Any valid PAK.
-- pub `configure_api_routes` function L196-280 — `( dal: DAL, cors_config: &Cors, reloadable_config: Option<ReloadableConfig>, ) -...` — Configures and returns the main application router with all API routes
--  `healthz` function L290-292 — `() -> impl IntoResponse` — Health check endpoint handler
--  `readyz` function L302-304 — `() -> impl IntoResponse` — Ready check endpoint handler
--  `metrics_handler` function L314-321 — `() -> impl IntoResponse` — Metrics endpoint handler
--  `metrics_middleware` function L326-342 — `(request: Request<Body>, next: Next) -> Response` — Middleware to record HTTP request metrics
+- pub `configure_api_routes` function L196-285 — `( dal: DAL, cors_config: &Cors, reloadable_config: Option<ReloadableConfig>, ) -...` — Configures and returns the main application router with all API routes
+-  `healthz` function L295-297 — `() -> impl IntoResponse` — Health check endpoint handler
+-  `READYZ_CACHE_TTL` variable L305 — `: Duration` — How long a `/readyz` result is reused before the database is probed again.
+-  `READYZ_DB_TIMEOUT` variable L313 — `: Duration` — Budget for the readiness pool checkout.
+-  `ReadinessCache` struct L321 — `-` — Cached readiness verdict: `(observed_at, ready)`.
+-  `ReadinessCache` type L323-337 — `= ReadinessCache` — - Required PAK: Any valid PAK.
+-  `get` function L325-329 — `(&self) -> Option<bool>` — Returns the cached verdict if it is still within the TTL.
+-  `store` function L332-336 — `(&self, ready: bool)` — Records a verdict for subsequent probes inside the TTL window.
+-  `check_db_ready` function L344-363 — `(dal: &DAL) -> Result<(), String>` — Checks that the database is reachable: a bounded pool checkout plus
+-  `readyz` function L379-397 — `( State(dal): State<DAL>, axum::Extension(cache): axum::Extension<ReadinessCache...` — Ready check endpoint handler
+-  `readyz_response` function L400-406 — `(ready: bool) -> (StatusCode, &'static str)` — Maps a readiness verdict onto the HTTP response the kubelet sees.
+-  `metrics_handler` function L416-423 — `() -> impl IntoResponse` — Metrics endpoint handler
+-  `metrics_middleware` function L428-444 — `(request: Request<Body>, next: Next) -> Response` — Middleware to record HTTP request metrics
 
 ### crates/brokkr-broker/src/api/v1
 
@@ -1127,66 +1230,68 @@
 
 #### crates/brokkr-broker/src/api/v1/admin.rs
 
-- pub `ConfigReloadResponse` struct L33-43 — `{ reloaded_at: DateTime<Utc>, changes: Vec<ConfigChangeInfo>, success: bool, mes...` — Response structure for configuration reload operations.
-- pub `ConfigChangeInfo` struct L47-54 — `{ key: String, old_value: String, new_value: String }` — Information about a single configuration change.
-- pub `AuditLogQueryParams` struct L58-82 — `{ actor_type: Option<String>, actor_id: Option<Uuid>, action: Option<String>, re...` — Query parameters for listing audit logs.
-- pub `AuditLogListResponse` struct L100-111 — `{ logs: Vec<AuditLog>, total: i64, count: usize, limit: i64, offset: i64 }` — Response structure for audit log list operations.
-- pub `routes` function L116-124 — `() -> Router<DAL>` — Constructs and returns the admin routes.
-- pub `WsConnectionInfo` struct L127-132 — `{ agent_id: Uuid, connected_since: DateTime<Utc>, messages_in: u64, messages_out...` — including configuration hot-reload functionality.
-- pub `WsConnectionsResponse` struct L135-140 — `{ connected_agents: usize, connections: Vec<WsConnectionInfo>, live_subscribers:...` — including configuration hot-reload functionality.
-- pub `list_ws_connections` function L152-183 — `( Extension(auth): Extension<AuthPayload>, Extension(registry): Extension<std::s...` — including configuration hot-reload functionality.
--  `AuditLogFilter` type L84-96 — `= AuditLogFilter` — including configuration hot-reload functionality.
--  `from` function L85-95 — `(params: AuditLogQueryParams) -> Self` — including configuration hot-reload functionality.
--  `reload_config` function L216-297 — `( Extension(auth): Extension<AuthPayload>, // Optional so the auth check below r...` — including configuration hot-reload functionality.
--  `list_audit_logs` function L341-382 — `( State(dal): State<DAL>, Extension(auth): Extension<AuthPayload>, Query(params)...` — including configuration hot-reload functionality.
--  `tests` module L385-418 — `-` — including configuration hot-reload functionality.
--  `test_config_reload_response_serialization` function L389-405 — `()` — including configuration hot-reload functionality.
--  `test_config_change_info_serialization` function L408-417 — `()` — including configuration hot-reload functionality.
+- pub `ConfigReloadResponse` struct L34-44 — `{ reloaded_at: DateTime<Utc>, changes: Vec<ConfigChangeInfo>, success: bool, mes...` — Response structure for configuration reload operations.
+- pub `ConfigChangeInfo` struct L48-55 — `{ key: String, old_value: String, new_value: String }` — Information about a single configuration change.
+- pub `AuditLogQueryParams` struct L59-83 — `{ actor_type: Option<String>, actor_id: Option<Uuid>, action: Option<String>, re...` — Query parameters for listing audit logs.
+- pub `AuditLogEntry` struct L103-110 — `{ log: AuditLog, actor_name: Option<String> }` — An audit log entry enriched with a human-readable actor name
+- pub `AuditLogListResponse` struct L114-125 — `{ logs: Vec<AuditLogEntry>, total: i64, count: usize, limit: i64, offset: i64 }` — Response structure for audit log list operations.
+- pub `routes` function L130-138 — `() -> Router<DAL>` — Constructs and returns the admin routes.
+- pub `WsConnectionInfo` struct L141-146 — `{ agent_id: Uuid, connected_since: DateTime<Utc>, messages_in: u64, messages_out...` — including configuration hot-reload functionality.
+- pub `WsConnectionsResponse` struct L149-154 — `{ connected_agents: usize, connections: Vec<WsConnectionInfo>, live_subscribers:...` — including configuration hot-reload functionality.
+- pub `list_ws_connections` function L166-197 — `( Extension(auth): Extension<AuthPayload>, Extension(registry): Extension<std::s...` — including configuration hot-reload functionality.
+-  `AuditLogFilter` type L85-97 — `= AuditLogFilter` — including configuration hot-reload functionality.
+-  `from` function L86-96 — `(params: AuditLogQueryParams) -> Self` — including configuration hot-reload functionality.
+-  `reload_config` function L230-311 — `( Extension(auth): Extension<AuthPayload>, // Optional so the auth check below r...` — including configuration hot-reload functionality.
+-  `list_audit_logs` function L355-397 — `( State(dal): State<DAL>, Extension(auth): Extension<AuthPayload>, Query(params)...` — including configuration hot-reload functionality.
+-  `enrich_with_actor_names` function L402-443 — `(dal: &DAL, logs: Vec<AuditLog>) -> Result<Vec<AuditLogEntry>, ApiError>` — Attach human-readable actor names to a page of audit logs
+-  `tests` module L446-479 — `-` — including configuration hot-reload functionality.
+-  `test_config_reload_response_serialization` function L450-466 — `()` — including configuration hot-reload functionality.
+-  `test_config_change_info_serialization` function L469-478 — `()` — including configuration hot-reload functionality.
 
 #### crates/brokkr-broker/src/api/v1/agent_events.rs
 
-- pub `routes` function L24-28 — `() -> Router<DAL>` — Creates and returns a router for agent event-related endpoints.
--  `list_agent_events` function L42-61 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<crate::api::v1::mid...` — through HTTP endpoints.
--  `get_agent_event` function L79-104 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<crate::api::v1::mid...` — through HTTP endpoints.
+- pub `routes` function L25-29 — `() -> Router<DAL>` — Creates and returns a router for agent event-related endpoints.
+-  `list_agent_events` function L44-70 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<crate::api::v1::mid...` — through HTTP endpoints.
+-  `get_agent_event` function L88-113 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<crate::api::v1::mid...` — through HTTP endpoints.
 
 #### crates/brokkr-broker/src/api/v1/agents.rs
 
 - pub `routes` function L43-73 — `() -> Router<DAL>` — Agent management API endpoints.
-- pub `CreateAgentRequest` struct L135-140 — `{ name: String, cluster_name: String, generator_ids: Vec<Uuid> }` — Request body for [`create_agent`].
-- pub `CreateAgentResponse` struct L145-148 — `{ agent: Agent, initial_pak: String }` — Response body for [`create_agent`]: the newly-created agent plus the
-- pub `HeartbeatReport` struct L930-935 — `{ k8s_reachable: Option<bool>, k8s_api_latency_ms: Option<i32> }` — Optional heartbeat report body (BROKKR-T-0227).
+- pub `CreateAgentRequest` struct L155-160 — `{ name: String, cluster_name: String, generator_ids: Vec<Uuid> }` — Request body for [`create_agent`].
+- pub `CreateAgentResponse` struct L165-168 — `{ agent: Agent, initial_pak: String }` — Response body for [`create_agent`]: the newly-created agent plus the
+- pub `HeartbeatReport` struct L978-983 — `{ k8s_reachable: Option<bool>, k8s_api_latency_ms: Option<i32> }` — Optional heartbeat report body (BROKKR-T-0227).
 -  `require_admin` function L75-84 — `(auth: &AuthPayload) -> Result<(), ApiError>` — Agent management API endpoints.
 -  `require_admin_or_agent` function L86-95 — `(auth: &AuthPayload, id: Uuid) -> Result<(), ApiError>` — Agent management API endpoints.
--  `list_agents` function L106-129 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, ) -> ...` — Agent management API endpoints.
--  `create_agent` function L161-252 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Json(...` — Agent management API endpoints.
--  `AgentQuery` struct L255-258 — `{ name: Option<String>, cluster_name: Option<String> }` — Agent management API endpoints.
--  `get_agent` function L271-288 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `search_agent` function L305-338 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Query...` — Agent management API endpoints.
--  `update_agent` function L352-402 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `delete_agent` function L414-448 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Exten...` — Agent management API endpoints.
--  `list_events` function L460-482 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `create_event` function L495-535 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `list_labels` function L549-566 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `add_label` function L581-601 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `remove_label` function L619-647 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `list_annotations` function L661-679 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `add_annotation` function L694-718 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `remove_annotation` function L736-764 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `list_targets` function L776-788 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `add_target` function L802-826 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Exten...` — Agent management API endpoints.
--  `authorize_target_mutation` function L833-877 — `( dal: &DAL, auth: &AuthPayload, agent_id: Uuid, stack_id: Uuid, ) -> Result<(),...` — Authorize a target create/delete operation.
--  `remove_target` function L893-921 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `record_heartbeat` function L948-1007 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Exten...` — Agent management API endpoints.
--  `TargetStateParams` struct L1010-1012 — `{ mode: Option<String> }` — Agent management API endpoints.
--  `get_target_state` function L1027-1060 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `get_associated_stacks` function L1072-1090 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
--  `rotate_agent_pak` function L1103-1159 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Exten...` — Agent management API endpoints.
--  `list_agent_registrations` function L1172-1187 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `list_agents` function L106-149 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, ) -> ...` — Agent management API endpoints.
+-  `create_agent` function L181-274 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Json(...` — Agent management API endpoints.
+-  `AgentQuery` struct L277-280 — `{ name: Option<String>, cluster_name: Option<String> }` — Agent management API endpoints.
+-  `get_agent` function L293-310 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `search_agent` function L327-360 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Query...` — Agent management API endpoints.
+-  `update_agent` function L374-424 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `delete_agent` function L436-470 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Exten...` — Agent management API endpoints.
+-  `list_events` function L482-504 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `create_event` function L517-580 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `list_labels` function L594-611 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `add_label` function L626-646 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `remove_label` function L664-692 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `list_annotations` function L706-724 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `add_annotation` function L739-763 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `remove_annotation` function L781-809 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `list_targets` function L821-833 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `add_target` function L847-871 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Exten...` — Agent management API endpoints.
+-  `authorize_target_mutation` function L878-925 — `( dal: &DAL, auth: &AuthPayload, agent_id: Uuid, stack_id: Uuid, ) -> Result<(),...` — Authorize a target create/delete operation.
+-  `remove_target` function L941-969 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `record_heartbeat` function L996-1050 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Exten...` — Agent management API endpoints.
+-  `TargetStateParams` struct L1053-1055 — `{ mode: Option<String> }` — Agent management API endpoints.
+-  `get_target_state` function L1070-1103 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `get_associated_stacks` function L1115-1133 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
+-  `rotate_agent_pak` function L1146-1202 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Exten...` — Agent management API endpoints.
+-  `list_agent_registrations` function L1215-1230 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Agent management API endpoints.
 
 #### crates/brokkr-broker/src/api/v1/auth.rs
 
 - pub `routes` function L19-21 — `() -> Router<DAL>` — Creates and returns the authentication routes for the API.
--  `verify_pak` function L40-46 — `(Extension(auth_payload): Extension<AuthPayload>) -> Json<AuthResponse>` — This module provides routes and handlers for authentication-related endpoints.
+-  `verify_pak` function L40-47 — `(Extension(auth_payload): Extension<AuthPayload>) -> Json<AuthResponse>` — This module provides routes and handlers for authentication-related endpoints.
 
 #### crates/brokkr-broker/src/api/v1/deployment_objects.rs
 
@@ -1234,21 +1339,21 @@
 
 #### crates/brokkr-broker/src/api/v1/fleet.rs
 
-- pub `FleetAgentRecord` struct L40-79 — `{ agent_id: Uuid, name: String, cluster_name: String, status: String, ws_connect...` — A per-agent fleet record: measured signals only, no health verdicts.
-- pub `to_wire` function L85-105 — `(&self) -> brokkr_wire::FleetAgentRecord` — Convert into the `brokkr-wire` twin used for live-push frames
-- pub `AgentFleetStatusResponse` struct L111-116 — `{ record: FleetAgentRecord, recent_events: Vec<AgentEvent> }` — Response body for the per-agent fleet-status detail view: the agent's fleet
-- pub `build_agent_fleet_record` function L249-278 — `( dal: &DAL, registry: &ConnectionRegistry, agent_id: Uuid, ) -> Option<FleetAge...` — Build a single agent's fleet record, or `None` if the agent no longer
-- pub `broadcast_agent_fleet_update` function L285-294 — `( dal: &DAL, registry: &ConnectionRegistry, fleet: &crate::ws::FleetBroadcaster,...` — Best-effort: recompute one agent's fleet record and broadcast it as a
-- pub `build_all_fleet_records` function L299-313 — `( dal: &DAL, registry: &ConnectionRegistry, ) -> Result<Vec<FleetAgentRecord>, A...` — Builds the full per-agent fleet record set (the `GET /fleet` rollup payload).
-- pub `list_fleet` function L335-346 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Exten...` — so it never fans out one query per agent.
-- pub `get_agent_fleet_status` function L359-397 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Exten...` — so it never fans out one query per agent.
--  `RECENT_EVENTS_LIMIT` variable L33 — `: usize` — Number of recent events returned by the per-agent fleet-status detail view.
--  `FleetAgentRecord` type L81-106 — `= FleetAgentRecord` — so it never fans out one query per agent.
--  `FleetAggregates` struct L122-130 — `{ ws_connected_since: HashMap<Uuid, DateTime<Utc>>, last_event_at: HashMap<Uuid,...` — Pre-aggregated, agent-keyed lookups shared by the rollup and detail views.
--  `FleetAggregates` type L132-241 — `= FleetAggregates` — so it never fans out one query per agent.
--  `load` function L135-208 — `(dal: &DAL, registry: &ConnectionRegistry) -> Result<Self, ApiError>` — Computes all per-agent aggregates with a bounded number of grouped
--  `build_record` function L211-240 — `( &self, agent: &brokkr_models::models::agents::Agent, now: DateTime<Utc>, ) -> ...` — Assembles a single agent's fleet record from the pre-aggregated lookups.
--  `require_admin` function L315-324 — `(auth: &AuthPayload) -> Result<(), ApiError>` — so it never fans out one query per agent.
+- pub `FleetAgentRecord` struct L41-80 — `{ agent_id: Uuid, name: String, cluster_name: String, status: String, ws_connect...` — A per-agent fleet record: measured signals only, no health verdicts.
+- pub `to_wire` function L86-106 — `(&self) -> brokkr_wire::FleetAgentRecord` — Convert into the `brokkr-wire` twin used for live-push frames
+- pub `AgentFleetStatusResponse` struct L112-117 — `{ record: FleetAgentRecord, recent_events: Vec<AgentEvent> }` — Response body for the per-agent fleet-status detail view: the agent's fleet
+- pub `build_agent_fleet_record` function L261-290 — `( dal: &DAL, registry: &ConnectionRegistry, agent_id: Uuid, ) -> Option<FleetAge...` — Build a single agent's fleet record, or `None` if the agent no longer
+- pub `broadcast_agent_fleet_update` function L297-306 — `( dal: &DAL, registry: &ConnectionRegistry, fleet: &crate::ws::FleetBroadcaster,...` — Best-effort: recompute one agent's fleet record and broadcast it as a
+- pub `build_all_fleet_records` function L311-325 — `( dal: &DAL, registry: &ConnectionRegistry, ) -> Result<Vec<FleetAgentRecord>, A...` — Builds the full per-agent fleet record set (the `GET /fleet` rollup payload).
+- pub `list_fleet` function L348-381 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Exten...` — so it never fans out one query per agent.
+- pub `get_agent_fleet_status` function L394-432 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Exten...` — so it never fans out one query per agent.
+-  `RECENT_EVENTS_LIMIT` variable L34 — `: usize` — Number of recent events returned by the per-agent fleet-status detail view.
+-  `FleetAgentRecord` type L82-107 — `= FleetAgentRecord` — so it never fans out one query per agent.
+-  `FleetAggregates` struct L123-131 — `{ ws_connected_since: HashMap<Uuid, DateTime<Utc>>, last_event_at: HashMap<Uuid,...` — Pre-aggregated, agent-keyed lookups shared by the rollup and detail views.
+-  `FleetAggregates` type L133-253 — `= FleetAggregates` — so it never fans out one query per agent.
+-  `load` function L136-212 — `(dal: &DAL, registry: &ConnectionRegistry) -> Result<Self, ApiError>` — Computes all per-agent aggregates with a bounded number of grouped
+-  `build_record` function L215-252 — `( &self, agent: &brokkr_models::models::agents::Agent, now: DateTime<Utc>, ) -> ...` — Assembles a single agent's fleet record from the pre-aggregated lookups.
+-  `require_admin` function L327-336 — `(auth: &AuthPayload) -> Result<(), ApiError>` — so it never fans out one query per agent.
 
 #### crates/brokkr-broker/src/api/v1/generators.rs
 
@@ -1265,7 +1370,7 @@
 -  `resolve_registration_agent` function L443-462 — `( auth: &AuthPayload, body: &AgentRegistrationBody, ) -> Result<Uuid, ApiError>` — Generators API module for Brokkr.
 -  `register_agent` function L477-521 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Generators API module for Brokkr.
 -  `deregister_agent` function L535-588 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Exten...` — Generators API module for Brokkr.
--  `list_generator_registered_agents` function L601-623 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Generators API module for Brokkr.
+-  `list_generator_registered_agents` function L601-637 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Generators API module for Brokkr.
 
 #### crates/brokkr-broker/src/api/v1/health.rs
 
@@ -1275,17 +1380,19 @@
 - pub `DeploymentHealthResponse` struct L60-67 — `{ deployment_object_id: Uuid, health_records: Vec<DeploymentHealth>, overall_sta...` — Response for deployment object health query.
 - pub `StackHealthResponse` struct L71-78 — `{ stack_id: Uuid, overall_status: String, deployment_objects: Vec<DeploymentObje...` — Response for stack health query.
 - pub `DeploymentObjectHealthSummary` struct L82-93 — `{ id: Uuid, status: String, healthy_agents: usize, degraded_agents: usize, faili...` — Summary of health for a deployment object within a stack.
--  `update_health_status` function L114-172 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — including endpoints for agents to report health and for operators to query health.
--  `get_deployment_health` function L192-228 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — including endpoints for agents to report health and for operators to query health.
--  `get_stack_health` function L248-322 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — including endpoints for agents to report health and for operators to query health.
--  `compute_overall_status` function L326-336 — `(records: &[DeploymentHealth]) -> String` — Computes the overall status from a list of health records.
+-  `update_health_status` function L114-175 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — including endpoints for agents to report health and for operators to query health.
+-  `get_deployment_health` function L195-231 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — including endpoints for agents to report health and for operators to query health.
+-  `get_stack_health` function L251-325 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — including endpoints for agents to report health and for operators to query health.
+-  `compute_overall_status` function L329-339 — `(records: &[DeploymentHealth]) -> String` — Computes the overall status from a list of health records.
 
 #### crates/brokkr-broker/src/api/v1/middleware.rs
 
-- pub `AuthPayload` struct L34-41 — `{ admin: bool, agent: Option<Uuid>, generator: Option<Uuid> }` — Represents the authenticated entity's payload.
-- pub `AuthResponse` struct L45-52 — `{ admin: bool, agent: Option<String>, generator: Option<String> }` — Represents the response structure for authentication information.
-- pub `auth_middleware` function L68-133 — `( State(dal): State<DAL>, mut request: Request<Body>, next: Next, ) -> Result<Re...` — Middleware function for authenticating requests.
--  `verify_pak` function L148-247 — `(dal: &DAL, pak: &str) -> Result<AuthPayload, StatusCode>` — Verifies the provided PAK and returns the corresponding `AuthPayload`.
+- pub `AuthPayload` struct L34-44 — `{ admin: bool, agent: Option<Uuid>, generator: Option<Uuid>, readonly: bool }` — Represents the authenticated entity's payload.
+- pub `require_tenant_generator` function L69-100 — `( auth: &AuthPayload, dal: &DAL, ) -> Result<Uuid, crate::api::v1::error::ApiErr...` — Resolves the caller's generator identity as a **tenant**, rejecting the
+- pub `AuthResponse` struct L104-113 — `{ admin: bool, agent: Option<String>, generator: Option<String>, readonly: bool ...` — Represents the response structure for authentication information.
+- pub `auth_middleware` function L129-204 — `( State(dal): State<DAL>, mut request: Request<Body>, next: Next, ) -> Result<Re...` — Middleware function for authenticating requests.
+-  `readonly_request_allowed` function L216-233 — `(method: &axum::http::Method, path: &str) -> bool` — Whether a request from a read-only credential may proceed.
+-  `verify_pak` function L248-365 — `(dal: &DAL, pak: &str) -> Result<AuthPayload, StatusCode>` — Verifies the provided PAK and returns the corresponding `AuthPayload`.
 
 #### crates/brokkr-broker/src/api/v1/mod.rs
 
@@ -1301,77 +1408,85 @@
 - pub `health` module L22 — `-` — with authentication middleware.
 - pub `middleware` module L23 — `-` — with authentication middleware.
 - pub `openapi` module L24 — `-` — with authentication middleware.
-- pub `stacks` module L25 — `-` — with authentication middleware.
-- pub `templates` module L26 — `-` — with authentication middleware.
-- pub `webhooks` module L27 — `-` — with authentication middleware.
-- pub `work_orders` module L28 — `-` — with authentication middleware.
-- pub `routes` function L43-79 — `( dal: DAL, cors_config: &Cors, reloadable_config: Option<ReloadableConfig>, ) -...` — Constructs and returns the main router for API v1.
--  `build_cors_layer` function L85-122 — `(config: &Cors) -> CorsLayer` — Builds a CORS layer from configuration.
+- pub `paks` module L25 — `-` — with authentication middleware.
+- pub `stacks` module L26 — `-` — with authentication middleware.
+- pub `templates` module L27 — `-` — with authentication middleware.
+- pub `webhooks` module L28 — `-` — with authentication middleware.
+- pub `work_orders` module L29 — `-` — with authentication middleware.
+- pub `routes` function L44-81 — `( dal: DAL, cors_config: &Cors, reloadable_config: Option<ReloadableConfig>, ) -...` — Constructs and returns the main router for API v1.
+-  `build_cors_layer` function L87-124 — `(config: &Cors) -> CorsLayer` — Builds a CORS layer from configuration.
 
 #### crates/brokkr-broker/src/api/v1/openapi.rs
 
-- pub `ApiDoc` struct L278 — `-`
-- pub `configure_openapi` function L330-334 — `() -> Router<DAL>`
--  `SecurityAddon` struct L280 — `-`
--  `SecurityAddon` type L282-299 — `= SecurityAddon`
--  `modify` function L283-298 — `(&self, openapi: &mut utoipa::openapi::OpenApi)`
--  `ServersAddon` struct L304 — `-` — Declares the API base URL.
--  `ServersAddon` type L306-310 — `= ServersAddon`
--  `modify` function L307-309 — `(&self, openapi: &mut utoipa::openapi::OpenApi)`
--  `LicenseAddon` struct L317 — `-` — Normalizes `info.license` to a name+URL form.
--  `LicenseAddon` type L319-328 — `= LicenseAddon`
--  `modify` function L320-327 — `(&self, openapi: &mut utoipa::openapi::OpenApi)`
--  `serve_openapi` function L336-338 — `() -> Json<utoipa::openapi::OpenApi>`
+- pub `ApiDoc` struct L282 — `-`
+- pub `configure_openapi` function L334-338 — `() -> Router<DAL>`
+-  `SecurityAddon` struct L284 — `-`
+-  `SecurityAddon` type L286-303 — `= SecurityAddon`
+-  `modify` function L287-302 — `(&self, openapi: &mut utoipa::openapi::OpenApi)`
+-  `ServersAddon` struct L308 — `-` — Declares the API base URL.
+-  `ServersAddon` type L310-314 — `= ServersAddon`
+-  `modify` function L311-313 — `(&self, openapi: &mut utoipa::openapi::OpenApi)`
+-  `LicenseAddon` struct L321 — `-` — Normalizes `info.license` to a name+URL form.
+-  `LicenseAddon` type L323-332 — `= LicenseAddon`
+-  `modify` function L324-331 — `(&self, openapi: &mut utoipa::openapi::OpenApi)`
+-  `serve_openapi` function L340-342 — `() -> Json<utoipa::openapi::OpenApi>`
+
+#### crates/brokkr-broker/src/api/v1/paks.rs
+
+- pub `routes` function L25-27 — `() -> Router<DAL>` — Creates and returns the tenant-listing routes.
+- pub `PakScopeQuery` struct L34-37 — `{ pak_id: Option<Uuid> }` — Query parameters for tenant-scoped listings (BROKKR-T-0270): fleet,
+- pub `PakSummary` struct L42-47 — `{ id: Uuid, name: String }` — One tenant entry for the console scope selector: a named PAK owner
+-  `list_paks` function L61-89 — `( State(dal): State<DAL>, Extension(auth): Extension<AuthPayload>, ) -> Result<J...` — (and so the read-only UI PAK never sees `pak_hash` material).
 
 #### crates/brokkr-broker/src/api/v1/stacks.rs
 
 - pub `routes` function L37-64 — `() -> Router<DAL>`
-- pub `list_deployment_objects` function L316-328 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
-- pub `CreateDeploymentObjectRequest` struct L335-341 — `{ yaml_content: String, is_deletion_marker: bool }` — Wire DTO for creating a deployment object via the public API.
-- pub `CreateDeploymentObjectQuery` struct L347-352 — `{ deletion_marker: Option<bool> }` — Query parameters for the deployment-object create endpoint.
-- pub `create_deployment_object` function L438-464 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Exten...`
-- pub `list_labels` function L511-527 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
-- pub `add_label` function L545-563 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
-- pub `remove_label` function L582-600 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
-- pub `list_annotations` function L616-632 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
-- pub `add_annotation` function L651-669 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
-- pub `remove_annotation` function L688-706 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
-- pub `TemplateInstantiationRequest` struct L709-712 — `{ template_id: Uuid, parameters: serde_json::Value }`
-- pub `TelemetryHistoryQuery` struct L879-888 — `{ since: Option<chrono::DateTime<chrono::Utc>>, limit: Option<i64> }`
-- pub `RetentionInfo` struct L891-902 — `{ retention_ceiling_seconds: u64, effective_retention_seconds: u64, oldest_avail...`
-- pub `K8sEventHistoryResponse` struct L905-908 — `{ retention: RetentionInfo, events: Vec<AgentK8sEvent> }`
-- pub `PodLogHistoryResponse` struct L911-914 — `{ retention: RetentionInfo, lines: Vec<AgentPodLog> }`
-- pub `list_telemetry_events` function L955-976 — `( State(dal): State<DAL>, Extension(auth): Extension<AuthPayload>, Path(stack_id...`
-- pub `list_telemetry_logs` function L993-1014 — `( State(dal): State<DAL>, Extension(auth): Extension<AuthPayload>, Path(stack_id...`
+- pub `list_deployment_objects` function L325-337 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
+- pub `CreateDeploymentObjectRequest` struct L344-350 — `{ yaml_content: String, is_deletion_marker: bool }` — Wire DTO for creating a deployment object via the public API.
+- pub `CreateDeploymentObjectQuery` struct L356-361 — `{ deletion_marker: Option<bool> }` — Query parameters for the deployment-object create endpoint.
+- pub `create_deployment_object` function L453-479 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Exten...`
+- pub `list_labels` function L526-542 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
+- pub `add_label` function L560-578 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
+- pub `remove_label` function L597-615 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
+- pub `list_annotations` function L631-647 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
+- pub `add_annotation` function L666-684 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
+- pub `remove_annotation` function L703-721 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
+- pub `TemplateInstantiationRequest` struct L724-727 — `{ template_id: Uuid, parameters: serde_json::Value }`
+- pub `TelemetryHistoryQuery` struct L900-909 — `{ since: Option<chrono::DateTime<chrono::Utc>>, limit: Option<i64> }`
+- pub `RetentionInfo` struct L912-923 — `{ retention_ceiling_seconds: u64, effective_retention_seconds: u64, oldest_avail...`
+- pub `K8sEventHistoryResponse` struct L926-929 — `{ retention: RetentionInfo, events: Vec<AgentK8sEvent> }`
+- pub `PodLogHistoryResponse` struct L932-935 — `{ retention: RetentionInfo, lines: Vec<AgentPodLog> }`
+- pub `list_telemetry_events` function L976-997 — `( State(dal): State<DAL>, Extension(auth): Extension<AuthPayload>, Path(stack_id...`
+- pub `list_telemetry_logs` function L1014-1035 — `( State(dal): State<DAL>, Extension(auth): Extension<AuthPayload>, Path(stack_id...`
 -  `fetch_owned_stack` function L67-89 — `( dal: &DAL, auth: &AuthPayload, stack_id: Uuid, ) -> Result<Stack, ApiError>` — Fetch a stack or return 404; also enforces admin-or-generator-owner access.
--  `list_stacks` function L103-134 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, ) -> ...`
--  `create_stack` function L148-190 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Json(...`
--  `get_stack` function L205-213 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
--  `update_stack` function L230-263 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
--  `delete_stack` function L278-301 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
--  `content_type_is_yaml` function L358-370 — `(headers: &HeaderMap) -> bool` — Whether a `Content-Type` denotes a raw YAML body rather than the JSON
--  `resolve_create_body` function L374-390 — `( headers: &HeaderMap, query: &CreateDeploymentObjectQuery, body: &[u8], ) -> Re...` — Resolves the request body into `(yaml_content, is_deletion_marker)` based
--  `validate_manifest_yaml` function L395-421 — `(yaml_content: &str, is_deletion_marker: bool) -> Result<(), ApiError>` — Validates the manifest body at ingest so malformed YAML fails here with a
--  `is_authorized_for_stack` function L466-495 — `( dal: &DAL, auth_payload: &AuthPayload, stack_id: Uuid, ) -> Result<bool, ApiEr...`
--  `instantiate_template` function L730-858 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
--  `TELEMETRY_DEFAULT_LIMIT` variable L874 — `: i64` — Default page size for the telemetry history endpoints.
--  `TELEMETRY_MAX_LIMIT` variable L876 — `: i64` — Maximum page size — protect the broker from "give me everything" callers.
--  `retention_info` function L916-924 — `(oldest: Option<chrono::DateTime<chrono::Utc>>) -> RetentionInfo`
--  `clamp_since` function L926-933 — `(since: Option<chrono::DateTime<chrono::Utc>>) -> chrono::DateTime<chrono::Utc>`
--  `clamp_limit` function L935-938 — `(limit: Option<i64>) -> i64`
--  `create_body_tests` module L1017-1123 — `-`
--  `headers_with` function L1021-1027 — `(ct: Option<&str>) -> HeaderMap`
--  `content_type_detection` function L1030-1039 — `()`
--  `yaml_body_uses_raw_string_and_query_flag` function L1042-1051 — `()`
--  `yaml_body_defaults_marker_false` function L1054-1060 — `()`
--  `json_body_still_parses` function L1063-1070 — `()`
--  `json_path_query_flag_ignored` function L1073-1081 — `()`
--  `malformed_json_is_rejected` function L1084-1090 — `()`
--  `validate_accepts_multidoc_yaml` function L1093-1096 — `()`
--  `validate_rejects_malformed_yaml` function L1099-1103 — `()`
--  `validate_rejects_empty_non_marker` function L1106-1109 — `()`
--  `validate_allows_empty_marker` function L1112-1115 — `()`
--  `validate_rejects_only_empty_documents` function L1118-1122 — `()`
+-  `list_stacks` function L104-143 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Query...`
+-  `create_stack` function L157-199 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Json(...`
+-  `get_stack` function L214-222 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
+-  `update_stack` function L239-272 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
+-  `delete_stack` function L287-310 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
+-  `content_type_is_yaml` function L367-379 — `(headers: &HeaderMap) -> bool` — Whether a `Content-Type` denotes a raw YAML body rather than the JSON
+-  `resolve_create_body` function L383-405 — `( headers: &HeaderMap, query: &CreateDeploymentObjectQuery, body: &[u8], ) -> Re...` — Resolves the request body into `(yaml_content, is_deletion_marker)` based
+-  `validate_manifest_yaml` function L410-436 — `(yaml_content: &str, is_deletion_marker: bool) -> Result<(), ApiError>` — Validates the manifest body at ingest so malformed YAML fails here with a
+-  `is_authorized_for_stack` function L481-510 — `( dal: &DAL, auth_payload: &AuthPayload, stack_id: Uuid, ) -> Result<bool, ApiEr...`
+-  `instantiate_template` function L745-879 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...`
+-  `TELEMETRY_DEFAULT_LIMIT` variable L895 — `: i64` — Default page size for the telemetry history endpoints.
+-  `TELEMETRY_MAX_LIMIT` variable L897 — `: i64` — Maximum page size — protect the broker from "give me everything" callers.
+-  `retention_info` function L937-945 — `(oldest: Option<chrono::DateTime<chrono::Utc>>) -> RetentionInfo`
+-  `clamp_since` function L947-954 — `(since: Option<chrono::DateTime<chrono::Utc>>) -> chrono::DateTime<chrono::Utc>`
+-  `clamp_limit` function L956-959 — `(limit: Option<i64>) -> i64`
+-  `create_body_tests` module L1038-1155 — `-`
+-  `headers_with` function L1042-1048 — `(ct: Option<&str>) -> HeaderMap`
+-  `content_type_detection` function L1051-1066 — `()`
+-  `yaml_body_uses_raw_string_and_query_flag` function L1069-1081 — `()`
+-  `yaml_body_defaults_marker_false` function L1084-1093 — `()`
+-  `json_body_still_parses` function L1096-1103 — `()`
+-  `json_path_query_flag_ignored` function L1106-1114 — `()`
+-  `malformed_json_is_rejected` function L1117-1122 — `()`
+-  `validate_accepts_multidoc_yaml` function L1125-1128 — `()`
+-  `validate_rejects_malformed_yaml` function L1131-1135 — `()`
+-  `validate_rejects_empty_non_marker` function L1138-1141 — `()`
+-  `validate_allows_empty_marker` function L1144-1147 — `()`
+-  `validate_rejects_only_empty_documents` function L1150-1154 — `()`
 
 #### crates/brokkr-broker/src/api/v1/templates.rs
 
@@ -1380,44 +1495,64 @@
 - pub `AddAnnotationRequest` struct L48-51 — `{ key: String, value: String }` — API endpoints for stack template management.
 - pub `routes` function L53-70 — `() -> Router<DAL>` — API endpoints for stack template management.
 -  `can_modify_template` function L72-80 — `(auth: &AuthPayload, template: &StackTemplate) -> bool` — API endpoints for stack template management.
--  `check_read_access` function L82-97 — `(auth: &AuthPayload, template: &StackTemplate) -> Result<(), ApiError>` — API endpoints for stack template management.
--  `fetch_template_or_404` function L99-107 — `(dal: &DAL, template_id: Uuid) -> Result<StackTemplate, ApiError>` — API endpoints for stack template management.
--  `list_templates` function L120-156 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, ) -> ...` — API endpoints for stack template management.
--  `audit_actor` function L160-166 — `(auth_payload: &AuthPayload) -> (&'static str, Option<uuid::Uuid>)` — Resolves the audit actor for template endpoints: the admin, or the
--  `create_template` function L181-232 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Json(...` — API endpoints for stack template management.
--  `get_template` function L247-257 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — API endpoints for stack template management.
--  `update_template` function L274-323 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — API endpoints for stack template management.
--  `delete_template` function L338-371 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — API endpoints for stack template management.
--  `list_labels` function L388-400 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — API endpoints for stack template management.
--  `add_label` function L419-439 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — API endpoints for stack template management.
--  `remove_label` function L459-483 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — API endpoints for stack template management.
--  `list_annotations` function L500-512 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — API endpoints for stack template management.
--  `add_annotation` function L531-551 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — API endpoints for stack template management.
--  `remove_annotation` function L571-597 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — API endpoints for stack template management.
+-  `check_read_access` function L90-108 — `( auth: &AuthPayload, template: &StackTemplate, ) -> Result<(), ApiError>` — Read-access gate for a single template.
+-  `fetch_template_or_404` function L110-118 — `(dal: &DAL, template_id: Uuid) -> Result<StackTemplate, ApiError>` — API endpoints for stack template management.
+-  `list_templates` function L131-167 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, ) -> ...` — API endpoints for stack template management.
+-  `audit_actor` function L171-177 — `(auth_payload: &AuthPayload) -> (&'static str, Option<uuid::Uuid>)` — Resolves the audit actor for template endpoints: the admin, or the
+-  `create_template` function L192-243 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Json(...` — API endpoints for stack template management.
+-  `get_template` function L258-268 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — API endpoints for stack template management.
+-  `update_template` function L285-334 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — API endpoints for stack template management.
+-  `delete_template` function L349-382 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — API endpoints for stack template management.
+-  `list_labels` function L399-411 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — API endpoints for stack template management.
+-  `add_label` function L430-450 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — API endpoints for stack template management.
+-  `remove_label` function L470-494 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — API endpoints for stack template management.
+-  `list_annotations` function L511-523 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — API endpoints for stack template management.
+-  `add_annotation` function L542-562 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — API endpoints for stack template management.
+-  `remove_annotation` function L582-608 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — API endpoints for stack template management.
 
 #### crates/brokkr-broker/src/api/v1/webhooks.rs
 
-- pub `CreateWebhookRequest` struct L37-53 — `{ name: String, url: String, auth_header: Option<String>, event_types: Vec<Strin...` — Webhooks API module for Brokkr.
-- pub `UpdateWebhookRequest` struct L56-75 — `{ name: Option<String>, url: Option<String>, auth_header: Option<Option<String>>...` — Webhooks API module for Brokkr.
-- pub `WebhookResponse` struct L78-92 — `{ id: Uuid, name: String, has_url: bool, has_auth_header: bool, event_types: Vec...` — Webhooks API module for Brokkr.
-- pub `ListDeliveriesQuery` struct L122-129 — `{ status: Option<String>, limit: Option<i64>, offset: Option<i64> }` — Webhooks API module for Brokkr.
-- pub `PendingWebhookDelivery` struct L132-142 — `{ id: Uuid, subscription_id: Uuid, event_type: String, payload: String, url: Str...` — Webhooks API module for Brokkr.
-- pub `DeliveryResultRequest` struct L145-153 — `{ success: bool, status_code: Option<i32>, error: Option<String>, duration_ms: O...` — Webhooks API module for Brokkr.
-- pub `routes` function L174-193 — `() -> Router<DAL>` — Webhooks API module for Brokkr.
--  `WebhookResponse` type L94-119 — `= WebhookResponse` — Webhooks API module for Brokkr.
--  `from` function L95-118 — `(sub: WebhookSubscription) -> Self` — Webhooks API module for Brokkr.
--  `encrypt_value` function L159-164 — `(value: &str) -> Result<Vec<u8>, ApiError>` — Webhooks API module for Brokkr.
--  `decrypt_value` function L166-168 — `(encrypted: &[u8]) -> Result<String, String>` — Webhooks API module for Brokkr.
--  `list_webhooks` function L208-228 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, ) -> ...` — Webhooks API module for Brokkr.
--  `list_event_types` function L238-248 — `( Extension(auth_payload): Extension<AuthPayload>, ) -> Result<Json<Vec<&'static...` — Webhooks API module for Brokkr.
--  `create_webhook` function L261-349 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Json(...` — Webhooks API module for Brokkr.
--  `get_webhook` function L362-391 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Webhooks API module for Brokkr.
--  `update_webhook` function L406-506 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Webhooks API module for Brokkr.
--  `delete_webhook` function L519-561 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Webhooks API module for Brokkr.
--  `list_deliveries` function L579-625 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Webhooks API module for Brokkr.
--  `test_webhook` function L639-747 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Webhooks API module for Brokkr.
--  `get_pending_agent_webhooks` function L764-866 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Webhooks API module for Brokkr.
--  `report_delivery_result` function L880-982 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Webhooks API module for Brokkr.
+- pub `CreateWebhookRequest` struct L60-76 — `{ name: String, url: String, auth_header: Option<String>, event_types: Vec<Strin...` — Body of `POST /webhooks`.
+- pub `UpdateWebhookRequest` struct L79-101 — `{ name: Option<String>, url: Option<String>, auth_header: Option<Option<String>>...` — Webhooks API module for Brokkr.
+- pub `WebhookResponse` struct L104-122 — `{ id: Uuid, name: String, has_url: bool, has_auth_header: bool, event_types: Vec...` — Webhooks API module for Brokkr.
+- pub `ListDeliveriesQuery` struct L152-159 — `{ status: Option<String>, limit: Option<i64>, offset: Option<i64> }` — Webhooks API module for Brokkr.
+- pub `PendingWebhookDelivery` struct L162-172 — `{ id: Uuid, subscription_id: Uuid, event_type: String, payload: String, url: Str...` — Webhooks API module for Brokkr.
+- pub `DeliveryResultRequest` struct L175-183 — `{ success: bool, status_code: Option<i32>, error: Option<String>, duration_ms: O...` — Webhooks API module for Brokkr.
+- pub `routes` function L399-418 — `() -> Router<DAL>` — Webhooks API module for Brokkr.
+-  `WebhookResponse` type L124-149 — `= WebhookResponse` — Webhooks API module for Brokkr.
+-  `from` function L125-148 — `(sub: WebhookSubscription) -> Self` — Webhooks API module for Brokkr.
+-  `CODE_UNSUPPORTED_FIELD` variable L194 — `: &str` — Stable error code for a request that carries a field the webhook API removed.
+-  `WriteBody` enum L201-204 — `Create | Update` — Which removed fields apply to the body being validated.
+-  `reject_removed_write_fields` function L226-250 — `(body: &serde_json::Value, which: WriteBody) -> Result<(), ApiError>` — Rejects a create/update body that carries a field the webhook API removed.
+-  `removed_field_error` function L254-259 — `(field: &str, message: &str, use_instead: &str) -> ApiError` — Builds the 422 for a removed field, naming the field and its replacement in
+-  `parse_body` function L268-272 — `(body: serde_json::Value) -> Result<T, ApiError>` — Deserializes an already-parsed body into a request DTO.
+-  `encrypt_value` function L278-283 — `(value: &str) -> Result<Vec<u8>, ApiError>` — Webhooks API module for Brokkr.
+-  `decrypt_value` function L285-287 — `(encrypted: &[u8]) -> Result<String, String>` — Webhooks API module for Brokkr.
+-  `FALLBACK_MAX_RETRIES` variable L293 — `: i32` — Attempt budget used when a delivery must be failed without its subscription
+-  `DeliveryDisposition` enum L299-313 — `Terminal | Retryable` — How a claimed delivery that cannot be dispatched should be disposed of.
+-  `fail_claimed_delivery` function L333-377 — `( dal: &DAL, delivery: &WebhookDelivery, reason: &str, disposition: DeliveryDisp...` — Fails a delivery that has already been claimed and cannot be handed to the
+-  `delivery_failure_message` function L384-393 — `(error: Option<&str>, status_code: Option<u16>) -> String` — Builds the `last_error` recorded for an agent-reported failure, guaranteeing
+-  `list_webhooks` function L433-453 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, ) -> ...` — Webhooks API module for Brokkr.
+-  `list_event_types` function L463-473 — `( Extension(auth_payload): Extension<AuthPayload>, ) -> Result<Json<Vec<&'static...` — Webhooks API module for Brokkr.
+-  `create_webhook` function L487-578 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Json(...` — Webhooks API module for Brokkr.
+-  `get_webhook` function L591-620 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Webhooks API module for Brokkr.
+-  `update_webhook` function L636-739 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Webhooks API module for Brokkr.
+-  `delete_webhook` function L752-794 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Webhooks API module for Brokkr.
+-  `list_deliveries` function L812-858 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Webhooks API module for Brokkr.
+-  `test_webhook` function L872-980 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Webhooks API module for Brokkr.
+-  `get_pending_agent_webhooks` function L997-1154 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Webhooks API module for Brokkr.
+-  `report_delivery_result` function L1168-1282 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Webhooks API module for Brokkr.
+-  `removed_write_field_tests` module L1285-1396 — `-` — Webhooks API module for Brokkr.
+-  `err` function L1289-1291 — `(body: serde_json::Value, which: WriteBody) -> ApiError` — Webhooks API module for Brokkr.
+-  `field_of` function L1293-1298 — `(error: &ApiError) -> String` — Webhooks API module for Brokkr.
+-  `create_rejects_validate_with_422_naming_the_replacement` function L1301-1312 — `()` — Webhooks API module for Brokkr.
+-  `create_rejects_filters_labels_with_422_naming_target_labels` function L1315-1326 — `()` — Webhooks API module for Brokkr.
+-  `update_rejects_filters_labels` function L1329-1334 — `()` — Webhooks API module for Brokkr.
+-  `a_null_valued_removed_key_is_still_present` function L1337-1350 — `()` — Webhooks API module for Brokkr.
+-  `update_ignores_validate_because_it_never_existed_there` function L1353-1357 — `()` — Webhooks API module for Brokkr.
+-  `supported_bodies_pass` function L1360-1376 — `()` — Webhooks API module for Brokkr.
+-  `stored_filter_deserialization_stays_tolerant` function L1379-1385 — `()` — Webhooks API module for Brokkr.
+-  `parse_body_reports_shape_errors_as_422` function L1388-1395 — `()` — Webhooks API module for Brokkr.
 
 #### crates/brokkr-broker/src/api/v1/work_orders.rs
 
@@ -1432,14 +1567,14 @@
 - pub `ListLogQuery` struct L116-121 — `{ work_type: Option<String>, success: Option<bool>, agent_id: Option<Uuid>, limi...` — Handles API routes and logic for work orders.
 -  `default_retryable` function L100-102 — `() -> bool` — Handles API routes and logic for work orders.
 -  `list_work_orders` function L142-165 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Query...` — Handles API routes and logic for work orders.
--  `create_work_order` function L180-276 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Exten...` — Handles API routes and logic for work orders.
--  `get_work_order` function L291-360 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Handles API routes and logic for work orders.
--  `delete_work_order` function L375-403 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Handles API routes and logic for work orders.
--  `list_pending_for_agent` function L424-460 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Handles API routes and logic for work orders.
--  `claim_work_order` function L476-528 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Handles API routes and logic for work orders.
--  `complete_work_order` function L550-653 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Handles API routes and logic for work orders.
--  `list_work_order_log` function L676-707 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Query...` — Handles API routes and logic for work orders.
--  `get_work_order_log` function L722-761 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Handles API routes and logic for work orders.
+-  `create_work_order` function L180-279 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Exten...` — Handles API routes and logic for work orders.
+-  `get_work_order` function L294-363 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Handles API routes and logic for work orders.
+-  `delete_work_order` function L378-406 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Handles API routes and logic for work orders.
+-  `list_pending_for_agent` function L427-463 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Handles API routes and logic for work orders.
+-  `claim_work_order` function L479-531 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Handles API routes and logic for work orders.
+-  `complete_work_order` function L553-656 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Handles API routes and logic for work orders.
+-  `list_work_order_log` function L679-710 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Query...` — Handles API routes and logic for work orders.
+-  `get_work_order_log` function L725-764 — `( State(dal): State<DAL>, Extension(auth_payload): Extension<AuthPayload>, Path(...` — Handles API routes and logic for work orders.
 
 ### crates/brokkr-broker/src
 
@@ -1447,16 +1582,22 @@
 
 #### crates/brokkr-broker/src/bin.rs
 
--  `main` function L24-68 — `() -> Result<(), Box<dyn std::error::Error>>` — Main function to run the Brokkr Broker application
+-  `main` function L24-70 — `() -> Result<(), Box<dyn std::error::Error>>` — Main function to run the Brokkr Broker application
 
 #### crates/brokkr-broker/src/db.rs
 
 - pub `ConnectionPool` struct L17-22 — `{ pool: Pool<ConnectionManager<PgConnection>>, schema: Option<String> }` — Represents a pool of PostgreSQL database connections.
-- pub `create_shared_connection_pool` function L42-65 — `( base_url: &str, database_name: &str, max_size: u32, schema: Option<&str>, ) ->...` — Creates a shared connection pool for PostgreSQL databases.
-- pub `validate_schema_name` function L78-97 — `(schema: &str) -> Result<(), String>` — Validates a PostgreSQL schema name to prevent SQL injection.
-- pub `get` function L115-134 — `( &self, ) -> Result<diesel::r2d2::PooledConnection<ConnectionManager<PgConnecti...` — Gets a connection from the pool with automatic schema search_path configuration.
-- pub `setup_schema` function L148-172 — `(&self, schema: &str) -> Result<(), String>` — Sets up a PostgreSQL schema for multi-tenant isolation.
--  `ConnectionPool` type L99-173 — `= ConnectionPool` — For detailed documentation, see the [Brokkr Documentation](https://brokkr.io/explanation/components#database-module).
+- pub `create_shared_connection_pool` function L55-76 — `( base_url: &str, database_name: Option<&str>, max_size: u32, schema: Option<&st...` — Creates a shared connection pool for PostgreSQL databases.
+- pub `validate_schema_name` function L164-183 — `(schema: &str) -> Result<(), String>` — Validates a PostgreSQL schema name to prevent SQL injection.
+- pub `get` function L201-220 — `( &self, ) -> Result<diesel::r2d2::PooledConnection<ConnectionManager<PgConnecti...` — Gets a connection from the pool with automatic schema search_path configuration.
+- pub `setup_schema` function L234-258 — `(&self, schema: &str) -> Result<(), String>` — Sets up a PostgreSQL schema for multi-tenant isolation.
+-  `resolve_database_url` function L84-92 — `(base_url: &str, database_name: Option<&str>) -> String` — Resolves the URL a pool will actually connect to.
+-  `tests` module L95-151 — `-` — For detailed documentation, see the [Brokkr Documentation](https://brokkr.io/explanation/components#database-module).
+-  `configured_database_name_is_preserved_when_not_overridden` function L101-111 — `()` — The BROKKR-T-0306 regression: production passes `None`, and the database
+-  `explicit_override_replaces_the_database_name` function L116-125 — `()` — The override still works, because the test harnesses point one base URL
+-  `override_supplies_a_database_when_the_url_has_none` function L130-136 — `()` — A base URL carrying no database at all is the other harness shape
+-  `authority_is_untouched` function L142-150 — `()` — Credentials, host and port must be untouched by either path — the bug
+-  `ConnectionPool` type L185-259 — `= ConnectionPool` — For detailed documentation, see the [Brokkr Documentation](https://brokkr.io/explanation/components#database-module).
 
 #### crates/brokkr-broker/src/lib.rs
 
@@ -1483,28 +1624,33 @@
 - pub `FLEET_LIVE_SUBSCRIBERS` variable L153-163 — `: Lazy<IntGauge>` — Subscribers on the consumer-facing fleet live-push hub (BROKKR-I-0028).
 - pub `WS_LOG_EVICTION_RUNS_TOTAL` variable L166-176 — `: Lazy<IntCounter>` — Eviction passes executed by the retention worker (WS-09).
 - pub `WS_TELEMETRY_EVICTED_TOTAL` variable L180-190 — `: Lazy<IntCounterVec>` — Total telemetry rows evicted (events + logs).
-- pub `ws_connected_agents` function L194-196 — `() -> &'static IntGauge` — Convenience accessors keep call sites short and avoid the static names
-- pub `ws_messages_total` function L198-200 — `(direction: &str, variant: &str) -> prometheus::IntCounter` — It exposes metrics about HTTP requests and system state.
-- pub `ws_live_subscribers` function L202-204 — `() -> &'static IntGauge` — It exposes metrics about HTTP requests and system state.
-- pub `fleet_live_subscribers` function L206-208 — `() -> &'static IntGauge` — It exposes metrics about HTTP requests and system state.
-- pub `ws_log_eviction_runs_total` function L210-212 — `() -> &'static IntCounter` — It exposes metrics about HTTP requests and system state.
-- pub `ws_telemetry_evicted_total` function L214-216 — `(table: &str) -> prometheus::IntCounter` — It exposes metrics about HTTP requests and system state.
-- pub `init` function L222-236 — `()` — Initializes all metrics by forcing lazy static evaluation
-- pub `encode_metrics` function L243-254 — `() -> String` — Encodes all registered metrics in Prometheus text format
-- pub `record_http_request` function L267-279 — `(endpoint: &str, method: &str, status: u16, duration_seconds: f64)` — Records an HTTP request metric
-- pub `set_active_agents` function L302-304 — `(count: i64)` — Updates the active agents gauge
-- pub `set_stacks_total` function L307-309 — `(count: i64)` — Updates the total stacks gauge
-- pub `set_deployment_objects_total` function L312-314 — `(count: i64)` — Updates the total deployment objects gauge
-- pub `set_agent_heartbeat_age` function L317-321 — `(agent_id: &str, agent_name: &str, age_seconds: f64)` — Updates the heartbeat age for a specific agent
--  `normalize_endpoint` function L283-299 — `(path: &str) -> String` — Normalizes an endpoint path to reduce cardinality
--  `tests` module L324-432 — `-` — It exposes metrics about HTTP requests and system state.
--  `test_init_registers_all_metrics` function L328-365 — `()` — It exposes metrics about HTTP requests and system state.
--  `test_normalize_endpoint_replaces_uuids` function L368-372 — `()` — It exposes metrics about HTTP requests and system state.
--  `test_normalize_endpoint_replaces_numeric_ids` function L375-379 — `()` — It exposes metrics about HTTP requests and system state.
--  `test_normalize_endpoint_preserves_regular_paths` function L382-390 — `()` — It exposes metrics about HTTP requests and system state.
--  `test_record_http_request_increments_counter` function L393-407 — `()` — It exposes metrics about HTTP requests and system state.
--  `test_set_active_agents` function L410-419 — `()` — It exposes metrics about HTTP requests and system state.
--  `test_set_stacks_total` function L422-431 — `()` — It exposes metrics about HTTP requests and system state.
+- pub `WEBHOOK_DECRYPT_FAILURES_TOTAL` variable L202-212 — `: Lazy<IntCounterVec>` — Webhook payload decryption failures (BROKKR-T-0288).
+- pub `ws_connected_agents` function L216-218 — `() -> &'static IntGauge` — Convenience accessors keep call sites short and avoid the static names
+- pub `ws_messages_total` function L220-222 — `(direction: &str, variant: &str) -> prometheus::IntCounter` — It exposes metrics about HTTP requests and system state.
+- pub `ws_live_subscribers` function L224-226 — `() -> &'static IntGauge` — It exposes metrics about HTTP requests and system state.
+- pub `fleet_live_subscribers` function L228-230 — `() -> &'static IntGauge` — It exposes metrics about HTTP requests and system state.
+- pub `ws_log_eviction_runs_total` function L232-234 — `() -> &'static IntCounter` — It exposes metrics about HTTP requests and system state.
+- pub `ws_telemetry_evicted_total` function L236-238 — `(table: &str) -> prometheus::IntCounter` — It exposes metrics about HTTP requests and system state.
+- pub `record_webhook_decrypt_failure` function L245-249 — `(field: &str, path: &str)` — Records a webhook decryption failure.
+- pub `init` function L255-270 — `()` — Initializes all metrics by forcing lazy static evaluation
+- pub `encode_metrics` function L277-288 — `() -> String` — Encodes all registered metrics in Prometheus text format
+- pub `record_http_request` function L301-313 — `(endpoint: &str, method: &str, status: u16, duration_seconds: f64)` — Records an HTTP request metric
+- pub `set_active_agents` function L336-338 — `(count: i64)` — Updates the active agents gauge
+- pub `set_stacks_total` function L341-343 — `(count: i64)` — Updates the total stacks gauge
+- pub `set_deployment_objects_total` function L346-348 — `(count: i64)` — Updates the total deployment objects gauge
+- pub `set_agent_heartbeat_age` function L351-355 — `(agent_id: &str, agent_name: &str, age_seconds: f64)` — Updates the heartbeat age for a specific agent
+-  `normalize_endpoint` function L317-333 — `(path: &str) -> String` — Normalizes an endpoint path to reduce cardinality
+-  `tests` module L358-494 — `-` — It exposes metrics about HTTP requests and system state.
+-  `GAUGE_TEST_LOCK` variable L364 — `: std::sync::Mutex<()>` — The registry is process-global, so tests that assert on an exact gauge
+-  `lock_gauges` function L366-368 — `() -> std::sync::MutexGuard<'static, ()>` — It exposes metrics about HTTP requests and system state.
+-  `test_init_registers_all_metrics` function L371-409 — `()` — It exposes metrics about HTTP requests and system state.
+-  `test_record_webhook_decrypt_failure` function L412-425 — `()` — It exposes metrics about HTTP requests and system state.
+-  `test_normalize_endpoint_replaces_uuids` function L428-432 — `()` — It exposes metrics about HTTP requests and system state.
+-  `test_normalize_endpoint_replaces_numeric_ids` function L435-439 — `()` — It exposes metrics about HTTP requests and system state.
+-  `test_normalize_endpoint_preserves_regular_paths` function L442-450 — `()` — It exposes metrics about HTTP requests and system state.
+-  `test_record_http_request_increments_counter` function L453-467 — `()` — It exposes metrics about HTTP requests and system state.
+-  `test_set_active_agents` function L470-480 — `()` — It exposes metrics about HTTP requests and system state.
+-  `test_set_stacks_total` function L483-493 — `()` — It exposes metrics about HTTP requests and system state.
 
 ### crates/brokkr-broker/src/cli
 
@@ -1513,15 +1659,16 @@
 #### crates/brokkr-broker/src/cli/commands.rs
 
 - pub `MIGRATIONS` variable L29 — `: EmbeddedMigrations`
-- pub `serve` function L42-225 — `(config: &Settings) -> Result<(), Box<dyn std::error::Error>>` — Function to start the Brokkr Broker server
-- pub `rotate_admin` function L230-242 — `(config: &Settings) -> Result<(), Box<dyn std::error::Error>>` — Function to rotate the admin key
-- pub `generate_pak` function L257-283 — `(config: &Settings) -> Result<(), Box<dyn std::error::Error>>` — Mints a fresh PAK + hash pair offline, without touching the database or
-- pub `rotate_agent_key` function L303-334 — `( config: &Settings, uuid: Uuid, ) -> Result<String, Box<dyn std::error::Error>>`
-- pub `rotate_generator_key` function L336-372 — `( config: &Settings, uuid: Uuid, ) -> Result<String, Box<dyn std::error::Error>>`
-- pub `create_agent` function L374-414 — `( config: &Settings, name: String, cluster_name: String, ) -> Result<(), Box<dyn...`
-- pub `create_generator` function L416-453 — `( config: &Settings, name: String, description: Option<String>, ) -> Result<(), ...`
+- pub `connection_pool_from_settings` function L56-66 — `(config: &Settings, max_size: u32) -> ConnectionPool` — Builds the database connection pool for a CLI entry point from `config`,
+- pub `serve` function L72-303 — `(config: &Settings) -> Result<(), Box<dyn std::error::Error>>` — Function to start the Brokkr Broker server
+- pub `rotate_admin` function L319-371 — `(config: &Settings) -> Result<(), Box<dyn std::error::Error>>` — Function to rotate the admin key
+- pub `generate_pak` function L386-412 — `(config: &Settings) -> Result<(), Box<dyn std::error::Error>>` — Mints a fresh PAK + hash pair offline, without touching the database or
+- pub `rotate_agent_key` function L432-458 — `( config: &Settings, uuid: Uuid, ) -> Result<String, Box<dyn std::error::Error>>`
+- pub `rotate_generator_key` function L460-491 — `( config: &Settings, uuid: Uuid, ) -> Result<String, Box<dyn std::error::Error>>`
+- pub `create_agent` function L500-565 — `( config: &Settings, name: String, cluster_name: String, generator_ids: Vec<uuid...` — Creates an agent and its initial PAK.
+- pub `create_generator` function L567-599 — `( config: &Settings, name: String, description: Option<String>, ) -> Result<(), ...`
 -  `Count` struct L33-36 — `{ count: i64 }`
--  `audit_cli_pak_event` function L288-301 — `(dal: &DAL, action: &str, resource_type: &str, id: Uuid, name: &str)` — Synchronously records a PAK lifecycle event performed via the CLI.
+-  `audit_cli_pak_event` function L417-430 — `(dal: &DAL, action: &str, resource_type: &str, id: Uuid, name: &str)` — Synchronously records a PAK lifecycle event performed via the CLI.
 
 #### crates/brokkr-broker/src/cli/mod.rs
 
@@ -1529,10 +1676,10 @@
 - pub `Cli` struct L19-22 — `{ command: Commands }` — Brokkr Broker CLI
 - pub `Commands` enum L25-41 — `Serve | Create | Rotate | GeneratePak`
 - pub `CreateCommands` struct L44-47 — `{ command: CreateSubcommands }`
-- pub `CreateSubcommands` enum L50-70 — `Agent | Generator`
-- pub `RotateCommands` struct L73-76 — `{ command: RotateSubcommands }`
-- pub `RotateSubcommands` enum L79-96 — `Agent | Generator | Admin`
-- pub `parse_cli` function L98-100 — `() -> Cli`
+- pub `CreateSubcommands` enum L50-77 — `Agent | Generator`
+- pub `RotateCommands` struct L80-83 — `{ command: RotateSubcommands }`
+- pub `RotateSubcommands` enum L86-103 — `Agent | Generator | Admin`
+- pub `parse_cli` function L105-107 — `() -> Cli`
 
 ### crates/brokkr-broker/src/dal
 
@@ -1557,23 +1704,24 @@
 - pub `get` function L53-60 — `(&self, event_uuid: Uuid) -> Result<Option<AgentEvent>, diesel::result::Error>` — Retrieves a non-deleted agent event by its UUID.
 - pub `get_including_deleted` function L71-80 — `( &self, event_uuid: Uuid, ) -> Result<Option<AgentEvent>, diesel::result::Error...` — Retrieves an agent event by its UUID, including deleted events.
 - pub `list` function L87-92 — `(&self) -> Result<Vec<AgentEvent>, diesel::result::Error>` — Lists all non-deleted agent events from the database.
-- pub `list_all` function L99-102 — `(&self) -> Result<Vec<AgentEvent>, diesel::result::Error>` — Lists all agent events from the database, including deleted ones.
-- pub `get_events` function L114-140 — `( &self, stack_id: Option<Uuid>, agent_id: Option<Uuid>, ) -> Result<Vec<AgentEv...` — Lists agent events from the database with optional filtering by stack and agent.
-- pub `last_event_at_by_agent` function L152-164 — `( &self, ) -> Result<Vec<(Uuid, chrono::DateTime<Utc>)>, diesel::result::Error>` — Returns the most recent non-deleted event timestamp per agent in a
-- pub `update` function L176-185 — `( &self, event_uuid: Uuid, updated_event: &AgentEvent, ) -> Result<AgentEvent, d...` — Updates an existing agent event in the database.
-- pub `soft_delete` function L196-201 — `(&self, event_uuid: Uuid) -> Result<usize, diesel::result::Error>` — Soft deletes an agent event by setting its deleted_at timestamp to the current time.
-- pub `hard_delete` function L212-215 — `(&self, event_uuid: Uuid) -> Result<usize, diesel::result::Error>` — Hard deletes an agent event from the database.
-- pub `delete_older_than` function L233-240 — `( &self, cutoff: DateTime<Utc>, ) -> Result<usize, diesel::result::Error>` — Hard-deletes all agent events with `created_at` older than `cutoff`.
+- pub `list_for_generator` function L97-113 — `( &self, generator_id: Uuid, ) -> Result<Vec<AgentEvent>, diesel::result::Error>` — Lists non-deleted events for agents registered under a generator
+- pub `list_all` function L120-123 — `(&self) -> Result<Vec<AgentEvent>, diesel::result::Error>` — Lists all agent events from the database, including deleted ones.
+- pub `get_events` function L135-161 — `( &self, stack_id: Option<Uuid>, agent_id: Option<Uuid>, ) -> Result<Vec<AgentEv...` — Lists agent events from the database with optional filtering by stack and agent.
+- pub `last_event_at_by_agent` function L173-185 — `( &self, ) -> Result<Vec<(Uuid, chrono::DateTime<Utc>)>, diesel::result::Error>` — Returns the most recent non-deleted event timestamp per agent in a
+- pub `update` function L197-206 — `( &self, event_uuid: Uuid, updated_event: &AgentEvent, ) -> Result<AgentEvent, d...` — Updates an existing agent event in the database.
+- pub `soft_delete` function L217-222 — `(&self, event_uuid: Uuid) -> Result<usize, diesel::result::Error>` — Soft deletes an agent event by setting its deleted_at timestamp to the current time.
+- pub `hard_delete` function L233-236 — `(&self, event_uuid: Uuid) -> Result<usize, diesel::result::Error>` — Hard deletes an agent event from the database.
+- pub `delete_older_than` function L254-258 — `(&self, cutoff: DateTime<Utc>) -> Result<usize, diesel::result::Error>` — Hard-deletes all agent events with `created_at` older than `cutoff`.
 
 #### crates/brokkr-broker/src/dal/agent_generator_registrations.rs
 
 - pub `AgentGeneratorRegistrationsDAL` struct L16-18 — `{ dal: &'a DAL }`
-- pub `create` function L23-33 — `( &self, agent_id: Uuid, generator_id: Uuid, ) -> Result<AgentGeneratorRegistrat...` — Inserts a registration.
-- pub `is_registered` function L36-48 — `( &self, agent_id: Uuid, generator_id: Uuid, ) -> Result<bool, diesel::result::E...` — O(1) existence check backed by the UNIQUE (agent_id, generator_id) index.
-- pub `list_for_agent` function L51-59 — `( &self, agent_id: Uuid, ) -> Result<Vec<AgentGeneratorRegistration>, diesel::re...` — All generators an agent is registered with.
-- pub `list_for_generator` function L62-70 — `( &self, generator_id: Uuid, ) -> Result<Vec<AgentGeneratorRegistration>, diesel...` — All agents registered with a generator.
-- pub `delete` function L73-85 — `( &self, agent_id: Uuid, generator_id: Uuid, ) -> Result<usize, diesel::result::...` — Removes one registration.
-- pub `delete_agent_targets_for_generator` function L90-108 — `( &self, agent_id: Uuid, generator_id: Uuid, ) -> Result<usize, diesel::result::...` — Removes all agent_targets rows for the given agent where the target stack
+- pub `create` function L23-36 — `( &self, agent_id: Uuid, generator_id: Uuid, ) -> Result<AgentGeneratorRegistrat...` — Inserts a registration.
+- pub `is_registered` function L39-51 — `( &self, agent_id: Uuid, generator_id: Uuid, ) -> Result<bool, diesel::result::E...` — O(1) existence check backed by the UNIQUE (agent_id, generator_id) index.
+- pub `list_for_agent` function L54-62 — `( &self, agent_id: Uuid, ) -> Result<Vec<AgentGeneratorRegistration>, diesel::re...` — All generators an agent is registered with.
+- pub `list_for_generator` function L65-73 — `( &self, generator_id: Uuid, ) -> Result<Vec<AgentGeneratorRegistration>, diesel...` — All agents registered with a generator.
+- pub `delete` function L76-88 — `( &self, agent_id: Uuid, generator_id: Uuid, ) -> Result<usize, diesel::result::...` — Removes one registration.
+- pub `delete_agent_targets_for_generator` function L93-111 — `( &self, agent_id: Uuid, generator_id: Uuid, ) -> Result<usize, diesel::result::...` — Removes all agent_targets rows for the given agent where the target stack
 
 #### crates/brokkr-broker/src/dal/agent_k8s_events.rs
 
@@ -1617,25 +1765,27 @@
 
 #### crates/brokkr-broker/src/dal/agents.rs
 
-- pub `AgentFilter` struct L24-29 — `{ labels: Vec<String>, annotations: Vec<(String, String)>, agent_targets: Vec<Uu...` — Struct for filtering agents based on various criteria.
-- pub `AgentsDAL` struct L32-35 — `{ dal: &'a DAL }` — Data Access Layer for Agent operations.
-- pub `create` function L59-79 — `(&self, new_agent: &NewAgent) -> Result<Agent, diesel::result::Error>` — Creates a new agent in the database.
-- pub `get` function L91-98 — `(&self, agent_uuid: Uuid) -> Result<Option<Agent>, diesel::result::Error>` — Retrieves a non-deleted agent by its UUID.
-- pub `get_including_deleted` function L110-119 — `( &self, agent_uuid: Uuid, ) -> Result<Option<Agent>, diesel::result::Error>` — Retrieves an agent by its UUID, including deleted agents.
-- pub `list` function L127-132 — `(&self) -> Result<Vec<Agent>, diesel::result::Error>` — Lists all non-deleted agents from the database.
-- pub `list_all` function L140-143 — `(&self) -> Result<Vec<Agent>, diesel::result::Error>` — Lists all agents from the database, including deleted ones.
-- pub `update` function L156-165 — `( &self, agent_uuid: Uuid, updated_agent: &Agent, ) -> Result<Agent, diesel::res...` — Updates an existing agent in the database.
-- pub `soft_delete` function L177-196 — `(&self, agent_uuid: Uuid) -> Result<usize, diesel::result::Error>` — Soft deletes an agent by setting its deleted_at timestamp to the current time.
-- pub `hard_delete` function L208-211 — `(&self, agent_uuid: Uuid) -> Result<usize, diesel::result::Error>` — Hard deletes an agent from the database.
-- pub `filter_by_labels` function L245-278 — `( &self, labels: Vec<String>, filter_type: FilterType, ) -> Result<Vec<Agent>, d...` — Filters agents by labels.
-- pub `filter_by_annotations` function L317-380 — `( &self, annotations: Vec<(String, String)>, filter_type: FilterType, ) -> Resul...` — Filters agents by annotations.
-- pub `get_agent_by_target_id` function L392-404 — `( &self, agent_target_id: Uuid, ) -> Result<Option<Agent>, diesel::result::Error...` — Retrieves an agent by its target ID.
-- pub `get_agent_details` function L417-437 — `( &self, agent_id: Uuid, ) -> Result<(Vec<AgentLabel>, Vec<AgentTarget>, Vec<Age...` — Retrieves labels, targets, and annotations associated with a specific agent.
-- pub `record_heartbeat` function L448-456 — `(&self, agent_id: Uuid) -> Result<(), diesel::result::Error>` — Records a heartbeat for the specified agent.
-- pub `record_k8s_connectivity` function L476-493 — `( &self, agent_id: Uuid, reachable: bool, latency_ms: Option<i32>, ) -> Result<(...` — Stores the latest agent-reported Kubernetes connectivity snapshot
-- pub `update_pak_hash` function L506-515 — `( &self, agent_uuid: Uuid, new_pak_hash: String, ) -> Result<Agent, diesel::resu...` — Updates the pak_hash for an agent.
-- pub `get_by_name_and_cluster_name` function L528-540 — `( &self, name: String, cluster_name: String, ) -> Result<Option<Agent>, diesel::...` — Retrieves an agent by its name and cluster name.
-- pub `get_by_pak_hash` function L555-562 — `(&self, pak_hash: &str) -> Result<Option<Agent>, diesel::result::Error>` — Retrieves an agent by its PAK hash.
+- pub `AgentFilter` struct L26-31 — `{ labels: Vec<String>, annotations: Vec<(String, String)>, agent_targets: Vec<Uu...` — Struct for filtering agents based on various criteria.
+- pub `AgentsDAL` struct L34-37 — `{ dal: &'a DAL }` — Data Access Layer for Agent operations.
+- pub `create` function L61-81 — `(&self, new_agent: &NewAgent) -> Result<Agent, diesel::result::Error>` — Creates a new agent in the database.
+- pub `get` function L93-100 — `(&self, agent_uuid: Uuid) -> Result<Option<Agent>, diesel::result::Error>` — Retrieves a non-deleted agent by its UUID.
+- pub `get_including_deleted` function L112-121 — `( &self, agent_uuid: Uuid, ) -> Result<Option<Agent>, diesel::result::Error>` — Retrieves an agent by its UUID, including deleted agents.
+- pub `list` function L129-134 — `(&self) -> Result<Vec<Agent>, diesel::result::Error>` — Lists all non-deleted agents from the database.
+- pub `list_for_generator` function L148-159 — `( &self, generator_id: Uuid, ) -> Result<Vec<Agent>, diesel::result::Error>` — Lists the non-deleted agents registered with `generator_id`.
+- pub `get_names_by_ids` function L164-173 — `( &self, ids: &[Uuid], ) -> Result<Vec<(Uuid, String)>, diesel::result::Error>` — Resolves agent names for a set of IDs in one query (audit-log actor
+- pub `list_all` function L181-184 — `(&self) -> Result<Vec<Agent>, diesel::result::Error>` — Lists all agents from the database, including deleted ones.
+- pub `update` function L197-206 — `( &self, agent_uuid: Uuid, updated_agent: &Agent, ) -> Result<Agent, diesel::res...` — Updates an existing agent in the database.
+- pub `soft_delete` function L218-237 — `(&self, agent_uuid: Uuid) -> Result<usize, diesel::result::Error>` — Soft deletes an agent by setting its deleted_at timestamp to the current time.
+- pub `hard_delete` function L249-252 — `(&self, agent_uuid: Uuid) -> Result<usize, diesel::result::Error>` — Hard deletes an agent from the database.
+- pub `filter_by_labels` function L286-319 — `( &self, labels: Vec<String>, filter_type: FilterType, ) -> Result<Vec<Agent>, d...` — Filters agents by labels.
+- pub `filter_by_annotations` function L358-421 — `( &self, annotations: Vec<(String, String)>, filter_type: FilterType, ) -> Resul...` — Filters agents by annotations.
+- pub `get_agent_by_target_id` function L433-445 — `( &self, agent_target_id: Uuid, ) -> Result<Option<Agent>, diesel::result::Error...` — Retrieves an agent by its target ID.
+- pub `get_agent_details` function L458-478 — `( &self, agent_id: Uuid, ) -> Result<(Vec<AgentLabel>, Vec<AgentTarget>, Vec<Age...` — Retrieves labels, targets, and annotations associated with a specific agent.
+- pub `record_heartbeat` function L489-497 — `(&self, agent_id: Uuid) -> Result<(), diesel::result::Error>` — Records a heartbeat for the specified agent.
+- pub `record_k8s_connectivity` function L517-534 — `( &self, agent_id: Uuid, reachable: bool, latency_ms: Option<i32>, ) -> Result<(...` — Stores the latest agent-reported Kubernetes connectivity snapshot
+- pub `update_pak_hash` function L547-556 — `( &self, agent_uuid: Uuid, new_pak_hash: String, ) -> Result<Agent, diesel::resu...` — Updates the pak_hash for an agent.
+- pub `get_by_name_and_cluster_name` function L569-581 — `( &self, name: String, cluster_name: String, ) -> Result<Option<Agent>, diesel::...` — Retrieves an agent by its name and cluster name.
+- pub `get_by_pak_hash` function L596-603 — `(&self, pak_hash: &str) -> Result<Option<Agent>, diesel::result::Error>` — Retrieves an agent by its PAK hash.
 
 #### crates/brokkr-broker/src/dal/audit_logs.rs
 
@@ -1676,23 +1826,26 @@
 - pub `soft_delete` function L159-191 — `( &self, deployment_object_uuid: Uuid, ) -> Result<usize, diesel::result::Error>` — Soft deletes a deployment object by setting its deleted_at timestamp to the current time.
 - pub `get_latest_for_stack` function L202-213 — `( &self, stack_id: Uuid, ) -> Result<Option<DeploymentObject>, diesel::result::E...` — Retrieves the latest non-deleted deployment object for a specific stack.
 - pub `get_target_state_for_agent` function L232-270 — `( &self, agent_id: Uuid, include_deployed: bool, ) -> Result<Vec<DeploymentObjec...` — Retrieves a list of undeployed objects for an agent based on its responsibilities.
-- pub `pending_counts_by_agent` function L291-375 — `(&self) -> Result<Vec<(Uuid, i64)>, diesel::result::Error>` — Returns, per agent, the number of pending deployment objects — computed
-- pub `search` function L387-397 — `( &self, yaml_checksum: &str, ) -> Result<Vec<DeploymentObject>, diesel::result:...` — Searches for deployment objects by checksum.
-- pub `get_desired_state_for_agent` function L412-432 — `( &self, agent_id: Uuid, ) -> Result<Vec<DeploymentObject>, diesel::result::Erro...` — Retrieves applicable deployment objects for a given agent.
+- pub `pending_counts_by_agent` function L294-387 — `(&self) -> Result<Vec<(Uuid, i64)>, diesel::result::Error>` — Returns, per agent, the number of pending deployment objects — computed
+- pub `search` function L399-409 — `( &self, yaml_checksum: &str, ) -> Result<Vec<DeploymentObject>, diesel::result:...` — Searches for deployment objects by checksum.
+- pub `get_desired_state_for_agent` function L424-444 — `( &self, agent_id: Uuid, ) -> Result<Vec<DeploymentObject>, diesel::result::Erro...` — Retrieves applicable deployment objects for a given agent.
 
 #### crates/brokkr-broker/src/dal/diagnostic_requests.rs
 
 - pub `DiagnosticRequestsDAL` struct L22-25 — `{ dal: &'a DAL }` — Data Access Layer for DiagnosticRequest operations.
-- pub `create` function L37-46 — `( &self, new_request: &NewDiagnosticRequest, ) -> Result<DiagnosticRequest, dies...` — Creates a new diagnostic request.
-- pub `get` function L57-64 — `(&self, id: Uuid) -> Result<Option<DiagnosticRequest>, diesel::result::Error>` — Gets a diagnostic request by ID.
-- pub `get_pending_for_agent` function L75-87 — `( &self, agent_id: Uuid, ) -> Result<Vec<DiagnosticRequest>, diesel::result::Err...` — Gets all pending diagnostic requests for a specific agent.
-- pub `claim` function L98-110 — `(&self, id: Uuid) -> Result<DiagnosticRequest, diesel::result::Error>` — Claims a diagnostic request for processing.
-- pub `complete` function L121-133 — `(&self, id: Uuid) -> Result<DiagnosticRequest, diesel::result::Error>` — Marks a diagnostic request as completed.
-- pub `fail` function L144-156 — `(&self, id: Uuid) -> Result<DiagnosticRequest, diesel::result::Error>` — Marks a diagnostic request as failed.
-- pub `list_by_deployment_object` function L167-177 — `( &self, deployment_object_id: Uuid, ) -> Result<Vec<DiagnosticRequest>, diesel:...` — Lists all diagnostic requests for a specific deployment object.
-- pub `expire_old_requests` function L184-194 — `(&self) -> Result<usize, diesel::result::Error>` — Expires all pending requests that have passed their expiry time.
-- pub `cleanup_old_requests` function L205-221 — `(&self, max_age_hours: i64) -> Result<usize, diesel::result::Error>` — Deletes expired and completed requests older than the given age in hours.
-- pub `delete` function L232-237 — `(&self, id: Uuid) -> Result<usize, diesel::result::Error>` — Deletes a diagnostic request by ID.
+- pub `ExpirySweep` struct L33-40 — `{ expired: usize, failed: usize }` — The outcome of one expiry sweep (BROKKR-T-0300).
+- pub `total` function L44-46 — `(&self) -> usize` — Total number of requests moved to a terminal state by the sweep.
+- pub `create` function L59-68 — `( &self, new_request: &NewDiagnosticRequest, ) -> Result<DiagnosticRequest, dies...` — Creates a new diagnostic request.
+- pub `get` function L79-86 — `(&self, id: Uuid) -> Result<Option<DiagnosticRequest>, diesel::result::Error>` — Gets a diagnostic request by ID.
+- pub `get_pending_for_agent` function L97-109 — `( &self, agent_id: Uuid, ) -> Result<Vec<DiagnosticRequest>, diesel::result::Err...` — Gets all pending diagnostic requests for a specific agent.
+- pub `claim` function L120-132 — `(&self, id: Uuid) -> Result<DiagnosticRequest, diesel::result::Error>` — Claims a diagnostic request for processing.
+- pub `complete` function L143-155 — `(&self, id: Uuid) -> Result<DiagnosticRequest, diesel::result::Error>` — Marks a diagnostic request as completed.
+- pub `fail` function L166-178 — `(&self, id: Uuid) -> Result<DiagnosticRequest, diesel::result::Error>` — Marks a diagnostic request as failed.
+- pub `list_by_deployment_object` function L189-199 — `( &self, deployment_object_id: Uuid, ) -> Result<Vec<DiagnosticRequest>, diesel:...` — Lists all diagnostic requests for a specific deployment object.
+- pub `expire_old_requests` function L222-247 — `(&self) -> Result<ExpirySweep, diesel::result::Error>` — Sweeps every non-terminal request that has passed its expiry time into a
+- pub `cleanup_old_requests` function L262-278 — `(&self, max_age_hours: i64) -> Result<usize, diesel::result::Error>` — Deletes terminal requests older than the given age in hours.
+- pub `delete` function L289-294 — `(&self, id: Uuid) -> Result<usize, diesel::result::Error>` — Deletes a diagnostic request by ID.
+-  `ExpirySweep` type L42-47 — `= ExpirySweep` — It includes methods for creating, claiming, completing, and querying diagnostic requests.
 
 #### crates/brokkr-broker/src/dal/diagnostic_results.rs
 
@@ -1710,17 +1863,18 @@
 - pub `get` function L51-58 — `(&self, generator_uuid: Uuid) -> Result<Option<Generator>, diesel::result::Error...` — Retrieves a non-deleted generator by its UUID.
 - pub `get_including_deleted` function L69-78 — `( &self, generator_uuid: Uuid, ) -> Result<Option<Generator>, diesel::result::Er...` — Retrieves a generator by its UUID, including deleted generators.
 - pub `list` function L84-90 — `(&self) -> Result<Vec<Generator>, diesel::result::Error>` — Lists all non-deleted, non-system generators.
-- pub `list_all` function L93-98 — `(&self) -> Result<Vec<Generator>, diesel::result::Error>` — Lists all non-system generators from the database, including deleted ones.
-- pub `update` function L110-119 — `( &self, generator_uuid: Uuid, updated_generator: &Generator, ) -> Result<Genera...` — Updates an existing generator in the database.
-- pub `soft_delete` function L130-135 — `(&self, generator_id: Uuid) -> Result<usize, diesel::result::Error>` — Soft deletes a generator by setting its deleted_at timestamp to the current time.
-- pub `hard_delete` function L146-149 — `(&self, generator_uuid: Uuid) -> Result<usize, diesel::result::Error>` — Hard deletes a generator from the database.
-- pub `update_pak_hash` function L161-170 — `( &self, generator_uuid: Uuid, new_pak_hash: String, ) -> Result<Generator, dies...` — Updates the pak_hash for a generator.
-- pub `update_last_active` function L181-192 — `( &self, generator_uuid: Uuid, ) -> Result<Generator, diesel::result::Error>` — Updates the last_active_at timestamp for a generator and sets is_active to true.
-- pub `get_by_name` function L203-213 — `( &self, generator_name: &str, ) -> Result<Option<Generator>, diesel::result::Er...` — Retrieves a non-deleted generator by its name.
-- pub `get_by_active_status` function L224-234 — `( &self, active: bool, ) -> Result<Vec<Generator>, diesel::result::Error>` — Retrieves non-deleted generators by their active status.
-- pub `provision_system_generator` function L241-286 — `(&self) -> Result<Uuid, diesel::result::Error>` — Provisions the system generator idempotently.
-- pub `get_system_generator_id` function L289-297 — `(&self) -> Result<Option<Uuid>, diesel::result::Error>` — Returns the system generator UUID, or None if not yet provisioned.
-- pub `get_by_pak_hash` function L312-322 — `( &self, pak_hash: &str, ) -> Result<Option<Generator>, diesel::result::Error>` — Retrieves a generator by its PAK hash.
+- pub `get_names_by_ids` function L95-104 — `( &self, ids: &[Uuid], ) -> Result<Vec<(Uuid, String)>, diesel::result::Error>` — Resolves generator names for a set of IDs in one query (audit-log actor
+- pub `list_all` function L107-112 — `(&self) -> Result<Vec<Generator>, diesel::result::Error>` — Lists all non-system generators from the database, including deleted ones.
+- pub `update` function L124-133 — `( &self, generator_uuid: Uuid, updated_generator: &Generator, ) -> Result<Genera...` — Updates an existing generator in the database.
+- pub `soft_delete` function L144-149 — `(&self, generator_id: Uuid) -> Result<usize, diesel::result::Error>` — Soft deletes a generator by setting its deleted_at timestamp to the current time.
+- pub `hard_delete` function L160-163 — `(&self, generator_uuid: Uuid) -> Result<usize, diesel::result::Error>` — Hard deletes a generator from the database.
+- pub `update_pak_hash` function L175-184 — `( &self, generator_uuid: Uuid, new_pak_hash: String, ) -> Result<Generator, dies...` — Updates the pak_hash for a generator.
+- pub `update_last_active` function L195-206 — `( &self, generator_uuid: Uuid, ) -> Result<Generator, diesel::result::Error>` — Updates the last_active_at timestamp for a generator and sets is_active to true.
+- pub `get_by_name` function L217-227 — `( &self, generator_name: &str, ) -> Result<Option<Generator>, diesel::result::Er...` — Retrieves a non-deleted generator by its name.
+- pub `get_by_active_status` function L238-248 — `( &self, active: bool, ) -> Result<Vec<Generator>, diesel::result::Error>` — Retrieves non-deleted generators by their active status.
+- pub `provision_system_generator` function L255-300 — `(&self) -> Result<Uuid, diesel::result::Error>` — Provisions the system generator idempotently.
+- pub `get_system_generator_id` function L303-311 — `(&self) -> Result<Option<Uuid>, diesel::result::Error>` — Returns the system generator UUID, or None if not yet provisioned.
+- pub `get_by_pak_hash` function L326-336 — `( &self, pak_hash: &str, ) -> Result<Option<Generator>, diesel::result::Error>` — Retrieves a generator by its PAK hash.
 
 #### crates/brokkr-broker/src/dal/mod.rs
 
@@ -1828,19 +1982,19 @@
 
 #### crates/brokkr-broker/src/dal/stacks.rs
 
-- pub `StacksDAL` struct L27-30 — `{ dal: &'a DAL }` — Data Access Layer for Stack operations.
-- pub `create` function L42-58 — `(&self, new_stack: &NewStack) -> Result<Stack, diesel::result::Error>` — Creates a new stack in the database.
-- pub `get` function L69-75 — `(&self, stack_uuids: Vec<Uuid>) -> Result<Vec<Stack>, diesel::result::Error>` — Retrieves non-deleted stacks by their UUIDs.
-- pub `get_including_deleted` function L86-95 — `( &self, stack_uuid: Uuid, ) -> Result<Option<Stack>, diesel::result::Error>` — Retrieves a stack by its UUID, including deleted stacks.
-- pub `list` function L102-107 — `(&self) -> Result<Vec<Stack>, diesel::result::Error>` — Lists all non-deleted stacks from the database.
-- pub `list_for_generator` function L119-128 — `( &self, generator_id: Uuid, ) -> Result<Vec<Stack>, diesel::result::Error>` — Lists all non-deleted stacks owned by a specific generator.
-- pub `list_all` function L135-138 — `(&self) -> Result<Vec<Stack>, diesel::result::Error>` — Lists all stacks from the database, including deleted ones.
-- pub `update` function L150-159 — `( &self, stack_uuid: Uuid, updated_stack: &Stack, ) -> Result<Stack, diesel::res...` — Updates an existing stack in the database.
-- pub `soft_delete` function L170-186 — `(&self, stack_uuid: Uuid) -> Result<usize, diesel::result::Error>` — Soft deletes a stack by setting its deleted_at timestamp to the current time.
-- pub `hard_delete` function L197-200 — `(&self, stack_uuid: Uuid) -> Result<usize, diesel::result::Error>` — Hard deletes a stack from the database.
-- pub `filter_by_labels` function L212-245 — `( &self, labels: Vec<String>, filter_type: FilterType, ) -> Result<Vec<Stack>, d...` — Filters stacks by labels.
-- pub `filter_by_annotations` function L257-306 — `( &self, annotations: Vec<(String, String)>, filter_type: FilterType, ) -> Resul...` — Filters stacks by annotations.
-- pub `get_associated_stacks` function L320-375 — `( &self, agent_id: Uuid, ) -> Result<Vec<Stack>, diesel::result::Error>` — Retrieves all stacks associated with a specific agent based on its labels, annotations, and targets.
+- pub `StacksDAL` struct L28-31 — `{ dal: &'a DAL }` — Data Access Layer for Stack operations.
+- pub `create` function L43-59 — `(&self, new_stack: &NewStack) -> Result<Stack, diesel::result::Error>` — Creates a new stack in the database.
+- pub `get` function L70-76 — `(&self, stack_uuids: Vec<Uuid>) -> Result<Vec<Stack>, diesel::result::Error>` — Retrieves non-deleted stacks by their UUIDs.
+- pub `get_including_deleted` function L87-96 — `( &self, stack_uuid: Uuid, ) -> Result<Option<Stack>, diesel::result::Error>` — Retrieves a stack by its UUID, including deleted stacks.
+- pub `list` function L103-108 — `(&self) -> Result<Vec<Stack>, diesel::result::Error>` — Lists all non-deleted stacks from the database.
+- pub `list_for_generator` function L120-129 — `( &self, generator_id: Uuid, ) -> Result<Vec<Stack>, diesel::result::Error>` — Lists all non-deleted stacks owned by a specific generator.
+- pub `list_all` function L136-139 — `(&self) -> Result<Vec<Stack>, diesel::result::Error>` — Lists all stacks from the database, including deleted ones.
+- pub `update` function L151-160 — `( &self, stack_uuid: Uuid, updated_stack: &Stack, ) -> Result<Stack, diesel::res...` — Updates an existing stack in the database.
+- pub `soft_delete` function L171-187 — `(&self, stack_uuid: Uuid) -> Result<usize, diesel::result::Error>` — Soft deletes a stack by setting its deleted_at timestamp to the current time.
+- pub `hard_delete` function L198-201 — `(&self, stack_uuid: Uuid) -> Result<usize, diesel::result::Error>` — Hard deletes a stack from the database.
+- pub `filter_by_labels` function L213-246 — `( &self, labels: Vec<String>, filter_type: FilterType, ) -> Result<Vec<Stack>, d...` — Filters stacks by labels.
+- pub `filter_by_annotations` function L258-307 — `( &self, annotations: Vec<(String, String)>, filter_type: FilterType, ) -> Resul...` — Filters stacks by annotations.
+- pub `get_associated_stacks` function L329-400 — `( &self, agent_id: Uuid, ) -> Result<Vec<Stack>, diesel::result::Error>` — Retrieves all stacks associated with a specific agent based on its labels, annotations, and targets.
 
 #### crates/brokkr-broker/src/dal/template_annotations.rs
 
@@ -1894,21 +2048,27 @@
 
 #### crates/brokkr-broker/src/dal/webhook_deliveries.rs
 
-- pub `WebhookDeliveriesDAL` struct L40-43 — `{ dal: &'a DAL }` — Data Access Layer for WebhookDelivery operations.
-- pub `create` function L55-64 — `( &self, new_delivery: &NewWebhookDelivery, ) -> Result<WebhookDelivery, diesel:...` — Creates a new webhook delivery.
-- pub `get` function L75-82 — `(&self, id: Uuid) -> Result<Option<WebhookDelivery>, diesel::result::Error>` — Gets a webhook delivery by ID.
-- pub `claim_for_broker` function L101-140 — `( &self, limit: i64, ttl_seconds: Option<i64>, ) -> Result<Vec<WebhookDelivery>,...` — Claims pending deliveries for broker processing (target_labels is NULL or empty).
-- pub `claim_for_agent` function L156-210 — `( &self, agent_id: Uuid, agent_labels: &[String], limit: i64, ttl_seconds: Optio...` — Claims pending deliveries for an agent based on label matching.
-- pub `release_expired` function L219-234 — `(&self) -> Result<usize, diesel::result::Error>` — Releases expired acquired deliveries back to pending status.
-- pub `process_retries` function L243-257 — `(&self) -> Result<usize, diesel::result::Error>` — Moves failed deliveries back to pending when retry time is reached.
-- pub `mark_success` function L272-287 — `(&self, id: Uuid) -> Result<WebhookDelivery, diesel::result::Error>` — Records a successful delivery.
-- pub `mark_failed` function L300-347 — `( &self, id: Uuid, error: &str, max_retries: i32, ) -> Result<WebhookDelivery, d...` — Records a failed delivery attempt and schedules retry if applicable.
-- pub `list_for_subscription` function L365-387 — `( &self, subscription_id: Uuid, status_filter: Option<&str>, limit: i64, offset:...` — Lists deliveries for a subscription with optional filtering.
-- pub `retry` function L398-422 — `(&self, id: Uuid) -> Result<Option<WebhookDelivery>, diesel::result::Error>` — Retries a failed or dead delivery.
-- pub `cleanup_old` function L433-448 — `(&self, retention_days: i64) -> Result<usize, diesel::result::Error>` — Deletes old deliveries based on retention policy.
-- pub `get_stats` function L459-479 — `(&self, subscription_id: Uuid) -> Result<DeliveryStats, diesel::result::Error>` — Gets delivery statistics for a subscription.
-- pub `DeliveryStats` struct L484-495 — `{ pending: i64, acquired: i64, success: i64, failed: i64, dead: i64 }` — Statistics about webhook deliveries.
--  `DEFAULT_CLAIM_TTL_SECONDS` variable L37 — `: i64` — Default TTL for acquired deliveries (60 seconds).
+- pub `is_retryable_status` function L68-74 — `(status: u16) -> bool` — Whether an HTTP status returned by a webhook endpoint is worth retrying
+- pub `WebhookDeliveriesDAL` struct L77-80 — `{ dal: &'a DAL }` — Data Access Layer for WebhookDelivery operations.
+- pub `create` function L92-101 — `( &self, new_delivery: &NewWebhookDelivery, ) -> Result<WebhookDelivery, diesel:...` — Creates a new webhook delivery.
+- pub `get` function L112-119 — `(&self, id: Uuid) -> Result<Option<WebhookDelivery>, diesel::result::Error>` — Gets a webhook delivery by ID.
+- pub `claim_for_broker` function L138-177 — `( &self, limit: i64, ttl_seconds: Option<i64>, ) -> Result<Vec<WebhookDelivery>,...` — Claims pending deliveries for broker processing (target_labels is NULL or empty).
+- pub `claim_for_agent` function L193-247 — `( &self, agent_id: Uuid, agent_labels: &[String], limit: i64, ttl_seconds: Optio...` — Claims pending deliveries for an agent based on label matching.
+- pub `release_expired` function L256-271 — `(&self) -> Result<usize, diesel::result::Error>` — Releases expired acquired deliveries back to pending status.
+- pub `process_retries` function L280-294 — `(&self) -> Result<usize, diesel::result::Error>` — Moves failed deliveries back to pending when retry time is reached.
+- pub `mark_success` function L309-324 — `(&self, id: Uuid) -> Result<WebhookDelivery, diesel::result::Error>` — Records a successful delivery.
+- pub `mark_failed` function L343-379 — `( &self, id: Uuid, error: &str, max_retries: i32, ) -> Result<WebhookDelivery, d...` — Records a failed delivery attempt and schedules retry if applicable.
+- pub `mark_dead` function L399-411 — `( &self, id: Uuid, error: &str, ) -> Result<WebhookDelivery, diesel::result::Err...` — Records a permanently-failed delivery attempt: the delivery goes to
+- pub `list_for_subscription` function L453-475 — `( &self, subscription_id: Uuid, status_filter: Option<&str>, limit: i64, offset:...` — Lists deliveries for a subscription with optional filtering.
+- pub `retry` function L486-510 — `(&self, id: Uuid) -> Result<Option<WebhookDelivery>, diesel::result::Error>` — Retries a failed or dead delivery.
+- pub `cleanup_old` function L521-536 — `(&self, retention_days: i64) -> Result<usize, diesel::result::Error>` — Deletes old deliveries based on retention policy.
+- pub `get_stats` function L547-567 — `(&self, subscription_id: Uuid) -> Result<DeliveryStats, diesel::result::Error>` — Gets delivery statistics for a subscription.
+- pub `DeliveryStats` struct L572-583 — `{ pending: i64, acquired: i64, success: i64, failed: i64, dead: i64 }` — Statistics about webhook deliveries.
+-  `DEFAULT_CLAIM_TTL_SECONDS` variable L45 — `: i64` — Default TTL for acquired deliveries (60 seconds).
+-  `write_dead` function L416-435 — `( conn: &mut PgConnection, id: Uuid, attempts: i32, now: DateTime<Utc>, error: &...` — Shared terminal-state write behind [`Self::mark_failed`] (budget
+-  `tests` module L586-612 — `-` — that will never accept the payload.
+-  `retryable_statuses_are_transient_only` function L590-601 — `()` — that will never accept the payload.
+-  `other_4xx_statuses_are_not_retryable` function L604-611 — `()` — that will never accept the payload.
 
 #### crates/brokkr-broker/src/dal/webhook_subscriptions.rs
 
@@ -1996,57 +2156,64 @@
 
 #### crates/brokkr-broker/src/utils/background_tasks.rs
 
-- pub `DiagnosticCleanupConfig` struct L21-26 — `{ interval_seconds: u64, max_age_hours: i64 }` — Configuration for diagnostic cleanup task.
-- pub `start_diagnostic_cleanup_task` function L46-89 — `(dal: DAL, config: DiagnosticCleanupConfig)` — Starts the diagnostic cleanup background task.
-- pub `WorkOrderMaintenanceConfig` struct L92-95 — `{ interval_seconds: u64 }` — Configuration for work order maintenance task.
-- pub `start_work_order_maintenance_task` function L114-151 — `(dal: DAL, config: WorkOrderMaintenanceConfig)` — Starts the work order maintenance background task.
-- pub `AgentMetricsRefreshConfig` struct L154-157 — `{ interval_seconds: u64 }` — Configuration for the agent-metrics refresh task.
-- pub `start_agent_metrics_refresh_task` function L178-192 — `(dal: DAL, config: AgentMetricsRefreshConfig)` — Starts the agent-metrics refresh background task (BROKKR-T-0226).
-- pub `WebhookDeliveryConfig` struct L223-228 — `{ interval_seconds: u64, batch_size: i64 }` — Configuration for webhook delivery worker.
-- pub `WebhookCleanupConfig` struct L240-245 — `{ interval_seconds: u64, retention_days: i64 }` — Configuration for webhook cleanup task.
-- pub `start_webhook_delivery_task` function L268-460 — `(dal: DAL, config: WebhookDeliveryConfig)` — Starts the webhook delivery worker background task.
-- pub `start_webhook_cleanup_task` function L504-531 — `(dal: DAL, config: WebhookCleanupConfig)` — Starts the webhook cleanup background task.
-- pub `AuditLogCleanupConfig` struct L534-539 — `{ interval_seconds: u64, retention_days: i64 }` — Configuration for audit log cleanup task.
-- pub `start_audit_log_cleanup_task` function L558-585 — `(dal: DAL, config: AuditLogCleanupConfig)` — Starts the audit log cleanup background task.
-- pub `AgentEventsCleanupConfig` struct L588-593 — `{ interval_seconds: u64, retention_days: i64 }` — Configuration for the agent-events cleanup task (BROKKR-T-0228).
-- pub `start_agent_events_cleanup_task` function L618-646 — `(dal: DAL, config: AgentEventsCleanupConfig)` — Starts the agent-events cleanup background task (BROKKR-T-0228).
-- pub `start_fleet_sweep_task` function L694-729 — `( dal: DAL, registry: std::sync::Arc<crate::ws::ConnectionRegistry>, fleet: std:...` — Starts the periodic fleet live-push sweep (the computed-signal half of the
--  `DiagnosticCleanupConfig` type L28-35 — `impl Default for DiagnosticCleanupConfig` — system health and cleanup expired data.
--  `default` function L29-34 — `() -> Self` — system health and cleanup expired data.
--  `WorkOrderMaintenanceConfig` type L97-103 — `impl Default for WorkOrderMaintenanceConfig` — system health and cleanup expired data.
--  `default` function L98-102 — `() -> Self` — system health and cleanup expired data.
--  `AgentMetricsRefreshConfig` type L159-165 — `impl Default for AgentMetricsRefreshConfig` — system health and cleanup expired data.
--  `default` function L160-164 — `() -> Self` — system health and cleanup expired data.
--  `refresh_agent_metrics` function L197-220 — `(dal: &DAL)` — Recomputes the active-agent and per-agent heartbeat-age gauges from the DB.
--  `WebhookDeliveryConfig` type L230-237 — `impl Default for WebhookDeliveryConfig` — system health and cleanup expired data.
--  `default` function L231-236 — `() -> Self` — system health and cleanup expired data.
--  `WebhookCleanupConfig` type L247-254 — `impl Default for WebhookCleanupConfig` — system health and cleanup expired data.
--  `default` function L248-253 — `() -> Self` — system health and cleanup expired data.
--  `attempt_delivery` function L463-494 — `( client: &reqwest::Client, url: &str, auth_header: Option<&str>, payload: &str,...` — Attempts to deliver a webhook payload via HTTP POST.
--  `AuditLogCleanupConfig` type L541-548 — `impl Default for AuditLogCleanupConfig` — system health and cleanup expired data.
--  `default` function L542-547 — `() -> Self` — system health and cleanup expired data.
--  `AgentEventsCleanupConfig` type L595-602 — `impl Default for AgentEventsCleanupConfig` — system health and cleanup expired data.
--  `default` function L596-601 — `() -> Self` — system health and cleanup expired data.
--  `FleetComputedSignals` type L659 — `= (i64, i64, i64, i64, i64)` — The computed (non-event-driven) fleet signals compared between sweep ticks:
--  `fleet_computed_signals` function L661-669 — `(r: &crate::api::v1::fleet::FleetAgentRecord) -> FleetComputedSignals` — system health and cleanup expired data.
--  `select_changed_fleet_records` function L674-687 — `( prev: &mut std::collections::HashMap<uuid::Uuid, FleetComputedSignals>, record...` — Returns the records whose computed signals changed versus `prev`, updating
--  `tests` module L732-911 — `-` — system health and cleanup expired data.
--  `fleet_rec` function L737-761 — `( agent_id: uuid::Uuid, pending_objects: i64, failing: i64, ) -> crate::api::v1:...` — Minimal fleet record for the sweep diff test — only the computed fields
--  `fleet_sweep_selects_only_changed_computed_signals` function L764-783 — `()` — system health and cleanup expired data.
--  `test_default_agent_events_cleanup_config` function L786-790 — `()` — system health and cleanup expired data.
--  `test_custom_agent_events_cleanup_config` function L793-800 — `()` — system health and cleanup expired data.
--  `test_default_diagnostic_config` function L803-807 — `()` — system health and cleanup expired data.
--  `test_custom_diagnostic_config` function L810-817 — `()` — system health and cleanup expired data.
--  `test_default_work_order_config` function L820-823 — `()` — system health and cleanup expired data.
--  `test_custom_work_order_config` function L826-831 — `()` — system health and cleanup expired data.
--  `test_default_agent_metrics_refresh_config` function L834-837 — `()` — system health and cleanup expired data.
--  `test_custom_agent_metrics_refresh_config` function L840-845 — `()` — system health and cleanup expired data.
--  `test_default_webhook_delivery_config` function L848-852 — `()` — system health and cleanup expired data.
--  `test_custom_webhook_delivery_config` function L855-862 — `()` — system health and cleanup expired data.
--  `test_default_webhook_cleanup_config` function L865-869 — `()` — system health and cleanup expired data.
--  `test_custom_webhook_cleanup_config` function L872-879 — `()` — system health and cleanup expired data.
--  `test_attempt_delivery_invalid_url` function L882-895 — `()` — system health and cleanup expired data.
--  `test_attempt_delivery_with_auth_header_invalid_url` function L898-910 — `()` — system health and cleanup expired data.
+- pub `DiagnosticCleanupConfig` struct L32-37 — `{ interval_seconds: u64, max_age_hours: i64 }` — Configuration for diagnostic cleanup task.
+- pub `start_diagnostic_cleanup_task` function L59-111 — `(dal: DAL, config: DiagnosticCleanupConfig)` — Starts the diagnostic cleanup background task.
+- pub `WorkOrderMaintenanceConfig` struct L114-117 — `{ interval_seconds: u64 }` — Configuration for work order maintenance task.
+- pub `start_work_order_maintenance_task` function L136-173 — `(dal: DAL, config: WorkOrderMaintenanceConfig)` — Starts the work order maintenance background task.
+- pub `AgentMetricsRefreshConfig` struct L176-179 — `{ interval_seconds: u64 }` — Configuration for the agent-metrics refresh task.
+- pub `start_agent_metrics_refresh_task` function L200-214 — `(dal: DAL, config: AgentMetricsRefreshConfig)` — Starts the agent-metrics refresh background task (BROKKR-T-0226).
+- pub `WebhookDeliveryConfig` struct L245-250 — `{ interval_seconds: u64, batch_size: i64 }` — Configuration for webhook delivery worker.
+- pub `WebhookCleanupConfig` struct L262-267 — `{ interval_seconds: u64, retention_days: i64 }` — Configuration for webhook cleanup task.
+- pub `start_webhook_delivery_task` function L290-542 — `(dal: DAL, config: WebhookDeliveryConfig)` — Starts the webhook delivery worker background task.
+- pub `start_webhook_cleanup_task` function L633-660 — `(dal: DAL, config: WebhookCleanupConfig)` — Starts the webhook cleanup background task.
+- pub `AuditLogCleanupConfig` struct L663-668 — `{ interval_seconds: u64, retention_days: i64 }` — Configuration for audit log cleanup task.
+- pub `start_audit_log_cleanup_task` function L687-714 — `(dal: DAL, config: AuditLogCleanupConfig)` — Starts the audit log cleanup background task.
+- pub `AgentEventsCleanupConfig` struct L717-722 — `{ interval_seconds: u64, retention_days: i64 }` — Configuration for the agent-events cleanup task (BROKKR-T-0228).
+- pub `start_agent_events_cleanup_task` function L747-775 — `(dal: DAL, config: AgentEventsCleanupConfig)` — Starts the agent-events cleanup background task (BROKKR-T-0228).
+- pub `start_fleet_sweep_task` function L823-858 — `( dal: DAL, registry: std::sync::Arc<crate::ws::ConnectionRegistry>, fleet: std:...` — Starts the periodic fleet live-push sweep (the computed-signal half of the
+-  `SUBSCRIPTION_FETCH_MAX_ATTEMPTS` variable L29 — `: i32` — Attempt ceiling applied when a claimed delivery's subscription cannot be
+-  `DiagnosticCleanupConfig` type L39-46 — `impl Default for DiagnosticCleanupConfig` — system health and cleanup expired data.
+-  `default` function L40-45 — `() -> Self` — system health and cleanup expired data.
+-  `WorkOrderMaintenanceConfig` type L119-125 — `impl Default for WorkOrderMaintenanceConfig` — system health and cleanup expired data.
+-  `default` function L120-124 — `() -> Self` — system health and cleanup expired data.
+-  `AgentMetricsRefreshConfig` type L181-187 — `impl Default for AgentMetricsRefreshConfig` — system health and cleanup expired data.
+-  `default` function L182-186 — `() -> Self` — system health and cleanup expired data.
+-  `refresh_agent_metrics` function L219-242 — `(dal: &DAL)` — Recomputes the active-agent and per-agent heartbeat-age gauges from the DB.
+-  `WebhookDeliveryConfig` type L252-259 — `impl Default for WebhookDeliveryConfig` — system health and cleanup expired data.
+-  `default` function L253-258 — `() -> Self` — system health and cleanup expired data.
+-  `WebhookCleanupConfig` type L269-276 — `impl Default for WebhookCleanupConfig` — system health and cleanup expired data.
+-  `default` function L270-275 — `() -> Self` — system health and cleanup expired data.
+-  `DeliveryFailure` struct L550-559 — `{ message: String, status: Option<u16>, retryable: bool }` — A failed broker-side delivery attempt (BROKKR-T-0288).
+-  `DeliveryFailure` type L561-580 — `= DeliveryFailure` — system health and cleanup expired data.
+-  `transport` function L563-569 — `(message: String) -> Self` — A transport-level failure: no response, so always worth retrying.
+-  `from_status` function L573-579 — `(status: u16, message: String) -> Self` — A response the endpoint actually returned; retryability comes from the
+-  `attempt_delivery` function L587-623 — `( client: &reqwest::Client, url: &str, auth_header: Option<&str>, payload: &str,...` — Attempts to deliver a webhook payload via HTTP POST.
+-  `AuditLogCleanupConfig` type L670-677 — `impl Default for AuditLogCleanupConfig` — system health and cleanup expired data.
+-  `default` function L671-676 — `() -> Self` — system health and cleanup expired data.
+-  `AgentEventsCleanupConfig` type L724-731 — `impl Default for AgentEventsCleanupConfig` — system health and cleanup expired data.
+-  `default` function L725-730 — `() -> Self` — system health and cleanup expired data.
+-  `FleetComputedSignals` type L788 — `= (i64, i64, i64, i64, i64)` — The computed (non-event-driven) fleet signals compared between sweep ticks:
+-  `fleet_computed_signals` function L790-798 — `(r: &crate::api::v1::fleet::FleetAgentRecord) -> FleetComputedSignals` — system health and cleanup expired data.
+-  `select_changed_fleet_records` function L803-816 — `( prev: &mut std::collections::HashMap<uuid::Uuid, FleetComputedSignals>, record...` — Returns the records whose computed signals changed versus `prev`, updating
+-  `tests` module L861-1100 — `-` — system health and cleanup expired data.
+-  `fleet_rec` function L866-890 — `( agent_id: uuid::Uuid, pending_objects: i64, failing: i64, ) -> crate::api::v1:...` — Minimal fleet record for the sweep diff test — only the computed fields
+-  `fleet_sweep_selects_only_changed_computed_signals` function L893-912 — `()` — system health and cleanup expired data.
+-  `test_default_agent_events_cleanup_config` function L915-919 — `()` — system health and cleanup expired data.
+-  `test_custom_agent_events_cleanup_config` function L922-929 — `()` — system health and cleanup expired data.
+-  `test_default_diagnostic_config` function L932-936 — `()` — system health and cleanup expired data.
+-  `test_custom_diagnostic_config` function L939-946 — `()` — system health and cleanup expired data.
+-  `test_default_work_order_config` function L949-952 — `()` — system health and cleanup expired data.
+-  `test_custom_work_order_config` function L955-960 — `()` — system health and cleanup expired data.
+-  `test_default_agent_metrics_refresh_config` function L963-966 — `()` — system health and cleanup expired data.
+-  `test_custom_agent_metrics_refresh_config` function L969-974 — `()` — system health and cleanup expired data.
+-  `test_default_webhook_delivery_config` function L977-981 — `()` — system health and cleanup expired data.
+-  `test_custom_webhook_delivery_config` function L984-991 — `()` — system health and cleanup expired data.
+-  `test_default_webhook_cleanup_config` function L994-998 — `()` — system health and cleanup expired data.
+-  `test_custom_webhook_cleanup_config` function L1001-1008 — `()` — system health and cleanup expired data.
+-  `test_attempt_delivery_invalid_url` function L1011-1028 — `()` — system health and cleanup expired data.
+-  `test_attempt_delivery_with_auth_header_invalid_url` function L1031-1044 — `()` — system health and cleanup expired data.
+-  `test_attempt_delivery_honors_per_request_timeout` function L1047-1080 — `()` — system health and cleanup expired data.
+-  `test_delivery_failure_classifies_status` function L1083-1099 — `()` — system health and cleanup expired data.
 
 #### crates/brokkr-broker/src/utils/config_watcher.rs
 
@@ -2072,10 +2239,11 @@
 - pub `fingerprint` function L117-120 — `(&self) -> String` — Returns the key as a hex string (for logging key fingerprint only).
 - pub `encrypt` function L126-144 — `(&self, plaintext: &[u8]) -> Result<Vec<u8>, EncryptionError>` — Encrypts data using AES-256-GCM.
 - pub `decrypt` function L151-172 — `(&self, data: &[u8]) -> Result<Vec<u8>, EncryptionError>` — Decrypts data, automatically detecting the encryption version.
-- pub `init_encryption_key` function L232-252 — `(key_hex: Option<&str>) -> Result<(), String>` — Initializes the global encryption key from configuration.
-- pub `get_encryption_key` function L258-263 — `() -> Arc<EncryptionKey>` — Gets the global encryption key.
-- pub `encrypt_string` function L272-274 — `(value: &str) -> Result<Vec<u8>, EncryptionError>` — Encrypts a string value for storage.
-- pub `decrypt_string` function L283-288 — `(encrypted: &[u8]) -> Result<String, String>` — Decrypts bytes back to a string.
+- pub `check_webhook_encryption_key` function L255-273 — `( key_hex: Option<&str>, existing_subscriptions: i64, ) -> Result<(), String>` — Startup guard for the webhook encryption key (BROKKR-T-0288).
+- pub `init_encryption_key` function L286-309 — `(key_hex: Option<&str>) -> Result<(), String>` — Initializes the global encryption key from configuration.
+- pub `get_encryption_key` function L315-320 — `() -> Arc<EncryptionKey>` — Gets the global encryption key.
+- pub `encrypt_string` function L329-331 — `(value: &str) -> Result<Vec<u8>, EncryptionError>` — Encrypts a string value for storage.
+- pub `decrypt_string` function L340-345 — `(encrypted: &[u8]) -> Result<String, String>` — Decrypts bytes back to a string.
 -  `VERSION_AES_GCM` variable L31 — `: u8` — Version byte for AES-256-GCM encrypted data
 -  `VERSION_LEGACY_XOR` variable L34 — `: u8` — Version byte for legacy XOR encrypted data (read-only)
 -  `AES_GCM_NONCE_SIZE` variable L37 — `: usize` — Nonce size for AES-256-GCM (96 bits)
@@ -2089,25 +2257,37 @@
 -  `EncryptionKey` type L89-221 — `= EncryptionKey` — - 0x01: AES-256-GCM encryption
 -  `decrypt_aes_gcm` function L175-188 — `(&self, data: &[u8]) -> Result<Vec<u8>, EncryptionError>` — Decrypts AES-256-GCM encrypted data.
 -  `decrypt_legacy_xor` function L195-220 — `(&self, data: &[u8]) -> Result<Vec<u8>, EncryptionError>` — Decrypts legacy XOR-encrypted data (for migration support).
--  `tests` module L291-440 — `-` — - 0x01: AES-256-GCM encryption
--  `test_encryption_key_from_hex` function L295-300 — `()` — - 0x01: AES-256-GCM encryption
--  `test_encryption_key_from_hex_invalid` function L303-309 — `()` — - 0x01: AES-256-GCM encryption
--  `test_encrypt_decrypt_roundtrip` function L312-320 — `()` — - 0x01: AES-256-GCM encryption
--  `test_encrypt_decrypt_empty` function L323-331 — `()` — - 0x01: AES-256-GCM encryption
--  `test_encrypt_produces_different_output` function L334-347 — `()` — - 0x01: AES-256-GCM encryption
--  `test_decrypt_wrong_key` function L350-359 — `()` — - 0x01: AES-256-GCM encryption
--  `test_decrypt_tampered_data` function L362-375 — `()` — - 0x01: AES-256-GCM encryption
--  `test_decrypt_too_short` function L378-383 — `()` — - 0x01: AES-256-GCM encryption
--  `test_fingerprint` function L386-393 — `()` — - 0x01: AES-256-GCM encryption
--  `test_version_byte_present` function L396-404 — `()` — - 0x01: AES-256-GCM encryption
--  `test_legacy_xor_decryption` function L407-439 — `()` — - 0x01: AES-256-GCM encryption
+-  `configured_key` function L229-231 — `(key_hex: Option<&str>) -> Option<&str>` — Normalizes the configured key: both `None` and `Some("")` mean "unset".
+-  `tests` module L348-541 — `-` — - 0x01: AES-256-GCM encryption
+-  `test_encryption_key_from_hex` function L352-357 — `()` — - 0x01: AES-256-GCM encryption
+-  `test_encryption_key_from_hex_invalid` function L360-366 — `()` — - 0x01: AES-256-GCM encryption
+-  `test_encrypt_decrypt_roundtrip` function L369-377 — `()` — - 0x01: AES-256-GCM encryption
+-  `test_encrypt_decrypt_empty` function L380-388 — `()` — - 0x01: AES-256-GCM encryption
+-  `test_encrypt_produces_different_output` function L391-404 — `()` — - 0x01: AES-256-GCM encryption
+-  `test_decrypt_wrong_key` function L407-416 — `()` — - 0x01: AES-256-GCM encryption
+-  `test_decrypt_tampered_data` function L419-432 — `()` — - 0x01: AES-256-GCM encryption
+-  `test_decrypt_too_short` function L435-440 — `()` — - 0x01: AES-256-GCM encryption
+-  `test_fingerprint` function L443-450 — `()` — - 0x01: AES-256-GCM encryption
+-  `test_version_byte_present` function L453-461 — `()` — - 0x01: AES-256-GCM encryption
+-  `VALID_KEY` variable L463 — `: &str` — - 0x01: AES-256-GCM encryption
+-  `test_startup_guard_blocks_unset_key_with_existing_subscriptions` function L466-481 — `()` — - 0x01: AES-256-GCM encryption
+-  `test_startup_guard_allows_fresh_install` function L484-489 — `()` — - 0x01: AES-256-GCM encryption
+-  `test_startup_guard_allows_any_set_key` function L492-498 — `()` — - 0x01: AES-256-GCM encryption
+-  `test_configured_key_matches_init_semantics` function L501-505 — `()` — - 0x01: AES-256-GCM encryption
+-  `test_legacy_xor_decryption` function L508-540 — `()` — - 0x01: AES-256-GCM encryption
 
 #### crates/brokkr-broker/src/utils/event_bus.rs
 
-- pub `emit_event` function L30-99 — `(dal: &DAL, event: &BrokkrEvent) -> usize` — Emits an event by creating webhook deliveries for all matching subscriptions.
--  `tests` module L102-123 — `-` — matching subscriptions.
--  `test_brokkr_event_creation` function L108-114 — `()` — matching subscriptions.
--  `test_brokkr_event_unique_ids` function L117-122 — `()` — matching subscriptions.
+- pub `emit_event` function L73-157 — `(dal: &DAL, event: &BrokkrEvent) -> usize` — Emits an event by creating webhook deliveries for all matching subscriptions.
+-  `subscription_admits_event` function L39-57 — `(subscription: &WebhookSubscription, event: &BrokkrEvent) -> bool` — Decides whether a subscription's stored `filters` admit this event.
+-  `tests` module L160-256 — `-` — matching subscriptions.
+-  `subscription_with_filters` function L169-186 — `(filters: Option<&str>) -> WebhookSubscription` — Builds an in-memory subscription carrying `filters` verbatim, so the
+-  `test_subscription_admits_event_without_filters` function L189-205 — `()` — matching subscriptions.
+-  `test_subscription_admits_event_agent_filter` function L208-221 — `()` — matching subscriptions.
+-  `test_subscription_admits_event_legacy_labels_only_filter` function L224-230 — `()` — matching subscriptions.
+-  `test_subscription_admits_nothing_on_unparseable_filters` function L233-238 — `()` — matching subscriptions.
+-  `test_brokkr_event_creation` function L241-247 — `()` — matching subscriptions.
+-  `test_brokkr_event_unique_ids` function L250-255 — `()` — matching subscriptions.
 
 #### crates/brokkr-broker/src/utils/matching.rs
 
@@ -2130,24 +2310,43 @@
 
 #### crates/brokkr-broker/src/utils/mod.rs
 
-- pub `audit` module L20 — `-` — the broker, including admin key management and shutdown procedures.
-- pub `background_tasks` module L21 — `-` — the broker, including admin key management and shutdown procedures.
-- pub `config_watcher` module L22 — `-` — the broker, including admin key management and shutdown procedures.
-- pub `encryption` module L23 — `-` — the broker, including admin key management and shutdown procedures.
-- pub `event_bus` module L24 — `-` — the broker, including admin key management and shutdown procedures.
-- pub `matching` module L25 — `-` — the broker, including admin key management and shutdown procedures.
-- pub `pak` module L26 — `-` — the broker, including admin key management and shutdown procedures.
-- pub `templating` module L27 — `-` — the broker, including admin key management and shutdown procedures.
-- pub `shutdown` function L38-42 — `(shutdown_rx: oneshot::Receiver<()>)` — Handles the shutdown process for the broker.
-- pub `AdminKey` struct L47-52 — `{ id: Uuid, created_at: chrono::DateTime<Utc>, updated_at: chrono::DateTime<Utc>...` — Represents an admin key in the database.
-- pub `NewAdminKey` struct L57-59 — `{ pak_hash: String }` — Represents a new admin key to be inserted into the database.
-- pub `first_startup` function L65-70 — `( conn: &mut PgConnection, config: &Settings, ) -> Result<(), Box<dyn std::error...` — Performs first-time startup operations.
-- pub `upsert_admin` function L90-166 — `( conn: &mut PgConnection, config: &Settings, ) -> Result<(), Box<dyn std::error...` — Updates or inserts the admin key and related generator.
--  `BOOTSTRAP_KEY_FILE` variable L33 — `: &str` — Path of the bootstrap key file written when the broker generates an admin
--  `create_pak` function L75-83 — `() -> Result<(String, String), Box<dyn std::error::Error>>` — Creates a new PAK (Privileged Access Key) and its hash.
--  `validate_pak_hash` function L168-172 — `(hash: &str) -> bool` — the broker, including admin key management and shutdown procedures.
--  `tests` module L175-195 — `-` — the broker, including admin key management and shutdown procedures.
--  `minted_hash_passes_config_validation` function L183-194 — `()` — The offline `generate-pak` day-zero flow only works if the hash it mints
+- pub `audit` module L23 — `-` — the broker, including admin key management and shutdown procedures.
+- pub `background_tasks` module L24 — `-` — the broker, including admin key management and shutdown procedures.
+- pub `config_watcher` module L25 — `-` — the broker, including admin key management and shutdown procedures.
+- pub `encryption` module L26 — `-` — the broker, including admin key management and shutdown procedures.
+- pub `event_bus` module L27 — `-` — the broker, including admin key management and shutdown procedures.
+- pub `matching` module L28 — `-` — the broker, including admin key management and shutdown procedures.
+- pub `pak` module L29 — `-` — the broker, including admin key management and shutdown procedures.
+- pub `templating` module L30 — `-` — the broker, including admin key management and shutdown procedures.
+- pub `ui_pak` module L31 — `-` — the broker, including admin key management and shutdown procedures.
+- pub `shutdown` function L42-46 — `(shutdown_rx: oneshot::Receiver<()>)` — Handles the shutdown process for the broker.
+- pub `AdminKey` struct L51-56 — `{ id: Uuid, created_at: chrono::DateTime<Utc>, updated_at: chrono::DateTime<Utc>...` — Represents an admin key in the database.
+- pub `NewAdminKey` struct L61-63 — `{ pak_hash: String }` — Represents a new admin key to be inserted into the database.
+- pub `AdminPakOutcome` enum L73-82 — `Minted | ReappliedConfigured` — What [`upsert_admin`] actually did.
+- pub `first_startup` function L88-97 — `( conn: &mut PgConnection, config: &Settings, ) -> Result<(), Box<dyn std::error...` — Performs first-time startup operations.
+- pub `upsert_admin` function L117-200 — `( conn: &mut PgConnection, config: &Settings, ) -> Result<AdminPakOutcome, Box<d...` — Updates or inserts the admin key and related generator.
+- pub `DefaultAdminPakStatus` struct L260-265 — `{ configured: bool, stored: bool }` — Which admin credential sources still carry the shipped default hash.
+- pub `in_use` function L269-271 — `(&self) -> bool` — True when the publicly-known PAK is accepted as admin by this broker.
+- pub `detect_default_admin_pak_hash` function L283-291 — `( configured: Option<&str>, stored: Option<&str>, ) -> DefaultAdminPakStatus` — Compares the effective admin credential against the shipped default.
+- pub `stored_admin_pak_hash` function L297-302 — `(conn: &mut PgConnection) -> QueryResult<Option<String>>` — Reads the persisted admin PAK hash, if the admin role has been provisioned.
+- pub `report_default_admin_pak_hash` function L361-368 — `(status: &DefaultAdminPakStatus)` — Logs the default-admin-PAK banner (if applicable) and publishes
+- pub `start_default_admin_pak_reminder_task` function L375-386 — `(status: DefaultAdminPakStatus)` — Spawns the hourly re-warning task described on
+-  `BOOTSTRAP_KEY_FILE` variable L37 — `: &str` — Path of the bootstrap key file written when the broker generates an admin
+-  `create_pak` function L102-110 — `() -> Result<(String, String), Box<dyn std::error::Error>>` — Creates a new PAK (Privileged Access Key) and its hash.
+-  `validate_pak_hash` function L202-206 — `(hash: &str) -> bool` — the broker, including admin key management and shutdown procedures.
+-  `DEFAULT_ADMIN_PAK_HASH_IN_USE` variable L225-235 — `: Lazy<IntGauge>` — `1` when this broker's admin credential is the publicly-known development
+-  `DEFAULT_ADMIN_PAK_REMINDER_INTERVAL` variable L248 — `: Duration` — How often the startup warning is repeated while the default admin PAK is
+-  `DefaultAdminPakStatus` type L267-272 — `= DefaultAdminPakStatus` — the broker, including admin key management and shutdown procedures.
+-  `default_admin_pak_warning` function L309-353 — `(status: &DefaultAdminPakStatus) -> Option<String>` — Renders the operator-facing warning for a default-PAK `status`.
+-  `tests` module L389-528 — `-` — the broker, including admin key management and shutdown procedures.
+-  `minted_hash_passes_config_validation` function L397-408 — `()` — The offline `generate-pak` day-zero flow only works if the hash it mints
+-  `OVERRIDE_HASH` variable L411 — `: &str` — A hash that is neither the default nor equal to any other fixture.
+-  `default_configured_admin_pak_hash_is_detected` function L414-423 — `()` — the broker, including admin key management and shutdown procedures.
+-  `overridden_admin_pak_hash_is_not_detected` function L426-436 — `()` — the broker, including admin key management and shutdown procedures.
+-  `stale_stored_default_is_detected_despite_overridden_config` function L443-461 — `()` — The case a config-only check misses: the operator set
+-  `unset_admin_pak_hash_is_not_detected` function L466-471 — `()` — An unset (or empty) hash means the broker mints its own PAK on first
+-  `default_admin_pak_warning_carries_full_remediation` function L476-500 — `()` — "Unmissable" is a wording property, so pin it: the banner must say what
+-  `report_default_admin_pak_hash_publishes_gauge` function L506-527 — `()` — The gauge must exist on `/metrics` in both states, so an alert on
 
 #### crates/brokkr-broker/src/utils/pak.rs
 
@@ -2203,6 +2402,14 @@
 -  `test_validate_parameters_minimum` function L462-473 — `()` — - Validating parameters against JSON Schema at instantiation time
 -  `test_validate_parameters_empty_schema` function L476-481 — `()` — - Validating parameters against JSON Schema at instantiation time
 -  `test_validate_parameters_complex_schema` function L484-509 — `()` — - Validating parameters against JSON Schema at instantiation time
+
+#### crates/brokkr-broker/src/utils/ui_pak.rs
+
+- pub `init` function L38-45 — `() -> Result<(), Box<dyn std::error::Error>>` — Mint the process-lifetime UI PAK.
+- pub `token` function L49-51 — `() -> Option<&'static str>` — The raw UI PAK for injection into the served console HTML.
+- pub `hash` function L54-56 — `() -> Option<&'static str>` — The UI PAK's hash, for the auth middleware's in-memory comparison.
+-  `UiPak` struct L26-32 — `{ token: String, hash: String }` — sessions.
+-  `UI_PAK` variable L34 — `: OnceLock<UiPak>` — sessions.
 
 ### crates/brokkr-broker/src/ws
 
@@ -2346,35 +2553,35 @@
 - pub `MIGRATIONS` variable L44 — `: EmbeddedMigrations` — Embedded migrations for the test database.
 - pub `TestFixture` struct L49-55 — `{ dal: DAL, settings: Settings, admin_pak: String, admin_generator: Generator }` — Represents a test fixture for the Brokkr project.
 - pub `create_test_router` function L72-86 — `(&self) -> Router<DAL>` — Creates and returns an Axum Router with configured API routes.
-- pub `new` function L103-150 — `() -> Self` — Creates a new TestFixture instance.
-- pub `create_test_stack` function L165-177 — `( &self, name: String, description: Option<String>, generator_id: Uuid, ) -> Sta...` — Creates a new stack for testing purposes.
-- pub `create_test_agent` function L189-200 — `(&self, name: String, cluster_name: String) -> Agent` — Creates a new agent for testing purposes.
-- pub `create_test_deployment_object` function L213-226 — `( &self, stack_id: Uuid, yaml_content: String, is_deletion_marker: bool, ) -> De...` — Creates a new deployment object for testing purposes.
-- pub `create_test_stack_label` function L238-245 — `(&self, stack_id: Uuid, label: String) -> StackLabel` — Creates a new stack label for testing purposes.
-- pub `create_test_stack_annotation` function L258-273 — `( &self, stack_id: Uuid, key: &str, value: &str, ) -> StackAnnotation` — Creates a new stack annotation for testing purposes.
-- pub `create_test_agent_annotation` function L286-298 — `( &self, agent_id: Uuid, key: String, value: String, ) -> AgentAnnotation` — Creates a new agent annotation for testing purposes.
-- pub `create_test_agent_target` function L310-317 — `(&self, agent_id: Uuid, stack_id: Uuid) -> AgentTarget` — Creates a new agent target for testing purposes.
-- pub `create_test_agent_event` function L332-351 — `( &self, agent: &Agent, deployment_object: &DeploymentObject, event_type: &str, ...` — Creates a new agent event for testing purposes.
-- pub `create_test_agent_label` function L363-370 — `(&self, agent_id: Uuid, label: String) -> AgentLabel` — Creates a new agent label for testing purposes.
-- pub `create_test_generator` function L382-400 — `( &self, name: String, description: Option<String>, api_key_hash: String, ) -> G...` — Creates a new generator for testing purposes.
-- pub `create_test_generator_with_pak` function L402-420 — `( &self, name: String, description: Option<String>, ) -> (Generator, String)` — and agent events.
-- pub `create_test_agent_with_pak` function L422-440 — `( &self, name: String, cluster_name: String, ) -> (Agent, String)` — and agent events.
-- pub `register_agent_with_defaults` function L445-453 — `(&self, agent_id: Uuid)` — Registers an agent with the system generator and the admin_generator.
-- pub `create_bare_agent_with_pak` function L457-474 — `( &self, name: String, cluster_name: String, ) -> (Agent, String)` — Creates an agent WITHOUT any default registrations, useful for testing
-- pub `register_agent_with_generator` function L477-486 — `( &self, agent_id: Uuid, generator_id: Uuid, ) -> AgentGeneratorRegistration` — Registers an agent with a specific generator via the DAL.
-- pub `create_test_template` function L501-519 — `( &self, generator_id: Option<Uuid>, name: String, description: Option<String>, ...` — Creates a new stack template for testing purposes.
-- pub `create_test_template_label` function L531-538 — `(&self, template_id: Uuid, label: String) -> TemplateLabel` — Creates a new template label for testing purposes.
-- pub `create_test_template_annotation` function L551-564 — `( &self, template_id: Uuid, key: &str, value: &str, ) -> TemplateAnnotation` — Creates a new template annotation for testing purposes.
-- pub `create_test_work_order` function L576-589 — `(&self, work_type: &str, yaml_content: &str) -> WorkOrder` — Creates a new work order for testing purposes.
-- pub `create_test_work_order_target` function L601-612 — `( &self, work_order_id: Uuid, agent_id: Uuid, ) -> WorkOrderTarget` — Creates a new work order target for testing purposes.
-- pub `create_test_work_order_label` function L624-631 — `(&self, work_order_id: Uuid, label: &str) -> WorkOrderLabel` — Creates a new work order label for testing purposes.
-- pub `create_test_work_order_annotation` function L644-657 — `( &self, work_order_id: Uuid, key: &str, value: &str, ) -> WorkOrderAnnotation` — Creates a new work order annotation for testing purposes.
+- pub `new` function L103-154 — `() -> Self` — Creates a new TestFixture instance.
+- pub `create_test_stack` function L169-181 — `( &self, name: String, description: Option<String>, generator_id: Uuid, ) -> Sta...` — Creates a new stack for testing purposes.
+- pub `create_test_agent` function L193-204 — `(&self, name: String, cluster_name: String) -> Agent` — Creates a new agent for testing purposes.
+- pub `create_test_deployment_object` function L217-230 — `( &self, stack_id: Uuid, yaml_content: String, is_deletion_marker: bool, ) -> De...` — Creates a new deployment object for testing purposes.
+- pub `create_test_stack_label` function L242-249 — `(&self, stack_id: Uuid, label: String) -> StackLabel` — Creates a new stack label for testing purposes.
+- pub `create_test_stack_annotation` function L262-277 — `( &self, stack_id: Uuid, key: &str, value: &str, ) -> StackAnnotation` — Creates a new stack annotation for testing purposes.
+- pub `create_test_agent_annotation` function L290-302 — `( &self, agent_id: Uuid, key: String, value: String, ) -> AgentAnnotation` — Creates a new agent annotation for testing purposes.
+- pub `create_test_agent_target` function L314-321 — `(&self, agent_id: Uuid, stack_id: Uuid) -> AgentTarget` — Creates a new agent target for testing purposes.
+- pub `create_test_agent_event` function L336-355 — `( &self, agent: &Agent, deployment_object: &DeploymentObject, event_type: &str, ...` — Creates a new agent event for testing purposes.
+- pub `create_test_agent_label` function L367-374 — `(&self, agent_id: Uuid, label: String) -> AgentLabel` — Creates a new agent label for testing purposes.
+- pub `create_test_generator` function L386-404 — `( &self, name: String, description: Option<String>, api_key_hash: String, ) -> G...` — Creates a new generator for testing purposes.
+- pub `create_test_generator_with_pak` function L406-424 — `( &self, name: String, description: Option<String>, ) -> (Generator, String)` — and agent events.
+- pub `create_test_agent_with_pak` function L426-444 — `( &self, name: String, cluster_name: String, ) -> (Agent, String)` — and agent events.
+- pub `register_agent_with_defaults` function L449-460 — `(&self, agent_id: Uuid)` — Registers an agent with the system generator and the admin_generator.
+- pub `create_bare_agent_with_pak` function L464-481 — `( &self, name: String, cluster_name: String, ) -> (Agent, String)` — Creates an agent WITHOUT any default registrations, useful for testing
+- pub `register_agent_with_generator` function L484-493 — `( &self, agent_id: Uuid, generator_id: Uuid, ) -> AgentGeneratorRegistration` — Registers an agent with a specific generator via the DAL.
+- pub `create_test_template` function L508-526 — `( &self, generator_id: Option<Uuid>, name: String, description: Option<String>, ...` — Creates a new stack template for testing purposes.
+- pub `create_test_template_label` function L538-545 — `(&self, template_id: Uuid, label: String) -> TemplateLabel` — Creates a new template label for testing purposes.
+- pub `create_test_template_annotation` function L558-571 — `( &self, template_id: Uuid, key: &str, value: &str, ) -> TemplateAnnotation` — Creates a new template annotation for testing purposes.
+- pub `create_test_work_order` function L583-596 — `(&self, work_type: &str, yaml_content: &str) -> WorkOrder` — Creates a new work order for testing purposes.
+- pub `create_test_work_order_target` function L608-619 — `( &self, work_order_id: Uuid, agent_id: Uuid, ) -> WorkOrderTarget` — Creates a new work order target for testing purposes.
+- pub `create_test_work_order_label` function L631-638 — `(&self, work_order_id: Uuid, label: &str) -> WorkOrderLabel` — Creates a new work order label for testing purposes.
+- pub `create_test_work_order_annotation` function L651-664 — `( &self, work_order_id: Uuid, key: &str, value: &str, ) -> WorkOrderAnnotation` — Creates a new work order annotation for testing purposes.
 -  `TestFixture` type L57-61 — `impl Default for TestFixture` — and agent events.
 -  `default` function L58-60 — `() -> Self` — and agent events.
--  `TestFixture` type L63-669 — `= TestFixture` — and agent events.
--  `reset_database` function L659-668 — `(&self)` — and agent events.
--  `TestFixture` type L671-675 — `impl Drop for TestFixture` — and agent events.
--  `drop` function L672-674 — `(&mut self)` — and agent events.
+-  `TestFixture` type L63-676 — `= TestFixture` — and agent events.
+-  `reset_database` function L666-675 — `(&self)` — and agent events.
+-  `TestFixture` type L678-682 — `impl Drop for TestFixture` — and agent events.
+-  `drop` function L679-681 — `(&mut self)` — and agent events.
 
 ### crates/brokkr-broker/tests/integration/api
 
@@ -2409,18 +2616,18 @@
 -  `test_delete_agent` function L168-189 — `()`
 -  `test_list_agent_events` function L192-243 — `()`
 -  `test_create_agent_event` function L246-290 — `()`
--  `test_create_event_agent_id_mismatch_returns_400` function L293-335 — `()`
--  `test_list_agent_events_requires_admin` function L338-359 — `()`
--  `test_list_agent_labels` function L362-398 — `()`
--  `test_add_agent_label` function L401-431 — `()`
--  `test_add_agent_label_duplicate_returns_409` function L434-466 — `()`
--  `test_remove_agent_label` function L469-502 — `()`
--  `test_list_agent_annotations` function L505-546 — `()`
--  `test_add_agent_annotation` function L549-584 — `()`
--  `test_remove_agent_annotation` function L587-624 — `()`
--  `test_list_agent_targets` function L627-672 — `()`
--  `test_add_agent_target` function L675-714 — `()`
--  `test_add_agent_target_duplicate_returns_409` function L717-756 — `()`
+-  `test_create_event_agent_id_mismatch_returns_400` function L293-337 — `()`
+-  `test_list_agent_events_requires_admin` function L340-361 — `()`
+-  `test_list_agent_labels` function L364-400 — `()`
+-  `test_add_agent_label` function L403-433 — `()`
+-  `test_add_agent_label_duplicate_returns_409` function L436-467 — `()`
+-  `test_remove_agent_label` function L470-503 — `()`
+-  `test_list_agent_annotations` function L506-547 — `()`
+-  `test_add_agent_annotation` function L550-585 — `()`
+-  `test_remove_agent_annotation` function L588-625 — `()`
+-  `test_list_agent_targets` function L628-673 — `()`
+-  `test_add_agent_target` function L676-715 — `()`
+-  `test_add_agent_target_duplicate_returns_409` function L718-756 — `()`
 -  `test_remove_agent_target` function L759-801 — `()`
 -  `test_unauthorized_list_agent_events` function L804-819 — `()`
 -  `test_unauthorized_create_agent_event` function L822-846 — `()`
@@ -2439,12 +2646,12 @@
 -  `test_get_target_state_full` function L1166-1235 — `()`
 -  `test_get_target_state_with_invalid_mode` function L1238-1289 — `()`
 -  `test_get_agent_by_name_and_cluster_name` function L1292-1321 — `()`
--  `test_get_agent_stacks` function L1324-1452 — `()`
--  `test_rotate_agent_pak_admin_success` function L1455-1493 — `()`
--  `test_rotate_agent_pak_self_success` function L1496-1529 — `()`
--  `test_rotate_agent_pak_unauthorized` function L1532-1551 — `()`
--  `test_rotate_agent_pak_forbidden` function L1554-1578 — `()`
--  `test_get_target_state_with_mismatched_auth` function L1581-1619 — `()`
+-  `test_get_agent_stacks` function L1324-1457 — `()`
+-  `test_rotate_agent_pak_admin_success` function L1460-1498 — `()`
+-  `test_rotate_agent_pak_self_success` function L1501-1534 — `()`
+-  `test_rotate_agent_pak_unauthorized` function L1537-1556 — `()`
+-  `test_rotate_agent_pak_forbidden` function L1559-1583 — `()`
+-  `test_get_target_state_with_mismatched_auth` function L1586-1624 — `()`
 
 #### crates/brokkr-broker/tests/integration/api/audit_logs.rs
 
@@ -2454,6 +2661,7 @@
 -  `test_audit_logs_pagination` function L100-127 — `()` — Test audit logs with pagination parameters.
 -  `test_audit_logs_filtering` function L131-157 — `()` — Test audit logs with filter parameters.
 -  `test_audit_logs_denied_for_generator` function L161-185 — `()` — Test that generator PAK cannot access audit logs (admin only).
+-  `test_audit_logs_actor_name_enrichment` function L190-247 — `()` — Entries carry a resolved `actor_name` (BROKKR-T-0271): generator/agent
 
 #### crates/brokkr-broker/tests/integration/api/auth.rs
 
@@ -2487,22 +2695,35 @@
 -  `test_submit_diagnostic_result` function L288-356 — `()`
 -  `test_submit_result_not_claimed` function L359-408 — `()`
 -  `test_get_diagnostic_with_result` function L411-490 — `()`
--  `test_get_diagnostic_not_found` function L493-512 — `()`
+-  `test_abandoned_claimed_diagnostic_reports_failed` function L497-587 — `()` — BROKKR-T-0300: an agent claims a request, dies, and the expiry sweep moves
+-  `test_get_diagnostic_not_found` function L590-609 — `()`
 
 #### crates/brokkr-broker/tests/integration/api/fleet.rs
 
--  `test_fleet_surfaces_agent_reported_k8s_connectivity` function L23-69 — `()` — An agent that reports `k8s_reachable = false` surfaces as `false` in its
+-  `test_fleet_surfaces_agent_reported_k8s_connectivity` function L23-72 — `()` — An agent that reports `k8s_reachable = false` surfaces as `false` in its
+
+#### crates/brokkr-broker/tests/integration/api/generator_agent_listing.rs
+
+-  `list_agents` function L33-50 — `(fixture: &TestFixture, pak: &str) -> (StatusCode, Value)` — Calls `GET /api/v1/agents` with `pak` and returns (status, body).
+-  `agent_ids` function L53-59 — `(body: &Value) -> Vec<Uuid>` — Extracts agent ids from a successful listing body.
+-  `test_generator_lists_its_registered_agents` function L63-84 — `()` — The core promise: a generator sees the agents registered with it.
+-  `test_generator_does_not_see_another_generators_agents` function L89-118 — `()` — The isolation property: one tenant's agents are invisible to another.
+-  `test_system_generator_pak_is_not_a_tenant` function L129-177 — `()` — The decision under test: a system generator is not a tenant.
+-  `test_admin_still_lists_every_agent` function L183-205 — `()` — Admin behavior is unchanged, and `admin-generator` is correctly unaffected:
+-  `test_soft_deleted_agents_are_excluded` function L210-240 — `()` — Soft-delete handling must match the admin `list()` path, or the two branches
+-  `test_agent_pak_cannot_list_agents` function L245-259 — `()` — An agent PAK is neither admin nor generator: it still gets 403, and the code
+-  `test_generator_with_no_agents_gets_empty_list` function L264-279 — `()` — A generator with no registered agents gets an empty list, not an error and
 
 #### crates/brokkr-broker/tests/integration/api/generator_registration.rs
 
--  `test_create_agent_via_api_auto_registers_with_system_generator` function L24-61 — `()` — Integration tests for the generator registration model (BROKKR-I-0030).
--  `test_add_target_unregistered_agent_returns_403` function L68-98 — `()` — Integration tests for the generator registration model (BROKKR-I-0030).
--  `test_add_target_registered_agent_returns_201` function L101-130 — `()` — Integration tests for the generator registration model (BROKKR-I-0030).
--  `test_admin_cannot_bypass_registration_check` function L133-161 — `()` — Integration tests for the generator registration model (BROKKR-I-0030).
--  `test_registration_scope_isolation` function L168-210 — `()` — Integration tests for the generator registration model (BROKKR-I-0030).
--  `test_deregister_cascades_agent_targets` function L217-283 — `()` — Integration tests for the generator registration model (BROKKR-I-0030).
--  `test_list_agent_registrations` function L290-319 — `()` — Integration tests for the generator registration model (BROKKR-I-0030).
--  `test_list_generator_registered_agents` function L322-352 — `()` — Integration tests for the generator registration model (BROKKR-I-0030).
+-  `test_create_agent_via_api_auto_registers_with_system_generator` function L24-64 — `()` — Integration tests for the generator registration model (BROKKR-I-0030).
+-  `test_add_target_unregistered_agent_returns_403` function L71-101 — `()` — Integration tests for the generator registration model (BROKKR-I-0030).
+-  `test_add_target_registered_agent_returns_201` function L104-133 — `()` — Integration tests for the generator registration model (BROKKR-I-0030).
+-  `test_admin_cannot_bypass_registration_check` function L136-164 — `()` — Integration tests for the generator registration model (BROKKR-I-0030).
+-  `test_registration_scope_isolation` function L171-213 — `()` — Integration tests for the generator registration model (BROKKR-I-0030).
+-  `test_deregister_cascades_agent_targets` function L220-286 — `()` — Integration tests for the generator registration model (BROKKR-I-0030).
+-  `test_list_agent_registrations` function L293-322 — `()` — Integration tests for the generator registration model (BROKKR-I-0030).
+-  `test_list_generator_registered_agents` function L325-358 — `()` — Integration tests for the generator registration model (BROKKR-I-0030).
 
 #### crates/brokkr-broker/tests/integration/api/generators.rs
 
@@ -2527,29 +2748,62 @@
 #### crates/brokkr-broker/tests/integration/api/health.rs
 
 -  `test_healthz_endpoint` function L16-37 — `()`
--  `test_readyz_endpoint` function L40-61 — `()`
--  `test_metrics_endpoint` function L64-88 — `()`
--  `test_metrics_records_http_requests` function L91-140 — `()`
--  `test_metrics_contains_all_defined_metrics` function L143-180 — `()`
+-  `test_readyz_endpoint` function L42-63 — `()` — BROKKR-T-0291: `/readyz` performs a real database check, so this exercises
+-  `test_readyz_result_is_cached_across_probes` function L69-90 — `()` — The verdict is cached for a couple of seconds so a 5s-per-pod kubelet probe
+-  `test_readyz_returns_503_when_database_unreachable` function L99-138 — `()` — A broker whose database is unreachable must fall out of Service endpoints.
+-  `test_healthz_stays_up_when_database_unreachable` function L143-182 — `()` — Liveness must stay process-only: a dead database must not restart-loop the
+-  `test_metrics_endpoint` function L185-209 — `()`
+-  `test_metrics_records_http_requests` function L212-261 — `()`
+-  `test_metrics_contains_all_defined_metrics` function L264-301 — `()`
 
 #### crates/brokkr-broker/tests/integration/api/mod.rs
 
 -  `admin` module L7 — `-`
 -  `agent_events` module L8 — `-`
 -  `agents` module L9 — `-`
--  `generator_registration` module L10 — `-`
--  `audit_logs` module L11 — `-`
--  `auth` module L12 — `-`
--  `deployment_objects` module L13 — `-`
--  `diagnostics` module L14 — `-`
--  `fleet` module L15 — `-`
--  `generators` module L16 — `-`
--  `health` module L17 — `-`
--  `stacks` module L18 — `-`
--  `templates` module L19 — `-`
--  `webhooks` module L20 — `-`
--  `work_orders` module L21 — `-`
--  `ws` module L22 — `-`
+-  `audit_logs` module L10 — `-`
+-  `auth` module L11 — `-`
+-  `deployment_objects` module L12 — `-`
+-  `diagnostics` module L13 — `-`
+-  `fleet` module L14 — `-`
+-  `generator_agent_listing` module L15 — `-`
+-  `generator_registration` module L16 — `-`
+-  `generators` module L17 — `-`
+-  `health` module L18 — `-`
+-  `pak_scoping` module L19 — `-`
+-  `paks` module L20 — `-`
+-  `registration_consent` module L21 — `-`
+-  `stacks` module L22 — `-`
+-  `templates` module L23 — `-`
+-  `ui_pak` module L24 — `-`
+-  `webhooks` module L25 — `-`
+-  `work_orders` module L26 — `-`
+-  `ws` module L27 — `-`
+
+#### crates/brokkr-broker/tests/integration/api/pak_scoping.rs
+
+-  `TwoTenants` struct L23-29 — `{ payments: Generator, payments_agent: Agent, payments_stack: Stack, ingest_agen...` — Two tenants, each with one registered agent, one stack, and one event.
+-  `seed_two_tenants` function L31-74 — `(fixture: &TestFixture) -> TwoTenants` — agent-events (BROKKR-T-0270).
+-  `get_json` function L76-95 — `( app: Router, token: &str, uri: &str, ) -> (StatusCode, Option<Vec<serde_json::...` — agent-events (BROKKR-T-0270).
+-  `ids` function L97-102 — `(items: &[serde_json::Value], key: &str) -> Vec<String>` — agent-events (BROKKR-T-0270).
+-  `test_fleet_scoped_by_pak_id` function L105-142 — `()` — agent-events (BROKKR-T-0270).
+-  `test_stacks_scoped_by_pak_id` function L145-166 — `()` — agent-events (BROKKR-T-0270).
+-  `test_agent_events_scoped_by_pak_id` function L169-193 — `()` — agent-events (BROKKR-T-0270).
+
+#### crates/brokkr-broker/tests/integration/api/paks.rs
+
+-  `get_paks` function L19-35 — `(app: axum::Router, token: &str) -> (StatusCode, Option<Vec<serde_json::Value>>)` — Integration tests for `GET /api/v1/paks` (BROKKR-T-0269).
+-  `test_list_paks_returns_id_name_pairs` function L38-59 — `()` — Integration tests for `GET /api/v1/paks` (BROKKR-T-0269).
+-  `test_list_paks_excludes_system_generator` function L62-80 — `()` — Integration tests for `GET /api/v1/paks` (BROKKR-T-0269).
+-  `test_list_paks_allows_ui_pak_rejects_non_admin` function L83-103 — `()` — Integration tests for `GET /api/v1/paks` (BROKKR-T-0269).
+
+#### crates/brokkr-broker/tests/integration/api/registration_consent.rs
+
+-  `target_state_object_ids` function L30-51 — `(fixture: &TestFixture, agent_id: Uuid) -> Vec<Uuid>` — Fetches the agent's incremental target state as admin and returns the
+-  `test_label_match_delivers_stack_from_registered_generator` function L56-79 — `()` — Positive path: a label match delivers a stack owned by a generator the
+-  `test_label_match_requires_registration_consent` function L88-114 — `()` — Consent boundary, label leg: a stack owned by a generator the agent is NOT
+-  `test_unregistered_agent_receives_nothing_from_label_match` function L123-144 — `()` — An agent with no registrations at all receives nothing from label matching.
+-  `test_annotation_match_requires_registration_consent` function L150-179 — `()` — Consent boundary, annotation leg: same rule for (key, value) annotation
 
 #### crates/brokkr-broker/tests/integration/api/stacks.rs
 
@@ -2574,11 +2828,11 @@
 -  `test_update_stack_with_wrong_generator_pak` function L740-784 — `()`
 -  `test_delete_stack_with_wrong_generator_pak` function L787-824 — `()`
 -  `test_add_stack_annotation_with_wrong_generator_pak` function L827-871 — `()`
--  `test_create_deployment_object_yaml_body` function L876-905 — `()`
--  `test_create_deployment_object_yaml_deletion_marker_empty` function L908-941 — `()`
--  `test_create_deployment_object_malformed_yaml_rejected` function L944-966 — `()`
--  `test_get_deployment_object_accept_yaml_roundtrip` function L969-1022 — `()`
--  `test_create_deployment_object_json_still_works` function L1025-1050 — `()`
+-  `test_create_deployment_object_yaml_body` function L876-904 — `()`
+-  `test_create_deployment_object_yaml_deletion_marker_empty` function L907-939 — `()`
+-  `test_create_deployment_object_malformed_yaml_rejected` function L942-963 — `()`
+-  `test_get_deployment_object_accept_yaml_roundtrip` function L966-1018 — `()`
+-  `test_create_deployment_object_json_still_works` function L1021-1045 — `()`
 
 #### crates/brokkr-broker/tests/integration/api/templates.rs
 
@@ -2603,6 +2857,19 @@
 -  `test_instantiate_template_label_mismatch` function L669-712 — `()`
 -  `test_instantiate_template_with_matching_labels` function L715-757 — `()`
 -  `test_generator_cannot_access_other_generator_template` function L760-791 — `()`
+-  `test_generator_cannot_instantiate_other_generator_template` function L797-849 — `()` — BROKKR-T-0290: instantiate used to be the only template path that skipped
+-  `test_generator_can_instantiate_system_template` function L854-898 — `()` — System templates (`generator_id = NULL`) are the sanctioned cross-tenant
+-  `test_generator_can_instantiate_own_template` function L902-950 — `()` — The owning generator must still be able to instantiate its own template.
+
+#### crates/brokkr-broker/tests/integration/api/ui_pak.rs
+
+-  `ui_token` function L21-23 — `() -> String` — The fixture mints the UI PAK; grab the raw token like the served console would.
+-  `test_ui_pak_verifies_as_readonly_admin` function L26-49 — `()` — Integration tests for the ephemeral read-only UI PAK (BROKKR-T-0267).
+-  `test_ui_pak_can_read` function L52-71 — `()` — Integration tests for the ephemeral read-only UI PAK (BROKKR-T-0267).
+-  `test_ui_pak_cannot_mutate` function L74-137 — `()` — Integration tests for the ephemeral read-only UI PAK (BROKKR-T-0267).
+-  `test_ui_pak_can_create_diagnostics` function L145-177 — `()` — The POST leg of the console's diagnostic flow, in isolation: the readonly
+-  `test_ui_pak_walks_console_diagnostic_path` function L188-265 — `()` — The console's full "Run diagnostic" path with the injected read-only UI PAK
+-  `test_admin_pak_is_not_readonly` function L268-289 — `()` — Integration tests for the ephemeral read-only UI PAK (BROKKR-T-0267).
 
 #### crates/brokkr-broker/tests/integration/api/webhooks.rs
 
@@ -2610,19 +2877,48 @@
 -  `test_list_webhooks_non_admin_forbidden` function L44-63 — `()`
 -  `test_list_webhooks_unauthorized` function L66-82 — `()`
 -  `test_create_webhook_admin_success` function L89-123 — `()`
--  `test_create_webhook_rejects_invalid_timeout` function L126-158 — `()`
--  `test_create_webhook_with_wildcard_events` function L161-186 — `()`
--  `test_create_webhook_invalid_url` function L189-214 — `()`
--  `test_create_webhook_non_admin_forbidden` function L217-243 — `()`
--  `test_get_webhook_admin_success` function L250-292 — `()`
--  `test_get_webhook_not_found` function L295-314 — `()`
--  `test_update_webhook_admin_success` function L321-370 — `()`
--  `test_delete_webhook_admin_success` function L377-424 — `()`
--  `test_delete_webhook_not_found` function L427-446 — `()`
--  `test_list_event_types_admin_success` function L453-479 — `()`
--  `test_list_deliveries_admin_success` function L486-528 — `()`
--  `test_list_deliveries_with_status_filter` function L531-589 — `()`
--  `test_list_deliveries_subscription_not_found` function L592-611 — `()`
+-  `test_create_webhook_rejects_invalid_timeout` function L126-162 — `()`
+-  `test_create_webhook_with_wildcard_events` function L165-190 — `()`
+-  `test_create_webhook_invalid_url` function L193-218 — `()`
+-  `test_create_webhook_non_admin_forbidden` function L221-247 — `()`
+-  `test_get_webhook_admin_success` function L254-296 — `()`
+-  `test_get_webhook_not_found` function L299-318 — `()`
+-  `test_update_webhook_admin_success` function L325-374 — `()`
+-  `test_delete_webhook_admin_success` function L381-428 — `()`
+-  `test_delete_webhook_not_found` function L431-450 — `()`
+-  `test_list_event_types_admin_success` function L457-483 — `()`
+-  `test_list_deliveries_admin_success` function L490-532 — `()`
+-  `test_list_deliveries_with_status_filter` function L535-593 — `()`
+-  `test_list_deliveries_subscription_not_found` function L596-615 — `()`
+-  `undecryptable_ciphertext` function L626-635 — `(plaintext: &str) -> Vec<u8>` — Produces ciphertext in the current storage format that the broker's active
+-  `setup_agent_targeted_delivery` function L640-646 — `( fixture: &TestFixture, url_encrypted: Vec<u8>, auth_header_encrypted: Option<V...` — Creates a label-targeted subscription plus one pending delivery for an agent
+-  `setup_agent_targeted_delivery_with` function L650-694 — `( fixture: &TestFixture, url_encrypted: Vec<u8>, auth_header_encrypted: Option<V...` — As [`setup_agent_targeted_delivery`], with the subscription's retry budget
+-  `poll_pending` function L697-718 — `( fixture: &TestFixture, agent_id: uuid::Uuid, agent_pak: &str, ) -> Vec<serde_j...` — Polls the agent pending-webhooks endpoint and returns the decoded list.
+-  `test_pending_agent_webhooks_undecryptable_url_marks_delivery_dead` function L721-765 — `()`
+-  `test_pending_agent_webhooks_undecryptable_auth_header_never_delivers` function L768-803 — `()`
+-  `delete_subscription_without_cascade` function L815-830 — `(fixture: &TestFixture, subscription_id: uuid::Uuid)` — Deletes a subscription row while leaving its deliveries behind.
+-  `test_pending_agent_webhooks_missing_subscription_marks_delivery_dead` function L833-894 — `()`
+-  `report_agent_delivery_result` function L902-925 — `( fixture: &TestFixture, agent_pak: &str, delivery_id: uuid::Uuid, result: serde...` — Claims the delivery for the agent (so the result report is authorized) and
+-  `test_report_delivery_result_non_retryable_4xx_is_dead_on_first_attempt` function L928-978 — `()`
+-  `test_report_delivery_result_retryable_5xx_stays_failed` function L981-1025 — `()`
+-  `test_report_delivery_result_transport_failure_stays_retryable` function L1028-1067 — `()`
+-  `test_report_delivery_result_records_status_without_error_body` function L1070-1104 — `()`
+-  `test_pending_agent_webhooks_uses_subscription_timeout` function L1111-1132 — `()`
+-  `create_webhook_via_api` function L1152-1187 — `( fixture: &TestFixture, name: &str, event_types: &[&str], filters: Option<serde...` — Creates a subscription through `POST /webhooks` and returns its id.
+-  `deliveries_for` function L1191-1200 — `(fixture: &TestFixture, subscription_id: uuid::Uuid) -> Vec<serde_json::Value>` — All deliveries queued for one subscription, oldest handling aside — the
+-  `test_webhook_filter_agent_id_delivers_only_matching_agent` function L1203-1233 — `()`
+-  `test_webhook_filter_stack_id_delivers_only_matching_stack` function L1236-1272 — `()`
+-  `test_webhook_filter_field_absent_from_event_never_matches` function L1275-1322 — `()`
+-  `report_agent_event` function L1327-1357 — `( fixture: &TestFixture, agent_id: uuid::Uuid, agent_pak: &str, deployment_objec...` — Reports an agent event as the agent itself, which is what emits
+-  `test_webhook_filter_stack_id_delivers_deployment_applied` function L1360-1439 — `()`
+-  `test_webhook_filter_stack_id_delivers_deployment_failed` function L1442-1488 — `()`
+-  `test_deployment_applied_stack_id_is_null_when_object_soft_deleted` function L1491-1556 — `()`
+-  `test_unfiltered_webhook_subscription_receives_every_matching_event` function L1559-1582 — `()`
+-  `post_webhook_body` function L1585-1606 — `( fixture: &TestFixture, body: serde_json::Value, ) -> (StatusCode, serde_json::...` — Sends a raw create body and returns `(status, parsed body)`.
+-  `test_create_webhook_rejects_legacy_filter_labels_and_validate` function L1609-1684 — `()`
+-  `test_create_webhook_accepts_supported_filters_unchanged` function L1687-1708 — `()`
+-  `test_update_webhook_rejects_legacy_filter_labels` function L1711-1760 — `()`
+-  `test_legacy_stored_labels_filter_still_delivers` function L1763-1796 — `()`
 
 #### crates/brokkr-broker/tests/integration/api/work_orders.rs
 
@@ -2694,9 +2990,9 @@
 -  `deleting_agent_closes_its_open_ws` function L1512-1556 — `()` — path; this is why we bind a TCP listener for the upgrade tests.
 -  `fleet_live_url` function L1562-1564 — `(addr: std::net::SocketAddr) -> String` — path; this is why we bind a TCP listener for the upgrade tests.
 -  `fleet_live_rejects_non_admin_pak` function L1569-1588 — `()` — The fleet-live endpoint is admin-gated exactly like `GET /fleet`.
--  `fleet_live_pushes_fleet_update_on_heartbeat` function L1594-1628 — `()` — An admin subscriber on `/api/v1/fleet/live` receives a `FleetUpdate` frame
--  `fleet_live_slow_subscriber_does_not_stall_heartbeats` function L1634-1666 — `()` — A slow fleet subscriber that never reads must not stall the producer
--  `wait_until` function L1669-1684 — `(timeout: std::time::Duration, mut predicate: F) -> bool` — Repeatedly poll `predicate` until it returns true or `timeout` elapses.
+-  `fleet_live_pushes_fleet_update_on_heartbeat` function L1594-1631 — `()` — An admin subscriber on `/api/v1/fleet/live` receives a `FleetUpdate` frame
+-  `fleet_live_slow_subscriber_does_not_stall_heartbeats` function L1637-1669 — `()` — A slow fleet subscriber that never reads must not stall the producer
+-  `wait_until` function L1672-1687 — `(timeout: std::time::Duration, mut predicate: F) -> bool` — Repeatedly poll `predicate` until it returns true or `timeout` elapses.
 
 ### crates/brokkr-broker/tests/integration
 
@@ -2738,7 +3034,7 @@
 -  `test_hard_delete_agent_event` function L412-490 — `()`
 -  `test_list_agent_events` function L493-580 — `()`
 -  `test_get_events_filtered` function L583-702 — `()`
--  `test_delete_older_than_retention` function L707-822 — `()` — BROKKR-T-0228: `delete_older_than` hard-deletes events whose `created_at`
+-  `test_delete_older_than_retention` function L707-819 — `()` — BROKKR-T-0228: `delete_older_than` hard-deletes events whose `created_at`
 
 #### crates/brokkr-broker/tests/integration/dal/agent_labels.rs
 
@@ -2815,8 +3111,8 @@
 -  `test_search_deployment_objects_by_checksum` function L577-636 — `()`
 -  `test_get_desired_state_for_agent` function L639-708 — `()`
 -  `test_target_state_direct_targeting_after_deployment_exists` function L719-763 — `()` — Test that direct targeting (agent_targets table) works when deployment exists first.
--  `test_target_state_label_targeting_after_deployment_exists` function L769-814 — `()` — Test that label targeting works when deployment exists first.
--  `test_target_state_annotation_targeting_after_deployment_exists` function L820-866 — `()` — Test that annotation targeting works when deployment exists first.
+-  `test_target_state_label_targeting_after_deployment_exists` function L769-817 — `()` — Test that label targeting works when deployment exists first.
+-  `test_target_state_annotation_targeting_after_deployment_exists` function L823-872 — `()` — Test that annotation targeting works when deployment exists first.
 
 #### crates/brokkr-broker/tests/integration/dal/diagnostic_requests.rs
 
@@ -2827,9 +3123,11 @@
 -  `test_complete_diagnostic_request` function L162-195 — `()`
 -  `test_fail_diagnostic_request` function L198-228 — `()`
 -  `test_list_by_deployment_object` function L231-261 — `()`
--  `test_expire_old_requests` function L264-309 — `()`
--  `test_cleanup_old_requests` function L312-358 — `()`
--  `test_delete_diagnostic_request` function L361-396 — `()`
+-  `test_expire_old_requests` function L264-311 — `()`
+-  `test_expire_sweeps_abandoned_claimed_request_to_failed` function L317-394 — `()` — BROKKR-T-0300: an agent claims a request and then dies without submitting a
+-  `test_cleanup_reaps_abandoned_claimed_request` function L400-467 — `()` — BROKKR-T-0300: the terminal state the sweep produces must actually be
+-  `test_cleanup_old_requests` function L470-516 — `()`
+-  `test_delete_diagnostic_request` function L519-554 — `()`
 
 #### crates/brokkr-broker/tests/integration/dal/diagnostic_results.rs
 
@@ -2856,7 +3154,7 @@
 
 #### crates/brokkr-broker/tests/integration/dal/fleet.rs
 
--  `test_fleet_grouped_methods_match_per_agent_ground_truth` function L24-237 — `()` — Seeds a deliberately heterogeneous fleet (agents matched via targets,
+-  `test_fleet_grouped_methods_match_per_agent_ground_truth` function L24-228 — `()` — Seeds a deliberately heterogeneous fleet (agents matched via targets,
 
 #### crates/brokkr-broker/tests/integration/dal/generators.rs
 
@@ -2929,8 +3227,8 @@
 -  `test_filter_by_labels_duplicate` function L312-336 — `()`
 -  `test_filter_by_labels_mixed_existing_and_non_existent` function L339-379 — `()`
 -  `test_filter_by_annotations` function L382-450 — `()`
--  `test_get_associated_stacks` function L453-581 — `()`
--  `test_recreate_stack_after_soft_delete` function L584-637 — `()`
+-  `test_get_associated_stacks` function L453-588 — `()`
+-  `test_recreate_stack_after_soft_delete` function L591-644 — `()`
 
 #### crates/brokkr-broker/tests/integration/dal/templates.rs
 
@@ -3046,21 +3344,53 @@
 
 > *Semantic summary to be generated by AI agent.*
 
+#### crates/brokkr-broker/tests/integration/db/cli_schema.rs
+
+-  `MIGRATIONS` variable L30 — `: EmbeddedMigrations` — inside that database rather than on a throwaway database.
+-  `SENTINEL_A` variable L35 — `: &str` — Sentinel `admin_role.pak_hash` values.
+-  `SENTINEL_B` variable L36 — `: &str` — inside that database rather than on a throwaway database.
+-  `ROTATED_HASH` variable L37 — `: &str` — inside that database rather than on a throwaway database.
+-  `HashRow` struct L40-43 — `{ pak_hash: String }` — inside that database rather than on a throwaway database.
+-  `SearchPathRow` struct L46-49 — `{ search_path: String }` — inside that database rather than on a throwaway database.
+-  `unique_schema` function L54-56 — `(prefix: &str) -> String` — Generates a collision-free schema name.
+-  `provision_schema` function L60-79 — `(settings: &Settings, schema: &str, sentinel: &str)` — Creates `schema`, migrates the full schema into it, and seeds `admin_role`
+-  `admin_hash_in_schema` function L82-90 — `(settings: &Settings, schema: &str) -> String` — Reads the single `admin_role.pak_hash` from `schema`.
+-  `admin_hash_in_public` function L95-102 — `(settings: &Settings) -> Option<String>` — Reads `public`'s `admin_role.pak_hash`, if there is one.
+-  `drop_schema` function L104-110 — `(settings: &Settings, schema: &str)` — inside that database rather than on a throwaway database.
+-  `test_rotate_admin_writes_to_configured_schema` function L121-164 — `()` — `rotate admin` must write to the schema named by `database.schema` and to no
+-  `test_connection_pool_from_settings_applies_configured_schema` function L170-219 — `()` — The shared helper every CLI subcommand now uses must carry
+
+#### crates/brokkr-broker/tests/integration/db/default_admin_pak.rs
+
+-  `MIGRATIONS` variable L37 — `: EmbeddedMigrations` — throwaway schema inside the `brokkr` database and drops it afterwards.
+-  `OVERRIDE_HASH` variable L41 — `: &str` — A valid-shaped SHA-256 hash that is not the shipped default — what an
+-  `unique_schema` function L43-45 — `(prefix: &str) -> String` — throwaway schema inside the `brokkr` database and drops it afterwards.
+-  `provision_schema` function L49-58 — `(settings: &Settings, schema: &str)` — Creates `schema` and migrates the full schema into it.
+-  `drop_schema` function L60-66 — `(settings: &Settings, schema: &str)` — throwaway schema inside the `brokkr` database and drops it afterwards.
+-  `settings_for` function L69-74 — `(base: &Settings, schema: &str, hash: &str) -> Settings` — Settings scoped to `schema` with `broker.pak_hash` pinned to `hash`.
+-  `test_default_admin_pak_hash_is_detected_after_first_startup` function L81-119 — `()` — The zero-configuration path: `angreal local up`, the docker-compose harness
+-  `test_overridden_admin_pak_hash_is_not_detected_after_first_startup` function L125-157 — `()` — The hardened path: an operator who ran `generate-pak` and set
+-  `test_stale_stored_default_is_detected_when_config_was_corrected_later` function L166-206 — `()` — The case a config-only check would miss, and the reason the stored hash is
+-  `test_configured_hash_reapplies_without_minting` function L218-248 — `()` — `rotate admin` reports what it did based on this outcome, and the two
+-  `test_unset_hash_mints_and_returns_the_plaintext_pak` function L255-299 — `()` — With no hash configured, a fresh PAK is minted and the plaintext is returned
+
 #### crates/brokkr-broker/tests/integration/db/mod.rs
 
--  `multi_tenant` module L7 — `-`
--  `TestRecord` struct L25-30 — `{ id: i32, name: String }` — Represents a record in the test database table.
--  `test_connection_pool_integration` function L46-141 — `()` — Integration test for the connection pool functionality.
+-  `cli_schema` module L7 — `-`
+-  `default_admin_pak` module L8 — `-`
+-  `multi_tenant` module L9 — `-`
+-  `TestRecord` struct L27-32 — `{ id: i32, name: String }` — Represents a record in the test database table.
+-  `test_connection_pool_integration` function L48-147 — `()` — Integration test for the connection pool functionality.
 
 #### crates/brokkr-broker/tests/integration/db/multi_tenant.rs
 
 -  `MIGRATIONS` variable L20 — `: EmbeddedMigrations` — Integration tests for multi-tenant schema isolation functionality
 -  `create_test_database` function L23-37 — `(base_url: &str) -> String` — Helper function to create a test database
 -  `drop_test_database` function L40-58 — `(base_url: &str, db_name: &str)` — Helper function to drop a test database
--  `test_schema_isolation` function L67-181 — `()` — Test complete data isolation between different schemas
--  `test_schema_auto_provisioning` function L190-237 — `()` — Test automatic schema provisioning on first connection
--  `test_backward_compatibility_no_schema` function L246-285 — `()` — Test backward compatibility with no schema (public schema)
--  `test_invalid_schema_name` function L294-331 — `()` — Test schema name validation
+-  `test_schema_isolation` function L67-183 — `()` — Test complete data isolation between different schemas
+-  `test_schema_auto_provisioning` function L192-240 — `()` — Test automatic schema provisioning on first connection
+-  `test_backward_compatibility_no_schema` function L249-288 — `()` — Test backward compatibility with no schema (public schema)
+-  `test_invalid_schema_name` function L297-334 — `()` — Test schema name validation
 
 ### crates/brokkr-cli/src
 
@@ -3600,30 +3930,43 @@
 - pub `VALID_EVENT_TYPES` variable L62-79 — `: &[&str]` — enabling external systems to receive notifications when events occur in Brokkr.
 - pub `BrokkrEvent` struct L87-96 — `{ id: Uuid, event_type: String, timestamp: DateTime<Utc>, data: serde_json::Valu...` — A Brokkr event that can trigger webhook deliveries.
 - pub `new` function L100-107 — `(event_type: &str, data: serde_json::Value) -> Self` — Creates a new event.
-- pub `WebhookFilters` struct L112-122 — `{ agent_id: Option<Uuid>, stack_id: Option<Uuid>, labels: Option<std::collection...` — Filters for webhook subscriptions.
-- pub `WebhookSubscription` struct L131-160 — `{ id: Uuid, name: String, url_encrypted: Vec<u8>, auth_header_encrypted: Option<...` — A webhook subscription record from the database.
-- pub `NewWebhookSubscription` struct L165-186 — `{ name: String, url_encrypted: Vec<u8>, auth_header_encrypted: Option<Vec<u8>>, ...` — A new webhook subscription to be inserted.
-- pub `new` function L202-242 — `( name: String, url_encrypted: Vec<u8>, auth_header_encrypted: Option<Vec<u8>>, ...` — Creates a new webhook subscription.
-- pub `UpdateWebhookSubscription` struct L248-267 — `{ name: Option<String>, url_encrypted: Option<Vec<u8>>, auth_header_encrypted: O...` — Changeset for updating a webhook subscription.
-- pub `WebhookDelivery` struct L276-307 — `{ id: Uuid, subscription_id: Uuid, event_type: String, event_id: Uuid, payload: ...` — A webhook delivery record from the database.
-- pub `NewWebhookDelivery` struct L312-325 — `{ subscription_id: Uuid, event_type: String, event_id: Uuid, payload: String, ta...` — A new webhook delivery to be inserted.
-- pub `new` function L337-357 — `( subscription_id: Uuid, event: &BrokkrEvent, target_labels: Option<Vec<Option<S...` — Creates a new webhook delivery.
-- pub `UpdateWebhookDelivery` struct L363-380 — `{ status: Option<String>, acquired_by: Option<Option<Uuid>>, acquired_until: Opt...` — Changeset for updating a webhook delivery.
+- pub `WebhookFilters` struct L150-157 — `{ agent_id: Option<Uuid>, stack_id: Option<Uuid> }` — Filters for webhook subscriptions.
+- pub `is_empty` function L164-166 — `(&self) -> bool` — Returns `true` when no filter field is set, i.e.
+- pub `matches` function L172-184 — `(&self, event: &BrokkrEvent) -> bool` — Evaluates this filter against an event.
+- pub `WebhookSubscription` struct L206-235 — `{ id: Uuid, name: String, url_encrypted: Vec<u8>, auth_header_encrypted: Option<...` — A webhook subscription record from the database.
+- pub `NewWebhookSubscription` struct L240-261 — `{ name: String, url_encrypted: Vec<u8>, auth_header_encrypted: Option<Vec<u8>>, ...` — A new webhook subscription to be inserted.
+- pub `new` function L277-317 — `( name: String, url_encrypted: Vec<u8>, auth_header_encrypted: Option<Vec<u8>>, ...` — Creates a new webhook subscription.
+- pub `UpdateWebhookSubscription` struct L323-342 — `{ name: Option<String>, url_encrypted: Option<Vec<u8>>, auth_header_encrypted: O...` — Changeset for updating a webhook subscription.
+- pub `WebhookDelivery` struct L351-382 — `{ id: Uuid, subscription_id: Uuid, event_type: String, event_id: Uuid, payload: ...` — A webhook delivery record from the database.
+- pub `NewWebhookDelivery` struct L387-400 — `{ subscription_id: Uuid, event_type: String, event_id: Uuid, payload: String, ta...` — A new webhook delivery to be inserted.
+- pub `new` function L412-432 — `( subscription_id: Uuid, event: &BrokkrEvent, target_labels: Option<Vec<Option<S...` — Creates a new webhook delivery.
+- pub `UpdateWebhookDelivery` struct L438-455 — `{ status: Option<String>, acquired_by: Option<Option<Uuid>>, acquired_until: Opt...` — Changeset for updating a webhook delivery.
 -  `BrokkrEvent` type L98-108 — `= BrokkrEvent` — enabling external systems to receive notifications when events occur in Brokkr.
--  `NewWebhookSubscription` type L188-243 — `= NewWebhookSubscription` — enabling external systems to receive notifications when events occur in Brokkr.
--  `NewWebhookDelivery` type L327-358 — `= NewWebhookDelivery` — enabling external systems to receive notifications when events occur in Brokkr.
--  `tests` module L387-556 — `-` — enabling external systems to receive notifications when events occur in Brokkr.
--  `test_brokkr_event_new` function L391-398 — `()` — enabling external systems to receive notifications when events occur in Brokkr.
--  `test_new_webhook_subscription_success` function L401-418 — `()` — enabling external systems to receive notifications when events occur in Brokkr.
--  `test_new_webhook_subscription_with_target_labels` function L421-436 — `()` — enabling external systems to receive notifications when events occur in Brokkr.
--  `test_new_webhook_subscription_empty_name` function L439-452 — `()` — enabling external systems to receive notifications when events occur in Brokkr.
--  `test_new_webhook_subscription_no_event_types` function L455-468 — `()` — enabling external systems to receive notifications when events occur in Brokkr.
--  `test_new_webhook_delivery_success` function L471-484 — `()` — enabling external systems to receive notifications when events occur in Brokkr.
--  `test_new_webhook_delivery_with_target_labels` function L487-498 — `()` — enabling external systems to receive notifications when events occur in Brokkr.
--  `test_new_webhook_delivery_nil_subscription` function L501-511 — `()` — enabling external systems to receive notifications when events occur in Brokkr.
--  `test_webhook_filters_serialization` function L514-529 — `()` — enabling external systems to receive notifications when events occur in Brokkr.
--  `test_valid_event_types` function L532-546 — `()` — enabling external systems to receive notifications when events occur in Brokkr.
--  `test_valid_delivery_statuses` function L549-555 — `()` — enabling external systems to receive notifications when events occur in Brokkr.
+-  `WebhookFilters` type L159-185 — `= WebhookFilters` — enabling external systems to receive notifications when events occur in Brokkr.
+-  `payload_uuid_eq` function L192-197 — `(data: &serde_json::Value, field: &str, expected: Uuid) -> bool` — Returns `true` only when `data` is an object carrying `field` as a UUID
+-  `NewWebhookSubscription` type L263-318 — `= NewWebhookSubscription` — enabling external systems to receive notifications when events occur in Brokkr.
+-  `NewWebhookDelivery` type L402-433 — `= NewWebhookDelivery` — enabling external systems to receive notifications when events occur in Brokkr.
+-  `tests` module L462-766 — `-` — enabling external systems to receive notifications when events occur in Brokkr.
+-  `test_brokkr_event_new` function L466-473 — `()` — enabling external systems to receive notifications when events occur in Brokkr.
+-  `test_new_webhook_subscription_success` function L476-493 — `()` — enabling external systems to receive notifications when events occur in Brokkr.
+-  `test_new_webhook_subscription_with_target_labels` function L496-511 — `()` — enabling external systems to receive notifications when events occur in Brokkr.
+-  `test_new_webhook_subscription_empty_name` function L514-527 — `()` — enabling external systems to receive notifications when events occur in Brokkr.
+-  `test_new_webhook_subscription_no_event_types` function L530-543 — `()` — enabling external systems to receive notifications when events occur in Brokkr.
+-  `test_new_webhook_delivery_success` function L546-559 — `()` — enabling external systems to receive notifications when events occur in Brokkr.
+-  `test_new_webhook_delivery_with_target_labels` function L562-573 — `()` — enabling external systems to receive notifications when events occur in Brokkr.
+-  `test_new_webhook_delivery_nil_subscription` function L576-586 — `()` — enabling external systems to receive notifications when events occur in Brokkr.
+-  `test_webhook_filters_serialization` function L589-599 — `()` — enabling external systems to receive notifications when events occur in Brokkr.
+-  `test_webhook_filters_unset_fields_are_omitted` function L602-605 — `()` — enabling external systems to receive notifications when events occur in Brokkr.
+-  `test_webhook_filters_legacy_labels_key_is_ignored` function L608-618 — `()` — enabling external systems to receive notifications when events occur in Brokkr.
+-  `test_webhook_filters_legacy_labels_alongside_agent_id` function L621-628 — `()` — enabling external systems to receive notifications when events occur in Brokkr.
+-  `test_webhook_filters_empty_matches_everything` function L631-639 — `()` — enabling external systems to receive notifications when events occur in Brokkr.
+-  `test_webhook_filters_agent_id_matches_and_rejects` function L642-660 — `()` — enabling external systems to receive notifications when events occur in Brokkr.
+-  `test_webhook_filters_absent_field_does_not_match` function L663-689 — `()` — enabling external systems to receive notifications when events occur in Brokkr.
+-  `test_webhook_filters_null_field_does_not_match` function L692-705 — `()` — enabling external systems to receive notifications when events occur in Brokkr.
+-  `test_webhook_filters_all_set_fields_must_match` function L708-728 — `()` — enabling external systems to receive notifications when events occur in Brokkr.
+-  `test_webhook_filters_non_object_payload_does_not_match` function L731-739 — `()` — enabling external systems to receive notifications when events occur in Brokkr.
+-  `test_valid_event_types` function L742-756 — `()` — enabling external systems to receive notifications when events occur in Brokkr.
+-  `test_valid_delivery_statuses` function L759-765 — `()` — enabling external systems to receive notifications when events occur in Brokkr.
 
 #### crates/brokkr-models/src/models/work_order_annotations.rs
 
@@ -3692,38 +4035,39 @@
 
 #### crates/brokkr-utils/src/config.rs
 
-- pub `Settings` struct L121-136 — `{ database: Database, log: Log, pak: PAK, agent: Agent, broker: Broker, cors: Co...` — Represents the main settings structure for the application
-- pub `Cors` struct L140-156 — `{ allowed_origins: Vec<String>, allowed_methods: Vec<String>, allowed_headers: V...` — Represents the CORS configuration
-- pub `Broker` struct L159-183 — `{ pak_hash: Option<String>, diagnostic_cleanup_interval_seconds: Option<u64>, di...` — Default: 60 (set to 0 to disable caching)
-- pub `Agent` struct L188-255 — `{ broker_url: String, polling_interval: u64, kubeconfig_path: Option<String>, ma...` — Represents the agent configuration
-- pub `Database` struct L260-265 — `{ url: String, schema: Option<String> }` — Represents the database configuration
-- pub `Log` struct L269-275 — `{ level: String, format: String }` — Represents the logging configuration
-- pub `Telemetry` struct L283-302 — `{ enabled: bool, otlp_endpoint: String, service_name: String, sampling_rate: f64...` — Represents the telemetry (OpenTelemetry) configuration with hierarchical overrides
-- pub `TelemetryOverride` struct L306-315 — `{ enabled: Option<bool>, otlp_endpoint: Option<String>, service_name: Option<Str...` — Component-specific telemetry overrides (all fields optional)
-- pub `ResolvedTelemetry` struct L319-324 — `{ enabled: bool, otlp_endpoint: String, service_name: String, sampling_rate: f64...` — Resolved telemetry configuration after merging base with overrides
-- pub `for_broker` function L328-343 — `(&self) -> ResolvedTelemetry` — Get resolved telemetry config for broker (base merged with broker overrides)
-- pub `for_agent` function L346-361 — `(&self) -> ResolvedTelemetry` — Get resolved telemetry config for agent (base merged with agent overrides)
-- pub `PAK` struct L378-395 — `{ prefix: Option<String>, digest: Option<String>, rng: Option<String>, short_tok...` — Represents the PAK configuration
-- pub `short_length_as_str` function L399-401 — `(&mut self)` — Convert short token length to string
-- pub `long_length_as_str` function L404-406 — `(&mut self)` — Convert long token length to string
-- pub `new` function L419-438 — `(file: Option<String>) -> Result<Self, ConfigError>` — Creates a new `Settings` instance
-- pub `DynamicConfig` struct L446-463 — `{ log_level: String, diagnostic_cleanup_interval_seconds: u64, diagnostic_max_ag...` — Dynamic configuration values that can be hot-reloaded at runtime.
-- pub `from_settings` function L467-487 — `(settings: &Settings) -> Self` — Create DynamicConfig from Settings
-- pub `ConfigChange` struct L492-499 — `{ key: String, old_value: String, new_value: String }` — Represents a configuration change detected during reload
-- pub `ReloadableConfig` struct L525-532 — `{ static_config: Settings, dynamic: Arc<RwLock<DynamicConfig>>, config_file: Opt...` — Configuration wrapper that separates static (restart-required) settings
-- pub `new` function L544-553 — `(file: Option<String>) -> Result<Self, ConfigError>` — Creates a new ReloadableConfig instance
-- pub `from_settings` function L565-573 — `(settings: Settings, config_file: Option<String>) -> Self` — Creates a ReloadableConfig from an existing Settings instance
-- pub `static_config` function L578-580 — `(&self) -> &Settings` — Get a reference to the static (immutable) settings
-- pub `reload` function L586-665 — `(&self) -> Result<Vec<ConfigChange>, ConfigError>` — Reload dynamic configuration from sources (file + environment)
-- pub `log_level` function L672-677 — `(&self) -> String` — Get current log level
-- pub `diagnostic_cleanup_interval_seconds` function L680-685 — `(&self) -> u64` — Get diagnostic cleanup interval in seconds
-- pub `diagnostic_max_age_hours` function L688-693 — `(&self) -> i64` — Get diagnostic max age in hours
-- pub `webhook_delivery_interval_seconds` function L696-701 — `(&self) -> u64` — Get webhook delivery interval in seconds
-- pub `webhook_delivery_batch_size` function L704-709 — `(&self) -> i64` — Get webhook delivery batch size
-- pub `webhook_cleanup_retention_days` function L712-717 — `(&self) -> i64` — Get webhook cleanup retention in days
-- pub `cors_allowed_origins` function L720-725 — `(&self) -> Vec<String>` — Get CORS allowed origins
-- pub `cors_max_age_seconds` function L728-733 — `(&self) -> u64` — Get CORS max age in seconds
-- pub `dynamic_snapshot` function L736-738 — `(&self) -> Option<DynamicConfig>` — Get a snapshot of all dynamic config values
+- pub `DEFAULT_ADMIN_PAK_HASH` variable L135-136 — `: &str` — The admin PAK hash shipped in the embedded `default.toml`.
+- pub `Settings` struct L141-156 — `{ database: Database, log: Log, pak: PAK, agent: Agent, broker: Broker, cors: Co...` — Represents the main settings structure for the application
+- pub `Cors` struct L160-176 — `{ allowed_origins: Vec<String>, allowed_methods: Vec<String>, allowed_headers: V...` — Represents the CORS configuration
+- pub `Broker` struct L179-204 — `{ pak_hash: Option<String>, diagnostic_cleanup_interval_seconds: Option<u64>, di...` — Default: 60 (set to 0 to disable caching)
+- pub `Agent` struct L209-276 — `{ broker_url: String, polling_interval: u64, kubeconfig_path: Option<String>, ma...` — Represents the agent configuration
+- pub `Database` struct L281-286 — `{ url: String, schema: Option<String> }` — Represents the database configuration
+- pub `Log` struct L290-296 — `{ level: String, format: String }` — Represents the logging configuration
+- pub `Telemetry` struct L304-323 — `{ enabled: bool, otlp_endpoint: String, service_name: String, sampling_rate: f64...` — Represents the telemetry (OpenTelemetry) configuration with hierarchical overrides
+- pub `TelemetryOverride` struct L327-336 — `{ enabled: Option<bool>, otlp_endpoint: Option<String>, service_name: Option<Str...` — Component-specific telemetry overrides (all fields optional)
+- pub `ResolvedTelemetry` struct L340-345 — `{ enabled: bool, otlp_endpoint: String, service_name: String, sampling_rate: f64...` — Resolved telemetry configuration after merging base with overrides
+- pub `for_broker` function L349-364 — `(&self) -> ResolvedTelemetry` — Get resolved telemetry config for broker (base merged with broker overrides)
+- pub `for_agent` function L367-382 — `(&self) -> ResolvedTelemetry` — Get resolved telemetry config for agent (base merged with agent overrides)
+- pub `PAK` struct L399-416 — `{ prefix: Option<String>, digest: Option<String>, rng: Option<String>, short_tok...` — Represents the PAK configuration
+- pub `short_length_as_str` function L420-422 — `(&mut self)` — Convert short token length to string
+- pub `long_length_as_str` function L425-427 — `(&mut self)` — Convert long token length to string
+- pub `new` function L440-459 — `(file: Option<String>) -> Result<Self, ConfigError>` — Creates a new `Settings` instance
+- pub `DynamicConfig` struct L467-484 — `{ log_level: String, diagnostic_cleanup_interval_seconds: u64, diagnostic_max_ag...` — Dynamic configuration values that can be hot-reloaded at runtime.
+- pub `from_settings` function L488-508 — `(settings: &Settings) -> Self` — Create DynamicConfig from Settings
+- pub `ConfigChange` struct L513-520 — `{ key: String, old_value: String, new_value: String }` — Represents a configuration change detected during reload
+- pub `ReloadableConfig` struct L546-553 — `{ static_config: Settings, dynamic: Arc<RwLock<DynamicConfig>>, config_file: Opt...` — Configuration wrapper that separates static (restart-required) settings
+- pub `new` function L565-574 — `(file: Option<String>) -> Result<Self, ConfigError>` — Creates a new ReloadableConfig instance
+- pub `from_settings` function L586-594 — `(settings: Settings, config_file: Option<String>) -> Self` — Creates a ReloadableConfig from an existing Settings instance
+- pub `static_config` function L599-601 — `(&self) -> &Settings` — Get a reference to the static (immutable) settings
+- pub `reload` function L607-686 — `(&self) -> Result<Vec<ConfigChange>, ConfigError>` — Reload dynamic configuration from sources (file + environment)
+- pub `log_level` function L693-698 — `(&self) -> String` — Get current log level
+- pub `diagnostic_cleanup_interval_seconds` function L701-706 — `(&self) -> u64` — Get diagnostic cleanup interval in seconds
+- pub `diagnostic_max_age_hours` function L709-714 — `(&self) -> i64` — Get diagnostic max age in hours
+- pub `webhook_delivery_interval_seconds` function L717-722 — `(&self) -> u64` — Get webhook delivery interval in seconds
+- pub `webhook_delivery_batch_size` function L725-730 — `(&self) -> i64` — Get webhook delivery batch size
+- pub `webhook_cleanup_retention_days` function L733-738 — `(&self) -> i64` — Get webhook cleanup retention in days
+- pub `cors_allowed_origins` function L741-746 — `(&self) -> Vec<String>` — Get CORS allowed origins
+- pub `cors_max_age_seconds` function L749-754 — `(&self) -> u64` — Get CORS max age in seconds
+- pub `dynamic_snapshot` function L757-759 — `(&self) -> Option<DynamicConfig>` — Get a snapshot of all dynamic config values
 -  `deserialize_string_or_vec` function L76-113 — `(deserializer: D) -> Result<Vec<String>, D::Error>` — Deserializes a comma-separated string or array into `Vec<String>`
 -  `StringOrVec` struct L83 — `-` — Default: 60 (set to 0 to disable caching)
 -  `StringOrVec` type L85-110 — `= StringOrVec` — Default: 60 (set to 0 to disable caching)
@@ -3732,33 +4076,34 @@
 -  `visit_str` function L92-98 — `(self, value: &str) -> Result<Self::Value, E>` — Default: 60 (set to 0 to disable caching)
 -  `visit_seq` function L100-109 — `(self, mut seq: A) -> Result<Self::Value, A::Error>` — Default: 60 (set to 0 to disable caching)
 -  `DEFAULT_SETTINGS` variable L116 — `: &str` — Default: 60 (set to 0 to disable caching)
--  `default_log_format` function L277-279 — `() -> String` — Default: 60 (set to 0 to disable caching)
--  `Telemetry` type L326-362 — `= Telemetry` — Default: 60 (set to 0 to disable caching)
--  `default_otlp_endpoint` function L364-366 — `() -> String` — Default: 60 (set to 0 to disable caching)
--  `default_service_name` function L368-370 — `() -> String` — Default: 60 (set to 0 to disable caching)
--  `default_sampling_rate` function L372-374 — `() -> f64` — Default: 60 (set to 0 to disable caching)
--  `PAK` type L397-407 — `= PAK` — Default: 60 (set to 0 to disable caching)
--  `Settings` type L409-439 — `= Settings` — Default: 60 (set to 0 to disable caching)
--  `DynamicConfig` type L465-488 — `= DynamicConfig` — Default: 60 (set to 0 to disable caching)
--  `ReloadableConfig` type L534-739 — `= ReloadableConfig` — Default: 60 (set to 0 to disable caching)
--  `tests` module L742-1087 — `-` — Default: 60 (set to 0 to disable caching)
--  `test_settings_default_values` function L752-761 — `()` — Test the creation of Settings with default values
--  `test_telemetry_default_values` function L764-772 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_telemetry_for_broker_no_overrides` function L775-792 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_telemetry_for_broker_full_overrides` function L795-817 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_telemetry_for_broker_partial_overrides` function L820-842 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_telemetry_for_agent_no_overrides` function L845-862 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_telemetry_for_agent_full_overrides` function L865-887 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_telemetry_broker_and_agent_independent` function L890-927 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_telemetry_override_enabled_false_overrides_base_true` function L930-951 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_telemetry_sampling_rate_extremes` function L954-976 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_reloadable_config_creation` function L983-996 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_dynamic_config_from_settings` function L999-1010 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_reloadable_config_accessors_with_defaults` function L1013-1023 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_reloadable_config_dynamic_snapshot` function L1026-1038 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_reloadable_config_reload_no_changes` function L1041-1051 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_reloadable_config_is_clone` function L1054-1060 — `()` — Default: 60 (set to 0 to disable caching)
--  `test_reloadable_config_thread_safety` function L1063-1086 — `()` — Default: 60 (set to 0 to disable caching)
+-  `default_log_format` function L298-300 — `() -> String` — Default: 60 (set to 0 to disable caching)
+-  `Telemetry` type L347-383 — `= Telemetry` — Default: 60 (set to 0 to disable caching)
+-  `default_otlp_endpoint` function L385-387 — `() -> String` — Default: 60 (set to 0 to disable caching)
+-  `default_service_name` function L389-391 — `() -> String` — Default: 60 (set to 0 to disable caching)
+-  `default_sampling_rate` function L393-395 — `() -> f64` — Default: 60 (set to 0 to disable caching)
+-  `PAK` type L418-428 — `= PAK` — Default: 60 (set to 0 to disable caching)
+-  `Settings` type L430-460 — `= Settings` — Default: 60 (set to 0 to disable caching)
+-  `DynamicConfig` type L486-509 — `= DynamicConfig` — Default: 60 (set to 0 to disable caching)
+-  `ReloadableConfig` type L555-760 — `= ReloadableConfig` — Default: 60 (set to 0 to disable caching)
+-  `tests` module L763-1141 — `-` — Default: 60 (set to 0 to disable caching)
+-  `default_admin_pak_hash_constant_matches_default_toml` function L776-797 — `()` — `DEFAULT_ADMIN_PAK_HASH` is a hand-copied literal, and the whole point of
+-  `test_settings_default_values` function L806-815 — `()` — Test the creation of Settings with default values
+-  `test_telemetry_default_values` function L818-826 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_telemetry_for_broker_no_overrides` function L829-846 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_telemetry_for_broker_full_overrides` function L849-871 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_telemetry_for_broker_partial_overrides` function L874-896 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_telemetry_for_agent_no_overrides` function L899-916 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_telemetry_for_agent_full_overrides` function L919-941 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_telemetry_broker_and_agent_independent` function L944-981 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_telemetry_override_enabled_false_overrides_base_true` function L984-1005 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_telemetry_sampling_rate_extremes` function L1008-1030 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_reloadable_config_creation` function L1037-1050 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_dynamic_config_from_settings` function L1053-1064 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_reloadable_config_accessors_with_defaults` function L1067-1077 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_reloadable_config_dynamic_snapshot` function L1080-1092 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_reloadable_config_reload_no_changes` function L1095-1105 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_reloadable_config_is_clone` function L1108-1114 — `()` — Default: 60 (set to 0 to disable caching)
+-  `test_reloadable_config_thread_safety` function L1117-1140 — `()` — Default: 60 (set to 0 to disable caching)
 
 #### crates/brokkr-utils/src/lib.rs
 
@@ -3819,30 +4164,43 @@
 
 #### crates/brokkr-web/src/api.rs
 
-- pub `pak` function L14-20 — `() -> Option<String>` — Operator-pasted PAK, if any (interim auth — see module docs).
-- pub `get` function L23-47 — `(path: &str) -> Result<T, ApiError>` — GET `/api/v1{path}` and deserialize the JSON body.
-- pub `fleet` function L50-52 — `() -> Result<Vec<FleetAgentRecord>, ApiError>` — `GET /api/v1/fleet` — the fleet rollup (flat list of agents).
-- pub `metrics_text` function L55-69 — `() -> Result<String, ApiError>` — `GET /metrics` (Prometheus text; top-level, public — no `/api/v1` prefix).
-- pub `ws_connections` function L72-74 — `() -> Result<crate::models::WsConnectionsResponse, ApiError>` — `GET /api/v1/admin/ws/connections`.
-- pub `metric_sum` function L77-98 — `(text: &str, name: &str) -> Option<f64>` — Sum all samples of a Prometheus metric `name` (handles labeled counters).
-- pub `webhooks` function L101-103 — `() -> Result<Vec<crate::models::WebhookSummary>, ApiError>` — `GET /api/v1/webhooks` — subscription summaries.
-- pub `work_order_log` function L106-108 — `() -> Result<Vec<crate::models::WorkOrderLogEntry>, ApiError>` — `GET /api/v1/work-order-log` — completed work-order history.
-- pub `stacks` function L111-113 — `() -> Result<Vec<crate::models::Stack>, ApiError>` — `GET /api/v1/stacks`.
-- pub `agent_events` function L116-118 — `() -> Result<Vec<crate::models::AgentEventDto>, ApiError>` — `GET /api/v1/agent-events`.
-- pub `post` function L121-140 — `(path: &str, body: &B) -> Result<(), ApiError>` — POST `/api/v1{path}` with a JSON body; discards the response on success.
-- pub `create_diagnostic` function L143-145 — `(agent_id: &str) -> Result<(), ApiError>` — `POST /api/v1/diagnostics` — request a diagnostic for an agent (the v1 write).
-- pub `stack_health` function L148-150 — `(id: &str) -> Result<crate::models::StackHealth, ApiError>` — `GET /api/v1/stacks/:id/health` — per-stack deployment-object health rollup.
-- pub `webhook_deliveries` function L153-155 — `(id: &str) -> Result<Vec<crate::models::WebhookDeliveryDto>, ApiError>` — `GET /api/v1/webhooks/:id/deliveries` — recent delivery attempts.
-- pub `work_orders` function L158-160 — `() -> Result<Vec<crate::models::WorkOrder>, ApiError>` — `GET /api/v1/work-orders` — full work-order list (admin-gated).
+- pub `pak` function L20-26 — `() -> Option<String>` — Operator-pasted PAK, if any (the write-capable override — see module docs).
+- pub `get_scoped` function L91-99 — `( path: &str, scope: Option<String>, ) -> Result<T, ApiError>` — GET `/api/v1{path}` and deserialize the JSON body.
+- pub `get` function L102-104 — `(path: &str) -> Result<T, ApiError>` — GET `/api/v1{path}` (unscoped) and deserialize the JSON body.
+- pub `fleet` function L108-110 — `(scope: Option<String>) -> Result<Vec<FleetAgentRecord>, ApiError>` — `GET /api/v1/fleet` — the fleet rollup (flat list of agents), optionally
+- pub `paks` function L113-115 — `() -> Result<Vec<PakSummary>, ApiError>` — `GET /api/v1/paks` — named PAKs (tenants) for the scope selector.
+- pub `metrics_text` function L118-132 — `() -> Result<String, ApiError>` — `GET /metrics` (Prometheus text; top-level, public — no `/api/v1` prefix).
+- pub `ws_connections` function L135-137 — `() -> Result<crate::models::WsConnectionsResponse, ApiError>` — `GET /api/v1/admin/ws/connections`.
+- pub `metric_sum` function L140-161 — `(text: &str, name: &str) -> Option<f64>` — Sum all samples of a Prometheus metric `name` (handles labeled counters).
+- pub `webhooks` function L164-166 — `() -> Result<Vec<crate::models::WebhookSummary>, ApiError>` — `GET /api/v1/webhooks` — subscription summaries.
+- pub `work_order_log` function L169-171 — `() -> Result<Vec<crate::models::WorkOrderLogEntry>, ApiError>` — `GET /api/v1/work-order-log` — completed work-order history.
+- pub `stacks` function L174-176 — `(scope: Option<String>) -> Result<Vec<crate::models::Stack>, ApiError>` — `GET /api/v1/stacks`, optionally scoped to a tenant.
+- pub `agent_events` function L179-183 — `( scope: Option<String>, ) -> Result<Vec<crate::models::AgentEventDto>, ApiError...` — `GET /api/v1/agent-events`, optionally scoped to a tenant.
+- pub `post_json` function L191-217 — `( path: &str, body: &B, ) -> Result<T, ApiError>` — POST `/api/v1{path}` with a JSON body, deserializing the response body
+- pub `agent_target_state` function L223-229 — `(agent_id: &str) -> Result<Vec<TargetStateObject>, ApiError>` — `GET /api/v1/agents/:id/target-state?mode=full` — every deployment object
+- pub `create_diagnostic` function L239-248 — `( deployment_object_id: &str, agent_id: &str, ) -> Result<DiagnosticRequestDto, ...` — `POST /api/v1/deployment-objects/:id/diagnostics` — ask `agent_id` to collect
+- pub `diagnostic` function L253-255 — `(id: &str) -> Result<DiagnosticResponse, ApiError>` — `GET /api/v1/diagnostics/:id` — the request plus, once an agent has submitted
+- pub `stack_health` function L258-260 — `(id: &str) -> Result<crate::models::StackHealth, ApiError>` — `GET /api/v1/stacks/:id/health` — per-stack deployment-object health rollup.
+- pub `webhook_deliveries` function L263-265 — `(id: &str) -> Result<Vec<crate::models::WebhookDeliveryDto>, ApiError>` — `GET /api/v1/webhooks/:id/deliveries` — recent delivery attempts.
+- pub `work_orders` function L268-270 — `() -> Result<Vec<crate::models::WorkOrder>, ApiError>` — `GET /api/v1/work-orders` — full work-order list (admin-gated).
+-  `injected_token` function L31-45 — `() -> Option<String>` — The broker-injected read-only UI token, read from the `<meta>` tag once
+-  `token` function L49-51 — `() -> Option<String>` — Bearer token for API calls: pasted PAK first (write-capable), then the
+-  `get_query` function L57-87 — `( path: &str, params: &[(&str, &str)], ) -> Result<T, ApiError>` — GET `/api/v1{path}` with `params` as the query string, and deserialize the
 
 #### crates/brokkr-web/src/app.rs
 
-- pub `App` function L52-71 — `() -> impl IntoView` — the later slices.
+- pub `ScopeSignal` type L54 — `= RwSignal<Option<String>>` — The selected tenant scope (BROKKR-I-0032): `None` = all tenants, `Some(id)`
+- pub `use_scope` function L57-59 — `() -> ScopeSignal` — Read the app-wide scope signal from context (installed by [`App`]).
+- pub `App` function L79-104 — `() -> impl IntoView` — the later slices.
 -  `NAV` variable L13-25 — `: &[(&str, &[(&str, &str)])]` — Sidebar nav: (group label, [(view id, label)]).
 -  `meta` function L28-39 — `(id: &str) -> (&'static str, &'static str)` — (title, subtitle) for a view id.
 -  `now_hms` function L41-49 — `() -> String` — the later slices.
--  `Sidebar` function L74-151 — `(route: RwSignal<&'static str>) -> impl IntoView` — the later slices.
--  `Main` function L154-207 — `( route: RwSignal<&'static str>, live: RwSignal<String>, clock: RwSignal<String>...` — the later slices.
+-  `SCOPE_STORAGE_KEY` variable L61 — `: &str` — the later slices.
+-  `load_scope` function L63-66 — `() -> Option<String>` — the later slices.
+-  `save_scope` function L68-76 — `(scope: &Option<String>)` — the later slices.
+-  `Sidebar` function L107-186 — `(route: RwSignal<&'static str>) -> impl IntoView` — the later slices.
+-  `ScopeSelector` function L195-243 — `() -> impl IntoView` — Tenant scope selector (BROKKR-I-0032): "All" + one entry per named PAK from
+-  `Main` function L246-299 — `( route: RwSignal<&'static str>, live: RwSignal<String>, clock: RwSignal<String>...` — the later slices.
 
 #### crates/brokkr-web/src/components.rs
 
@@ -3870,20 +4228,39 @@
 
 - pub `FleetAgentRecord` struct L8-34 — `{ agent_id: String, name: String, cluster_name: String, status: String, ws_conne...` — One agent in `GET /api/v1/fleet` (mirrors the broker `FleetAgentRecord`).
 - pub `health` function L38-47 — `(&self) -> (&'static str, &'static str)` — Derived health bucket from the failing/degraded counts.
-- pub `ErrorBody` struct L52-57 — `{ code: String, message: String }` — The broker's `ErrorResponse` body (`{ code, message, details? }`).
-- pub `WsConnectionInfo` struct L61-69 — `{ agent_id: String, connected_since: Option<String>, messages_in: u64, messages_...` — One internal-WS connection in `GET /api/v1/admin/ws/connections`.
-- pub `WsConnectionsResponse` struct L73-80 — `{ connected_agents: usize, connections: Vec<WsConnectionInfo>, live_subscribers:...` — `GET /api/v1/admin/ws/connections`.
-- pub `WebhookSummary` struct L84-93 — `{ id: String, name: String, enabled: bool, event_types: Vec<String>, has_url: bo...` — `GET /api/v1/webhooks` (safe DTO — URL is redacted to `has_url`).
-- pub `WorkOrderLogEntry` struct L97-106 — `{ id: String, work_type: String, success: bool, retries_attempted: i32, result_m...` — `GET /api/v1/work-order-log` (completed work-order history).
-- pub `Stack` struct L110-116 — `{ id: String, name: String, description: Option<String>, generator_id: String }` — `GET /api/v1/stacks`.
-- pub `AgentEventDto` struct L120-127 — `{ agent_id: String, event_type: String, status: String, message: Option<String> ...` — `GET /api/v1/agent-events` (agent lifecycle events: Apply/Heartbeat/Reconcile).
-- pub `DeploymentObjectHealth` struct L131-140 — `{ id: String, status: String, healthy_agents: usize, degraded_agents: usize, fai...` — `GET /api/v1/stacks/:id/health` — per-stack deployment-object health rollup.
-- pub `StackHealth` struct L144-149 — `{ overall_status: String, deployment_objects: Vec<DeploymentObjectHealth> }` — `GET /api/v1/stacks/:id/health`.
-- pub `WebhookDeliveryDto` struct L153-162 — `{ event_type: String, status: String, attempts: i32, last_error: Option<String> ...` — `GET /api/v1/webhooks/:id/deliveries` — recent delivery attempts (summary).
-- pub `WorkOrder` struct L167-177 — `{ id: String, work_type: String, status: String, retry_count: i32, claimed_by: O...` — One work order in `GET /api/v1/work-orders` (admin-gated list).
-- pub `is_active` function L181-186 — `(&self) -> bool` — Whether the order is still in flight (not in a terminal state).
+- pub `TargetStateObject` struct L56-65 — `{ id: String, stack_id: String, sequence_id: i64, is_deletion_marker: bool }` — One deployment object in `GET /api/v1/agents/:id/target-state?mode=full`
+- pub `label` function L71-80 — `(&self) -> String` — Operator-readable, collision-free picker label (`sequence_id` is unique).
+- pub `DiagnosticResponse` struct L88-92 — `{ request: DiagnosticRequestDto, result: Option<DiagnosticResultDto> }` — `GET /api/v1/diagnostics/:id` — mirrors the broker's `DiagnosticResponse`:
+- pub `DiagnosticRequestDto` struct L98-106 — `{ id: String, status: String, claimed_at: Option<String>, completed_at: Option<S...` — A diagnostic request (the 201 body of `POST /deployment-objects/:id/diagnostics`
+- pub `DiagnosticResultDto` struct L113-126 — `{ pod_statuses: String, events: String, log_tails: Option<String>, collected_at:...` — A diagnostic result.
+- pub `PodStatus` struct L130-139 — `{ name: String, namespace: String, phase: String, containers: Vec<ContainerStatu...` — One entry of the parsed `pod_statuses` array.
+- pub `ContainerStatus` struct L143-154 — `{ name: String, ready: bool, restart_count: i32, state: String, state_reason: Op...` — One container inside a [`PodStatus`].
+- pub `DiagEvent` struct L164-182 — `{ event_type: Option<String>, reason: Option<String>, message: Option<String>, i...` — One entry of the parsed `events` array.
+- pub `DiagnosticData` struct L188-194 — `{ pods: Result<Vec<PodStatus>, String>, events: Result<Vec<DiagEvent>, String>, ...` — The result's three JSON-in-string payloads, parsed.
+- pub `parse` function L198-221 — `(dto: &DiagnosticResultDto) -> Self` — Parse the JSON-encoded payload strings.
+- pub `collection_errors` function L229-234 — `(&self) -> Vec<String>` — The collection-failure messages carried inside `events`, if any.
+- pub `DiagnosticOutcome` enum L240-251 — `InFlight | CollectionFailed | Collected | NoResult` — What a polled diagnostic actually amounts to, once the `completed`-with-an-
+- pub `is_terminal` function L256-261 — `(&self) -> bool` — Whether the request has reached a state the agent will never move it out
+- pub `outcome` function L264-279 — `(&self) -> DiagnosticOutcome` — Classify the response for rendering.
+- pub `PakSummary` struct L285-288 — `{ id: String, name: String }` — One named PAK (tenant) in `GET /api/v1/paks` — powers the scope selector
+- pub `ErrorBody` struct L292-297 — `{ code: String, message: String }` — The broker's `ErrorResponse` body (`{ code, message, details? }`).
+- pub `WsConnectionInfo` struct L301-309 — `{ agent_id: String, connected_since: Option<String>, messages_in: u64, messages_...` — One internal-WS connection in `GET /api/v1/admin/ws/connections`.
+- pub `WsConnectionsResponse` struct L313-320 — `{ connected_agents: usize, connections: Vec<WsConnectionInfo>, live_subscribers:...` — `GET /api/v1/admin/ws/connections`.
+- pub `WebhookSummary` struct L324-333 — `{ id: String, name: String, enabled: bool, event_types: Vec<String>, has_url: bo...` — `GET /api/v1/webhooks` (safe DTO — URL is redacted to `has_url`).
+- pub `WorkOrderLogEntry` struct L337-346 — `{ id: String, work_type: String, success: bool, retries_attempted: i32, result_m...` — `GET /api/v1/work-order-log` (completed work-order history).
+- pub `Stack` struct L350-356 — `{ id: String, name: String, description: Option<String>, generator_id: String }` — `GET /api/v1/stacks`.
+- pub `AgentEventDto` struct L360-367 — `{ agent_id: String, event_type: String, status: String, message: Option<String> ...` — `GET /api/v1/agent-events` (agent lifecycle events: Apply/Heartbeat/Reconcile).
+- pub `DeploymentObjectHealth` struct L371-380 — `{ id: String, status: String, healthy_agents: usize, degraded_agents: usize, fai...` — `GET /api/v1/stacks/:id/health` — per-stack deployment-object health rollup.
+- pub `StackHealth` struct L384-389 — `{ overall_status: String, deployment_objects: Vec<DeploymentObjectHealth> }` — `GET /api/v1/stacks/:id/health`.
+- pub `WebhookDeliveryDto` struct L393-402 — `{ event_type: String, status: String, attempts: i32, last_error: Option<String> ...` — `GET /api/v1/webhooks/:id/deliveries` — recent delivery attempts (summary).
+- pub `WorkOrder` struct L407-417 — `{ id: String, work_type: String, status: String, retry_count: i32, claimed_by: O...` — One work order in `GET /api/v1/work-orders` (admin-gated list).
+- pub `is_active` function L421-426 — `(&self) -> bool` — Whether the order is still in flight (not in a terminal state).
 -  `FleetAgentRecord` type L36-48 — `= FleetAgentRecord` — (not the broker's diesel-bound types) so the wasm crate stays light.
--  `WorkOrder` type L179-187 — `= WorkOrder` — (not the broker's diesel-bound types) so the wasm crate stays light.
+-  `TargetStateObject` type L67-81 — `= TargetStateObject` — (not the broker's diesel-bound types) so the wasm crate stays light.
+-  `DiagnosticData` type L196-235 — `= DiagnosticData` — (not the broker's diesel-bound types) so the wasm crate stays light.
+-  `json` function L199-201 — `(raw: &str) -> Result<T, String>` — (not the broker's diesel-bound types) so the wasm crate stays light.
+-  `DiagnosticResponse` type L253-280 — `= DiagnosticResponse` — (not the broker's diesel-bound types) so the wasm crate stays light.
+-  `WorkOrder` type L419-427 — `= WorkOrder` — (not the broker's diesel-bound types) so the wasm crate stays light.
 
 ### crates/brokkr-web/src/views
 
@@ -3891,11 +4268,20 @@
 
 #### crates/brokkr-web/src/views/deployments.rs
 
-- pub `DeploymentsView` function L15-120 — `() -> impl IntoView` — health is a follow-up (logged on the task).
+- pub `DeploymentsView` function L15-122 — `() -> impl IntoView` — health is a follow-up (logged on the task).
 
 #### crates/brokkr-web/src/views/fleet.rs
 
-- pub `FleetView` function L17-144 — `() -> impl IntoView` — the v1 **run-diagnostic** write (POST /diagnostics).
+- pub `FleetView` function L193-552 — `() -> impl IntoView` — events, log tails — is rendered in the same modal (BROKKR-T-0301).
+-  `POLL_EVERY_MS` variable L28 — `: u64` — How often the console re-reads a running diagnostic.
+-  `POLL_MAX` variable L37 — `: u32` — How many times, at most.
+-  `heading` function L40-46 — `(text: &'static str) -> AnyView` — Uppercase section heading, matching the modal's other headings.
+-  `note` function L49-54 — `(text: String) -> AnyView` — A neutral, non-alarming note (used for legitimately empty payloads).
+-  `pods_view` function L59-102 — `(pods: Result<Vec<PodStatus>, String>) -> AnyView` — Parsed pod statuses.
+-  `events_view` function L106-149 — `(events: Result<Vec<DiagEvent>, String>) -> AnyView` — Parsed events.
+-  `SHOW` variable L107 — `: usize` — events, log tails — is rendered in the same modal (BROKKR-T-0301).
+-  `logs_view` function L152-173 — `(tails: Result<Vec<(String, String)>, String>) -> AnyView` — Parsed log tails (`pod/container` -> last lines).
+-  `result_view` function L176-190 — `(data: DiagnosticData) -> AnyView` — A completed collection's payload.
 
 #### crates/brokkr-web/src/views/health.rs
 
@@ -3918,11 +4304,11 @@
 
 #### crates/brokkr-web/src/views/overview.rs
 
-- pub `OverviewView` function L15-139 — `() -> impl IntoView` — The 3 layout variants are deferred — this is the "command" layout.
+- pub `OverviewView` function L15-141 — `() -> impl IntoView` — The 3 layout variants are deferred — this is the "command" layout.
 
 #### crates/brokkr-web/src/views/telemetry.rs
 
-- pub `TelemetryView` function L15-113 — `() -> impl IntoView` — the logs tab needs a stack selected.
+- pub `TelemetryView` function L15-115 — `() -> impl IntoView` — the logs tab needs a stack selected.
 
 #### crates/brokkr-web/src/views/webhooks.rs
 
@@ -6577,13 +6963,13 @@
 
 #### sdks/python/brokkr-client/brokkr_broker_client/api/agent_events/list_agent_events.py
 
-- pub `sync_detailed` function L58-77 — `def sync_detailed( *, client: AuthenticatedClient, ) -> Response[ErrorResponse |...` — Raises:
-- pub `sync` function L80-95 — `def sync( *, client: AuthenticatedClient, ) -> ErrorResponse | list[AgentEvent] ...` — Raises:
-- pub `asyncio_detailed` function L98-115 — `def asyncio_detailed( *, client: AuthenticatedClient, ) -> Response[ErrorRespons...` — Raises:
-- pub `asyncio` function L118-135 — `def asyncio( *, client: AuthenticatedClient, ) -> ErrorResponse | list[AgentEven...` — Raises:
--  `_get_kwargs` function L13-20 — `def _get_kwargs() -> dict[str, Any]`
--  `_parse_response` function L23-44 — `def _parse_response( *, client: AuthenticatedClient | Client, response: httpx.Re...`
--  `_build_response` function L47-55 — `def _build_response( *, client: AuthenticatedClient | Client, response: httpx.Re...`
+- pub `sync_detailed` function L76-101 — `def sync_detailed( *, client: AuthenticatedClient, pak_id: None | Unset | UUID =...` — Args:
+- pub `sync` function L104-124 — `def sync( *, client: AuthenticatedClient, pak_id: None | Unset | UUID = UNSET, )...` — Args:
+- pub `asyncio_detailed` function L127-150 — `def asyncio_detailed( *, client: AuthenticatedClient, pak_id: None | Unset | UUI...` — Args:
+- pub `asyncio` function L153-175 — `def asyncio( *, client: AuthenticatedClient, pak_id: None | Unset | UUID = UNSET...` — Args:
+-  `_get_kwargs` function L14-38 — `def _get_kwargs( *, pak_id: None | Unset | UUID = UNSET, ) -> dict[str, Any]`
+-  `_parse_response` function L41-62 — `def _parse_response( *, client: AuthenticatedClient | Client, response: httpx.Re...`
+-  `_build_response` function L65-73 — `def _build_response( *, client: AuthenticatedClient | Client, response: httpx.Re...`
 
 #### sdks/python/brokkr-client/brokkr_broker_client/api/agent_events/list_events.py
 
@@ -6781,6 +7167,16 @@
 
 > *Semantic summary to be generated by AI agent.*
 
+#### sdks/python/brokkr-client/brokkr_broker_client/api/auth/list_paks.py
+
+- pub `sync_detailed` function L63-83 — `def sync_detailed( *, client: AuthenticatedClient, ) -> Response[ErrorResponse |...` — Lists named PAKs (tenants) for scope selection.
+- pub `sync` function L86-102 — `def sync( *, client: AuthenticatedClient, ) -> ErrorResponse | list[PakSummary] ...` — Lists named PAKs (tenants) for scope selection.
+- pub `asyncio_detailed` function L105-123 — `def asyncio_detailed( *, client: AuthenticatedClient, ) -> Response[ErrorRespons...` — Lists named PAKs (tenants) for scope selection.
+- pub `asyncio` function L126-144 — `def asyncio( *, client: AuthenticatedClient, ) -> ErrorResponse | list[PakSummar...` — Lists named PAKs (tenants) for scope selection.
+-  `_get_kwargs` function L13-20 — `def _get_kwargs() -> dict[str, Any]`
+-  `_parse_response` function L23-49 — `def _parse_response( *, client: AuthenticatedClient | Client, response: httpx.Re...`
+-  `_build_response` function L52-60 — `def _build_response( *, client: AuthenticatedClient | Client, response: httpx.Re...`
+
 #### sdks/python/brokkr-client/brokkr_broker_client/api/auth/verify_pak.py
 
 - pub `sync_detailed` function L53-75 — `def sync_detailed( *, client: AuthenticatedClient, ) -> Response[AuthResponse | ...` — Verifies a PAK (Personal Access Key) and returns an AuthResponse.
@@ -6875,13 +7271,13 @@
 
 #### sdks/python/brokkr-client/brokkr_broker_client/api/fleet/list_fleet.py
 
-- pub `sync_detailed` function L63-82 — `def sync_detailed( *, client: AuthenticatedClient, ) -> Response[ErrorResponse |...` — Raises:
-- pub `sync` function L85-100 — `def sync( *, client: AuthenticatedClient, ) -> ErrorResponse | list[FleetAgentRe...` — Raises:
-- pub `asyncio_detailed` function L103-120 — `def asyncio_detailed( *, client: AuthenticatedClient, ) -> Response[ErrorRespons...` — Raises:
-- pub `asyncio` function L123-140 — `def asyncio( *, client: AuthenticatedClient, ) -> ErrorResponse | list[FleetAgen...` — Raises:
--  `_get_kwargs` function L13-20 — `def _get_kwargs() -> dict[str, Any]`
--  `_parse_response` function L23-49 — `def _parse_response( *, client: AuthenticatedClient | Client, response: httpx.Re...`
--  `_build_response` function L52-60 — `def _build_response( *, client: AuthenticatedClient | Client, response: httpx.Re...`
+- pub `sync_detailed` function L81-106 — `def sync_detailed( *, client: AuthenticatedClient, pak_id: None | Unset | UUID =...` — Args:
+- pub `sync` function L109-129 — `def sync( *, client: AuthenticatedClient, pak_id: None | Unset | UUID = UNSET, )...` — Args:
+- pub `asyncio_detailed` function L132-155 — `def asyncio_detailed( *, client: AuthenticatedClient, pak_id: None | Unset | UUI...` — Args:
+- pub `asyncio` function L158-180 — `def asyncio( *, client: AuthenticatedClient, pak_id: None | Unset | UUID = UNSET...` — Args:
+-  `_get_kwargs` function L14-38 — `def _get_kwargs( *, pak_id: None | Unset | UUID = UNSET, ) -> dict[str, Any]`
+-  `_parse_response` function L41-67 — `def _parse_response( *, client: AuthenticatedClient | Client, response: httpx.Re...`
+-  `_build_response` function L70-78 — `def _build_response( *, client: AuthenticatedClient | Client, response: httpx.Re...`
 
 ### sdks/python/brokkr-client/brokkr_broker_client/api/generators
 
@@ -7101,13 +7497,13 @@
 
 #### sdks/python/brokkr-client/brokkr_broker_client/api/stacks/list_stacks.py
 
-- pub `sync_detailed` function L63-82 — `def sync_detailed( *, client: AuthenticatedClient, ) -> Response[ErrorResponse |...` — Raises:
-- pub `sync` function L85-100 — `def sync( *, client: AuthenticatedClient, ) -> ErrorResponse | list[Stack] | Non...` — Raises:
-- pub `asyncio_detailed` function L103-120 — `def asyncio_detailed( *, client: AuthenticatedClient, ) -> Response[ErrorRespons...` — Raises:
-- pub `asyncio` function L123-140 — `def asyncio( *, client: AuthenticatedClient, ) -> ErrorResponse | list[Stack] | ...` — Raises:
--  `_get_kwargs` function L13-20 — `def _get_kwargs() -> dict[str, Any]`
--  `_parse_response` function L23-49 — `def _parse_response( *, client: AuthenticatedClient | Client, response: httpx.Re...`
--  `_build_response` function L52-60 — `def _build_response( *, client: AuthenticatedClient | Client, response: httpx.Re...`
+- pub `sync_detailed` function L81-106 — `def sync_detailed( *, client: AuthenticatedClient, pak_id: None | Unset | UUID =...` — Args:
+- pub `sync` function L109-129 — `def sync( *, client: AuthenticatedClient, pak_id: None | Unset | UUID = UNSET, )...` — Args:
+- pub `asyncio_detailed` function L132-155 — `def asyncio_detailed( *, client: AuthenticatedClient, pak_id: None | Unset | UUI...` — Args:
+- pub `asyncio` function L158-180 — `def asyncio( *, client: AuthenticatedClient, pak_id: None | Unset | UUID = UNSET...` — Args:
+-  `_get_kwargs` function L14-38 — `def _get_kwargs( *, pak_id: None | Unset | UUID = UNSET, ) -> dict[str, Any]`
+-  `_parse_response` function L41-67 — `def _parse_response( *, client: AuthenticatedClient | Client, response: httpx.Re...`
+-  `_build_response` function L70-78 — `def _build_response( *, client: AuthenticatedClient | Client, response: httpx.Re...`
 
 #### sdks/python/brokkr-client/brokkr_broker_client/api/stacks/stacks_add_annotation.py
 
@@ -7299,13 +7695,13 @@
 
 #### sdks/python/brokkr-client/brokkr_broker_client/api/webhooks/create_webhook.py
 
-- pub `sync_detailed` function L73-98 — `def sync_detailed( *, client: AuthenticatedClient, body: CreateWebhookRequest, )...` — Args:
-- pub `sync` function L101-121 — `def sync( *, client: AuthenticatedClient, body: CreateWebhookRequest, ) -> Error...` — Args:
-- pub `asyncio_detailed` function L124-147 — `def asyncio_detailed( *, client: AuthenticatedClient, body: CreateWebhookRequest...` — Args:
-- pub `asyncio` function L150-172 — `def asyncio( *, client: AuthenticatedClient, body: CreateWebhookRequest, ) -> Er...` — Args:
+- pub `sync_detailed` function L78-124 — `def sync_detailed( *, client: AuthenticatedClient, body: CreateWebhookRequest, )...` — Args:
+- pub `sync` function L127-168 — `def sync( *, client: AuthenticatedClient, body: CreateWebhookRequest, ) -> Error...` — Args:
+- pub `asyncio_detailed` function L171-215 — `def asyncio_detailed( *, client: AuthenticatedClient, body: CreateWebhookRequest...` — Args:
+- pub `asyncio` function L218-261 — `def asyncio( *, client: AuthenticatedClient, body: CreateWebhookRequest, ) -> Er...` — Args:
 -  `_get_kwargs` function L14-30 — `def _get_kwargs( *, body: CreateWebhookRequest, ) -> dict[str, Any]`
--  `_parse_response` function L33-59 — `def _parse_response( *, client: AuthenticatedClient | Client, response: httpx.Re...`
--  `_build_response` function L62-70 — `def _build_response( *, client: AuthenticatedClient | Client, response: httpx.Re...`
+-  `_parse_response` function L33-64 — `def _parse_response( *, client: AuthenticatedClient | Client, response: httpx.Re...`
+-  `_build_response` function L67-75 — `def _build_response( *, client: AuthenticatedClient | Client, response: httpx.Re...`
 
 #### sdks/python/brokkr-client/brokkr_broker_client/api/webhooks/delete_webhook.py
 
@@ -7389,13 +7785,13 @@
 
 #### sdks/python/brokkr-client/brokkr_broker_client/api/webhooks/update_webhook.py
 
-- pub `sync_detailed` function L83-111 — `def sync_detailed( id: UUID, *, client: AuthenticatedClient, body: UpdateWebhook...` — Args:
-- pub `sync` function L114-137 — `def sync( id: UUID, *, client: AuthenticatedClient, body: UpdateWebhookRequest, ...` — Args:
-- pub `asyncio_detailed` function L140-166 — `def asyncio_detailed( id: UUID, *, client: AuthenticatedClient, body: UpdateWebh...` — Args:
-- pub `asyncio` function L169-194 — `def asyncio( id: UUID, *, client: AuthenticatedClient, body: UpdateWebhookReques...` — Args:
+- pub `sync_detailed` function L88-116 — `def sync_detailed( id: UUID, *, client: AuthenticatedClient, body: UpdateWebhook...` — Args:
+- pub `sync` function L119-142 — `def sync( id: UUID, *, client: AuthenticatedClient, body: UpdateWebhookRequest, ...` — Args:
+- pub `asyncio_detailed` function L145-171 — `def asyncio_detailed( id: UUID, *, client: AuthenticatedClient, body: UpdateWebh...` — Args:
+- pub `asyncio` function L174-199 — `def asyncio( id: UUID, *, client: AuthenticatedClient, body: UpdateWebhookReques...` — Args:
 -  `_get_kwargs` function L16-35 — `def _get_kwargs( id: UUID, *, body: UpdateWebhookRequest, ) -> dict[str, Any]`
--  `_parse_response` function L38-69 — `def _parse_response( *, client: AuthenticatedClient | Client, response: httpx.Re...`
--  `_build_response` function L72-80 — `def _build_response( *, client: AuthenticatedClient | Client, response: httpx.Re...`
+-  `_parse_response` function L38-74 — `def _parse_response( *, client: AuthenticatedClient | Client, response: httpx.Re...`
+-  `_build_response` function L77-85 — `def _build_response( *, client: AuthenticatedClient | Client, response: httpx.Re...`
 
 ### sdks/python/brokkr-client/brokkr_broker_client/api/work_orders
 
@@ -7603,6 +7999,15 @@
 - pub `__delitem__` method L212-213 — `def __delitem__(self, key: str) -> None`
 - pub `__contains__` method L215-216 — `def __contains__(self, key: str) -> bool`
 
+#### sdks/python/brokkr-client/brokkr_broker_client/models/audit_log_entry.py
+
+- pub `AuditLogEntry` class L18-239 — `{ to_dict, from_dict, additional_keys }` — An audit log entry enriched with a human-readable actor name
+- pub `to_dict` method L53-127 — `def to_dict(self) -> dict[str, Any]`
+- pub `__getitem__` method L229-230 — `def __getitem__(self, key: str) -> Any`
+- pub `__setitem__` method L232-233 — `def __setitem__(self, key: str, value: Any) -> None`
+- pub `__delitem__` method L235-236 — `def __delitem__(self, key: str) -> None`
+- pub `__contains__` method L238-239 — `def __contains__(self, key: str) -> bool`
+
 #### sdks/python/brokkr-client/brokkr_broker_client/models/audit_log_list_response.py
 
 - pub `AuditLogListResponse` class L17-108 — `{ to_dict, from_dict, additional_keys }` — Response structure for audit log list operations.
@@ -7614,12 +8019,12 @@
 
 #### sdks/python/brokkr-client/brokkr_broker_client/models/auth_response.py
 
-- pub `AuthResponse` class L15-104 — `{ to_dict, from_dict, additional_keys }` — Represents the response structure for authentication information.
-- pub `to_dict` method L29-56 — `def to_dict(self) -> dict[str, Any]`
-- pub `__getitem__` method L94-95 — `def __getitem__(self, key: str) -> Any`
-- pub `__setitem__` method L97-98 — `def __setitem__(self, key: str, value: Any) -> None`
-- pub `__delitem__` method L100-101 — `def __delitem__(self, key: str) -> None`
-- pub `__contains__` method L103-104 — `def __contains__(self, key: str) -> bool`
+- pub `AuthResponse` class L15-112 — `{ to_dict, from_dict, additional_keys }` — Represents the response structure for authentication information.
+- pub `to_dict` method L31-61 — `def to_dict(self) -> dict[str, Any]`
+- pub `__getitem__` method L102-103 — `def __getitem__(self, key: str) -> Any`
+- pub `__setitem__` method L105-106 — `def __setitem__(self, key: str, value: Any) -> None`
+- pub `__delitem__` method L108-109 — `def __delitem__(self, key: str) -> None`
+- pub `__contains__` method L111-112 — `def __contains__(self, key: str) -> bool`
 
 #### sdks/python/brokkr-client/brokkr_broker_client/models/claim_work_order_request.py
 
@@ -7713,12 +8118,12 @@
 
 #### sdks/python/brokkr-client/brokkr_broker_client/models/create_webhook_request.py
 
-- pub `CreateWebhookRequest` class L19-201 — `{ to_dict, from_dict, additional_keys }` — Attributes:
-- pub `to_dict` method L44-106 — `def to_dict(self) -> dict[str, Any]`
-- pub `__getitem__` method L191-192 — `def __getitem__(self, key: str) -> Any`
-- pub `__setitem__` method L194-195 — `def __setitem__(self, key: str, value: Any) -> None`
-- pub `__delitem__` method L197-198 — `def __delitem__(self, key: str) -> None`
-- pub `__contains__` method L200-201 — `def __contains__(self, key: str) -> bool`
+- pub `CreateWebhookRequest` class L19-252 — `{ to_dict, from_dict, additional_keys }` — Body of `POST /webhooks`.
+- pub `to_dict` method L102-160 — `def to_dict(self) -> dict[str, Any]`
+- pub `__getitem__` method L242-243 — `def __getitem__(self, key: str) -> Any`
+- pub `__setitem__` method L245-246 — `def __setitem__(self, key: str, value: Any) -> None`
+- pub `__delitem__` method L248-249 — `def __delitem__(self, key: str) -> None`
+- pub `__contains__` method L251-252 — `def __contains__(self, key: str) -> bool`
 
 #### sdks/python/brokkr-client/brokkr_broker_client/models/create_work_order_request.py
 
@@ -8008,6 +8413,15 @@
 - pub `__delitem__` method L67-68 — `def __delitem__(self, key: str) -> None`
 - pub `__contains__` method L70-71 — `def __contains__(self, key: str) -> bool`
 
+#### sdks/python/brokkr-client/brokkr_broker_client/models/pak_summary.py
+
+- pub `PakSummary` class L14-72 — `{ to_dict, from_dict, additional_keys }` — One tenant entry for the console scope selector: a named PAK owner
+- pub `to_dict` method L27-41 — `def to_dict(self) -> dict[str, Any]`
+- pub `__getitem__` method L62-63 — `def __getitem__(self, key: str) -> Any`
+- pub `__setitem__` method L65-66 — `def __setitem__(self, key: str, value: Any) -> None`
+- pub `__delitem__` method L68-69 — `def __delitem__(self, key: str) -> None`
+- pub `__contains__` method L71-72 — `def __contains__(self, key: str) -> bool`
+
 #### sdks/python/brokkr-client/brokkr_broker_client/models/pending_webhook_delivery.py
 
 - pub `PendingWebhookDelivery` class L16-140 — `{ to_dict, from_dict, additional_keys }` — Attributes:
@@ -8136,12 +8550,12 @@
 
 #### sdks/python/brokkr-client/brokkr_broker_client/models/update_webhook_request.py
 
-- pub `UpdateWebhookRequest` class L19-257 — `{ to_dict, from_dict, additional_keys }` — Attributes:
-- pub `to_dict` method L44-125 — `def to_dict(self) -> dict[str, Any]`
-- pub `__getitem__` method L247-248 — `def __getitem__(self, key: str) -> Any`
-- pub `__setitem__` method L250-251 — `def __setitem__(self, key: str, value: Any) -> None`
-- pub `__delitem__` method L253-254 — `def __delitem__(self, key: str) -> None`
-- pub `__contains__` method L256-257 — `def __contains__(self, key: str) -> bool`
+- pub `UpdateWebhookRequest` class L19-295 — `{ to_dict, from_dict, additional_keys }` — Attributes:
+- pub `to_dict` method L82-163 — `def to_dict(self) -> dict[str, Any]`
+- pub `__getitem__` method L285-286 — `def __getitem__(self, key: str) -> Any`
+- pub `__setitem__` method L288-289 — `def __setitem__(self, key: str, value: Any) -> None`
+- pub `__delitem__` method L291-292 — `def __delitem__(self, key: str) -> None`
+- pub `__contains__` method L294-295 — `def __contains__(self, key: str) -> bool`
 
 #### sdks/python/brokkr-client/brokkr_broker_client/models/webhook_delivery.py
 
@@ -8154,30 +8568,21 @@
 
 #### sdks/python/brokkr-client/brokkr_broker_client/models/webhook_filters.py
 
-- pub `WebhookFilters` class L20-153 — `{ to_dict, from_dict, additional_keys }` — Filters for webhook subscriptions.
-- pub `to_dict` method L34-71 — `def to_dict(self) -> dict[str, Any]`
+- pub `WebhookFilters` class L16-153 — `{ to_dict, from_dict, additional_keys }` — Filters for webhook subscriptions.
+- pub `to_dict` method L66-91 — `def to_dict(self) -> dict[str, Any]`
 - pub `__getitem__` method L143-144 — `def __getitem__(self, key: str) -> Any`
 - pub `__setitem__` method L146-147 — `def __setitem__(self, key: str, value: Any) -> None`
 - pub `__delitem__` method L149-150 — `def __delitem__(self, key: str) -> None`
 - pub `__contains__` method L152-153 — `def __contains__(self, key: str) -> bool`
 
-#### sdks/python/brokkr-client/brokkr_broker_client/models/webhook_filters_labels_type_0.py
-
-- pub `WebhookFiltersLabelsType0` class L13-47 — `{ to_dict, from_dict, additional_keys }` — Filter by labels (all must match).
-- pub `to_dict` method L18-23 — `def to_dict(self) -> dict[str, Any]`
-- pub `__getitem__` method L37-38 — `def __getitem__(self, key: str) -> str`
-- pub `__setitem__` method L40-41 — `def __setitem__(self, key: str, value: str) -> None`
-- pub `__delitem__` method L43-44 — `def __delitem__(self, key: str) -> None`
-- pub `__contains__` method L46-47 — `def __contains__(self, key: str) -> bool`
-
 #### sdks/python/brokkr-client/brokkr_broker_client/models/webhook_response.py
 
-- pub `WebhookResponse` class L22-211 — `{ to_dict, from_dict, additional_keys }` — Attributes:
-- pub `to_dict` method L55-118 — `def to_dict(self) -> dict[str, Any]`
-- pub `__getitem__` method L201-202 — `def __getitem__(self, key: str) -> Any`
-- pub `__setitem__` method L204-205 — `def __setitem__(self, key: str, value: Any) -> None`
-- pub `__delitem__` method L207-208 — `def __delitem__(self, key: str) -> None`
-- pub `__contains__` method L210-211 — `def __contains__(self, key: str) -> bool`
+- pub `WebhookResponse` class L22-249 — `{ to_dict, from_dict, additional_keys }` — Attributes:
+- pub `to_dict` method L93-156 — `def to_dict(self) -> dict[str, Any]`
+- pub `__getitem__` method L239-240 — `def __getitem__(self, key: str) -> Any`
+- pub `__setitem__` method L242-243 — `def __setitem__(self, key: str, value: Any) -> None`
+- pub `__delitem__` method L245-246 — `def __delitem__(self, key: str) -> None`
+- pub `__contains__` method L248-249 — `def __contains__(self, key: str) -> bool`
 
 #### sdks/python/brokkr-client/brokkr_broker_client/models/webhook_subscription.py
 
@@ -8323,11 +8728,11 @@
 
 #### sdks/typescript/brokkr-client/src/schema.d.ts
 
-- pub `paths` interface L6-1151 — `{ "/admin/audit-logs": : { parameters: { query?: never; header?: never; path?: n...`
-- pub `webhooks` type L1152 — `= Record<string, never>`
-- pub `components` interface L1153-2766 — `{ schemas: : { AddAnnotationRequest: { key: string; value: string; }; /** @descr...`
-- pub `$defs` type L2767 — `= Record<string, never>`
-- pub `operations` interface L2768-7462 — `{ list_audit_logs: : { parameters: { query?: { /** * @description Filter by acto...`
+- pub `paths` interface L6-1168 — `{ "/admin/audit-logs": : { parameters: { query?: never; header?: never; path?: n...`
+- pub `webhooks` type L1169 — `= Record<string, never>`
+- pub `components` interface L1170-2884 — `{ schemas: : { AddAnnotationRequest: { key: string; value: string; }; /** @descr...`
+- pub `$defs` type L2885 — `= Record<string, never>`
+- pub `operations` interface L2886-7645 — `{ list_audit_logs: : { parameters: { query?: { /** * @description Filter by acto...`
 
 #### sdks/typescript/brokkr-client/src/wrapper.test.ts
 

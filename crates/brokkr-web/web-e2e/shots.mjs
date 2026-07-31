@@ -80,6 +80,106 @@ const TELEM = [
   { agent_id: "a2", event_type: "Apply", status: "failure", message: "Service/ingest: port 8080 already allocated" },
 ];
 
+// Diagnostics (BROKKR-T-0301). The Fleet modal picks a deployment object from
+// the agent's target state, POSTs a request, keeps the returned id and polls
+// GET /diagnostics/:id. The route mock is method-agnostic (keyed on path), so
+// the POST is answered with the 201-shaped body below.
+const TARGET_STATE = [
+  { id: "d1a2b3c4", stack_id: "s1", sequence_id: 41, is_deletion_marker: false },
+];
+const DIAG_CREATED = {
+  id: "9f10ab22", agent_id: "1b9d6bcd", deployment_object_id: "d1a2b3c4",
+  status: "pending", requested_by: "operator-console",
+  created_at: "2026-07-27T10:00:00Z", expires_at: "2026-07-27T11:00:00Z",
+};
+// The result's three payload fields are JSON-encoded *strings*, not nested
+// objects — hence the JSON.stringify calls: the console parses them a second time.
+const DIAG_DONE = {
+  request: { ...DIAG_CREATED, status: "completed", claimed_at: "2026-07-27T10:00:08Z",
+    completed_at: "2026-07-27T10:00:14Z" },
+  result: {
+    request_id: "9f10ab22",
+    pod_statuses: JSON.stringify([
+      { name: "payments-api-7d9f4-x2k1", namespace: "payments", phase: "Running",
+        conditions: [{ condition_type: "Ready", status: "True" }],
+        containers: [{ name: "api", ready: true, restart_count: 0, state: "running" }] },
+      { name: "payments-api-7d9f4-q8m3", namespace: "payments", phase: "Pending",
+        conditions: [{ condition_type: "Ready", status: "False" }],
+        containers: [{ name: "api", ready: false, restart_count: 4, state: "waiting",
+          state_reason: "ImagePullBackOff" }] },
+    ]),
+    events: JSON.stringify([
+      { event_type: "Warning", reason: "Failed", message: "Failed to pull image \"ghcr.io/app:sha-7f3a01\": not found",
+        involved_object: "payments-api-7d9f4-q8m3", involved_object_kind: "Pod", count: 6,
+        last_timestamp: "2026-07-27T10:00:12Z" },
+      { event_type: "Normal", reason: "Pulled", message: "Successfully pulled image in 1.2s",
+        involved_object: "payments-api-7d9f4-x2k1", involved_object_kind: "Pod", count: 1,
+        last_timestamp: "2026-07-27T09:59:40Z" },
+    ]),
+    log_tails: JSON.stringify({
+      "payments-api-7d9f4-x2k1/api": "10:00:01 INFO listening on :8080\n10:00:02 INFO ready",
+    }),
+    collected_at: "2026-07-27T10:00:13Z",
+  },
+};
+// An honest empty success: no pods attributed (legitimate — the object may apply
+// no workloads), but the collection itself worked.
+const DIAG_EMPTY = {
+  request: { ...DIAG_DONE.request },
+  result: { request_id: "9f10ab22", pod_statuses: "[]",
+    events: JSON.stringify([
+      { event_type: "Normal", reason: "Created", message: "Created ConfigMap/payments-config",
+        involved_object: "payments-config", involved_object_kind: "ConfigMap", count: 1 },
+    ]),
+    log_tails: null, collected_at: "2026-07-27T10:00:13Z" },
+};
+// A FAILED collection: the broker has no `failed` status, so this arrives as
+// `completed` with a single `error` entry inside `events`.
+const DIAG_ERROR = {
+  request: { ...DIAG_DONE.request },
+  result: { request_id: "9f10ab22", pod_statuses: "[]",
+    events: JSON.stringify([{ error: "Failed to list pods in namespace payments: ApiError: pods is forbidden: User \"system:serviceaccount:brokkr:brokkr-agent\" cannot list resource \"pods\"" }]),
+    log_tails: null, collected_at: "2026-07-27T10:00:13Z" },
+};
+const DIAG_MOCKS = {
+  "/fleet": FLEET,
+  "/agents/1b9d6bcd/target-state": TARGET_STATE,
+  "/deployment-objects/d1a2b3c4/diagnostics": DIAG_CREATED,
+};
+
+// Tenants view (BROKKR-T-0318). `GET /generators` lists tenants; the mint
+// dialog POSTs to the same path and gets back the created generator plus its
+// one-time PAK — hence the method-aware mock keys below.
+const GENERATORS = [
+  { id: "1b9d6bcd-bbfd", name: "team-payments", description: "prod payments service",
+    is_active: true, is_system: false, last_active_at: "2026-07-29T09:14:02Z" },
+  { id: "7c9e6679-7425", name: "team-ingest", description: "event ingest",
+    is_active: true, is_system: false, last_active_at: "2026-07-29T08:51:40Z" },
+  { id: "a1b2c3d4-0000", name: "team-sandbox", description: null,
+    is_active: false, is_system: false, last_active_at: null },
+];
+// The one-time secret the reveal panel shows. Distinct from the seeded
+// any real credential, so the persistence assertion below cannot pass by accident.
+const MINTED_PAK = "brokkr_MINTED9_Zx7QvT2mKp8sLd4NrB6yCw3EfH5jA1gU";
+const CREATED_GENERATOR = {
+  generator: { id: "f00dcafe-1234", name: "team-checkout", description: "new tenant",
+    is_active: true, is_system: false, last_active_at: null },
+  pak: MINTED_PAK,
+};
+// The admin PAK an operator would paste. Never stored by the console — asserted
+// after the mint scene.
+const TYPED_ADMIN_PAK = "brokkr_ADMINxx_TypedByOperatorNeverPersisted00";
+
+// Pause/resume (BROKKR-T-0322). PUT /agents/:id answers with the updated agent;
+// the modal reads back `status` so the pill flips without waiting for the 5s
+// fleet refetch. Method-aware key so it does not collide with any GET.
+const AGENT_PAUSED = { id: "1b9d6bcd", name: "prod-agent-01", status: "INACTIVE" };
+const PAUSE_MOCKS = {
+  "/fleet": FLEET,
+  "/agents/1b9d6bcd/target-state": TARGET_STATE,
+  "PUT /agents/1b9d6bcd": AGENT_PAUSED,
+};
+
 const SCENES = [
   { name: "overview", mocks: { "/fleet": FLEET, "/agent-events": EVENTS } },
   { name: "fleet", nav: "Fleet", mocks: { "/fleet": FLEET } },
@@ -103,11 +203,40 @@ const SCENES = [
     ] } } },
   { name: "telemetry", nav: "Telemetry", mocks: { "/agent-events": TELEM } },
   { name: "telemetry-modal", nav: "Telemetry", click: "Apply", mocks: { "/agent-events": TELEM } },
+  // Diagnostics request -> result (BROKKR-T-0301): open the agent modal, run a
+  // diagnostic, and screenshot the polled outcome. Three outcomes that must not
+  // look alike: a real collection, an empty-but-successful one, and a failure.
+  { name: "fleet-diagnostic", nav: "Fleet", click: "prod-agent-01", then_click: "Run diagnostic",
+    mocks: { ...DIAG_MOCKS, "/diagnostics/9f10ab22": DIAG_DONE } },
+  { name: "fleet-diagnostic-empty", nav: "Fleet", click: "prod-agent-01", then_click: "Run diagnostic",
+    mocks: { ...DIAG_MOCKS, "/diagnostics/9f10ab22": DIAG_EMPTY } },
+  { name: "fleet-diagnostic-error", nav: "Fleet", click: "prod-agent-01", then_click: "Run diagnostic",
+    mocks: { ...DIAG_MOCKS, "/diagnostics/9f10ab22": DIAG_ERROR } },
   // Scope selector (BROKKR-I-0032): selector visible with named PAKs...
   { name: "scope-selector", nav: "Fleet", mocks: { "/paks": PAKS, "/fleet": FLEET } },
   // ...and selecting a tenant narrows the fleet to its agents.
   { name: "fleet-scoped", nav: "Fleet", select: "team-payments",
     mocks: { "/paks": PAKS, "/fleet": FLEET, "/fleet?pak_id=1b9d6bcd-bbfd": FLEET_PAYMENTS } },
+  // Tenants (BROKKR-T-0318): list, empty state, the mint dialog, and the
+  // reveal-once panel. The last one is the whole point of the feature, so it is
+  // driven end to end rather than screenshotted mid-form.
+  // The agent modal's pause control, and the state after pausing.
+  { name: "fleet-pause", nav: "Fleet", click: "prod-agent-01", mocks: PAUSE_MOCKS },
+  { name: "fleet-paused", nav: "Fleet", click: "prod-agent-01",
+    fill: [["brokkr_\u2026", TYPED_ADMIN_PAK]], then_click: "Pause",
+    assert_no_stored: TYPED_ADMIN_PAK,
+    mocks: PAUSE_MOCKS },
+  { name: "tenants", nav: "Tenants", mocks: { "/generators": GENERATORS } },
+  { name: "tenants-empty", nav: "Tenants", mocks: { "/generators": [] } },
+  { name: "tenants-new", nav: "Tenants", click: "+ New tenant",
+    mocks: { "/generators": GENERATORS } },
+  { name: "tenants-minted", nav: "Tenants", click: "+ New tenant",
+    fill: [["acme-payments", "team-checkout"], ["brokkr_…", TYPED_ADMIN_PAK]],
+    then_click: "Create tenant",
+    // Asserts the credential-handling criterion a screenshot cannot: the typed
+    // admin PAK must appear nowhere in browser storage afterwards.
+    assert_no_stored: TYPED_ADMIN_PAK,
+    mocks: { "/generators": GENERATORS, "POST /generators": CREATED_GENERATOR } },
 ];
 
 // ---- driver --------------------------------------------------------------
@@ -122,7 +251,10 @@ page.on("console", (m) => m.type() === "error" && errs.push(`[console] ${m.text(
 page.on("pageerror", (e) => errs.push(`[pageerror] ${e.message}`));
 
 // seed a PAK so the fetch layer attaches auth (the mock ignores it).
-await page.addInitScript(() => localStorage.setItem("brokkr_pak", "brokkr_BRtest_e2e"));
+// No PAK is seeded: the route mocks below fulfil regardless of headers, so the
+// console needs no credential here. The old `localStorage["brokkr_pak"]` seed
+// was cosmetic even before that override was removed (BROKKR-T-0320) -- its own
+// comment conceded "the mock ignores it".
 
 // /metrics is top-level (not under /api/v1) and Prometheus text.
 await page.route("**/metrics", (route) =>
@@ -137,7 +269,14 @@ await page.route("**/api/v1/**", (route) => {
   // path. Trailing separators are stripped so URL-builder quirks can't dodge
   // a scoped fixture.
   const withQuery = (suffix + url.search).replace(/[&?]+$/, "");
-  const key = withQuery in MOCKS ? withQuery : suffix;
+  // Method-aware first (BROKKR-T-0318): `POST /generators` returns the created
+  // generator + its one-time PAK, while `GET /generators` returns the list.
+  // Keying on path alone cannot express both, and silently answering the POST
+  // with the list array made the mint look like it failed.
+  const method = route.request().method();
+  const key = [`${method} ${withQuery}`, `${method} ${suffix}`, withQuery, suffix].find(
+    (k) => k in MOCKS
+  ) ?? suffix;
   // The scope selector fetches /paks on every scene; scenes that don't care
   // get an empty tenant list (selector hidden) instead of 404 noise.
   if (!(key in MOCKS) && suffix === "/paks") {
@@ -157,13 +296,63 @@ await page.route("**/api/v1/**", (route) => {
   });
 });
 
+/// The page header's title, or "" if it is not rendered yet.
+async function headerTitle() {
+  return (
+    (await page.locator(".cl-page-header__title").first().textContent().catch(() => "")) ?? ""
+  ).trim();
+}
+
+/// Click a sidebar nav item and *verify* the view changed, retrying if it did
+/// not.
+///
+/// A fixed settle delay cannot be made correct here. Leptos renders the sidebar
+/// before its click handlers respond, so a click in that window is accepted by
+/// the DOM and silently does nothing — and how long the window lasts depends on
+/// machine load, which in a 23-scene run with 2x full-page screenshots varies
+/// by seconds. The original harness clicked once, swallowed every failure with
+/// `.catch(() => {})`, and screenshotted whatever was on screen; most scenes
+/// were quietly capturing the default Overview view.
+///
+/// Clicking until the header actually reads the target is deterministic
+/// regardless of load, and fails loudly when the view genuinely does not exist.
+async function navigateTo(scene, label) {
+  for (let attempt = 1; attempt <= 8; attempt++) {
+    await page
+      .getByText(label, { exact: true })
+      .first()
+      .click({ timeout: 5000 })
+      .catch(() => {});
+    await page.waitForTimeout(300);
+    if ((await headerTitle()) === label) {
+      // Let the view's resources resolve before the caller screenshots.
+      await page.waitForTimeout(700);
+      return true;
+    }
+  }
+  errs.push(
+    `[nav] ${scene}: clicked "${label}" 8x but the header still reads "${await headerTitle()}" — screenshot would be of the wrong view`
+  );
+  return false;
+}
+
 for (const s of SCENES) {
   MOCKS = s.mocks || {};
   await page.goto(BASE, { waitUntil: "domcontentloaded" });
+  // Wait for the WASM app to mount before interacting. `domcontentloaded` fires
+  // long before Leptos has rendered anything, so clicking straight after it was
+  // a race: the nav item did not exist yet, the click was swallowed by the
+  // `.catch()` below, and the scene screenshotted whatever view was default.
+  // That produced confident-looking screenshots of the wrong page.
+  await page
+    .getByText("control plane", { exact: true })
+    .waitFor({ state: "visible", timeout: 15000 })
+    .catch(() => errs.push(`[mount] ${s.name}: app never rendered`));
   if (s.nav) {
-    await page.getByText(s.nav, { exact: true }).first().click().catch(() => {});
+    await navigateTo(s.name, s.nav);
+  } else {
+    await page.waitForTimeout(800);
   }
-  await page.waitForTimeout(800);
   if (s.click) {
     await page.getByText(s.click, { exact: true }).first().click().catch(() => {});
     await page.waitForTimeout(500);
@@ -172,9 +361,51 @@ for (const s of SCENES) {
     await page.locator("select").last().selectOption({ label: s.select }).catch(() => {});
     await page.waitForTimeout(500);
   }
+  // Type into fields by placeholder (BROKKR-T-0318's mint dialog). Aurora's
+  // inputs carry no name/id, so the placeholder is the stable handle.
+  if (s.fill) {
+    for (const [placeholder, value] of s.fill) {
+      await page
+        .getByPlaceholder(placeholder)
+        .first()
+        .fill(value)
+        .catch(() => {});
+    }
+    await page.waitForTimeout(200);
+  }
+  // A second click *inside* whatever the first one opened (the modal's "Run
+  // diagnostic" button). Substring match: the button label carries a glyph.
+  if (s.then_click) {
+    await page.getByText(s.then_click).first().click().catch(() => {});
+    await page.waitForTimeout(900);
+  }
   await page.waitForTimeout(700);
   await page.screenshot({ path: `${OUT}/${s.name}.png`, fullPage: true });
   console.log(`shot: ${s.name}`);
+
+  // Behavioural check, not a pixel one: a secret typed into the page must not
+  // survive in localStorage or sessionStorage. A screenshot can show the reveal
+  // panel looking right while the credential is quietly persisted, so this is
+  // asserted rather than eyeballed (BROKKR-T-0318).
+  if (s.assert_no_stored) {
+    const leaked = await page.evaluate((needle) => {
+      const hits = [];
+      for (const store of [localStorage, sessionStorage]) {
+        for (let i = 0; i < store.length; i++) {
+          const k = store.key(i);
+          if ((store.getItem(k) ?? "").includes(needle)) hits.push(k);
+        }
+      }
+      return hits;
+    }, s.assert_no_stored);
+    if (leaked.length) {
+      errs.push(
+        `[assert] ${s.name}: the supplied admin PAK was persisted under ${leaked.join(", ")}`
+      );
+    } else {
+      console.log(`  assert: admin PAK not persisted ✓`);
+    }
+  }
   // The selected scope persists in localStorage; clear it so scenes stay independent.
   await page.evaluate(() => localStorage.removeItem("brokkr_scope"));
 }

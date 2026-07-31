@@ -3,9 +3,11 @@
 This page gets you from zero to a working Brokkr deployment fast, so you can decide whether it fits your needs. It offers two paths — pick one:
 
 - **[Path A — Fastest look](#path-a--fastest-look-angreal-local-up)** — one command builds the stack from source and bundles its own Kubernetes (k3s); nothing to install but Docker.
-- **[Path B — Realistic evaluation](#path-b--realistic-evaluation-helm-on-a-local-cluster)** — Helm installs the published `v0.8.0` images onto a local cluster you bring yourself (kind or k3d); no source build.
+- **[Path B — Realistic evaluation](#path-b--realistic-evaluation-helm-on-a-local-cluster)** — Helm installs the published images onto a local cluster you bring yourself (kind or k3d); no source build.
 
 Both paths end with an agent reconciling a real Kubernetes resource onto a cluster.
+
+Along the way you will meet Brokkr's five nouns — **generator**, **agent**, **stack**, **deployment object**, and **target**. You can follow either path without knowing them, since every command below says what it is doing, but if you would rather have the model first, read [Core Concepts](../explanation/core-concepts.md) — it takes a few minutes and makes the rest of the book easier to navigate.
 
 ---
 
@@ -112,7 +114,7 @@ curl -s -X POST "http://localhost:3000/api/v1/stacks/$STACK_ID/deployment-object
   -d '{"yaml_content": "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: brokkr-evaluate", "is_deletion_marker": false}'
 ```
 
-The agent polls the broker on its next cycle and applies the namespace. Point `kubectl` at the bundled k3s cluster (its host kubeconfig is written to `/tmp/brokkr-keys/`) and verify:
+The agent polls the broker on its next cycle and applies the namespace — allow one full poll cycle (about 10 seconds in this stack). Point `kubectl` at the bundled k3s cluster (its host kubeconfig is written to `/tmp/brokkr-keys/`) and verify:
 
 ```bash
 export KUBECONFIG=/tmp/brokkr-keys/kubeconfig.local.yaml
@@ -138,7 +140,7 @@ angreal local down --hard   # stop and remove volumes
 
 ## Path B — Realistic evaluation (Helm on a local cluster)
 
-This path installs the **published `v0.8.0` images** with Helm onto a local Kubernetes cluster — no source build. It mirrors a real install closely enough to evaluate operational behavior.
+This path installs the **published images** with Helm onto a local Kubernetes cluster — no source build. It mirrors a real install closely enough to evaluate operational behavior.
 
 ### Prerequisites
 
@@ -173,7 +175,6 @@ Install the broker chart with bundled PostgreSQL. The chart pulls the published 
 
 ```bash
 helm install brokkr-broker oci://ghcr.io/colliery-io/charts/brokkr-broker \
-  --version 0.8.0 \
   --set postgresql.enabled=true \
   --wait
 
@@ -212,13 +213,14 @@ echo "$AGENT_PAK"   # shown only once
 
 ### 5. Install the agent
 
-Install the agent chart with the PAK from the previous step.
+Install the agent chart with the PAK from the previous step. The `broker.agentName` and `broker.clusterName` values must exactly match the agent you created in step 4 (`eval-agent` / `evaluation`) — at startup the agent looks up its own registration by that pair, and a mismatch leaves the pod crashlooping with "Agent not found".
 
 ```bash
 helm install brokkr-agent oci://ghcr.io/colliery-io/charts/brokkr-agent \
-  --version 0.8.0 \
   --set broker.url=http://brokkr-broker:3000 \
   --set broker.pak="$AGENT_PAK" \
+  --set broker.agentName=eval-agent \
+  --set broker.clusterName=evaluation \
   --wait
 
 # Visible result: the agent pod is Running and the agent has registered
@@ -275,7 +277,7 @@ curl -s -X POST "http://localhost:3000/api/v1/stacks/$STACK_ID/deployment-object
   -d '{"yaml_content": "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: brokkr-evaluate", "is_deletion_marker": false}'
 ```
 
-After the agent's next poll, the namespace appears on your cluster:
+After the agent's next poll, the namespace appears on your cluster — allow one full poll cycle (the chart's default polling interval is 30 seconds):
 
 ```bash
 # Visible result: the namespace your agent reconciled

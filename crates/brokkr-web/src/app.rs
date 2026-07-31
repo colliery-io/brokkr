@@ -1,7 +1,12 @@
 //! Operator-console app shell (slice 1a): Aurora `AppShell` with the fixed
 //! sidebar (brand + live status + nav + footer) and a per-view header carrying
-//! a live clock + Live/Paused toggle. Views are placeholders; live data lands in
-//! the later slices. Styled only via Aurora tokens (`var(--*)` / `token::*`).
+//! a live clock. Styled only via Aurora tokens (`var(--*)` / `token::*`).
+//!
+//! The header once carried a Live/Paused `SegmentedControl`. It drove nothing —
+//! no view ever read the signal — and in a deployment tool a global "Paused"
+//! reads as *the fleet is paused*, which it never was. Removed in
+//! BROKKR-T-0322; pausing is now a real, per-agent, admin-authorized action in
+//! the Fleet view's agent modal, where it has a target and a credential.
 
 use aurora_leptos::components::*;
 use aurora_leptos::tokens::token;
@@ -20,8 +25,14 @@ const NAV: &[(&str, &[(&str, &str)])] = &[
             ("telemetry", "Telemetry"),
         ],
     ),
-    ("Operations", &[("jobs", "Work orders"), ("webhooks", "Webhooks")]),
-    ("System", &[("system", "Broker health")]),
+    (
+        "Operations",
+        &[("jobs", "Work orders"), ("webhooks", "Webhooks")],
+    ),
+    (
+        "System",
+        &[("system", "Broker health"), ("tenants", "Tenants")],
+    ),
 ];
 
 /// (title, subtitle) for a view id.
@@ -34,6 +45,7 @@ fn meta(id: &str) -> (&'static str, &'static str) {
         "jobs" => ("Work orders", "active · history"),
         "webhooks" => ("Webhooks", "subscriptions · deliveries"),
         "system" => ("Broker health", "metrics · connections"),
+        "tenants" => ("Tenants", "generators · PAK minting"),
         _ => ("Brokkr", ""),
     }
 }
@@ -62,7 +74,9 @@ const SCOPE_STORAGE_KEY: &str = "brokkr_scope";
 
 fn load_scope() -> Option<String> {
     let ls = web_sys::window()?.local_storage().ok()??;
-    ls.get_item(SCOPE_STORAGE_KEY).ok()?.filter(|s| !s.is_empty())
+    ls.get_item(SCOPE_STORAGE_KEY)
+        .ok()?
+        .filter(|s| !s.is_empty())
 }
 
 fn save_scope(scope: &Option<String>) {
@@ -70,16 +84,18 @@ fn save_scope(scope: &Option<String>) {
         return;
     };
     match scope {
-        Some(id) => { let _ = ls.set_item(SCOPE_STORAGE_KEY, id); }
-        None => { let _ = ls.remove_item(SCOPE_STORAGE_KEY); }
+        Some(id) => {
+            let _ = ls.set_item(SCOPE_STORAGE_KEY, id);
+        }
+        None => {
+            let _ = ls.remove_item(SCOPE_STORAGE_KEY);
+        }
     }
 }
 
 #[component]
 pub fn App() -> impl IntoView {
     let route = RwSignal::new("overview");
-    // Live/Paused toggle (drives the live engine in a later slice).
-    let live = RwSignal::new(String::from("Live"));
     // Wall-clock, ticking each second.
     let clock = RwSignal::new(now_hms());
     set_interval(
@@ -97,7 +113,7 @@ pub fn App() -> impl IntoView {
     view! {
         <AuroraStyles/>
         <AppShell navbar=Box::new(move || view! { <Sidebar route=route /> }.into_any())>
-            <Main route=route live=live clock=clock />
+            <Main route=route clock=clock />
         </AppShell>
         <crate::components::Toaster/>
     }
@@ -194,7 +210,7 @@ fn Sidebar(route: RwSignal<&'static str>) -> impl IntoView {
 #[component]
 fn ScopeSelector() -> impl IntoView {
     let scope = use_scope();
-    let paks = LocalResource::new(|| crate::api::paks());
+    let paks = LocalResource::new(crate::api::paks);
 
     view! {
         {move || match paks.get() {
@@ -243,11 +259,7 @@ fn ScopeSelector() -> impl IntoView {
 }
 
 #[component]
-fn Main(
-    route: RwSignal<&'static str>,
-    live: RwSignal<String>,
-    clock: RwSignal<String>,
-) -> impl IntoView {
+fn Main(route: RwSignal<&'static str>, clock: RwSignal<String>) -> impl IntoView {
     view! {
         <div style="padding:20px 26px;max-width:1500px;margin:0 auto;">
             {move || {
@@ -259,10 +271,6 @@ fn Main(
                         right=Box::new(move || {
                             view! {
                                 <div style="display:flex;align-items:center;gap:12px;">
-                                    <SegmentedControl
-                                        value=live
-                                        options=vec![String::from("Live"), String::from("Paused")]
-                                    />
                                     <span style="font:12px var(--font-mono);color:var(--muted);\
                                                  font-variant-numeric:tabular-nums;">
                                         {move || clock.get()}
@@ -283,6 +291,7 @@ fn Main(
                     "webhooks" => view! { <crate::views::webhooks::WebhooksView /> }.into_any(),
                     "deployments" => view! { <crate::views::deployments::DeploymentsView /> }.into_any(),
                     "telemetry" => view! { <crate::views::telemetry::TelemetryView /> }.into_any(),
+                    "tenants" => view! { <crate::views::tenants::TenantsView /> }.into_any(),
                     other => {
                         let (title, _) = meta(other);
                         view! {

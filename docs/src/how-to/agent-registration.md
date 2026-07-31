@@ -160,9 +160,22 @@ curl -s -X POST "http://localhost:3000/api/v1/agents" \
 
 An unknown generator UUID rejects the whole request with `400 invalid_generator_id`.
 
+The broker CLI creates agents with the same semantics — system registration plus whatever you name — so a bootstrap script does not have to make a second call:
+
+```bash
+brokkr-broker create agent \
+  --name prod-1 \
+  --cluster-name us-east-1 \
+  --generator-ids a1b2c3d4-e5f6-7890-abcd-ef1234567890,b2c3d4e5-f6a7-8901-bcde-f12345678901
+```
+
+Every UUID is validated before anything is written, so a typo fails the command rather than leaving a half-registered agent behind.
+
 ## System Generator Scope
 
-The system generator (`__system__`) is provisioned at broker startup, and **every** agent is auto-registered with it at creation. It carries fleet- and system-wide stacks that should reach all agents, so an agent with an empty `generator_ids` still serves those stacks. The system generator is excluded from the public `GET /generators` listing.
+The system generator (`__system__`) is provisioned at broker startup, and **every** agent is auto-registered with it at creation — through `POST /agents` and `brokkr-broker create agent` alike. It carries fleet- and system-wide stacks that should reach all agents, so an agent with an empty `generator_ids` still serves those stacks. The system generator is excluded from the public `GET /generators` listing.
+
+The one gap: if you create an agent before the broker has ever started, there is no system generator to register it with. The CLI warns and creates the agent anyway. Start the broker once to provision the system generator, then register the agent with it explicitly.
 
 The system generator is **not** the admin generator — the admin generator is a separate entity tied to the admin role/PAK, and agents are **not** auto-registered with it.
 
@@ -179,7 +192,7 @@ To resolve:
 2. Register the agent with that generator (see [Register or Deregister an Existing Agent](#register-or-deregister-an-existing-agent-admin)).
 3. Retry the target mutation.
 
-What registration does **not** change: the read path `GET /agents/{id}/target-state` is unchanged. An agent's served-stack set is still the **union** of explicit `agent_targets`, label matches, and annotation matches. Registration only gates whether an explicit target can be **created** — it does not alter the read-time union, and existing targets remain valid. (Migration 23 back-fills registrations from pre-existing `agent_targets`, so upgrades do not break current targeting.)
+What registration controls on the read path: `GET /agents/{id}/target-state` serves the **union** of explicit `agent_targets`, label matches, and annotation matches — and the label and annotation legs are limited to stacks whose owning generator the agent is registered with. So labelling a stack cannot pull it onto an agent that never registered with its generator; registration decides which generators an agent hears from, and labels select among their stacks. Explicit targets are not filtered at read time because registration was checked when they were created, and existing targets remain valid. (Migration 23 back-fills registrations from pre-existing `agent_targets`, so upgrades do not break current targeting.)
 
 ## A Note on the Two Isolation Layers
 

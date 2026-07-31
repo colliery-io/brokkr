@@ -21,6 +21,7 @@ Manage applications across multiple Kubernetes clusters from a single control pl
 ## Explore Brokkr
 
 - **[Getting Started](./getting-started/README.md)** — Install, configure, and get Brokkr running
+- **[Tutorials](./tutorials/README.md)** — Learn Brokkr by deploying real workloads
 - **[How-To Guides](./how-to/README.md)** — Practical guides for common tasks
 - **[Explanation](./explanation/README.md)** — Architecture, concepts, and design decisions
 - **[Reference](./reference/README.md)** — API reference and technical details
@@ -41,3 +42,5 @@ Manage applications across multiple Kubernetes clusters from a single control pl
 ## Working with Brokkr Day to Day
 
 Once Brokkr is running, the recommended everyday workflow is the **`brokkr` CLI**: point it at a folder of manifests and run [`brokkr apply`](./how-to/cli-apply.md) — it's idempotent and CI-safe. For programmatic use, the [SDKs](./how-to/sdks/README.md) (Rust, Python, TypeScript) expose the same operations. The raw [REST API](./reference/api/README.md) sits underneath both.
+
+For watching rather than changing, the broker also serves a read-only **Operator Console** at its own root URL — a browser view of the fleet, deployments, telemetry, work orders, and broker health that needs no credential of its own. Because it authenticates itself, anyone who can reach the broker's port can read it: network reach is the console's only boundary, which is worth knowing before you expose that port. See the [Security Model](./explanation/security-model.md#read-only-console-authentication-the-ui-pak).

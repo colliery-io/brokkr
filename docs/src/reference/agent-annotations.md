@@ -22,7 +22,7 @@ These annotations are set on the top-level objects the agent applies (Deployment
 
 | Key | Kind | Where it must be | Effect |
 |-----|------|------------------|--------|
-| `brokkr.io/deployment-object-id=<uuid>` | **Label** | On pods | Diagnostics (`cli/commands.rs`) discover pods by this label selector, and deployment health honors it as a manual override. Health otherwise attributes pods automatically via their ownerReference chain (`deployment_health.rs`); diagnostics still require the label — without it they return empty results |
+| `brokkr.io/deployment-object-id=<uuid>` | **Label** (or annotation) | On pods | An optional manual override. Deployment health and diagnostics both attribute pods to a deployment object automatically — checking the pod for this key directly, then walking its ownerReference chain up to the owning workload — so pods created by a Deployment, ReplicaSet, StatefulSet, or Job need no marking at all. Set it explicitly only to attribute a pod that the ownership chain cannot reach |
 | `k8s.brokkr.io/stack=<stack-uuid>` | Annotation | On pods (for log streaming); on any object (for kube-event forwarding) | Marks the pod/object as belonging to a stack |
 | `brokkr.io/stream-logs: "true"` | Annotation | On pods | Opts the pod into log streaming. Both this and the stack annotation must be present on the pod itself (`pod_logs.rs`) |
 

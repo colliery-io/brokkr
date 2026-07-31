@@ -14,7 +14,7 @@ use crate::k8s::api::dynamic_api;
 use crate::k8s::objects::DEPLOYMENT_OBJECT_ID_LABEL;
 use chrono::{DateTime, Utc};
 use k8s_openapi::api::core::v1::Pod;
-use k8s_openapi::apimachinery::pkg::apis::meta::v1::OwnerReference;
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::{ObjectMeta, OwnerReference};
 use kube::api::{DynamicObject, GroupVersionKind, ListParams};
 use kube::discovery::Discovery;
 use kube::{Api, Client};
@@ -248,17 +248,7 @@ impl HealthChecker {
     }
 
     /// Discovers the pods belonging to each requested deployment object in a
-    /// single cluster-wide pass. A pod is attributed to a deployment object
-    /// when, in order:
-    ///
-    /// 1. it carries the `brokkr.io/deployment-object-id` **label** (manual
-    ///    opt-in, the historical mechanism),
-    /// 2. it carries the key as an annotation directly (bare `Pod` manifests
-    ///    applied by Brokkr are stamped with it),
-    /// 3. an object in its ownerReference chain carries the annotation —
-    ///    pods created by controllers (Deployment→ReplicaSet→Pod, Job→Pod,
-    ///    StatefulSet/DaemonSet→Pod) resolve to the Brokkr-applied top-level
-    ///    object (BROKKR-T-0191).
+    /// single cluster-wide pass, using the shared [`PodAttributor`] strategy.
     async fn discover_pods(
         &self,
         deployment_object_ids: &[Uuid],
@@ -270,99 +260,8 @@ impl HealthChecker {
         };
         let pods = pods_api.list(&ListParams::default()).await?;
 
-        // Discovery is needed only when owner chains must be walked; build it
-        // lazily so clusters where every pod is directly attributable skip
-        // the cost.
-        let mut discovery: Option<Discovery> = None;
-        let mut owner_cache: HashMap<OwnerKey, Option<Uuid>> = HashMap::new();
-        let mut grouped: HashMap<Uuid, Vec<Pod>> = HashMap::new();
-
-        for pod in pods {
-            let doid = match pod_direct_doid(&pod) {
-                Some(id) => Some(id),
-                None => {
-                    self.resolve_owner_doid(&pod, &mut discovery, &mut owner_cache)
-                        .await
-                }
-            };
-            if let Some(id) = doid
-                && wanted.contains(&id)
-            {
-                grouped.entry(id).or_default().push(pod);
-            }
-        }
-
-        Ok(grouped)
-    }
-
-    /// Walks a pod's controller ownerReference chain upward until an object
-    /// carrying the deployment-object annotation is found, the chain ends,
-    /// or `MAX_OWNER_DEPTH` is reached. Results (including misses) are
-    /// memoized per owner so pods sharing a ReplicaSet cost one lookup.
-    async fn resolve_owner_doid(
-        &self,
-        pod: &Pod,
-        discovery: &mut Option<Discovery>,
-        cache: &mut HashMap<OwnerKey, Option<Uuid>>,
-    ) -> Option<Uuid> {
-        let namespace = pod.metadata.namespace.clone()?;
-        let mut owner = controller_owner(pod.metadata.owner_references.as_deref())?.clone();
-        let mut visited: Vec<OwnerKey> = Vec::new();
-        let mut result: Option<Uuid> = None;
-
-        for _ in 0..MAX_OWNER_DEPTH {
-            let key: OwnerKey = (
-                namespace.clone(),
-                owner.api_version.clone(),
-                owner.kind.clone(),
-                owner.name.clone(),
-            );
-            if let Some(cached) = cache.get(&key) {
-                result = *cached;
-                break;
-            }
-            visited.push(key);
-
-            if discovery.is_none() {
-                match Discovery::new(self.k8s_client.clone()).run().await {
-                    Ok(d) => *discovery = Some(d),
-                    Err(e) => {
-                        warn!("Discovery failed during health pod attribution: {}", e);
-                        break;
-                    }
-                }
-            }
-            let gvk = gvk_of(&owner.api_version, &owner.kind);
-            let Some((ar, caps)) = discovery.as_ref().and_then(|d| d.resolve_gvk(&gvk)) else {
-                break;
-            };
-            let api: Api<DynamicObject> =
-                dynamic_api(ar, caps, self.k8s_client.clone(), Some(&namespace), false);
-            let obj = match api.get_opt(&owner.name).await {
-                Ok(Some(o)) => o,
-                Ok(None) => break,
-                Err(e) => {
-                    warn!(
-                        "Failed to fetch owner {}/{} '{}' during health pod attribution: {}",
-                        owner.api_version, owner.kind, owner.name, e
-                    );
-                    break;
-                }
-            };
-            if let Some(id) = annotations_doid(obj.metadata.annotations.as_ref()) {
-                result = Some(id);
-                break;
-            }
-            match controller_owner(obj.metadata.owner_references.as_deref()) {
-                Some(next) => owner = next.clone(),
-                None => break,
-            }
-        }
-
-        for key in visited {
-            cache.insert(key, result);
-        }
-        result
+        let mut attributor = PodAttributor::new(self.k8s_client.clone());
+        Ok(attributor.group_by_deployment_object(pods, &wanted).await)
     }
 
     /// Checks health for multiple deployment objects with one cluster-wide
@@ -396,6 +295,183 @@ impl HealthChecker {
             })
             .collect()
     }
+}
+
+/// Attributes pods to the Brokkr deployment object that produced them.
+///
+/// A pod is attributed to a deployment object when, in order:
+///
+/// 1. it carries the `brokkr.io/deployment-object-id` **label** (manual
+///    opt-in, the historical mechanism),
+/// 2. it carries the key as an **annotation** directly (bare `Pod` manifests
+///    applied by Brokkr are stamped with it),
+/// 3. an object in its ownerReference chain carries the annotation — pods
+///    created by controllers (Deployment→ReplicaSet→Pod, Job→Pod,
+///    StatefulSet/DaemonSet→Pod) resolve to the Brokkr-applied top-level
+///    object (BROKKR-T-0191).
+///
+/// Step 3 is the case that matters in practice: Brokkr stamps the key as an
+/// annotation on the top-level applied object only and never injects it into
+/// pod templates, so neither a label selector nor a direct annotation match
+/// finds the pods of a Deployment/StatefulSet/Job. Both continuous health
+/// checking and on-demand diagnostics resolve pods through this type so the
+/// two always agree on what belongs to a deployment object (BROKKR-T-0299).
+///
+/// One instance corresponds to one discovery pass: API discovery is built
+/// lazily on first owner walk and owner-chain results (including misses) are
+/// memoized, so pods sharing a ReplicaSet cost a single lookup.
+pub struct PodAttributor {
+    fetcher: KubeOwnerFetcher,
+    cache: HashMap<OwnerKey, Option<Uuid>>,
+}
+
+impl PodAttributor {
+    /// Creates an attributor bound to a Kubernetes client.
+    pub fn new(client: Client) -> Self {
+        Self {
+            fetcher: KubeOwnerFetcher {
+                client,
+                discovery: None,
+            },
+            cache: HashMap::new(),
+        }
+    }
+
+    /// Resolves the deployment object a single pod belongs to, if any.
+    pub async fn deployment_object_of(&mut self, pod: &Pod) -> Option<Uuid> {
+        match pod_direct_doid(pod) {
+            Some(id) => Some(id),
+            None => resolve_owner_doid(&mut self.fetcher, pod, &mut self.cache).await,
+        }
+    }
+
+    /// Groups pods by the deployment object they belong to, keeping only the
+    /// ids in `wanted`. Pods that resolve to nothing are dropped.
+    pub async fn group_by_deployment_object(
+        &mut self,
+        pods: impl IntoIterator<Item = Pod>,
+        wanted: &HashSet<Uuid>,
+    ) -> HashMap<Uuid, Vec<Pod>> {
+        let mut grouped: HashMap<Uuid, Vec<Pod>> = HashMap::new();
+        for pod in pods {
+            if let Some(id) = self.deployment_object_of(&pod).await
+                && wanted.contains(&id)
+            {
+                grouped.entry(id).or_default().push(pod);
+            }
+        }
+        grouped
+    }
+
+    /// Returns the subset of `pods` belonging to one deployment object.
+    pub async fn pods_for(
+        &mut self,
+        pods: impl IntoIterator<Item = Pod>,
+        deployment_object_id: Uuid,
+    ) -> Vec<Pod> {
+        let wanted: HashSet<Uuid> = HashSet::from([deployment_object_id]);
+        self.group_by_deployment_object(pods, &wanted)
+            .await
+            .remove(&deployment_object_id)
+            .unwrap_or_default()
+    }
+}
+
+/// Looks up the metadata of an ownerReference target.
+///
+/// Abstracted from the chain walk purely so the walk can be unit-tested
+/// without a cluster; the only production implementation is
+/// [`KubeOwnerFetcher`].
+trait OwnerFetcher {
+    /// Returns the owner's metadata, or `None` when it cannot be resolved
+    /// (discovery failure, unknown GVK, object deleted, API error). `None`
+    /// stops the walk.
+    async fn fetch(&mut self, namespace: &str, owner: &OwnerReference) -> Option<ObjectMeta>;
+}
+
+/// Fetches owner objects from the API server via dynamic discovery.
+struct KubeOwnerFetcher {
+    client: Client,
+    /// Built lazily: clusters where every pod is directly attributable never
+    /// pay the cost of a discovery pass.
+    discovery: Option<Discovery>,
+}
+
+impl OwnerFetcher for KubeOwnerFetcher {
+    async fn fetch(&mut self, namespace: &str, owner: &OwnerReference) -> Option<ObjectMeta> {
+        if self.discovery.is_none() {
+            match Discovery::new(self.client.clone()).run().await {
+                Ok(d) => self.discovery = Some(d),
+                Err(e) => {
+                    warn!("Discovery failed during pod attribution: {}", e);
+                    return None;
+                }
+            }
+        }
+
+        let gvk = gvk_of(&owner.api_version, &owner.kind);
+        let (ar, caps) = self.discovery.as_ref()?.resolve_gvk(&gvk)?;
+        let api: Api<DynamicObject> =
+            dynamic_api(ar, caps, self.client.clone(), Some(namespace), false);
+
+        match api.get_opt(&owner.name).await {
+            Ok(Some(obj)) => Some(obj.metadata),
+            Ok(None) => None,
+            Err(e) => {
+                warn!(
+                    "Failed to fetch owner {}/{} '{}' during pod attribution: {}",
+                    owner.api_version, owner.kind, owner.name, e
+                );
+                None
+            }
+        }
+    }
+}
+
+/// Walks a pod's controller ownerReference chain upward until an object
+/// carrying the deployment-object annotation is found, the chain ends, or
+/// `MAX_OWNER_DEPTH` is reached. Results (including misses) are memoized per
+/// owner in `cache`.
+async fn resolve_owner_doid<F: OwnerFetcher>(
+    fetcher: &mut F,
+    pod: &Pod,
+    cache: &mut HashMap<OwnerKey, Option<Uuid>>,
+) -> Option<Uuid> {
+    let namespace = pod.metadata.namespace.clone()?;
+    let mut owner = controller_owner(pod.metadata.owner_references.as_deref())?.clone();
+    let mut visited: Vec<OwnerKey> = Vec::new();
+    let mut result: Option<Uuid> = None;
+
+    for _ in 0..MAX_OWNER_DEPTH {
+        let key: OwnerKey = (
+            namespace.clone(),
+            owner.api_version.clone(),
+            owner.kind.clone(),
+            owner.name.clone(),
+        );
+        if let Some(cached) = cache.get(&key) {
+            result = *cached;
+            break;
+        }
+        visited.push(key);
+
+        let Some(meta) = fetcher.fetch(&namespace, &owner).await else {
+            break;
+        };
+        if let Some(id) = annotations_doid(meta.annotations.as_ref()) {
+            result = Some(id);
+            break;
+        }
+        match controller_owner(meta.owner_references.as_deref()) {
+            Some(next) => owner = next.clone(),
+            None => break,
+        }
+    }
+
+    for key in visited {
+        cache.insert(key, result);
+    }
+    result
 }
 
 /// Extracts the deployment-object id directly carried by a pod: the
@@ -547,6 +623,189 @@ mod tests {
         assert_eq!(controller_owner(Some(&refs)).unwrap().name, "plain");
         assert!(controller_owner(None).is_none());
         assert!(controller_owner(Some(&[])).is_none());
+    }
+
+    /// In-memory stand-in for the API server, keyed by (kind, name). The
+    /// real [`KubeOwnerFetcher`] needs a live cluster, so the chain walk is
+    /// exercised against this instead; `KubeOwnerFetcher` itself is covered
+    /// by the integration suite.
+    #[derive(Default)]
+    struct FakeOwnerFetcher {
+        objects: HashMap<(String, String), ObjectMeta>,
+        fetches: usize,
+    }
+
+    impl FakeOwnerFetcher {
+        fn with(mut self, kind: &str, name: &str, meta: ObjectMeta) -> Self {
+            self.objects
+                .insert((kind.to_string(), name.to_string()), meta);
+            self
+        }
+    }
+
+    impl OwnerFetcher for FakeOwnerFetcher {
+        async fn fetch(&mut self, _namespace: &str, owner: &OwnerReference) -> Option<ObjectMeta> {
+            self.fetches += 1;
+            self.objects
+                .get(&(owner.kind.clone(), owner.name.clone()))
+                .cloned()
+        }
+    }
+
+    fn owner_ref(kind: &str, name: &str) -> OwnerReference {
+        OwnerReference {
+            api_version: "apps/v1".into(),
+            kind: kind.into(),
+            name: name.into(),
+            uid: format!("uid-{}", name),
+            controller: Some(true),
+            ..Default::default()
+        }
+    }
+
+    fn meta_with(annotation: Option<Uuid>, owner: Option<OwnerReference>) -> ObjectMeta {
+        ObjectMeta {
+            annotations: annotation.map(|id| {
+                let mut a = BTreeMap::new();
+                a.insert(DEPLOYMENT_OBJECT_ID_LABEL.to_string(), id.to_string());
+                a
+            }),
+            owner_references: owner.map(|o| vec![o]),
+            ..Default::default()
+        }
+    }
+
+    /// Pod → ReplicaSet → Deployment, where the pod carries neither the
+    /// label nor the annotation (the shape Brokkr actually produces: only
+    /// the top-level applied Deployment is stamped).
+    fn owned_pod(namespace: &str, name: &str, replicaset: &str) -> Pod {
+        let mut pod = Pod::default();
+        pod.metadata.name = Some(name.to_string());
+        pod.metadata.namespace = Some(namespace.to_string());
+        pod.metadata.owner_references = Some(vec![owner_ref("ReplicaSet", replicaset)]);
+        pod
+    }
+
+    #[tokio::test]
+    async fn test_owner_chain_resolves_deployment_replicaset_pod() {
+        let id = Uuid::new_v4();
+        let pod = owned_pod("prod", "web-7d9-abcde", "web-7d9");
+
+        // The pod itself is unattributable — this is the case the label
+        // selector used to miss entirely.
+        assert_eq!(pod_direct_doid(&pod), None);
+
+        let mut fetcher = FakeOwnerFetcher::default()
+            .with(
+                "ReplicaSet",
+                "web-7d9",
+                meta_with(None, Some(owner_ref("Deployment", "web"))),
+            )
+            .with("Deployment", "web", meta_with(Some(id), None));
+        let mut cache = HashMap::new();
+
+        assert_eq!(
+            resolve_owner_doid(&mut fetcher, &pod, &mut cache).await,
+            Some(id)
+        );
+        assert_eq!(fetcher.fetches, 2, "walked ReplicaSet then Deployment");
+    }
+
+    #[tokio::test]
+    async fn test_owner_chain_memoizes_shared_replicaset() {
+        let id = Uuid::new_v4();
+        let mut fetcher = FakeOwnerFetcher::default()
+            .with(
+                "ReplicaSet",
+                "web-7d9",
+                meta_with(None, Some(owner_ref("Deployment", "web"))),
+            )
+            .with("Deployment", "web", meta_with(Some(id), None));
+        let mut cache = HashMap::new();
+
+        let first = owned_pod("prod", "web-7d9-aaaaa", "web-7d9");
+        let second = owned_pod("prod", "web-7d9-bbbbb", "web-7d9");
+        assert_eq!(
+            resolve_owner_doid(&mut fetcher, &first, &mut cache).await,
+            Some(id)
+        );
+        assert_eq!(
+            resolve_owner_doid(&mut fetcher, &second, &mut cache).await,
+            Some(id)
+        );
+        assert_eq!(
+            fetcher.fetches, 2,
+            "the second pod must be served from the owner cache"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_owner_chain_misses_are_cached_and_bounded() {
+        // An unstamped chain resolves to None, and the miss is memoized so a
+        // sibling pod does not re-walk it.
+        let mut fetcher = FakeOwnerFetcher::default().with(
+            "ReplicaSet",
+            "other-1",
+            meta_with(None, Some(owner_ref("Deployment", "other"))),
+        );
+        // "Deployment/other" is deliberately absent: the fetch returns None
+        // and the walk stops.
+        let mut cache = HashMap::new();
+        let pod = owned_pod("prod", "other-1-aaaaa", "other-1");
+        assert_eq!(
+            resolve_owner_doid(&mut fetcher, &pod, &mut cache).await,
+            None
+        );
+        let before = fetcher.fetches;
+        let sibling = owned_pod("prod", "other-1-bbbbb", "other-1");
+        assert_eq!(
+            resolve_owner_doid(&mut fetcher, &sibling, &mut cache).await,
+            None
+        );
+        assert_eq!(fetcher.fetches, before, "misses are cached too");
+    }
+
+    #[tokio::test]
+    async fn test_owner_chain_stops_at_max_depth() {
+        // A self-referential chain must terminate rather than loop forever.
+        let mut fetcher = FakeOwnerFetcher::default().with(
+            "ReplicaSet",
+            "loop",
+            meta_with(None, Some(owner_ref("ReplicaSet", "loop"))),
+        );
+        let mut cache = HashMap::new();
+        let pod = owned_pod("prod", "loop-aaaaa", "loop");
+        assert_eq!(
+            resolve_owner_doid(&mut fetcher, &pod, &mut cache).await,
+            None
+        );
+        // The cache is only written once the walk finishes, so the sole
+        // guard against a cycle is the hop budget.
+        assert_eq!(fetcher.fetches, MAX_OWNER_DEPTH);
+    }
+
+    #[tokio::test]
+    async fn test_owner_chain_skipped_without_namespace_or_owner() {
+        let mut fetcher = FakeOwnerFetcher::default();
+        let mut cache = HashMap::new();
+
+        // No namespace → nothing to look up in.
+        let mut orphan = Pod::default();
+        orphan.metadata.owner_references = Some(vec![owner_ref("ReplicaSet", "rs")]);
+        assert_eq!(
+            resolve_owner_doid(&mut fetcher, &orphan, &mut cache).await,
+            None
+        );
+
+        // No ownerReferences → bare pod, nothing to walk.
+        let mut bare = Pod::default();
+        bare.metadata.namespace = Some("prod".to_string());
+        assert_eq!(
+            resolve_owner_doid(&mut fetcher, &bare, &mut cache).await,
+            None
+        );
+
+        assert_eq!(fetcher.fetches, 0, "neither case may hit the API");
     }
 
     #[test]

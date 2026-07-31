@@ -12,8 +12,8 @@ use leptos::prelude::*;
 
 #[component]
 pub fn WorkOrdersView() -> impl IntoView {
-    let active = LocalResource::new(|| api::work_orders());
-    let data = LocalResource::new(|| api::work_order_log());
+    let active = LocalResource::new(api::work_orders);
+    let data = LocalResource::new(api::work_order_log);
     set_interval(
         move || {
             active.refetch();
