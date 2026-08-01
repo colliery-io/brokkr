@@ -88,3 +88,25 @@ Doc claims to correct: `getting-started/installation.md:340-341`, `getting-start
 ## Status Updates
 
 *To be added during implementation*
+
+**2026-08-01 — SLICE 0 DONE (the claims), for 0.9.1. The feature is untouched.**
+
+Dylan asked to knock this out for a 0.9.1. What shipped is the separable half identified in the 2026-07-29 check above: **every false hot-reload claim is corrected. Neither slice 1 nor slice 2 was built**, so this ticket stays open for the feature itself.
+
+Corrected:
+
+| Surface | Was | Now |
+|---|---|---|
+| `charts/brokkr-broker/values.yaml` header | "Some settings can be changed without restarting the broker pod", with a list of five | states plainly that **every** setting requires a restart, and gives both reasons (no config file mounted → watcher never starts; nothing reads reloaded values back) |
+| `values.yaml` per-key | 5 × `@hot-reload: true` | all `@hot-reload: false - requires restart`, each naming why (log filter / cleanup task / CORS layer captured at startup) |
+| `templates/configmap.yaml` | section header "changes apply without pod restart" + 3 × `@hot-reload: true` | header rewritten as *intended but not today*; all three annotations `false` |
+| `getting-started/configuration.md` | "A subset of broker settings can change at runtime without a restart" | leads with a warning that hot reload does not change behaviour, then describes what the machinery actually does |
+| `getting-started/installation.md` | `configReload.enabled` = "Watch the ConfigMap and reload hot-reloadable settings automatically" | "Currently has no effect", with the reason |
+
+**`configReload.*` was deliberately kept and left defaulting to `true`.** It is a real input to a feature that is intended to exist; removing it would be a breaking values change to buy nothing, and defaulting it false would mean flipping it back when the feature lands. The comments now say it does nothing rather than the values pretending otherwise.
+
+**One thing the docs were already right about**, and it was left alone: `configuration.md` already explained that the watcher never starts under Helm because no `BROKKR_CONFIG_FILE` is mounted. What it missed was the deeper half — that even *with* a file, nothing consumes the reloaded values — so a reload is detection and an audit entry, and no behaviour change. That is now stated.
+
+Verified: `angreal helm check-values` (52 assertions), `helm lint`, `angreal docs build` all pass.
+
+**Still open — the feature.** Slice 1 (make `ReloadableConfig` actually consumable) then slice 2 (chart delivery), exactly as sequenced above. Doing slice 2 first still delivers nothing.

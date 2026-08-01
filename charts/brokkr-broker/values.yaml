@@ -1,16 +1,24 @@
 ---
 # =============================================================================
-# CONFIGURATION HOT-RELOAD SUPPORT
+# CONFIGURATION HOT-RELOAD  --  NOT FUNCTIONAL IN A CHART INSTALL
 # =============================================================================
-# Some settings can be changed without restarting the broker pod. These are
-# marked with "@hot-reload: true" comments throughout this file.
+# **Every setting in this file requires a pod restart to take effect.**
+# Changing a value and running `helm upgrade` restarts the pod anyway (the
+# ConfigMap checksum annotation forces it), so in practice you get the new
+# value -- by restart, not by reload.
 #
-# Hot-reloadable settings:
-#   - log.level
-#   - broker.diagnosticCleanupIntervalSeconds
-#   - broker.diagnosticMaxAgeHours
-#   - cors.allowedOrigins
-#   - cors.maxAgeSeconds
+# Two things have to be true for hot reload to work, and neither is today
+# (BROKKR-T-0292):
+#
+#   1. The watcher only starts when BROKKR_CONFIG_FILE points at an existing
+#      file. This chart injects configuration as environment variables via
+#      envFrom and never mounts a file, so the watcher never starts.
+#   2. Even when it does run, nothing reads the reloaded values back. Every
+#      consumer -- the log filter, the CORS layer, the background workers --
+#      captures its settings once at startup.
+#
+# `configReload.*` below is kept because it is a real input to a feature that
+# is intended to exist, not because it currently does anything.
 #
 # Static settings (require pod restart):
 #   - database.url, database.schema
@@ -26,9 +34,11 @@
 
 # Configuration hot-reload settings
 configReload:
-  # Enable automatic ConfigMap watching in Kubernetes
-  # When enabled, the broker watches for ConfigMap changes and reloads
-  # hot-reloadable settings automatically (with 5-second debounce)
+  # Intended to enable ConfigMap watching so hot-reloadable settings apply
+  # without a restart. **Currently has no effect in a chart install** -- see the
+  # header of this file (BROKKR-T-0292). Left in place because it is a real
+  # input to the feature, and defaulted true so behaviour does not change when
+  # the feature lands.
   enabled: true
 
   # Debounce duration in seconds to prevent rapid successive reloads
@@ -184,12 +194,14 @@ extraEnv: []
 # These control runtime behavior of the broker
 broker:
   # Log level for the broker application
-  # @hot-reload: true - changes apply without restart
+  # @hot-reload: false - requires restart (BROKKR-T-0292: the log filter is
+  # captured once at startup, so a reload would not reach it)
   # Valid values: trace, debug, info, warn, error
   logLevel: info
 
   # Diagnostic cleanup settings
-  # @hot-reload: true - changes apply without restart
+  # @hot-reload: false - requires restart (BROKKR-T-0292: the cleanup task
+  # captures these when it spawns)
   diagnosticCleanupIntervalSeconds: 900  # 15 minutes
   diagnosticMaxAgeHours: 1
 
@@ -229,7 +241,8 @@ broker:
   pakHashExistingSecretKey: BROKKR__BROKER__PAK_HASH   # key within that Secret
 
 # CORS configuration for API access
-# @hot-reload: true - changes apply without restart (except allowCredentials)
+# @hot-reload: false - requires restart (BROKKR-T-0292: the CORS layer is built
+# once when the router is constructed)
 cors:
   # Allowed origins for CORS requests
   # Use "*" to allow all origins (not recommended for production)
@@ -252,7 +265,7 @@ cors:
     - Accept
 
   # Max age for CORS preflight cache (seconds)
-  # @hot-reload: true
+  # @hot-reload: false - requires restart (see the CORS note above)
   maxAgeSeconds: 3600
 
 # Resource requests and limits for broker pods

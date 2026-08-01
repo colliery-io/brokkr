@@ -439,7 +439,7 @@ Key configuration options for the broker chart:
 | `image.tag` | Image tag to use | `latest` |
 | `broker.logLevel` | Log level | `info` |
 | `broker.webhookEncryptionKey` | Hex-encoded 32-byte key for webhook secrets at rest; a random key is generated on every boot if unset. Rendered into the ConfigMap in plaintext — prefer `broker.webhookEncryptionKeyExistingSecret` | unset |
-| `configReload.enabled` | Watch the ConfigMap and reload hot-reloadable settings automatically | `true` |
+| `configReload.enabled` | Intended to watch the ConfigMap and reload settings automatically. **Currently has no effect** — the watcher needs a config file, which the chart does not mount, and reloaded values are not read back (BROKKR-T-0292). Treat every setting as restart-only | `true` |
 | `configReload.debounceSeconds` | Debounce window for successive reloads | `5` |
 | `resources.limits.cpu` | CPU limit | `500m` |
 | `resources.limits.memory` | Memory limit | `512Mi` |

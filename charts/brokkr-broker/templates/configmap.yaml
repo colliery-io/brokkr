@@ -29,13 +29,17 @@ data:
   BROKKR__TELEMETRY__ENABLED: "false"
   {{- end }}
   # =============================================================================
-  # Hot-reloadable settings (changes apply without pod restart)
-  # The broker watches this ConfigMap and automatically reloads these settings
+  # Settings that are INTENDED to be hot-reloadable, but are not today.
+  # The broker does not watch this ConfigMap in a chart install: the watcher
+  # only starts when BROKKR_CONFIG_FILE points at a file, and this chart
+  # injects configuration as environment via envFrom. Even if it ran, nothing
+  # reads the reloaded values back. All of these require a pod restart
+  # (BROKKR-T-0292).
   # =============================================================================
-  # Log level (@hot-reload: true)
+  # Log level (@hot-reload: false - restart required)
   {{- if .Values.broker }}
   BROKKR__LOG__LEVEL: {{ .Values.broker.logLevel | default "info" | quote }}
-  # Diagnostic cleanup settings (@hot-reload: true)
+  # Diagnostic cleanup settings (@hot-reload: false - restart required)
   BROKKR__BROKER__DIAGNOSTIC_CLEANUP_INTERVAL_SECONDS: {{ .Values.broker.diagnosticCleanupIntervalSeconds | default 900 | quote }}
   BROKKR__BROKER__DIAGNOSTIC_MAX_AGE_HOURS: {{ .Values.broker.diagnosticMaxAgeHours | default 1 | quote }}
   # Webhook delivery settings (static - requires restart)
@@ -58,7 +62,7 @@ data:
   BROKKR__BROKER__PAK_HASH: {{ .Values.broker.pakHash | quote }}
   {{- end }}
   {{- end }}
-  # CORS configuration (@hot-reload: true)
+  # CORS configuration (@hot-reload: false - restart required)
   {{- if .Values.cors }}
   BROKKR__CORS__ALLOWED_ORIGINS: {{ .Values.cors.allowedOrigins | join "," | quote }}
   BROKKR__CORS__ALLOWED_METHODS: {{ .Values.cors.allowedMethods | join "," | quote }}
