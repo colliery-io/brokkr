@@ -2,10 +2,13 @@
 # =============================================================================
 # CONFIGURATION HOT-RELOAD  --  NOT FUNCTIONAL IN A CHART INSTALL
 # =============================================================================
-# **Every setting in this file requires a pod restart to take effect.**
-# Changing a value and running `helm upgrade` restarts the pod anyway (the
-# ConfigMap checksum annotation forces it), so in practice you get the new
-# value -- by restart, not by reload.
+# **Settings not listed as hot-reloadable require a pod restart, and
+# `helm upgrade` will not do it for you.** The pod template carries no
+# ConfigMap checksum annotation, so changing a value updates the ConfigMap and
+# leaves the running pod with the environment it started with. Restart it
+# yourself (`kubectl rollout restart deploy/<release>-brokkr-broker`) or run an
+# external reload controller -- the ConfigMap does carry a `checksum/config`
+# annotation for exactly that.
 #
 # Two things have to be true for hot reload to work, and neither is today
 # (BROKKR-T-0292):

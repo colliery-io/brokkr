@@ -56,6 +56,13 @@ spec:
         - configMapRef:
             name: {{ include "brokkr-broker.fullname" . }}
         env:
+        {{- if .Values.configReload.enabled }}
+        # Points the config watcher at the mounted TOML file. Without this the
+        # watcher never starts, which is what made hot reload inert in a chart
+        # install (BROKKR-T-0292).
+        - name: BROKKR_CONFIG_FILE
+          value: /etc/brokkr/brokkr.toml
+        {{- end }}
         {{- if .Values.postgresql.existingSecret }}
         - name: BROKKR__DATABASE__URL
           valueFrom:
@@ -87,9 +94,22 @@ spec:
         # Writable /tmp directory (required for read-only root filesystem)
         - name: tmp
           mountPath: /tmp
+        {{- if .Values.configReload.enabled }}
+        # Mounted as a DIRECTORY, deliberately: a `subPath` mount is resolved
+        # once at container start and never sees ConfigMap updates, which would
+        # make the file as static as the environment it replaces.
+        - name: dynamic-config
+          mountPath: /etc/brokkr
+          readOnly: true
+        {{- end }}
         resources:
           {{- toYaml .Values.resources | nindent 10 }}
       volumes:
       # EmptyDir for temporary files
       - name: tmp
         emptyDir: {}
+      {{- if .Values.configReload.enabled }}
+      - name: dynamic-config
+        configMap:
+          name: {{ include "brokkr-broker.fullname" . }}-dynamic
+      {{- end }}

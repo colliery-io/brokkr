@@ -1,0 +1,41 @@
+{{- if .Values.configReload.enabled }}
+# Hot-reloadable settings, delivered as a TOML *file* (BROKKR-T-0292).
+#
+# Why a second ConfigMap rather than more keys in the first one:
+#
+#   * The broker's config watcher only starts when BROKKR_CONFIG_FILE points at
+#     an existing file. The main ConfigMap is consumed via `envFrom`, which is
+#     environment, not a file — so on its own it can never drive a reload.
+#   * Environment beats file in the precedence chain. Any key left in the env
+#     ConfigMap would silently override whatever this file says, so the keys
+#     below are deliberately *absent* from `configmap.yaml`. Moving a key
+#     between the two files is a real change, not a cosmetic one.
+#
+# This is mounted as a directory (not `subPath`): a `subPath` mount is resolved
+# once at container start and never receives ConfigMap updates, which would
+# reintroduce exactly the restart-only behaviour this replaces. Expect the
+# kubelet's own sync period (tens of seconds) on top of the debounce below.
+#
+# Deliberately carries no checksum annotation. The static ConfigMap has one so
+# that changing a restart-only value rolls the pod; these keys are the opposite
+# case — they are meant to apply *without* a roll.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "brokkr-broker.fullname" . }}-dynamic
+  labels:
+    {{- include "brokkr-broker.labels" . | nindent 4 }}
+data:
+  brokkr.toml: |
+    # Managed by the brokkr-broker Helm chart. Edited copies are overwritten on
+    # the next `helm upgrade`; change the chart values instead.
+    [log]
+    level = {{ .Values.broker.logLevel | default "info" | quote }}
+
+    [broker]
+    diagnostic_cleanup_interval_seconds = {{ .Values.broker.diagnosticCleanupIntervalSeconds | default 900 }}
+    diagnostic_max_age_hours = {{ .Values.broker.diagnosticMaxAgeHours | default 1 }}
+    webhook_delivery_interval_seconds = {{ .Values.broker.webhookDeliveryIntervalSeconds | default 5 }}
+    webhook_delivery_batch_size = {{ .Values.broker.webhookDeliveryBatchSize | default 50 }}
+    webhook_cleanup_retention_days = {{ .Values.broker.webhookCleanupRetentionDays | default 7 }}
+{{- end }}

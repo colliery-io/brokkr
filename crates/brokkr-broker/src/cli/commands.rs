@@ -203,6 +203,14 @@ pub async fn serve(config: &Settings) -> Result<(), Box<dyn std::error::Error>> 
     info!("Initializing audit logger");
     utils::audit::init_audit_logger(dal.clone()).expect("Failed to initialize audit logger");
 
+    // Reloadable configuration is built *before* the background tasks, because
+    // they take a handle to it and re-read their tunables on every tick
+    // (BROKKR-T-0292). It used to be constructed after they had already
+    // spawned, which is part of why a reload changed nothing.
+    info!("Initializing reloadable configuration");
+    let reloadable_config =
+        ReloadableConfig::from_settings(config.clone(), std::env::var("BROKKR_CONFIG_FILE").ok());
+
     // Start background tasks
     info!("Starting background tasks");
     let cleanup_config = utils::background_tasks::DiagnosticCleanupConfig {
@@ -212,7 +220,11 @@ pub async fn serve(config: &Settings) -> Result<(), Box<dyn std::error::Error>> 
             .unwrap_or(900),
         max_age_hours: config.broker.diagnostic_max_age_hours.unwrap_or(1),
     };
-    utils::background_tasks::start_diagnostic_cleanup_task(dal.clone(), cleanup_config);
+    utils::background_tasks::start_diagnostic_cleanup_task(
+        dal.clone(),
+        cleanup_config,
+        Some(reloadable_config.clone()),
+    );
 
     // Start work order maintenance task (retry processing and stale claim detection)
     let work_order_config = utils::background_tasks::WorkOrderMaintenanceConfig::default();
@@ -232,14 +244,22 @@ pub async fn serve(config: &Settings) -> Result<(), Box<dyn std::error::Error>> 
         interval_seconds: config.broker.webhook_delivery_interval_seconds.unwrap_or(5),
         batch_size: config.broker.webhook_delivery_batch_size.unwrap_or(50),
     };
-    utils::background_tasks::start_webhook_delivery_task(dal.clone(), webhook_delivery_config);
+    utils::background_tasks::start_webhook_delivery_task(
+        dal.clone(),
+        webhook_delivery_config,
+        Some(reloadable_config.clone()),
+    );
 
     // Start webhook cleanup task
     let webhook_cleanup_config = utils::background_tasks::WebhookCleanupConfig {
         interval_seconds: 3600, // Every hour
         retention_days: config.broker.webhook_cleanup_retention_days.unwrap_or(7),
     };
-    utils::background_tasks::start_webhook_cleanup_task(dal.clone(), webhook_cleanup_config);
+    utils::background_tasks::start_webhook_cleanup_task(
+        dal.clone(),
+        webhook_cleanup_config,
+        Some(reloadable_config.clone()),
+    );
 
     // Start audit log cleanup task
     let audit_cleanup_config = utils::background_tasks::AuditLogCleanupConfig {
@@ -265,11 +285,6 @@ pub async fn serve(config: &Settings) -> Result<(), Box<dyn std::error::Error>> 
             "Agent-events retention disabled (agent_events_retention_days = 0); skipping eviction task"
         );
     }
-
-    // Create reloadable configuration for hot-reload support
-    info!("Initializing reloadable configuration");
-    let reloadable_config =
-        ReloadableConfig::from_settings(config.clone(), std::env::var("BROKKR_CONFIG_FILE").ok());
 
     // Start ConfigMap watcher for Kubernetes hot-reload (if running in K8s)
     if let Some(watcher_config) = utils::config_watcher::ConfigWatcherConfig::from_environment() {

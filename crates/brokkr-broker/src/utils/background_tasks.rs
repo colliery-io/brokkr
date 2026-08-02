@@ -14,6 +14,7 @@ use crate::dal::webhook_deliveries::is_retryable_status;
 use brokkr_models::models::audit_logs::{
     ACTION_WEBHOOK_DELIVERY_FAILED, ACTOR_TYPE_SYSTEM, RESOURCE_TYPE_WEBHOOK,
 };
+use brokkr_utils::config::ReloadableConfig;
 use std::time::Duration;
 use tokio::time::interval;
 use tracing::{debug, error, info, warn};
@@ -56,17 +57,49 @@ impl Default for DiagnosticCleanupConfig {
 /// # Arguments
 /// * `dal` - The Data Access Layer instance
 /// * `config` - Configuration for the cleanup task
-pub fn start_diagnostic_cleanup_task(dal: DAL, config: DiagnosticCleanupConfig) {
+pub fn start_diagnostic_cleanup_task(
+    dal: DAL,
+    config: DiagnosticCleanupConfig,
+    reloadable: Option<ReloadableConfig>,
+) {
     info!(
         "Starting diagnostic cleanup task (interval: {}s, max_age: {}h)",
         config.interval_seconds, config.max_age_hours
     );
 
     tokio::spawn(async move {
-        let mut ticker = interval(Duration::from_secs(config.interval_seconds));
+        let mut current_interval = config.interval_seconds;
+        let mut ticker = interval(Duration::from_secs(current_interval));
 
         loop {
             ticker.tick().await;
+
+            // Re-read per tick so a reload takes effect without a restart
+            // (BROKKR-T-0292). Falls back to the startup values when no
+            // reloadable config was supplied (tests, and any caller that opts
+            // out).
+            let (want_interval, max_age_hours) = match &reloadable {
+                Some(rc) => (
+                    rc.diagnostic_cleanup_interval_seconds(),
+                    rc.diagnostic_max_age_hours(),
+                ),
+                None => (config.interval_seconds, config.max_age_hours),
+            };
+            let config = DiagnosticCleanupConfig {
+                interval_seconds: want_interval,
+                max_age_hours,
+            };
+            if want_interval != current_interval {
+                info!(
+                    "Diagnostic cleanup interval changed {}s -> {}s (config reload)",
+                    current_interval, want_interval
+                );
+                current_interval = want_interval;
+                ticker = interval(Duration::from_secs(current_interval));
+                // A fresh `interval` yields its first tick immediately; consume
+                // it so the rebuild does not run this pass twice.
+                ticker.tick().await;
+            }
 
             // Sweep requests past their expiry time into a terminal state.
             // Unclaimed and abandoned requests are logged separately: the
@@ -287,7 +320,11 @@ impl Default for WebhookCleanupConfig {
 /// # Arguments
 /// * `dal` - The Data Access Layer instance
 /// * `config` - Configuration for the delivery worker
-pub fn start_webhook_delivery_task(dal: DAL, config: WebhookDeliveryConfig) {
+pub fn start_webhook_delivery_task(
+    dal: DAL,
+    config: WebhookDeliveryConfig,
+    reloadable: Option<ReloadableConfig>,
+) {
     info!(
         "Starting webhook delivery worker (interval: {}s, batch_size: {})",
         config.interval_seconds, config.batch_size
@@ -302,10 +339,35 @@ pub fn start_webhook_delivery_task(dal: DAL, config: WebhookDeliveryConfig) {
         .expect("Failed to create HTTP client");
 
     tokio::spawn(async move {
-        let mut ticker = interval(Duration::from_secs(config.interval_seconds));
+        let mut current_interval = config.interval_seconds;
+        let mut ticker = interval(Duration::from_secs(current_interval));
 
         loop {
             ticker.tick().await;
+
+            // Re-read per tick (BROKKR-T-0292). These were captured at spawn,
+            // which is why the chart's `@hot-reload: true` annotations on them
+            // were false.
+            let (want_interval, batch_size) = match &reloadable {
+                Some(rc) => (
+                    rc.webhook_delivery_interval_seconds(),
+                    rc.webhook_delivery_batch_size(),
+                ),
+                None => (config.interval_seconds, config.batch_size),
+            };
+            let config = WebhookDeliveryConfig {
+                interval_seconds: want_interval,
+                batch_size,
+            };
+            if want_interval != current_interval {
+                info!(
+                    "Webhook delivery interval changed {}s -> {}s (config reload)",
+                    current_interval, want_interval
+                );
+                current_interval = want_interval;
+                ticker = interval(Duration::from_secs(current_interval));
+                ticker.tick().await;
+            }
 
             // First, release any expired acquired deliveries
             match dal.webhook_deliveries().release_expired() {
@@ -630,7 +692,11 @@ async fn attempt_delivery(
 /// # Arguments
 /// * `dal` - The Data Access Layer instance
 /// * `config` - Configuration for the cleanup task
-pub fn start_webhook_cleanup_task(dal: DAL, config: WebhookCleanupConfig) {
+pub fn start_webhook_cleanup_task(
+    dal: DAL,
+    config: WebhookCleanupConfig,
+    reloadable: Option<ReloadableConfig>,
+) {
     info!(
         "Starting webhook cleanup task (interval: {}s, retention: {}d)",
         config.interval_seconds, config.retention_days
@@ -642,12 +708,20 @@ pub fn start_webhook_cleanup_task(dal: DAL, config: WebhookCleanupConfig) {
         loop {
             ticker.tick().await;
 
-            match dal.webhook_deliveries().cleanup_old(config.retention_days) {
+            // Retention is re-read per tick (BROKKR-T-0292). The interval is
+            // not a dynamic key -- it is fixed at an hour by the caller -- so
+            // there is no ticker to rebuild here.
+            let retention_days = match &reloadable {
+                Some(rc) => rc.webhook_cleanup_retention_days(),
+                None => config.retention_days,
+            };
+
+            match dal.webhook_deliveries().cleanup_old(retention_days) {
                 Ok(deleted) => {
                     if deleted > 0 {
                         info!(
                             "Cleaned up {} old webhook deliveries (age > {}d)",
-                            deleted, config.retention_days
+                            deleted, retention_days
                         );
                     }
                 }
