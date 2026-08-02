@@ -12,7 +12,6 @@
 use brokkr_utils::config::ReloadableConfig;
 use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
 use std::path::Path;
-use std::sync::mpsc;
 use std::time::{Duration, Instant};
 use tracing::{debug, error, info, warn};
 
@@ -130,8 +129,19 @@ async fn run_config_watcher(
     let config_path = watcher_config.config_file_path.clone();
     let debounce_duration = watcher_config.debounce_duration;
 
-    // Create a channel for file events
-    let (tx, rx) = mpsc::channel();
+    // A **tokio** channel, not `std::sync::mpsc` (BROKKR-T-0292).
+    //
+    // This loop runs inside `tokio::spawn`, so it must never block the worker
+    // thread. It previously used `std::sync::mpsc` and `recv_timeout`, which
+    // blocks for up to 60s at a time, forever — starving the runtime. On a
+    // container with few worker threads that stops axum being scheduled at all:
+    // the process stays up, never binds, and the liveness probe kills it in a
+    // loop.
+    //
+    // It went unnoticed because the watcher only starts when
+    // BROKKR_CONFIG_FILE is set, and until this ticket no chart install ever
+    // set it — so this code had never run outside a unit test.
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<()>();
 
     // Create a file watcher
     let mut watcher: RecommendedWatcher =
@@ -157,9 +167,9 @@ async fn run_config_watcher(
 
     // Process events
     loop {
-        // Block waiting for events with a timeout
-        match rx.recv_timeout(Duration::from_secs(60)) {
-            Ok(()) => {
+        // Await with a timeout instead of blocking: an idle tick just loops.
+        match tokio::time::timeout(Duration::from_secs(60), rx.recv()).await {
+            Ok(Some(())) => {
                 // Check debounce
                 let should_reload = match last_reload {
                     Some(last) => last.elapsed() >= debounce_duration,
@@ -205,11 +215,11 @@ async fn run_config_watcher(
                     );
                 }
             }
-            Err(mpsc::RecvTimeoutError::Timeout) => {
-                // No events, continue watching
+            Err(_elapsed) => {
+                // No events in this window; keep watching.
                 continue;
             }
-            Err(mpsc::RecvTimeoutError::Disconnected) => {
+            Ok(None) => {
                 warn!("Config file watcher channel disconnected");
                 break;
             }

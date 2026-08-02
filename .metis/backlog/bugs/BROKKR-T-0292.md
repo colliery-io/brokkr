@@ -88,3 +88,55 @@ Doc claims to correct: `getting-started/installation.md:340-341`, `getting-start
 ## Status Updates
 
 *To be added during implementation*
+
+**2026-08-01 — SLICE 0 DONE (the claims), for 0.9.1. The feature is untouched.**
+
+Dylan asked to knock this out for a 0.9.1. What shipped is the separable half identified in the 2026-07-29 check above: **every false hot-reload claim is corrected. Neither slice 1 nor slice 2 was built**, so this ticket stays open for the feature itself.
+
+Corrected:
+
+| Surface | Was | Now |
+|---|---|---|
+| `charts/brokkr-broker/values.yaml` header | "Some settings can be changed without restarting the broker pod", with a list of five | states plainly that **every** setting requires a restart, and gives both reasons (no config file mounted → watcher never starts; nothing reads reloaded values back) |
+| `values.yaml` per-key | 5 × `@hot-reload: true` | all `@hot-reload: false - requires restart`, each naming why (log filter / cleanup task / CORS layer captured at startup) |
+| `templates/configmap.yaml` | section header "changes apply without pod restart" + 3 × `@hot-reload: true` | header rewritten as *intended but not today*; all three annotations `false` |
+| `getting-started/configuration.md` | "A subset of broker settings can change at runtime without a restart" | leads with a warning that hot reload does not change behaviour, then describes what the machinery actually does |
+| `getting-started/installation.md` | `configReload.enabled` = "Watch the ConfigMap and reload hot-reloadable settings automatically" | "Currently has no effect", with the reason |
+
+**`configReload.*` was deliberately kept and left defaulting to `true`.** It is a real input to a feature that is intended to exist; removing it would be a breaking values change to buy nothing, and defaulting it false would mean flipping it back when the feature lands. The comments now say it does nothing rather than the values pretending otherwise.
+
+**One thing the docs were already right about**, and it was left alone: `configuration.md` already explained that the watcher never starts under Helm because no `BROKKR_CONFIG_FILE` is mounted. What it missed was the deeper half — that even *with* a file, nothing consumes the reloaded values — so a reload is detection and an audit entry, and no behaviour change. That is now stated.
+
+Verified: `angreal helm check-values` (52 assertions), `helm lint`, `angreal docs build` all pass.
+
+**Still open — the feature.** Slice 1 (make `ReloadableConfig` actually consumable) then slice 2 (chart delivery), exactly as sequenced above. Doing slice 2 first still delivers nothing.
+
+**2026-08-02 — SLICES 1 AND 2 DONE. Hot reload now changes behaviour.**
+
+Scope decided with Dylan: the tunables and log level become genuinely hot; **CORS stays restart-only** and remains annotated `@hot-reload: false`. Replacing `tower_http`'s `CorsLayer` — which is baked into the router at construction and cannot be swapped at runtime — would mean owning preflight, credentials and origin matching by hand, which is disproportionate risk for a setting that changes rarely.
+
+### Slice 1 — reloaded values are now consumed
+
+- **`ReloadableConfig` is constructed before the background tasks**, not after. It used to be built at `commands.rs:271` while the tasks spawned at `:205`, so no task could ever hold a handle to it.
+- **Three task loops re-read per tick** — diagnostic cleanup, webhook delivery, webhook cleanup — through the same accessors that previously had zero call sites. Where an interval changed, the ticker is rebuilt and its immediate first tick consumed, so a rebuild does not run the pass twice.
+- **Log level is applied inside `reload()`**, not by callers, so the ConfigMap watcher and `POST /admin/config/reload` both get it. `update_log_level` already worked and simply had no caller outside its own tests. The config write lock is released before calling into `logging`.
+
+### Slice 2 — the chart actually delivers it
+
+- New `configmap-dynamic.yaml` renders the hot keys as **TOML**, mounted at `/etc/brokkr` as a **directory** (a `subPath` mount is resolved once at container start and never sees updates).
+- `BROKKR_CONFIG_FILE` is set, without which the watcher never starts.
+- **The hot keys are removed from the env ConfigMap.** This is the subtle half: environment beats file in the precedence chain, so a key left behind would silently override the mounted file and reloading would appear to do nothing. With `configReload.enabled=false` they fall back to env, so disabling the feature loses nothing.
+
+### Two corrections found while building
+
+**A claim in the earlier claims-only commit was wrong.** It said `helm upgrade` restarts the pod anyway via the ConfigMap checksum. It does not: the checksum annotation is on the *ConfigMap*, for external reload controllers, and **the pod template has no annotation at all**. Changing a restart-only value updates the ConfigMap and leaves the pod running with its old environment. Corrected to say so and to name the remedy.
+
+**Adding a second ConfigMap broke five existing render assertions**, which used `single_manifest(docs, "ConfigMap")` and silently began matching the dynamic one. Added an `env_configmap()` helper rather than renaming the template to win the sort order. Worth noting the assertions did their job — this would otherwise have been a quiet mis-assertion.
+
+### Verification
+
+57 chart render assertions (52 + 5 new), `helm lint`, 26 + 151 unit tests, docs build. The new `test_reload_applies_log_level_to_the_logger` is the exit criterion this ticket asked for: it asserts the logger's level actually moves, not merely that a diff is reported. It also surfaced that reloading to the value already in effect is correctly a no-op, so the test has to use a level differing from `default.toml`.
+
+Four clippy warnings remain in these crates; all four are present with the change stashed, so they are pre-existing.
+
+**Remaining, deliberately:** CORS. `cors.allowedOrigins` and `cors.maxAgeSeconds` are still restart-only and still annotated as such, and `reload()` still reports them as changes — the report is accurate, only nothing acts on it. Anyone picking that up should read the CORS note above first.

@@ -2239,6 +2239,21 @@ def single_manifest(docs, kind):
     return found[0] if found else None
 
 
+def env_configmap(docs):
+    """The broker's *environment* ConfigMap, excluding the dynamic TOML one.
+
+    The broker renders two ConfigMaps since BROKKR-T-0292: the env one consumed
+    via `envFrom`, and `<release>-dynamic` carrying hot-reloadable settings as a
+    TOML file. `single_manifest(docs, "ConfigMap")` returns whichever renders
+    first, which is the dynamic one -- so every assertion about an env key has
+    to say which ConfigMap it means.
+    """
+    for d in manifests_of_kind(docs, "ConfigMap"):
+        if not str((d or {}).get("metadata", {}).get("name", "")).endswith("-dynamic"):
+            return d
+    return None
+
+
 def container_port_names(deployment):
     """Every container port *name* declared by a Deployment's pod spec."""
     names = set()
@@ -2319,6 +2334,76 @@ def check_broker_values(yaml_mod, checks):
     print(f"\n{BROKER_CHART}: targeted value assertions")
 
     default_docs = render_own(yaml_mod, BROKER_CHART)
+
+    # --- configReload: dynamic keys must live in the file, not the env -------
+    # BROKKR-T-0292. Environment beats file in the broker's precedence chain,
+    # so a dynamic key left in the env ConfigMap silently overrides the mounted
+    # TOML and reloading appears to do nothing. That is the failure this pair
+    # of assertions exists to catch -- it is invisible in a rendered diff.
+    DYNAMIC_ENV_KEYS = [
+        "BROKKR__LOG__LEVEL",
+        "BROKKR__BROKER__DIAGNOSTIC_CLEANUP_INTERVAL_SECONDS",
+        "BROKKR__BROKER__DIAGNOSTIC_MAX_AGE_HOURS",
+        "BROKKR__BROKER__WEBHOOK_DELIVERY_INTERVAL_SECONDS",
+        "BROKKR__BROKER__WEBHOOK_DELIVERY_BATCH_SIZE",
+        "BROKKR__BROKER__WEBHOOK_CLEANUP_RETENTION_DAYS",
+    ]
+
+    def _dynamic_cm(docs):
+        for d in docs:
+            if (d or {}).get("kind") == "ConfigMap" and str(
+                d.get("metadata", {}).get("name", "")
+            ).endswith("-dynamic"):
+                return d
+        return None
+
+    on_env = (env_configmap(default_docs) or {}).get("data", {})
+    leaked = [k for k in DYNAMIC_ENV_KEYS if k in on_env]
+    checks.expect(
+        BROKER_CHART,
+        "configReload.enabled",
+        "dynamic keys absent from the env ConfigMap (env would override the file)",
+        not leaked,
+        leaked,
+    )
+    dyn = _dynamic_cm(default_docs)
+    checks.expect(
+        BROKER_CHART,
+        "configReload.enabled",
+        "dynamic ConfigMap rendered with a brokkr.toml key",
+        dyn is not None and "brokkr.toml" in (dyn or {}).get("data", {}),
+        None if dyn is None else list((dyn.get("data") or {}).keys()),
+    )
+    dep = single_manifest(default_docs, "Deployment")
+    container = dep["spec"]["template"]["spec"]["containers"][0]
+    env_names = {e.get("name") for e in container.get("env", []) or []}
+    checks.expect(
+        BROKER_CHART,
+        "configReload.enabled",
+        "BROKKR_CONFIG_FILE set (the watcher does not start without it)",
+        "BROKKR_CONFIG_FILE" in env_names,
+        sorted(n for n in env_names if n),
+    )
+    mounts = {m.get("name"): m for m in container.get("volumeMounts", []) or []}
+    checks.expect(
+        BROKER_CHART,
+        "configReload.enabled",
+        "dynamic config mounted as a directory, not subPath (subPath never updates)",
+        "dynamic-config" in mounts and "subPath" not in mounts.get("dynamic-config", {}),
+        mounts.get("dynamic-config"),
+    )
+
+    # Disabled: the keys must come back as environment, or they are lost.
+    off_docs = render_own(yaml_mod, BROKER_CHART, {"configReload": {"enabled": False}})
+    off_env = (env_configmap(off_docs) or {}).get("data", {})
+    missing = [k for k in DYNAMIC_ENV_KEYS if k not in off_env]
+    checks.expect(
+        BROKER_CHART,
+        "configReload.enabled",
+        "with reload disabled the dynamic keys fall back to the env ConfigMap",
+        not missing,
+        missing,
+    )
 
     # --- service.annotations -------------------------------------------------
     # BROKKR-T-0308: this value was accepted and documented but the Service
@@ -2437,7 +2522,7 @@ def check_broker_values(yaml_mod, checks):
         BROKER_CHART,
         {"telemetry": {"enabled": True, "otlpEndpoint": endpoint}},
     )
-    tele_cm = single_manifest(tele, "ConfigMap").get("data", {})
+    tele_cm = env_configmap(tele).get("data", {})
     checks.expect(
         BROKER_CHART,
         "telemetry.otlpEndpoint",
@@ -2445,7 +2530,7 @@ def check_broker_values(yaml_mod, checks):
         tele_cm.get("BROKKR__TELEMETRY__OTLP_ENDPOINT") == endpoint,
         tele_cm.get("BROKKR__TELEMETRY__OTLP_ENDPOINT"),
     )
-    default_cm = single_manifest(default_docs, "ConfigMap").get("data", {})
+    default_cm = env_configmap(default_docs).get("data", {})
     checks.expect(
         BROKER_CHART,
         "telemetry.enabled",
@@ -2471,7 +2556,7 @@ def check_broker_values(yaml_mod, checks):
         BROKER_CHART,
         {"postgresql": {"existingSecret": "db-cred", "existingSecretKey": "url-key"}},
     )
-    db_cm = single_manifest(db, "ConfigMap").get("data", {})
+    db_cm = env_configmap(db).get("data", {})
     db_env = container_env(single_manifest(db, "Deployment"), "broker")
     checks.expect(
         BROKER_CHART,
@@ -2495,7 +2580,7 @@ def check_broker_values(yaml_mod, checks):
         BROKER_CHART,
         "broker.webhookEncryptionKey",
         "the plaintext key in the ConfigMap when no existingSecret is set",
-        single_manifest(plain_wh, "ConfigMap")
+        env_configmap(plain_wh)
         .get("data", {})
         .get("BROKKR__BROKER__WEBHOOK_ENCRYPTION_KEY")
         == "deadbeef",
@@ -2511,7 +2596,7 @@ def check_broker_values(yaml_mod, checks):
             }
         },
     )
-    wh_cm = single_manifest(wh, "ConfigMap").get("data", {})
+    wh_cm = env_configmap(wh).get("data", {})
     wh_env = container_env(single_manifest(wh, "Deployment"), "broker")
     checks.expect(
         BROKER_CHART,
@@ -2540,7 +2625,7 @@ def check_broker_values(yaml_mod, checks):
             }
         },
     )
-    pak_secret_cm = single_manifest(pak_secret, "ConfigMap").get("data", {})
+    pak_secret_cm = env_configmap(pak_secret).get("data", {})
     pak_secret_env = container_env(single_manifest(pak_secret, "Deployment"), "broker")
     checks.expect(
         BROKER_CHART,
@@ -2563,7 +2648,7 @@ def check_broker_values(yaml_mod, checks):
     # empty value is what previously left the publicly-known dev credential
     # live, because the broker fell back to its built-in default.
     empty_pak = render_own(yaml_mod, BROKER_CHART, {"broker": {"pakHash": ""}})
-    empty_pak_cm = single_manifest(empty_pak, "ConfigMap").get("data", {})
+    empty_pak_cm = env_configmap(empty_pak).get("data", {})
     checks.expect(
         BROKER_CHART,
         "broker.pakHash",
@@ -2574,7 +2659,7 @@ def check_broker_values(yaml_mod, checks):
     set_pak = render_own(
         yaml_mod, BROKER_CHART, {"broker": {"pakHash": "0123456789abcdef"}}
     )
-    set_pak_cm = single_manifest(set_pak, "ConfigMap").get("data", {})
+    set_pak_cm = env_configmap(set_pak).get("data", {})
     checks.expect(
         BROKER_CHART,
         "broker.pakHash",

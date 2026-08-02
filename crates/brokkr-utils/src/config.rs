@@ -680,7 +680,30 @@ impl ReloadableConfig {
         }
 
         // Apply the new configuration
+        let log_level_changed = dynamic.log_level != new_dynamic.log_level;
+        let new_log_level = new_dynamic.log_level.clone();
         *dynamic = new_dynamic;
+        drop(dynamic);
+
+        // Push the log level into the logger (BROKKR-T-0292).
+        //
+        // Applied here rather than by callers so that *every* reload path gets
+        // it — the ConfigMap watcher and `POST /admin/config/reload` alike.
+        // Before this, `reload()` recomputed the level, reported it as a change,
+        // and left the logger untouched: `update_log_level` existed and had no
+        // caller outside its own tests, so the level was restart-only in
+        // practice while being advertised as hot-reloadable.
+        //
+        // The lock is released first: `update_log_level` only touches an atomic
+        // and `log::set_max_level`, but holding a config write lock across a
+        // call into another module is how deadlocks get introduced later.
+        if log_level_changed {
+            if let Err(e) = crate::logging::update_log_level(&new_log_level) {
+                // A bad level in config should not abort a reload that also
+                // carried good changes; the level simply stays where it was.
+                eprintln!("failed to apply reloaded log level '{new_log_level}': {e}");
+            }
+        }
 
         Ok(changes)
     }
@@ -1102,6 +1125,45 @@ mod tests {
             "Expected no changes but got: {:?}",
             changes
         );
+    }
+
+    /// BROKKR-T-0292's exit criterion for slice 1: a reload must **change
+    /// behaviour**, not merely report a diff.
+    ///
+    /// Before this, `reload()` recomputed `DynamicConfig`, listed the change,
+    /// wrote an audit entry, and left the process behaving exactly as before —
+    /// every consumer had captured its settings at startup. This asserts the
+    /// one side effect `reload()` owns directly: the logger's level actually
+    /// moves. The background tunables are proven by construction instead — the
+    /// task loops read through these same accessors on every tick rather than
+    /// copying them at spawn.
+    #[test]
+    fn test_reload_applies_log_level_to_the_logger() {
+        // A distinctive starting point, so the assertion cannot pass by
+        // coincidence with whatever the ambient default happens to be.
+        let _ = crate::logging::update_log_level("error");
+        assert_eq!(log::max_level(), log::LevelFilter::Error);
+
+        let config = ReloadableConfig::new(None).unwrap();
+
+        // Drive the level through the config layer the way a reload does.
+        // "warn" specifically because it differs from default.toml's level --
+        // reloading to the value already in effect is correctly a no-op.
+        unsafe { std::env::set_var("BROKKR__LOG__LEVEL", "warn") };
+        let changes = config.reload().unwrap();
+        unsafe { std::env::remove_var("BROKKR__LOG__LEVEL") };
+
+        assert!(
+            changes.iter().any(|c| c.key == "log.level"),
+            "reload should report the level change, got: {changes:?}"
+        );
+        assert_eq!(
+            log::max_level(),
+            log::LevelFilter::Warn,
+            "reload must push the new level into the logger, not just report it"
+        );
+
+        let _ = crate::logging::update_log_level("info");
     }
 
     #[test]

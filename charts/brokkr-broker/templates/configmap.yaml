@@ -29,23 +29,26 @@ data:
   BROKKR__TELEMETRY__ENABLED: "false"
   {{- end }}
   # =============================================================================
-  # Hot-reloadable settings (changes apply without pod restart)
-  # The broker watches this ConfigMap and automatically reloads these settings
+  # Hot-reloadable settings live in the *dynamic* ConfigMap
+  # (configmap-dynamic.yaml), delivered as a TOML file, NOT here
+  # (BROKKR-T-0292).
+  #
+  # They are absent from this file on purpose: environment beats file in the
+  # precedence chain, so a key left here would silently override the mounted
+  # file and reloading would appear to do nothing. When
+  # `configReload.enabled=false` they fall back to this ConfigMap, because
+  # then there is no file to read them from.
   # =============================================================================
-  # Log level (@hot-reload: true)
   {{- if .Values.broker }}
+  {{- if not .Values.configReload.enabled }}
+  # Reload disabled: deliver the dynamic keys as environment instead.
   BROKKR__LOG__LEVEL: {{ .Values.broker.logLevel | default "info" | quote }}
-  # Diagnostic cleanup settings (@hot-reload: true)
   BROKKR__BROKER__DIAGNOSTIC_CLEANUP_INTERVAL_SECONDS: {{ .Values.broker.diagnosticCleanupIntervalSeconds | default 900 | quote }}
   BROKKR__BROKER__DIAGNOSTIC_MAX_AGE_HOURS: {{ .Values.broker.diagnosticMaxAgeHours | default 1 | quote }}
-  # Webhook delivery settings (static - requires restart)
-  # These are read once when the delivery worker starts, so a ConfigMap reload
-  # does not apply them; restart the pod after changing either value.
   BROKKR__BROKER__WEBHOOK_DELIVERY_INTERVAL_SECONDS: {{ .Values.broker.webhookDeliveryIntervalSeconds | default 5 | quote }}
   BROKKR__BROKER__WEBHOOK_DELIVERY_BATCH_SIZE: {{ .Values.broker.webhookDeliveryBatchSize | default 50 | quote }}
-  # Webhook delivery retention (static - requires restart)
-  # Captured when the cleanup worker starts, like the delivery settings above.
   BROKKR__BROKER__WEBHOOK_CLEANUP_RETENTION_DAYS: {{ .Values.broker.webhookCleanupRetentionDays | default 7 | quote }}
+  {{- end }}
   {{- if and .Values.broker.webhookEncryptionKey (not .Values.broker.webhookEncryptionKeyExistingSecret) }}
   # Webhook encryption key (static - requires restart)
   # When webhookEncryptionKeyExistingSecret is set, the key is injected via
@@ -58,7 +61,7 @@ data:
   BROKKR__BROKER__PAK_HASH: {{ .Values.broker.pakHash | quote }}
   {{- end }}
   {{- end }}
-  # CORS configuration (@hot-reload: true)
+  # CORS configuration (@hot-reload: false - restart required)
   {{- if .Values.cors }}
   BROKKR__CORS__ALLOWED_ORIGINS: {{ .Values.cors.allowedOrigins | join "," | quote }}
   BROKKR__CORS__ALLOWED_METHODS: {{ .Values.cors.allowedMethods | join "," | quote }}

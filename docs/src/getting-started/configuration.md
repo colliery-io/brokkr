@@ -75,7 +75,9 @@ The same list can be supplied by the `--generator-ids` CLI flag (highest precede
 
 ## Hot-Reload Configuration
 
-A subset of broker settings can change at runtime without a restart: the log level, CORS origins and preflight max-age, and the diagnostic/webhook background-task tunables. The authoritative list is in the [Environment Variables Reference](../reference/environment-variables.md#configuration-file-and-hot-reload); everything else requires a restart.
+> **Hot reload does not currently change broker behaviour.** Several settings are *designated* hot-reloadable, and the machinery to detect a change exists — but no part of the broker reads the reloaded values back. The log filter, the CORS layer and the background workers each capture their settings once at startup. **Treat every setting as restart-only.** This is tracked as BROKKR-T-0292; the rest of this section describes what the reload machinery does today, which is detection and reporting.
+
+The settings designated hot-reloadable are the log level, CORS origins and preflight max-age, and the diagnostic/webhook background-task tunables. The authoritative list is in the [Environment Variables Reference](../reference/environment-variables.md#configuration-file-and-hot-reload).
 
 Trigger a reload explicitly:
 
@@ -84,7 +86,7 @@ curl -X POST https://broker.example.com/api/v1/admin/config/reload \
   -H "Authorization: Bearer $ADMIN_PAK"
 ```
 
-A reload re-reads all three layers and records the change set in the audit log as `config.reloaded`.
+A reload re-reads all three layers and records the change set in the audit log as `config.reloaded`. That audit entry is the whole observable effect: the recomputed values are stored, but nothing consults them afterwards, so the broker keeps behaving as it did before. In a chart install the endpoint additionally has nothing new to find — the process environment is fixed for the pod's lifetime — so it consistently reports no changes.
 
 There is also an automatic path, but it depends on how the broker was deployed:
 
