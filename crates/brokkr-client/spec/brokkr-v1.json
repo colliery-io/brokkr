@@ -2950,7 +2950,7 @@
       "url": "https://www.elastic.co/licensing/elastic-license"
     },
     "title": "brokkr-broker",
-    "version": "0.9.1"
+    "version": "0.9.2"
   },
   "openapi": "3.0.3",
   "paths": {
