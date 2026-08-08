@@ -4,15 +4,15 @@ level: task
 title: "Agent WS client cannot dial wss:// — tokio-tungstenite built without TLS feature"
 short_code: "BROKKR-T-0325"
 created_at: 2026-08-08T13:31:15.220414+00:00
-updated_at: 2026-08-08T13:31:15.220414+00:00
+updated_at: 2026-08-08T21:48:19.496004+00:00
 parent: 
 blocked_by: []
 archived: false
 
 tags:
   - "#task"
-  - "#phase/backlog"
   - "#bug"
+  - "#phase/completed"
 
 
 exit_criteria_met: false
@@ -40,6 +40,10 @@ Make the agent's broker WebSocket channel work across a TLS boundary. As shipped
   2. Configure an agent with `broker_url = "https://<host>"`.
   3. Agent registers and polls fine over HTTPS (reqwest has native-tls), but the WS channel never comes up.
 - **Expected vs Actual**: Expected — `ws_url_from_broker_url` maps `https://` → `wss://` (`crates/brokkr-agent/src/broker_ws.rs:222`) and the agent connects. Actual — `tokio_tungstenite::connect_async` fails instantly with `UrlError::TlsFeatureNotEnabled` on every reconnect attempt; the handshake never reaches the network. `crates/brokkr-agent/Cargo.toml` declared `tokio-tungstenite = "0.24"` with no TLS feature (TLS is opt-in in tokio-tungstenite).
+
+## Acceptance Criteria
+
+## Acceptance Criteria
 
 ## Acceptance Criteria **[REQUIRED]**
 

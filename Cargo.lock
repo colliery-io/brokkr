@@ -375,7 +375,7 @@ dependencies = [
 
 [[package]]
 name = "brokkr-agent"
-version = "0.9.1"
+version = "0.9.2"
 dependencies = [
  "aquamarine",
  "axum",
@@ -410,7 +410,7 @@ dependencies = [
 
 [[package]]
 name = "brokkr-broker"
-version = "0.9.1"
+version = "0.9.2"
 dependencies = [
  "aes-gcm",
  "axum",
@@ -462,7 +462,7 @@ dependencies = [
 
 [[package]]
 name = "brokkr-cli"
-version = "0.9.1"
+version = "0.9.2"
 dependencies = [
  "brokkr-client",
  "clap",
@@ -476,7 +476,7 @@ dependencies = [
 
 [[package]]
 name = "brokkr-client"
-version = "0.9.1"
+version = "0.9.2"
 dependencies = [
  "bytes",
  "chrono",
@@ -495,7 +495,7 @@ dependencies = [
 
 [[package]]
 name = "brokkr-models"
-version = "0.9.1"
+version = "0.9.2"
 dependencies = [
  "brokkr-utils",
  "chrono",
@@ -514,7 +514,7 @@ dependencies = [
 
 [[package]]
 name = "brokkr-utils"
-version = "0.9.1"
+version = "0.9.2"
 dependencies = [
  "chrono",
  "config",
@@ -536,7 +536,7 @@ dependencies = [
 
 [[package]]
 name = "brokkr-wire"
-version = "0.9.1"
+version = "0.9.2"
 dependencies = [
  "brokkr-models",
  "chrono",
@@ -4198,7 +4198,9 @@ checksum = "edc5f74e248dc973e0dbb7b74c7e0d6fcc301c694ff50049504004ef4d0cdcd9"
 dependencies = [
  "futures-util",
  "log",
+ "native-tls",
  "tokio",
+ "tokio-native-tls",
  "tungstenite",
 ]
 
@@ -4488,6 +4490,7 @@ dependencies = [
  "http 1.4.0",
  "httparse",
  "log",
+ "native-tls",
  "rand",
  "sha1",
  "thiserror 1.0.64",
