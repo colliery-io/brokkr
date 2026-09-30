@@ -3,11 +3,15 @@
 // render with realistic data without a running broker. The console must be
 // served first: `cd crates/brokkr-web && trunk serve --port 9080`.
 //   Run: cd crates/brokkr-web/web-e2e && URL=http://127.0.0.1:9080 node shots.mjs
+// Aurora has a light and a dark theme that follow the OS. THEME=light or
+// THEME=dark emulates that OS setting (default dark); OUT sets the folder.
+//   THEME=light OUT=shots/light node shots.mjs
 import { chromium } from "@playwright/test";
 import { mkdirSync } from "node:fs";
 
 const BASE = process.env.URL || "http://127.0.0.1:9080";
-const OUT = "shots";
+const THEME = process.env.THEME === "light" ? "light" : "dark";
+const OUT = process.env.OUT || "shots";
 mkdirSync(OUT, { recursive: true });
 
 // ---- fixtures ------------------------------------------------------------
@@ -244,6 +248,7 @@ const browser = await chromium.launch();
 const ctx = await browser.newContext({
   viewport: { width: 1440, height: 900 },
   deviceScaleFactor: 2,
+  colorScheme: THEME,
 });
 const page = await ctx.newPage();
 const errs = [];
@@ -281,6 +286,18 @@ await page.route("**/api/v1/**", (route) => {
   // get an empty tenant list (selector hidden) instead of 404 noise.
   if (!(key in MOCKS) && suffix === "/paks") {
     return route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
+  }
+  // The shell reads the fleet (nav count, broker live state) and the active
+  // work orders (nav count) on every view, and every scene opens on the
+  // Overview (agent events) before it navigates; scenes that don't mock
+  // these get the standard fixtures instead of 404 noise.
+  const SHELL = { "/fleet": FLEET, "/work-orders": ACTIVE_WOS, "/agent-events": EVENTS };
+  if (!(key in MOCKS) && suffix in SHELL) {
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(SHELL[suffix]),
+    });
   }
   if (key in MOCKS) {
     return route.fulfill({
