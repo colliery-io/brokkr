@@ -1,25 +1,28 @@
 //! Fleet view — agents from `GET /api/v1/fleet`, **grouped by cluster** (one panel
 //! per `cluster_name`), with a KPI strip and a row per agent (status/health pills,
-//! `⇄ ws`, heartbeat "ago"). Clicking a row opens the agent-detail **Modal** with
-//! the console's only write: **run diagnostic**.
+//! `⇄ ws`, heartbeat "ago"). Clicking a row opens the agent-detail slide-over (a
+//! `Drawer`, design/README.md) with
+//! the console's writes: **pause/resume** and **run diagnostic**.
 //!
 //! Diagnostics are deployment-object-scoped in the broker
 //! (`POST /deployment-objects/:id/diagnostics`; `deployment_object_id` is NOT
-//! NULL), but the fleet rollup carries no deployment-object id — so the modal
+//! NULL), but the fleet rollup carries no deployment-object id — so the drawer
 //! fetches the agent's target state (`GET /agents/:id/target-state?mode=full`)
 //! and offers a picker. An agent with no deployment objects has nothing to
 //! diagnose, and says so instead of showing a dead button (BROKKR-T-0275).
 //!
 //! The created request's id is kept and polled (`GET /diagnostics/:id`) until the
 //! request is terminal or the poll bound is hit, and the outcome — pod statuses,
-//! events, log tails — is rendered in the same modal (BROKKR-T-0301).
+//! events, log tails — is rendered in the same drawer (BROKKR-T-0301).
 
 use crate::api;
-use crate::components::{sev, toast, ToastBus};
+use crate::components::{sev, LiveDot, Sweep, FRESH_BEAT_SECS};
 use crate::models::{DiagEvent, DiagnosticData, DiagnosticOutcome, FleetAgentRecord, PodStatus};
-use crate::views::{ago, Kpi};
+use crate::views::ago;
 use aurora_leptos::components::*;
-use aurora_leptos::tokens::{status_color, token};
+use aurora_leptos::data::{CodeBlock, DetailList, KeyValue, SectionLabel, StatTile};
+use aurora_leptos::frame::{use_toaster, Drawer};
+use aurora_leptos::tokens::token;
 use leptos::prelude::*;
 use std::collections::BTreeMap;
 use wasm_bindgen_futures::spawn_local;
@@ -36,19 +39,15 @@ const POLL_EVERY_MS: u64 = 2_000;
 /// forever would just spin; the console stops and says so.
 const POLL_MAX: u32 = 45;
 
-/// Uppercase section heading, matching the modal's other headings.
+/// Uppercase section heading, matching the drawer's other headings.
 fn heading(text: &'static str) -> AnyView {
-    view! {
-        <span style="font:600 10px var(--font-mono);text-transform:uppercase;\
-                     letter-spacing:.05em;color:var(--muted);">{text}</span>
-    }
-    .into_any()
+    view! { <SectionLabel label=text /> }.into_any()
 }
 
 /// A neutral, non-alarming note (used for legitimately empty payloads).
 fn note(text: String) -> AnyView {
     view! {
-        <span style="font:11px var(--font-mono);color:var(--faint);">{text}</span>
+        <span class="brk-note">{text}</span>
     }
     .into_any()
 }
@@ -82,14 +81,12 @@ fn pods_view(pods: Result<Vec<PodStatus>, String>) -> AnyView {
                         <Group justify="between">
                             <Group gap="sm">
                                 <Pill color=color>{p.phase}</Pill>
-                                <span style="font:11px var(--font-mono);color:var(--fg);">
-                                    {where_}
-                                </span>
+                                <span class="brk-value">{where_}</span>
                                 {(!reason.is_empty()).then(|| view! {
-                                    <span style="font:10px var(--font-mono);color:var(--gold);">{reason}</span>
+                                    <span class="brk-warn">{reason}</span>
                                 })}
                             </Group>
-                            <span style="font:10px var(--font-mono);color:var(--faint);">
+                            <span class="brk-note">
                                 {format!("{ready}/{total} ready \u{00b7} {restarts} restarts")}
                             </span>
                         </Group>
@@ -128,13 +125,10 @@ fn events_view(events: Result<Vec<DiagEvent>, String>) -> AnyView {
                         <Stack gap="xs">
                             <Group gap="sm">
                                 <Pill color=color>{kind}</Pill>
-                                <span style="font:11px var(--font-mono);color:var(--fg);">{reason}</span>
-                                <span style="font:10px var(--font-mono);color:var(--faint);">
-                                    {obj}{count}
-                                </span>
+                                <span class="brk-value">{reason}</span>
+                                <span class="brk-note">{obj}{count}</span>
                             </Group>
-                            <span style="font:11px var(--font-sans);color:var(--muted);\
-                                         word-break:break-word;">{msg}</span>
+                            <span class="brk-text">{msg}</span>
                         </Stack>
                     }
                 })
@@ -154,12 +148,11 @@ fn logs_view(tails: Result<Vec<(String, String)>, String>) -> AnyView {
             let blocks = v
                 .into_iter()
                 .map(|(key, text)| {
+                    let label = format!("Log tail {key}");
                     view! {
                         <Stack gap="xs">
-                            <span style="font:10px var(--font-mono);color:var(--teal);">{key}</span>
-                            <pre style="margin:0;max-height:160px;overflow:auto;background:var(--inset);\
-                                        border-radius:6px;padding:8px;font:10.5px var(--font-mono);\
-                                        color:var(--fg);white-space:pre-wrap;">{text}</pre>
+                            <span class="brk-logkey">{key}</span>
+                            <CodeBlock code=text max_height="160px" wrap=true label=label />
                         </Stack>
                     }
                 })
@@ -192,10 +185,10 @@ pub fn FleetView() -> impl IntoView {
     // fetcher makes the resource refetch when the tenant selection changes.
     let scope = crate::app::use_scope();
     let data = LocalResource::new(move || api::fleet(scope.get()));
-    set_interval(move || data.refetch(), std::time::Duration::from_secs(5));
+    crate::components::poll(move || data.refetch(), std::time::Duration::from_secs(5));
     let selected = RwSignal::new(None::<FleetAgentRecord>);
     let open = RwSignal::new(false);
-    let bus = use_context::<ToastBus>();
+    let toaster = use_toaster();
     // Deployment objects targeted at the selected agent — refetched when the
     // selection changes (same idiom as the stack-health / deliveries panels).
     let objects = LocalResource::new(move || {
@@ -255,7 +248,7 @@ pub fn FleetView() -> impl IntoView {
             }
         }
     });
-    set_interval(
+    crate::components::poll(
         move || {
             if diag_id.get_untracked().is_none() || settled.get_untracked() {
                 return;
@@ -305,39 +298,59 @@ pub fn FleetView() -> impl IntoView {
                     .into_iter()
                     .map(|(cluster, ags)| {
                         let count = ags.len();
+                        let active_here = ags.iter().filter(|a| a.status.eq_ignore_ascii_case("active")).count();
                         let rows = ags.into_iter().map(|a| {
                             let (h, hc) = a.health();
-                            let sc = status_color(&a.status);
-                            let live = a.status.eq_ignore_ascii_case("active");
+                            // Brokkr agent statuses (ACTIVE/INACTIVE) are not Aurora's
+                            // run statuses; the dot shows health (design/README.md).
+                            let sc = sev(&a.status);
+                            // Pulse while the agent is active and its last beat is fresh.
+                            let live = a.status.eq_ignore_ascii_case("active")
+                                && a.heartbeat_age_seconds.is_some_and(|s| s < FRESH_BEAT_SECS);
                             let a_sel = a.clone();
+                            let a_id = a.agent_id.clone();
                             view! {
-                                <div style="cursor:pointer;border-radius:8px;padding:2px 4px;"
-                                     on:click=move |_| {
-                                         chosen.set(String::new());
-                                         reset_diagnostic();
-                                         reset_pause();
-                                         selected.set(Some(a_sel.clone()));
-                                         open.set(true);
-                                     }>
-                                    <Group justify="between">
+                                <TableRow
+                                    selected=Signal::derive(move || {
+                                        open.get() && selected.with(|x| x.as_ref().is_some_and(|x| x.agent_id == a_id))
+                                    })
+                                    on_click=Callback::new(move |_| {
+                                        chosen.set(String::new());
+                                        reset_diagnostic();
+                                        reset_pause();
+                                        selected.set(Some(a_sel.clone()));
+                                        open.set(true);
+                                    })
+                                >
+                                    <td>
                                         <Group gap="sm">
-                                            <Dot color=sc glow=live />
-                                            <span style="font:13px var(--font-mono);color:var(--fg);min-width:150px;">{a.name.clone()}</span>
-                                            <Pill color=sc>{a.status.to_lowercase()}</Pill>
-                                            <Pill color=hc>{h}</Pill>
-                                            {a.ws_connected.then(|| view! {
-                                                <span style="font:9.5px var(--font-mono);color:var(--teal);">"\u{21c4} ws"</span>
-                                            })}
+                                            <LiveDot color=hc live=live />
+                                            <span>{a.name.clone()}</span>
                                         </Group>
-                                        <span style="font:11px var(--font-mono);color:var(--muted);">{ago(a.heartbeat_age_seconds)}</span>
-                                    </Group>
-                                </div>
+                                    </td>
+                                    <td><Pill color=sc>{a.status.to_lowercase()}</Pill></td>
+                                    <td><Pill color=hc>{h}</Pill></td>
+                                    <td>
+                                        {a.ws_connected.then(|| view! {
+                                            <span class="brk-ws" title="connected on the WebSocket channel">"\u{21c4} ws"</span>
+                                        })}
+                                    </td>
+                                    <td class="brk-muted brk-right">{ago(a.heartbeat_age_seconds)}</td>
+                                </TableRow>
                             }
                         }).collect_view();
-                        let title = format!("{cluster}  ·  {count}");
+                        let caption = format!("{active_here}/{count} active");
+                        let label = format!("Agents in {cluster}");
                         view! {
-                            <Panel title=title>
-                                <Stack gap="sm">{rows}</Stack>
+                            <Panel title=cluster caption=caption>
+                                <Table mono=true fixed=true label=label
+                                    widths=vec!["34%".into(), "16%".into(), "16%".into(), "14%".into(), "20%".into()]>
+                                    <thead><tr>
+                                        <th>"Agent"</th><th>"Status"</th><th>"Health"</th>
+                                        <th>"Channel"</th><th class="brk-right">"Heartbeat"</th>
+                                    </tr></thead>
+                                    <tbody>{rows}</tbody>
+                                </Table>
                             </Panel>
                         }
                     })
@@ -345,12 +358,12 @@ pub fn FleetView() -> impl IntoView {
 
                 view! {
                     <Stack gap="md">
-                        <Group gap="md" wrap=true>
-                            <Kpi label="agents" value=total.to_string() color="var(--fg-bright)" />
-                            <Kpi label="active" value=active.to_string() color=token::OK />
-                            <Kpi label="degraded" value=degraded.to_string() color=token::GOLD />
-                            <Kpi label="failing" value=failing.to_string() color=token::BAD />
-                        </Group>
+                        <div class="brk-kpis">
+                            <StatTile label="agents" value=total.to_string() />
+                            <StatTile label="active" value=active.to_string() color=token::OK />
+                            <StatTile label="degraded" value=degraded.to_string() color=token::GOLD />
+                            <StatTile label="failing" value=failing.to_string() color=token::BAD />
+                        </div>
                         {panels}
                     </Stack>
                 }
@@ -358,7 +371,7 @@ pub fn FleetView() -> impl IntoView {
             }
         }}
 
-        <Modal open=open title="Agent detail">
+        <Drawer open=open title="Agent detail" size="lg">
             {move || match selected.get() {
                 None => ().into_any(),
                 Some(a) => {
@@ -371,11 +384,12 @@ pub fn FleetView() -> impl IntoView {
                     let a_id = a.agent_id.clone();
                     view! {
                         <Stack gap="md">
-                            <span style="font:600 15px var(--font-mono);color:var(--fg-bright);">{a.name.clone()}</span>
-                            <div>
-                                <crate::components::DetailRow label="agent id">{a.agent_id.clone()}</crate::components::DetailRow>
-                                <crate::components::DetailRow label="cluster">{if a.cluster_name.is_empty() { "(unknown)".to_string() } else { a.cluster_name.clone() }}</crate::components::DetailRow>
-                            </div>
+                            <span class="brk-detail-title">{a.name.clone()}</span>
+                            <DetailList mono=true>
+                                <KeyValue label="agent id">{a.agent_id.clone()}</KeyValue>
+                                <KeyValue label="cluster">{if a.cluster_name.is_empty() { "(unknown)".to_string() } else { a.cluster_name.clone() }}</KeyValue>
+                                <KeyValue label="last heartbeat">{ago(a.heartbeat_age_seconds)}</KeyValue>
+                            </DetailList>
                             <Group gap="sm">
                                 // Reflects a pause/resume done here immediately; otherwise
                                 // the agent's status as of the last fleet refetch.
@@ -383,21 +397,17 @@ pub fn FleetView() -> impl IntoView {
                                     let shown = pause_status
                                         .get()
                                         .unwrap_or_else(|| a_status_pill.clone());
-                                    let c = status_color(&shown);
+                                    let c = sev(&shown);
                                     view! { <Pill color=c>{shown.to_lowercase()}</Pill> }
                                 }}
                                 <Pill color=hc>{h}</Pill>
                                 {a.ws_connected.then(|| view! {
-                                    <span style="font:9.5px var(--font-mono);color:var(--teal);">"\u{21c4} ws"</span>
+                                    <span class="brk-ws">"\u{21c4} ws"</span>
                                 })}
                             </Group>
-                            <span style="font:11px var(--font-mono);color:var(--muted);">
-                                {format!("last heartbeat {}", ago(a.heartbeat_age_seconds))}
-                            </span>
 
                             // ---- pause / resume (BROKKR-T-0322) ----------------
-                            <span style="font:600 10px var(--font-mono);text-transform:uppercase;\
-                                         letter-spacing:.05em;color:var(--muted);">"agent state"</span>
+                            <SectionLabel label="agent state" />
                             {move || {
                                 let current =
                                     pause_status.get().unwrap_or_else(|| a_status_ctl.clone());
@@ -409,8 +419,7 @@ pub fn FleetView() -> impl IntoView {
                                 };
                                 let id_for_click = a_id.clone();
                                 view! {
-                                    <span style="font:11px var(--font-mono);color:var(--muted);\
-                                                 line-height:1.5;">
+                                    <span class="brk-text">
                                         {if paused {
                                             "Paused: this agent stops fetching deployment objects and \
                                              work orders. Already-applied resources stay in the cluster \
@@ -424,9 +433,13 @@ pub fn FleetView() -> impl IntoView {
                                         label="Admin PAK"
                                         placeholder="brokkr_\u{2026}"
                                         value=pause_pak
+                                        autocomplete="off"
                                     />
                                     <Group gap="sm">
-                                        <Button on_click=Callback::new(move |_| {
+                                        <Button
+                                            loading=pause_busy
+                                            loading_label="Working\u{2026}"
+                                            on_click=Callback::new(move |_| {
                                             let pak = pause_pak.get();
                                             if pak.trim().is_empty() {
                                                 pause_error.set(Some(
@@ -447,17 +460,11 @@ pub fn FleetView() -> impl IntoView {
                                                     Ok(updated) => {
                                                         pause_status.set(Some(updated.status.clone()));
                                                         data.refetch();
-                                                        if let Some(b) = bus {
-                                                            toast(
-                                                                b,
-                                                                if target == "ACTIVE" {
-                                                                    "agent resumed"
-                                                                } else {
-                                                                    "agent paused"
-                                                                },
-                                                                token::OK,
-                                                            );
-                                                        }
+                                                        toaster.success(if target == "ACTIVE" {
+                                                            "agent resumed"
+                                                        } else {
+                                                            "agent paused"
+                                                        });
                                                     }
                                                     Err(e) => {
                                                         pause_error.set(Some(match e {
@@ -478,47 +485,44 @@ pub fn FleetView() -> impl IntoView {
                                                             }
                                                             _ => "The request failed.".to_string(),
                                                         }));
-                                                        if let Some(b) = bus {
-                                                            toast(b, "agent state change failed", token::BAD);
-                                                        }
+                                                        toaster.error("agent state change failed");
                                                     }
                                                 }
                                             });
                                         })>
-                                            {move || if pause_busy.get() {
-                                                "Working\u{2026}".to_string()
-                                            } else {
-                                                verb.to_string()
-                                            }}
+                                            {verb}
                                         </Button>
                                     </Group>
                                     {move || pause_error.get().map(|e| view! {
-                                        <Alert color=token::BAD.to_string()>{e}</Alert>
+                                        <Alert color=token::BAD>{e}</Alert>
                                     })}
                                 }
                             }}
-                            <span style="font:600 10px var(--font-mono);text-transform:uppercase;\
-                                         letter-spacing:.05em;color:var(--muted);">"diagnostics"</span>
+                            <SectionLabel label="diagnostics" />
                             {move || match objects.get() {
                                 None | Some(None) => {
                                     view! { <Loading label="loading deployment objects" /> }.into_any()
                                 }
                                 Some(Some(Err(_))) => view! {
-                                    <span style="font:11px var(--font-mono);color:var(--faint);">
-                                        "deployment objects unavailable"
-                                    </span>
+                                    <span class="brk-note">"deployment objects unavailable"</span>
                                 }.into_any(),
                                 Some(Some(Ok(objs))) if objs.is_empty() => view! {
-                                    <span style="font:11px var(--font-mono);color:var(--faint);">
+                                    <span class="brk-note">
                                         "No deployment objects target this agent \u{2014} nothing to diagnose."
                                     </span>
                                 }.into_any(),
                                 Some(Some(Ok(objs))) => {
                                     let options: Vec<String> = objs.iter().map(|o| o.label()).collect();
+                                    // Aurora's Select shows its value: start on the first object.
+                                    if chosen.get_untracked().is_empty() {
+                                        if let Some(first) = options.first() {
+                                            chosen.set(first.clone());
+                                        }
+                                    }
                                     let agent_id = agent_id.clone();
                                     view! {
                                         <Select label="deployment object" options=options value=chosen />
-                                        <Button on_click=Callback::new(move |_| {
+                                        <Group><Button on_click=Callback::new(move |_| {
                                             // Empty/stale selection falls back to the first
                                             // option, which is what the <select> is showing.
                                             let want = chosen.get();
@@ -538,19 +542,15 @@ pub fn FleetView() -> impl IntoView {
                                                     // Keep the id: it's what makes the result readable.
                                                     Ok(req) => {
                                                         diag_id.set(Some(req.id));
-                                                        if let Some(b) = bus {
-                                                            toast(b, "diagnostic requested \u{2014} collecting\u{2026}", token::OK);
-                                                        }
+                                                        toaster.success("diagnostic requested \u{2014} collecting\u{2026}");
                                                     }
                                                     Err(_) => {
-                                                        if let Some(b) = bus {
-                                                            toast(b, "diagnostic request failed", token::BAD);
-                                                        }
+                                                        toaster.error("diagnostic request failed");
                                                     }
                                                 }
                                             });
-                                        })>"\u{2315} Run diagnostic"</Button>
-                                        <span style="font:10px var(--font-mono);color:var(--faint);">
+                                        })>"\u{2315} Run diagnostic"</Button></Group>
+                                        <span class="brk-note">
                                             "Asks the agent to collect pod status, events and log tails \
                                              for this deployment object."
                                         </span>
@@ -595,27 +595,24 @@ pub fn FleetView() -> impl IntoView {
                                             DiagnosticOutcome::InFlight if exhausted => view! {
                                                 <Alert title="no result yet" color=token::GOLD>
                                                     <Stack gap="xs">
-                                                        <span style="font:11px var(--font-sans);color:var(--muted);">
-                                                            {stalled_msg}
-                                                        </span>
+                                                        <span class="brk-text">{stalled_msg}</span>
                                                         <Button on_click=recheck>"\u{21bb} Check again"</Button>
                                                     </Stack>
                                                 </Alert>
                                             }.into_any(),
                                             DiagnosticOutcome::InFlight => view! {
-                                                <Loading label="waiting for the agent to collect\u{2026}" />
+                                                <Sweep label="waiting for the agent to collect pod statuses, events, log tails\u{2026}" />
                                             }.into_any(),
                                             // `completed` + an `error` entry in `events` is a
                                             // FAILED collection, not an empty one.
                                             DiagnosticOutcome::CollectionFailed(errs) => {
                                                 let lines = errs.into_iter().map(|e| view! {
-                                                    <span style="font:11px var(--font-mono);color:var(--fg);\
-                                                                 word-break:break-word;">{e}</span>
+                                                    <span class="brk-value">{e}</span>
                                                 }).collect_view();
                                                 view! {
                                                     <Alert title="collection failed" color=token::BAD>
                                                         <Stack gap="xs">
-                                                            <span style="font:11px var(--font-sans);color:var(--muted);">
+                                                            <span class="brk-text">
                                                                 "The agent could not read the cluster. The broker still \
                                                                  reports the request as completed \u{2014} the error is \
                                                                  carried inside the result."
@@ -649,9 +646,7 @@ pub fn FleetView() -> impl IntoView {
                                                 };
                                                 view! {
                                                     <Alert title=title color=color>
-                                                        <span style="font:11px var(--font-sans);color:var(--muted);">
-                                                            {text}
-                                                        </span>
+                                                        <span class="brk-text">{text}</span>
                                                     </Alert>
                                                 }.into_any()
                                             }
@@ -661,9 +656,7 @@ pub fn FleetView() -> impl IntoView {
                                                 {heading("diagnostic result")}
                                                 <Group gap="sm">
                                                     <Pill color=sev(&status)>{status.clone()}</Pill>
-                                                    <span style="font:10px var(--font-mono);color:var(--faint);">
-                                                        {format!("request {id8}")}
-                                                    </span>
+                                                    <span class="brk-note">{format!("request {id8}")}</span>
                                                 </Group>
                                                 {body}
                                             </Stack>
@@ -676,6 +669,6 @@ pub fn FleetView() -> impl IntoView {
                     .into_any()
                 }
             }}
-        </Modal>
+        </Drawer>
     }
 }

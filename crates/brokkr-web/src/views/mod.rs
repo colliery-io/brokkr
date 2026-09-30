@@ -10,37 +10,25 @@ pub mod tenants;
 pub mod webhooks;
 pub mod work_orders;
 
-use leptos::prelude::*;
+use aurora_leptos::data::format_relative;
 
-/// Human "N ago" from a seconds count.
+/// Human "N ago" from a seconds count (Aurora's wording: "just now", "3m ago").
 pub fn ago(secs: Option<i64>) -> String {
     match secs {
-        None => "—".into(),
-        Some(s) if s < 5 => "now".into(),
-        Some(s) if s < 60 => format!("{s}s ago"),
-        Some(s) if s < 3600 => format!("{}m ago", s / 60),
-        Some(s) if s < 86400 => format!("{}h ago", s / 3600),
-        Some(s) => format!("{}d ago", s / 86400),
+        None => "\u{2014}".into(),
+        Some(s) => format_relative(s as f64 * 1000.0),
     }
 }
 
-/// A KPI card: mono uppercase label + big tabular value colored by meaning.
-/// `color` is any CSS color (a `token::*` hex or a `var(--*)`).
-#[component]
-pub fn Kpi(
-    #[prop(into)] label: String,
-    #[prop(into)] value: String,
-    #[prop(into)] color: String,
-) -> impl IntoView {
-    view! {
-        <div style="background:var(--panel);border:1px solid var(--border);border-radius:10px;\
-                    padding:13px 15px;min-width:120px;">
-            <div style="font:600 10px var(--font-mono);letter-spacing:.04em;text-transform:uppercase;\
-                        color:var(--muted);margin-bottom:4px;">{label}</div>
-            <div style=format!(
-                "font:600 26px var(--font-mono);color:{color};\
-                 font-variant-numeric:tabular-nums;line-height:1;"
-            )>{value}</div>
-        </div>
+#[cfg(test)]
+mod tests {
+    use super::ago;
+
+    #[test]
+    fn ago_uses_aurora_wording() {
+        assert_eq!(ago(None), "\u{2014}");
+        assert_eq!(ago(Some(2)), "just now");
+        assert_eq!(ago(Some(42)), "42s ago");
+        assert_eq!(ago(Some(900)), "15m ago");
     }
 }

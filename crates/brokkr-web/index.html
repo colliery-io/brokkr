@@ -3,9 +3,14 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
     <title>Brokkr · Operator Console</title>
-    <!-- Aurora Dark CSS is injected at runtime by <AuroraStyles/> (see app.rs);
-         no <link> needed. A build-time aurora-css hook is a later no-flash step. -->
+    <!-- Aurora THEME_INIT_SCRIPT: sets data-theme from the stored choice before
+         the first paint. A test (src/main.rs) keeps it equal to the constant. -->
+    <script>(function(){try{var t=localStorage.getItem("aurora-theme");if(t==="light"||t==="dark"){var d=document.documentElement;d.setAttribute("data-theme",t);d.style.colorScheme=t;}}catch(e){}})();</script>
+    <!-- Aurora's CSS is injected at runtime by <AuroraStyles/> (see app.rs).
+         The console's own few classes, all on Aurora tokens: -->
+    <link data-trunk rel="css" href="style/brokkr.css" />
     <link data-trunk rel="rust" data-wasm-opt="z" />
   </head>
   <body></body>

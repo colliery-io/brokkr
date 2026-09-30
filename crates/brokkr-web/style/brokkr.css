@@ -1,0 +1,122 @@
+/*
+ * Brokkr operator console: the few styles Aurora does not ship.
+ *
+ * Every colour, space, radius and font here is an Aurora token (`var(--*)`),
+ * so both themes work. No raw colour may go in this file: the
+ * `no_raw_colours` test in src/main.rs refuses one. Aurora's stylesheet is
+ * injected at runtime by <AuroraStyles/>; these classes use a `brk-` prefix
+ * and never restyle a `cl-` class.
+ */
+
+/* ----- Brand (top bar) ----- */
+.brk-brand { display: flex; align-items: center; gap: 9px; }
+.brk-brand__mark {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  background: var(--ice);
+  color: var(--on-accent);
+}
+.brk-brand__text { display: flex; flex-direction: column; }
+.brk-brand__name { font: 600 var(--fs-md) / 1 var(--font-sans); color: var(--fg-bright); }
+.brk-brand__sub {
+  font: 9.5px / 1.4 var(--font-mono);
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+/* ----- Top bar (right side) ----- */
+.brk-topbar { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-sm); flex: 1; }
+.brk-clock { font: var(--fs-xs) var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* ----- Sidebar footer ----- */
+.brk-sidefoot { display: flex; flex-direction: column; gap: var(--space-sm); }
+.brk-sidefoot__line {
+  display: flex;
+  justify-content: space-between;
+  font: 10px var(--font-mono);
+  color: var(--faint);
+}
+
+/* ----- Layout ----- */
+.brk-page { max-width: 1500px; margin: 0 auto; display: flex; flex-direction: column; gap: var(--space-md); }
+/* KPI row: auto-fit tiles, as in design/README.md. */
+.brk-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: var(--space-sm); }
+.brk-kpis > * { min-width: 0; }
+/* Tiles whose sub line is a long metric name. */
+.brk-kpis--wide { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.brk-grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-sm); }
+@media (max-width: 900px) {
+  .brk-grid-2 { grid-template-columns: minmax(0, 1fr); }
+}
+.brk-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--space-sm); }
+
+/* A feed whose events carry no time: Aurora's FeedRow keeps an empty 64px
+   time slot, so hide it here. */
+.brk-feed-notime .cl-feed__time { display: none; }
+
+/* ----- Text ----- */
+/* A neutral note: an empty payload, a hint, an id. */
+.brk-note { font: 11px var(--font-mono); color: var(--faint); line-height: 1.5; }
+/* A secondary mono fact (a status word, a count, "3m ago"). */
+.brk-meta { font: 11px var(--font-mono); color: var(--muted); }
+/* A primary mono value in a row (an agent name, a pod path). */
+.brk-value { font: var(--fs-xs) var(--font-mono); color: var(--fg); }
+/* Body text in a panel or a callout. */
+.brk-text { font: var(--fs-xs) / 1.5 var(--font-sans); color: var(--fg-2); overflow-wrap: anywhere; }
+.brk-warn { font: 11px var(--font-mono); color: var(--gold-fg); }
+.brk-ws { font: 10px var(--font-mono); color: var(--teal); white-space: nowrap; }
+.brk-logkey { font: 10px var(--font-mono); color: var(--teal); }
+.brk-detail-title {
+  font: 600 var(--fs-sm) var(--font-mono);
+  color: var(--fg-bright);
+  overflow-wrap: anywhere;
+}
+.brk-big {
+  font: 600 22px var(--font-mono);
+  color: var(--ice);
+  font-variant-numeric: tabular-nums;
+}
+.brk-ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.brk-right,
+.cl-table .brk-right { text-align: right; }
+.brk-muted { color: var(--muted); }
+.brk-faint { color: var(--faint); }
+
+/* ----- Live motion ----- */
+/* A status dot that pulses while an agent's heartbeat is fresh. It uses
+   Aurora's `cl-pulse` keyframes; the guard below is local because Aurora
+   guards `.cl-pulse` only inside a graph. */
+.brk-pulse { display: inline-flex; animation: cl-pulse 1.6s ease-in-out infinite; }
+
+/* An indeterminate progress bar for a diagnostic the agent is collecting. */
+.brk-sweep {
+  position: relative;
+  height: 3px;
+  overflow: hidden;
+  border-radius: var(--radius-xs);
+  background: var(--inset);
+}
+.brk-sweep::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 30%;
+  background: var(--ice);
+  animation: brk-sweep 1.1s ease-in-out infinite;
+}
+@keyframes brk-sweep {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(340%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brk-pulse,
+  .brk-sweep::after { animation: none; }
+  .brk-sweep::after { width: 100%; opacity: 0.5; }
+}

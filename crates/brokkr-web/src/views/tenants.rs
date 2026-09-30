@@ -15,9 +15,11 @@
 //! credential store at all — BROKKR-T-0320 removed the one it used to have.
 
 use crate::api;
-use crate::components::{sev, toast, DetailRow, ToastBus};
+use crate::components::sev;
 use crate::models::Generator;
 use aurora_leptos::components::*;
+use aurora_leptos::data::{DetailList, KeyValue};
+use aurora_leptos::frame::{use_toaster, Modal, SecretReveal};
 use aurora_leptos::tokens::token;
 use leptos::prelude::*;
 use wasm_bindgen_futures::spawn_local;
@@ -45,7 +47,7 @@ pub fn TenantsView() -> impl IntoView {
     let error = RwSignal::new(None::<String>);
     let minted = RwSignal::new(None::<Minted>);
 
-    let bus = use_context::<ToastBus>();
+    let toaster = use_toaster();
 
     // Resets everything the dialog holds, including the credential fields.
     let reset = move || {
@@ -88,9 +90,7 @@ pub fn TenantsView() -> impl IntoView {
                     name.set(String::new());
                     description.set(String::new());
                     data.refetch();
-                    if let Some(b) = bus {
-                        toast(b, "tenant created", token::OK);
-                    }
+                    toaster.success("tenant created");
                 }
                 Err(e) => {
                     // Surface the broker's own message. `ErrorResponse` never
@@ -114,140 +114,139 @@ pub fn TenantsView() -> impl IntoView {
                         _ => "The request failed.".to_string(),
                     };
                     error.set(Some(msg));
-                    if let Some(b) = bus {
-                        toast(b, "tenant creation failed", token::BAD);
-                    }
+                    toaster.error("tenant creation failed");
                 }
             }
         });
     };
 
     view! {
-        <div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
-            <Button on_click=Callback::new(move |_| {
-                reset();
-                open.set(true);
-            })>"+ New tenant"</Button>
-        </div>
+        <Stack gap="md">
+            <Group justify="end">
+                <Button on_click=Callback::new(move |_| {
+                    reset();
+                    open.set(true);
+                })>"+ New tenant"</Button>
+            </Group>
 
-        {move || match data.get() {
-            None => view! { <Loading label="loading tenants" /> }.into_any(),
-            Some(Err(e)) => view! {
-                <ErrorState error=e on_retry=Callback::new(move |_| { data.refetch(); }) />
-            }
-            .into_any(),
-            Some(Ok(gens)) if gens.is_empty() => view! {
-                <Empty message="No tenants yet. Create one to scope stacks and agents to an application." />
-            }
-            .into_any(),
-            Some(Ok(gens)) => {
-                let rows = gens
-                    .into_iter()
-                    .map(|g: Generator| {
-                        let status = if g.is_active { "active" } else { "inactive" };
-                        let color = sev(status);
-                        view! {
-                            <tr>
-                                <td>{g.name}</td>
-                                <td style="color:var(--muted);">
-                                    {g.description.unwrap_or_else(|| "\u{2014}".into())}
-                                </td>
-                                <td><Pill color=color.to_string()>{status}</Pill></td>
-                                <td style="color:var(--faint);">
-                                    {g.last_active_at.unwrap_or_else(|| "never".into())}
-                                </td>
-                                <td style="color:var(--faint);">{g.id}</td>
-                            </tr>
-                        }
-                    })
-                    .collect_view();
-                view! {
-                    <Panel title="Tenants">
-                        <Table mono=true>
-                            <thead>
-                                <tr>
-                                    <th>"Name"</th>
-                                    <th>"Description"</th>
-                                    <th>"Status"</th>
-                                    <th>"Last active"</th>
-                                    <th>"ID"</th>
-                                </tr>
-                            </thead>
-                            <tbody>{rows}</tbody>
-                        </Table>
-                    </Panel>
+            {move || match data.get() {
+                None => view! { <Loading label="loading tenants" /> }.into_any(),
+                Some(Err(e)) => view! {
+                    <ErrorState error=e on_retry=Callback::new(move |_| { data.refetch(); }) />
                 }
-                .into_any()
-            }
-        }}
+                .into_any(),
+                Some(Ok(gens)) if gens.is_empty() => view! {
+                    <Empty message="No tenants yet. Create one to scope stacks and agents to an application." />
+                }
+                .into_any(),
+                Some(Ok(gens)) => {
+                    let rows = gens
+                        .into_iter()
+                        .map(|g: Generator| {
+                            let status = if g.is_active { "active" } else { "inactive" };
+                            let color = sev(status);
+                            view! {
+                                <TableRow>
+                                    <td>{g.name}</td>
+                                    <td class="brk-muted">
+                                        {g.description.unwrap_or_else(|| "\u{2014}".into())}
+                                    </td>
+                                    <td><Pill color=color>{status}</Pill></td>
+                                    <td class="brk-faint">
+                                        {g.last_active_at.unwrap_or_else(|| "never".into())}
+                                    </td>
+                                    <td class="brk-faint">{g.id}</td>
+                                </TableRow>
+                            }
+                        })
+                        .collect_view();
+                    view! {
+                        <Panel title="Tenants">
+                            <Table mono=true label="Tenants">
+                                <thead>
+                                    <tr>
+                                        <th>"Name"</th>
+                                        <th>"Description"</th>
+                                        <th>"Status"</th>
+                                        <th>"Last active"</th>
+                                        <th>"ID"</th>
+                                    </tr>
+                                </thead>
+                                <tbody>{rows}</tbody>
+                            </Table>
+                        </Panel>
+                    }
+                    .into_any()
+                }
+            }}
+        </Stack>
 
-        <Modal open=open title="New tenant">
+        // The dialog stays open on a stray scrim click: it may hold a typed
+        // admin PAK or a one-time secret.
+        <Modal open=open title="New tenant" close_on_scrim=false on_close=Callback::new(move |_| reset())>
             {move || match minted.get() {
                 // ---- reveal-once panel ------------------------------------
                 Some(m) => view! {
-                    <Alert color=token::GOLD.to_string()>
-                        "This PAK is shown once and cannot be recovered. Store it now \u{2014} \
-                         the broker keeps only a hash, so the only way back is to rotate."
-                    </Alert>
-                    <div style="margin-top:12px;">
-                        <DetailRow label="Tenant">{m.name.clone()}</DetailRow>
-                    </div>
-                    <div style="margin-top:12px;display:flex;align-items:center;gap:10px;">
-                        <code style="flex:1;font:12px var(--font-mono);color:var(--fg);\
-                                     background:var(--inset);border:1px solid var(--border-control);\
-                                     border-radius:8px;padding:10px 12px;word-break:break-all;">
-                            {m.pak.clone()}
-                        </code>
-                        <CopyButton value=m.pak.clone() />
-                    </div>
-                    <div style="margin-top:16px;display:flex;justify-content:flex-end;gap:8px;">
-                        <Button on_click=Callback::new(move |_| {
-                            reset();
-                            open.set(false);
-                        })>"Done"</Button>
-                    </div>
+                    <Stack gap="md">
+                        <DetailList mono=true>
+                            <KeyValue label="Tenant">{m.name.clone()}</KeyValue>
+                        </DetailList>
+                        <SecretReveal
+                            secret=m.pak.clone()
+                            label="PAK"
+                            warning="This PAK is shown once and cannot be recovered. Store it now \u{2014} \
+                                     the broker keeps only a hash, so the only way back is to rotate."
+                            done_label="Done"
+                            on_done=Callback::new(move |_| {
+                                reset();
+                                open.set(false);
+                            })
+                        />
+                    </Stack>
                 }
                 .into_any(),
 
                 // ---- the form ---------------------------------------------
                 None => view! {
-                    <TextInput label="Name" placeholder="acme-payments" value=name />
-                    <div style="margin-top:10px;">
+                    <Stack gap="md">
+                        <TextInput label="Name" placeholder="acme-payments" value=name />
                         <TextInput
                             label="Description (optional)"
                             placeholder="What this tenant deploys"
                             value=description
                         />
-                    </div>
-                    <div style="margin-top:14px;">
-                        <PasswordInput
-                            label="Admin PAK"
-                            placeholder="brokkr_\u{2026}"
-                            value=admin_pak
-                        />
-                        <div style="font:10px var(--font-mono);color:var(--faint);margin-top:6px;\
-                                    line-height:1.5;">
-                            "Required: the console's own credential is read-only, so it cannot \
-                             mint tenants. Held in memory for this request only \u{2014} never \
-                             stored, and cleared as soon as it completes."
-                        </div>
-                    </div>
+                        <Stack gap="xs">
+                            <PasswordInput
+                                label="Admin PAK"
+                                placeholder="brokkr_\u{2026}"
+                                value=admin_pak
+                                autocomplete="off"
+                            />
+                            <span class="brk-note">
+                                "Required: the console's own credential is read-only, so it cannot \
+                                 mint tenants. Held in memory for this request only \u{2014} never \
+                                 stored, and cleared as soon as it completes."
+                            </span>
+                        </Stack>
 
-                    {move || error.get().map(|e| view! {
-                        <div style="margin-top:12px;">
-                            <Alert color=token::BAD.to_string()>{e}</Alert>
-                        </div>
-                    })}
+                        {move || error.get().map(|e| view! {
+                            <Alert color=token::BAD>{e}</Alert>
+                        })}
 
-                    <div style="margin-top:18px;display:flex;justify-content:flex-end;gap:8px;">
-                        <Button on_click=Callback::new(move |_| {
-                            reset();
-                            open.set(false);
-                        })>"Cancel"</Button>
-                        <Button on_click=Callback::new(move |_| submit())>
-                            {move || if busy.get() { "Creating\u{2026}" } else { "Create tenant" }}
-                        </Button>
-                    </div>
+                        <Group justify="end" gap="sm">
+                            <Button variant="default" on_click=Callback::new(move |_| {
+                                reset();
+                                open.set(false);
+                            })>"Cancel"</Button>
+                            <Button
+                                loading=busy
+                                loading_label="Creating\u{2026}"
+                                on_click=Callback::new(move |_| submit())
+                            >
+                                "Create tenant"
+                            </Button>
+                        </Group>
+                    </Stack>
                 }
                 .into_any(),
             }}

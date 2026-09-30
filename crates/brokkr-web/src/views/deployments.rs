@@ -1,14 +1,15 @@
 //! Deployments view — stacks from `GET /api/v1/stacks`; click a stack for detail.
 //! NOTE: the handoff shows per-stack deployment objects with a per-agent health
 //! rollup. That needs the deployment-objects + `/stacks/:id/health` endpoints per
-//! stack (N+1); v1 lists the stacks (name + generator) and a detail Modal. Per-object
+//! stack (N+1); v1 lists the stacks (name + generator) and a detail drawer. Per-object
 //! health is a follow-up (logged on the task).
 
 use crate::api;
 use crate::components::sev;
-use crate::components::DetailRow;
 use crate::models::Stack;
 use aurora_leptos::components::*;
+use aurora_leptos::data::{DetailList, KeyValue, SectionLabel};
+use aurora_leptos::frame::{Card, Drawer};
 use leptos::prelude::*;
 
 #[component]
@@ -40,54 +41,52 @@ pub fn DeploymentsView() -> impl IntoView {
                 view! { <Empty message="No stacks." /> }.into_any()
             }
             Some(Ok(stacks)) => {
-                let panels = stacks
+                let cards = stacks
                     .into_iter()
                     .map(|s| {
                         let gen8: String = s.generator_id.chars().take(8).collect();
                         let desc = s.description.clone().unwrap_or_default();
                         let s_sel = s.clone();
                         view! {
-                            <div style="cursor:pointer;" on:click=move |_| {
-                                selected.set(Some(s_sel.clone()));
-                                open.set(true);
-                            }>
-                                <Panel title=s.name.clone()>
-                                    <Group justify="between">
-                                        <span style="font:12px var(--font-sans);color:var(--muted);">
-                                            {desc}
-                                        </span>
-                                        <span style="font:11px var(--font-mono);color:var(--faint);">
-                                            {format!("gen · {gen8}")}
-                                        </span>
-                                    </Group>
-                                </Panel>
-                            </div>
+                            <Card
+                                title=s.name.clone()
+                                selected=Signal::derive({
+                                    let id = s.id.clone();
+                                    move || open.get() && selected.with(|x| x.as_ref().is_some_and(|x| x.id == id))
+                                })
+                                on_click=Callback::new(move |_| {
+                                    selected.set(Some(s_sel.clone()));
+                                    open.set(true);
+                                })
+                            >
+                                <Group justify="between">
+                                    <span class="brk-text">{desc}</span>
+                                    <span class="brk-note">{format!("gen · {gen8}")}</span>
+                                </Group>
+                            </Card>
                         }
                     })
                     .collect_view();
-                view! { <Stack gap="md">{panels}</Stack> }.into_any()
+                view! { <div class="brk-cards">{cards}</div> }.into_any()
             }
         }}
 
-        <Modal open=open title="Stack detail">
+        <Drawer open=open title="Stack detail">
             {move || match selected.get() {
                 None => ().into_any(),
                 Some(s) => view! {
                     <Stack gap="md">
-                        <span style="font:600 15px var(--font-mono);color:var(--fg-bright);">{s.name.clone()}</span>
-                        <div>
-                            <DetailRow label="stack id">{s.id.clone()}</DetailRow>
-                            <DetailRow label="generator">{s.generator_id.clone()}</DetailRow>
-                            <DetailRow label="description">{s.description.clone().unwrap_or_else(|| "—".into())}</DetailRow>
-                        </div>
-                        <span style="font:600 10px var(--font-mono);text-transform:uppercase;\
-                                     letter-spacing:.05em;color:var(--muted);">"deployment health"</span>
+                        <span class="brk-detail-title">{s.name.clone()}</span>
+                        <DetailList mono=true>
+                            <KeyValue label="stack id">{s.id.clone()}</KeyValue>
+                            <KeyValue label="generator">{s.generator_id.clone()}</KeyValue>
+                            <KeyValue label="description">{s.description.clone().unwrap_or_else(|| "—".into())}</KeyValue>
+                        </DetailList>
+                        <SectionLabel label="deployment health" />
                         {move || match health.get() {
                             None | Some(None) => view! { <Loading label="loading health" /> }.into_any(),
                             Some(Some(Err(_))) => view! {
-                                <span style="font:11px var(--font-mono);color:var(--faint);">
-                                    "health unavailable"
-                                </span>
+                                <span class="brk-note">"health unavailable"</span>
                             }.into_any(),
                             Some(Some(Ok(h))) => {
                                 let oc = sev(&h.overall_status);
@@ -97,9 +96,9 @@ pub fn DeploymentsView() -> impl IntoView {
                                         <Group justify="between">
                                             <Group gap="sm">
                                                 <Pill color=sev(&o.status)>{o.status}</Pill>
-                                                <span style="font:11px var(--font-mono);color:var(--muted);">{id8}</span>
+                                                <span class="brk-meta">{id8}</span>
                                             </Group>
-                                            <span style="font:10px var(--font-mono);color:var(--faint);">
+                                            <span class="brk-note">
                                                 {format!("{}\u{2713} {}~ {}\u{2717}", o.healthy_agents, o.degraded_agents, o.failing_agents)}
                                             </span>
                                         </Group>
@@ -107,7 +106,10 @@ pub fn DeploymentsView() -> impl IntoView {
                                 }).collect_view();
                                 view! {
                                     <Stack gap="sm">
-                                        <Pill color=oc>{h.overall_status}</Pill>
+                                        <Group gap="sm">
+                                            <span class="brk-meta">"overall"</span>
+                                            <Pill color=oc>{h.overall_status}</Pill>
+                                        </Group>
                                         {rows}
                                     </Stack>
                                 }.into_any()
@@ -117,6 +119,6 @@ pub fn DeploymentsView() -> impl IntoView {
                 }
                 .into_any(),
             }}
-        </Modal>
+        </Drawer>
     }
 }
