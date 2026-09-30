@@ -9,9 +9,10 @@ license = "Elastic-2.0"
 description = "Brokkr Operator Console — a read-mostly Leptos/WASM monitoring console served by the broker."
 
 [dependencies]
-# Aurora Dark design system (components + tokens + CSS), pinned. ADR BROKKR-A-0010.
-aurora-leptos = { git = "https://github.com/colliery-io/aurora-dark", rev = "b32747dfd69a8c0f65f73a3c9841822fe8af79be" }
-# Renderer selected here (csr); this also enables csr for aurora-leptos.
+# Aurora design system (components + tokens + CSS, light and dark themes),
+# from crates.io. ADR BROKKR-A-0010. The library is imported as `aurora_leptos`.
+colliery-io-aurora = "0.4.0"
+# Renderer selected here (csr); this also enables csr for Aurora.
 leptos = { version = "0.8", features = ["csr"] }
 # Wall-clock for the header clock (Date.now / getHours…).
 js-sys = "0.3"
