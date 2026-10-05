@@ -8,7 +8,7 @@ use crate::api;
 use crate::components::sev;
 use crate::models::AgentEventDto;
 use aurora_leptos::components::*;
-use aurora_leptos::data::{DetailList, FeedList, FeedRow, KeyValue};
+use aurora_leptos::data::{DetailList, FeedList, FeedRow, KeyValue, RelativeTime};
 use aurora_leptos::frame::{Drawer, TabItem, TabPanel, Tabs};
 use leptos::prelude::*;
 
@@ -52,27 +52,32 @@ pub fn TelemetryView() -> impl IntoView {
                                     let subject = e.event_type.clone();
                                     let status = e.status.clone();
                                     let agent: String = e.agent_id.chars().take(8).collect();
+                                    let at = crate::views::overview::event_at(e.created_at.as_deref());
                                     let e_sel = e.clone();
-                                    view! {
-                                        <FeedRow
-                                            dot=sc
-                                            subject=subject
-                                            actor=agent
-                                            status=status
-                                            status_color=sc
-                                            on_click=Callback::new(move |_| {
-                                                selected.set(Some(e_sel.clone()));
-                                                open.set(true);
-                                            })
-                                        >
-                                            {msg}
-                                        </FeedRow>
+                                    let on_click = Callback::new(move |_| {
+                                        selected.set(Some(e_sel.clone()));
+                                        open.set(true);
+                                    });
+                                    // FeedRow strips the Option of `at`: a row with no time passes none.
+                                    match at {
+                                        Some(t) => view! {
+                                            <FeedRow at=t dot=sc subject=subject actor=agent status=status status_color=sc on_click=on_click>
+                                                {msg}
+                                            </FeedRow>
+                                        }
+                                        .into_any(),
+                                        None => view! {
+                                            <FeedRow dot=sc subject=subject actor=agent status=status status_color=sc on_click=on_click>
+                                                {msg}
+                                            </FeedRow>
+                                        }
+                                        .into_any(),
                                     }
                                 })
                                 .collect_view();
                             view! {
                                 <Panel title="Agent events">
-                                    <div class="brk-feed-notime"><FeedList label="Agent events">{rows}</FeedList></div>
+                                    <FeedList label="Agent events">{rows}</FeedList>
                                 </Panel>
                             }
                             .into_any()
@@ -100,6 +105,7 @@ pub fn TelemetryView() -> impl IntoView {
                             </Group>
                             <DetailList mono=true>
                                 <KeyValue label="agent">{e.agent_id.clone()}</KeyValue>
+                                <KeyValue label="time"><RelativeTime iso=e.created_at.clone().unwrap_or_default() /></KeyValue>
                             </DetailList>
                             <span class="brk-text">
                                 {e.message.clone().unwrap_or_else(|| "(no message)".into())}
