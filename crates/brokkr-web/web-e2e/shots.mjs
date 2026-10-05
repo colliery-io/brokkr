@@ -52,10 +52,14 @@ brokkr_deployment_objects_total 47
 `;
 
 // scene = { name, nav?: sidebar label to click, mocks: { "/path": json } }
+// A time `s` seconds ago, as the broker sends it (RFC 3339). The feed shows it
+// as "3m ago" (BROKKR-T-0328).
+const ago = (s) => new Date(Date.now() - s * 1000).toISOString();
+
 const EVENTS = [
-  { agent_id: "a1", event_type: "Apply", status: "success", message: "applied Deployment/payments (3 objects)" },
-  { agent_id: "a1", event_type: "Heartbeat", status: "success", message: "k8s reachable (12ms)" },
-  { agent_id: "a2", event_type: "Reconcile", status: "failure", message: "Service/ingest: port 8080 already allocated" },
+  { agent_id: "a1", event_type: "Apply", status: "success", message: "applied Deployment/payments (3 objects)", created_at: ago(42) },
+  { agent_id: "a1", event_type: "Heartbeat", status: "success", message: "k8s reachable (12ms)", created_at: ago(190) },
+  { agent_id: "a2", event_type: "Reconcile", status: "failure", message: "Service/ingest: port 8080 already allocated", created_at: ago(3700) },
 ];
 
 const JOBS = [
@@ -79,8 +83,9 @@ const PAKS = [
 // team-payments owns the two prod agents; team-ingest the staging one.
 const FLEET_PAYMENTS = FLEET.slice(0, 2);
 const TELEM = [
-  { agent_id: "a1", event_type: "Apply", status: "success", message: "applied Deployment/payments (3 objects)" },
-  { agent_id: "a1", event_type: "Reconcile", status: "success", message: "no drift" },
+  { agent_id: "a1", event_type: "Apply", status: "success", message: "applied Deployment/payments (3 objects)", created_at: ago(42) },
+  { agent_id: "a1", event_type: "Reconcile", status: "success", message: "no drift", created_at: ago(900) },
+  // No created_at: an older broker. The row shows with no time.
   { agent_id: "a2", event_type: "Apply", status: "failure", message: "Service/ingest: port 8080 already allocated" },
 ];
 
@@ -186,6 +191,10 @@ const PAUSE_MOCKS = {
 
 const SCENES = [
   { name: "overview", mocks: { "/fleet": FLEET, "/agent-events": EVENTS } },
+  // The two other layouts of design/README.md (BROKKR-T-0328): the segmented
+  // control rearranges the five widgets.
+  { name: "overview-grid", click: "grid", mocks: { "/fleet": FLEET, "/agent-events": EVENTS } },
+  { name: "overview-stream", click: "stream", mocks: { "/fleet": FLEET, "/agent-events": EVENTS } },
   { name: "fleet", nav: "Fleet", mocks: { "/fleet": FLEET } },
   { name: "fleet-empty", nav: "Fleet", mocks: { "/fleet": [] } },
   { name: "fleet-modal", nav: "Fleet", click: "prod-agent-01", mocks: { "/fleet": FLEET } },
@@ -423,8 +432,12 @@ for (const s of SCENES) {
       console.log(`  assert: admin PAK not persisted ✓`);
     }
   }
-  // The selected scope persists in localStorage; clear it so scenes stay independent.
-  await page.evaluate(() => localStorage.removeItem("brokkr_scope"));
+  // The selected scope and the Overview layout persist in localStorage; clear
+  // them so scenes stay independent.
+  await page.evaluate(() => {
+    localStorage.removeItem("brokkr_scope");
+    localStorage.removeItem("brokkr_overview_layout");
+  });
 }
 
 console.log(errs.length ? `CONSOLE ERRORS:\n${errs.join("\n")}` : "no console errors");

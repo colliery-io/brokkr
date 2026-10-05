@@ -364,6 +364,10 @@ pub struct AgentEventDto {
     pub status: String,
     #[serde(default)]
     pub message: Option<String>,
+    /// When the broker recorded the event (RFC 3339). The feed shows it as
+    /// "3m ago" (BROKKR-T-0328).
+    #[serde(default)]
+    pub created_at: Option<String>,
 }
 
 /// `GET /api/v1/stacks/:id/health` — per-stack deployment-object health rollup.

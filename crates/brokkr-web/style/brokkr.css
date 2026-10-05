@@ -15,12 +15,10 @@
  *     height (--h-xs is 30px).
  *   - The 3px sweep bar: a hairline, with no token.
  *   - The layout widths: the page maximum, the grid minima and the 900px
- *     breakpoint.
+ *     breakpoint, and the 13px gap and 130px header allowance of the
+ *     Overview grid (from the design).
  * Aurora's stylesheet is injected at runtime by <AuroraStyles/>; these
- * classes use a `brk-` prefix and never restyle a `cl-` class, with one
- * exception: `.brk-feed-notime .cl-feed__time` hides the empty 64px time
- * slot that FeedRow keeps when a row has no time (AURORA-T-0007 item 6).
- * Remove it when Aurora repairs that defect.
+ * classes use a `brk-` prefix and never restyle a `cl-` class.
  */
 
 /* ----- Brand (top bar) ----- */
@@ -71,9 +69,57 @@
 }
 .brk-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--space-sm); }
 
-/* A feed whose events carry no time: Aurora's FeedRow keeps an empty 64px
-   time slot (AURORA-T-0007 item 6), so hide it here. See the header. */
-.brk-feed-notime .cl-feed__time { display: none; }
+/* ----- Overview layouts (design/README.md, BROKKR-T-0328) -----
+   The five widgets sit in named grid areas. The segmented control picks the
+   template; the widgets do not change. The 13px gap and the 130px header
+   allowance are from the design, with no token. Aurora Grid spans columns
+   only, so the templates live here. */
+.brk-overview {
+  display: grid;
+  gap: 13px;
+  min-height: calc(100vh - 130px);
+}
+.brk-overview > * { min-width: 0; }
+.brk-ov-kpis { grid-area: kpis; }
+.brk-ov-fleet { grid-area: fleet; }
+.brk-ov-flow { grid-area: flow; }
+.brk-ov-stream { grid-area: stream; }
+.brk-ov-jobs { grid-area: jobs; }
+/* The activity stream is the tall right column. */
+.brk-overview--command {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) repeat(2, minmax(0, 1.1fr));
+  grid-template-rows: auto 1fr auto auto;
+  grid-template-areas:
+    "kpis kpis kpis kpis"
+    "fleet fleet stream stream"
+    "jobs jobs stream stream"
+    "flow flow stream stream";
+}
+/* Three equal columns. */
+.brk-overview--grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: auto 1fr 1fr;
+  grid-template-areas:
+    "kpis kpis kpis"
+    "fleet fleet jobs"
+    "stream stream flow";
+}
+/* Activity first: the stream is the wide left column. */
+.brk-overview--stream {
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  grid-template-rows: auto auto auto 1fr;
+  grid-template-areas:
+    "stream kpis"
+    "stream fleet"
+    "stream jobs"
+    "stream flow";
+}
+/* A panel fills its area, so the rows of a layout line up. */
+.brk-overview > * > * { height: 100%; box-sizing: border-box; }
+@media (max-width: 900px) {
+  .brk-overview { grid-template-columns: minmax(0, 1fr); grid-template-areas: none; min-height: 0; }
+  .brk-overview > * { grid-area: auto; }
+}
 
 /* ----- Text ----- */
 /* A neutral note: an empty payload, a hint, an id. */
@@ -98,6 +144,8 @@
   font-variant-numeric: tabular-nums;
 }
 .brk-ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.brk-grow { flex: 1; }
+.brk-right { text-align: right; }
 .brk-muted { color: var(--muted); }
 .brk-faint { color: var(--faint); }
 
