@@ -34,16 +34,30 @@ pub struct FleetAgentRecord {
 }
 
 impl FleetAgentRecord {
-    /// Derived health bucket from the failing/degraded counts.
+    /// Derived health bucket from the failing/degraded counts. An agent that
+    /// has never checked in has no health to report: "unknown", muted
+    /// (BROKKR-T-0336).
     pub fn health(&self) -> (&'static str, &'static str) {
         use aurora_leptos::tokens::token;
-        if self.health_failing > 0 {
+        if !self.has_checked_in() {
+            ("unknown", token::MUTED)
+        } else if self.health_failing > 0 {
             ("failing", token::BAD)
         } else if self.health_degraded > 0 {
             ("degraded", token::GOLD)
         } else {
             ("healthy", token::OK)
         }
+    }
+
+    /// Whether the broker has ever heard a heartbeat from this agent.
+    pub fn has_checked_in(&self) -> bool {
+        self.last_heartbeat.is_some() || self.heartbeat_age_seconds.is_some()
+    }
+
+    /// `ACTIVE`, in any case.
+    pub fn is_active(&self) -> bool {
+        self.status.eq_ignore_ascii_case("active")
     }
 }
 

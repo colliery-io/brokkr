@@ -4,7 +4,7 @@
 //! that panel renders a note and the history still shows.
 
 use crate::api;
-use crate::components::sev;
+use crate::components::{sev, EmptyNext, DOCS};
 use crate::models::WorkOrderLogEntry;
 use aurora_leptos::components::*;
 use aurora_leptos::data::{DetailList, KeyValue};
@@ -49,7 +49,16 @@ pub fn WorkOrdersView() -> impl IntoView {
                 Some(Ok(wos)) => {
                     let act: Vec<_> = wos.into_iter().filter(|w| w.is_active()).collect();
                     if act.is_empty() {
-                        view! { <Panel title="Active"><Empty message="No work orders in flight." /></Panel> }.into_any()
+                        view! {
+                            <Panel title="Active">
+                                <EmptyNext
+                                    message="No work orders in flight."
+                                    next="A work order appears when a tenant requests an image build."
+                                    href=format!("{DOCS}/reference/work-orders.html")
+                                    link="What a work order is"
+                                />
+                            </Panel>
+                        }.into_any()
                     } else {
                         let rows = act.into_iter().map(|w| {
                             let id8: String = w.id.chars().take(8).collect();

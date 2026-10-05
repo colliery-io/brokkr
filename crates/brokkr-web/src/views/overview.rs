@@ -8,7 +8,7 @@
 //! the Deployments view shows it on demand (BROKKR-T-0328).
 
 use crate::api;
-use crate::components::sev;
+use crate::components::{sev, EmptyNext, DOCS};
 use crate::models::FleetAgentRecord;
 use aurora_leptos::components::*;
 use aurora_leptos::data::{FeedList, FeedRow, Segment, SegmentedBar, Sparkline, StatTile};
@@ -91,17 +91,16 @@ pub fn cluster_rollup(agents: &[FleetAgentRecord]) -> Vec<ClusterHealth> {
                 offline: 0,
             });
         c.total += 1;
-        if !a.status.eq_ignore_ascii_case("active") {
+        // An agent that is not active, or that has never checked in, is offline.
+        if !a.is_active() || !a.has_checked_in() {
             c.offline += 1;
             continue;
         }
         c.up += 1;
-        if a.health_failing > 0 {
-            c.failing += 1;
-        } else if a.health_degraded > 0 {
-            c.degraded += 1;
-        } else {
-            c.healthy += 1;
+        match a.health().0 {
+            "failing" => c.failing += 1,
+            "degraded" => c.degraded += 1,
+            _ => c.healthy += 1,
         }
     }
     by_cluster.into_values().collect()
@@ -173,9 +172,10 @@ pub fn OverviewView() -> impl IntoView {
                         Some(Ok(a)) => {
                             let total = a.len();
                             let active = a.iter().filter(|x| x.status.eq_ignore_ascii_case("active")).count();
-                            let degraded = a.iter().filter(|x| x.health_degraded > 0 && x.health_failing == 0).count();
-                            let failing = a.iter().filter(|x| x.health_failing > 0).count();
-                            let healthy = total.saturating_sub(degraded + failing);
+                            // An agent that never checked in is "unknown": in no bucket.
+                            let degraded = a.iter().filter(|x| x.health().0 == "degraded").count();
+                            let failing = a.iter().filter(|x| x.health().0 == "failing").count();
+                            let healthy = a.iter().filter(|x| x.health().0 == "healthy").count();
                             view! {
                                 <div class="brk-kpis">
                                     <StatTile label="active agents" value=format!("{active}/{total}") />
@@ -195,7 +195,14 @@ pub fn OverviewView() -> impl IntoView {
                 <div class="brk-ov-fleet">
                     <Panel title="Fleet by cluster">
                         {move || match fleet.get() {
-                            Some(Ok(a)) if a.is_empty() => view! { <Empty message="No agents." /> }.into_any(),
+                            Some(Ok(a)) if a.is_empty() => view! {
+                                <EmptyNext
+                                    message="No agents yet."
+                                    next="Create an agent record, start the agent with its PAK, then activate it from Fleet."
+                                    href=format!("{DOCS}/how-to/agent-registration.html")
+                                    link="How an agent registers"
+                                />
+                            }.into_any(),
                             Some(Ok(a)) => {
                                 let rows = cluster_rollup(&a).into_iter().map(|c| {
                                     let segments = vec![
@@ -253,7 +260,12 @@ pub fn OverviewView() -> impl IntoView {
                         {move || match events.get() {
                             None => view! { <Loading label="" /> }.into_any(),
                             Some(Err(e)) => view! { <ErrorState error=e on_retry=Callback::new(move |_| { events.refetch(); }) /> }.into_any(),
-                            Some(Ok(evs)) if evs.is_empty() => view! { <Empty message="No recent activity." /> }.into_any(),
+                            Some(Ok(evs)) if evs.is_empty() => view! {
+                                <EmptyNext
+                                    message="No activity yet."
+                                    next="An agent reports an event each time it applies, reconciles or heartbeats."
+                                />
+                            }.into_any(),
                             Some(Ok(evs)) => {
                                 let rows = evs.into_iter().take(8).map(|e| {
                                     // Agent-event statuses are Brokkr's (success/failure), not Aurora's.
@@ -281,7 +293,14 @@ pub fn OverviewView() -> impl IntoView {
                             Some(Ok(wos)) => {
                                 let act: Vec<_> = wos.into_iter().filter(|w| w.is_active()).collect();
                                 if act.is_empty() {
-                                    return view! { <Empty message="No active work orders." /> }.into_any();
+                                    return view! {
+                                        <EmptyNext
+                                            message="No active work orders."
+                                            next="A work order appears when a tenant requests an image build."
+                                            href=format!("{DOCS}/reference/work-orders.html")
+                                            link="What a work order is"
+                                        />
+                                    }.into_any();
                                 }
                                 let rows = act.into_iter().take(8).map(|w| {
                                     let id8: String = w.id.chars().take(8).collect();
@@ -307,33 +326,44 @@ pub fn OverviewView() -> impl IntoView {
 mod tests {
     use super::*;
 
-    fn agent(cluster: &str, status: &str, degraded: i64, failing: i64) -> FleetAgentRecord {
-        serde_json::from_value(serde_json::json!({
+    /// An agent the broker has heard from (`seen`), or a bare record.
+    fn agent(
+        cluster: &str,
+        status: &str,
+        degraded: i64,
+        failing: i64,
+        seen: bool,
+    ) -> FleetAgentRecord {
+        let mut v = serde_json::json!({
             "agent_id": "a", "name": "n", "cluster_name": cluster, "status": status,
             "ws_connected": false, "health_degraded": degraded, "health_failing": failing,
-        }))
-        .expect("fleet record")
+        });
+        if seen {
+            v["heartbeat_age_seconds"] = serde_json::json!(5);
+        }
+        serde_json::from_value(v).expect("fleet record")
     }
 
     #[test]
     fn the_rollup_groups_by_cluster_and_buckets_each_agent() {
         let fleet = [
-            agent("prod", "ACTIVE", 0, 0),
-            agent("prod", "ACTIVE", 1, 0),
-            agent("prod", "ACTIVE", 1, 2),
-            agent("prod", "INACTIVE", 0, 5),
-            agent("staging", "ACTIVE", 0, 0),
-            agent("", "INACTIVE", 0, 0),
+            agent("prod", "ACTIVE", 0, 0, true),
+            agent("prod", "ACTIVE", 1, 0, true),
+            agent("prod", "ACTIVE", 1, 2, true),
+            agent("prod", "INACTIVE", 0, 5, true),
+            agent("prod", "ACTIVE", 0, 0, false),
+            agent("staging", "ACTIVE", 0, 0, true),
+            agent("", "INACTIVE", 0, 0, false),
         ];
         let got = cluster_rollup(&fleet);
         let names: Vec<_> = got.iter().map(|c| c.name.as_str()).collect();
         assert_eq!(names, ["(unknown)", "prod", "staging"]);
         let prod = &got[1];
-        assert_eq!((prod.up, prod.total), (3, 4));
+        assert_eq!((prod.up, prod.total), (3, 5));
         assert_eq!(
             (prod.healthy, prod.degraded, prod.failing, prod.offline),
-            (1, 1, 1, 1),
-            "an inactive agent is offline, whatever its counts"
+            (1, 1, 1, 2),
+            "an inactive agent is offline, whatever its counts; so is one that never checked in"
         );
         assert_eq!(prod.hue(), token::BAD);
         assert_eq!(got[2].hue(), token::OK);
@@ -342,6 +372,16 @@ mod tests {
             token::MUTED,
             "a cluster with nothing up is muted"
         );
+    }
+
+    #[test]
+    fn an_agent_that_never_checked_in_has_unknown_health() {
+        let new = agent("prod", "INACTIVE", 0, 0, false);
+        assert_eq!(new.health().0, "unknown");
+        assert!(!new.has_checked_in());
+        let seen = agent("prod", "INACTIVE", 0, 0, true);
+        assert_eq!(seen.health().0, "healthy");
+        assert!(seen.has_checked_in());
     }
 
     #[test]

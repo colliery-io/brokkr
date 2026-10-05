@@ -74,3 +74,34 @@ mod tests {
         assert_eq!(sev("something-new"), token::MUTED);
     }
 }
+
+/// The docs site, for the "next step" links of empty states.
+pub const DOCS: &str = "https://colliery-io.github.io/brokkr";
+
+/// An empty state that says the next step (BROKKR-T-0336). Aurora's `Empty`
+/// takes one message and has no slot for a step or a link (AURORA-T-0007
+/// item 20), so this composes Aurora's `Text` and `Anchor` under a local
+/// layout class.
+#[component]
+pub fn EmptyNext(
+    #[prop(into)] message: String,
+    #[prop(into)] next: String,
+    #[prop(optional, into)] href: String,
+    #[prop(optional, into)] link: String,
+) -> impl IntoView {
+    use aurora_leptos::components::{Anchor, Text};
+    let link = (!href.is_empty()).then(|| {
+        let label = if link.is_empty() {
+            "Read how".to_string()
+        } else {
+            link
+        };
+        view! { <Anchor href=href>{label}</Anchor> }
+    });
+    view! {
+        <div class="brk-empty">
+            <Text dimmed=true>{message}</Text>
+            <span class="brk-empty__next">{next} " " {link}</span>
+        </div>
+    }
+}

@@ -191,6 +191,15 @@ pub fn TenantsView() -> impl IntoView {
                         <DetailList mono=true>
                             <KeyValue label="Tenant">{m.name.clone()}</KeyValue>
                         </DetailList>
+                        <span class="brk-text">
+                            "Give this PAK to the tenant: its CI, or a developer. With it, "
+                            <code>"brokkr apply"</code>
+                            " creates stacks and pushes manifests for this tenant only. The console \
+                             cannot use it: the console is read-only. "
+                            <Anchor href=format!("{}/tutorials/cicd-generators.html", crate::components::DOCS)>
+                                "How a tenant deploys"
+                            </Anchor>
+                        </span>
                         <SecretReveal
                             secret=m.pak.clone()
                             label="PAK"

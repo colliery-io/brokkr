@@ -5,7 +5,7 @@
 //! broker enhancement (logged on the task).
 
 use crate::api;
-use crate::components::sev;
+use crate::components::{sev, EmptyNext, DOCS};
 use crate::models::WebhookSummary;
 use aurora_leptos::components::*;
 use aurora_leptos::data::{DetailList, KeyValue, SectionLabel};
@@ -49,7 +49,14 @@ pub fn WebhooksView() -> impl IntoView {
             }
             .into_any(),
             Some(Ok(subs)) if subs.is_empty() => {
-                view! { <Empty message="No webhook subscriptions." /> }.into_any()
+                view! {
+                    <EmptyNext
+                        message="No webhook subscriptions."
+                        next="Create a subscription with the API to get events pushed to a URL."
+                        href=format!("{DOCS}/how-to/webhooks.html")
+                        link="How to configure webhooks"
+                    />
+                }.into_any()
             }
             Some(Ok(subs)) => {
                 let cards = subs

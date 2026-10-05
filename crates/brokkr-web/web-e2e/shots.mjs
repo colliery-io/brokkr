@@ -189,12 +189,29 @@ const PAUSE_MOCKS = {
   "PUT /agents/1b9d6bcd": AGENT_PAUSED,
 };
 
+// Day zero (BROKKR-T-0336): an agent record that no process has started yet,
+// and the tenant list with one minted tenant.
+const NEW_AGENT = { agent_id: "5e7d2c11-9a0b-4c3d-8e2f-1a2b3c4d5e6f", name: "checkout-agent-01", cluster_name: "prod-us-east-1",
+  status: "INACTIVE", ws_connected: false, last_heartbeat: null, heartbeat_age_seconds: null,
+  health_failing: 0, health_degraded: 0, pending_object_count: 0, pending_work_orders: 0, claimed_work_orders: 0 };
+const EMPTY_SHELL = { "/fleet": [], "/agent-events": [], "/work-orders": [] };
+
 const SCENES = [
   { name: "overview", mocks: { "/fleet": FLEET, "/agent-events": EVENTS } },
   // The two other layouts of design/README.md (BROKKR-T-0328): the segmented
   // control rearranges the five widgets.
   { name: "overview-grid", click: "grid", mocks: { "/fleet": FLEET, "/agent-events": EVENTS } },
   { name: "overview-stream", click: "stream", mocks: { "/fleet": FLEET, "/agent-events": EVENTS } },
+  // Day zero (BROKKR-T-0336): every empty state says the next step.
+  { name: "overview-empty", mocks: EMPTY_SHELL },
+  { name: "deployments-empty", nav: "Deployments", mocks: { ...EMPTY_SHELL, "/stacks": [] } },
+  { name: "telemetry-empty", nav: "Telemetry", mocks: { ...EMPTY_SHELL } },
+  { name: "webhooks-empty", nav: "Webhooks", mocks: { ...EMPTY_SHELL, "/webhooks": [] } },
+  { name: "jobs-empty", nav: "Work orders", mocks: { ...EMPTY_SHELL, "/work-order-log": [] } },
+  // A new agent: no heartbeat, so health is unknown and the drawer offers Activate.
+  { name: "fleet-new-agent", nav: "Fleet", mocks: { ...EMPTY_SHELL, "/fleet": [NEW_AGENT] } },
+  { name: "fleet-new-agent-modal", nav: "Fleet", click: "checkout-agent-01",
+    mocks: { ...EMPTY_SHELL, "/fleet": [NEW_AGENT], "/agents/5e7d2c11-9a0b-4c3d-8e2f-1a2b3c4d5e6f/target-state": [] } },
   { name: "fleet", nav: "Fleet", mocks: { "/fleet": FLEET } },
   { name: "fleet-empty", nav: "Fleet", mocks: { "/fleet": [] } },
   { name: "fleet-modal", nav: "Fleet", click: "prod-agent-01", mocks: { "/fleet": FLEET } },
@@ -241,6 +258,11 @@ const SCENES = [
     mocks: PAUSE_MOCKS },
   { name: "tenants", nav: "Tenants", mocks: { "/generators": GENERATORS } },
   { name: "tenants-empty", nav: "Tenants", mocks: { "/generators": [] } },
+  // A wrong admin PAK: the dialog says so and keeps the form (BROKKR-T-0336).
+  { name: "tenants-rejected", nav: "Tenants", click: "+ New tenant",
+    fill: [["acme-payments", "team-checkout"], ["brokkr_\u2026", "brokkr_wrongpak"]], then_click: "Create tenant",
+    expect_http: [403],
+    mocks: { "/generators": [], "POST /generators": { __status: 403, code: "forbidden", message: "admin required" } } },
   { name: "tenants-new", nav: "Tenants", click: "+ New tenant",
     mocks: { "/generators": GENERATORS } },
   { name: "tenants-minted", nav: "Tenants", click: "+ New tenant",
@@ -261,7 +283,16 @@ const ctx = await browser.newContext({
 });
 const page = await ctx.newPage();
 const errs = [];
-page.on("console", (m) => m.type() === "error" && errs.push(`[console] ${m.text()}`));
+// A scene that mocks an HTTP error on purpose (`expect_http: [403]`) is not a
+// console error: the browser logs the failed load, and this filters it.
+let EXPECT_HTTP = new Set();
+page.on("console", (m) => {
+  if (m.type() !== "error") return;
+  const t = m.text();
+  const hit = /status of (\d+)/.exec(t);
+  if (hit && EXPECT_HTTP.has(Number(hit[1]))) return;
+  errs.push(`[console] ${t}`);
+});
 page.on("pageerror", (e) => errs.push(`[pageerror] ${e.message}`));
 
 // seed a PAK so the fetch layer attaches auth (the mock ignores it).
@@ -309,11 +340,11 @@ await page.route("**/api/v1/**", (route) => {
     });
   }
   if (key in MOCKS) {
-    return route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(MOCKS[key]),
-    });
+    // A fixture with `__status` answers with that HTTP status (BROKKR-T-0336:
+    // the rejected-PAK scene needs a 403).
+    const body = MOCKS[key];
+    const status = body && body.__status ? body.__status : 200;
+    return route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
   }
   return route.fulfill({
     status: 404,
@@ -364,6 +395,7 @@ async function navigateTo(scene, label) {
 
 for (const s of SCENES) {
   MOCKS = s.mocks || {};
+  EXPECT_HTTP = new Set(s.expect_http || []);
   await page.goto(BASE, { waitUntil: "domcontentloaded" });
   // Wait for the WASM app to mount before interacting. `domcontentloaded` fires
   // long before Leptos has rendered anything, so clicking straight after it was

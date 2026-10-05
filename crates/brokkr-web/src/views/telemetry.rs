@@ -5,7 +5,7 @@
 //! the logs tab needs a stack selected. REST-poll, 6h retention (logged on task).
 
 use crate::api;
-use crate::components::sev;
+use crate::components::{sev, EmptyNext};
 use crate::models::AgentEventDto;
 use aurora_leptos::components::*;
 use aurora_leptos::data::{DetailList, FeedList, FeedRow, KeyValue, RelativeTime};
@@ -40,7 +40,12 @@ pub fn TelemetryView() -> impl IntoView {
                         }
                         .into_any(),
                         Some(Ok(evs)) if evs.is_empty() => {
-                            view! { <Empty message="No agent events in the retention window." /> }
+                            view! {
+                                <EmptyNext
+                                    message="No agent events in the retention window."
+                                    next="An agent reports an event each time it applies, reconciles or heartbeats. Events stay for six hours."
+                                />
+                            }
                                 .into_any()
                         }
                         Some(Ok(evs)) => {
