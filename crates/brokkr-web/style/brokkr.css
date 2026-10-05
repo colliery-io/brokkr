@@ -3,7 +3,7 @@
  *
  * Every colour, space, radius and font here is an Aurora token (`var(--*)`),
  * so both themes work. No raw colour may go in this file: the
- * `no_raw_colours` test in src/main.rs refuses one. Aurora's stylesheet is
+ * `no_raw_colours_in_the_console` test in tests/theme.rs refuses one. Aurora's stylesheet is
  * injected at runtime by <AuroraStyles/>; these classes use a `brk-` prefix
  * and never restyle a `cl-` class.
  */
