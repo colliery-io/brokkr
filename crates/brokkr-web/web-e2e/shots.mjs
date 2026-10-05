@@ -118,6 +118,15 @@ const TELEM = [
 const TARGET_STATE = [
   { id: "d1a2b3c4", stack_id: "s1", sequence_id: 41, is_deletion_marker: false },
 ];
+// Stack health for the Deployments cards (BROKKR-T-0337).
+const S1_HEALTH = { stack_id: "s1", overall_status: "degraded", deployment_objects: [
+  { id: "d1a2b3c4", status: "healthy", healthy_agents: 3, degraded_agents: 0, failing_agents: 0 },
+  { id: "e5f6a7b8", status: "degraded", healthy_agents: 1, degraded_agents: 2, failing_agents: 0 },
+] };
+const S2_HEALTH = { stack_id: "s2", overall_status: "healthy", deployment_objects: [
+  { id: "f9e8d7c6", status: "healthy", healthy_agents: 2, degraded_agents: 0, failing_agents: 0 },
+] };
+
 const DIAG_CREATED = {
   id: "9f10ab22", agent_id: "1b9d6bcd", deployment_object_id: "d1a2b3c4",
   status: "pending", requested_by: "operator-console",
@@ -211,6 +220,17 @@ const PAUSE_MOCKS = {
   "PUT /agents/1b9d6bcd": AGENT_PAUSED,
 };
 
+// Every mock the Deployments view and its drawer read: the stacks, their
+// health, the tenants, and each agent's target state (BROKKR-T-0337).
+const DEPLOY_MOCKS = {
+  "/stacks": STACKS, "/stacks/s1/health": S1_HEALTH, "/stacks/s2/health": S2_HEALTH,
+  "/generators": GENERATORS, "/fleet": FLEET,
+  "/agents/1b9d6bcd/target-state": TARGET_STATE, "/agents/7c9e6679/target-state": TARGET_STATE,
+  "/agents/a1b2c3d4/target-state": [],
+};
+// The fleet with the short ids the event fixtures use, so names resolve.
+const FLEET_A = [{ ...FLEET[0], agent_id: "a1" }, { ...FLEET[1], agent_id: "a2" }];
+
 // Day zero (BROKKR-T-0336): an agent record that no process has started yet,
 // and the tenant list with one minted tenant.
 const NEW_AGENT = { agent_id: "5e7d2c11-9a0b-4c3d-8e2f-1a2b3c4d5e6f", name: "checkout-agent-01", cluster_name: "prod-us-east-1",
@@ -237,7 +257,15 @@ const SCENES = [
     mocks: { ...EMPTY_SHELL, "/fleet": [NEW_AGENT], "/agents/5e7d2c11-9a0b-4c3d-8e2f-1a2b3c4d5e6f/target-state": [] } },
   { name: "fleet", nav: "Fleet", mocks: { "/fleet": FLEET } },
   { name: "fleet-empty", nav: "Fleet", mocks: { "/fleet": [] } },
-  { name: "fleet-modal", nav: "Fleet", click: "prod-agent-01", mocks: { "/fleet": FLEET } },
+  { name: "fleet-modal", nav: "Fleet", click: "prod-agent-01",
+    mocks: { "/fleet": FLEET, "/stacks": STACKS, "/agents/1b9d6bcd/target-state": TARGET_STATE } },
+  // Links between views (BROKKR-T-0337): a hash with a selection opens the
+  // drawer, and Telemetry filters to one agent.
+  { name: "fleet-by-link", hash: "#fleet/agent/1b9d6bcd", settle: 800,
+    mocks: { "/fleet": FLEET, "/stacks": STACKS, "/agents/1b9d6bcd/target-state": TARGET_STATE } },
+  { name: "deployments-by-link", hash: "#deployments/stack/s1", settle: 1200, mocks: DEPLOY_MOCKS },
+  { name: "telemetry-agent", hash: "#telemetry/agent/a1", settle: 800,
+    mocks: { "/agent-events": TELEM, "/stacks": STACKS, "/fleet": FLEET_A } },
   { name: "health", nav: "Broker health", mocks: { "/admin/ws/connections": WSCONN } },
   { name: "health-modal", nav: "Broker health", click: "1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed", mocks: { "/admin/ws/connections": WSCONN } },
   { name: "jobs", nav: "Work orders", mocks: { "/work-order-log": JOBS, "/work-orders": ACTIVE_WOS } },
@@ -248,12 +276,8 @@ const SCENES = [
       { event_type: "stack.updated", status: "delivered", attempts: 1, last_error: null },
       { event_type: "agent.failed", status: "failed", attempts: 3, last_error: "connect ETIMEDOUT 10.0.0.4:443" },
     ] } },
-  { name: "deployments", nav: "Deployments", mocks: { "/stacks": STACKS } },
-  { name: "deployments-modal", nav: "Deployments", click: "payments-api", mocks: { "/stacks": STACKS,
-    "/stacks/s1/health": { stack_id: "s1", overall_status: "degraded", deployment_objects: [
-      { id: "d1a2b3c4", status: "healthy", healthy_agents: 3, degraded_agents: 0, failing_agents: 0 },
-      { id: "e5f6a7b8", status: "degraded", healthy_agents: 1, degraded_agents: 2, failing_agents: 0 },
-    ] } } },
+  { name: "deployments", nav: "Deployments", mocks: DEPLOY_MOCKS },
+  { name: "deployments-modal", nav: "Deployments", click: "payments-api", settle: 1200, mocks: DEPLOY_MOCKS },
   { name: "telemetry", nav: "Telemetry", mocks: { "/agent-events": TELEM, "/stacks": STACKS } },
   { name: "telemetry-modal", nav: "Telemetry", click: "Apply", mocks: { "/agent-events": TELEM, "/stacks": STACKS } },
   // Per-stack tabs (BROKKR-T-0338): pick a stack, then its Kubernetes events
@@ -366,7 +390,9 @@ await page.route("**/api/v1/**", (route) => {
   // work orders (nav count) on every view, and every scene opens on the
   // Overview (agent events) before it navigates; scenes that don't mock
   // these get the standard fixtures instead of 404 noise.
-  const SHELL = { "/fleet": FLEET, "/work-orders": ACTIVE_WOS, "/agent-events": EVENTS };
+  // Fleet reads /stacks and Deployments reads /generators for names
+  // (BROKKR-T-0337), so those get fixtures too.
+  const SHELL = { "/fleet": FLEET, "/work-orders": ACTIVE_WOS, "/agent-events": EVENTS, "/stacks": STACKS, "/generators": GENERATORS };
   if (!(key in MOCKS) && suffix in SHELL) {
     return route.fulfill({
       status: 200,
@@ -431,7 +457,8 @@ async function navigateTo(scene, label) {
 for (const s of SCENES) {
   MOCKS = s.mocks || {};
   EXPECT_HTTP = new Set(s.expect_http || []);
-  await page.goto(BASE, { waitUntil: "domcontentloaded" });
+  // `hash` opens a view with a selection (BROKKR-T-0337): `#fleet/agent/<id>`.
+  await page.goto(BASE + (s.hash || ""), { waitUntil: "domcontentloaded" });
   // Wait for the WASM app to mount before interacting. `domcontentloaded` fires
   // long before Leptos has rendered anything, so clicking straight after it was
   // a race: the nav item did not exist yet, the click was swallowed by the
@@ -473,6 +500,9 @@ for (const s of SCENES) {
     }
     await page.waitForTimeout(200);
   }
+  // Extra settle time after the actions: a second /metrics poll, or the
+  // drawer's own fetches.
+  if (s.settle) await page.waitForTimeout(s.settle);
   // A second click *inside* whatever the first one opened (the modal's "Run
   // diagnostic" button). Substring match: the button label carries a glyph.
   if (s.then_click) {

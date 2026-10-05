@@ -105,3 +105,34 @@ pub fn EmptyNext(
         </div>
     }
 }
+
+/// A link to another view, as a hash route plus a selection
+/// (`#fleet/agent/<id>`), so the browser's back button works
+/// (BROKKR-T-0337). `crate::app::parse_hash` reads them.
+pub fn agent_href(id: &str) -> String {
+    format!("#fleet/agent/{id}")
+}
+
+pub fn stack_href(id: &str) -> String {
+    format!("#deployments/stack/{id}")
+}
+
+pub fn agent_events_href(id: &str) -> String {
+    format!("#telemetry/agent/{id}")
+}
+
+/// Whether `id` names the agent `agent_id`: equal, or one a prefix of the
+/// other. The console shows 8-character ids in places, and a link made from
+/// one must still find the agent.
+pub fn same_agent(agent_id: &str, id: &str) -> bool {
+    !id.is_empty() && (agent_id == id || agent_id.starts_with(id) || id.starts_with(agent_id))
+}
+
+/// The agent's name from the fleet, or the first 8 characters of its id.
+pub fn agent_name(fleet: &[crate::models::FleetAgentRecord], id: &str) -> String {
+    fleet
+        .iter()
+        .find(|a| same_agent(&a.agent_id, id))
+        .map(|a| a.name.clone())
+        .unwrap_or_else(|| id.chars().take(8).collect())
+}

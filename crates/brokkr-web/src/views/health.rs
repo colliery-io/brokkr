@@ -2,6 +2,7 @@
 //! WS connections panel (`GET /api/v1/admin/ws/connections`).
 
 use crate::api;
+use crate::components::{agent_href, agent_name};
 use crate::models::WsConnectionInfo;
 use aurora_leptos::components::*;
 use aurora_leptos::data::{DetailList, KeyValue, StatTile};
@@ -44,6 +45,8 @@ pub fn BrokerHealthView() -> impl IntoView {
     );
     let selected = RwSignal::new(None::<WsConnectionInfo>);
     let open = RwSignal::new(false);
+    // Agent names for the connections table (BROKKR-T-0337).
+    let fleet = LocalResource::new(move || api::fleet(None));
 
     view! {
         <Stack gap="md">
@@ -82,11 +85,13 @@ pub fn BrokerHealthView() -> impl IntoView {
                     }
                     .into_any(),
                     Some(Ok(r)) => {
+                        let names = fleet.get().and_then(|f| f.ok()).unwrap_or_default();
                         let rows = r
                             .connections
                             .into_iter()
                             .map(|c| {
                                 let c_sel = c.clone();
+                                let name = agent_name(&names, &c.agent_id);
                                 view! {
                                     <TableRow on_click=Callback::new(move |_| {
                                         selected.set(Some(c_sel.clone()));
@@ -95,7 +100,7 @@ pub fn BrokerHealthView() -> impl IntoView {
                                         <td>
                                             <Group gap="sm">
                                                 <Dot color=token::TEAL glow=true />
-                                                <span>{c.agent_id.clone()}</span>
+                                                <span>{name}</span>
                                             </Group>
                                         </td>
                                         <td class="cl-num">{c.messages_in.to_string()}</td>
@@ -127,8 +132,11 @@ pub fn BrokerHealthView() -> impl IntoView {
                 None => ().into_any(),
                 Some(c) => view! {
                     <Stack gap="md">
-                        <span class="brk-detail-title">{c.agent_id.clone()}</span>
+                        <span class="brk-detail-title">
+                            {agent_name(&fleet.get().and_then(|f| f.ok()).unwrap_or_default(), &c.agent_id)}
+                        </span>
                         <DetailList mono=true>
+                            <KeyValue label="agent"><Anchor href=agent_href(&c.agent_id)>{c.agent_id.clone()}</Anchor></KeyValue>
                             <KeyValue label="messages in">{c.messages_in.to_string()}</KeyValue>
                             <KeyValue label="messages out">{c.messages_out.to_string()}</KeyValue>
                             <KeyValue label="connected since">{c.connected_since.clone().unwrap_or_else(|| "—".into())}</KeyValue>

@@ -5,7 +5,7 @@
 //! answer (BROKKR-T-0338). REST poll every 5 s.
 
 use crate::api;
-use crate::components::{sev, EmptyNext};
+use crate::components::{agent_href, agent_name, same_agent, sev, EmptyNext};
 use crate::models::{AgentEventDto, RetentionInfo};
 use aurora_leptos::components::*;
 use aurora_leptos::data::{
@@ -47,6 +47,10 @@ pub fn TelemetryView() -> impl IntoView {
     let scope = crate::app::use_scope();
     let events = LocalResource::new(move || api::agent_events(scope.get()));
     let stacks = LocalResource::new(move || api::stacks(scope.get()));
+    // Agent names for the rows, and the agent a link asked for (BROKKR-T-0337).
+    let fleet = LocalResource::new(move || api::fleet(scope.get()));
+    let selection = crate::app::use_selection();
+    let only_agent = move || selection.get().filter(|s| s.kind == "agent").map(|s| s.id);
     // The stack the two per-stack tabs read; "" is none.
     let stack = RwSignal::new(String::new());
     // Each per-stack tab reads the broker only while it is shown, so the poll
@@ -141,16 +145,44 @@ pub fn TelemetryView() -> impl IntoView {
                             <ErrorState error=e on_retry=Callback::new(move |_| { events.refetch(); }) />
                         }
                         .into_any(),
-                        Some(Ok(evs)) if evs.is_empty() => {
-                            view! {
-                                <EmptyNext
-                                    message="No agent events yet."
-                                    next="An agent reports an event each time it applies, reconciles or heartbeats."
-                                />
-                            }
-                                .into_any()
-                        }
                         Some(Ok(evs)) => {
+                            let names = fleet.get().and_then(|r| r.ok()).unwrap_or_default();
+                            let only = only_agent();
+                            let evs: Vec<AgentEventDto> = match &only {
+                                Some(id) => evs.into_iter().filter(|e| same_agent(&e.agent_id, id)).collect(),
+                                None => evs,
+                            };
+                            if evs.is_empty() {
+                                return match only {
+                                    Some(id) => view! {
+                                        <Stack gap="sm">
+                                            <EmptyNext
+                                                message=format!("No events from {} in the retention window.", agent_name(&names, &id))
+                                                next="An agent reports an event each time it applies, reconciles or heartbeats."
+                                                href="#telemetry"
+                                                link="Show all agents"
+                                            />
+                                        </Stack>
+                                    }
+                                    .into_any(),
+                                    None => view! {
+                                        <EmptyNext
+                                            message="No agent events yet."
+                                            next="An agent reports an event each time it applies, reconciles or heartbeats."
+                                        />
+                                    }
+                                    .into_any(),
+                                };
+                            }
+                            let filter_line = only.as_ref().map(|id| {
+                                let name = agent_name(&names, id);
+                                view! {
+                                    <Group gap="sm">
+                                        <span class="brk-meta">{format!("Events of {name}.")}</span>
+                                        <Anchor href="#telemetry">"Show all agents"</Anchor>
+                                    </Group>
+                                }
+                            });
                             let rows = evs
                                 .into_iter()
                                 .map(|e| {
@@ -158,7 +190,7 @@ pub fn TelemetryView() -> impl IntoView {
                                     let msg = e.message.clone().unwrap_or_default();
                                     let subject = e.event_type.clone();
                                     let status = e.status.clone();
-                                    let agent: String = e.agent_id.chars().take(8).collect();
+                                    let agent = agent_name(&names, &e.agent_id);
                                     let at = crate::views::overview::event_at(e.created_at.as_deref());
                                     let e_sel = e.clone();
                                     let on_click = Callback::new(move |_| {
@@ -184,7 +216,10 @@ pub fn TelemetryView() -> impl IntoView {
                                 .collect_view();
                             view! {
                                 <Panel title="Agent events">
-                                    <FeedList label="Agent events">{rows}</FeedList>
+                                    <Stack gap="sm">
+                                        {filter_line}
+                                        <FeedList label="Agent events">{rows}</FeedList>
+                                    </Stack>
                                 </Panel>
                             }
                             .into_any()
@@ -294,7 +329,11 @@ pub fn TelemetryView() -> impl IntoView {
                                 <span class="brk-meta">{e.status.clone()}</span>
                             </Group>
                             <DetailList mono=true>
-                                <KeyValue label="agent">{e.agent_id.clone()}</KeyValue>
+                                <KeyValue label="agent">
+                                    <Anchor href=agent_href(&e.agent_id)>
+                                        {agent_name(&fleet.get().and_then(|r| r.ok()).unwrap_or_default(), &e.agent_id)}
+                                    </Anchor>
+                                </KeyValue>
                                 <KeyValue label="time"><RelativeTime iso=e.created_at.clone().unwrap_or_default() /></KeyValue>
                             </DetailList>
                             <span class="brk-text">

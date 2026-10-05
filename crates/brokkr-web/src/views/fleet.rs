@@ -16,7 +16,10 @@
 //! events, log tails — is rendered in the same drawer (BROKKR-T-0301).
 
 use crate::api;
-use crate::components::{sev, EmptyNext, LiveDot, Sweep, DOCS, FRESH_BEAT_SECS};
+use crate::components::{
+    agent_events_href, same_agent, sev, stack_href, EmptyNext, LiveDot, Sweep, DOCS,
+    FRESH_BEAT_SECS,
+};
 use crate::models::{DiagEvent, DiagnosticData, DiagnosticOutcome, FleetAgentRecord, PodStatus};
 use crate::views::ago;
 use aurora_leptos::components::*;
@@ -189,6 +192,27 @@ pub fn FleetView() -> impl IntoView {
     let selected = RwSignal::new(None::<FleetAgentRecord>);
     let open = RwSignal::new(false);
     let toaster = use_toaster();
+    // Stack names for the drawer's links (BROKKR-T-0337).
+    let stacks = LocalResource::new(move || api::stacks(scope.get()));
+    // A link from another view (`#fleet/agent/<id>`) opens that agent's drawer
+    // once; a drawer the operator closed stays closed through the next poll.
+    let selection = crate::app::use_selection();
+    let applied = RwSignal::new(None::<String>);
+    Effect::new(move |_| {
+        let Some(sel) = selection.get() else {
+            return;
+        };
+        if sel.kind != "agent" || applied.get_untracked().as_deref() == Some(sel.id.as_str()) {
+            return;
+        }
+        if let Some(Ok(agents)) = data.get() {
+            if let Some(a) = agents.iter().find(|a| same_agent(&a.agent_id, &sel.id)) {
+                applied.set(Some(sel.id.clone()));
+                selected.set(Some(a.clone()));
+                open.set(true);
+            }
+        }
+    });
     // Deployment objects targeted at the selected agent — refetched when the
     // selection changes (same idiom as the stack-health / deliveries panels).
     let objects = LocalResource::new(move || {
@@ -392,6 +416,7 @@ pub fn FleetView() -> impl IntoView {
                     // A new agent and a paused one both read INACTIVE; the heartbeat
                     // tells them apart (BROKKR-T-0336).
                     let a_checked_in = a.has_checked_in();
+                    let a_id_links = a.agent_id.clone();
                     view! {
                         <Stack gap="md">
                             <span class="brk-detail-title">{a.name.clone()}</span>
@@ -515,6 +540,34 @@ pub fn FleetView() -> impl IntoView {
                                     })}
                                 }
                             }}
+                            // ---- links to the stacks and the events (BROKKR-T-0337) ----
+                            <SectionLabel label="stacks" />
+                            {move || match objects.get() {
+                                None | Some(None) => view! { <Loading label="loading stacks" /> }.into_any(),
+                                Some(Some(Err(_))) => view! { <span class="brk-note">"stacks unavailable"</span> }.into_any(),
+                                Some(Some(Ok(objs))) => {
+                                    let mut ids: Vec<String> = objs.iter().map(|o| o.stack_id.clone()).collect();
+                                    ids.sort();
+                                    ids.dedup();
+                                    if ids.is_empty() {
+                                        return view! { <span class="brk-note">"No stack targets this agent yet."</span> }.into_any();
+                                    }
+                                    let names = stacks.get().and_then(|r| r.ok()).unwrap_or_default();
+                                    let items = ids.into_iter().map(|id| {
+                                        let name = names.iter().find(|s| s.id == id).map(|s| s.name.clone())
+                                            .unwrap_or_else(|| id.chars().take(8).collect());
+                                        let n = objs.iter().filter(|o| o.stack_id == id).count();
+                                        view! {
+                                            <Group gap="sm">
+                                                <Anchor href=stack_href(&id)>{name}</Anchor>
+                                                <span class="brk-meta">{format!("{n} deployment object{}", if n == 1 { "" } else { "s" })}</span>
+                                            </Group>
+                                        }
+                                    }).collect_view();
+                                    view! { <Stack gap="xs">{items}</Stack> }.into_any()
+                                }
+                            }}
+                            <Anchor href=agent_events_href(&a_id_links)>"Events of this agent"</Anchor>
                             <SectionLabel label="diagnostics" />
                             {move || match objects.get() {
                                 None | Some(None) => {
