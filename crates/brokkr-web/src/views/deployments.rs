@@ -5,7 +5,7 @@
 //! health is a follow-up (logged on the task).
 
 use crate::api;
-use crate::components::sev;
+use crate::components::{sev, EmptyNext, DOCS};
 use crate::models::Stack;
 use aurora_leptos::components::*;
 use aurora_leptos::data::{DetailList, KeyValue, SectionLabel};
@@ -38,7 +38,14 @@ pub fn DeploymentsView() -> impl IntoView {
             }
             .into_any(),
             Some(Ok(stacks)) if stacks.is_empty() => {
-                view! { <Empty message="No stacks." /> }.into_any()
+                view! {
+                    <EmptyNext
+                        message="No stacks yet."
+                        next="A tenant creates a stack with its own PAK, then pushes manifests to it."
+                        href=format!("{DOCS}/tutorials/first-deployment.html")
+                        link="Deploy a first application"
+                    />
+                }.into_any()
             }
             Some(Ok(stacks)) => {
                 let cards = stacks

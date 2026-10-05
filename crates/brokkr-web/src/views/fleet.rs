@@ -16,7 +16,7 @@
 //! events, log tails — is rendered in the same drawer (BROKKR-T-0301).
 
 use crate::api;
-use crate::components::{sev, LiveDot, Sweep, FRESH_BEAT_SECS};
+use crate::components::{sev, EmptyNext, LiveDot, Sweep, DOCS, FRESH_BEAT_SECS};
 use crate::models::{DiagEvent, DiagnosticData, DiagnosticOutcome, FleetAgentRecord, PodStatus};
 use crate::views::ago;
 use aurora_leptos::components::*;
@@ -275,13 +275,20 @@ pub fn FleetView() -> impl IntoView {
             }
             .into_any(),
             Some(Ok(agents)) if agents.is_empty() => {
-                view! { <Empty message="No agents registered with this broker." /> }.into_any()
+                view! {
+                    <EmptyNext
+                        message="No agents registered with this broker."
+                        next="Create an agent record, start the agent with its PAK and a matching name and cluster, then open it here and activate it."
+                        href=format!("{DOCS}/how-to/agent-registration.html")
+                        link="How an agent registers"
+                    />
+                }.into_any()
             }
             Some(Ok(agents)) => {
                 let total = agents.len();
                 let active = agents.iter().filter(|a| a.status.eq_ignore_ascii_case("active")).count();
-                let degraded = agents.iter().filter(|a| a.health_degraded > 0 && a.health_failing == 0).count();
-                let failing = agents.iter().filter(|a| a.health_failing > 0).count();
+                let degraded = agents.iter().filter(|a| a.health().0 == "degraded").count();
+                let failing = agents.iter().filter(|a| a.health().0 == "failing").count();
 
                 // Group agents by cluster (empty cluster_name -> "(unknown)").
                 let mut by_cluster: BTreeMap<String, Vec<FleetAgentRecord>> = BTreeMap::new();
@@ -382,6 +389,9 @@ pub fn FleetView() -> impl IntoView {
                     let a_status_pill = a.status.clone();
                     let a_status_ctl = a.status.clone();
                     let a_id = a.agent_id.clone();
+                    // A new agent and a paused one both read INACTIVE; the heartbeat
+                    // tells them apart (BROKKR-T-0336).
+                    let a_checked_in = a.has_checked_in();
                     view! {
                         <Stack gap="md">
                             <span class="brk-detail-title">{a.name.clone()}</span>
@@ -411,22 +421,29 @@ pub fn FleetView() -> impl IntoView {
                             {move || {
                                 let current =
                                     pause_status.get().unwrap_or_else(|| a_status_ctl.clone());
-                                let paused = !current.eq_ignore_ascii_case("ACTIVE");
-                                let (target, verb) = if paused {
-                                    ("ACTIVE", "Resume")
-                                } else {
+                                let active = current.eq_ignore_ascii_case("ACTIVE");
+                                let (target, verb) = if active {
                                     ("INACTIVE", "Pause")
+                                } else {
+                                    ("ACTIVE", "Activate")
                                 };
                                 let id_for_click = a_id.clone();
                                 view! {
                                     <span class="brk-text">
-                                        {if paused {
-                                            "Paused: this agent stops fetching deployment objects and \
-                                             work orders. Already-applied resources stay in the cluster \
-                                             — pausing does not roll anything back."
-                                        } else {
+                                        {if active {
                                             "Active: this agent fetches and applies the deployment \
                                              objects targeted at it."
+                                        } else if !a_checked_in {
+                                            "Not yet activated: this agent has never checked in. Start \
+                                             the agent with its PAK and a matching name and cluster, \
+                                             then activate it here. A new agent applies nothing until \
+                                             an admin activates it."
+                                        } else {
+                                            "Inactive: this agent checks in, but it fetches no \
+                                             deployment objects and no work orders. A new agent starts \
+                                             inactive, and a paused agent stays inactive, until an \
+                                             admin activates it. Already-applied resources stay in the \
+                                             cluster."
                                         }}
                                     </span>
                                     <PasswordInput
@@ -461,7 +478,7 @@ pub fn FleetView() -> impl IntoView {
                                                         pause_status.set(Some(updated.status.clone()));
                                                         data.refetch();
                                                         toaster.success(if target == "ACTIVE" {
-                                                            "agent resumed"
+                                                            "agent activated"
                                                         } else {
                                                             "agent paused"
                                                         });

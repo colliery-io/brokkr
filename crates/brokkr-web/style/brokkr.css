@@ -121,6 +121,19 @@
   .brk-overview > * { grid-area: auto; }
 }
 
+/* ----- Empty states ----- */
+/* An empty state with a next step (EmptyNext in components.rs): Aurora's
+   Empty takes one message and has no slot for a step (AURORA-T-0007 item 20). */
+.brk-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-xl) var(--space-md);
+  text-align: center;
+}
+.brk-empty__next { font: var(--fs-xs) / 1.5 var(--font-sans); color: var(--muted); max-width: 52ch; }
+
 /* ----- Text ----- */
 /* A neutral note: an empty payload, a hint, an id. */
 .brk-note { font: 11px var(--font-mono); color: var(--faint); line-height: 1.5; }
