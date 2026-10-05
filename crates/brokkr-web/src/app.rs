@@ -56,16 +56,50 @@ fn meta(id: &str) -> (&'static str, &'static str) {
     }
 }
 
-/// The view id for a URL fragment (`#fleet` → `"fleet"`); unknown → overview.
-/// The nav links are plain `#id` anchors, so a reload or a shared link opens
-/// the same view.
-fn route_for_hash(hash: &str) -> &'static str {
+/// A selection carried in the URL fragment (`#fleet/agent/<id>`), so a link
+/// from another view opens the right drawer and the back button returns
+/// (BROKKR-T-0337). `kind` is `agent` or `stack`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Selection {
+    pub kind: String,
+    pub id: String,
+}
+
+pub type SelectionSignal = RwSignal<Option<Selection>>;
+
+/// Read the app-wide selection signal from context (installed by [`App`]).
+pub fn use_selection() -> SelectionSignal {
+    use_context::<SelectionSignal>().expect("selection signal provided at app root")
+}
+
+/// The view id and the selection for a URL fragment: `#fleet` is ("fleet",
+/// None), `#fleet/agent/abc` is ("fleet", agent abc), and an unknown view is
+/// the overview with no selection. The nav links are plain `#id` anchors, so
+/// a reload or a shared link opens the same view.
+pub fn parse_hash(hash: &str) -> (&'static str, Option<Selection>) {
     let want = hash.trim_start_matches('#');
-    NAV.iter()
+    let mut parts = want.splitn(3, '/');
+    let view = parts.next().unwrap_or("");
+    let route = NAV
+        .iter()
         .flat_map(|(_, items)| items.iter())
         .map(|(id, _)| *id)
-        .find(|id| *id == want)
-        .unwrap_or("overview")
+        .find(|id| *id == view);
+    let Some(route) = route else {
+        return ("overview", None);
+    };
+    let selection = match (parts.next(), parts.next()) {
+        (Some(kind), Some(id)) if !kind.is_empty() && !id.is_empty() => Some(Selection {
+            kind: kind.to_string(),
+            id: id.to_string(),
+        }),
+        _ => None,
+    };
+    (route, selection)
+}
+
+fn route_for_hash(hash: &str) -> &'static str {
+    parse_hash(hash).0
 }
 
 fn current_hash() -> String {
@@ -123,9 +157,12 @@ pub fn App() -> impl IntoView {
     provide_toaster();
 
     let route = RwSignal::new(route_for_hash(&current_hash()));
+    let selection: SelectionSignal = RwSignal::new(parse_hash(&current_hash()).1);
+    provide_context(selection);
     // Back / forward and hand-typed fragments move the view too.
     let _ = window_event_listener(leptos::ev::hashchange, move |_| {
-        let next = route_for_hash(&current_hash());
+        let (next, sel) = parse_hash(&current_hash());
+        selection.set(sel);
         // The link's own click has set it already; setting the same view
         // again would re-mount it.
         if route.get_untracked() != next {
@@ -367,6 +404,30 @@ mod tests {
         assert_eq!(route_for_hash("system"), "system");
         assert_eq!(route_for_hash(""), "overview");
         assert_eq!(route_for_hash("#nope"), "overview");
+    }
+
+    #[test]
+    fn a_fragment_can_carry_a_selection() {
+        let (route, sel) = parse_hash("#fleet/agent/1b9d6bcd");
+        assert_eq!(route, "fleet");
+        assert_eq!(
+            sel,
+            Some(Selection {
+                kind: "agent".into(),
+                id: "1b9d6bcd".into()
+            })
+        );
+        assert_eq!(
+            parse_hash("#deployments/stack/s1").1.map(|s| s.kind),
+            Some("stack".into())
+        );
+        assert_eq!(
+            parse_hash("#fleet/agent/").1,
+            None,
+            "an empty id is no selection"
+        );
+        assert_eq!(parse_hash("#fleet/agent").1, None);
+        assert_eq!(parse_hash("#nope/agent/x"), ("overview", None));
     }
 
     #[test]

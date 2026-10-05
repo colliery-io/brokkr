@@ -8,7 +8,7 @@
 //! the Deployments view shows it on demand (BROKKR-T-0328).
 
 use crate::api;
-use crate::components::{sev, EmptyNext, DOCS};
+use crate::components::{agent_href, agent_name, sev, EmptyNext, DOCS};
 use crate::models::FleetAgentRecord;
 use aurora_leptos::components::*;
 use aurora_leptos::data::{FeedList, FeedRow, Segment, SegmentedBar, Sparkline, StatTile};
@@ -302,15 +302,18 @@ pub fn OverviewView() -> impl IntoView {
                                 />
                             }.into_any(),
                             Some(Ok(evs)) => {
+                                // Agent names from the fleet; each row links to the agent (BROKKR-T-0337).
+                                let names = fleet.get().and_then(|r| r.ok()).unwrap_or_default();
                                 let rows = evs.into_iter().take(8).map(|e| {
                                     // Agent-event statuses are Brokkr's (success/failure), not Aurora's.
                                     let sc = sev(&e.status);
                                     let msg = e.message.unwrap_or_default();
-                                    let agent: String = e.agent_id.chars().take(8).collect();
+                                    let agent = agent_name(&names, &e.agent_id);
+                                    let href = agent_href(&e.agent_id);
                                     // FeedRow strips the Option of `at`: a row with no time passes none.
                                     match event_at(e.created_at.as_deref()) {
-                                        Some(t) => view! { <FeedRow at=t dot=sc subject=e.event_type actor=agent>{msg}</FeedRow> }.into_any(),
-                                        None => view! { <FeedRow dot=sc subject=e.event_type actor=agent>{msg}</FeedRow> }.into_any(),
+                                        Some(t) => view! { <FeedRow at=t dot=sc subject=e.event_type actor=agent href=href>{msg}</FeedRow> }.into_any(),
+                                        None => view! { <FeedRow dot=sc subject=e.event_type actor=agent href=href>{msg}</FeedRow> }.into_any(),
                                     }
                                 }).collect_view();
                                 view! { <FeedList label="Live activity">{rows}</FeedList> }.into_any()
