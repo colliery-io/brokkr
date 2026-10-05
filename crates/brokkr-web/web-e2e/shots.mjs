@@ -219,7 +219,8 @@ const NEW_AGENT = { agent_id: "5e7d2c11-9a0b-4c3d-8e2f-1a2b3c4d5e6f", name: "che
 const EMPTY_SHELL = { "/fleet": [], "/agent-events": [], "/work-orders": [], "/stacks": [] };
 
 const SCENES = [
-  { name: "overview", mocks: { "/fleet": FLEET, "/agent-events": EVENTS } },
+  // `settle` waits for a second /metrics poll, so the throughput shows a rate.
+  { name: "overview", settle: 5500, mocks: { "/fleet": FLEET, "/agent-events": EVENTS } },
   // The two other layouts of design/README.md (BROKKR-T-0328): the segmented
   // control rearranges the five widgets.
   { name: "overview-grid", click: "grid", mocks: { "/fleet": FLEET, "/agent-events": EVENTS } },
@@ -332,9 +333,13 @@ page.on("pageerror", (e) => errs.push(`[pageerror] ${e.message}`));
 // comment conceded "the mock ignores it".
 
 // /metrics is top-level (not under /api/v1) and Prometheus text.
-await page.route("**/metrics", (route) =>
-  route.fulfill({ status: 200, contentType: "text/plain", body: PROM })
-);
+// The counter grows on each poll, so the Overview can show a rate
+// (BROKKR-T-0339): 60 requests per 5 s poll is 720 per minute.
+let metricsHits = 0;
+await page.route("**/metrics", (route) => {
+  const body = PROM.replace(/(brokkr_http_requests_total\{[^}]*\}) (\d+)/, (_, m, n) => `${m} ${Number(n) + 60 * metricsHits++}`);
+  return route.fulfill({ status: 200, contentType: "text/plain", body });
+});
 
 let MOCKS = {};
 await page.route("**/api/v1/**", (route) => {
@@ -441,6 +446,7 @@ for (const s of SCENES) {
   } else {
     await page.waitForTimeout(800);
   }
+  if (s.settle) await page.waitForTimeout(s.settle);
   if (s.click) {
     await page.getByText(s.click, { exact: true }).first().click().catch(() => {});
     await page.waitForTimeout(500);

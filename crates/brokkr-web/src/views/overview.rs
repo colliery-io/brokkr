@@ -41,6 +41,52 @@ fn save_layout(layout: &str) {
     }
 }
 
+/// Samples of a Prometheus counter, and the rate between them
+/// (BROKKR-T-0339). `brokkr_http_requests_total` only goes up, so the
+/// Overview shows requests per minute from the deltas, not the total.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct CounterSamples {
+    /// `(time in ms since the epoch, counter value)`, oldest first.
+    points: Vec<(f64, f64)>,
+}
+
+impl CounterSamples {
+    /// How many samples to keep: 45 samples at one every 5 s is a bit under
+    /// four minutes, and 44 rates for the sparkline.
+    pub const KEEP: usize = 45;
+
+    pub fn push(&mut self, at_ms: f64, counter: f64) {
+        self.points.push((at_ms, counter));
+        while self.points.len() > Self::KEEP {
+            self.points.remove(0);
+        }
+    }
+
+    /// The rate per minute between each pair of consecutive samples. A
+    /// counter that went down was reset, so the delta is the new value, as
+    /// Prometheus `rate()` does. A pair with no time between them is skipped.
+    pub fn per_minute(&self) -> Vec<f64> {
+        self.points
+            .windows(2)
+            .filter_map(|w| {
+                let (t0, c0) = w[0];
+                let (t1, c1) = w[1];
+                let dt_min = (t1 - t0) / 60_000.0;
+                if dt_min <= 0.0 {
+                    return None;
+                }
+                let delta = if c1 < c0 { c1 } else { c1 - c0 };
+                Some(delta / dt_min)
+            })
+            .collect()
+    }
+
+    /// The newest rate, or None until there are two samples.
+    pub fn latest(&self) -> Option<f64> {
+        self.per_minute().last().copied()
+    }
+}
+
 /// The health of one cluster's agents, for the "Fleet by cluster" panel.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClusterHealth {
@@ -121,7 +167,8 @@ pub fn OverviewView() -> impl IntoView {
     let metrics = LocalResource::new(api::metrics_text);
     let events = LocalResource::new(move || api::agent_events(scope.get()));
     let orders = LocalResource::new(api::work_orders);
-    let history = RwSignal::new(Vec::<f64>::new());
+    let samples = RwSignal::new(CounterSamples::default());
+    let rates = Signal::derive(move || samples.with(|s| s.per_minute()));
 
     let layout = RwSignal::new(load_layout().to_string());
     Effect::new(move |_| save_layout(&layout.get()));
@@ -136,22 +183,12 @@ pub fn OverviewView() -> impl IntoView {
         std::time::Duration::from_secs(5),
     );
 
-    // Accumulate the http-requests counter into a 44-point ring for the sparkline.
+    // Sample the http-requests counter on each poll; the panel shows the rate
+    // between samples, so it needs two before it says anything.
     Effect::new(move |_| {
         if let Some(Ok(text)) = metrics.get() {
             if let Some(v) = api::metric_sum(&text, "brokkr_http_requests_total") {
-                history.update(|h| {
-                    if h.is_empty() {
-                        // seed a short ramp so the sparkline has shape on first paint
-                        for k in 0..8 {
-                            h.push(v * (0.85 + 0.02 * k as f64));
-                        }
-                    }
-                    h.push(v);
-                    while h.len() > 44 {
-                        h.remove(0);
-                    }
-                });
+                samples.update(|s| s.push(js_sys::Date::now(), v));
             }
         }
     });
@@ -236,19 +273,17 @@ pub fn OverviewView() -> impl IntoView {
                 <div class="brk-ov-flow">
                     <Panel title="Broker throughput">
                         <Stack gap="sm">
-                            <span class="brk-big">
-                                {move || {
-                                    let last = history.with(|h| h.last().copied().unwrap_or(0.0));
-                                    format!("{} req", last as i64)
-                                }}
-                            </span>
+                            {move || match samples.with(|s| s.latest()) {
+                                Some(r) => view! { <span class="brk-big">{format!("{} req/min", r.round() as i64)}</span> }.into_any(),
+                                None => view! { <span class="brk-meta">"collecting: the rate needs two samples"</span> }.into_any(),
+                            }}
                             <Sparkline
-                                values=history
+                                values=rates
                                 fill=true
                                 fluid=true
                                 height=52.0
                                 color=token::ICE
-                                label="HTTP requests, recent samples"
+                                label="HTTP requests per minute, recent samples"
                             />
                         </Stack>
                     </Panel>
@@ -382,6 +417,34 @@ mod tests {
         let seen = agent("prod", "INACTIVE", 0, 0, true);
         assert_eq!(seen.health().0, "healthy");
         assert!(seen.has_checked_in());
+    }
+
+    #[test]
+    fn the_rate_is_the_delta_per_minute_and_survives_a_reset() {
+        let mut s = CounterSamples::default();
+        assert_eq!(s.latest(), None, "one sample is no rate");
+        s.push(0.0, 1000.0);
+        assert_eq!(s.latest(), None);
+        // 50 requests in 5 s = 600 per minute.
+        s.push(5_000.0, 1050.0);
+        assert_eq!(s.latest(), Some(600.0));
+        // The broker restarted: the counter fell to 20, so 20 requests in 5 s.
+        s.push(10_000.0, 20.0);
+        assert_eq!(s.latest(), Some(240.0));
+        assert_eq!(s.per_minute().len(), 2);
+        // Two samples at the same instant give no rate, not a division by zero.
+        s.push(10_000.0, 25.0);
+        assert_eq!(s.per_minute().len(), 2);
+    }
+
+    #[test]
+    fn the_ring_keeps_the_newest_samples() {
+        let mut s = CounterSamples::default();
+        for i in 0..(CounterSamples::KEEP as i64 + 10) {
+            s.push(i as f64 * 5_000.0, i as f64 * 10.0);
+        }
+        assert_eq!(s.per_minute().len(), CounterSamples::KEEP - 1);
+        assert_eq!(s.latest(), Some(120.0));
     }
 
     #[test]
