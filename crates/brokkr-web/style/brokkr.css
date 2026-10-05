@@ -17,7 +17,10 @@
  *   - The layout widths: the page maximum, the grid minima and the 900px
  *     breakpoint.
  * Aurora's stylesheet is injected at runtime by <AuroraStyles/>; these
- * classes use a `brk-` prefix and never restyle a `cl-` class.
+ * classes use a `brk-` prefix and never restyle a `cl-` class, with one
+ * exception: `.brk-feed-notime .cl-feed__time` hides the empty 64px time
+ * slot that FeedRow keeps when a row has no time (AURORA-T-0007 item 6).
+ * Remove it when Aurora repairs that defect.
  */
 
 /* ----- Brand (top bar) ----- */
@@ -69,7 +72,7 @@
 .brk-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--space-sm); }
 
 /* A feed whose events carry no time: Aurora's FeedRow keeps an empty 64px
-   time slot, so hide it here. */
+   time slot (AURORA-T-0007 item 6), so hide it here. See the header. */
 .brk-feed-notime .cl-feed__time { display: none; }
 
 /* ----- Text ----- */
@@ -95,8 +98,6 @@
   font-variant-numeric: tabular-nums;
 }
 .brk-ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.brk-right,
-.cl-table .brk-right { text-align: right; }
 .brk-muted { color: var(--muted); }
 .brk-faint { color: var(--faint); }
 

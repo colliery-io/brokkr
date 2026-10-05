@@ -335,7 +335,7 @@ pub fn FleetView() -> impl IntoView {
                                             <span class="brk-ws" title="connected on the WebSocket channel">"\u{21c4} ws"</span>
                                         })}
                                     </td>
-                                    <td class="brk-muted brk-right">{ago(a.heartbeat_age_seconds)}</td>
+                                    <td class="brk-muted cl-num">{ago(a.heartbeat_age_seconds)}</td>
                                 </TableRow>
                             }
                         }).collect_view();
@@ -347,7 +347,7 @@ pub fn FleetView() -> impl IntoView {
                                     widths=vec!["34%".into(), "16%".into(), "16%".into(), "14%".into(), "20%".into()]>
                                     <thead><tr>
                                         <th>"Agent"</th><th>"Status"</th><th>"Health"</th>
-                                        <th>"Channel"</th><th class="brk-right">"Heartbeat"</th>
+                                        <th>"Channel"</th><th class="cl-num">"Heartbeat"</th>
                                     </tr></thead>
                                     <tbody>{rows}</tbody>
                                 </Table>

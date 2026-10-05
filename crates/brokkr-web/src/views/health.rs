@@ -98,8 +98,8 @@ pub fn BrokerHealthView() -> impl IntoView {
                                                 <span>{c.agent_id.clone()}</span>
                                             </Group>
                                         </td>
-                                        <td class="brk-right">{c.messages_in.to_string()}</td>
-                                        <td class="brk-right">{c.messages_out.to_string()}</td>
+                                        <td class="cl-num">{c.messages_in.to_string()}</td>
+                                        <td class="cl-num">{c.messages_out.to_string()}</td>
                                     </TableRow>
                                 }
                             })
@@ -109,8 +109,8 @@ pub fn BrokerHealthView() -> impl IntoView {
                                 <thead>
                                     <tr>
                                         <th>"Agent"</th>
-                                        <th class="brk-right">"Messages in \u{2193}"</th>
-                                        <th class="brk-right">"Messages out \u{2191}"</th>
+                                        <th class="cl-num">"Messages in \u{2193}"</th>
+                                        <th class="cl-num">"Messages out \u{2191}"</th>
                                     </tr>
                                 </thead>
                                 <tbody>{rows}</tbody>
