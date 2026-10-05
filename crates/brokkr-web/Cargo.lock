@@ -87,16 +87,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "aurora-leptos"
-version = "0.1.0"
-source = "git+https://github.com/colliery-io/aurora-dark?rev=b32747dfd69a8c0f65f73a3c9841822fe8af79be#b32747dfd69a8c0f65f73a3c9841822fe8af79be"
-dependencies = [
- "js-sys",
- "leptos",
- "web-sys",
-]
-
-[[package]]
 name = "base16"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -121,7 +111,7 @@ dependencies = [
 name = "brokkr-web"
 version = "0.9.2"
 dependencies = [
- "aurora-leptos",
+ "colliery-io-aurora",
  "gloo-net",
  "js-sys",
  "leptos",
@@ -171,6 +161,18 @@ name = "collection_literals"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2550f75b8cfac212855f6b1885455df8eaee8fe8e246b647d69146142e016084"
+
+[[package]]
+name = "colliery-io-aurora"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "68c673fa39748195187453f5dfe1435601f7240fec28cbdc9f46a076d510a416"
+dependencies = [
+ "js-sys",
+ "leptos",
+ "wasm-bindgen-futures",
+ "web-sys",
+]
 
 [[package]]
 name = "config"

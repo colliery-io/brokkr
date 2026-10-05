@@ -1,10 +1,11 @@
-//! Broker health view — Prometheus metric cards (`GET /metrics`) + the internal
+//! Broker health view — Prometheus metric tiles (`GET /metrics`) + the internal
 //! WS connections panel (`GET /api/v1/admin/ws/connections`).
 
 use crate::api;
-use crate::components::DetailRow;
 use crate::models::WsConnectionInfo;
 use aurora_leptos::components::*;
+use aurora_leptos::data::{DetailList, KeyValue, StatTile};
+use aurora_leptos::frame::Drawer;
 use aurora_leptos::tokens::token;
 use leptos::prelude::*;
 
@@ -16,29 +17,9 @@ fn fmt(v: Option<f64>) -> String {
     }
 }
 
-#[component]
-fn MetricCard(
-    #[prop(into)] label: String,
-    #[prop(into)] value: String,
-    #[prop(into)] sub: String,
-    #[prop(into)] color: String,
-) -> impl IntoView {
-    view! {
-        <div style="background:var(--panel);border:1px solid var(--border);border-radius:10px;\
-                    padding:14px 16px;min-width:170px;">
-            <div style="font:600 10px var(--font-mono);letter-spacing:.04em;text-transform:uppercase;\
-                        color:var(--muted);">{label}</div>
-            <div style=format!(
-                "font:600 26px var(--font-mono);color:{color};font-variant-numeric:tabular-nums;\
-                 margin:4px 0;line-height:1;"
-            )>{value}</div>
-            <div style="font:10px var(--font-mono);color:var(--faint);">{sub}</div>
-        </div>
-    }
-}
-
+/// (label, metric, hue). An empty hue is the tile's default bright text.
 const CARDS: &[(&str, &str, &str)] = &[
-    ("Active agents", "brokkr_active_agents", "var(--fg-bright)"),
+    ("Active agents", "brokkr_active_agents", ""),
     ("WS connected", "brokkr_ws_connected_agents", token::TEAL),
     ("HTTP requests", "brokkr_http_requests_total", token::ICE),
     (
@@ -46,19 +27,15 @@ const CARDS: &[(&str, &str, &str)] = &[
         "brokkr_fleet_live_subscribers",
         token::VIOLET,
     ),
-    ("Stacks", "brokkr_stacks_total", "var(--fg-bright)"),
-    (
-        "Deploy objects",
-        "brokkr_deployment_objects_total",
-        "var(--fg-bright)",
-    ),
+    ("Stacks", "brokkr_stacks_total", ""),
+    ("Deploy objects", "brokkr_deployment_objects_total", ""),
 ];
 
 #[component]
 pub fn BrokerHealthView() -> impl IntoView {
     let metrics = LocalResource::new(api::metrics_text);
     let conns = LocalResource::new(api::ws_connections);
-    set_interval(
+    crate::components::poll(
         move || {
             metrics.refetch();
             conns.refetch();
@@ -81,16 +58,16 @@ pub fn BrokerHealthView() -> impl IntoView {
                         .iter()
                         .map(|(label, name, color)| {
                             view! {
-                                <MetricCard
+                                <StatTile
                                     label=*label
                                     value=fmt(api::metric_sum(&text, name))
-                                    sub=*name
+                                    sub=name.to_string()
                                     color=*color
                                 />
                             }
                         })
                         .collect_view();
-                    view! { <Group gap="md" wrap=true>{cards}</Group> }.into_any()
+                    view! { <div class="brk-kpis brk-kpis--wide">{cards}</div> }.into_any()
                 }
             }}
             <Panel title="Internal WS connections">
@@ -111,48 +88,55 @@ pub fn BrokerHealthView() -> impl IntoView {
                             .map(|c| {
                                 let c_sel = c.clone();
                                 view! {
-                                    <div style="cursor:pointer;" on:click=move |_| {
+                                    <TableRow on_click=Callback::new(move |_| {
                                         selected.set(Some(c_sel.clone()));
                                         open.set(true);
-                                    }>
-                                        <Group justify="between">
+                                    })>
+                                        <td>
                                             <Group gap="sm">
                                                 <Dot color=token::TEAL glow=true />
-                                                <span style="font:12px var(--font-mono);color:var(--fg);">
-                                                    {c.agent_id.clone()}
-                                                </span>
+                                                <span>{c.agent_id.clone()}</span>
                                             </Group>
-                                            <span style="font:11px var(--font-mono);color:var(--muted);">
-                                                {format!("{}\u{2193} {}\u{2191}", c.messages_in, c.messages_out)}
-                                            </span>
-                                        </Group>
-                                    </div>
+                                        </td>
+                                        <td class="cl-num">{c.messages_in.to_string()}</td>
+                                        <td class="cl-num">{c.messages_out.to_string()}</td>
+                                    </TableRow>
                                 }
                             })
                             .collect_view();
-                        view! { <Stack gap="sm">{rows}</Stack> }.into_any()
+                        view! {
+                            <Table mono=true label="Internal WS connections">
+                                <thead>
+                                    <tr>
+                                        <th>"Agent"</th>
+                                        <th class="cl-num">"Messages in \u{2193}"</th>
+                                        <th class="cl-num">"Messages out \u{2191}"</th>
+                                    </tr>
+                                </thead>
+                                <tbody>{rows}</tbody>
+                            </Table>
+                        }
+                        .into_any()
                     }
                 }}
             </Panel>
         </Stack>
 
-        <Modal open=open title="WS connection">
+        <Drawer open=open title="WS connection">
             {move || match selected.get() {
                 None => ().into_any(),
                 Some(c) => view! {
                     <Stack gap="md">
-                        <span style="font:600 14px var(--font-mono);color:var(--fg-bright);word-break:break-all;">
-                            {c.agent_id.clone()}
-                        </span>
-                        <div>
-                            <DetailRow label="messages in">{c.messages_in.to_string()}</DetailRow>
-                            <DetailRow label="messages out">{c.messages_out.to_string()}</DetailRow>
-                            <DetailRow label="connected since">{c.connected_since.clone().unwrap_or_else(|| "—".into())}</DetailRow>
-                        </div>
+                        <span class="brk-detail-title">{c.agent_id.clone()}</span>
+                        <DetailList mono=true>
+                            <KeyValue label="messages in">{c.messages_in.to_string()}</KeyValue>
+                            <KeyValue label="messages out">{c.messages_out.to_string()}</KeyValue>
+                            <KeyValue label="connected since">{c.connected_since.clone().unwrap_or_else(|| "—".into())}</KeyValue>
+                        </DetailList>
                     </Stack>
                 }
                 .into_any(),
             }}
-        </Modal>
+        </Drawer>
     }
 }
