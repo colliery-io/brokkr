@@ -1,15 +1,27 @@
 /*
  * Brokkr operator console: the few styles Aurora does not ship.
  *
- * Every colour, space, radius and font here is an Aurora token (`var(--*)`),
- * so both themes work. No raw colour may go in this file: the
- * `no_raw_colours_in_the_console` test in tests/theme.rs refuses one. Aurora's stylesheet is
- * injected at runtime by <AuroraStyles/>; these classes use a `brk-` prefix
- * and never restyle a `cl-` class.
+ * Every colour here is an Aurora token (`var(--*)`), so both themes work.
+ * No raw colour may go in this file: the `no_raw_colours_in_the_console`
+ * test in tests/theme.rs refuses one. Space, radius and font use an Aurora
+ * token where one exists. These raw values remain, because Aurora has no
+ * token for them:
+ *   - The font sizes 9.5px, 10px and 11px (the eyebrow, the sidebar
+ *     footer, the mono captions): the Aurora scale starts at --fs-xs
+ *     (12px). Aurora's own captions use 10.5px and 11px.
+ *   - The 22px throughput count (.brk-big): the scale stops at --fs-xl
+ *     (20px), and the design asks for 22/600.
+ *   - The 26px brand mark: a logo size from the design, not a control
+ *     height (--h-xs is 30px).
+ *   - The 3px sweep bar: a hairline, with no token.
+ *   - The layout widths: the page maximum, the grid minima and the 900px
+ *     breakpoint.
+ * Aurora's stylesheet is injected at runtime by <AuroraStyles/>; these
+ * classes use a `brk-` prefix and never restyle a `cl-` class.
  */
 
 /* ----- Brand (top bar) ----- */
-.brk-brand { display: flex; align-items: center; gap: 9px; }
+.brk-brand { display: flex; align-items: center; gap: var(--space-xs); }
 .brk-brand__mark {
   width: 26px;
   height: 26px;
