@@ -74,6 +74,28 @@ const STACKS = [
   { id: "s1", name: "payments-api", description: "prod payments service", generator_id: "1b9d6bcd-bbfd" },
   { id: "s2", name: "ingest-worker", description: "event ingest", generator_id: "7c9e6679-7425" },
 ];
+// Per-stack telemetry (BROKKR-T-0338): the Kubernetes events and the pod log
+// lines the agent reported for payments-api, with the retention the broker
+// states on each answer.
+const RETENTION = { retention_ceiling_seconds: 21600, effective_retention_seconds: 21600,
+  oldest_available_ts: ago(5400), long_term_sink_hint: "" };
+const K8S_EVENTS = { retention: RETENTION, events: [
+  { id: "e1", agent_id: "a1", stack_id: "s1", observed_at: ago(35), reason: "BackOff", event_type: "Warning",
+    message: "Back-off pulling image \"ghcr.io/app:sha-7f3a01\"", source: "kubelet",
+    involved_object: { kind: "Pod", name: "payments-api-7d9f4-q8m3", namespace: "payments" } },
+  { id: "e2", agent_id: "a1", stack_id: "s1", observed_at: ago(140), reason: "Scheduled", event_type: "Normal",
+    message: "Successfully assigned payments/payments-api-7d9f4-x2k1 to node-1", source: "default-scheduler",
+    involved_object: { kind: "Pod", name: "payments-api-7d9f4-x2k1", namespace: "payments" } },
+  { id: "e3", agent_id: "a1", stack_id: "s1", observed_at: ago(141), reason: "ScalingReplicaSet", event_type: "Normal",
+    message: "Scaled up replica set payments-api-7d9f4 to 2", source: "deployment-controller",
+    involved_object: { kind: "Deployment", name: "payments-api", namespace: "payments" } },
+] };
+const POD_LOGS = { retention: RETENTION, lines: [
+  { ts: ago(95), namespace: "payments", pod: "payments-api-7d9f4-x2k1", container: "api", line: "listening on :8080" },
+  { ts: ago(60), namespace: "payments", pod: "payments-api-7d9f4-x2k1", container: "api", line: "GET /healthz 200 1ms" },
+  { ts: ago(31), namespace: "payments", pod: "payments-api-7d9f4-q8m3", container: "api", line: "pulling image ghcr.io/app:sha-7f3a01" },
+  { ts: ago(12), namespace: "payments", pod: "payments-api-7d9f4-x2k1", container: "api", line: "POST /charge 201 48ms" },
+] };
 // Named PAKs (tenants) for the scope selector (BROKKR-I-0032). IDs line up
 // with STACKS.generator_id so scoped mocks stay coherent.
 const PAKS = [
@@ -194,7 +216,7 @@ const PAUSE_MOCKS = {
 const NEW_AGENT = { agent_id: "5e7d2c11-9a0b-4c3d-8e2f-1a2b3c4d5e6f", name: "checkout-agent-01", cluster_name: "prod-us-east-1",
   status: "INACTIVE", ws_connected: false, last_heartbeat: null, heartbeat_age_seconds: null,
   health_failing: 0, health_degraded: 0, pending_object_count: 0, pending_work_orders: 0, claimed_work_orders: 0 };
-const EMPTY_SHELL = { "/fleet": [], "/agent-events": [], "/work-orders": [] };
+const EMPTY_SHELL = { "/fleet": [], "/agent-events": [], "/work-orders": [], "/stacks": [] };
 
 const SCENES = [
   { name: "overview", mocks: { "/fleet": FLEET, "/agent-events": EVENTS } },
@@ -231,8 +253,16 @@ const SCENES = [
       { id: "d1a2b3c4", status: "healthy", healthy_agents: 3, degraded_agents: 0, failing_agents: 0 },
       { id: "e5f6a7b8", status: "degraded", healthy_agents: 1, degraded_agents: 2, failing_agents: 0 },
     ] } } },
-  { name: "telemetry", nav: "Telemetry", mocks: { "/agent-events": TELEM } },
-  { name: "telemetry-modal", nav: "Telemetry", click: "Apply", mocks: { "/agent-events": TELEM } },
+  { name: "telemetry", nav: "Telemetry", mocks: { "/agent-events": TELEM, "/stacks": STACKS } },
+  { name: "telemetry-modal", nav: "Telemetry", click: "Apply", mocks: { "/agent-events": TELEM, "/stacks": STACKS } },
+  // Per-stack tabs (BROKKR-T-0338): pick a stack, then its Kubernetes events
+  // or its pod logs; and the Pod logs tab with no stack picked.
+  { name: "telemetry-kube-events", nav: "Telemetry", select: "payments-api", tab: "Kube events",
+    mocks: { "/agent-events": TELEM, "/stacks": STACKS, "/stacks/s1/events": K8S_EVENTS } },
+  { name: "telemetry-logs", nav: "Telemetry", select: "payments-api", tab: "Pod logs",
+    mocks: { "/agent-events": TELEM, "/stacks": STACKS, "/stacks/s1/logs": POD_LOGS } },
+  { name: "telemetry-logs-no-stack", nav: "Telemetry", tab: "Pod logs",
+    mocks: { "/agent-events": TELEM, "/stacks": STACKS } },
   // Diagnostics request -> result (BROKKR-T-0301): open the agent modal, run a
   // diagnostic, and screenshot the polled outcome. Three outcomes that must not
   // look alike: a real collection, an empty-but-successful one, and a failure.
@@ -414,6 +444,12 @@ for (const s of SCENES) {
   if (s.click) {
     await page.getByText(s.click, { exact: true }).first().click().catch(() => {});
     await page.waitForTimeout(500);
+  }
+  // A tab, by its accessible name: a substring click would hit the page
+  // subtitle ("kube events · pod logs") first.
+  if (s.tab) {
+    await page.getByRole("tab", { name: s.tab }).click().catch(() => {});
+    await page.waitForTimeout(700);
   }
   if (s.select) {
     await page.locator("select").last().selectOption({ label: s.select }).catch(() => {});

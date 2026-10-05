@@ -47,7 +47,7 @@ fn meta(id: &str) -> (&'static str, &'static str) {
         "overview" => ("Overview", "command view"),
         "fleet" => ("Fleet", "agents by cluster"),
         "deployments" => ("Deployments", "per-stack health"),
-        "telemetry" => ("Telemetry", "kube events · pod logs"),
+        "telemetry" => ("Telemetry", "agent events · kube events · pod logs"),
         "jobs" => ("Work orders", "active · history"),
         "webhooks" => ("Webhooks", "subscriptions · deliveries"),
         "system" => ("Broker health", "metrics · connections"),
