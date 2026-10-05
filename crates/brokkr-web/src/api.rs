@@ -181,6 +181,18 @@ pub async fn stacks(scope: Option<String>) -> Result<Vec<crate::models::Stack>, 
     get_scoped("/stacks", scope).await
 }
 
+/// `GET /api/v1/stacks/:id/events`: the Kubernetes events an agent reported
+/// for the stack, newest first, in the retention window (BROKKR-T-0338).
+pub async fn stack_events(id: &str) -> Result<crate::models::K8sEventHistory, ApiError> {
+    get(&format!("/stacks/{id}/events")).await
+}
+
+/// `GET /api/v1/stacks/:id/logs`: the pod log lines an agent streamed for
+/// the stack, in the retention window.
+pub async fn stack_logs(id: &str) -> Result<crate::models::PodLogHistory, ApiError> {
+    get(&format!("/stacks/{id}/logs")).await
+}
+
 /// `GET /api/v1/agent-events`, optionally scoped to a tenant.
 pub async fn agent_events(
     scope: Option<String>,

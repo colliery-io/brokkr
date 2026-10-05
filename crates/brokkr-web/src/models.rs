@@ -487,3 +487,105 @@ pub struct CreateGeneratorResponse {
 pub struct AgentRecord {
     pub status: String,
 }
+
+/// Retention of the per-stack telemetry (`GET /api/v1/stacks/:id/{events,logs}`).
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct RetentionInfo {
+    #[serde(default)]
+    pub retention_ceiling_seconds: u64,
+    #[serde(default)]
+    pub effective_retention_seconds: u64,
+    #[serde(default)]
+    pub oldest_available_ts: Option<String>,
+}
+
+impl RetentionInfo {
+    /// The window, in whole hours, or the minutes under one hour.
+    pub fn window(&self) -> String {
+        let s = self.effective_retention_seconds;
+        if s >= 3600 {
+            format!("{} h", s / 3600)
+        } else {
+            format!("{} min", s / 60)
+        }
+    }
+}
+
+/// One Kubernetes event an agent reported for a stack
+/// (`GET /api/v1/stacks/:id/events`, BROKKR-T-0338).
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct K8sEventDto {
+    #[serde(default)]
+    pub agent_id: String,
+    #[serde(default)]
+    pub observed_at: Option<String>,
+    #[serde(default)]
+    pub reason: String,
+    #[serde(default)]
+    pub message: String,
+    #[serde(default)]
+    pub event_type: String,
+    #[serde(default)]
+    pub involved_object: serde_json::Value,
+}
+
+impl K8sEventDto {
+    /// `Kind/name` of the object the event is about, or "" when unknown.
+    pub fn object(&self) -> String {
+        let kind = self.involved_object.get("kind").and_then(|v| v.as_str());
+        let name = self.involved_object.get("name").and_then(|v| v.as_str());
+        match (kind, name) {
+            (Some(k), Some(n)) => format!("{k}/{n}"),
+            (None, Some(n)) => n.to_string(),
+            (Some(k), None) => k.to_string(),
+            (None, None) => String::new(),
+        }
+    }
+}
+
+/// `GET /api/v1/stacks/:id/events`.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct K8sEventHistory {
+    pub retention: RetentionInfo,
+    #[serde(default)]
+    pub events: Vec<K8sEventDto>,
+}
+
+/// One pod log line an agent streamed for a stack (`GET /api/v1/stacks/:id/logs`).
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct PodLogDto {
+    #[serde(default)]
+    pub ts: Option<String>,
+    #[serde(default)]
+    pub namespace: String,
+    #[serde(default)]
+    pub pod: String,
+    #[serde(default)]
+    pub container: String,
+    #[serde(default)]
+    pub line: String,
+}
+
+impl PodLogDto {
+    /// `HH:MM:SSZ` of the timestamp, for a log line. The broker sends UTC, and
+    /// the Z says so next to the local wall clock in the top bar.
+    pub fn clock(&self) -> Option<String> {
+        self.ts
+            .as_deref()
+            .and_then(|t| t.get(11..19))
+            .map(|t| format!("{t}Z"))
+    }
+
+    /// `namespace/pod/container`.
+    pub fn source(&self) -> String {
+        format!("{}/{}/{}", self.namespace, self.pod, self.container)
+    }
+}
+
+/// `GET /api/v1/stacks/:id/logs`.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct PodLogHistory {
+    pub retention: RetentionInfo,
+    #[serde(default)]
+    pub lines: Vec<PodLogDto>,
+}

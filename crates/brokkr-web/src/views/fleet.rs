@@ -602,7 +602,7 @@ pub fn FleetView() -> impl IntoView {
                                         let stalled_msg = format!(
                                             "Stopped polling after {}s; the request is still {status}. \
                                              A claimed request can stay claimed indefinitely if the \
-                                             agent never submits (BROKKR-T-0300), so this is not \
+                                             agent never submits, so this is not \
                                              proof that collection failed.",
                                             POLL_MAX as u64 * POLL_EVERY_MS / 1000,
                                         );
