@@ -235,7 +235,7 @@ Labels restrict which stacks a template may be instantiated into. Right now vers
 curl -s -X POST "http://localhost:3000/api/v1/templates/${TEMPLATE_ID}/labels" \
   -H "Authorization: Bearer <your-admin-pak>" \
   -H "Content-Type: application/json" \
-  -d '"env=production"' | jq '{label}'
+  -d '"env:production"' | jq '{label}'
 ```
 
 Now instantiate version 2 into the `frontend-app` stack, which carries no labels:
@@ -267,7 +267,7 @@ The request is refused with `template_stack_mismatch`, and the response names th
 curl -s -X POST "http://localhost:3000/api/v1/stacks/${STACK_ID}/labels" \
   -H "Authorization: Bearer <your-admin-pak>" \
   -H "Content-Type: application/json" \
-  -d '"env=production"' | jq '{label}'
+  -d '"env:production"' | jq '{label}'
 ```
 
 Re-run the instantiation command above and it succeeds.

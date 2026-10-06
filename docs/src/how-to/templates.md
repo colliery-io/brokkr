@@ -92,7 +92,7 @@ A template with no labels or annotations can be instantiated into any stack. Add
 curl -X POST http://localhost:3000/api/v1/templates/$TEMPLATE_ID/labels \
   -H "Authorization: Bearer $ADMIN_PAK" \
   -H "Content-Type: application/json" \
-  -d '"env=production"'
+  -d '"env:production"'
 
 # Add annotation to template
 curl -X POST http://localhost:3000/api/v1/templates/$TEMPLATE_ID/annotations \
@@ -106,9 +106,9 @@ curl -X POST http://localhost:3000/api/v1/templates/$TEMPLATE_ID/annotations \
 | Template | Stack | Result |
 |----------|-------|--------|
 | No labels | Any labels | Matches |
-| `env=prod` | `env=prod, team=platform` | Matches |
-| `env=prod` | `env=staging` | No match |
-| `env=prod, tier=1` | `env=prod` | No match (missing tier) |
+| `env:prod` | `env:prod, team:platform` | Matches |
+| `env:prod` | `env:staging` | No match |
+| `env:prod, tier:1` | `env:prod` | No match (missing tier) |
 
 When instantiation fails due to label mismatch, you'll receive a 422 response with the missing keys under `details`:
 
@@ -157,7 +157,7 @@ Anything still sending `$OLD_TEMPLATE_ID` — a pipeline, a saved script, a CI v
 curl -X POST http://localhost:3000/api/v1/templates/$TEMPLATE_ID/labels \
   -H "Authorization: Bearer $ADMIN_PAK" \
   -H "Content-Type: application/json" \
-  -d '"env=production"'
+  -d '"env:production"'
 
 # ...and every annotation
 curl -X POST http://localhost:3000/api/v1/templates/$TEMPLATE_ID/annotations \

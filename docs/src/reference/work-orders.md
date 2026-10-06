@@ -81,7 +81,7 @@ Content-Type: application/json
   "backoff_seconds": 60,
   "claim_timeout_seconds": 3600,
   "targeting": {
-    "labels": ["env=dev"],
+    "labels": ["env:dev"],
     "annotations": {"capability": "builder"}
   }
 }

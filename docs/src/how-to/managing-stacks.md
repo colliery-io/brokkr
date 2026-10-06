@@ -72,17 +72,19 @@ Labels enable pattern-based targeting where agents with matching labels automati
 curl -X POST http://localhost:3000/api/v1/stacks/$STACK_ID/labels \
   -H "Authorization: Bearer $ADMIN_PAK" \
   -H "Content-Type: application/json" \
-  -d '"production"'
+  -d '"env:production"'
 ```
 
-Labels must be non-empty strings up to 64 characters with no whitespace. Common labeling patterns include:
+#### The label shape
 
-| Purpose | Example Labels |
-|---------|---------------|
-| Environment | `production`, `staging`, `development` |
-| Region | `us-east`, `eu-west`, `apac` |
-| Tier | `frontend`, `backend`, `data` |
-| Criticality | `critical`, `standard` |
+A label is one string: non-empty, up to 64 characters, no whitespace. The broker compares labels as exact strings, so a stack labelled `env:prod` matches only an agent labelled `env:prod`; `env=prod` and `prod` are different labels. Use one shape everywhere, on stacks and on agents: `key:value`. The CLI's `--target-label` flag and the [Multi-Cluster Targeting](../tutorials/multi-cluster-targeting.md) tutorial use the same shape.
+
+| Purpose | Example labels |
+|---------|----------------|
+| Environment | `env:production`, `env:staging`, `env:development` |
+| Region | `region:us-east`, `region:eu-west`, `region:apac` |
+| Tier | `tier:frontend`, `tier:backend`, `tier:data` |
+| Criticality | `criticality:critical`, `criticality:standard` |
 
 ### Listing Labels
 
@@ -148,7 +150,7 @@ curl -X DELETE http://localhost:3000/api/v1/stacks/$STACK_ID/annotations/cost-ce
 
 Targeting establishes the relationship between stacks and the agents that should manage them. Without either an explicit target or a shared label/annotation, an agent won't receive deployment objects from a stack regardless of other configuration.
 
-An agent can only be **explicitly targeted** at a stack (via direct assignment) once it is registered with that stack's owning generator. Registration is the agent's opt-in consent boundary; without it, the broker rejects the target with `403 agent_not_registered` (admins cannot bypass this). Label- and annotation-based matching is unaffected. See [Register Agents with Generators](./agent-registration.md) for the full operational guide and [the security model](../explanation/security-model.md#generator-registration-and-application-scopes) for why this boundary exists.
+An agent can only be **explicitly targeted** at a stack (via direct assignment) once it is registered with that stack's owning generator. Registration is the agent's opt-in consent boundary; without it, the broker rejects the target with `403 agent_not_registered` (admins cannot bypass this). Label and annotation matching is gated the same way, with no error: the broker leaves out the stacks of generators the agent is not registered with when it computes the agent's matches, so a matching label on an unregistered agent delivers nothing. The stack's owning generator may create the target itself, on an agent that is registered with it. See [Register Agents with Generators](./agent-registration.md) for the full operational guide and [the security model](../explanation/security-model.md#generator-registration-and-application-scopes) for why this boundary exists.
 
 ### Registration (Prerequisite)
 
@@ -194,7 +196,7 @@ For example, to have every production agent receive a stack:
 curl -X POST http://localhost:3000/api/v1/stacks/$STACK_ID/labels \
   -H "Authorization: Bearer $ADMIN_PAK" \
   -H "Content-Type: application/json" \
-  -d '"production"'
+  -d '"env:production"'
 
 # Add the same label to each agent that should manage it
 curl -X POST http://localhost:3000/api/v1/agents/$AGENT_ID/labels \
