@@ -13,6 +13,7 @@
 # Tutorials
 
 - [Overview](./tutorials/README.md)
+  - [Your First Tenant, From a Fresh Broker to a Running Manifest](./tutorials/first-tenant.md)
   - [Deploy Your First Application](./tutorials/first-deployment.md)
   - [Multi-Cluster Targeting](./tutorials/multi-cluster-targeting.md)
   - [CI/CD with Generators](./tutorials/cicd-generators.md)

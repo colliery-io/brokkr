@@ -19,12 +19,13 @@ Both work for every tutorial below. The commands are identical; only three value
 
 | Tutorial | What You'll Learn | What it needs |
 |----------|-------------------|---------------|
+| [Your First Tenant](./first-tenant.md) | The whole path from an empty broker to a manifest on a cluster under a tenant's own PAK, with the admin's three steps and the hand-off to the tenant | Broker + admin PAK + **a running agent** attached to a cluster |
 | [Deploy Your First Application](./first-deployment.md) | Create a stack, add a deployment object, register an agent, and watch Kubernetes resources get applied | Broker + admin PAK + **a running agent** attached to a cluster — it is the one tutorial that verifies its results with `kubectl` |
 | [Multi-Cluster Targeting](./multi-cluster-targeting.md) | Use labels and annotations to direct deployments to specific agents | Broker + admin PAK only — it creates its own two agent *records* and never needs an agent process |
 | [CI/CD with Generators](./cicd-generators.md) | Create a generator and use it from a CI/CD pipeline to push deployments | Broker + admin PAK + **one existing agent** (a running one if you want to watch the deployment land on a cluster) |
 | [Standardized Deployments with Templates](./templates.md) | Create reusable templates with JSON Schema validation and instantiate them across stacks | Broker + admin PAK only — templates are rendered broker-side, no agent involved |
 
-Start with [Deploy Your First Application](./first-deployment.md). The other three assume you have met stacks, deployment objects, and targets there, but they do not depend on any resource it creates.
+Start with [Your First Tenant](./first-tenant.md): it is the one path a new operator and a new team both take. [Deploy Your First Application](./first-deployment.md) does the same under the admin PAK alone, in more depth. The others assume you have met stacks, deployment objects, and targets there, but they do not depend on any resource it creates.
 
 ## Adapting the commands to your install
 
