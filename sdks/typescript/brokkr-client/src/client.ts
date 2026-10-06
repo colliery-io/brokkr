@@ -18,6 +18,7 @@ import {
   type AuthResponse,
   type BrokkrApi,
   type DeploymentObject,
+  type Generator,
   type K8sEventHistoryResponse,
   type PodLogHistoryResponse,
   type Stack,
@@ -25,6 +26,9 @@ import {
   createBrokkrClient,
 } from "./index.js";
 import { BrokkrError } from "./error.js";
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Outcome of {@link BrokkrClient.apply}. */
 export type ApplyResult =
@@ -179,34 +183,98 @@ export class BrokkrClient {
   }
 
   /**
-   * Idempotently make a folder of manifests the desired state of the stack
-   * named `stackName`, creating the stack if needed, applying `targeting`
-   * labels for fan-out, and submitting a new revision only when the bundle
-   * changed. Requires a generator PAK. Node-only.
+   * The generator that owns the stack an apply is about to touch.
+   *
+   * A generator PAK owns its own generator; `wanted`, if given, must be that
+   * generator's name or id. An admin PAK owns nothing, so `wanted` is
+   * required and is looked up by id first, then by name.
    */
-  async apply(
-    stackName: string,
-    path: string,
-    targeting: string[] = [],
-  ): Promise<ApplyResult> {
-    const yaml = await readManifests(path);
-    const checksum = await sha256Hex(yaml);
-
+  private async resolveApplyGenerator(wanted?: string): Promise<string> {
     // POST /auth/pak is a pure read (verify the PAK) with no side effect, so
     // retrying it is safe.
     const auth = await this.retry<AuthResponse>((api) =>
       api.POST("/auth/pak", {}),
     );
-    const generatorId = auth.generator;
-    if (!generatorId) {
+    const own = auth.generator;
+    if (own) {
+      if (wanted === undefined || wanted.toLowerCase() === own.toLowerCase()) {
+        return own;
+      }
+      const me = await this.retry<Generator>((api) =>
+        api.GET("/generators/{id}", { params: { path: { id: own } } }),
+      );
+      if (me.name === wanted) {
+        return own;
+      }
       throw new BrokkrError({
-        message:
-          "apply by name requires a generator PAK; admin callers should create the stack explicitly and use submitManifests",
+        message: `this PAK belongs to generator "${me.name}"; it cannot apply for "${wanted}"`,
       });
     }
+    if (!auth.admin) {
+      throw new BrokkrError({
+        message: "apply requires a generator PAK or an admin PAK",
+      });
+    }
+    if (wanted === undefined) {
+      throw new BrokkrError({
+        message:
+          "apply with an admin PAK needs the generator that owns the stack: give its name or id as `generator` (`--generator` in the brokkr CLI)",
+      });
+    }
+    if (UUID_RE.test(wanted)) {
+      try {
+        const g = await this.retry<Generator>((api) =>
+          api.GET("/generators/{id}", { params: { path: { id: wanted } } }),
+        );
+        return g.id;
+      } catch (e) {
+        if (e instanceof BrokkrError && e.status === 404) {
+          throw new BrokkrError({ message: `no generator with id ${wanted}` });
+        }
+        throw e;
+      }
+    }
+    const generators = await this.retry<Generator[]>((api) =>
+      api.GET("/generators", {}),
+    );
+    const match = generators.find((g) => g.name === wanted);
+    if (!match) {
+      throw new BrokkrError({ message: `no generator named "${wanted}"` });
+    }
+    return match.id;
+  }
+
+  /**
+   * Idempotently make a folder of manifests the desired state of the stack
+   * named `stackName`, creating the stack if needed, applying `targeting`
+   * labels for fan-out, and submitting a new revision only when the bundle
+   * changed. Node-only.
+   *
+   * A generator PAK applies for its own generator. An admin PAK has no
+   * generator of its own, so it must name the owner of the stack in
+   * `generator` (a generator name or id). With a generator PAK, `generator`
+   * may be omitted, or must name that PAK's own generator.
+   */
+  async apply(
+    stackName: string,
+    path: string,
+    targeting: string[] = [],
+    generator?: string,
+  ): Promise<ApplyResult> {
+    const yaml = await readManifests(path);
+    const checksum = await sha256Hex(yaml);
+
+    const generatorId = await this.resolveApplyGenerator(generator);
 
     const stacks = await this.retry<Stack[]>((api) => api.GET("/stacks", {}));
     let stack = stacks.find((s) => s.name === stackName);
+    // Stack names are unique broker-wide. A generator PAK only sees its own
+    // stacks; an admin sees every stack, so check the owner.
+    if (stack && stack.generator_id !== generatorId) {
+      throw new BrokkrError({
+        message: `stack "${stackName}" belongs to another generator`,
+      });
+    }
     if (!stack) {
       // Single attempt: creating a stack is not idempotent.
       const stackRes = await this.api.POST("/stacks", {

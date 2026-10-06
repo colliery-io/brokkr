@@ -56,7 +56,7 @@ let object = client.submit_manifests(stack_id, "./manifests").await?;
 println!("submitted revision {}", object.sequence_id);
 ```
 
-For the control-plane loop, `apply` is idempotent: it creates the stack by name if it doesn't exist, applies targeting labels for fan-out, and submits a new revision **only when the bundle changed** (so re-running with an unchanged folder is a no-op). It requires a generator PAK (the stack is owned by that generator).
+For the control-plane loop, `apply` is idempotent: it creates the stack by name if it doesn't exist, applies targeting labels for fan-out, and submits a new revision **only when the bundle changed** (so re-running with an unchanged folder is a no-op). With a generator PAK, the stack is owned by that generator:
 
 ```rust
 use brokkr_client::ApplyOutcome;
@@ -67,6 +67,14 @@ match client.apply("payments", "./manifests", &["env:prod".into(), "region:us".i
     ApplyOutcome::Unchanged  => println!("already current"),
 }
 ```
+
+An admin PAK has no generator of its own, so it names the owner (by name or id) with `apply_for_generator`:
+
+```rust
+let outcome = admin.apply_for_generator("acme-payments", "payments", "./manifests", &[]).await?;
+```
+
+`apply` with an admin PAK returns `BrokkrError::InvalidRequest`; so does `apply_for_generator` with a generator PAK that names a different generator.
 
 A stack's desired state is the single latest deployment object, and the agent reconciles + prunes — so removing a file from the folder and re-applying deletes that resource on the next reconcile. Ordering is forgiving: the agent front-loads `Namespace`/`CustomResourceDefinition` objects.
 

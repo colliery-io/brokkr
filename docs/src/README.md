@@ -41,6 +41,6 @@ Manage applications across multiple Kubernetes clusters from a single control pl
 
 ## Working with Brokkr Day to Day
 
-Once Brokkr is running, the recommended everyday workflow is the **`brokkr` CLI**: point it at a folder of manifests and run [`brokkr apply`](./how-to/cli-apply.md) — it's idempotent and CI-safe. For programmatic use, the [SDKs](./how-to/sdks/README.md) (Rust, Python, TypeScript) expose the same operations. The raw [REST API](./reference/api/README.md) sits underneath both.
+Once Brokkr is running, the recommended everyday workflow is the **`brokkr` CLI**: point it at a folder of manifests and run [`brokkr apply`](./how-to/cli-apply.md) — it's idempotent and CI-safe. A generator PAK applies for its own generator; the admin PAK adds `--generator <name>` to say which generator owns the stack. For programmatic use, the [SDKs](./how-to/sdks/README.md) (Rust, Python, TypeScript) expose the same operations. The raw [REST API](./reference/api/README.md) sits underneath both.
 
 For watching rather than changing, the broker also serves a read-only **Operator Console** at its own root URL — a browser view of the fleet, deployments, telemetry, work orders, and broker health that needs no credential of its own. Because it authenticates itself, anyone who can reach the broker's port can read it: network reach is the console's only boundary, which is worth knowing before you expose that port. See the [Security Model](./explanation/security-model.md#read-only-console-authentication-the-ui-pak).

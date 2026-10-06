@@ -5,7 +5,7 @@ You have a folder of Kubernetes manifests and want it to become a stack's desire
 ## Prerequisites
 
 - The `brokkr` binary on your `PATH` (download the Linux or macOS tarball for your architecture from the [GitHub Release](https://github.com/colliery-io/brokkr/releases), or build it from source with `cargo build --release -p brokkr-cli`).
-- A reachable broker and a **generator** PAK (the stack will be owned by that generator).
+- A reachable broker and a PAK. A **generator** PAK applies for its own generator: the stack is owned by that generator. An **admin** PAK can apply too, but it must name the generator that owns the stack with `--generator` (see [Apply as an admin](#apply-as-an-admin)). To mint a generator PAK, see [Create the tenant](../tutorials/first-tenant.md#step-1-admin-create-the-tenant) or [Working with Generators](./generators.md#step-1-create-the-generator).
 
 ## Configure the connection once
 
@@ -31,6 +31,22 @@ created stack "payments": first revision (sequence 1)
 updated stack "payments": new revision (sequence 2)
 unchanged: stack "payments" already current
 ```
+
+## Apply as an admin
+
+An admin PAK has no generator of its own, so it cannot own a stack. Name the owner with `--generator`, by name or by id:
+
+```bash
+brokkr apply -f ./manifests --stack payments --generator acme-payments
+```
+
+The stack is created under that generator, and that generator's PAK can manage it from then on. Without `--generator`, an admin PAK gets:
+
+```
+error: invalid request: apply with an admin PAK needs the generator that owns the stack: give its name or id as `generator` (`--generator` in the brokkr CLI)
+```
+
+With a generator PAK, `--generator` is optional. If you give it, it must name that PAK's own generator: a tenant cannot apply for another tenant.
 
 ## Target specific agents
 

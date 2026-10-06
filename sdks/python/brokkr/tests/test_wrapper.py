@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from types import SimpleNamespace
+from uuid import UUID
 
 import httpx
 import pytest
@@ -233,3 +234,103 @@ def test_sha256_hex_matches_known_vector() -> None:
     a = "apiVersion: v1\nkind: ConfigMap\n"
     assert _sha256_hex(a) == _sha256_hex(a)
     assert _sha256_hex(a) != _sha256_hex("apiVersion: v1\nkind: Secret\n")
+
+
+# ---------------------------------------------------------------------------
+# apply: who owns the stack (BROKKR-T-0332)
+# ---------------------------------------------------------------------------
+
+GENERATOR_ID = UUID("22222222-2222-2222-2222-222222222222")
+STACK_ID = UUID("33333333-3333-3333-3333-333333333333")
+
+
+def _manifests(tmp_path: Path) -> Path:
+    _write(tmp_path, "cm.yaml", "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: c\n")
+    return tmp_path
+
+
+def _patch(monkeypatch: pytest.MonkeyPatch, target: str, result: object) -> list:
+    """Replace a generated ``asyncio_detailed`` with one that records its call
+    and returns ``result`` (a ``_resp``)."""
+    calls: list = []
+
+    async def fake(*args: object, **kwargs: object) -> object:
+        calls.append((args, kwargs))
+        return result
+
+    monkeypatch.setattr(f"brokkr_broker_client.api.{target}.asyncio_detailed", fake)
+    return calls
+
+
+async def test_apply_admin_names_the_generator_and_owns_the_stack(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _patch(monkeypatch, "auth.verify_pak", _resp(200, SimpleNamespace(admin=True, generator=None)))
+    _patch(
+        monkeypatch,
+        "generators.list_generators",
+        _resp(200, [SimpleNamespace(id=GENERATOR_ID, name="acme")]),
+    )
+    _patch(monkeypatch, "stacks.list_stacks", _resp(200, []))
+    created = _patch(
+        monkeypatch,
+        "stacks.create_stack",
+        _resp(201, SimpleNamespace(id=STACK_ID, name="payments", generator_id=GENERATOR_ID)),
+    )
+    _patch(monkeypatch, "stacks.list_deployment_objects", _resp(200, []))
+    _patch(
+        monkeypatch,
+        "stacks.create_deployment_object",
+        _resp(201, SimpleNamespace(id="o1", stack_id=STACK_ID, sequence_id=1)),
+    )
+    c = BrokkrClient("http://localhost:3000/api/v1", token="bk_admin")
+    result = await c.apply("payments", _manifests(tmp_path), generator="acme")
+    assert result.status == "created"
+    assert created[0][1]["body"].generator_id == GENERATOR_ID
+
+
+async def test_apply_admin_without_generator_names_the_flag(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _patch(monkeypatch, "auth.verify_pak", _resp(200, SimpleNamespace(admin=True, generator=None)))
+    c = BrokkrClient("http://localhost:3000/api/v1", token="bk_admin")
+    with pytest.raises(BrokkrError, match="--generator"):
+        await c.apply("payments", _manifests(tmp_path))
+
+
+async def test_apply_generator_pak_cannot_apply_for_another(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _patch(
+        monkeypatch,
+        "auth.verify_pak",
+        _resp(200, SimpleNamespace(admin=False, generator=str(GENERATOR_ID))),
+    )
+    _patch(
+        monkeypatch,
+        "generators.get_generator",
+        _resp(200, SimpleNamespace(id=GENERATOR_ID, name="acme")),
+    )
+    c = BrokkrClient("http://localhost:3000/api/v1", token="bk_gen")
+    with pytest.raises(BrokkrError, match='belongs to generator "acme"'):
+        await c.apply("payments", _manifests(tmp_path), generator="globex")
+
+
+async def test_apply_refuses_a_stack_owned_by_another_generator(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _patch(monkeypatch, "auth.verify_pak", _resp(200, SimpleNamespace(admin=True, generator=None)))
+    _patch(
+        monkeypatch,
+        "generators.get_generator",
+        _resp(200, SimpleNamespace(id=GENERATOR_ID, name="acme")),
+    )
+    other = UUID("44444444-4444-4444-4444-444444444444")
+    _patch(
+        monkeypatch,
+        "stacks.list_stacks",
+        _resp(200, [SimpleNamespace(id=STACK_ID, name="payments", generator_id=other)]),
+    )
+    c = BrokkrClient("http://localhost:3000/api/v1", token="bk_admin")
+    with pytest.raises(BrokkrError, match="belongs to another generator"):
+        await c.apply("payments", _manifests(tmp_path), generator=str(GENERATOR_ID))
