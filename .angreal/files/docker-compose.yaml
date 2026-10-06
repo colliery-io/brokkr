@@ -90,8 +90,15 @@ services:
 
         AGENT_ID=$$(echo "$$EXISTING" | sed -n "s/.*\"id\":\"\([^\"]*\)\".*\"name\":\"brokkr-integration-test-agent\".*/\1/p")
 
+        # A second `up` keeps the agent: its id, its PAK and its registrations
+        # (BROKKR-T-0330). Only an agent whose key file is gone is recreated.
+        if [ -n "$$AGENT_ID" ] && [ -s /tmp/brokkr-keys/agent.pak ]; then
+          echo "Agent brokkr-integration-test-agent exists ($$AGENT_ID); keeping it."
+          exit 0
+        fi
+
         if [ -n "$$AGENT_ID" ]; then
-          echo "Deleting existing agent: $$AGENT_ID"
+          echo "Deleting existing agent: $$AGENT_ID (its key file is gone)"
           curl -s -X DELETE "http://broker:3000/api/v1/agents/$$AGENT_ID" \
             -H "Authorization: Bearer brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8"
         fi
@@ -103,8 +110,6 @@ services:
           -H "Authorization: Bearer brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8" \
           -d "{\"name\": \"brokkr-integration-test-agent\", \"cluster_name\": \"brokkr-dev-integration-cluster\"}")
 
-        echo "Response: $$RESPONSE"
-
         # Extract PAK from JSON response
         PAK=$$(echo "$$RESPONSE" | sed -n "s/.*\"initial_pak\":\"\([^\"]*\)\".*/\1/p")
 
@@ -114,7 +119,7 @@ services:
         fi
 
         echo "$$PAK" > /tmp/brokkr-keys/agent.pak
-        echo "Agent PAK: $$PAK"
+        echo "Agent PAK written to /tmp/brokkr-keys/agent.pak"
       '
 
   # K3s cluster - only for Shipwright/Tekton build infrastructure
@@ -267,7 +272,7 @@ services:
       sh -c '
         # Read PAK from file
         export BROKKR__AGENT__PAK=$$(cat /tmp/brokkr-keys/agent.pak)
-        echo "Starting agent with PAK: $$BROKKR__AGENT__PAK"
+        echo "Starting agent with the PAK from /tmp/brokkr-keys/agent.pak"
         exec ./brokkr-agent start
       '
     healthcheck:
@@ -331,7 +336,7 @@ services:
       context: ../../examples/webhook-catcher
       dockerfile: Dockerfile
     ports:
-      - "8090:8080"
+      - "${BROKKR_DEV_WEBHOOK_PORT:-8090}:8080"
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/healthz"]
       interval: 5s
