@@ -731,7 +731,7 @@
             "description": "The created generator."
           },
           "pak": {
-            "description": "The Pre-Authentication Key for the generator.",
+            "description": "The Prefixed API Key for the generator.",
             "type": "string"
           }
         },
@@ -5167,7 +5167,7 @@
             "generator_pak": []
           }
         ],
-        "summary": "Verifies a PAK (Personal Access Key) and returns an AuthResponse.",
+        "summary": "Verifies a PAK (Prefixed API Key) and returns an AuthResponse.",
         "tags": [
           "auth"
         ]

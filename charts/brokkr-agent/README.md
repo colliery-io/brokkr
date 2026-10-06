@@ -21,7 +21,7 @@ This Helm chart deploys the Brokkr agent to a Kubernetes cluster. The agent conn
 - Helm 3.8+ (3.8 is the floor for `helm install oci://…` against the published charts;
   installing from a local checkout works with any Helm 3.x)
 - A running Brokkr broker instance
-- Broker Pre-Authenticated Key (PAK) for agent authentication
+- Broker Prefixed API Key (PAK) for agent authentication
 - (Optional) Prometheus Operator, if you enable `metrics.podMonitor`
 - For a **default** install, cluster-admin rights and a cluster with no existing Tekton or
   Shipwright installation — see the next section
@@ -137,7 +137,7 @@ broker:
   url: http://brokkr-broker:3000  # Broker service URL
   agentName: ""                    # Required: must match the agent record's name on the broker
   clusterName: ""                  # Required: must match the agent record's cluster_name
-  pak: ""                          # Pre-Authenticated Key for agent authentication
+  pak: ""                          # Prefixed API Key for agent authentication
   generatorIds: []                 # Generator scopes this agent serves (see below)
 ```
 
@@ -382,7 +382,7 @@ if this table and the chart ever disagree.
 | `broker.url` | string | `"http://brokkr-broker:3000"` | Broker service URL (`BROKKR__AGENT__BROKER_URL`) |
 | `broker.agentName` | string | `""` | **Required.** Agent name. Must match the `name` of the agent record on the broker. An empty or different value makes the startup self-lookup fail with "Agent not found". The chart does not generate a name. |
 | `broker.clusterName` | string | `""` | **Required.** Cluster name. Must match the `cluster_name` of the agent record on the broker. |
-| `broker.pak` | string | `""` | Pre-Authenticated Key (rendered into the ConfigMap in plaintext; dev/test only). Ignored when `broker.existingSecret` is set. |
+| `broker.pak` | string | `""` | Prefixed API Key (rendered into the ConfigMap in plaintext; dev/test only). Ignored when `broker.existingSecret` is set. |
 | `broker.existingSecret` | string | `""` | Name of a pre-existing Secret to source the PAK from. When set, the PAK is injected via `secretKeyRef` and kept out of the ConfigMap/values/git (GitOps-friendly). |
 | `broker.existingSecretKey` | string | `"BROKKR__AGENT__PAK"` | Key within `broker.existingSecret` holding the PAK. |
 | `broker.generatorIds` | list/string | `[]` | Generator UUIDs the agent self-registers with on startup (`BROKKR__AGENT__GENERATOR_IDS`). Empty = system/fleet scope only. |

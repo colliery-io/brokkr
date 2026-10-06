@@ -20,7 +20,7 @@ pub fn routes() -> Router<DAL> {
     Router::new().route("/auth/pak", post(verify_pak))
 }
 
-/// Verifies a PAK (Personal Access Key) and returns an AuthResponse.
+/// Verifies a PAK (Prefixed API Key) and returns an AuthResponse.
 ///
 /// This function handles the authentication process for both admin and agent PAKs.
 #[utoipa::path(

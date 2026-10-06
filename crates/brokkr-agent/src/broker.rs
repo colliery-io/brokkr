@@ -136,7 +136,7 @@ pub async fn wait_for_broker_ready(config: &Settings) {
     std::process::exit(1);
 }
 
-/// Verifies the agent's Personal Access Key (PAK) with the broker.
+/// Verifies the agent's Prefixed API Key (PAK) with the broker.
 #[instrument(skip(config), fields(broker_url = %config.agent.broker_url))]
 pub async fn verify_agent_pak(config: &Settings) -> Result<(), Box<dyn std::error::Error>> {
     debug!("Verifying agent PAK at {}", config.agent.broker_url);

@@ -37,7 +37,7 @@ use uuid::Uuid;
 pub struct CreateGeneratorResponse {
     /// The created generator.
     pub generator: Generator,
-    /// The Pre-Authentication Key for the generator.
+    /// The Prefixed API Key for the generator.
     pub pak: String,
 }
 

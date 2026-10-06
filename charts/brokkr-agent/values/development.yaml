@@ -11,7 +11,7 @@
 #   helm install brokkr-agent-dev . -f values/development.yaml \
 #     --set broker.agentName=dev-test-agent \
 #     --set broker.clusterName=local-dev \
-#     --set broker.pak=<pre-authenticated-key>
+#     --set broker.pak=<prefixed-api-key>
 #
 # WARNING: DO NOT USE IN PRODUCTION
 # This configuration uses namespace-scoped RBAC and minimal resources.
@@ -47,7 +47,7 @@ broker:
   # Development cluster name
   clusterName: "local-dev"
 
-  # Pre-Authenticated Key (REQUIRED)
+  # Prefixed API Key (REQUIRED)
   # Get from broker during agent registration
   pak: ""
 

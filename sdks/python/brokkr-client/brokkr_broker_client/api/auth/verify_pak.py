@@ -54,7 +54,7 @@ def sync_detailed(
     *,
     client: AuthenticatedClient,
 ) -> Response[AuthResponse | ErrorResponse]:
-    """Verifies a PAK (Personal Access Key) and returns an AuthResponse.
+    """Verifies a PAK (Prefixed API Key) and returns an AuthResponse.
 
      This function handles the authentication process for both admin and agent PAKs.
 
@@ -79,7 +79,7 @@ def sync(
     *,
     client: AuthenticatedClient,
 ) -> AuthResponse | ErrorResponse | None:
-    """Verifies a PAK (Personal Access Key) and returns an AuthResponse.
+    """Verifies a PAK (Prefixed API Key) and returns an AuthResponse.
 
      This function handles the authentication process for both admin and agent PAKs.
 
@@ -100,7 +100,7 @@ async def asyncio_detailed(
     *,
     client: AuthenticatedClient,
 ) -> Response[AuthResponse | ErrorResponse]:
-    """Verifies a PAK (Personal Access Key) and returns an AuthResponse.
+    """Verifies a PAK (Prefixed API Key) and returns an AuthResponse.
 
      This function handles the authentication process for both admin and agent PAKs.
 
@@ -123,7 +123,7 @@ async def asyncio(
     *,
     client: AuthenticatedClient,
 ) -> AuthResponse | ErrorResponse | None:
-    """Verifies a PAK (Personal Access Key) and returns an AuthResponse.
+    """Verifies a PAK (Prefixed API Key) and returns an AuthResponse.
 
      This function handles the authentication process for both admin and agent PAKs.
 

@@ -8,7 +8,7 @@ The broker serves an interactive Swagger UI (with request/response schemas, auth
 
 ## API Overview
 
-All API endpoints are prefixed with `/api/v1/` and require authentication via PAK (Pre-Authenticated Key) in the `Authorization` header.
+All API endpoints are prefixed with `/api/v1/` and require authentication via PAK (Prefixed API Key) in the `Authorization` header.
 
 ### Authentication
 

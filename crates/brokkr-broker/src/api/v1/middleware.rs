@@ -6,7 +6,7 @@
 
 //! Authentication middleware for the Brokkr API v1.
 //!
-//! This module provides middleware for authenticating requests using Pre-Authentication Keys (PAKs)
+//! This module provides middleware for authenticating requests using Prefixed API Keys (PAKs)
 //! and handling different types of authenticated entities (admin, agent, generator).
 
 use crate::dal::DAL;
@@ -240,7 +240,7 @@ fn readonly_request_allowed(method: &axum::http::Method, path: &str) -> bool {
 /// # Arguments
 ///
 /// * `dal` - The data access layer for database operations.
-/// * `pak` - The Pre-Authentication Key to verify.
+/// * `pak` - The Prefixed API Key to verify.
 ///
 /// # Returns
 ///

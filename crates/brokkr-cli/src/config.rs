@@ -21,7 +21,7 @@ pub struct ConfigLayer {
     /// Base URL of the broker. May or may not include the `/api/v1` suffix;
     /// [`normalize_base_url`] adds it when missing.
     pub broker_url: Option<String>,
-    /// Project Access Key presented as `Authorization: Bearer <pak>`.
+    /// Prefixed API Key presented as `Authorization: Bearer <pak>`.
     pub pak: Option<String>,
 }
 

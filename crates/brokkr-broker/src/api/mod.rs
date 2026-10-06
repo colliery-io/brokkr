@@ -23,7 +23,7 @@
 //! ## API Endpoints
 //!
 //! ### Authentication
-//! - `POST /api/v1/auth/pak`: Verifies a Pre-Authentication Key (PAK).
+//! - `POST /api/v1/auth/pak`: Verifies a Prefixed API Key (PAK).
 //!   - Returns: AuthResponse with authentication details.
 //!   - Required PAK: Any valid PAK (admin, agent, or generator).
 //!

@@ -19,7 +19,7 @@
 //! - `deleted_at`: TIMESTAMPTZ, soft deletion timestamp (nullable)
 //! - `name`: VARCHAR(255), name of the generator
 //! - `description`: TEXT, optional description of the generator
-//! - `pak_hash`: TEXT, hash of the Pre-Authentication Key (PAK) for the generator (nullable)
+//! - `pak_hash`: TEXT, hash of the Prefixed API Key (PAK) for the generator (nullable)
 //! - `last_active_at`: TIMESTAMPTZ, timestamp of the last activity (nullable)
 //! - `is_active`: BOOLEAN, indicates if the generator is currently active
 //!
@@ -70,7 +70,7 @@ pub struct Generator {
     pub name: String,
     /// Optional description of the generator.
     pub description: Option<String>,
-    /// Hash of the Pre-Authentication Key (PAK) for the generator.
+    /// Hash of the Prefixed API Key (PAK) for the generator.
     #[serde(skip_serializing, skip_deserializing)]
     pub pak_hash: Option<String>,
     /// Timestamp of when the generator was last active.

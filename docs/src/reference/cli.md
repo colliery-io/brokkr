@@ -284,9 +284,9 @@ brokkr apply -f ./manifests --stack payments --target-label env:prod
 | `-f`, `--filename <PATH>` | yes | Folder of manifests (top-level `*.yaml`/`*.yml`, sorted) or a single file. |
 | `--stack <NAME>` | yes | Stack name; created if absent. |
 | `--target-label <LABEL>` | no | Targeting label for agent fan-out (e.g. `env:prod`). Repeatable. |
-| `--generator <NAME_OR_ID>` | with an admin PAK | The generator that owns the stack, by name or id. Required with an admin PAK. Optional with a generator PAK, where it must name that PAK's own generator. |
+| `--generator <NAME_OR_ID>` | with an admin PAK | The tenant that owns the stack, by name or id (the API calls a tenant a generator). Required with an admin PAK. Optional with a tenant PAK, where it must name the tenant of that PAK. |
 
-With a **generator** PAK, the stack is owned by the generator the PAK resolves to. With an **admin** PAK, the stack is owned by the generator named in `--generator`; without it, the command exits `1` with an error that names the flag. It prints one of three lines and exits `0`:
+With a **tenant** PAK, the tenant of that PAK owns the stack. With an **admin** PAK, the tenant named in `--generator` owns the stack; without it, the command exits `1` with an error that names the flag. It prints one of three lines and exits `0`:
 
 | Output | Meaning |
 |--------|---------|
@@ -298,10 +298,10 @@ On any error (no connection settings, malformed config, unreadable bundle, broke
 
 ### `brokkr register`
 
-Registers an agent with a generator scope on the agent's behalf. An agent must be registered with a generator before any of that generator's stacks can be targeted at it. Agents normally self-register on startup (see [`brokkr-agent start`](#brokkr-agent-start)); use this to register an agent before it is live, or to add a scope. Requires an admin PAK. Re-registering an already-registered pair returns `409 already_registered` and exits `1` (only the agent's own startup self-registration treats that as success).
+Registers an agent with a tenant for the agent. An agent must be registered with a tenant before any of the stacks of that tenant can target it. Agents normally self-register on startup (see [`brokkr-agent start`](#brokkr-agent-start)); use this to register an agent before it is live, or to add a tenant. Requires an admin PAK. Re-registering an already-registered pair returns `409 already_registered` and exits `1` (only the agent's own startup self-registration treats that as success).
 
 ```bash
-brokkr register --agent <agent-id> --generator <generator-id>
+brokkr register --agent <agent-id> --generator <tenant-id>
 ```
 
 **Flags:**
@@ -309,16 +309,16 @@ brokkr register --agent <agent-id> --generator <generator-id>
 | Flag | Required | Description |
 |------|----------|-------------|
 | `--agent <UUID>` | yes | The agent to register. |
-| `--generator <UUID>` | yes | The generator scope to register it with. |
+| `--generator <UUID>` | yes | The tenant to register it with (its generator id in the API). |
 
 See [Generator Registration](../explanation/security-model.md#generator-registration-and-application-scopes) for the model and [Agent registration](../how-to/agent-registration.md) for the operational guide.
 
 ### `brokkr deregister`
 
-Removes an agent's registration from a generator scope. Requires an admin PAK.
+Removes an agent's registration from a tenant. Requires an admin PAK.
 
 ```bash
-brokkr deregister --agent <agent-id> --generator <generator-id>
+brokkr deregister --agent <agent-id> --generator <tenant-id>
 ```
 
 **Flags:**
@@ -326,28 +326,28 @@ brokkr deregister --agent <agent-id> --generator <generator-id>
 | Flag | Required | Description |
 |------|----------|-------------|
 | `--agent <UUID>` | yes | The agent to deregister. |
-| `--generator <UUID>` | yes | The generator scope to remove. |
+| `--generator <UUID>` | yes | The tenant to remove the agent from. |
 
-Destructive: the broker also removes the agent's `agent_targets` for that generator's stacks and pushes a target-changed frame to the agent, which prunes the corresponding Kubernetes resources on its next reconcile.
+Destructive: the broker also removes the agent's `agent_targets` for the stacks of that tenant and pushes a target-changed frame to the agent, which prunes the corresponding Kubernetes resources on its next reconcile.
 
 ### `brokkr registrations`
 
-Lists the generator scopes one agent is registered with, or the agents registered with one generator. Exactly one of `--agent` or `--generator` is required. Cross-entity queries require an admin PAK.
+Lists the tenants that one agent is registered with, or the agents registered with one tenant. Exactly one of `--agent` or `--generator` is required. Cross-entity queries require an admin PAK.
 
 ```bash
-# Generator scopes an agent is registered with
+# Tenants an agent is registered with
 brokkr registrations --agent <agent-id>
 
-# Agents registered with a generator
-brokkr registrations --generator <generator-id>
+# Agents registered with a tenant
+brokkr registrations --generator <tenant-id>
 ```
 
 **Flags:**
 
 | Flag | Required | Description |
 |------|----------|-------------|
-| `--agent <UUID>` | one of¹ | List the agent's generator registrations. |
-| `--generator <UUID>` | one of¹ | List the generator's registered agents. |
+| `--agent <UUID>` | one of¹ | List the tenant registrations of the agent. |
+| `--generator <UUID>` | one of¹ | List the registered agents of the tenant. |
 
 ¹ Exactly one of `--agent` or `--generator` must be given (mutually exclusive).
 

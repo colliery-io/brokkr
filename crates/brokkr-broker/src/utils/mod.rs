@@ -96,7 +96,7 @@ pub fn first_startup(
     upsert_admin(conn, config).map(|_| ())
 }
 
-/// Creates a new PAK (Privileged Access Key) and its hash.
+/// Creates a new PAK (Prefixed API Key) and its hash.
 ///
 /// This function generates a new PAK and returns both the key and its hash.
 fn create_pak() -> Result<(String, String), Box<dyn std::error::Error>> {
