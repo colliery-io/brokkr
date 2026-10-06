@@ -374,10 +374,10 @@ Labels and annotation values are compared as exact strings; extra labels and ann
 
 **Example:**
 
-Template with labels `["env=production", "tier=frontend"]`:
-- Stack with `["env=production", "tier=frontend", "region=us"]` → **matches** (has all required)
-- Stack with `["env=production"]` → **no match** (missing `tier=frontend`)
-- Stack with `["env=staging", "tier=frontend"]` → **no match** (wrong env)
+Template with labels `["env:production", "tier:frontend"]`:
+- Stack with `["env:production", "tier:frontend", "region:us"]` → **matches** (has all required)
+- Stack with `["env:production"]` → **no match** (missing `tier:frontend`)
+- Stack with `["env:staging", "tier:frontend"]` → **no match** (wrong env)
 
 Matching is a targeting guardrail, not an access control boundary — a template with no labels is instantiable into any stack the caller is authorized for. Access is governed by [template ownership](#template-types).
 

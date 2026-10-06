@@ -78,7 +78,7 @@ Example targeting configurations:
 // Combined targeting (OR logic across all methods)
 {
   "targeting": {
-    "labels": ["env=prod"],
+    "labels": ["env:prod"],
     "annotations": {"tier": "premium"}
   }
 }

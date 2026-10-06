@@ -110,7 +110,7 @@ An agent can only have *explicit targets* created for a generator's stacks once 
 
 2. **Confirm the resulting scope.** An empty or unset value means the agent joins no application scopes beyond the automatic system-generator registration, so explicit targets cannot be created for any other generator's stacks. Every agent is auto-registered with the system generator at creation, so fleet-wide stacks always reach it regardless of this setting.
 
-3. **Audit the agent's labels and annotations.** Registration bounds explicit targeting, but stacks are also delivered when their labels or annotations match the agent's — a delivery path that operates independently of registration. Keep selectors distinct per tenant or application (for example, prefix them with the tenant name) so a generic label like `env=prod` cannot pull another tenant's stacks onto the agent.
+3. **Audit the agent's labels and annotations.** Registration bounds every delivery path: an explicit target is refused for an unregistered agent, and a label or annotation match is left out for the generators the agent is not registered with. A generic label like `env:prod` therefore cannot pull another tenant's stack onto an agent. Keep selectors distinct per tenant or application all the same (for example, prefix them with the tenant name), so that a registration granted later does not widen a match by surprises onto the agent.
 
 To add or remove scopes after deployment, register or deregister agents with the `brokkr` CLI; see [Agent Registration](./agent-registration.md) for the operational steps. Configuration keys are documented in [Environment Variables](../reference/environment-variables.md).
 
