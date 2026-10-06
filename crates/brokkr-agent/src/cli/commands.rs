@@ -63,8 +63,8 @@ use crate::{
     pod_logs, webhooks, work_orders,
 };
 use brokkr_utils::config::Settings;
-use brokkr_wire::WsMessage;
 use brokkr_utils::telemetry::prelude::*;
+use brokkr_wire::WsMessage;
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -434,27 +434,39 @@ pub async fn start(
                     Ok(objects) => {
                         // Gap detection: find stacks present last cycle but absent now.
                         // Their agent_targets were removed (e.g. generator deregistration)
-                        // so we must clean up their K8s resources locally — no broker call.
-                        let current_stack_ids: HashSet<Uuid> =
-                            objects.iter().map(|o| o.stack_id).collect();
-                        let removed_stacks: Vec<Uuid> = previous_stack_ids
-                            .difference(&current_stack_ids)
-                            .copied()
-                            .collect();
-                        for stack_id in &removed_stacks {
-                            info!(%stack_id, "stack removed from targets; cleaning up K8s resources");
-                            if let Err(e) = k8s::api::delete_stack_resources(
-                                &stack_id.to_string(),
-                                k8s_client.clone(),
-                                &agent.id,
-                                config.agent.watch_namespace.as_deref(),
-                            )
-                            .await
-                            {
-                                error!(%stack_id, "failed to clean up resources for removed stack: {}", e);
+                        // so we must clean up their K8s resources locally.
+                        //
+                        // The set comes from the broker's associated-stacks view, not
+                        // from `objects`: that list is incremental and drops an object
+                        // once this agent reported it deployed, so a stack with nothing
+                        // new to apply looked removed, and the agent deleted what it had
+                        // just applied (BROKKR-T-0342). With no view this cycle, delete
+                        // nothing and keep the last known set.
+                        match broker::fetch_associated_stack_ids(&sdk_client, &agent).await {
+                            Ok(current_stack_ids) => {
+                                let removed_stacks: Vec<Uuid> = previous_stack_ids
+                                    .difference(&current_stack_ids)
+                                    .copied()
+                                    .collect();
+                                for stack_id in &removed_stacks {
+                                    info!(%stack_id, "stack removed from targets; cleaning up K8s resources");
+                                    if let Err(e) = k8s::api::delete_stack_resources(
+                                        &stack_id.to_string(),
+                                        k8s_client.clone(),
+                                        &agent.id,
+                                        config.agent.watch_namespace.as_deref(),
+                                    )
+                                    .await
+                                    {
+                                        error!(%stack_id, "failed to clean up resources for removed stack: {}", e);
+                                    }
+                                }
+                                previous_stack_ids = current_stack_ids;
+                            }
+                            Err(e) => {
+                                warn!("could not read the agent's stacks; skipping gap detection this cycle: {}", e);
                             }
                         }
-                        previous_stack_ids = current_stack_ids;
 
                         // Collect this cycle's successfully-applied ids and
                         // replace the tracked set at the end, so superseded
@@ -747,7 +759,9 @@ pub async fn start(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use brokkr_models::models::{agent_targets::AgentTarget, stacks::Stack, work_orders::WorkOrder};
+    use brokkr_models::models::{
+        agent_targets::AgentTarget, stacks::Stack, work_orders::WorkOrder,
+    };
     use chrono::Utc;
 
     fn stack() -> Stack {
@@ -844,14 +858,20 @@ mod tests {
     fn generator_ids_falls_back_to_legacy_env_and_flags_it() {
         let (resolved, legacy) = resolve_generator_ids(None, None, Some("env".into()));
         assert_eq!(resolved, "env");
-        assert!(legacy, "non-empty legacy env should be flagged as deprecated use");
+        assert!(
+            legacy,
+            "non-empty legacy env should be flagged as deprecated use"
+        );
     }
 
     #[test]
     fn generator_ids_empty_legacy_env_is_not_flagged() {
         let (resolved, legacy) = resolve_generator_ids(None, None, Some("  ".into()));
         assert_eq!(resolved, "  ");
-        assert!(!legacy, "blank legacy env should not trigger the deprecation warning");
+        assert!(
+            !legacy,
+            "blank legacy env should not trigger the deprecation warning"
+        );
     }
 
     #[test]

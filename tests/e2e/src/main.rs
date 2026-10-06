@@ -128,6 +128,12 @@ async fn main() -> ExitCode {
                     scenarios::test_ws_telemetry(&client)
                 );
             }
+            "survive-polls" => {
+                run_scenario!(
+                    "BROKKR-T-0342: applied resources survive polls, and go with the target",
+                    scenarios::test_applied_resources_survive_polls(&client)
+                );
+            }
             other => {
                 eprintln!("❌ Unknown E2E_SCENARIO: {}", other);
                 return ExitCode::FAILURE;

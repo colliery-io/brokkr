@@ -922,7 +922,10 @@ pub async fn test_agent_reconciliation_existing_deployments(client: &Client) -> 
     client
         .register_agent_with_generator(generator_id, agent2_id)
         .await?;
-    println!("    Created agent: {} (registered with generator)", agent2_id);
+    println!(
+        "    Created agent: {} (registered with generator)",
+        agent2_id
+    );
 
     // 2c. NOW add matching label to agent (after deployment exists)
     client
@@ -975,7 +978,10 @@ pub async fn test_agent_reconciliation_existing_deployments(client: &Client) -> 
     client
         .register_agent_with_generator(generator_id, agent3_id)
         .await?;
-    println!("    Created agent: {} (registered with generator)", agent3_id);
+    println!(
+        "    Created agent: {} (registered with generator)",
+        agent3_id
+    );
 
     // 3c. NOW add matching annotation to agent (after deployment exists)
     client
@@ -1162,10 +1168,7 @@ pub async fn test_ws_smoke(client: &Client) -> Result<()> {
     let initial_connected = client
         .wait_for_metric("brokkr_ws_connected_agents", &[], 30, |v| v >= 1.0)
         .await?;
-    println!(
-        "    brokkr_ws_connected_agents = {} ✓",
-        initial_connected
-    );
+    println!("    brokkr_ws_connected_agents = {} ✓", initial_connected);
 
     // -------------------------------------------------------------------
     // Step 2: Stop the broker container
@@ -1236,9 +1239,7 @@ pub async fn test_ws_smoke(client: &Client) -> Result<()> {
     let agents = client.list_agents().await?;
     let agent = agents
         .iter()
-        .find(|a| {
-            a.get("name").and_then(|n| n.as_str()) == Some("brokkr-integration-test-agent")
-        })
+        .find(|a| a.get("name").and_then(|n| n.as_str()) == Some("brokkr-integration-test-agent"))
         .ok_or("expected brokkr-integration-test-agent in agent list")?;
     let agent_id: Uuid = agent
         .get("id")
@@ -1253,11 +1254,7 @@ pub async fn test_ws_smoke(client: &Client) -> Result<()> {
         .await?;
     let gen_id: Uuid = Uuid::parse_str(gen["generator"]["id"].as_str().unwrap())?;
     let stack = client
-        .create_stack(
-            &format!("ws-smoke-stack-{}", Uuid::new_v4()),
-            None,
-            gen_id,
-        )
+        .create_stack(&format!("ws-smoke-stack-{}", Uuid::new_v4()), None, gen_id)
         .await?;
     let stack_id: Uuid = Uuid::parse_str(stack["id"].as_str().unwrap())?;
 
@@ -1309,11 +1306,7 @@ pub async fn test_ws_smoke(client: &Client) -> Result<()> {
 /// through it — which is exactly the "WS severed, REST untouched" primitive
 /// the A2 chaos scenario needs (REST goes direct to broker:3000, not through
 /// toxiproxy).
-async fn toxiproxy_set_enabled(
-    toxiproxy_url: &str,
-    proxy_name: &str,
-    enabled: bool,
-) -> Result<()> {
+async fn toxiproxy_set_enabled(toxiproxy_url: &str, proxy_name: &str, enabled: bool) -> Result<()> {
     let url = format!("{}/proxies/{}", toxiproxy_url, proxy_name);
     let resp = reqwest::Client::new()
         .post(&url)
@@ -1350,8 +1343,8 @@ async fn toxiproxy_set_enabled(
 /// catch, and Pass 2 of this task will extend the scenario to seed work
 /// orders during the severance window and assert REST-fallback drains them.
 pub async fn test_ws_chaos(client: &Client) -> Result<()> {
-    let toxiproxy_url = std::env::var("TOXIPROXY_URL")
-        .unwrap_or_else(|_| "http://localhost:8474".to_string());
+    let toxiproxy_url =
+        std::env::var("TOXIPROXY_URL").unwrap_or_else(|_| "http://localhost:8474".to_string());
 
     println!("  → Toxiproxy admin URL: {}", toxiproxy_url);
 
@@ -1374,10 +1367,7 @@ pub async fn test_ws_chaos(client: &Client) -> Result<()> {
     let dropped = client
         .wait_for_metric("brokkr_ws_connected_agents", &[], 30, |v| v < 1.0)
         .await?;
-    println!(
-        "    brokkr_ws_connected_agents = {} after sever ✓",
-        dropped
-    );
+    println!("    brokkr_ws_connected_agents = {} after sever ✓", dropped);
 
     // While WS is down, REST is still reachable — sanity check.
     println!("  → Confirming REST stays reachable during WS sever...");
@@ -1422,9 +1412,7 @@ pub async fn test_ws_chaos(client: &Client) -> Result<()> {
     let agents = client.list_agents().await?;
     let agent = agents
         .iter()
-        .find(|a| {
-            a.get("name").and_then(|n| n.as_str()) == Some("brokkr-integration-test-agent")
-        })
+        .find(|a| a.get("name").and_then(|n| n.as_str()) == Some("brokkr-integration-test-agent"))
         .ok_or("expected brokkr-integration-test-agent in agent list")?;
     let agent_id: Uuid = agent
         .get("id")
@@ -1475,12 +1463,10 @@ pub async fn test_ws_chaos(client: &Client) -> Result<()> {
 
     // Parse and compare to be defensive — string inequality is sufficient
     // for the broker's ISO-8601 timestamp granularity, but explicit > is clearer.
-    let t_a = chrono::DateTime::parse_from_rfc3339(&hb_a).map_err(|e| {
-        format!("could not parse first heartbeat timestamp {}: {}", hb_a, e)
-    })?;
-    let t_b = chrono::DateTime::parse_from_rfc3339(&hb_b).map_err(|e| {
-        format!("could not parse second heartbeat timestamp {}: {}", hb_b, e)
-    })?;
+    let t_a = chrono::DateTime::parse_from_rfc3339(&hb_a)
+        .map_err(|e| format!("could not parse first heartbeat timestamp {}: {}", hb_a, e))?;
+    let t_b = chrono::DateTime::parse_from_rfc3339(&hb_b)
+        .map_err(|e| format!("could not parse second heartbeat timestamp {}: {}", hb_b, e))?;
     if t_b <= t_a {
         return Err(format!(
             "REST heartbeat fallback advanced backwards or stalled: hb_a={} hb_b={}",
@@ -1591,14 +1577,23 @@ pub async fn test_ws_workorders(client: &Client) -> Result<()> {
             }
             if let Ok(log) = client.get_work_order_log(*id).await {
                 // Present in the log == the agent called complete_work_order.
-                let success = log.get("success").and_then(|v| v.as_bool()).unwrap_or(false);
+                let success = log
+                    .get("success")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
                 if !success {
-                    toxiproxy_set_enabled(&toxiproxy_url, "ws-channel", true).await.ok();
-                    return Err(format!("work order {} completed but success=false: {}", id, log).into());
+                    toxiproxy_set_enabled(&toxiproxy_url, "ws-channel", true)
+                        .await
+                        .ok();
+                    return Err(
+                        format!("work order {} completed but success=false: {}", id, log).into(),
+                    );
                 }
                 let claimed_by = log.get("claimed_by").and_then(|v| v.as_str());
                 if claimed_by != Some(agent_id.to_string().as_str()) {
-                    toxiproxy_set_enabled(&toxiproxy_url, "ws-channel", true).await.ok();
+                    toxiproxy_set_enabled(&toxiproxy_url, "ws-channel", true)
+                        .await
+                        .ok();
                     return Err(format!(
                         "work order {} claimed_by {:?}, expected the test agent {}",
                         id, claimed_by, agent_id
@@ -1606,11 +1601,18 @@ pub async fn test_ws_workorders(client: &Client) -> Result<()> {
                     .into());
                 }
                 completed.insert(*id);
-                println!("    completed {}/{} ({})", completed.len(), wo_ids.len(), id);
+                println!(
+                    "    completed {}/{} ({})",
+                    completed.len(),
+                    wo_ids.len(),
+                    id
+                );
             }
         }
         if completed.len() < wo_ids.len() && std::time::Instant::now() > deadline {
-            toxiproxy_set_enabled(&toxiproxy_url, "ws-channel", true).await.ok();
+            toxiproxy_set_enabled(&toxiproxy_url, "ws-channel", true)
+                .await
+                .ok();
             return Err(format!(
                 "only {}/{} work orders completed within 150s with WS severed — REST \
                  fallback did not drain the queue",
@@ -1623,7 +1625,10 @@ pub async fn test_ws_workorders(client: &Client) -> Result<()> {
             tokio::time::sleep(std::time::Duration::from_secs(3)).await;
         }
     }
-    println!("    all {} work orders completed with WS severed ✓", wo_ids.len());
+    println!(
+        "    all {} work orders completed with WS severed ✓",
+        wo_ids.len()
+    );
 
     // No duplicate / leftover: each id is gone from the active queue.
     let active = client.list_work_orders().await?;
@@ -1638,7 +1643,9 @@ pub async fn test_ws_workorders(client: &Client) -> Result<()> {
         })
         .collect();
     if !leftover.is_empty() {
-        toxiproxy_set_enabled(&toxiproxy_url, "ws-channel", true).await.ok();
+        toxiproxy_set_enabled(&toxiproxy_url, "ws-channel", true)
+            .await
+            .ok();
         return Err(format!(
             "{} seeded work order(s) still in the active queue after completion — \
              not drained cleanly",
@@ -1848,11 +1855,7 @@ pub async fn test_ws_telemetry(client: &Client) -> Result<()> {
         .await?;
     let gen_id: Uuid = Uuid::parse_str(gen["generator"]["id"].as_str().unwrap())?;
     let stack = client
-        .create_stack(
-            &format!("a3-tel-stack-{}", Uuid::new_v4()),
-            None,
-            gen_id,
-        )
+        .create_stack(&format!("a3-tel-stack-{}", Uuid::new_v4()), None, gen_id)
         .await?;
     let stack_id: Uuid = Uuid::parse_str(stack["id"].as_str().unwrap())?;
     println!("    stack {} created", stack_id);
@@ -1903,11 +1906,9 @@ spec:
             Err(e) => {
                 if std::time::Instant::now() > deadline {
                     cleanup(compose_file.clone(), pod_name.clone()).await;
-                    return Err(format!(
-                        "history endpoint never returned a parseable body: {}",
-                        e
-                    )
-                    .into());
+                    return Err(
+                        format!("history endpoint never returned a parseable body: {}", e).into(),
+                    );
                 }
                 tokio::time::sleep(Duration::from_secs(2)).await;
                 continue;
@@ -1941,9 +1942,7 @@ spec:
         });
 
         if matched {
-            println!(
-                "    ✓ found event referencing {pod_name} with a Pull/Failed/BackOff reason"
-            );
+            println!("    ✓ found event referencing {pod_name} with a Pull/Failed/BackOff reason");
             break;
         }
 
@@ -2038,9 +2037,9 @@ spec:
             last_log_count = lines.len();
         }
 
-        let matched = lines.iter().any(|line| {
-            line.get("pod").and_then(|v| v.as_str()) == Some(chatty_name.as_str())
-        });
+        let matched = lines
+            .iter()
+            .any(|line| line.get("pod").and_then(|v| v.as_str()) == Some(chatty_name.as_str()));
         if matched {
             println!("    ✓ found ≥1 log line from chatty pod in history");
             break;
@@ -2074,4 +2073,123 @@ spec:
     Ok(())
 }
 
+/// Run `kubectl` inside the k3s container and give back whether it succeeded
+/// and what it printed. For assertions that a resource is, or is not, on the
+/// cluster.
+async fn k3s_kubectl(compose_file: &str, args: &[&str]) -> Result<(bool, String)> {
+    use tokio::process::Command as TokioCommand;
+    let mut cmd = TokioCommand::new("docker");
+    cmd.args([
+        "compose",
+        "-f",
+        compose_file,
+        "exec",
+        "-T",
+        "k3s",
+        "kubectl",
+    ]);
+    cmd.args(args);
+    let out = cmd.output().await?;
+    Ok((
+        out.status.success(),
+        format!(
+            "{}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        ),
+    ))
+}
 
+/// BROKKR-T-0342: what the agent applied stays on the cluster across polls,
+/// and goes when the target goes.
+///
+/// The agent's gap detection compared the stacks named by the incremental
+/// target-state list between polls. That list drops an object once the agent
+/// reports it deployed, so one poll after a successful apply the stack looked
+/// removed and the agent deleted everything it had just created. This
+/// scenario applies one object through the running dev agent, waits three
+/// poll cycles, and asserts the namespace is still there; then removes the
+/// target and asserts the namespace is gone within two cycles.
+///
+/// Needs the dev stack (`E2E_COMPOSE_FILE`) and its running agent
+/// `brokkr-integration-test-agent`, which polls every 10 s.
+pub async fn test_applied_resources_survive_polls(client: &Client) -> Result<()> {
+    let compose_file = std::env::var("E2E_COMPOSE_FILE").map_err(|_| {
+        "E2E_COMPOSE_FILE must point at the dev docker-compose.yaml (kubectl runs in k3s)"
+    })?;
+    let poll = std::time::Duration::from_secs(10);
+    // Unique names, so the scenario can run again on the same stack.
+    let suffix = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() % 100_000)
+        .unwrap_or(0);
+    let ns_owned = format!("e2e-survive-{suffix}");
+    let ns = ns_owned.as_str();
+
+    println!("  → Finding the running dev agent...");
+    let agents = client.list_agents().await?;
+    let agent = agents
+        .iter()
+        .find(|a| a.get("name").and_then(|n| n.as_str()) == Some("brokkr-integration-test-agent"))
+        .ok_or("expected brokkr-integration-test-agent in agent list")?;
+    let agent_id: Uuid = agent["id"].as_str().unwrap().parse()?;
+    client
+        .update_agent(agent_id, json!({"status": "ACTIVE"}))
+        .await?;
+
+    println!("  → Creating a generator, a stack with one object, and the target...");
+    let gen = client
+        .create_generator(&format!("e2e-survive-gen-{suffix}"), None)
+        .await?;
+    let generator_id: Uuid = gen["generator"]["id"].as_str().unwrap().parse()?;
+    client
+        .register_agent_with_generator(generator_id, agent_id)
+        .await?;
+    let stack = client
+        .create_stack(&format!("e2e-survive-{suffix}"), None, generator_id)
+        .await?;
+    let stack_id: Uuid = stack["id"].as_str().unwrap().parse()?;
+    let manifest = format!(
+        "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: {ns}\n---\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: survive\n  namespace: {ns}\ndata:\n  key: value\n"
+    );
+    client.create_deployment(stack_id, &manifest, false).await?;
+    client.add_agent_target(agent_id, stack_id).await?;
+
+    println!("  → Waiting three poll cycles for the apply to land and stay...");
+    tokio::time::sleep(poll * 3 + std::time::Duration::from_secs(5)).await;
+    let (ok, out) = k3s_kubectl(&compose_file, &["get", "namespace", ns]).await?;
+    if !ok {
+        k3s_delete_best_effort(&compose_file, &["namespace", ns]).await;
+        return Err(format!(
+            "namespace {ns} is not on the cluster three poll cycles after the apply: {out}"
+        )
+        .into());
+    }
+    let (ok, out) = k3s_kubectl(&compose_file, &["get", "configmap", "survive", "-n", ns]).await?;
+    if !ok {
+        k3s_delete_best_effort(&compose_file, &["namespace", ns]).await;
+        return Err(format!("configmap survive is not on the cluster: {out}").into());
+    }
+    println!("    ✓ The namespace and the configmap are still on the cluster");
+
+    println!("  → Removing the target; the agent must clean up within two cycles...");
+    client.remove_agent_target(agent_id, stack_id).await?;
+    tokio::time::sleep(poll * 2 + std::time::Duration::from_secs(5)).await;
+    // A namespace being deleted stays listable as Terminating for a while;
+    // that counts as gone.
+    let (found, phase) = k3s_kubectl(
+        &compose_file,
+        &["get", "namespace", ns, "-o", "jsonpath={.status.phase}"],
+    )
+    .await?;
+    let still_there = found && !phase.contains("Terminating");
+    if still_there {
+        k3s_delete_best_effort(&compose_file, &["namespace", ns]).await;
+        return Err(format!(
+            "namespace {ns} is still on the cluster two poll cycles after the target was removed"
+        )
+        .into());
+    }
+    println!("    ✓ The namespace is gone after the target was removed");
+    Ok(())
+}
