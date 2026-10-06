@@ -79,11 +79,11 @@ If you want a genuine live stream of fleet state, that is an API capability rath
 
 ## Step 4: Scope the View to One Tenant
 
-On a broker shared between tenants, the sidebar shows a **Tenant** selector below the navigation. It lists the named PAK owners (generators) the broker knows about, plus **All**. Choosing one narrows the Overview, Fleet, Deployments, and Telemetry views to that tenant's resources; the choice is remembered in your browser between visits, and falls back to **All** if the tenant it named has since been removed.
+On a broker shared between tenants, the sidebar shows a **Tenant** selector below the navigation. It lists the tenants that the broker knows about, plus **All**. Choosing one narrows the Overview, Fleet, Deployments, and Telemetry views to that tenant's resources; the choice is remembered in your browser between visits, and falls back to **All** if the tenant it named has since been removed.
 
 On a single-tenant install there is nothing to choose, so the selector is hidden entirely. It is also hidden if the tenant listing cannot be read — the views still work, unscoped.
 
-**The tenant selector is a view filter, not an authorization boundary.** It trims what the console displays; it does not restrict what the console's credential is permitted to read, and switching back to **All** is a click away for anyone using the page. Real isolation comes from generator ownership, described in [Setting Up Multi-Tenant Operation](./multi-tenant-setup.md) and the [Multi-Tenancy reference](../reference/multi-tenancy.md). Never treat the selector as a way to show one tenant's operators only their own data.
+**The tenant selector is a view filter, not an authorization boundary.** It trims what the console displays; it does not restrict what the console's credential is permitted to read, and switching back to **All** is a click away for anyone using the page. Real isolation comes from tenant ownership, described in [Setting Up Multi-Tenant Operation](./multi-tenant-setup.md) and the [Multi-Tenancy reference](../reference/multi-tenancy.md). Never treat the selector as a way to show one tenant's operators only their own data.
 
 ## Step 5: Run a Diagnostic on an Agent
 
@@ -114,7 +114,7 @@ The equivalent outside the console is `PUT /api/v1/agents/{id}` with `{"status":
 
 ## Step 6: Create a Tenant
 
-**Tenants** lists the generators on this broker, and is the one place the console writes anything. Because a tenant's PAK is a credential, the console will not mint one on the strength of the read-only identity it carries — you supply an admin PAK for that single request.
+**Tenants** lists the tenants on this broker, and is the one place the console writes anything. Because a tenant's PAK is a credential, the console will not mint one on the strength of the read-only identity it carries — you supply an admin PAK for that single request.
 
 1. Open **Tenants** in the sidebar and choose **+ New tenant**.
 2. Give the tenant a name, and a description if it helps whoever inherits it.
@@ -129,13 +129,13 @@ The admin PAK you pasted is held in memory for that one request and cleared as s
 
 If the PAK is rejected, the dialog says whether it was not an admin credential (403) or the name was already taken (409). Nothing is created in either case.
 
-The equivalent outside the console is `POST /api/v1/generators` or `brokkr-broker create generator`; see [Generators](../reference/generators.md). Creating **agents** is not available here — only tenants.
+Outside the console, use `POST /api/v1/generators` or `brokkr-broker create generator` (the API calls a tenant a generator); see [Generators](../reference/generators.md). Creating **agents** is not available here — only tenants.
 
 ## Running More Than One Broker Replica
 
 Each broker process mints its own console credential, and a credential minted by one replica is rejected by the others. A browser served the console page by replica A and then load-balanced onto replica B will find its API calls refused.
 
-**Enable session affinity (sticky sessions) on whatever fronts your brokers** whenever more than one replica serves console traffic, so a browser keeps talking to the replica that served it the page. Reloading the page also fixes an individual session, since the reload picks up the current replica's credential — but affinity is what makes the console usable rather than intermittent. Agent, generator, and admin PAK authentication is unaffected; those credentials verify identically on every replica. See [Horizontal Broker Scaling](../explanation/architecture.md#horizontal-broker-scaling).
+**Enable session affinity (sticky sessions) on whatever fronts your brokers** whenever more than one replica serves console traffic, so a browser keeps talking to the replica that served it the page. Reloading the page also fixes an individual session, since the reload picks up the current replica's credential — but affinity is what makes the console usable rather than intermittent. Agent, tenant, and admin PAK authentication is unaffected; those credentials verify identically on every replica. See [Horizontal Broker Scaling](../explanation/architecture.md#horizontal-broker-scaling).
 
 ## The Console Is Not `examples/ui-slim`
 

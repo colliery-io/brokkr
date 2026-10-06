@@ -38,7 +38,7 @@ All deployments require these three values to be set:
    - Helps organize agents in broker UI
    - Examples: `production-us-east-1`, `local-dev`, `staging`
 
-3. **broker.pak**: Pre-Authenticated Key
+3. **broker.pak**: Prefixed API Key
    - Obtain from broker when creating agent
    - SECURITY: Always use `--set` flag, never commit to files
 
@@ -248,7 +248,7 @@ resources:
     cpu: "1000m"
 ```
 
-## Getting Pre-Authenticated Key (PAK)
+## Getting Prefixed API Key (PAK)
 
 The PAK is required for agent authentication. Get it from the broker:
 
@@ -266,7 +266,7 @@ curl -X POST https://brokkr.example.com/api/agents \
 {
   "id": "123",
   "name": "prod-cluster-01",
-  "pak": "generated-pre-authenticated-key"
+  "pak": "generated-prefixed-api-key"
 }
 
 # Method 2: Broker UI
@@ -274,7 +274,7 @@ curl -X POST https://brokkr.example.com/api/agents \
 # Copy PAK from creation dialog
 
 # Use PAK in Helm install
-export BROKER_PAK="generated-pre-authenticated-key"
+export BROKER_PAK="generated-prefixed-api-key"
 helm install brokkr-agent . -f values/production.yaml \
   --set broker.agentName=prod-cluster-01 \
   --set broker.clusterName=production-us-east-1 \

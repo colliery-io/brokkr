@@ -41,7 +41,7 @@ struct ConnectionArgs {
     #[arg(long, global = true)]
     broker_url: Option<String>,
 
-    /// Project Access Key (PAK) to authenticate with.
+    /// Prefixed API Key (PAK) to authenticate with.
     #[arg(long, global = true)]
     pak: Option<String>,
 
@@ -55,21 +55,23 @@ enum Command {
     /// Make a folder of manifests the desired state of a stack (idempotent).
     Apply(ApplyArgs),
 
-    /// Register an agent with a generator scope (admin bootstrap).
+    /// Register an agent with a tenant (admin bootstrap).
     ///
-    /// Agents normally self-register on startup; use this to register an agent
-    /// on its behalf — e.g. before it is live, or to add an application scope.
-    /// Requires an admin PAK. Registering an already-registered pair is a no-op.
+    /// Agents usually register themselves when they start. Use this command to
+    /// register an agent for it: for example, before the agent is live, or to
+    /// add a tenant. Requires an admin PAK. If the agent is already registered
+    /// with the tenant, the broker returns 409 `already_registered` and the
+    /// command exits with status 1.
     Register(RegisterArgs),
 
-    /// Remove an agent's registration from a generator scope (admin).
+    /// Remove an agent's registration from a tenant (admin).
     ///
     /// DESTRUCTIVE: the broker also removes the agent's targets for that
-    /// generator and notifies the agent, which then prunes the corresponding
+    /// tenant and notifies the agent, which then prunes the corresponding
     /// Kubernetes resources on its next reconcile. Requires an admin PAK.
     Deregister(RegisterArgs),
 
-    /// List generator registrations — for one agent or one generator.
+    /// List tenant registrations: for one agent or for one tenant.
     Registrations(RegistrationsArgs),
 }
 
@@ -79,7 +81,8 @@ struct RegisterArgs {
     #[arg(long)]
     agent: Uuid,
 
-    /// UUID of the generator scope to (de)register the agent with.
+    /// UUID of the tenant to (de)register the agent with. The API calls a
+    /// tenant a generator.
     #[arg(long)]
     generator: Uuid,
 }
@@ -87,11 +90,12 @@ struct RegisterArgs {
 #[derive(Debug, Args)]
 #[command(group(ArgGroup::new("subject").required(true).args(["agent", "generator"])))]
 struct RegistrationsArgs {
-    /// List the generator scopes this agent is registered with.
+    /// List the tenants this agent is registered with.
     #[arg(long)]
     agent: Option<Uuid>,
 
-    /// List the agents registered with this generator scope.
+    /// List the agents registered with this tenant. The API calls a tenant a
+    /// generator.
     #[arg(long)]
     generator: Option<Uuid>,
 }
@@ -110,9 +114,9 @@ struct ApplyArgs {
     #[arg(long = "target-label", value_name = "LABEL")]
     target_label: Vec<String>,
 
-    /// Generator that owns the stack, by name or id. Required with an admin
-    /// PAK. With a generator PAK it may be omitted, or must name that PAK's
-    /// own generator.
+    /// Tenant that owns the stack, by name or id. The API calls a tenant a
+    /// generator. Required with an admin PAK. With a tenant PAK, you can omit
+    /// it; if you give it, it must name the tenant of that PAK.
     #[arg(long, value_name = "NAME_OR_ID")]
     generator: Option<String>,
 }
@@ -195,7 +199,7 @@ async fn register(client: &BrokkrClient, args: RegisterArgs) -> Result<(), Strin
         .await
         .map_err(|e| e.to_string())?;
     println!(
-        "registered agent {} with generator {} (registration {})",
+        "registered agent {} with tenant {} (registration {})",
         reg.agent_id, reg.generator_id, reg.id
     );
     Ok(())
@@ -207,11 +211,11 @@ async fn deregister(client: &BrokkrClient, args: RegisterArgs) -> Result<(), Str
         .await
         .map_err(|e| e.to_string())?;
     println!(
-        "deregistered agent {} from generator {}",
+        "deregistered agent {} from tenant {}",
         args.agent, args.generator
     );
     println!(
-        "note: the agent's targets for this generator were removed; it will prune \
+        "note: the agent's targets for this tenant were removed; it will prune \
          those resources on its next reconcile"
     );
     Ok(())
@@ -225,11 +229,11 @@ async fn registrations(client: &BrokkrClient, args: RegistrationsArgs) -> Result
             .await
             .map_err(|e| e.to_string())?;
         if regs.is_empty() {
-            println!("agent {agent} has no generator registrations");
+            println!("agent {agent} has no tenant registrations");
         } else {
-            println!("agent {agent} is registered with {} generator(s):", regs.len());
+            println!("agent {agent} is registered with {} tenant(s):", regs.len());
             for r in regs {
-                println!("  generator {}  (registered {})", r.generator_id, r.registered_at);
+                println!("  tenant {}  (registered {})", r.generator_id, r.registered_at);
             }
         }
     } else if let Some(generator) = args.generator {
@@ -238,9 +242,9 @@ async fn registrations(client: &BrokkrClient, args: RegistrationsArgs) -> Result
             .await
             .map_err(|e| e.to_string())?;
         if regs.is_empty() {
-            println!("generator {generator} has no registered agents");
+            println!("tenant {generator} has no registered agents");
         } else {
-            println!("generator {generator} has {} registered agent(s):", regs.len());
+            println!("tenant {generator} has {} registered agent(s):", regs.len());
             for r in regs {
                 println!("  agent {}  (registered {})", r.agent_id, r.registered_at);
             }

@@ -45,7 +45,7 @@
 //!   Default: "debug"
 //!   Possible values: "trace", "debug", "info", "warn", "error"
 //!
-//! - `BROKKR__PAK__PREFIX`: Sets the prefix for PAKs (Pre-Authentication Keys)
+//! - `BROKKR__PAK__PREFIX`: Sets the prefix for PAKs (Prefixed API Keys)
 //!   Default: "brokkr"
 //!
 //! - `BROKKR__PAK__RNG`: Sets the random number generator type for PAK generation

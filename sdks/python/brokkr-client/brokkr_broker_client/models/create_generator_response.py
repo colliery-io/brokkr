@@ -19,7 +19,7 @@ class CreateGeneratorResponse:
 
     Attributes:
         generator (Generator): Represents a generator in the Brokkr system.
-        pak (str): The Pre-Authentication Key for the generator.
+        pak (str): The Prefixed API Key for the generator.
     """
 
     generator: Generator

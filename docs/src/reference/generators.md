@@ -4,7 +4,7 @@ This reference documents the API endpoints for managing generators in Brokkr.
 
 ## Overview
 
-Generators are identity principals that enable external systems (CI/CD pipelines, automation tools) and teams to authenticate with Brokkr and manage resources. Each generator has its own Pre-Authentication Key (PAK) and can only access resources it created.
+Generators are identity principals that enable external systems (CI/CD pipelines, automation tools) and teams to authenticate with Brokkr and manage resources. Each generator has its own Prefixed API Key (PAK) and can only access resources it created.
 
 **A generator is also Brokkr's tenant.** Onboarding a team or an application onto a shared broker means creating a generator and handing over its PAK: stacks carry the owning `generator_id`, templates are private to their generator unless they are system templates, and agents must register with a generator before its stacks reach them. Generators are what the operator console's tenant scope selector lists (`GET /api/v1/paks`) and what `?pak_id=` narrows a listing to. See [Multi-Tenancy](./multi-tenancy.md) for the full tenant model.
 

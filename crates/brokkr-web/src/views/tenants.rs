@@ -101,7 +101,7 @@ pub fn TenantsView() -> impl IntoView {
                             "Rejected: that PAK is not an admin credential.".to_string()
                         }
                         aurora_leptos::tokens::ApiError::Http { status: 409, .. } => {
-                            "A generator with that name already exists.".to_string()
+                            "A tenant with that name already exists.".to_string()
                         }
                         aurora_leptos::tokens::ApiError::Http { status, .. } => {
                             format!("Broker rejected the request (HTTP {status}).")

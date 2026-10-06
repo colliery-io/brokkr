@@ -1084,7 +1084,7 @@
         "tags": [
           "auth"
         ],
-        "summary": "Verifies a PAK (Personal Access Key) and returns an AuthResponse.",
+        "summary": "Verifies a PAK (Prefixed API Key) and returns an AuthResponse.",
         "description": "This function handles the authentication process for both admin and agent PAKs.",
         "operationId": "verify_pak",
         "responses": {
@@ -1903,7 +1903,7 @@
           },
           "pak": {
             "type": "string",
-            "description": "The Pre-Authentication Key for the generator"
+            "description": "The Prefixed API Key for the generator"
           }
         }
       },

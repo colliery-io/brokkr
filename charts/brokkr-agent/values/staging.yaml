@@ -14,7 +14,7 @@
 #   helm install brokkr-agent-staging . -f values/staging.yaml \
 #     --set broker.agentName=staging-cluster-01 \
 #     --set broker.clusterName=staging-us-east-1 \
-#     --set broker.pak=<pre-authenticated-key>
+#     --set broker.pak=<prefixed-api-key>
 #
 # IMPORTANT: Review and customize the following before deploying:
 #   - broker.url (your staging broker endpoint)
@@ -49,7 +49,7 @@ broker:
   # Staging cluster identifier
   clusterName: ""
 
-  # Pre-Authenticated Key (REQUIRED)
+  # Prefixed API Key (REQUIRED)
   # Obtain from staging broker when registering agent
   pak: ""
 

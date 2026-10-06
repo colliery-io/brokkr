@@ -8,13 +8,13 @@
 #   helm install brokkr-agent . -f values/production.yaml \
 #     --set broker.agentName=prod-cluster-01 \
 #     --set broker.clusterName=production-us-east-1 \
-#     --set broker.pak=<pre-authenticated-key>
+#     --set broker.pak=<prefixed-api-key>
 #
 # IMPORTANT: Review and customize the following before deploying:
 #   - broker.url (your production broker endpoint)
 #   - broker.agentName (unique identifier for this agent)
 #   - broker.clusterName (cluster identifier)
-#   - broker.pak (pre-authenticated key from broker)
+#   - broker.pak (Prefixed API Key from broker)
 
 # Image Configuration
 image:
@@ -47,7 +47,7 @@ broker:
   # Examples: production-us-east-1, prod-gke-main, prod-eks-primary
   clusterName: ""
 
-  # Pre-Authenticated Key (REQUIRED)
+  # Prefixed API Key (REQUIRED)
   # Obtain from broker when registering agent
   # SECURITY: Use --set flag or external secret, never commit to values file
   pak: ""

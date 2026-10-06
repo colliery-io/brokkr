@@ -69,7 +69,7 @@ broker:
   # an empty or different value fails with "Agent not found".
   agentName: ""
   clusterName: ""
-  # Pre-Authenticated Key. Used only when broker.existingSecret is empty.
+  # Prefixed API Key. Used only when broker.existingSecret is empty.
   # WARNING: a value here is rendered into the agent ConfigMap in plaintext —
   # for GitOps / production, prefer broker.existingSecret below.
   pak: ""

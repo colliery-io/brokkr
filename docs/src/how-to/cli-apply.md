@@ -5,7 +5,7 @@ You have a folder of Kubernetes manifests and want it to become a stack's desire
 ## Prerequisites
 
 - The `brokkr` binary on your `PATH` (download the Linux or macOS tarball for your architecture from the [GitHub Release](https://github.com/colliery-io/brokkr/releases), or build it from source with `cargo build --release -p brokkr-cli`).
-- A reachable broker and a PAK. A **generator** PAK applies for its own generator: the stack is owned by that generator. An **admin** PAK can apply too, but it must name the generator that owns the stack with `--generator` (see [Apply as an admin](#apply-as-an-admin)). To mint a generator PAK, see [Create the tenant](../tutorials/first-tenant.md#step-1-admin-create-the-tenant) or [Working with Generators](./generators.md#step-1-create-the-generator).
+- A reachable broker and a PAK. A **tenant** PAK applies for its own tenant: that tenant owns the stack. An **admin** PAK can apply too, but it must name the tenant that owns the stack with `--generator` (the API calls a tenant a generator; see [Apply as an admin](#apply-as-an-admin)). To mint a tenant PAK, see [Create the tenant](../tutorials/first-tenant.md#step-1-admin-create-the-tenant) or [Working with Generators](./generators.md#step-1-create-the-generator).
 
 ## Configure the connection once
 
@@ -34,19 +34,19 @@ unchanged: stack "payments" already current
 
 ## Apply as an admin
 
-An admin PAK has no generator of its own, so it cannot own a stack. Name the owner with `--generator`, by name or by id:
+An admin PAK has no tenant of its own, so it cannot own a stack. Name the owner tenant with `--generator`, by name or by id:
 
 ```bash
 brokkr apply -f ./manifests --stack payments --generator acme-payments
 ```
 
-The stack is created under that generator, and that generator's PAK can manage it from then on. Without `--generator`, an admin PAK gets:
+The stack is created under that tenant, and the PAK of that tenant can manage it from then on. Without `--generator`, an admin PAK gets:
 
 ```
 error: invalid request: apply with an admin PAK needs the generator that owns the stack: give its name or id as `generator` (`--generator` in the brokkr CLI)
 ```
 
-With a generator PAK, `--generator` is optional. If you give it, it must name that PAK's own generator: a tenant cannot apply for another tenant.
+With a tenant PAK, `--generator` is optional. If you give it, it must name the tenant of that PAK: a tenant cannot apply for another tenant.
 
 ## Target specific agents
 
@@ -60,12 +60,12 @@ brokkr apply -f ./manifests --stack payments \
 
 Labels are additive and applied every run; a label that already exists is left as-is.
 
-`--target-label` is **label-based fan-out**: any agent whose labels match reconciles the stack — but only if that agent is registered with the generator that owns it. Registration is the tenant consent boundary and it gates both targeting paths:
+`--target-label` is **label-based fan-out**: any agent whose labels match reconciles the stack — but only if that agent is registered with the tenant that owns it. Registration is the tenant consent boundary and it gates both targeting paths:
 
-- **Label and annotation matching** is filtered at read time. An agent that never registered with your generator is served nothing, however its labels are set, and no error is raised anywhere — the stack simply doesn't arrive.
-- **Explicit per-agent targets** (`POST /agents/{id}/targets`, created by an admin or by the stack's owning generator) are rejected outright with HTTP `403` / `agent_not_registered` when the agent isn't registered.
+- **Label and annotation matching** is filtered at read time. An agent that never registered with your tenant is served nothing, however its labels are set, and no error is raised anywhere — the stack simply doesn't arrive.
+- **Explicit per-agent targets** (`POST /agents/{id}/targets`, created by an admin or by the tenant that owns the stack) are rejected outright with HTTP `403` / `agent_not_registered` when the agent isn't registered.
 
-So register the agents you intend to reach before you rely on labels: `brokkr register --agent <id> --generator <id>` with an admin PAK, or set `BROKKR__AGENT__GENERATOR_IDS` on the agent at startup so it self-registers. See [Registering agents with generators](./agent-registration.md) and the [error code reference](../reference/error-codes.md).
+So register the agents you intend to reach before you rely on labels: `brokkr register --agent <id> --generator <tenant-id>` with an admin PAK, or set `BROKKR__AGENT__GENERATOR_IDS` on the agent at startup so it self-registers. See [Registering agents with generators](./agent-registration.md) and the [error code reference](../reference/error-codes.md).
 
 ## Re-run safely in CI
 

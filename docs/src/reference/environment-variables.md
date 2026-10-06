@@ -60,7 +60,7 @@ A fresh admin PAK is generated (and written to `/tmp/brokkr-keys/key.txt`) only 
 
 On startup the agent self-registers with each generator UUID resolved from `BROKKR__AGENT__GENERATOR_IDS` (or its higher-precedence equivalents). Malformed UUIDs are skipped with a warning, and registration failures do not block startup. Every agent is additionally auto-registered with the system generator (internal fleet scope) by the broker at agent creation, independent of this configuration. For operational steps and conceptual background, see [Agent Registration](../how-to/agent-registration.md) and the [security model](../explanation/security-model.md#generator-registration-and-application-scopes).
 
-## PAK (Pre-Authentication Key) Generation
+## PAK (Prefixed API Key) Generation
 
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|

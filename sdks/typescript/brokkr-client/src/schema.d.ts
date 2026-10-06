@@ -464,7 +464,7 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Verifies a PAK (Personal Access Key) and returns an AuthResponse.
+         * Verifies a PAK (Prefixed API Key) and returns an AuthResponse.
          * @description This function handles the authentication process for both admin and agent PAKs.
          */
         post: operations["verify_pak"];
@@ -1571,7 +1571,7 @@ export interface components {
         CreateGeneratorResponse: {
             /** @description The created generator. */
             generator: components["schemas"]["Generator"];
-            /** @description The Pre-Authentication Key for the generator. */
+            /** @description The Prefixed API Key for the generator. */
             pak: string;
         };
         CreateTemplateRequest: {

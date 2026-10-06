@@ -51,7 +51,7 @@ fn meta(id: &str) -> (&'static str, &'static str) {
         "jobs" => ("Work orders", "active · history"),
         "webhooks" => ("Webhooks", "subscriptions · deliveries"),
         "system" => ("Broker health", "metrics · connections"),
-        "tenants" => ("Tenants", "generators · PAK minting"),
+        "tenants" => ("Tenants", "tenant list · PAK minting"),
         _ => ("Brokkr", ""),
     }
 }
