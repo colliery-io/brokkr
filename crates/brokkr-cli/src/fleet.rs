@@ -42,8 +42,8 @@ pub enum AgentCommand {
 
     /// List the agents with their name, id, status, cluster and labels.
     ///
-    /// An admin PAK lists all agents. A generator PAK lists the agents that
-    /// are registered with its generator.
+    /// An admin PAK lists all agents. A tenant PAK lists the agents that are
+    /// registered with its tenant.
     List,
 }
 
@@ -54,20 +54,20 @@ pub enum StackCommand {
     /// The stack goes to each agent that has the same label. The label has
     /// the form key:value, for example env:prod. If the stack has the label
     /// already, the command changes nothing. Requires an admin PAK or the PAK
-    /// of the generator that owns the stack.
+    /// of the tenant that owns the stack.
     Label(StackLabelArgs),
 
     /// Send a stack to one agent, whatever the labels of the agent are.
     ///
-    /// The agent must be registered with the generator that owns the stack.
-    /// If the target exists already, the command changes nothing. Requires an
-    /// admin PAK or the PAK of the generator that owns the stack.
+    /// The agent must be registered with the tenant that owns the stack. If
+    /// the target exists already, the command changes nothing. Requires an
+    /// admin PAK or the PAK of the tenant that owns the stack.
     Target(StackTargetArgs),
 
     /// List the stacks with their name, id and labels.
     ///
-    /// An admin PAK lists all stacks. A generator PAK lists the stacks of its
-    /// generator.
+    /// An admin PAK lists all stacks. A tenant PAK lists the stacks of its
+    /// tenant.
     List,
 }
 

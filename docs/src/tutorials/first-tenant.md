@@ -156,7 +156,7 @@ brokkr --pak "$TENANT_PAK" stack target tutorial-hello "$AGENT_NAME"
 targeted stack "tutorial-hello" at agent "brokkr-integration-test-agent"
 ```
 
-An error that says the agent `is not registered with the generator that owns stack` means Step 3 did not happen for this tenant. A line that starts with `unchanged:` means the target exists already; that is fine.
+An error that says the agent `is not registered with the tenant that owns stack` means Step 3 did not happen for this tenant. A line that starts with `unchanged:` means the target exists already; that is fine.
 
 <details>
 <summary>The same step with <code>curl</code></summary>

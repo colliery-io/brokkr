@@ -818,7 +818,7 @@ impl BrokkrClient {
                 }
                 err if err.code() == Some("agent_not_registered") => {
                     Err(BrokkrError::InvalidRequest(format!(
-                        "agent \"{}\" is not registered with the generator that owns stack \"{}\". \
+                        "agent \"{}\" is not registered with the tenant that owns stack \"{}\". \
                          Register it first: brokkr register --agent {} --generator {}",
                         agent.name, stack.name, agent.id, stack.generator_id
                     )))

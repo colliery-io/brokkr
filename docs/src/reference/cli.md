@@ -370,10 +370,10 @@ Every command that adds something is safe to run again. If the label or the targ
 | `brokkr agent activate <AGENT>` | admin | Sets the agent status to `ACTIVE`. |
 | `brokkr agent pause <AGENT>` | admin | Sets the agent status to `INACTIVE`. |
 | `brokkr agent label <AGENT> <LABEL>` | admin | Adds a label to the agent. |
-| `brokkr agent list` | admin or generator | Lists the agents. |
-| `brokkr stack label <STACK> <LABEL>` | admin or owning generator | Adds a label to the stack. |
-| `brokkr stack target <STACK> <AGENT>` | admin or owning generator | Sends the stack to the agent. |
-| `brokkr stack list` | admin or generator | Lists the stacks. |
+| `brokkr agent list` | admin or tenant | Lists the agents. |
+| `brokkr stack label <STACK> <LABEL>` | admin or owning tenant | Adds a label to the stack. |
+| `brokkr stack target <STACK> <AGENT>` | admin or owning tenant | Sends the stack to the agent. |
+| `brokkr stack list` | admin or tenant | Lists the stacks. |
 
 #### `brokkr agent activate`
 
@@ -417,7 +417,7 @@ The API form is `POST /api/v1/agents/{id}/labels` with `{"agent_id": "<id>", "la
 
 #### `brokkr agent list`
 
-Lists the agents with their name, id, status, cluster and labels. An admin PAK lists all agents. A generator PAK lists only the agents that are registered with its generator. The broker does not show agent labels to a generator PAK, so that list has no `LABELS` column.
+Lists the agents with their name, id, status, cluster and labels. An admin PAK lists all agents. A tenant PAK lists only the agents that are registered with its tenant. The broker does not show agent labels to a tenant PAK, so that list has no `LABELS` column.
 
 ```bash
 brokkr agent list
@@ -455,17 +455,17 @@ brokkr stack target payments prod-1
 targeted stack "payments" at agent "prod-1"
 ```
 
-The agent must be registered with the generator that owns the stack. If it is not, the broker refuses the target, and the error gives the command that registers it:
+The agent must be registered with the tenant that owns the stack. If it is not, the broker refuses the target, and the error gives the command that registers it:
 
 ```
-error: invalid request: agent "prod-1" is not registered with the generator that owns stack "payments". Register it first: brokkr register --agent <agent-id> --generator <generator-id>
+error: invalid request: agent "prod-1" is not registered with the tenant that owns stack "payments". Register it first: brokkr register --agent <agent-id> --generator <generator-id>
 ```
 
 The API form is `POST /api/v1/agents/{id}/targets` with `{"agent_id": "<id>", "stack_id": "<id>"}`. The body repeats the agent id.
 
 #### `brokkr stack list`
 
-Lists the stacks with their name, id and labels. An admin PAK lists all stacks. A generator PAK lists the stacks of its generator.
+Lists the stacks with their name, id and labels. An admin PAK lists all stacks. A tenant PAK lists the stacks of its tenant.
 
 ```bash
 brokkr stack list
