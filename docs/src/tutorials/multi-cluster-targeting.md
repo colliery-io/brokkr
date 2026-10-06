@@ -14,6 +14,12 @@ In this tutorial, you'll deploy different configurations to different clusters u
 - A broker you can reach at `http://localhost:3000` — either a [Helm install](../getting-started/installation.md) with `kubectl port-forward svc/brokkr-broker 3000:3000` running, or the [local development environment](../getting-started/development.md) (`angreal local up`)
 - Your admin PAK for that broker (see [Adapting the commands to your install](./README.md#adapting-the-commands-to-your-install))
 - `curl` and `jq` installed
+- The `brokkr` CLI on your `PATH`, for the label and target steps. Download it from the [GitHub Release](https://github.com/colliery-io/brokkr/releases), or build it with `cargo build --release -p brokkr-cli`. Each step that uses it also shows the `curl` form. Point it at your broker:
+
+  ```bash
+  export BROKKR_BROKER_URL=http://localhost:3000
+  export BROKKR_PAK=<your-admin-pak>
+  ```
 - Recommended: [Deploy Your First Application](./first-deployment.md), for stacks, deployment objects, and targets. Nothing here depends on the resources it created.
 
 **No running agent is required.** This tutorial creates its own two agents through the API and works with them as broker-side records only, so it behaves identically on a Helm install and in the development environment. It never touches the pre-created `brokkr-integration-test-agent`, and nothing is applied to a real cluster.
@@ -50,21 +56,31 @@ These two agents are database records only — no agent process is running for t
 
 **Labels** are simple tags (e.g., `env:staging`, `tier:web`). **Annotations** are key-value pairs (e.g., `region=us-east-1`). Both do more than organize and filter: they drive **dynamic matching**. When the broker computes which stacks an agent is responsible for, a stack that shares *any* label string — or *any* annotation key and value — with the agent is associated with it automatically. Labels are typically used for broad categories, while annotations carry more specific values.
 
-Add environment labels to each agent:
+Add environment labels to each agent. A label has the form `key:value`:
 
 ```bash
-# Label the staging agent (agent labels take an object, unlike stack labels)
+brokkr agent label staging-agent env:staging
+brokkr agent label prod-agent env:production
+```
+
+<details>
+<summary>The same step with <code>curl</code></summary>
+
+Agent labels take an object, unlike stack labels. The body repeats the agent id.
+
+```bash
 curl -s -X POST "http://localhost:3000/api/v1/agents/${STAGING}/labels" \
   -H "Authorization: Bearer <your-admin-pak>" \
   -H "Content-Type: application/json" \
   -d "{\"agent_id\": \"${STAGING}\", \"label\": \"env:staging\"}" | jq .
 
-# Label the production agent
 curl -s -X POST "http://localhost:3000/api/v1/agents/${PROD}/labels" \
   -H "Authorization: Bearer <your-admin-pak>" \
   -H "Content-Type: application/json" \
   -d "{\"agent_id\": \"${PROD}\", \"label\": \"env:production\"}" | jq .
 ```
+
+</details>
 
 Add a region annotation to the production agent:
 
@@ -75,7 +91,14 @@ curl -s -X POST "http://localhost:3000/api/v1/agents/${PROD}/annotations" \
   -d "{\"agent_id\": \"${PROD}\", \"key\": \"region\", \"value\": \"us-east-1\"}" | jq .
 ```
 
-Verify the labels are set:
+Verify the labels are set. The `LABELS` column shows them:
+
+```bash
+brokkr agent list
+```
+
+<details>
+<summary>The same step with <code>curl</code></summary>
 
 ```bash
 curl -s "http://localhost:3000/api/v1/agents/${STAGING}/labels" \
@@ -84,6 +107,8 @@ curl -s "http://localhost:3000/api/v1/agents/${STAGING}/labels" \
 curl -s "http://localhost:3000/api/v1/agents/${PROD}/labels" \
   -H "Authorization: Bearer <your-admin-pak>" | jq '.[].label'
 ```
+
+</details>
 
 ## Step 3: Create Stacks with Matching Labels
 
@@ -103,43 +128,67 @@ STAGING_STACK=$(curl -s -X POST http://localhost:3000/api/v1/stacks \
   -d "{\"name\": \"myapp-staging\", \"description\": \"My app - staging environment\", \"generator_id\": \"${GEN_ID}\"}" \
   | jq -r '.id')
 
-# Add label to staging stack
-curl -s -X POST "http://localhost:3000/api/v1/stacks/${STAGING_STACK}/labels" \
-  -H "Authorization: Bearer <your-admin-pak>" \
-  -H "Content-Type: application/json" \
-  -d '"env:staging"' | jq .
-
 # Create production stack
 PROD_STACK=$(curl -s -X POST http://localhost:3000/api/v1/stacks \
   -H "Authorization: Bearer <your-admin-pak>" \
   -H "Content-Type: application/json" \
   -d "{\"name\": \"myapp-production\", \"description\": \"My app - production environment\", \"generator_id\": \"${GEN_ID}\"}" \
   | jq -r '.id')
+```
 
-# Add label to production stack
+Label each stack to match its agent:
+
+```bash
+brokkr stack label myapp-staging env:staging
+brokkr stack label myapp-production env:production
+```
+
+<details>
+<summary>The same step with <code>curl</code></summary>
+
+A stack label is a JSON string, not an object.
+
+```bash
+curl -s -X POST "http://localhost:3000/api/v1/stacks/${STAGING_STACK}/labels" \
+  -H "Authorization: Bearer <your-admin-pak>" \
+  -H "Content-Type: application/json" \
+  -d '"env:staging"' | jq .
+
 curl -s -X POST "http://localhost:3000/api/v1/stacks/${PROD_STACK}/labels" \
   -H "Authorization: Bearer <your-admin-pak>" \
   -H "Content-Type: application/json" \
   -d '"env:production"' | jq .
 ```
 
+</details>
+
 ## Step 4: Target Agents to Stacks
 
-The matching `env:*` labels already associate each agent with its stack. You can additionally pin each pairing with an **explicit agent target** — an unconditional binding that keeps working even if labels are later changed or removed. To create a target, the agent must be registered with the stack's owning generator (which we ensured by passing the admin-generator ID in `generator_ids` when creating the agents in Step 1); otherwise the broker rejects the request with a `403 agent_not_registered` error. The body requires both `agent_id` and `stack_id`:
+The matching `env:*` labels already associate each agent with its stack. You can additionally pin each pairing with an **explicit agent target** — an unconditional binding that keeps working even if labels are later changed or removed. To create a target, the agent must be registered with the stack's owning generator (which we ensured by passing the admin-generator ID in `generator_ids` when creating the agents in Step 1); otherwise the broker rejects the request with an `agent_not_registered` error. The first argument is the stack, the second is the agent:
 
 ```bash
-# Staging agent targets staging stack
+brokkr stack target myapp-staging staging-agent
+brokkr stack target myapp-production prod-agent
+```
+
+<details>
+<summary>The same step with <code>curl</code></summary>
+
+The body requires both `agent_id` and `stack_id`:
+
+```bash
 curl -s -X POST "http://localhost:3000/api/v1/agents/${STAGING}/targets" \
   -H "Authorization: Bearer <your-admin-pak>" \
   -H "Content-Type: application/json" \
   -d "{\"agent_id\": \"${STAGING}\", \"stack_id\": \"${STAGING_STACK}\"}" | jq .
 
-# Production agent targets production stack
 curl -s -X POST "http://localhost:3000/api/v1/agents/${PROD}/targets" \
   -H "Authorization: Bearer <your-admin-pak>" \
   -H "Content-Type: application/json" \
   -d "{\"agent_id\": \"${PROD}\", \"stack_id\": \"${PROD_STACK}\"}" | jq .
 ```
+
+</details>
 
 ## Step 5: Deploy to Staging Only
 
@@ -194,16 +243,11 @@ SHARED_STACK=$(curl -s -X POST http://localhost:3000/api/v1/stacks \
   | jq -r '.id')
 
 # Both agents target the shared stack
-curl -s -X POST "http://localhost:3000/api/v1/agents/${STAGING}/targets" \
-  -H "Authorization: Bearer <your-admin-pak>" \
-  -H "Content-Type: application/json" \
-  -d "{\"agent_id\": \"${STAGING}\", \"stack_id\": \"${SHARED_STACK}\"}" | jq .
-
-curl -s -X POST "http://localhost:3000/api/v1/agents/${PROD}/targets" \
-  -H "Authorization: Bearer <your-admin-pak>" \
-  -H "Content-Type: application/json" \
-  -d "{\"agent_id\": \"${PROD}\", \"stack_id\": \"${SHARED_STACK}\"}" | jq .
+brokkr stack target monitoring-shared staging-agent
+brokkr stack target monitoring-shared prod-agent
 ```
+
+With `curl`, these are the same `POST /agents/{id}/targets` calls as in Step 4, with `${SHARED_STACK}` as the `stack_id`.
 
 Now any deployment object pushed to `monitoring-shared` will be applied by both agents.
 

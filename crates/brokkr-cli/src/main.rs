@@ -14,6 +14,7 @@
 //! the owner with `--generator`.
 
 mod config;
+mod fleet;
 
 use brokkr_client::{ApplyOutcome, BrokkrClient};
 use clap::{ArgGroup, Args, Parser, Subcommand};
@@ -73,6 +74,14 @@ enum Command {
 
     /// List tenant registrations: for one agent or for one tenant.
     Registrations(RegistrationsArgs),
+
+    /// Activate, pause, label and list agents. Give each agent by name or id.
+    #[command(subcommand)]
+    Agent(fleet::AgentCommand),
+
+    /// Label, target and list stacks. Give each stack by name or id.
+    #[command(subcommand)]
+    Stack(fleet::StackCommand),
 }
 
 #[derive(Debug, Args)]
@@ -145,6 +154,8 @@ async fn run(cli: Cli) -> Result<(), String> {
         Command::Register(args) => register(&client, args).await,
         Command::Deregister(args) => deregister(&client, args).await,
         Command::Registrations(args) => registrations(&client, args).await,
+        Command::Agent(command) => fleet::agent(&client, command).await,
+        Command::Stack(command) => fleet::stack(&client, command).await,
     }
 }
 

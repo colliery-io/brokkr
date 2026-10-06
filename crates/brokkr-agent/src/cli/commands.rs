@@ -423,10 +423,14 @@ pub async fn start(
                 }
             }
             _ = deployment_check_interval.tick() => {
-                // Skip deployment object requests if agent is inactive
+                // Skip deployment object requests if agent is inactive. Say so
+                // at info level on each poll: a new agent starts INACTIVE, and
+                // an operator who sees no deployments must see why (BROKKR-T-0333).
                 if agent.status != "ACTIVE" {
-                    debug!("Agent '{}' (id: {}) is not active (status: {}), skipping deployment object requests",
-                        agent.name, agent.id, agent.status);
+                    info!(
+                        "Agent '{}' (id: {}) is {}. It applies nothing until an admin activates it. To activate it, run: brokkr agent activate {}",
+                        agent.name, agent.id, agent.status, agent.name
+                    );
                     continue;
                 }
 

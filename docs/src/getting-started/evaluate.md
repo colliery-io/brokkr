@@ -44,6 +44,10 @@ The dev broker runs with the default configuration, so the publicly known dev ad
 ```bash
 export ADMIN_PAK="brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8"
 
+# The brokkr CLI reads its connection from these two variables
+export BROKKR_BROKER_URL=http://localhost:3000
+export BROKKR_PAK=$ADMIN_PAK
+
 # Confirm the broker is healthy
 curl http://localhost:3000/healthz
 ```
@@ -53,25 +57,38 @@ curl http://localhost:3000/healthz
 List registered agents — the pre-created agent should already be there.
 
 ```bash
-curl -s http://localhost:3000/api/v1/agents \
-  -H "Authorization: Bearer $ADMIN_PAK" | jq '.[] | {id, name, cluster_name, status}'
+brokkr agent list
 ```
 
-You should see `brokkr-integration-test-agent`. A freshly registered agent starts with `status` `INACTIVE` — the broker only hands it deployment objects once you mark it `ACTIVE`. Save its ID, then activate it:
+You should see `brokkr-integration-test-agent`. A freshly registered agent starts with `status` `INACTIVE` — the broker only hands it deployment objects once you mark it `ACTIVE`. Until then, the agent log says so on each poll. Activate it, and save its ID for the next step:
 
 ```bash
+# Activate the agent so it will pull and reconcile deployment objects
+brokkr agent activate brokkr-integration-test-agent
+
+export AGENT_ID=$(brokkr agent list | awk '$1 == "brokkr-integration-test-agent" {print $2}')
+```
+
+The output should say that the agent `is ACTIVE`, meaning the agent will pull and reconcile what you target to it.
+
+<details>
+<summary>The same step with <code>curl</code></summary>
+
+```bash
+curl -s http://localhost:3000/api/v1/agents \
+  -H "Authorization: Bearer $ADMIN_PAK" | jq '.[] | {id, name, cluster_name, status}'
+
 export AGENT_ID=$(curl -s http://localhost:3000/api/v1/agents \
   -H "Authorization: Bearer $ADMIN_PAK" \
   | jq -r '.[] | select(.name=="brokkr-integration-test-agent") | .id')
 
-# Activate the agent so it will pull and reconcile deployment objects
 curl -s -X PUT http://localhost:3000/api/v1/agents/$AGENT_ID \
   -H "Authorization: Bearer $ADMIN_PAK" \
   -H "Content-Type: application/json" \
   -d '{"status": "ACTIVE"}' | jq '{name, status}'
 ```
 
-The status should now read `ACTIVE`, meaning the agent will pull and reconcile what you target to it.
+</details>
 
 ### 4. Deploy something and watch it reconcile
 
@@ -91,18 +108,11 @@ STACK_ID=$(curl -s -X POST http://localhost:3000/api/v1/stacks \
 
 # Register the agent with the admin-generator. An agent must be registered with a
 # generator before any stack that generator owns can be targeted at it — without
-# this, the next call fails with 403 agent_not_registered.
-curl -s -X POST http://localhost:3000/api/v1/generators/$GEN_ID/register \
-  -H "Authorization: Bearer $ADMIN_PAK" \
-  -H "Content-Type: application/json" \
-  -d "{\"agent_id\": \"$AGENT_ID\"}"
+# this, the next command fails with agent_not_registered.
+brokkr register --agent "$AGENT_ID" --generator "$GEN_ID"
 
-# Now target the agent to the stack so it receives the deployment.
-# The body `agent_id` must match the agent id in the path — the broker rejects a mismatch with 400.
-curl -s -X POST http://localhost:3000/api/v1/agents/$AGENT_ID/targets \
-  -H "Authorization: Bearer $ADMIN_PAK" \
-  -H "Content-Type: application/json" \
-  -d "{\"agent_id\": \"$AGENT_ID\", \"stack_id\": \"$STACK_ID\"}"
+# Now target the stack at the agent so the agent receives the deployment.
+brokkr stack target evaluate brokkr-integration-test-agent
 
 # Push a deployment object (a single namespace)
 curl -s -X POST "http://localhost:3000/api/v1/stacks/$STACK_ID/deployment-objects" \
@@ -110,6 +120,24 @@ curl -s -X POST "http://localhost:3000/api/v1/stacks/$STACK_ID/deployment-object
   -H "Content-Type: application/json" \
   -d '{"yaml_content": "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: brokkr-evaluate", "is_deletion_marker": false}'
 ```
+
+<details>
+<summary>The register and target steps with <code>curl</code></summary>
+
+```bash
+curl -s -X POST http://localhost:3000/api/v1/generators/$GEN_ID/register \
+  -H "Authorization: Bearer $ADMIN_PAK" \
+  -H "Content-Type: application/json" \
+  -d "{\"agent_id\": \"$AGENT_ID\"}"
+
+# The body `agent_id` must match the agent id in the path. The broker rejects a mismatch with 400.
+curl -s -X POST http://localhost:3000/api/v1/agents/$AGENT_ID/targets \
+  -H "Authorization: Bearer $ADMIN_PAK" \
+  -H "Content-Type: application/json" \
+  -d "{\"agent_id\": \"$AGENT_ID\", \"stack_id\": \"$STACK_ID\"}"
+```
+
+</details>
 
 The agent polls the broker on its next cycle and applies the namespace — allow one full poll cycle (about 10 seconds in this stack). Point `kubectl` at the bundled k3s cluster (its host kubeconfig is written to `/tmp/brokkr-keys/`) and verify:
 
@@ -189,6 +217,10 @@ kubectl port-forward svc/brokkr-broker 3000:3000 &
 
 export ADMIN_PAK="brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8"
 
+# The brokkr CLI reads its connection from these two variables
+export BROKKR_BROKER_URL=http://localhost:3000
+export BROKKR_PAK=$ADMIN_PAK
+
 # Confirm the broker answers
 curl http://localhost:3000/api/v1/agents -H "Authorization: Bearer $ADMIN_PAK"
 ```
@@ -237,15 +269,10 @@ When the agent pod is `Running` and `eval-agent` appears in the broker's agent l
 Create a stack, target the agent, and push a namespace through the broker.
 
 ```bash
-export AGENT_ID=$(curl -s http://localhost:3000/api/v1/agents \
-  -H "Authorization: Bearer $ADMIN_PAK" \
-  | jq -r '.[] | select(.name=="eval-agent") | .id')
-
 # Activate the agent so it will pull and reconcile deployment objects
-curl -s -X PUT http://localhost:3000/api/v1/agents/$AGENT_ID \
-  -H "Authorization: Bearer $ADMIN_PAK" \
-  -H "Content-Type: application/json" \
-  -d '{"status": "ACTIVE"}' | jq '{name, status}'
+brokkr agent activate eval-agent
+
+export AGENT_ID=$(brokkr agent list | awk '$1 == "eval-agent" {print $2}')
 
 GEN_ID=$(curl -s http://localhost:3000/api/v1/generators \
   -H "Authorization: Bearer $ADMIN_PAK" \
@@ -258,23 +285,43 @@ STACK_ID=$(curl -s -X POST http://localhost:3000/api/v1/stacks \
   | jq -r '.id')
 
 # Register the agent with the admin-generator before targeting it. Targeting a stack
-# at an agent that is not registered with the stack's generator fails with 403 agent_not_registered.
-curl -s -X POST http://localhost:3000/api/v1/generators/$GEN_ID/register \
-  -H "Authorization: Bearer $ADMIN_PAK" \
-  -H "Content-Type: application/json" \
-  -d "{\"agent_id\": \"$AGENT_ID\"}"
+# at an agent that is not registered with the stack's generator fails with agent_not_registered.
+brokkr register --agent "$AGENT_ID" --generator "$GEN_ID"
 
-# The body `agent_id` must match the agent id in the path — the broker rejects a mismatch with 400.
-curl -s -X POST http://localhost:3000/api/v1/agents/$AGENT_ID/targets \
-  -H "Authorization: Bearer $ADMIN_PAK" \
-  -H "Content-Type: application/json" \
-  -d "{\"agent_id\": \"$AGENT_ID\", \"stack_id\": \"$STACK_ID\"}"
+brokkr stack target evaluate eval-agent
 
 curl -s -X POST "http://localhost:3000/api/v1/stacks/$STACK_ID/deployment-objects" \
   -H "Authorization: Bearer $ADMIN_PAK" \
   -H "Content-Type: application/json" \
   -d '{"yaml_content": "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: brokkr-evaluate", "is_deletion_marker": false}'
 ```
+
+<details>
+<summary>The activate, register and target steps with <code>curl</code></summary>
+
+```bash
+export AGENT_ID=$(curl -s http://localhost:3000/api/v1/agents \
+  -H "Authorization: Bearer $ADMIN_PAK" \
+  | jq -r '.[] | select(.name=="eval-agent") | .id')
+
+curl -s -X PUT http://localhost:3000/api/v1/agents/$AGENT_ID \
+  -H "Authorization: Bearer $ADMIN_PAK" \
+  -H "Content-Type: application/json" \
+  -d '{"status": "ACTIVE"}' | jq '{name, status}'
+
+curl -s -X POST http://localhost:3000/api/v1/generators/$GEN_ID/register \
+  -H "Authorization: Bearer $ADMIN_PAK" \
+  -H "Content-Type: application/json" \
+  -d "{\"agent_id\": \"$AGENT_ID\"}"
+
+# The body `agent_id` must match the agent id in the path. The broker rejects a mismatch with 400.
+curl -s -X POST http://localhost:3000/api/v1/agents/$AGENT_ID/targets \
+  -H "Authorization: Bearer $ADMIN_PAK" \
+  -H "Content-Type: application/json" \
+  -d "{\"agent_id\": \"$AGENT_ID\", \"stack_id\": \"$STACK_ID\"}"
+```
+
+</details>
 
 After the agent's next poll, the namespace appears on your cluster — allow one full poll cycle (the chart's default polling interval is 30 seconds):
 

@@ -14,6 +14,7 @@ This is Path A of [Evaluate Brokkr Locally](./evaluate.md). It builds Brokkr fro
 - **Git**
 - **[Angreal](https://pypi.org/project/angreal/)**, the project's task runner: `pip install angreal`
 - **`curl`** and **`jq`**
+- **The `brokkr` CLI** on your `PATH`, for the agent steps. Download it from the [GitHub Release](https://github.com/colliery-io/brokkr/releases). Each step that uses it also shows the `curl` form.
 
 ### To evaluate or install with Helm
 
@@ -24,6 +25,7 @@ This is Path B of [Evaluate Brokkr Locally](./evaluate.md) and the [Installation
 - **Helm** 3.8 or later ([installation guide](https://helm.sh/docs/intro/install/))
 - **Docker**, to run kind or k3d, and to run `brokkr-broker generate-pak` from the published image
 - **`curl`** and **`jq`**
+- **The `brokkr` CLI** on your `PATH`, for the agent steps. Download it from the [GitHub Release](https://github.com/colliery-io/brokkr/releases). Each step that uses it also shows the `curl` form.
 
 ### To develop Brokkr
 

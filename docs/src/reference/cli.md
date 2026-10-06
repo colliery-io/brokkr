@@ -206,6 +206,14 @@ brokkr-agent start
 | `/health` | Detailed health status (JSON) |
 | `/metrics` | Prometheus metrics |
 
+**A new agent is inactive.** A new agent starts `INACTIVE` and applies nothing. On each poll while it is not `ACTIVE`, the agent logs one line at info level that names the fix:
+
+```
+Agent 'prod-1' (id: a1b2c3d4-e5f6-7890-abcd-ef1234567890) is INACTIVE. It applies nothing until an admin activates it. To activate it, run: brokkr agent activate prod-1
+```
+
+An admin activates it with [`brokkr agent activate`](#brokkr-agent-activate).
+
 **Generator scope self-registration (optional):**
 
 On startup the agent registers itself with the generator scopes it resolves, in precedence order:
@@ -248,7 +256,7 @@ See the [Configuration Guide](../getting-started/configuration.md) for all avail
 
 ## brokkr
 
-`brokkr` is the control-plane client. It submits a folder of Kubernetes manifests as a stack's desired state. It wraps the Rust SDK's `apply` operation.
+`brokkr` is the control-plane client. It submits a folder of Kubernetes manifests as a stack's desired state. It wraps the Rust SDK's `apply` operation. It also does the day-zero steps: it activates, labels and lists agents, and labels, targets and lists stacks (see [Day-zero commands](#day-zero-commands-brokkr-agent-and-brokkr-stack)).
 
 ### Connection settings
 
@@ -350,6 +358,123 @@ brokkr registrations --generator <tenant-id>
 | `--generator <UUID>` | one of¹ | List the registered agents of the tenant. |
 
 ¹ Exactly one of `--agent` or `--generator` must be given (mutually exclusive).
+
+### Day-zero commands: `brokkr agent` and `brokkr stack`
+
+These commands do the first steps for a new agent or stack: activate the agent, add labels, target a stack at an agent, and list what the broker has. Each command takes an agent or a stack by **name or id**. The CLI looks up the id for you, so you do not need `curl` and `jq` to find it. An id matches first. If two agents have the same name, the command stops and prints their ids; give the id in its place.
+
+Every command that adds something is safe to run again. If the label or the target exists already, the command prints a line that starts with `unchanged:` and exits `0`. On an error, the command prints `error: <message>` to stderr and exits `1`. A label that does not have the form `key:value` is a usage error: the command exits `2` and sends nothing to the broker.
+
+| Command | PAK | What it does |
+|---------|-----|--------------|
+| `brokkr agent activate <AGENT>` | admin | Sets the agent status to `ACTIVE`. |
+| `brokkr agent pause <AGENT>` | admin | Sets the agent status to `INACTIVE`. |
+| `brokkr agent label <AGENT> <LABEL>` | admin | Adds a label to the agent. |
+| `brokkr agent list` | admin or generator | Lists the agents. |
+| `brokkr stack label <STACK> <LABEL>` | admin or owning generator | Adds a label to the stack. |
+| `brokkr stack target <STACK> <AGENT>` | admin or owning generator | Sends the stack to the agent. |
+| `brokkr stack list` | admin or generator | Lists the stacks. |
+
+#### `brokkr agent activate`
+
+Lets an agent apply its stacks. A new agent starts `INACTIVE` and applies nothing. While it is `INACTIVE`, the agent logs this at info level on each poll and names this command. After you activate it, the agent applies its stacks on its next poll.
+
+```bash
+brokkr agent activate prod-1
+```
+
+```
+agent "prod-1" (a1b2c3d4-e5f6-7890-abcd-ef1234567890) is ACTIVE. It applies its stacks on its next poll.
+```
+
+This is the same as `PUT /api/v1/agents/{id}` with `{"status": "ACTIVE"}`.
+
+#### `brokkr agent pause`
+
+Stops an agent from applying its stacks. The command sets the status to `INACTIVE`. The agent keeps the resources that it applied, but it applies no new changes until you activate it again.
+
+```bash
+brokkr agent pause prod-1
+```
+
+```
+agent "prod-1" (a1b2c3d4-e5f6-7890-abcd-ef1234567890) is INACTIVE. It applies nothing until you run: brokkr agent activate prod-1
+```
+
+#### `brokkr agent label`
+
+Adds a label to an agent. A stack that has the same label goes to the agent. The label has the form `key:value`, for example `env:prod`. It can have up to 64 characters and no spaces. See [The label shape](../how-to/managing-stacks.md#the-label-shape).
+
+```bash
+brokkr agent label prod-1 env:prod
+```
+
+```
+added label "env:prod" to agent "prod-1"
+```
+
+The API form is `POST /api/v1/agents/{id}/labels` with `{"agent_id": "<id>", "label": "env:prod"}`. The body repeats the agent id.
+
+#### `brokkr agent list`
+
+Lists the agents with their name, id, status, cluster and labels. An admin PAK lists all agents. A generator PAK lists only the agents that are registered with its generator. The broker does not show agent labels to a generator PAK, so that list has no `LABELS` column.
+
+```bash
+brokkr agent list
+```
+
+```
+NAME     ID                                    STATUS    CLUSTER    LABELS
+prod-1   a1b2c3d4-e5f6-7890-abcd-ef1234567890  ACTIVE    us-east-1  env:prod,region:us-east
+stage-1  0f9e8d7c-6b5a-4321-9876-543210fedcba  INACTIVE  us-west-2  -
+```
+
+#### `brokkr stack label`
+
+Adds a label to a stack. The stack goes to each agent that has the same label. The label shape is the same as for agents.
+
+```bash
+brokkr stack label payments env:prod
+```
+
+```
+added label "env:prod" to stack "payments"
+```
+
+`brokkr apply --target-label env:prod` adds the same label when it applies a folder.
+
+#### `brokkr stack target`
+
+Sends a stack to one agent, whatever the labels of the agent are. The first argument is the stack; the second is the agent.
+
+```bash
+brokkr stack target payments prod-1
+```
+
+```
+targeted stack "payments" at agent "prod-1"
+```
+
+The agent must be registered with the generator that owns the stack. If it is not, the broker refuses the target, and the error gives the command that registers it:
+
+```
+error: invalid request: agent "prod-1" is not registered with the generator that owns stack "payments". Register it first: brokkr register --agent <agent-id> --generator <generator-id>
+```
+
+The API form is `POST /api/v1/agents/{id}/targets` with `{"agent_id": "<id>", "stack_id": "<id>"}`. The body repeats the agent id.
+
+#### `brokkr stack list`
+
+Lists the stacks with their name, id and labels. An admin PAK lists all stacks. A generator PAK lists the stacks of its generator.
+
+```bash
+brokkr stack list
+```
+
+```
+NAME      ID                                    LABELS
+payments  c4ba105f-4332-447b-8af5-63f8e69ee89c  env:prod
+```
 
 ---
 

@@ -182,6 +182,17 @@ def run_sdk_contract_rust():
     if build.returncode != 0:
         return build.returncode
 
+    # The day-zero scenario (BROKKR-T-0333) runs the `brokkr` CLI binary
+    # against the broker, so build it and tell the suite where it is.
+    print("Building the brokkr CLI for the contract suite...")
+    cli_build = subprocess.run(
+        ["cargo", "build", "-p", "brokkr-cli", "--bin", "brokkr"], cwd=cwd
+    )
+    if cli_build.returncode != 0:
+        return cli_build.returncode
+    import os
+    env.setdefault("BROKKR_CLI", os.path.join(cwd, "target", "debug", "brokkr"))
+
     print("Running Rust SDK contract suite...")
     result = subprocess.run(
         ["./tests/sdk-contract/rust/target/release/brokkr-sdk-contract-rust"],

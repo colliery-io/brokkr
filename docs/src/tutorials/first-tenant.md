@@ -14,6 +14,7 @@ In this tutorial you take a broker that has nothing in it and get a manifest run
 
 - A broker at `http://localhost:3000` with a running agent. The quickest is the development environment: `angreal local up` prints the broker URL, the console URL, the admin PAK and the path of the agent's key when it finishes. A [Helm install](../getting-started/installation.md) works too; then the admin PAK is the one you minted with `generate-pak`, and the agent is the one you installed.
 - `curl`, `jq`, and `kubectl` pointed at the cluster the agent manages. In the development environment: `export KUBECONFIG=/tmp/brokkr-keys/kubeconfig.local.yaml`.
+- The `brokkr` CLI on your `PATH`. Download it from the [GitHub Release](https://github.com/colliery-io/brokkr/releases), or build it with `cargo build --release -p brokkr-cli`. Each step that uses it also shows the `curl` form.
 
 Export the two values the admin starts with:
 
@@ -21,7 +22,10 @@ Export the two values the admin starts with:
 export BROKER=http://localhost:3000
 export ADMIN_PAK=brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8   # the development PAK; on your own install, the one you minted
 export AGENT_NAME=brokkr-integration-test-agent                     # the development agent; on your own install, your broker.agentName
+export BROKKR_BROKER_URL=$BROKER                                    # the brokkr CLI reads the broker URL from here
 ```
+
+Each `brokkr` command below gives its PAK with `--pak`, so you can see which of the two people runs it.
 
 > The development PAK is publicly known. It opens only a broker that still runs the embedded default hash. Never use it in production.
 
@@ -50,13 +54,25 @@ The operator console does the same from **Tenants → New tenant**, with the adm
 
 ### Step 2 (admin): Activate the agent
 
-A new agent starts `INACTIVE` and applies nothing. Find it by name and activate it. This is safe to repeat.
+A new agent starts `INACTIVE` and applies nothing. Until you activate it, its log says so on each poll. Activate it by name. This is safe to repeat.
+
+```bash
+brokkr --pak "$ADMIN_PAK" agent activate "$AGENT_NAME"
+```
+
+```
+agent "brokkr-integration-test-agent" (6b1f...) is ACTIVE. It applies its stacks on its next poll.
+```
+
+`brokkr --pak "$ADMIN_PAK" agent list` shows each agent with its id and status. In the console, the agent's drawer under **Fleet** has an **Activate** button that does the same.
+
+<details>
+<summary>The same step with <code>curl</code></summary>
 
 ```bash
 AGENT_ID=$(curl -s "$BROKER/api/v1/agents" \
   -H "Authorization: Bearer $ADMIN_PAK" \
   | jq -r --arg name "$AGENT_NAME" '.[] | select(.name==$name) | .id')
-echo "Agent id: $AGENT_ID"
 
 curl -s -X PUT "$BROKER/api/v1/agents/$AGENT_ID" \
   -H "Authorization: Bearer $ADMIN_PAK" \
@@ -64,11 +80,21 @@ curl -s -X PUT "$BROKER/api/v1/agents/$AGENT_ID" \
   -d '{"status": "ACTIVE"}' | jq '{name, status}'
 ```
 
-The response shows `"status": "ACTIVE"`. In the console, the agent's drawer under **Fleet** has an **Activate** button that does the same.
+</details>
 
 ### Step 3 (admin): Register the agent with the tenant
 
-Registration is the agent's consent to receive stacks from this tenant. Without it, the tenant's target in Step 6 fails with `403 agent_not_registered`.
+Registration is the agent's consent to receive stacks from this tenant. Without it, the tenant's target in Step 6 fails with `agent_not_registered`. `brokkr register` takes ids, so get the agent id from the agent list first:
+
+```bash
+AGENT_ID=$(brokkr --pak "$ADMIN_PAK" agent list | awk -v name="$AGENT_NAME" '$1 == name {print $2}')
+echo "Agent id: $AGENT_ID"
+
+brokkr --pak "$ADMIN_PAK" register --agent "$AGENT_ID" --generator "$TENANT_ID"
+```
+
+<details>
+<summary>The same step with <code>curl</code></summary>
 
 ```bash
 curl -s -X POST "$BROKER/api/v1/generators/$TENANT_ID/register" \
@@ -77,9 +103,11 @@ curl -s -X POST "$BROKER/api/v1/generators/$TENANT_ID/register" \
   -d "{\"agent_id\": \"$AGENT_ID\"}" | jq '{agent_id, generator_id}'
 ```
 
+</details>
+
 ### The hand-off
 
-The admin gives the tenant three values: the broker URL, `TENANT_PAK`, and `AGENT_ID`. The tenant needs the agent id because a tenant cannot list agents (`GET /api/v1/agents` answers `403` to a tenant PAK). That is the whole hand-off. Everything after this is the tenant's.
+The admin gives the tenant three values: the broker URL, `TENANT_PAK`, and the agent name, `AGENT_NAME`. A tenant PAK lists only the agents that are registered with its tenant, so after Step 3 the tenant finds the agent by name. That is the whole hand-off. Everything after this is the tenant's.
 
 ## Part 2: The tenant deploys
 
@@ -118,16 +146,35 @@ echo "Stack id: $STACK_ID"
 
 ### Step 6 (tenant): Target the stack to the agent
 
-The tenant connects its stack to the agent the admin registered. The body repeats the agent id; the broker requires both fields.
+The tenant connects its stack to the agent the admin registered, by name:
 
 ```bash
+brokkr --pak "$TENANT_PAK" stack target tutorial-hello "$AGENT_NAME"
+```
+
+```
+targeted stack "tutorial-hello" at agent "brokkr-integration-test-agent"
+```
+
+An error that says the agent `is not registered with the generator that owns stack` means Step 3 did not happen for this tenant. A line that starts with `unchanged:` means the target exists already; that is fine.
+
+<details>
+<summary>The same step with <code>curl</code></summary>
+
+The tenant gets the agent id from `GET /api/v1/agents`, which lists the agents registered with it. The body repeats the agent id; the broker requires both fields. A `403 agent_not_registered` means Step 3 did not happen; a `409 unique_violation` means the target exists already.
+
+```bash
+AGENT_ID=$(curl -s "$BROKER/api/v1/agents" \
+  -H "Authorization: Bearer $TENANT_PAK" \
+  | jq -r --arg name "$AGENT_NAME" '.[] | select(.name==$name) | .id')
+
 curl -s -X POST "$BROKER/api/v1/agents/$AGENT_ID/targets" \
   -H "Authorization: Bearer $TENANT_PAK" \
   -H "Content-Type: application/json" \
   -d "{\"agent_id\": \"$AGENT_ID\", \"stack_id\": \"$STACK_ID\"}" | jq '{agent_id, stack_id}'
 ```
 
-A `403 agent_not_registered` here means Step 3 did not happen for this tenant. A `unique_violation` means the target already exists; that is fine.
+</details>
 
 ### Step 7 (tenant): Push the manifest
 
@@ -234,14 +281,16 @@ curl -s -X DELETE "$BROKER/api/v1/generators/$TENANT_ID" \
 
 ## What you've learned
 
-- The admin does three things once per tenant: create it, activate the agent, register the agent with it. The hand-off is the broker URL, the tenant PAK and the agent id.
+- The admin does three things once per tenant: create it, activate the agent, register the agent with it. The hand-off is the broker URL, the tenant PAK and the agent name.
 - The tenant does the rest with its own PAK: find its id, create a stack, target it, push manifests, delete the stack.
-- A tenant PAK cannot list agents, read agent events or read stack health. Those are admin views, and the console shows them.
+- A tenant PAK lists only the agents registered with it, and it cannot read agent labels, agent events or stack health. Those are admin views, and the console shows them.
 - The agent pulls. It starts inactive, and it applies only the stacks of tenants it is registered with.
 
 ## Troubleshooting
 
-- **`403 agent_not_registered` on the target.** The admin did not register this agent with this tenant (Step 3), or registered it with a different tenant.
+- **`agent_not_registered` on the target.** The admin did not register this agent with this tenant (Step 3), or registered it with a different tenant.
+- **`no agent has the name or id` from a tenant command.** A tenant sees only the agents registered with it. Do Step 3 first.
+- **Nothing reaches the cluster.** The agent may still be `INACTIVE`. Its log says so on each poll. Run Step 2 again.
 - **`403` with `admin_required` from a tenant command.** The endpoint is an admin view: agents, agent events, stack health. Use the admin PAK, or the console.
 - **`DEPLOY SUCCESS`, but `kubectl` finds nothing.** The agent is on a different cluster than your `kubectl`, or you checked before one poll cycle passed. If the resources appear and then vanish one poll cycle later, upgrade the agent: agents up to 0.9.2 deleted a stack's resources one poll after a successful apply.
 - **The tenant PAK is lost.** The admin rotates it: `POST /api/v1/generators/{id}/rotate-pak` with the admin PAK returns a new one, once.
