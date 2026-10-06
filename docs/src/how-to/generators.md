@@ -34,10 +34,14 @@ The response includes the generator details and its PAK:
 {
   "generator": {
     "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "created_at": "2026-10-06T01:59:35.569566Z",
+    "updated_at": "2026-10-06T01:59:35.574293Z",
+    "deleted_at": null,
     "name": "github-actions-prod",
     "description": "Production deployment pipeline",
-    "created_at": "2025-01-02T10:00:00Z",
-    "updated_at": "2025-01-02T10:00:00Z"
+    "last_active_at": null,
+    "is_active": true,
+    "is_system": false
   },
   "pak": "brokkr_BRgen12ab_GeneratorLongTokenExample01"
 }
@@ -82,68 +86,11 @@ The path is `/api/v1/paks`, not `/api/v1/auth/paks`. Operators can then narrow t
 
 When a generator creates a stack, the request body must include `generator_id` set to the generator's own ID — the broker rejects any other value for a generator PAK.
 
-### GitHub Actions Example
+### CI pipelines
 
-Configure your workflow to deploy through Brokkr:
+One pattern, in one place: [CI/CD with Generators, Step 7](../tutorials/cicd-generators.md#step-7-a-real-github-actions-workflow) shows a complete workflow that pushes the rendered manifest as YAML to an existing stack with the generator PAK. With the `brokkr` CLI the step is one idempotent command, `brokkr apply -f ./manifests --stack <name>`; see [Submitting a Folder of Manifests](./cli-apply.md#re-run-safely-in-ci). The same two forms work in GitLab CI or any other runner.
 
-```yaml
-name: Deploy to Production
-on:
-  push:
-    branches: [main]
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Create Stack
-        env:
-          BROKKR_PAK: ${{ secrets.BROKKR_GENERATOR_PAK }}
-          BROKKR_GENERATOR_ID: ${{ secrets.BROKKR_GENERATOR_ID }}
-          BROKKR_URL: ${{ vars.BROKKR_URL }}
-        run: |
-          curl -X POST "$BROKKR_URL/api/v1/stacks" \
-            -H "Authorization: Bearer $BROKKR_PAK" \
-            -H "Content-Type: application/json" \
-            -o stack-response.json \
-            -d '{
-              "name": "my-app-${{ github.sha }}",
-              "description": "Deployed from commit ${{ github.sha }}",
-              "generator_id": "'"$BROKKR_GENERATOR_ID"'"
-            }'
-
-      - name: Add Deployment Objects
-        env:
-          BROKKR_PAK: ${{ secrets.BROKKR_GENERATOR_PAK }}
-          BROKKR_URL: ${{ vars.BROKKR_URL }}
-        run: |
-          STACK_ID=$(cat stack-response.json | jq -r '.id')
-          curl -X POST "$BROKKR_URL/api/v1/stacks/$STACK_ID/deployment-objects" \
-            -H "Authorization: Bearer $BROKKR_PAK" \
-            -H "Content-Type: application/json" \
-            -d @deployment.json
-```
-
-### GitLab CI Example
-
-```yaml
-deploy:
-  stage: deploy
-  script:
-    - |
-      curl -X POST "$BROKKR_URL/api/v1/stacks" \
-        -H "Authorization: Bearer $BROKKR_GENERATOR_PAK" \
-        -H "Content-Type: application/json" \
-        -d "{
-          \"name\": \"my-app-$CI_COMMIT_SHA\",
-          \"description\": \"Pipeline $CI_PIPELINE_ID\",
-          \"generator_id\": \"$BROKKR_GENERATOR_ID\"
-        }"
-  only:
-    - main
-```
+Do not create a stack per commit. The stack is the application and lives on; each push is a new deployment object in it, and the agent applies the newest.
 
 ### Using Templates
 

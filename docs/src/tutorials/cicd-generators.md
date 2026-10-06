@@ -87,7 +87,7 @@ curl -s http://localhost:3000/api/v1/agents \
 # Returns: 403 Forbidden
 ```
 
-The key rule: generators can create, update, and delete their own stacks and push deployment objects to them, but they cannot manage agents, targets, or other generators' resources. Registering an agent with a generator is likewise an admin operation (or the agent acting on itself) — a generator PAK can't register agents on its own. See the [Security Model](../explanation/security-model.md) for the complete access control matrix.
+The key rule: generators can create, update, and delete their own stacks and push deployment objects to them, and they can target their own stacks at agents that are registered with them. They cannot list or manage agents, register agents, or touch other generators' resources. Registering an agent with a generator is an admin operation (or the agent acting on itself) — a generator PAK can't register agents on its own. See the [Security Model](../explanation/security-model.md) for the complete access control matrix.
 
 ## Step 4: Register and Target an Agent (So Deployments Reach a Cluster)
 
@@ -106,16 +106,16 @@ curl -s -X POST "http://localhost:3000/api/v1/generators/${GENERATOR_ID}/registe
   -d "{\"agent_id\": \"${AGENT_ID}\"}" | jq .
 ```
 
-Re-running this registration returns `409 already_registered` (harmless if the agent is already registered). Now target the agent at the stack:
+Re-running this registration returns `409 already_registered` (harmless if the agent is already registered). Now target the agent at the stack. The generator does this itself, with its own PAK, because the agent is registered with it (an admin PAK works too):
 
 ```bash
 curl -s -X POST "http://localhost:3000/api/v1/agents/${AGENT_ID}/targets" \
-  -H "Authorization: Bearer <your-admin-pak>" \
+  -H "Authorization: Bearer ${GENERATOR_PAK}" \
   -H "Content-Type: application/json" \
   -d "{\"agent_id\": \"${AGENT_ID}\", \"stack_id\": \"${STACK_ID}\"}" | jq .
 ```
 
-> **Note:** Generators cannot manage agents, registrations, or targets — that requires admin access (or the agent acting on itself). In production, an admin registers and targets the agent once and the generator just pushes deployments.
+> **Note:** Generators cannot manage agents or registrations — that requires admin access (or the agent acting on itself). A target for the generator's own stack on a registered agent is the one agent-side call a generator may make. In production, an admin registers the agent once and tells the generator its id; the generator targets and pushes on its own.
 
 > **Troubleshooting:** A `403` with code `agent_not_registered` means the agent isn't registered with this stack's generator. Register it with `POST /generators/{id}/register` (as above), or start the agent with `--generator-ids {id}` so it self-registers. See the [error-codes reference](../reference/error-codes.md) and the operational [agent-registration how-to](../how-to/agent-registration.md).
 
@@ -206,7 +206,7 @@ Notice the `sequence_id` incremented. The agent will apply this new version.
 
 ## Step 7: A Real GitHub Actions Workflow
 
-Here's how you'd integrate Brokkr into a real GitHub Actions pipeline:
+This is the one CI pattern in these docs; the [generators how-to](../how-to/generators.md#ci-pipelines) and the [CLI page](../how-to/cli-apply.md#re-run-safely-in-ci) point here. The stack exists before the pipeline runs (the application is the stack; each push is a new deployment object in it), and the pipeline pushes the rendered manifest as YAML:
 
 ```yaml
 # .github/workflows/deploy.yml

@@ -16,24 +16,31 @@ Onboard two teams, `acme` and `globex`, onto a single running broker. Each team 
 
 ## Step 1: Create a Generator Per Team
 
-Create one generator per tenant with the admin PAK:
+Create one generator per tenant with the admin PAK, and keep the two values the response gives you: the tenant's id and its PAK.
 
 ```bash
-curl -s -X POST http://broker:3000/api/v1/generators \
+ACME=$(curl -s -X POST http://broker:3000/api/v1/generators \
   -H "Authorization: Bearer $ADMIN_PAK" \
   -H "Content-Type: application/json" \
-  -d '{"name": "team-acme", "description": "Acme platform team"}'
+  -d '{"name": "team-acme", "description": "Acme platform team"}')
+ACME_GEN_ID=$(echo "$ACME" | jq -r '.generator.id')
+ACME_GENERATOR_PAK=$(echo "$ACME" | jq -r '.pak')
 ```
 
-The response carries the tenant's ID and its PAK:
+The response carries the tenant's record and its PAK:
 
 ```json
 {
   "generator": {
     "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "created_at": "2026-10-06T01:59:35.569566Z",
+    "updated_at": "2026-10-06T01:59:35.574293Z",
+    "deleted_at": null,
     "name": "team-acme",
     "description": "Acme platform team",
-    "is_active": true
+    "last_active_at": null,
+    "is_active": true,
+    "is_system": false
   },
   "pak": "brokkr_BRgen12ab_GeneratorLongTokenExample01"
 }
@@ -41,26 +48,23 @@ The response carries the tenant's ID and its PAK:
 
 The `pak` is returned **once**. Hand it to the team over a secure channel and have them store it in their secret manager; the only recovery path is `POST /api/v1/generators/{id}/rotate-pak`. Keep the generator `id` too — the team needs it as `generator_id` on every stack they create, and you need it for scoped views later.
 
-Repeat for `team-globex`. Note both IDs:
-
-```bash
-ACME_GEN_ID=a1b2c3d4-e5f6-7890-abcd-ef1234567890
-GLOBEX_GEN_ID=b2c3d4e5-f6a7-8901-bcde-f12345678901
-```
+Repeat for `team-globex`, into `GLOBEX_GEN_ID` and `GLOBEX_GENERATOR_PAK`.
 
 ## Step 2: Create Each Team's Agents, Registered to Their Generator
 
 Agent creation is admin-only. Pass `generator_ids` so the agent is registered with its team's generator at creation:
 
 ```bash
-curl -s -X POST http://broker:3000/api/v1/agents \
+ACME_AGENT=$(curl -s -X POST http://broker:3000/api/v1/agents \
   -H "Authorization: Bearer $ADMIN_PAK" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "acme-prod",
     "cluster_name": "us-east-1",
     "generator_ids": ["'"$ACME_GEN_ID"'"]
-  }'
+  }')
+ACME_AGENT_ID=$(echo "$ACME_AGENT" | jq -r '.agent.id')
+ACME_AGENT_PAK=$(echo "$ACME_AGENT" | jq -r '.initial_pak')
 ```
 
 The response contains the agent record and its one-time `initial_pak`:
@@ -74,7 +78,7 @@ The response contains the agent record and its one-time `initial_pak`:
 
 Every agent is also auto-registered with the system generator, so fleet-wide stacks still reach it. A `generator_ids` entry that does not exist is rejected with `400 invalid_generator_id`.
 
-Repeat for `globex-prod` with `$GLOBEX_GEN_ID`.
+Repeat for `globex-prod` with `$GLOBEX_GEN_ID`, into `GLOBEX_AGENT_ID` and `GLOBEX_AGENT_PAK`.
 
 ## Step 3: Deploy Each Team's Agent
 
@@ -94,19 +98,32 @@ helm install brokkr-agent-acme oci://ghcr.io/colliery-io/charts/brokkr-agent \
 
 Repeat for `globex`, pointing at the same broker URL with `$GLOBEX_GEN_ID`.
 
+### Activate the agents
+
+A new agent starts `INACTIVE` and applies nothing until an admin activates it. Activate both:
+
+```bash
+for AGENT_ID in "$ACME_AGENT_ID" "$GLOBEX_AGENT_ID"; do
+  curl -s -X PUT "http://broker:3000/api/v1/agents/$AGENT_ID" \
+    -H "Authorization: Bearer $ADMIN_PAK" \
+    -H "Content-Type: application/json" \
+    -d '{"status": "ACTIVE"}' | jq '{name, status}'
+done
+```
+
 ## Step 4: Let Each Team Create Stacks Under Its Generator
 
 From here the team works with its own generator PAK and never needs the admin PAK. Stack creation must set `generator_id` to the team's own generator — the broker rejects any other value:
 
 ```bash
-curl -s -X POST http://broker:3000/api/v1/stacks \
+ACME_STACK_ID=$(curl -s -X POST http://broker:3000/api/v1/stacks \
   -H "Authorization: Bearer $ACME_GENERATOR_PAK" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "acme-web",
     "description": "Acme web tier",
     "generator_id": "'"$ACME_GEN_ID"'"
-  }'
+  }' | jq -r '.id')
 ```
 
 A team member who needs their tenant ID can read it back from their PAK:
@@ -116,18 +133,38 @@ curl -s -X POST http://broker:3000/api/v1/auth/pak \
   -H "Authorization: Bearer $ACME_GENERATOR_PAK" | jq -r '.generator'
 ```
 
-The team then labels the stack to select which of its agents receive it:
+The team then labels the stack to select which of its agents receive it. Labels are one string in the `key:value` shape (see [Configuring Labels](managing-stacks.md#configuring-labels-and-annotations)):
 
 ```bash
-curl -s -X POST "http://broker:3000/api/v1/stacks/$STACK_ID/labels" \
+curl -s -X POST "http://broker:3000/api/v1/stacks/$ACME_STACK_ID/labels" \
   -H "Authorization: Bearer $ACME_GENERATOR_PAK" \
   -H "Content-Type: application/json" \
-  -d '"env=prod"'
+  -d '"env:prod"'
 ```
 
-(The label endpoint takes a bare JSON string, not an object.)
+(The stack label endpoint takes a bare JSON string, not an object.)
 
-Labels select **within** the generators an agent has registered with. `env=prod` on Acme's stack will never reach Globex's agent, even though Globex also labels its agents `env=prod` — the agent is not registered with Acme's generator, so the match is not considered. Teams do not have to coordinate on label vocabulary.
+A label on a stack matches only an agent that carries the same label. Agent labels are admin-only and take an object, so the admin labels Acme's agent:
+
+```bash
+curl -s -X POST "http://broker:3000/api/v1/agents/$ACME_AGENT_ID/labels" \
+  -H "Authorization: Bearer $ADMIN_PAK" \
+  -H "Content-Type: application/json" \
+  -d '{"agent_id": "'"$ACME_AGENT_ID"'", "label": "env:prod"}'
+```
+
+The team can instead target its stack at the agent directly, with its own PAK. This works because the agent is registered with the team's generator; the admin has to tell the team the agent id, because a tenant cannot list agents:
+
+```bash
+curl -s -X POST "http://broker:3000/api/v1/agents/$ACME_AGENT_ID/targets" \
+  -H "Authorization: Bearer $ACME_GENERATOR_PAK" \
+  -H "Content-Type: application/json" \
+  -d '{"agent_id": "'"$ACME_AGENT_ID"'", "stack_id": "'"$ACME_STACK_ID"'"}'
+```
+
+Labels select **within** the generators an agent has registered with. `env:prod` on Acme's stack will never reach Globex's agent, even though Globex also labels its agents `env:prod` — the agent is not registered with Acme's generator, so the match is not considered. Teams do not have to coordinate on label vocabulary.
+
+Repeat for Globex with a stack named `globex-api`, into `GLOBEX_STACK_ID`.
 
 Templates behave the same way: a generator can instantiate its own templates and admin-owned system templates, but another tenant's template returns `403 template_not_accessible`.
 

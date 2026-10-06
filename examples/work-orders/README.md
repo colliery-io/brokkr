@@ -20,18 +20,24 @@ work-orders/
 
 ### Creating a Work Order via API
 
+The endpoint takes JSON with the YAML in `yaml_content`. Build the body from the file with `jq`, so no quoting by hand:
+
 ```bash
-# Create a work order from the example files
-curl -X POST http://localhost:3000/api/v1/work-orders \
+# Create a work order from one of the example files
+jq -Rs '{work_type: "build", yaml_content: ., targeting: {labels: ["env:dev"]}}' build.yaml \
+  | curl -X POST http://localhost:3000/api/v1/work-orders \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer <ADMIN_PAK>" \
+      -d 639
+```
+
+A label matches an agent that carries the same label. Agent labels are set by an admin, as one string in the `key:value` shape:
+
+```bash
+curl -X POST "http://localhost:3000/api/v1/agents/<AGENT_ID>/labels" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <ADMIN_PAK>" \
-  -d '{
-    "work_type": "build",
-    "yaml_content": "<contents of example yaml file>",
-    "targeting": {
-      "labels": ["env=dev"]
-    }
-  }'
+  -d '{"agent_id": "<AGENT_ID>", "label": "env:dev"}'
 ```
 
 ### Targeting Options
@@ -52,10 +58,10 @@ Example targeting configurations:
   }
 }
 
-// Target by labels (any agent with env=dev OR env=staging)
+// Target by labels (any agent with env:dev OR env:staging)
 {
   "targeting": {
-    "labels": ["env=dev", "env=staging"]
+    "labels": ["env:dev", "env:staging"]
   }
 }
 

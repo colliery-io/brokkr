@@ -53,7 +53,7 @@ So register the agents you intend to reach before you rely on labels: `brokkr re
 
 ## Re-run safely in CI
 
-`apply` is idempotent — it compares a checksum of the bundle against the stack's current latest deployment object and submits a new revision **only when the folder changed**. That makes it safe to run on every push:
+`apply` is idempotent — it compares a checksum of the bundle against the stack's current latest deployment object and submits a new revision **only when the folder changed**. That makes it safe to run on every push. A complete workflow around this one command is in [CI/CD with Generators, Step 7](../tutorials/cicd-generators.md#step-7-a-real-github-actions-workflow):
 
 ```bash
 BROKKR_BROKER_URL="$BROKER_URL" BROKKR_PAK="$BROKKR_GENERATOR_PAK" \
