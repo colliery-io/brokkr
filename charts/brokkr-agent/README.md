@@ -95,6 +95,13 @@ For the full build workflow see
 
 ### Basic Installation
 
+First create the agent record on the broker (`POST /api/v1/agents` with a `name` and a
+`cluster_name`). The response gives the agent PAK. `broker.agentName` and `broker.clusterName`
+are **required**. They must match the `name` and `cluster_name` of that agent record exactly.
+At startup the agent looks up its own record by that pair. If a value is empty or different,
+the lookup fails, the agent logs "Agent not found", and the pod crashloops. The chart does not
+generate a name.
+
 Deploy with default settings (cluster-wide RBAC — **and the cluster-wide Tekton/Shipwright
 install described above**):
 
@@ -102,6 +109,7 @@ install described above**):
 helm install my-agent charts/brokkr-agent \
   --set broker.url=http://my-broker:3000 \
   --set broker.pak=your-pak-token \
+  --set broker.agentName=prod-k8s-agent \
   --set broker.clusterName=production-cluster
 ```
 
@@ -112,19 +120,10 @@ helm install my-agent charts/brokkr-agent \
   --namespace tenant-namespace \
   --set broker.url=http://my-broker:3000 \
   --set broker.pak=your-pak-token \
+  --set broker.agentName=prod-k8s-agent \
   --set broker.clusterName=production-cluster \
   --set shipwright.enabled=false \
   --set rbac.clusterWide=false
-```
-
-### Installation with Custom Agent Name
-
-```bash
-helm install my-agent charts/brokkr-agent \
-  --set broker.url=http://my-broker:3000 \
-  --set broker.pak=your-pak-token \
-  --set broker.clusterName=production-cluster \
-  --set broker.agentName=prod-k8s-agent
 ```
 
 ## Configuration
@@ -136,8 +135,8 @@ The agent requires connection details to communicate with the broker:
 ```yaml
 broker:
   url: http://brokkr-broker:3000  # Broker service URL
-  agentName: ""                    # Optional agent identifier (auto-generated if empty)
-  clusterName: ""                  # Cluster identifier for broker
+  agentName: ""                    # Required: must match the agent record's name on the broker
+  clusterName: ""                  # Required: must match the agent record's cluster_name
   pak: ""                          # Pre-Authenticated Key for agent authentication
   generatorIds: []                 # Generator scopes this agent serves (see below)
 ```
@@ -158,6 +157,7 @@ startup, and the broker will only target it with stacks owned by those generator
 ```bash
 helm install my-agent charts/brokkr-agent \
   --set broker.url=http://my-broker:3000 \
+  --set broker.agentName=prod-k8s-agent \
   --set broker.clusterName=production \
   --set "broker.generatorIds={1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed,7c9e6679-7425-40de-944b-e07fc1f90ae7}"
 ```
@@ -177,6 +177,7 @@ kubectl create secret generic agent-credentials \
 
 helm install my-agent charts/brokkr-agent \
   --set broker.url=http://my-broker:3000 \
+  --set broker.agentName=prod-k8s-agent \
   --set broker.clusterName=production \
   --set broker.existingSecret=agent-credentials
 ```
@@ -379,8 +380,8 @@ if this table and the chart ever disagree.
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `broker.url` | string | `"http://brokkr-broker:3000"` | Broker service URL (`BROKKR__AGENT__BROKER_URL`) |
-| `broker.agentName` | string | `""` | Agent identifier. Must match the name the agent was registered under on the broker, or startup self-lookup fails. |
-| `broker.clusterName` | string | `""` | Cluster identifier. Must match the registered cluster name. |
+| `broker.agentName` | string | `""` | **Required.** Agent name. Must match the `name` of the agent record on the broker. An empty or different value makes the startup self-lookup fail with "Agent not found". The chart does not generate a name. |
+| `broker.clusterName` | string | `""` | **Required.** Cluster name. Must match the `cluster_name` of the agent record on the broker. |
 | `broker.pak` | string | `""` | Pre-Authenticated Key (rendered into the ConfigMap in plaintext; dev/test only). Ignored when `broker.existingSecret` is set. |
 | `broker.existingSecret` | string | `""` | Name of a pre-existing Secret to source the PAK from. When set, the PAK is injected via `secretKeyRef` and kept out of the ConfigMap/values/git (GitOps-friendly). |
 | `broker.existingSecretKey` | string | `"BROKKR__AGENT__PAK"` | Key within `broker.existingSecret` holding the PAK. |
@@ -493,6 +494,7 @@ collector you run yourself (or at your service mesh's OTLP receiver). See
 helm install dev-agent charts/brokkr-agent \
   --set broker.url=http://dev-broker:3000 \
   --set broker.pak=dev-pak-token \
+  --set broker.agentName=dev-agent \
   --set broker.clusterName=dev-cluster
 ```
 
@@ -532,6 +534,7 @@ runs the `cluster-admin` installer Job and installs Tekton/Shipwright cluster-wi
 helm install agent-with-crds charts/brokkr-agent \
   --set broker.url=http://broker:3000 \
   --set broker.pak=pak-token \
+  --set broker.agentName=my-agent \
   --set broker.clusterName=cluster \
   --set-json 'rbac.additionalRules=[{"apiGroups":["custom.io"],"resources":["customresources"],"verbs":["get","list","watch"]}]'
 ```

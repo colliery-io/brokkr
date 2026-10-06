@@ -42,7 +42,7 @@ helm install my-broker charts/brokkr-broker \
   --set broker.pakHash=<pak-hash-from-generate-pak>
 ```
 
-**WARNING:** installing without `broker.pakHash` or `broker.pakHashExistingSecret` leaves the broker running with the publicly-known development admin PAK compiled into the binary — anyone who can reach the broker can authenticate as admin. Always set one of the two, even on dev clusters. Setting `broker.pakHash` to an empty string is the same as omitting it: the chart only renders the variable when the value is non-empty.
+**WARNING:** installing without `broker.pakHash` or `broker.pakHashExistingSecret` leaves the broker running with the publicly-known development admin PAK compiled into the binary — anyone who can reach the broker can authenticate as admin. Set one of the two on every install. The only exception is a throwaway local evaluation cluster that nobody else can reach, such as Path B of [Evaluate Brokkr Locally](https://github.com/colliery-io/brokkr/blob/main/docs/src/getting-started/evaluate.md). A restart does not replace the development hash, because the broker runs the admin bootstrap only on its first startup. Setting `broker.pakHash` to an empty string is the same as omitting it: the chart only renders the variable when the value is non-empty.
 
 ### Production Installation
 

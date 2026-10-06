@@ -37,9 +37,10 @@ Most defaults are sensible for development; a real installation sets these:
 # Where PostgreSQL lives (the embedded default points at the dev compose stack on :5433)
 BROKKR__DATABASE__URL=postgres://user:password@db.example.com:5432/brokkr
 
-# Admin credential. The embedded default is a PUBLICLY KNOWN development hash —
-# set your own hash, or set empty to have a fresh PAK generated at first
-# startup and written to /tmp/brokkr-keys/key.txt
+# Admin credential. If you do not set it, the broker uses the embedded
+# default, which is a PUBLICLY KNOWN development hash. Set your own hash.
+# Only an explicit empty string (BROKKR__BROKER__PAK_HASH="") makes the broker
+# generate a fresh PAK at first startup and write it to /tmp/brokkr-keys/key.txt.
 BROKKR__BROKER__PAK_HASH=<your-pak-hash>
 
 # Webhook secrets are encrypted at rest under this key. If unset, a random key
@@ -51,7 +52,7 @@ BROKKR__BROKER__WEBHOOK_ENCRYPTION_KEY=<64-hex-chars>
 BROKKR__LOG__LEVEL=info
 ```
 
-To mint an admin credential before the broker ever starts, run `brokkr-broker generate-pak`. It produces a PAK and its SHA-256 hash entirely offline — no database, no keyfile — so you can set `BROKKR__BROKER__PAK_HASH` to that hash for a day-zero bootstrap. Leaving the hash unset/empty instead has the broker auto-generate a fresh PAK on first startup and write it to `/tmp/brokkr-keys/key.txt`. See the [CLI Reference](../reference/cli.md) for the command's full output.
+To mint an admin credential before the broker ever starts, run `brokkr-broker generate-pak`. It produces a PAK and its SHA-256 hash entirely offline — no database, no keyfile — so you can set `BROKKR__BROKER__PAK_HASH` to that hash for a day-zero bootstrap. If you do not set the hash, the broker uses the hash in its embedded default configuration. The matching PAK is public. Only an explicit empty string, `BROKKR__BROKER__PAK_HASH=""`, makes the broker generate a fresh PAK on first startup and write it to `/tmp/brokkr-keys/key.txt`. See the [CLI Reference](../reference/cli.md) for the command's full output.
 
 **Agent:**
 

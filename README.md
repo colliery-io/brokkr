@@ -18,7 +18,7 @@ Brokkr supports sophisticated targeting through labels and annotations, allowing
 
 ### Prerequisites
 
-Running Brokkr locally requires Rust 1.90+ (edition 2024), PostgreSQL, Docker with Docker Compose, and the [Angreal](https://angreal.github.io/) task runner which you can install via `pip install angreal`.
+The [Prerequisites](docs/src/getting-started/README.md#prerequisites) list in the Getting Started guide tells you what to install. The tools depend on your path: evaluate, install with Helm, or develop. For the `angreal local up` command below, install the tools in [To evaluate with `angreal local up`](docs/src/getting-started/README.md#to-evaluate-with-angreal-local-up). You do not need Rust or PostgreSQL for it.
 
 ### Running Locally
 
@@ -57,7 +57,7 @@ A new agent is `INACTIVE` until an admin activates it; the tutorial does that in
 
 ## Documentation
 
-Comprehensive documentation is available in the [docs/](./docs/) directory or can be built locally with `angreal local docs`. The documentation follows the Divio documentation system, organized into four categories:
+Comprehensive documentation is available in the [docs/](./docs/) directory or can be built locally with `angreal docs build` (or served with `angreal docs serve`). The `angreal local docs` task builds the Rust API documentation with `cargo doc`. The documentation follows the Divio documentation system, organized into four categories:
 
 The **Getting Started** guide covers installation options including Helm charts for production and development environment setup. **Tutorials** provide step-by-step walkthroughs of common tasks like deploying your first application or setting up multi-cluster targeting. **How-To Guides** give focused instructions for specific tasks such as configuring webhooks, using templates, or integrating with CI/CD systems. The **Explanation** section dives deep into Brokkr's architecture, data model, and design decisions.
 

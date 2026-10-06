@@ -4,13 +4,36 @@ This section covers installing and configuring Brokkr.
 
 ## Prerequisites
 
-Prerequisites depend on which path you take — each page lists its own. The fastest way to try Brokkr, [Evaluate Brokkr Locally](./evaluate.md), needs only Docker (its one-command path bundles its own Kubernetes, so you do **not** need a cluster or the Rust toolchain).
+This is the one list of prerequisites for Brokkr. The other pages link here. Find the path that you will take, and install the tools in its list.
 
-For a real install or to build from source, you'll typically want:
+### To evaluate with `angreal local up`
 
-- Kubernetes cluster access and `kubectl` (for [Installation](./installation.md))
-- Docker (for container deployments)
-- The Rust toolchain (only if building from source)
+This is Path A of [Evaluate Brokkr Locally](./evaluate.md). It builds Brokkr from source inside Docker and bundles its own Kubernetes (k3s). You do not need a cluster or a Rust toolchain.
+
+- **Docker** with Docker Compose
+- **Git**
+- **[Angreal](https://pypi.org/project/angreal/)**, the project's task runner: `pip install angreal`
+- **`curl`** and **`jq`**
+
+### To evaluate or install with Helm
+
+This is Path B of [Evaluate Brokkr Locally](./evaluate.md) and the [Installation](./installation.md) guide. These paths use the published images. You do not need a source checkout or a Rust toolchain.
+
+- **A Kubernetes cluster**, v1.29 or later (the agent chart declares `kubeVersion: ">=1.29.0-0"`). For an evaluation, a local [kind](https://kind.sigs.k8s.io/) or [k3d](https://k3d.io/) cluster is sufficient.
+- **kubectl**, configured to reach that cluster
+- **Helm** 3.8 or later ([installation guide](https://helm.sh/docs/intro/install/))
+- **Docker**, to run kind or k3d, and to run `brokkr-broker generate-pak` from the published image
+- **`curl`** and **`jq`**
+
+### To develop Brokkr
+
+This is the [Local Development Environment](./development.md). It builds and tests Brokkr from source.
+
+- **Rust 1.90 or later** (the workspace uses edition 2024)
+- **PostgreSQL client tools**: `libpq`, which the build links, and `psql`. The database itself runs in Docker.
+- **Docker** with Docker Compose
+- **Git**
+- **[Angreal](https://pypi.org/project/angreal/)**, the project's task runner: `pip install angreal`
 
 ## Quick Navigation
 

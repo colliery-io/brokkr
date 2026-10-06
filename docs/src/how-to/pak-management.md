@@ -57,7 +57,7 @@ Presetting the hash this way is also the safest bootstrap: you hold the admin PA
 What `rotate admin` does depends on `broker.pak_hash`:
 
 - **If `broker.pak_hash` is set** (it is by default, to a publicly-known development hash), the command validates and re-applies that hash — **nothing rotates**, and it says so rather than reporting success. This is the path to use when you manage the hash yourself: mint a new pair with `brokkr-broker generate-pak`, update the hash everywhere the broker config defines it (`BROKKR__BROKER__PAK_HASH`, or the chart's `broker.pakHash` / `broker.pakHashExistingSecret`), then run `rotate admin` to store it.
-- **If `broker.pak_hash` is unset or empty**, the command mints a fresh PAK and **prints both the PAK and its hash**. The PAK is shown once and cannot be recovered from the hash. It is also written to `/tmp/brokkr-keys/key.txt` as a fallback, which the broker deletes on graceful shutdown.
+- **If `broker.pak_hash` is an explicit empty string** (for example `BROKKR__BROKER__PAK_HASH=""`), the command mints a fresh PAK and **prints both the PAK and its hash**. The PAK is shown once and cannot be recovered from the hash. It is also written to `/tmp/brokkr-keys/key.txt` as a fallback, which the broker deletes on graceful shutdown.
 
 > **Take both values.** The PAK is the secret — store it in a vault. The hash is not secret and belongs in configuration. If you keep only the PAK you cannot set the configured hash to match: it is a SHA-256 of the PAK's long-token component, not of the whole string, so `sha256sum` will not reproduce it. Configuration and database would then disagree, and a later `rotate admin` would overwrite your new credential with whatever the config still holds.
 

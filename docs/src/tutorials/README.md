@@ -10,7 +10,7 @@ The tutorials are written against a broker at `http://localhost:3000`. Two setup
 
 | Setup | Who it's for | What you get |
 |-------|--------------|--------------|
-| [Helm install](../getting-started/installation.md) | Anyone running Brokkr in their own cluster | A broker you reach with `kubectl port-forward svc/brokkr-broker 3000:3000`, an admin PAK you minted yourself, and one agent named after the `broker.agentName` you installed it with |
+| [Helm install](../getting-started/installation.md) | Anyone running Brokkr in their own cluster | A broker you reach with `kubectl port-forward svc/brokkr-broker 3000:3000`, the admin PAK that you minted with `brokkr-broker generate-pak` before the install (Quick Start step 1), and one agent named after the `broker.agentName` you installed it with |
 | [Local development environment](../getting-started/development.md) (`angreal local up`) | Contributors working on Brokkr itself | A broker already published on `localhost:3000`, a pre-created agent called `brokkr-integration-test-agent`, and the publicly known development admin PAK |
 
 Both work for every tutorial below. The commands are identical; only three values differ, and [Adapting the commands to your install](#adapting-the-commands-to-your-install) covers all three.
@@ -50,7 +50,7 @@ The tutorials write `<your-admin-pak>` in the `Authorization: Bearer` header. Ex
   docker run --rm ghcr.io/colliery-io/brokkr-broker:latest generate-pak
   ```
 
-  See [Get the Admin PAK](../getting-started/installation.md#3-get-the-admin-pak). The development PAK above will **not** authenticate against a broker configured with your own hash — and if it does, your broker is still running the publicly known default credential and needs fixing before anything else.
+  See [Generate the Admin PAK](../getting-started/installation.md#1-generate-the-admin-pak). If you installed with Path B of [Evaluate Brokkr Locally](../getting-started/evaluate.md), you set no hash, and the admin PAK is the development PAK above. The development PAK above will **not** authenticate against a broker configured with your own hash — and if it does, your broker is still running the publicly known default credential and needs fixing before anything else.
 
 ### 3. The agent name
 
