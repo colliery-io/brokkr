@@ -32,31 +32,28 @@ angreal local up
 
 This starts the broker at http://localhost:3000, which serves both the REST API and the Operator Console — the supported read-only web view of your fleet, deployments, and telemetry. The development environment also brings up `examples/ui-slim` at http://localhost:3001; that is a demonstration app, not a supported product.
 
-### Creating Your First Deployment
+### The admin PAK
 
-Every stack belongs to a generator, so first look up the admin-generator the broker creates at initialization (it is linked to the admin PAK):
-
-```bash
-GEN_ID=$(curl -s http://localhost:3000/api/v1/generators \
-  -H "Authorization: Bearer <admin-pak>" \
-  | jq -r '.[] | select(.name=="admin-generator") | .id')
-```
-
-Then create a stack to hold your application's resources:
+Every request to the API carries a PAK (Prefixed API Key) in the `Authorization: Bearer` header. The development environment prints its admin PAK when `angreal local up` finishes; it is the publicly known development key, which opens only a broker that runs the embedded default hash. For your own install, mint one first, with no toolchain:
 
 ```bash
-curl -X POST http://localhost:3000/api/v1/stacks \
-  -H "Authorization: Bearer <admin-pak>" \
-  -H "Content-Type: application/json" \
-  -d "{\"name\": \"my-app\", \"description\": \"My application stack\", \"generator_id\": \"$GEN_ID\"}"
+docker run --rm ghcr.io/colliery-io/brokkr-broker:latest generate-pak
 ```
 
-Verify agents are connected and ready to receive deployments:
+and pass its hash to the broker as `broker.pakHash`. The [installation guide](docs/src/getting-started/installation.md) covers that.
+
+### Your first deployment
+
+The shortest path from this empty broker to a manifest running on a cluster is the tutorial [Your First Tenant](docs/src/tutorials/first-tenant.md). It creates a tenant with its own PAK, activates the agent, registers it with the tenant, pushes a manifest and shows it with `kubectl`, in about fifteen minutes. Start there.
+
+To check what the broker knows right now:
 
 ```bash
-curl http://localhost:3000/api/v1/agents \
-  -H "Authorization: Bearer <admin-pak>"
+curl -s http://localhost:3000/api/v1/agents \
+  -H "Authorization: Bearer " | jq '.[] | {name, cluster_name, status}'
 ```
+
+A new agent is `INACTIVE` until an admin activates it; the tutorial does that in its second step.
 
 ## Documentation
 
