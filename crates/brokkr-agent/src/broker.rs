@@ -207,6 +207,27 @@ pub async fn fetch_agent_details(
     }
 }
 
+/// Fetches the ids of the stacks the broker associates with this agent: its
+/// targets, and the stacks its labels and annotations match, under the
+/// generators it is registered with. This is the set gap detection compares
+/// between polls (BROKKR-T-0342). The target-state list cannot serve: it is
+/// incremental, and an object leaves it once this agent reported it deployed,
+/// so a stack with nothing new to apply looks like a stack that was removed.
+pub async fn fetch_associated_stack_ids(
+    client: &BrokkrClient,
+    agent: &Agent,
+) -> Result<std::collections::HashSet<Uuid>, Box<dyn std::error::Error>> {
+    let rv = client
+        .api()
+        .get_associated_stacks()
+        .id(agent.id)
+        .send()
+        .await
+        .map_err(|e| boxed("Failed to fetch the agent's stacks", BrokkrError::from(e)))?;
+    let stacks: Vec<brokkr_models::models::stacks::Stack> = convert(rv.into_inner())?;
+    Ok(stacks.into_iter().map(|s| s.id).collect())
+}
+
 /// Fetches deployment objects to apply from the broker's target-state view.
 pub async fn fetch_and_process_deployment_objects(
     _config: &Settings,

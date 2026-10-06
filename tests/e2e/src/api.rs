@@ -191,6 +191,11 @@ impl Client {
         .await
     }
 
+    pub async fn remove_agent_target(&self, agent_id: Uuid, stack_id: Uuid) -> Result<()> {
+        self.delete(&format!("/api/v1/agents/{}/targets/{}", agent_id, stack_id))
+            .await
+    }
+
     pub async fn get_agent_targets(&self, id: Uuid) -> Result<Vec<Value>> {
         self.get(&format!("/api/v1/agents/{}/targets", id)).await
     }
@@ -559,7 +564,9 @@ impl Client {
                 continue;
             }
             // Lines look like: `metric_name{k1="v1",k2="v2"} 3` or `metric_name 3`.
-            let Some(space_idx) = line.rfind(' ') else { continue };
+            let Some(space_idx) = line.rfind(' ') else {
+                continue;
+            };
             let (lhs, rhs) = line.split_at(space_idx);
             let value_str = rhs.trim();
             let (metric_name, label_part) = match lhs.find('{') {
