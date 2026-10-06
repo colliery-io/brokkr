@@ -5,7 +5,7 @@
 //! answer (BROKKR-T-0338). REST poll every 5 s.
 
 use crate::api;
-use crate::components::{agent_href, agent_name, same_agent, sev, EmptyNext};
+use crate::components::{agent_href, agent_name, same_agent, sev};
 use crate::models::{AgentEventDto, RetentionInfo};
 use aurora_leptos::components::*;
 use aurora_leptos::data::{
@@ -156,9 +156,9 @@ pub fn TelemetryView() -> impl IntoView {
                                 return match only {
                                     Some(id) => view! {
                                         <Stack gap="sm">
-                                            <EmptyNext
+                                            <Empty
                                                 message=format!("No events from {} in the retention window.", agent_name(&names, &id))
-                                                next="An agent reports an event each time it applies, reconciles or heartbeats."
+                                                hint="An agent reports an event each time it applies, reconciles or heartbeats."
                                                 href="#telemetry"
                                                 link="Show all agents"
                                             />
@@ -166,9 +166,9 @@ pub fn TelemetryView() -> impl IntoView {
                                     }
                                     .into_any(),
                                     None => view! {
-                                        <EmptyNext
+                                        <Empty
                                             message="No agent events yet."
-                                            next="An agent reports an event each time it applies, reconciles or heartbeats."
+                                            hint="An agent reports an event each time it applies, reconciles or heartbeats."
                                         />
                                     }
                                     .into_any(),
@@ -230,9 +230,9 @@ pub fn TelemetryView() -> impl IntoView {
                     {move || match kube.get() {
                         None => view! { <Loading label="loading events" /> }.into_any(),
                         Some(None) => view! {
-                            <EmptyNext
+                            <Empty
                                 message="Select a stack to see its Kubernetes events."
-                                next="The agent that applies the stack reports the events of the objects it manages."
+                                hint="The agent that applies the stack reports the events of the objects it manages."
                             />
                         }
                         .into_any(),
@@ -242,9 +242,9 @@ pub fn TelemetryView() -> impl IntoView {
                         .into_any(),
                         Some(Some(Ok(h))) if h.events.is_empty() => view! {
                             <Stack gap="sm">
-                                <EmptyNext
+                                <Empty
                                     message="No Kubernetes events for this stack in the retention window."
-                                    next="Events appear once the agent applies the stack and its objects change state."
+                                    hint="Events appear once the agent applies the stack and its objects change state."
                                 />
                                 <Retention info=h.retention.clone() />
                             </Stack>
@@ -288,9 +288,9 @@ pub fn TelemetryView() -> impl IntoView {
                     {move || match logs.get() {
                         None => view! { <Loading label="loading logs" /> }.into_any(),
                         Some(None) => view! {
-                            <EmptyNext
+                            <Empty
                                 message="Select a stack to tail its pod logs."
-                                next="The agent streams the log lines of the stack's pods to the broker, which keeps a short window of them."
+                                hint="The agent streams the log lines of the stack's pods to the broker, which keeps a short window of them."
                             />
                         }
                         .into_any(),

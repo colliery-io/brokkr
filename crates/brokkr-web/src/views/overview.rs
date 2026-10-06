@@ -8,7 +8,7 @@
 //! the Deployments view shows it on demand (BROKKR-T-0328).
 
 use crate::api;
-use crate::components::{agent_href, agent_name, sev, EmptyNext, DOCS};
+use crate::components::{agent_href, agent_name, sev, DOCS};
 use crate::models::FleetAgentRecord;
 use aurora_leptos::components::*;
 use aurora_leptos::data::{FeedList, FeedRow, Segment, SegmentedBar, Sparkline, StatTile};
@@ -233,9 +233,9 @@ pub fn OverviewView() -> impl IntoView {
                     <Panel title="Fleet by cluster">
                         {move || match fleet.get() {
                             Some(Ok(a)) if a.is_empty() => view! {
-                                <EmptyNext
+                                <Empty
                                     message="No agents yet."
-                                    next="Create an agent record, start the agent with its PAK, then activate it from Fleet."
+                                    hint="Create an agent record, start the agent with its PAK, then activate it from Fleet."
                                     href=format!("{DOCS}/how-to/agent-registration.html")
                                     link="How an agent registers"
                                 />
@@ -296,9 +296,9 @@ pub fn OverviewView() -> impl IntoView {
                             None => view! { <Loading label="" /> }.into_any(),
                             Some(Err(e)) => view! { <ErrorState error=e on_retry=Callback::new(move |_| { events.refetch(); }) /> }.into_any(),
                             Some(Ok(evs)) if evs.is_empty() => view! {
-                                <EmptyNext
+                                <Empty
                                     message="No activity yet."
-                                    next="An agent reports an event each time it applies, reconciles or heartbeats."
+                                    hint="An agent reports an event each time it applies, reconciles or heartbeats."
                                 />
                             }.into_any(),
                             Some(Ok(evs)) => {
@@ -332,9 +332,9 @@ pub fn OverviewView() -> impl IntoView {
                                 let act: Vec<_> = wos.into_iter().filter(|w| w.is_active()).collect();
                                 if act.is_empty() {
                                     return view! {
-                                        <EmptyNext
+                                        <Empty
                                             message="No active work orders."
-                                            next="A work order appears when a tenant requests an image build."
+                                            hint="A work order appears when a tenant requests an image build."
                                             href=format!("{DOCS}/reference/work-orders.html")
                                             link="What a work order is"
                                         />

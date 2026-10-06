@@ -5,7 +5,7 @@
 //! fetched when the drawer opens, not on a poll.
 
 use crate::api;
-use crate::components::{agent_href, sev, EmptyNext, DOCS};
+use crate::components::{agent_href, sev, DOCS};
 use crate::models::{FleetAgentRecord, Stack};
 use aurora_leptos::components::*;
 use aurora_leptos::data::{DetailList, KeyValue, SectionLabel};
@@ -105,9 +105,9 @@ pub fn DeploymentsView() -> impl IntoView {
             .into_any(),
             Some(Ok(stacks)) if stacks.is_empty() => {
                 view! {
-                    <EmptyNext
+                    <Empty
                         message="No stacks yet."
-                        next="A tenant creates a stack with its own PAK, then pushes manifests to it."
+                        hint="A tenant creates a stack with its own PAK, then pushes manifests to it."
                         href=format!("{DOCS}/tutorials/first-deployment.html")
                         link="Deploy a first application"
                     />

@@ -4,7 +4,7 @@
 //! that panel renders a note and the history still shows.
 
 use crate::api;
-use crate::components::{sev, EmptyNext, DOCS};
+use crate::components::{sev, DOCS};
 use crate::models::WorkOrderLogEntry;
 use aurora_leptos::components::*;
 use aurora_leptos::data::{DetailList, KeyValue};
@@ -51,9 +51,9 @@ pub fn WorkOrdersView() -> impl IntoView {
                     if act.is_empty() {
                         view! {
                             <Panel title="Active">
-                                <EmptyNext
+                                <Empty
                                     message="No work orders in flight."
-                                    next="A work order appears when a tenant requests an image build."
+                                    hint="A work order appears when a tenant requests an image build."
                                     href=format!("{DOCS}/reference/work-orders.html")
                                     link="What a work order is"
                                 />
