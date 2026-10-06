@@ -9,7 +9,12 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { BrokkrClient, BrokkrError, type ErrorResponse } from "./index.js";
+import {
+  BrokkrClient,
+  BrokkrError,
+  normalizeBaseUrl,
+  type ErrorResponse,
+} from "./index.js";
 
 /** Build a fake `fetch` that returns scripted responses in order. */
 function scriptedFetch(
@@ -292,6 +297,35 @@ describe("BrokkrClient.listWsConnections", () => {
     const out = await c.listWsConnections();
     expect(out.connected_agents).toBe(0);
     expect(calls[0]!.url).toContain("/admin/ws/connections");
+  });
+});
+
+describe("base URL rule (same as the CLI)", () => {
+  const forms = [
+    "http://localhost:3000",
+    "http://localhost:3000/",
+    "http://localhost:3000/api/v1",
+    "http://localhost:3000/api/v1/",
+    "  http://localhost:3000  ",
+  ];
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it.each(forms)("normalizeBaseUrl(%j) adds /api/v1 once", (given) => {
+    expect(normalizeBaseUrl(given)).toBe("http://localhost:3000/api/v1");
+  });
+
+  it.each(forms)("requests from baseUrl %j go to /api/v1", async (given) => {
+    const { fetch: scripted, calls } = scriptedFetch([
+      { status: 200, body: [] },
+    ]);
+    vi.stubGlobal("fetch", scripted);
+    const c = new BrokkrClient({ baseUrl: given });
+    expect(c.baseUrl).toBe("http://localhost:3000/api/v1");
+    await c.retry((api) => api.GET("/agents"));
+    expect(calls[0]!.url).toBe("http://localhost:3000/api/v1/agents");
   });
 });
 

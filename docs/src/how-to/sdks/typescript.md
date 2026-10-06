@@ -21,12 +21,24 @@ npm --prefix sdks/typescript/brokkr-client run build
 import { BrokkrClient } from "@colliery-io/brokkr-client";
 
 const client = new BrokkrClient({
-  baseUrl: "https://broker.example.com/api/v1",
-  token: "brokkr_BRabcd1234_AgentLongTokenExample0001", // PAK
+  baseUrl: "https://broker.example.com", // the client adds /api/v1
+  token: "brokkr_BRabcd1234_GeneratorLongTokenExample01", // generator PAK
 });
 ```
 
-Options (`BrokkrClientOptions` in `sdks/typescript/brokkr-client/src/client.ts`): `baseUrl` (conventionally includes `/api/v1`), optional `token` (injected as `Authorization: Bearer <token>` on every request), `requestTimeoutMs` (default 30000), `maxRetries` (default 3), and `initialBackoffMs` (default 200).
+The base URL can be the broker root (`https://broker.example.com`) or end in `/api/v1`. The client adds `/api/v1` when it is absent and never adds it twice. The `brokkr` CLI uses the same rule.
+
+Options (`BrokkrClientOptions` in `sdks/typescript/brokkr-client/src/client.ts`): `baseUrl`, optional `token` (injected as `Authorization: Bearer <token>` on every request), `requestTimeoutMs` (default 30000), `maxRetries` (default 3), and `initialBackoffMs` (default 200).
+
+This page uses a **generator PAK**, because a generator owns stacks and deployment objects. An admin creates a generator with `brokkr-broker create generator --name <name>` or `POST /api/v1/generators`. Each operation needs one of these PAKs:
+
+| Operation | PAK |
+|-----------|-----|
+| `apply`, `submitManifests`, stack, label and deployment-object calls, `listTelemetryEvents`, `listTelemetryLogs`, the live tail, `GET /agents` | Generator (its own stacks only) or admin |
+| `apply` for a named generator (fourth argument), `listWsConnections`, create agents and generators, stack health | Admin |
+| Heartbeat, target state, agent events and health reports | Agent |
+
+The `security` field of each operation in `openapi/brokkr-v1.json` gives the full list.
 
 ## Call one endpoint
 
@@ -75,12 +87,12 @@ A stack's desired state is the single latest deployment object, and the agent re
 import { BrokkrError } from "@colliery-io/brokkr-client";
 
 try {
-  const agent = await client.retry((api) =>
-    api.GET("/agents/{id}", { params: { path: { id: agentId } } }),
+  const stack = await client.retry((api) =>
+    api.GET("/stacks/{id}", { params: { path: { id: stackId } } }),
   );
 } catch (err) {
-  if (err instanceof BrokkrError && err.code === "agent_not_found") {
-    console.log("no such agent");
+  if (err instanceof BrokkrError && err.code === "stack_not_found") {
+    console.log("no such stack");
   } else {
     throw err;
   }
@@ -99,7 +111,7 @@ The wrapper has dedicated methods for the telemetry surface:
 
 ```typescript
 // The same PAK used to construct the client
-const pak = "brokkr_BRabcd1234_AgentLongTokenExample0001";
+const pak = "brokkr_BRabcd1234_GeneratorLongTokenExample01";
 
 // Retained history (6-hour ceiling); responses include retention metadata
 const logs = await client.listTelemetryLogs(stackId, { limit: 1000 });

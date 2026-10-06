@@ -49,7 +49,10 @@ PYTHON_SDK_DIR = PROJECT_ROOT / "sdks" / "python" / "brokkr-client"
 PYTHON_GEN_CONFIG = (
     Path(angreal.get_root()) / "files" / "openapi-python-client-config.yaml"
 )
-TYPESCRIPT_SDK_DIR = PROJECT_ROOT / "sdks" / "typescript" / "brokkr-client"
+PYTHON_CLIENT_README = (
+    Path(angreal.get_root()) / "files" / "python-client-generated-README.md"
+)
+TYPESCRIPT_SDK_DIR =PROJECT_ROOT / "sdks" / "typescript" / "brokkr-client"
 TYPESCRIPT_SCHEMA_REL = "src/schema.d.ts"
 
 openapi = angreal.command_group(name="openapi", about="OpenAPI spec tasks")
@@ -215,6 +218,10 @@ def _run_python_gen(target_dir: Path) -> int:
     except subprocess.CalledProcessError as e:
         print(f"openapi-python-client failed: {e}", file=sys.stderr)
         return e.returncode
+    # The generator writes a template README with placeholder names. Replace
+    # it with the maintained README. Both gen-python and check-python run this
+    # step, so the drift check accepts the replacement.
+    shutil.copyfile(PYTHON_CLIENT_README, target_dir / "README.md")
     return 0
 
 

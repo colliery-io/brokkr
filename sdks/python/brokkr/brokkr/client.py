@@ -26,13 +26,29 @@ _DEFAULT_CONNECT_TIMEOUT = 10.0  # seconds
 _DEFAULT_MAX_RETRIES = 3
 _DEFAULT_INITIAL_BACKOFF = 0.2  # seconds
 _MAX_BACKOFF = 10.0
+_API_PREFIX = "/api/v1"
+
+
+def normalize_base_url(url: str) -> str:
+    """Return the broker URL with the ``/api/v1`` prefix that the API needs.
+
+    The CLI uses the same rule. Give the broker root
+    (``https://broker.example.com``) or a URL that already ends in
+    ``/api/v1``. A trailing slash is optional. The function adds the prefix
+    when it is absent and never adds it twice.
+    """
+    trimmed = url.strip().rstrip("/")
+    if trimmed.endswith(_API_PREFIX):
+        return trimmed
+    return trimmed + _API_PREFIX
 
 
 class BrokkrClient:
     """Ergonomic Brokkr broker client.
 
-    Construct with a base URL and (optionally) a PAK token. The wrapper
-    holds the generated `AuthenticatedClient` (or `Client`, when no token
+    Construct with a base URL and (optionally) a PAK token. The base URL can
+    be the broker root or end in ``/api/v1`` (see ``normalize_base_url``).
+    The wrapper holds the generated `AuthenticatedClient` (or `Client`, when no token
     is supplied) plus a retry policy. Access the generated API surface via
     `client.api`; reach for the raw httpx session via `client.api.get_httpx_client()`.
     """
@@ -52,6 +68,7 @@ class BrokkrClient:
         if initial_backoff <= 0:
             raise ValueError("initial_backoff must be > 0")
 
+        base_url = normalize_base_url(base_url)
         timeout = httpx.Timeout(request_timeout, connect=connect_timeout)
         self._max_retries = max_retries
         self._initial_backoff = initial_backoff

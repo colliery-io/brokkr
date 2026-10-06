@@ -8,7 +8,7 @@ description = "Auto-generated Rust client for the Brokkr broker API"
 repository.workspace = true
 homepage.workspace = true
 documentation = "https://docs.rs/brokkr-client"
-readme = "../../README.md"
+readme = "README.md"
 
 # This crate's source is generated from openapi/brokkr-v1.json by the
 # `progenitor::generate_api!` macro in src/lib.rs. Regeneration happens
