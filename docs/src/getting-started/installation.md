@@ -4,11 +4,7 @@ This guide will help you install Brokkr using Helm, the recommended installation
 
 ## Prerequisites
 
-Before installing Brokkr, ensure you have:
-
-- **Kubernetes cluster** (v1.29 or later — the agent chart declares `kubeVersion: ">=1.29.0-0"`)
-- **kubectl** CLI configured to access your cluster
-- **Helm** 3.8 or later installed ([installation guide](https://helm.sh/docs/intro/install/))
+Install the tools in [Prerequisites: To evaluate or install with Helm](./README.md#to-evaluate-or-install-with-helm).
 
 ### Verifying Prerequisites
 
@@ -29,40 +25,9 @@ Get a broker and agent running in your cluster in under 10 minutes.
 
 This walkthrough passes credentials as plaintext `--set` values, which is the fastest way to see Brokkr working on a throwaway cluster. Values set that way are rendered into ConfigMaps in cleartext, so for anything you intend to keep, use [Production Install: Credentials from Kubernetes Secrets](#production-install-credentials-from-kubernetes-secrets) instead — the steps are the same shape, with each credential read from a Secret you create first.
 
-### 1. Install the Broker
+### 1. Generate the Admin PAK
 
-Install the broker with bundled PostgreSQL for development:
-
-```bash
-# Install broker with bundled PostgreSQL
-helm install brokkr-broker oci://ghcr.io/colliery-io/charts/brokkr-broker \
-  --set postgresql.enabled=true \
-  --wait
-
-# Verify broker is running
-kubectl get pods -l app.kubernetes.io/name=brokkr-broker
-```
-
-Expected output:
-```
-NAME                             READY   STATUS    RESTARTS   AGE
-brokkr-broker-xxxxxxxxxx-xxxxx   1/1     Running   0          2m
-```
-
-### 2. Get Broker URL
-
-```bash
-# Port forward to access the broker locally
-kubectl port-forward svc/brokkr-broker 3000:3000 &
-
-# The broker is now accessible at http://localhost:3000
-```
-
-### 3. Get the Admin PAK
-
-Every `/api/v1` request must carry a PAK (Prefixed API Key) in the `Authorization` header. On first startup the broker creates the admin role.
-
-**For production (recommended)**, generate the admin PAK offline before deployment:
+Every `/api/v1` request must carry a PAK (Prefixed API Key) in the `Authorization` header. The broker stores the hash of the admin PAK on its first startup. Generate the PAK and its hash before you install the broker.
 
 ```bash
 brokkr-broker generate-pak
@@ -76,24 +41,56 @@ docker run --rm ghcr.io/colliery-io/brokkr-broker:latest generate-pak
 
 Substitute the release tag you intend to deploy if you are pinning the image rather than tracking `latest`. The command is entirely offline — no database, no cluster, no keyfile — so it is safe to run on a laptop before the broker exists. Everywhere this guide says `brokkr-broker generate-pak`, either form works.
 
-This prints both the PAK value and its SHA-256 hash without touching a database or keyfile. Set the hash as `broker.pakHash` in your Helm values before first startup; the broker stores it on the admin role at initialization. Keep the PAK value secret and export it for the steps below.
-
-For a throwaway dev cluster you can instead rely on how the broker provisions the admin role at first startup:
-
-- **If you installed with the commands above** (no `broker.pakHash` chart value), the broker's embedded default configuration supplies a publicly known hash, and the admin PAK is `brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8` — fine for a throwaway dev cluster, **never for production**.
-- **If you set `broker.pakHash` to the hash of your own PAK** (or reference a Secret containing it via `broker.pakHashExistingSecret`), use that PAK.
-
-> **Warning:** Setting `broker.pakHash` to an empty value does **not** make the broker generate a fresh PAK. The chart only passes the hash to the broker when the value is non-empty, so an empty or omitted `broker.pakHash` silently leaves the publicly known development admin PAK above active. Anywhere beyond a throwaway dev cluster, always set `broker.pakHash` or `broker.pakHashExistingSecret` from the `brokkr-broker generate-pak` output.
-
-The only configuration in which the broker mints an admin PAK for you is one where the hash is genuinely empty in its environment — which the chart cannot produce without an `extraEnv` override. If you do force that, the broker writes the PAK to `/tmp/brokkr-keys/key.txt` inside the broker's own filesystem, and that file is a one-shot artifact: it is written on the genuinely first startup only, never recreated by later restarts, and deleted when the broker shuts down gracefully. A pod restart, reschedule, or `helm upgrade` before you read it loses the admin PAK for good. Capture it in the same breath as the install, or avoid the race entirely by presetting the hash from `brokkr-broker generate-pak` as described above.
-
-If the admin PAK is lost, it cannot be recovered from the stored hash — mint a replacement with `brokkr-broker generate-pak`, update `broker.pakHash` (or the Secret behind `broker.pakHashExistingSecret`), and run `brokkr-broker rotate admin` against the broker's database to store the new hash. Restarting the broker does not re-run the admin bootstrap. See [Managing PAKs](../how-to/pak-management.md#rotating-the-admin-pak).
-
-Export it for the following steps:
+The command prints the PAK and its SHA-256 hash. Keep the PAK secret. You cannot get the PAK back from the hash. Export both values for the steps below:
 
 ```bash
-export ADMIN_PAK="<your-admin-pak>"
+export ADMIN_PAK="<pak-from-generate-pak>"
+export ADMIN_PAK_HASH="<hash-from-generate-pak>"
 ```
+
+> **Warning:** Do not install the broker without a hash. If you omit `broker.pakHash` and `broker.pakHashExistingSecret`, the broker uses the hash in its embedded default configuration. The matching admin PAK, `brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8`, is public. A restart does not replace that hash, because the broker runs the admin bootstrap only on its first startup. An empty `broker.pakHash` is the same as no value: the chart renders the variable only when the value is not empty.
+
+### 2. Install the Broker
+
+Install the broker with bundled PostgreSQL for development. Give it the hash from step 1:
+
+```bash
+# Install broker with bundled PostgreSQL and your admin PAK hash
+helm install brokkr-broker oci://ghcr.io/colliery-io/charts/brokkr-broker \
+  --set postgresql.enabled=true \
+  --set broker.pakHash="$ADMIN_PAK_HASH" \
+  --wait
+
+# Verify broker is running
+kubectl get pods -l app.kubernetes.io/name=brokkr-broker
+```
+
+Expected output:
+```
+NAME                             READY   STATUS    RESTARTS   AGE
+brokkr-broker-xxxxxxxxxx-xxxxx   1/1     Running   0          2m
+```
+
+On its first startup the broker stores the hash on the admin role. The PAK in `$ADMIN_PAK` is now your admin credential.
+
+### 3. Get Broker URL
+
+```bash
+# Port forward to access the broker locally
+kubectl port-forward svc/brokkr-broker 3000:3000 &
+
+# The broker is now accessible at http://localhost:3000
+```
+
+Make sure that your admin PAK works:
+
+```bash
+curl -s http://localhost:3000/api/v1/agents -H "Authorization: Bearer $ADMIN_PAK"
+```
+
+The command prints a JSON list. A `401` response tells you that the broker did not get your hash. To see the hash that the broker got, run `kubectl exec deploy/brokkr-broker -- printenv BROKKR__BROKER__PAK_HASH`.
+
+If you lose the admin PAK, you cannot recover it from the stored hash. Mint a replacement with `brokkr-broker generate-pak`, update `broker.pakHash` (or the Secret behind `broker.pakHashExistingSecret`), and run `brokkr-broker rotate admin` against the broker's database to store the new hash. Restarting the broker does not re-run the admin bootstrap. See [Managing PAKs](../how-to/pak-management.md#rotating-the-admin-pak).
 
 ### 4. Create an Agent and Get Its PAK
 
@@ -131,7 +128,9 @@ Note the `"status": "INACTIVE"` in the response: every new agent starts inactive
 
 ### 5. Install the Agent
 
-Install the agent using the `initial_pak` from step 4. The `broker.agentName` and `broker.clusterName` values must exactly match the name and cluster you registered in step 4 — at startup the agent looks up its own registration by that pair, and a mismatch leaves the pod crashlooping with "Agent not found":
+Install the agent using the `initial_pak` from step 4. The `broker.agentName` and `broker.clusterName` values must exactly match the name and cluster you registered in step 4 — at startup the agent looks up its own registration by that pair, and a mismatch leaves the pod crashlooping with "Agent not found".
+
+> **Warning: the default agent install changes the whole cluster.** With the chart defaults, a pre-install hook Job installs Tekton Pipelines and Shipwright Build cluster-wide. The Job runs under a ServiceAccount with a `cluster-admin` ClusterRoleBinding. `helm uninstall` does not remove Tekton or Shipwright. If you do not use build work orders, add `--set shipwright.enabled=false`. If Tekton and Shipwright are already in the cluster, add `--set shipwright.install.tekton=false --set shipwright.install.shipwright=false`. For the full list of effects, see [What a Default Install Does to Your Cluster](https://github.com/colliery-io/brokkr/blob/main/charts/brokkr-agent/README.md#what-a-default-install-does-to-your-cluster).
 
 ```bash
 # Install agent (replace <PAK> with the initial_pak from step 4)
@@ -188,7 +187,7 @@ Create the Secrets before installing. A Secret or key that does not exist leaves
 kubectl create secret generic brokkr-broker-db \
   --from-literal=database-url='postgres://brokkr:<password>@postgres.example.com:5432/brokkr'
 
-# Admin PAK hash, from `brokkr-broker generate-pak` (see Quick Start step 3)
+# Admin PAK hash, from `brokkr-broker generate-pak` (see Quick Start step 1)
 kubectl create secret generic brokkr-broker-admin-pak-hash \
   --from-literal=BROKKR__BROKER__PAK_HASH='<hash-from-generate-pak>'
 
@@ -269,8 +268,11 @@ For development and testing, use the bundled PostgreSQL. The password below is r
 helm install brokkr-broker oci://ghcr.io/colliery-io/charts/brokkr-broker \
   --set postgresql.enabled=true \
   --set postgresql.auth.password=brokkr \
+  --set broker.pakHash="$ADMIN_PAK_HASH" \
   --wait
 ```
+
+Every broker install on this page sets the admin PAK hash. Get the hash from `brokkr-broker generate-pak`, as in [Quick Start step 1](#1-generate-the-admin-pak). The values files do not set a hash.
 
 #### Using Provided Values Files
 
@@ -278,8 +280,11 @@ Brokkr includes pre-configured values files for different environments — devel
 
 ```bash
 helm install brokkr-broker oci://ghcr.io/colliery-io/charts/brokkr-broker \
+  --set broker.pakHash="$ADMIN_PAK_HASH" \
   -f https://raw.githubusercontent.com/colliery-io/brokkr/main/charts/brokkr-broker/values/<environment>.yaml
 ```
+
+For staging and production, use `--set broker.pakHashExistingSecret=<secret-name>` instead of `broker.pakHash`. See [Production Install](#production-install-credentials-from-kubernetes-secrets).
 
 You can also download these files and customize them:
 
@@ -292,6 +297,7 @@ vi development.yaml
 
 # Install with custom values
 helm install brokkr-broker oci://ghcr.io/colliery-io/charts/brokkr-broker \
+  --set broker.pakHash="$ADMIN_PAK_HASH" \
   -f development.yaml
 ```
 
@@ -321,6 +327,8 @@ helm install brokkr-agent oci://ghcr.io/colliery-io/charts/brokkr-agent \
   --set broker.clusterName=<CLUSTER_NAME> \
   --wait
 ```
+
+This install and the values-file install below keep the chart default `shipwright.enabled=true`. Thus they also install Tekton and Shipwright cluster-wide with a `cluster-admin` binding, as the warning in [Quick Start step 5](#5-install-the-agent) tells. Add `--set shipwright.enabled=false` if you do not use build work orders.
 
 #### Using Provided Values Files
 
@@ -458,8 +466,8 @@ Key configuration options for the agent chart:
 | `broker.existingSecret` | Name of a pre-created Secret to read the agent PAK from; injected via `secretKeyRef` and kept out of the ConfigMap. See the [Existing-Secret Values Reference](#existing-secret-values-reference) | `""` |
 | `broker.existingSecretKey` | Key within that Secret holding the PAK | `BROKKR__AGENT__PAK` |
 | `broker.generatorIds` | Generator UUIDs (YAML list or comma string) this agent self-registers with at startup. The agent is always auto-registered with the system/fleet generator; application generators must be listed here to serve their stacks. See [Registering Agents with Generators](../how-to/agent-registration.md) | `[]` |
-| `broker.agentName` | Human-readable agent name | `""` |
-| `broker.clusterName` | Name of the managed cluster | `""` |
+| `broker.agentName` | Agent name. **Required.** Must match the `name` of the agent record on the broker | `""` |
+| `broker.clusterName` | Cluster name. **Required.** Must match the `cluster_name` of the agent record on the broker | `""` |
 | `agent.pollingInterval` | Seconds between broker polls (the agent binary's own default is `10`) | `30` |
 | `agent.deploymentHealth.enabled` | Enable deployment health checks | `true` |
 | `agent.deploymentHealth.intervalSeconds` | Health check interval | `60` |
@@ -480,7 +488,7 @@ For complete configuration options, see the chart values files:
 
 These defaults and shortcuts are safe for development but dangerous in production:
 
-1. **Replace the default admin PAK.** The default configuration embeds a publicly known `broker.pak_hash` — leaving it in place means anyone can use the development admin credential against your broker. Run `brokkr-broker generate-pak` — from the broker image if you have no binary, `docker run --rm ghcr.io/colliery-io/brokkr-broker:latest generate-pak` (see [Get the Admin PAK](#3-get-the-admin-pak)) — and set the printed hash via `broker.pakHashExistingSecret` (or, on a dev cluster, as the plaintext `broker.pakHash`) before first startup. Leaving the chart value empty does **not** generate a fresh key; it silently keeps the publicly known default active.
+1. **Replace the default admin PAK.** The default configuration embeds a publicly known `broker.pak_hash` — leaving it in place means anyone can use the development admin credential against your broker. Run `brokkr-broker generate-pak` — from the broker image if you have no binary, `docker run --rm ghcr.io/colliery-io/brokkr-broker:latest generate-pak` (see [Generate the Admin PAK](#1-generate-the-admin-pak)) — and set the printed hash via `broker.pakHashExistingSecret` (or, on a dev cluster, as the plaintext `broker.pakHash`) before first startup. Leaving the chart value empty does **not** generate a fresh key; it silently keeps the publicly known default active.
 2. **Set a persistent webhook encryption key.** If `broker.webhook_encryption_key` (`BROKKR__BROKER__WEBHOOK_ENCRYPTION_KEY`, 64 hex chars / 32 bytes) is unset, the broker generates a random key on every startup — webhook URLs and auth headers encrypted under the previous key become unreadable after a restart, and once subscriptions exist the broker refuses to start with the key unset. Source it from a Secret with `broker.webhookEncryptionKeyExistingSecret`.
 3. **Keep credentials out of ConfigMaps.** The database URL, admin PAK hash, webhook encryption key, and agent PAK all land in a ConfigMap in cleartext when set as plaintext Helm values. Source each from a pre-created Secret instead — see [Production Install: Credentials from Kubernetes Secrets](#production-install-credentials-from-kubernetes-secrets).
 4. **Lower the log level.** The binary default is `debug`; the Helm chart sets `broker.logLevel: info`. If you run the binary outside the chart, set `BROKKR__LOG__LEVEL=info` (or `warn`).

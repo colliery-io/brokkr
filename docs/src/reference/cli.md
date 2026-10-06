@@ -103,8 +103,8 @@ brokkr-broker rotate admin
 
 Behavior depends on `broker.pak_hash`, and the command reports which branch it took:
 
-- If `broker.pak_hash` is set and non-empty, the configured hash is validated and stored; **no new PAK is generated and nothing is revoked**. Any PAK matching that hash keeps working. The output says so and lists the two ways to actually replace the credential.
-- If `broker.pak_hash` is unset or empty, a new admin PAK is generated and its hash stored. **Both the PAK and its hash are printed**; the PAK is shown once and cannot be recovered from the hash. It is also written to `/tmp/brokkr-keys/key.txt`, which is deleted on graceful shutdown.
+- If `broker.pak_hash` is set and non-empty, the configured hash is validated and stored. An unset value takes this branch too, because the embedded default configuration supplies the publicly known development hash. In this branch **no new PAK is generated and nothing is revoked**. Any PAK matching that hash keeps working. The output says so and lists the two ways to actually replace the credential.
+- If `broker.pak_hash` is an explicit empty string (for example `BROKKR__BROKER__PAK_HASH=""`), a new admin PAK is generated and its hash stored. **Both the PAK and its hash are printed**; the PAK is shown once and cannot be recovered from the hash. It is also written to `/tmp/brokkr-keys/key.txt`, which is deleted on graceful shutdown.
 
 The old admin PAK stops working only on the second branch, where the stored hash actually changes. Take the printed hash as well as the PAK — it belongs in `BROKKR__BROKER__PAK_HASH` (or the chart's `broker.pakHash` / `broker.pakHashExistingSecret`), and it cannot be derived from the PAK with `sha256sum` because only the long-token component is hashed.
 

@@ -42,7 +42,7 @@ The OpenAPI spec declares three security schemes — `admin_pak`, `agent_pak`, `
 
 Where PAKs come from:
 
-- **Admin** — generated at first broker startup (when no `pak_hash` is configured) and written to `/tmp/brokkr-keys/key.txt` inside the broker container (see [Managing PAKs](../pak-management.md)).
+- **Admin** — minted offline with `brokkr-broker generate-pak`, whose hash you set as `broker.pak_hash` before the first broker startup. If you do not set `pak_hash`, the broker uses the embedded default hash, and the matching public development PAK is the admin PAK. Only an explicit empty `pak_hash` makes the broker generate a PAK at first startup and write it to `/tmp/brokkr-keys/key.txt` inside the broker container (see [Managing PAKs](../pak-management.md)).
 - **Agent** — returned once when an agent is created (`POST /api/v1/agents`); rotate with `POST /api/v1/agents/{id}/rotate-pak`, which returns the new PAK once.
 - **Generator** — returned once when a generator is created (`POST /api/v1/generators`); rotate with `POST /api/v1/generators/{id}/rotate-pak`, which returns the new PAK once.
 

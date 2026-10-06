@@ -17,10 +17,7 @@ This path builds Brokkr from source and runs the full broker + agent + k3s + loc
 
 ### Prerequisites
 
-- **Docker** with Docker Compose
-- **Git**
-- **[Angreal](https://pypi.org/project/angreal/)**, the project's task runner: `pip install angreal`
-- **`curl`** and **`jq`** — the verification steps below use both
+Install the tools in [Prerequisites: To evaluate with `angreal local up`](./README.md#to-evaluate-with-angreal-local-up).
 
 The first `angreal local up` compiles the broker and agent from source — usually 5–15 minutes depending on your machine and Docker cache. Docker streams the build output to your terminal as it works, so you can watch it make progress (subsequent runs are much faster once layers are cached).
 
@@ -144,10 +141,7 @@ This path installs the **published images** with Helm onto a local Kubernetes cl
 
 ### Prerequisites
 
-- A local Kubernetes cluster via **[kind](https://kind.sigs.k8s.io/)** or **[k3d](https://k3d.io/)**
-- **kubectl** configured to reach that cluster
-- **Helm** 3.8 or later
-- **`curl`** and **`jq`** — the steps below use both
+Install the tools in [Prerequisites: To evaluate or install with Helm](./README.md#to-evaluate-or-install-with-helm). You create the local cluster in the next step.
 
 ### 1. Create a local cluster
 
@@ -173,6 +167,8 @@ kubectl cluster-info
 
 Install the broker chart with bundled PostgreSQL. The chart pulls the published `brokkr-broker` image.
 
+> **Warning:** This evaluation install does not set an admin PAK hash. Thus the broker uses the publicly known development admin PAK. Anyone who can reach this broker can use that PAK as admin. Use this install only on a local cluster that nobody else can reach. Do not expose the broker with an Ingress, a LoadBalancer, or a port-forward on a shared host. A restart does not replace the development PAK. For any other install, follow [Installing Brokkr](./installation.md), which sets your own hash before the first startup.
+
 ```bash
 helm install brokkr-broker oci://ghcr.io/colliery-io/charts/brokkr-broker \
   --set postgresql.enabled=true \
@@ -184,7 +180,7 @@ kubectl get pods -l app.kubernetes.io/name=brokkr-broker
 
 ### 3. Reach the broker and set your admin key
 
-Port-forward the broker, then export the default admin PAK. The default chart install ships a publicly known PAK hash, so this PAK works — fine for a throwaway eval cluster, **never for production**.
+Port-forward the broker, then export the publicly known development admin PAK. It works because the install in step 2 set no hash. It is acceptable only for this throwaway evaluation cluster, **never for production**.
 
 This port-forward must stay running for every remaining step — leave it in this shell (or its own terminal) until teardown.
 
@@ -215,12 +211,15 @@ echo "$AGENT_PAK"   # shown only once
 
 Install the agent chart with the PAK from the previous step. The `broker.agentName` and `broker.clusterName` values must exactly match the agent you created in step 4 (`eval-agent` / `evaluation`) — at startup the agent looks up its own registration by that pair, and a mismatch leaves the pod crashlooping with "Agent not found".
 
+> **Warning: the default agent install changes the whole cluster.** With the chart defaults, a pre-install hook Job installs Tekton Pipelines and Shipwright Build cluster-wide. The Job runs under a ServiceAccount with a `cluster-admin` ClusterRoleBinding. `helm uninstall` does not remove Tekton or Shipwright. This evaluation does not use build work orders, so the command below sets `shipwright.enabled=false`. To try builds, remove that line. If Tekton and Shipwright are already in the cluster, use `--set shipwright.install.tekton=false --set shipwright.install.shipwright=false` instead. For the full list of effects, see [What a Default Install Does to Your Cluster](https://github.com/colliery-io/brokkr/blob/main/charts/brokkr-agent/README.md#what-a-default-install-does-to-your-cluster).
+
 ```bash
 helm install brokkr-agent oci://ghcr.io/colliery-io/charts/brokkr-agent \
   --set broker.url=http://brokkr-broker:3000 \
   --set broker.pak="$AGENT_PAK" \
   --set broker.agentName=eval-agent \
   --set broker.clusterName=evaluation \
+  --set shipwright.enabled=false \
   --wait
 
 # Visible result: the agent pod is Running and the agent has registered
