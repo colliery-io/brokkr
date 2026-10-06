@@ -155,5 +155,3 @@
 /* The wrapper of a pulsing status dot. The pulse and its reduced-motion
    guard are Aurora's `.cl-pulse`. */
 .brk-pulse { display: inline-flex; }
-  .brk-sweep::after { width: 100%; opacity: 0.5; }
-}
