@@ -10,6 +10,7 @@ import httpx
 import pytest
 
 from brokkr import BrokkrClient, BrokkrError, ErrorResponse, TemplateGenerator
+from brokkr.client import normalize_base_url
 from brokkr_broker_client import AuthenticatedClient, Client
 from brokkr_broker_client import models as generated_models
 
@@ -28,6 +29,22 @@ def test_constructs_authenticated_when_token_supplied() -> None:
 def test_constructs_unauthenticated_when_token_omitted() -> None:
     c = BrokkrClient("http://localhost:3000/api/v1")
     assert isinstance(c.api, Client)
+
+
+@pytest.mark.parametrize(
+    "given",
+    [
+        "http://localhost:3000",
+        "http://localhost:3000/",
+        "http://localhost:3000/api/v1",
+        "http://localhost:3000/api/v1/",
+        "  http://localhost:3000  ",
+    ],
+)
+def test_base_url_gets_api_prefix_once(given: str) -> None:
+    assert normalize_base_url(given) == "http://localhost:3000/api/v1"
+    c = BrokkrClient(given, token="bk_admin_test")
+    assert c.api._base_url == "http://localhost:3000/api/v1"
 
 
 def test_rejects_invalid_max_retries() -> None:

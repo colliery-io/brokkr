@@ -45,6 +45,9 @@ export interface TelemetryHistoryQuery {
 }
 
 export interface BrokkrClientOptions {
+  /** Broker URL. Give the broker root (`https://broker.example.com`) or a
+   * URL that ends in `/api/v1`. The client adds `/api/v1` when it is absent
+   * and never adds it twice (see {@link normalizeBaseUrl}). */
   baseUrl: string;
   /** PAK; injected as `Authorization: Bearer <token>` on every request. */
   token?: string;
@@ -54,6 +57,18 @@ export interface BrokkrClientOptions {
   maxRetries?: number;
   /** Initial backoff for `retry()`. Default 200ms. */
   initialBackoffMs?: number;
+}
+
+const API_PREFIX = "/api/v1";
+
+/**
+ * Return the broker URL with the `/api/v1` prefix that the API needs. The
+ * CLI uses the same rule. A trailing slash is optional. The prefix is added
+ * when it is absent and never added twice.
+ */
+export function normalizeBaseUrl(url: string): string {
+  const trimmed = url.trim().replace(/\/+$/, "");
+  return trimmed.endsWith(API_PREFIX) ? trimmed : `${trimmed}${API_PREFIX}`;
 }
 
 const DEFAULTS = {
@@ -77,7 +92,7 @@ export class BrokkrClient {
   readonly baseUrl: string;
 
   constructor(options: BrokkrClientOptions) {
-    this.baseUrl = options.baseUrl;
+    this.baseUrl = normalizeBaseUrl(options.baseUrl);
     const maxRetries = options.maxRetries ?? DEFAULTS.maxRetries;
     const initialBackoffMs =
       options.initialBackoffMs ?? DEFAULTS.initialBackoffMs;
@@ -106,7 +121,7 @@ export class BrokkrClient {
     };
 
     this.api = createBrokkrClient({
-      baseUrl: options.baseUrl,
+      baseUrl: this.baseUrl,
       headers,
       fetch: customFetch,
     });
@@ -340,9 +355,8 @@ export class BrokkrClient {
   liveSubscriptionUrl(stackId: string): string {
     // The broker mounts the live subscription at /api/v1/stacks/{id}/live,
     // even though the OpenAPI schema strips that prefix from operation
-    // paths. baseUrl conventionally includes /api/v1 (matching how
-    // BrokkrClient is constructed everywhere else), so strip it once
-    // before re-appending the canonical full path.
+    // paths. The constructor normalizes baseUrl to end in /api/v1, so
+    // strip it once before re-appending the canonical full path.
     const trimmed = this.baseUrl.replace(/\/+$/, "");
     const root = trimmed.endsWith("/api/v1")
       ? trimmed.slice(0, -"/api/v1".length)

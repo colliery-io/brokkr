@@ -150,6 +150,24 @@ fn is_retryable_status(status: reqwest::StatusCode) -> bool {
     matches!(status.as_u16(), 408 | 429 | 502 | 503 | 504)
 }
 
+/// The version prefix of the broker API.
+const API_PREFIX: &str = "/api/v1";
+
+/// Return the broker URL with the `/api/v1` prefix that the API needs.
+///
+/// Give the broker root (`https://broker.example.com`) or a URL that already
+/// ends in `/api/v1`. A trailing slash is optional. The function adds the
+/// prefix when it is absent and never adds it twice. The CLI and the Python
+/// and TypeScript SDKs use the same rule.
+pub fn normalize_base_url(url: &str) -> String {
+    let trimmed = url.trim().trim_end_matches('/');
+    if trimmed.ends_with(API_PREFIX) {
+        trimmed.to_string()
+    } else {
+        format!("{trimmed}{API_PREFIX}")
+    }
+}
+
 /// Builder for [`BrokkrClient`]. Use [`BrokkrClient::builder`] to start.
 #[derive(Debug)]
 pub struct BrokkrClientBuilder {
@@ -223,7 +241,8 @@ impl BrokkrClientBuilder {
             .build()
             .map_err(BrokkrError::Transport)?;
 
-        let inner = Client::new_with_client(&self.base_url, reqwest_client);
+        let base_url = normalize_base_url(&self.base_url);
+        let inner = Client::new_with_client(&base_url, reqwest_client);
         Ok(BrokkrClient {
             inner,
             max_retries: self.max_retries,
@@ -245,8 +264,9 @@ pub struct BrokkrClient {
 }
 
 impl BrokkrClient {
-    /// Start building a client. `base_url` should include the version prefix
-    /// (e.g. `https://broker.example.com/api/v1`).
+    /// Start building a client. `base_url` is the broker root
+    /// (`https://broker.example.com`) or a URL that ends in `/api/v1`. The
+    /// builder adds `/api/v1` when it is absent (see [`normalize_base_url`]).
     pub fn builder(base_url: impl Into<String>) -> BrokkrClientBuilder {
         BrokkrClientBuilder::new(base_url)
     }
@@ -767,6 +787,24 @@ mod tests {
             .build()
             .expect("builder should succeed");
         assert_eq!(c.api().baseurl(), "http://localhost:3000/api/v1");
+    }
+
+    #[test]
+    fn base_url_gets_api_prefix_once() {
+        use progenitor_client::ClientInfo;
+        for given in [
+            "http://localhost:3000",
+            "http://localhost:3000/",
+            "http://localhost:3000/api/v1",
+            "http://localhost:3000/api/v1/",
+            "  http://localhost:3000  ",
+        ] {
+            assert_eq!(normalize_base_url(given), "http://localhost:3000/api/v1");
+            let c = BrokkrClient::builder(given)
+                .build()
+                .expect("builder should succeed");
+            assert_eq!(c.api().baseurl(), "http://localhost:3000/api/v1", "{given}");
+        }
     }
 
     #[test]

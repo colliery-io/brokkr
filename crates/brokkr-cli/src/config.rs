@@ -66,14 +66,10 @@ pub fn resolve(
 
 /// Ensure the base URL carries the `/api/v1` prefix the SDK expects. Accepts a
 /// bare broker URL (`https://broker.example.com`) or one that already includes
-/// the prefix, with or without a trailing slash, and never doubles it.
+/// the prefix, with or without a trailing slash, and never doubles it. The SDK
+/// owns the rule, so the CLI and the SDKs cannot drift apart.
 pub fn normalize_base_url(url: &str) -> String {
-    let trimmed = url.trim().trim_end_matches('/');
-    if trimmed.ends_with("/api/v1") {
-        trimmed.to_string()
-    } else {
-        format!("{trimmed}/api/v1")
-    }
+    brokkr_client::normalize_base_url(url)
 }
 
 /// Default config-file location, `~/.brokkr/config`. Returns `None` when the

@@ -16,6 +16,8 @@ Brokkr ships generated client SDKs for **Rust**, **Python**, and **TypeScript**.
 | Python | `pip install brokkr-client` | `from brokkr import BrokkrClient` |
 | TypeScript | `npm install @colliery-io/brokkr-client` | `import { BrokkrClient } from "@colliery-io/brokkr-client";` |
 
+Construct the client with the broker URL and one PAK. The base URL can be the broker root (`https://broker.example.com`) or end in `/api/v1`. The client adds `/api/v1` when it is absent and never adds it twice. The `brokkr` CLI uses the same rule. To create stacks and apply manifests, use a **generator PAK** (see [Authentication](#authentication)).
+
 Detailed walkthroughs:
 
 - [Rust](./rust.md) — `brokkr-client` crate, includes a worked agent example.
@@ -24,7 +26,7 @@ Detailed walkthroughs:
 
 ## Versioning and compatibility
 
-SDK versions track the broker version in **lockstep**. The git tag `vX.Y.Z` drives the version stamped into the broker container images, helm charts, and all three SDKs in the same release. An SDK at `0.8.x` is the canonical client for broker `0.8.x`; mixing major versions is not supported.
+The SDK version matches the broker version. The git tag `vX.Y.Z` drives the version stamped into the broker container images, helm charts, and all three SDKs in the same release. Use the SDK release that has the same version as your broker. Mixing versions is not supported. See the [releases page](https://github.com/colliery-io/brokkr/releases).
 
 There is no separate SDK-only release cadence. If the broker API changes, the SDKs are regenerated and republished in the same tag.
 

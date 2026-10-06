@@ -24,12 +24,22 @@ uv pip install -e sdks/python/brokkr
 from brokkr import BrokkrClient
 
 client = BrokkrClient(
-    base_url="https://broker.example.com/api/v1",
-    token="brokkr_BRabcd1234_AgentLongTokenExample0001",  # agent PAK
+    base_url="https://broker.example.com",  # the client adds /api/v1
+    token="brokkr_BRabcd1234_GeneratorLongTokenExample01",  # generator PAK
 )
 ```
 
-The constructor takes a base URL and one PAK. **The base URL must include the `/api/v1` prefix** — the OpenAPI spec declares its server as `/api/v1`, and the generated endpoint modules append unprefixed paths like `/agents` to whatever base you provide, so omitting the prefix makes every call 404. The wrapper builds the underlying `AuthenticatedClient` and attaches `Authorization: Bearer <pak>` on every request — you do not need to know which of the three `*_pak` security schemes your role maps to. Omit `token` for a client that can only hit unauthenticated endpoints.
+The constructor takes a base URL and one PAK. The base URL can be the broker root (`https://broker.example.com`) or end in `/api/v1`. The client adds `/api/v1` when it is absent and never adds it twice. The `brokkr` CLI uses the same rule. The wrapper builds the underlying `AuthenticatedClient` and attaches `Authorization: Bearer <pak>` on every request. You do not need to know which of the three `*_pak` security schemes your role maps to. Omit `token` for a client that can only hit unauthenticated endpoints.
+
+This page uses a **generator PAK**, because a generator owns stacks and deployment objects. An admin creates a generator with `brokkr-broker create generator --name <name>` or `POST /api/v1/generators`. Each operation needs one of these PAKs:
+
+| Operation | PAK |
+|-----------|-----|
+| `apply`, `submit_manifests`, stack, label and deployment-object calls, `list_telemetry_events`, `list_telemetry_logs`, `list_agents` | Generator (its own stacks only) or admin |
+| `apply` for a named generator (`generator=`), `list_ws_connections`, create agents and generators, stack health | Admin |
+| Heartbeat, target state, agent events and health reports | Agent |
+
+The `security` field of each operation in `openapi/brokkr-v1.json` gives the full list.
 
 The constructor also accepts keyword-only tuning knobs:
 
@@ -89,15 +99,15 @@ Via `retry()` (recommended single exception path):
 
 ```python
 from brokkr import BrokkrError
-from brokkr_broker_client.api.agents import get_agent
+from brokkr_broker_client.api.stacks import get_stack
 
 try:
-    agent = await client.retry(
-        lambda api: get_agent.asyncio_detailed(client=api, id=agent_id)
+    stack = await client.retry(
+        lambda api: get_stack.asyncio_detailed(stack_id, client=api)
     )
 except BrokkrError as err:
-    if err.code == "agent_not_found":
-        print("no such agent")
+    if err.code == "stack_not_found":
+        print("no such stack")
     elif err.code == "unauthorized":
         print("PAK rejected")
     else:
@@ -108,9 +118,9 @@ Or convert manually after a direct call:
 
 ```python
 from brokkr import BrokkrError, ErrorResponse
-from brokkr_broker_client.api.agents import get_agent
+from brokkr_broker_client.api.stacks import get_stack
 
-result = await get_agent.asyncio(client=client.api, id=agent_id)
+result = await get_stack.asyncio(stack_id, client=client.api)
 if isinstance(result, ErrorResponse):
     raise BrokkrError.from_response(result, status=404)
 ```
