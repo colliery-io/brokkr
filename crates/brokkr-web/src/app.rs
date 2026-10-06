@@ -204,7 +204,13 @@ pub fn App() -> impl IntoView {
                 .map(|w| w.iter().filter(|w| w.is_active()).count())
         }),
     };
+    // Every request with the injected token feeds this, so a refusal after a
+    // success (a broker restart, or a different replica) shows in the shell.
+    let session = RwSignal::new(crate::api::Session::default());
+    crate::api::watch_session(session);
+    let expired = Signal::derive(move || session.get() == crate::api::Session::Expired);
     let live = Signal::derive(move || match fleet.get() {
+        _ if expired.get() => LiveState::Offline,
         None => LiveState::Connecting,
         Some(Ok(_)) => LiveState::Live,
         Some(Err(_)) => LiveState::Offline,
@@ -214,9 +220,10 @@ pub fn App() -> impl IntoView {
         <AuroraStyles/>
         <AppShell
             brand=std::sync::Arc::new(|| view! { <Brand /> }.into_any())
-            header=Box::new(move || view! { <TopBar live=live clock=clock /> }.into_any())
+            header=Box::new(move || view! { <TopBar live=live expired=expired clock=clock /> }.into_any())
             navbar=Box::new(move || view! { <Sidebar route=route counts=counts /> }.into_any())
         >
+            <SessionBanner expired=expired />
             <Main route=route />
         </AppShell>
         <ToastStack />
@@ -246,20 +253,61 @@ fn Brand() -> impl IntoView {
 }
 
 /// The right side of the top bar: the broker's live state, the clock and the
-/// theme toggle.
+/// theme toggle. When the session expired, the broker is reachable, so the
+/// indicator says "session expired", not "broker unreachable".
 #[component]
-fn TopBar(live: Signal<LiveState>, clock: RwSignal<String>) -> impl IntoView {
+fn TopBar(
+    live: Signal<LiveState>,
+    expired: Signal<bool>,
+    clock: RwSignal<String>,
+) -> impl IntoView {
     view! {
         <div class="brk-topbar">
-            <LiveIndicator
-                state=live
-                live_label="broker ready"
-                connecting_label="connecting"
-                offline_label="broker unreachable"
-            />
+            {move || {
+                let offline = if expired.get() { "session expired" } else { "broker unreachable" };
+                view! {
+                    <LiveIndicator
+                        state=live
+                        live_label="broker ready"
+                        connecting_label="connecting"
+                        offline_label=offline
+                    />
+                }
+            }}
             <span class="brk-clock">{move || clock.get()}</span>
             <ThemeToggle />
         </div>
+    }
+}
+
+/// The text of the session banner.
+const SESSION_EXPIRED: &str =
+    "The broker restarted, or this page reached a different replica. Reload to get a new session.";
+
+/// One banner for the whole console when the session expired, above every
+/// view, so the views' own "Not authorized" errors have an explanation and a
+/// fix. A reload gets the page again, with the token of the broker that
+/// serves it.
+#[component]
+fn SessionBanner(expired: Signal<bool>) -> impl IntoView {
+    let reload = Callback::new(|_| {
+        if let Some(w) = web_sys::window() {
+            let _ = w.location().reload();
+        }
+    });
+    move || {
+        expired.get().then(|| {
+            view! {
+                <div class="brk-page brk-session">
+                    <Alert title="Session expired" color=token::GOLD>
+                        <div class="brk-session__body">
+                            <span class="brk-text">{SESSION_EXPIRED}</span>
+                            <Button on_click=reload>"Reload"</Button>
+                        </div>
+                    </Alert>
+                </div>
+            }
+        })
     }
 }
 

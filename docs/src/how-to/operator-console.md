@@ -156,9 +156,26 @@ The repository also contains `examples/ui-slim`, a small React application. It i
 
 **Views show an error where data should be.** The console reports API failures inline with a retry control. Confirm the broker is healthy (`/healthz`, `/readyz`) and check the broker logs; the console is only as available as the API behind it.
 
-**Everything works until the page sits open for a while, then calls start failing.** The broker probably restarted, invalidating the credential in the loaded page — or you are behind a load balancer without session affinity. Reload the page; if it recurs, fix the affinity as described above.
+**The console says the session expired.** See [The Console Says the Session Expired](#the-console-says-the-session-expired) below.
 
 **An action you expected is refused with 403.** The console authenticates read-only by design. Perform the change with an admin PAK through the [CLI](../reference/cli.md), an [SDK](./sdks/README.md), or the API.
+
+### The Console Says the Session Expired
+
+**Symptom.** The console worked, and then a banner shows above the view:
+
+> The broker restarted, or this page reached a different replica. Reload to get a new session.
+
+The indicator in the top bar shows **session expired**. The views below the banner show "Not authorized".
+
+**Cause.** The page holds the read-only credential of the broker process that served it. The broker keeps that credential in memory only. When the broker restarts, it makes a new credential, and the broker refuses the old one with `401 Unauthorized`. If you run more than one broker replica, each replica has its own credential. A request that a load balancer sends to a different replica is refused in the same way.
+
+**Fix.**
+
+1. Click **Reload** in the banner, or reload the page in the browser. The page then gets the credential of the broker that serves it.
+2. If the banner comes back when the broker did not restart, you have more than one replica behind a load balancer without session affinity. Enable session affinity (sticky sessions) on the load balancer, or send console traffic to one replica. See [Running More Than One Broker Replica](#running-more-than-one-broker-replica).
+
+The banner shows only after a request succeeded. If the first requests are refused, the console does not show the banner, and the indicator shows **broker unreachable**. In that case, examine the broker logs and the address you opened.
 
 ## Related
 
