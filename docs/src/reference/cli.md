@@ -284,8 +284,9 @@ brokkr apply -f ./manifests --stack payments --target-label env:prod
 | `-f`, `--filename <PATH>` | yes | Folder of manifests (top-level `*.yaml`/`*.yml`, sorted) or a single file. |
 | `--stack <NAME>` | yes | Stack name; created if absent. |
 | `--target-label <LABEL>` | no | Targeting label for agent fan-out (e.g. `env:prod`). Repeatable. |
+| `--generator <NAME_OR_ID>` | with an admin PAK | The generator that owns the stack, by name or id. Required with an admin PAK. Optional with a generator PAK, where it must name that PAK's own generator. |
 
-`apply` requires a **generator** PAK — the stack is owned by the generator the PAK resolves to. It prints one of three lines and exits `0`:
+With a **generator** PAK, the stack is owned by the generator the PAK resolves to. With an **admin** PAK, the stack is owned by the generator named in `--generator`; without it, the command exits `1` with an error that names the flag. It prints one of three lines and exits `0`:
 
 | Output | Meaning |
 |--------|---------|

@@ -638,7 +638,7 @@ async fn scenario_manifest_apply(base_url: &str, admin_pak: &str) -> Result<()> 
     let gen_resp = admin
         .api()
         .create_generator()
-        .body(NewGenerator::builder().name(gen_name).description(Some("apply contract".to_string())))
+        .body(NewGenerator::builder().name(gen_name.clone()).description(Some("apply contract".to_string())))
         .send()
         .await
         .map_err(berr)
@@ -712,6 +712,49 @@ async fn scenario_manifest_apply(base_url: &str, admin_pak: &str) -> Result<()> 
     let obj = gen.submit_manifests(stack.id, dir.path()).await?;
     if obj.stack_id != stack.id {
         return Err(anyhow!("submit_manifests returned object for the wrong stack"));
+    }
+
+    // Admin form (BROKKR-T-0332): an admin PAK applies on behalf of a
+    // generator, named by name or by id. The stack belongs to that generator.
+    let admin_stack = unique("sdk-contract-rust-admin-apply-stack");
+    println!("  → [admin] apply_for_generator by name (expect Created)");
+    match admin.apply_for_generator(&gen_name, &admin_stack, dir.path(), &[]).await? {
+        ApplyOutcome::Created(_) => {}
+        other => return Err(anyhow!("expected Created, got {other:?}")),
+    }
+    println!("  → [admin] apply_for_generator by id, same folder (expect Unchanged)");
+    match admin
+        .apply_for_generator(&generator_id.to_string(), &admin_stack, dir.path(), &[])
+        .await?
+    {
+        ApplyOutcome::Unchanged => {}
+        other => return Err(anyhow!("expected Unchanged, got {other:?}")),
+    }
+    let owned = gen.api().list_stacks().send().await.map_err(berr)?.into_inner();
+    if !owned.iter().any(|s| s.name == admin_stack) {
+        return Err(anyhow!("the generator does not own the stack the admin applied"));
+    }
+
+    // Without a generator, an admin is refused, and the error names the flag.
+    println!("  → [admin] apply without a generator (expect an error naming --generator)");
+    match admin.apply(&admin_stack, dir.path(), &[]).await {
+        Err(e) if e.to_string().contains("--generator") => {}
+        other => return Err(anyhow!("expected an error naming --generator, got {other:?}")),
+    }
+    // An unknown generator is refused.
+    match admin.apply_for_generator("no-such-generator", &admin_stack, dir.path(), &[]).await {
+        Err(e) if e.to_string().contains("no generator named") => {}
+        other => return Err(anyhow!("expected an unknown-generator error, got {other:?}")),
+    }
+    // A tenant cannot apply for another tenant; its own name is fine.
+    println!("  → [generator] apply_for_generator for another tenant (expect refusal)");
+    match gen.apply_for_generator("no-such-generator", &admin_stack, dir.path(), &[]).await {
+        Err(e) if e.to_string().contains("cannot apply for") => {}
+        other => return Err(anyhow!("expected a cannot-apply-for error, got {other:?}")),
+    }
+    match gen.apply_for_generator(&gen_name, &admin_stack, dir.path(), &[]).await? {
+        ApplyOutcome::Unchanged => {}
+        other => return Err(anyhow!("expected Unchanged, got {other:?}")),
     }
 
     Ok(())

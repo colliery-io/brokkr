@@ -62,7 +62,7 @@ obj = await client.submit_manifests(stack_id, "./manifests")
 print("submitted revision", obj.sequence_id)
 ```
 
-For the control-plane loop, `apply` is idempotent: it creates the stack by name if needed, applies targeting labels for fan-out, and submits a new revision **only when the bundle changed**. It requires a generator PAK (the stack is owned by that generator):
+For the control-plane loop, `apply` is idempotent: it creates the stack by name if needed, applies targeting labels for fan-out, and submits a new revision **only when the bundle changed**. With a generator PAK, the stack is owned by that generator:
 
 ```python
 from brokkr import ApplyResult
@@ -70,6 +70,14 @@ from brokkr import ApplyResult
 result: ApplyResult = await client.apply("payments", "./manifests", ["env:prod", "region:us"])
 print(result.status)  # "created" | "updated" | "unchanged"
 ```
+
+An admin PAK has no generator of its own, so it names the owner (by name or id) with `generator`:
+
+```python
+result = await admin.apply("payments", "./manifests", generator="acme-payments")
+```
+
+Without `generator`, an admin PAK raises `BrokkrError`; so does a generator PAK that names a different generator.
 
 A stack's desired state is the single latest deployment object, and the agent reconciles + prunes — so removing a file and re-applying deletes that resource on the next reconcile. Ordering is forgiving: the agent front-loads `Namespace`/`CustomResourceDefinition` objects.
 

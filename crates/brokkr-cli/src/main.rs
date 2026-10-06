@@ -10,7 +10,8 @@
 //! manifests and a stack name, and it becomes that stack's desired state. It is
 //! a thin shell over the Rust SDK's idempotent [`BrokkrClient::apply`], so a CI
 //! job or a developer loop can re-run it cheaply — an unchanged folder is a
-//! no-op.
+//! no-op. A generator PAK applies for its own generator; an admin PAK names
+//! the owner with `--generator`.
 
 mod config;
 
@@ -108,6 +109,12 @@ struct ApplyArgs {
     /// Targeting label for agent fan-out, e.g. `env:prod`. Repeatable.
     #[arg(long = "target-label", value_name = "LABEL")]
     target_label: Vec<String>,
+
+    /// Generator that owns the stack, by name or id. Required with an admin
+    /// PAK. With a generator PAK it may be omitted, or must name that PAK's
+    /// own generator.
+    #[arg(long, value_name = "NAME_OR_ID")]
+    generator: Option<String>,
 }
 
 #[tokio::main]
@@ -152,10 +159,19 @@ fn resolve_connection(args: &ConnectionArgs) -> Result<ResolvedConfig, String> {
 }
 
 async fn apply(client: &BrokkrClient, args: ApplyArgs) -> Result<(), String> {
-    let outcome = client
-        .apply(&args.stack, &args.filename, &args.target_label)
-        .await
-        .map_err(|e| e.to_string())?;
+    let outcome = match &args.generator {
+        Some(generator) => {
+            client
+                .apply_for_generator(generator, &args.stack, &args.filename, &args.target_label)
+                .await
+        }
+        None => {
+            client
+                .apply(&args.stack, &args.filename, &args.target_label)
+                .await
+        }
+    }
+    .map_err(|e| e.to_string())?;
 
     match outcome {
         ApplyOutcome::Created(obj) => println!(

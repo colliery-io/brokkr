@@ -145,18 +145,88 @@ class BrokkrClient:
         )
         return _expect(result, "create_deployment_object")
 
+    async def _resolve_apply_generator(self, wanted: Optional[str]) -> UUID:
+        """The generator that owns the stack an apply is about to touch.
+
+        A generator PAK owns its own generator; ``wanted``, if given, must be
+        that generator's name or id. An admin PAK owns nothing, so ``wanted``
+        is required and is looked up by id first, then by name.
+        """
+        from brokkr_broker_client.api.auth import verify_pak
+        from brokkr_broker_client.api.generators import get_generator, list_generators
+
+        auth = _expect(
+            await verify_pak.asyncio_detailed(client=self.api), "verify_pak"
+        )
+        own = auth.generator
+        if own is not None and not isinstance(own, Unset):
+            try:
+                own_id = UUID(str(own))
+            except ValueError as exc:
+                raise BrokkrError(
+                    message=f"auth response generator id is not a UUID: {own!r}"
+                ) from exc
+            if wanted is None or wanted.lower() == str(own_id):
+                return own_id
+            me = _expect(
+                await get_generator.asyncio_detailed(own_id, client=self.api),
+                "get_generator",
+            )
+            if me.name == wanted:
+                return own_id
+            raise BrokkrError(
+                message=(
+                    f'this PAK belongs to generator "{me.name}"; '
+                    f'it cannot apply for "{wanted}"'
+                )
+            )
+        if not auth.admin:
+            raise BrokkrError(
+                message="apply requires a generator PAK or an admin PAK"
+            )
+        if wanted is None:
+            raise BrokkrError(
+                message=(
+                    "apply with an admin PAK needs the generator that owns the "
+                    "stack: give its name or id as `generator` "
+                    "(`--generator` in the brokkr CLI)"
+                )
+            )
+        try:
+            wanted_id: Optional[UUID] = UUID(wanted)
+        except ValueError:
+            wanted_id = None
+        if wanted_id is not None:
+            resp = await get_generator.asyncio_detailed(wanted_id, client=self.api)
+            if int(resp.status_code) == 404:
+                raise BrokkrError(message=f"no generator with id {wanted_id}")
+            return _expect(resp, "get_generator").id
+        generators = _expect(
+            await list_generators.asyncio_detailed(client=self.api),
+            "list_generators",
+        )
+        match = next((g for g in generators if g.name == wanted), None)
+        if match is None:
+            raise BrokkrError(message=f'no generator named "{wanted}"')
+        return match.id
+
     async def apply(
         self,
         stack_name: str,
         path: Any,
         targeting: Optional[Sequence[str]] = None,
+        generator: Optional[str] = None,
     ) -> "ApplyResult":
         """Idempotently make a folder of manifests the desired state of the
         stack named ``stack_name`` — creating the stack if needed, applying
         ``targeting`` labels for fan-out, and submitting a new revision only
-        when the bundle changed. Requires a generator PAK.
+        when the bundle changed.
+
+        A generator PAK applies for its own generator. An admin PAK has no
+        generator of its own, so it must name the owner of the stack in
+        ``generator`` (a generator name or id). With a generator PAK,
+        ``generator`` may be omitted, or must name that PAK's own generator.
         """
-        from brokkr_broker_client.api.auth import verify_pak
         from brokkr_broker_client.api.stacks import (
             create_deployment_object,
             create_stack,
@@ -173,24 +243,18 @@ class BrokkrClient:
         yaml_content = _read_manifests(path)
         checksum = _sha256_hex(yaml_content)
 
-        auth = _expect(
-            await verify_pak.asyncio_detailed(client=self.api), "verify_pak"
-        )
-        generator = auth.generator
-        if generator is None or isinstance(generator, Unset):
-            raise BrokkrError(
-                message=(
-                    "apply by name requires a generator PAK; admin callers should "
-                    "create the stack explicitly and use submit_manifests"
-                )
-            )
-        try:
-            generator_id = UUID(str(generator))
-        except ValueError as exc:
-            raise BrokkrError(
-                message=f"auth response generator id is not a UUID: {generator!r}"
-            ) from exc
+        generator_id = await self._resolve_apply_generator(generator)
 
+        stacks = _expect(
+            await list_stacks.asyncio_detailed(client=self.api), "list_stacks"
+        )
+        stack = next((s for s in stacks if s.name == stack_name), None)
+        # Stack names are unique broker-wide. A generator PAK only sees its
+        # own stacks; an admin sees every stack, so check the owner.
+        if stack is not None and stack.generator_id != generator_id:
+            raise BrokkrError(
+                message=f'stack "{stack_name}" belongs to another generator'
+            )
         stacks = _expect(
             await list_stacks.asyncio_detailed(client=self.api), "list_stacks"
         )

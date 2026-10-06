@@ -48,7 +48,7 @@ const object = await client.submitManifests(stackId, "./manifests");
 console.log("submitted revision", object.sequence_id);
 ```
 
-For the control-plane loop, `apply` is idempotent: it creates the stack by name if needed, applies targeting labels for fan-out, and submits a new revision **only when the bundle changed**. It requires a generator PAK (the stack is owned by that generator):
+For the control-plane loop, `apply` is idempotent: it creates the stack by name if needed, applies targeting labels for fan-out, and submits a new revision **only when the bundle changed**. With a generator PAK, the stack is owned by that generator:
 
 ```typescript
 import type { ApplyResult } from "@colliery-io/brokkr-client";
@@ -56,6 +56,14 @@ import type { ApplyResult } from "@colliery-io/brokkr-client";
 const result: ApplyResult = await client.apply("payments", "./manifests", ["env:prod", "region:us"]);
 console.log(result.status); // "created" | "updated" | "unchanged"
 ```
+
+An admin PAK has no generator of its own, so it names the owner (by name or id) in the fourth argument:
+
+```typescript
+const result = await admin.apply("payments", "./manifests", [], "acme-payments");
+```
+
+Without it, an admin PAK throws `BrokkrError`; so does a generator PAK that names a different generator.
 
 A stack's desired state is the single latest deployment object, and the agent reconciles + prunes — so removing a file and re-applying deletes that resource on the next reconcile. Ordering is forgiving: the agent front-loads `Namespace`/`CustomResourceDefinition` objects.
 

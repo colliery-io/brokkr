@@ -35,6 +35,7 @@ export type WorkOrderLog = components["schemas"]["WorkOrderLog"];
 export type DeploymentObject = components["schemas"]["DeploymentObject"];
 export type StackTemplate = components["schemas"]["StackTemplate"];
 export type AuthResponse = components["schemas"]["AuthResponse"];
+export type Generator = components["schemas"]["Generator"];
 export type WebhookResponse = components["schemas"]["WebhookResponse"];
 export type PendingWebhookDelivery = components["schemas"]["PendingWebhookDelivery"];
 // WS-10 / WS-13 — internal broker↔agent channel surface (BROKKR-I-0019).

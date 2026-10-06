@@ -172,7 +172,7 @@ curl -s -X POST "$BROKER/api/v1/stacks/$STACK_ID/deployment-objects" \
 
 The response has a `sequence_id`. It is a broker-wide counter, so the first push of a new stack is not always 1; each push to the stack gets a higher one, and the agent applies the newest.
 
-With the `brokkr` CLI, the same step is `brokkr apply -f ./manifests --stack tutorial-hello` with `BROKKR_PAK=$TENANT_PAK`; see [Submitting a Folder of Manifests](../how-to/cli-apply.md). The CLI needs the tenant PAK; it refuses the admin PAK.
+With the `brokkr` CLI, the same step is `brokkr apply -f ./manifests --stack tutorial-hello` with `BROKKR_PAK=$TENANT_PAK`; see [Submitting a Folder of Manifests](../how-to/cli-apply.md). With the admin PAK, add `--generator team-tutorial` to say which tenant owns the stack.
 
 ### Step 8: See it on the cluster
 

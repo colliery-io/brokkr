@@ -302,7 +302,7 @@ kind delete cluster --name brokkr-eval   # or: k3d cluster delete brokkr-eval
 Once you have seen Brokkr work, go deeper:
 
 - **[Deploy Your First Application](../tutorials/first-deployment.md)** — a fuller guided tutorial of the deployment workflow.
-- **[Submitting a Folder of Manifests (CLI)](../how-to/cli-apply.md)** — apply a whole directory of manifests with one idempotent `brokkr` command instead of curling each object.
+- **[Submitting a Folder of Manifests (CLI)](../how-to/cli-apply.md)** — apply a whole directory of manifests with one idempotent `brokkr` command instead of curling each object. With the admin PAK, add `--generator <name>` to say which generator owns the stack.
 - **[Monitoring Your Agent Fleet](../how-to/fleet-monitoring.md)** — see which agents are connected, healthy, and keeping up.
 - **[Monitoring Deployment Health](../how-to/deployment-health.md)** — watch what your agents are reconciling and surface failures.
 - **[Installing Brokkr](./installation.md)** — the full, production-aware Helm install with values files, real PAKs, and a hardening checklist.

@@ -360,39 +360,132 @@ impl BrokkrClient {
     /// submitted only when the bundle differs from the stack's current latest
     /// deployment object, so this drops straight into a reconcile loop.
     ///
-    /// Requires a generator PAK (the new stack is owned by that generator);
-    /// admin callers should create the stack explicitly and use
-    /// [`Self::submit_manifests`].
+    /// Requires a generator PAK: the new stack is owned by that generator. An
+    /// admin PAK has no generator of its own, so it must name the owner with
+    /// [`Self::apply_for_generator`].
     pub async fn apply(
         &self,
         stack_name: &str,
         path: impl AsRef<Path>,
         targeting: &[String],
     ) -> Result<ApplyOutcome, BrokkrError> {
-        let yaml_content = read_manifests(path.as_ref())?;
+        self.apply_inner(None, stack_name, path.as_ref(), targeting)
+            .await
+    }
+
+    /// [`Self::apply`] on behalf of a generator. `generator` is the name or
+    /// the id of the generator that owns the stack.
+    ///
+    /// This is the admin form: an admin PAK can apply for any generator. With
+    /// a generator PAK, `generator` must be that PAK's own generator; a tenant
+    /// cannot apply for another tenant.
+    pub async fn apply_for_generator(
+        &self,
+        generator: &str,
+        stack_name: &str,
+        path: impl AsRef<Path>,
+        targeting: &[String],
+    ) -> Result<ApplyOutcome, BrokkrError> {
+        self.apply_inner(Some(generator), stack_name, path.as_ref(), targeting)
+            .await
+    }
+
+    /// The generator that owns the stack an apply is about to touch.
+    ///
+    /// A generator PAK owns its own generator; `wanted`, if given, must be
+    /// that generator's name or id. An admin PAK owns nothing, so `wanted` is
+    /// required and is looked up by id first, then by name.
+    async fn resolve_apply_generator(&self, wanted: Option<&str>) -> Result<Uuid, BrokkrError> {
+        let auth = self.inner.verify_pak().send().await?.into_inner();
+        if let Some(own) = auth.generator {
+            let own = Uuid::parse_str(&own).map_err(|e| BrokkrError::UnexpectedResponse {
+                status: None,
+                detail: format!("auth response generator id is not a UUID: {e}"),
+            })?;
+            return match wanted {
+                None => Ok(own),
+                Some(w) if w.eq_ignore_ascii_case(&own.to_string()) => Ok(own),
+                Some(w) => {
+                    let me = self
+                        .inner
+                        .get_generator()
+                        .id(own)
+                        .send()
+                        .await?
+                        .into_inner();
+                    if me.name == w {
+                        Ok(own)
+                    } else {
+                        Err(BrokkrError::InvalidRequest(format!(
+                            "this PAK belongs to generator \"{}\"; it cannot apply for \"{w}\"",
+                            me.name
+                        )))
+                    }
+                }
+            };
+        }
+        if !auth.admin {
+            return Err(BrokkrError::InvalidRequest(
+                "apply requires a generator PAK or an admin PAK".to_string(),
+            ));
+        }
+        let wanted = wanted.ok_or_else(|| {
+            BrokkrError::InvalidRequest(
+                "apply with an admin PAK needs the generator that owns the stack: give its \
+                 name or id as `generator` (`--generator` in the brokkr CLI)"
+                    .to_string(),
+            )
+        })?;
+        self.find_generator(wanted).await
+    }
+
+    /// Look a generator up by id, then by name. Admin only (listing is).
+    async fn find_generator(&self, wanted: &str) -> Result<Uuid, BrokkrError> {
+        if let Ok(id) = Uuid::parse_str(wanted) {
+            return match self.inner.get_generator().id(id).send().await {
+                Ok(g) => Ok(g.into_inner().id),
+                Err(e) => {
+                    let err = BrokkrError::from(e);
+                    if err.status() == Some(reqwest::StatusCode::NOT_FOUND) {
+                        Err(BrokkrError::InvalidRequest(format!(
+                            "no generator with id {id}"
+                        )))
+                    } else {
+                        Err(err)
+                    }
+                }
+            };
+        }
+        let generators = self.inner.list_generators().send().await?.into_inner();
+        generators
+            .into_iter()
+            .find(|g| g.name == wanted)
+            .map(|g| g.id)
+            .ok_or_else(|| BrokkrError::InvalidRequest(format!("no generator named \"{wanted}\"")))
+    }
+
+    async fn apply_inner(
+        &self,
+        generator: Option<&str>,
+        stack_name: &str,
+        path: &Path,
+        targeting: &[String],
+    ) -> Result<ApplyOutcome, BrokkrError> {
+        let yaml_content = read_manifests(path)?;
         let checksum = sha256_hex(&yaml_content);
 
-        // Resolve the caller's generator identity (needed to own a new stack).
-        let auth = self.inner.verify_pak().send().await?.into_inner();
-        let generator_id = auth
-            .generator
-            .ok_or_else(|| {
-                BrokkrError::InvalidRequest(
-                    "apply by name requires a generator PAK; admin callers should create the \
-                     stack explicitly and use submit_manifests"
-                        .to_string(),
-                )
-            })
-            .and_then(|g| {
-                Uuid::parse_str(&g).map_err(|e| BrokkrError::UnexpectedResponse {
-                    status: None,
-                    detail: format!("auth response generator id is not a UUID: {e}"),
-                })
-            })?;
+        let generator_id = self.resolve_apply_generator(generator).await?;
 
         // Find-or-create the stack by name.
         let stacks: Vec<Stack> = self.inner.list_stacks().send().await?.into_inner();
+        // Stack names are unique broker-wide. A generator PAK only sees its
+        // own stacks; an admin sees every stack, so check the owner.
         let stack = match stacks.into_iter().find(|s| s.name == stack_name) {
+            Some(s) if s.generator_id != generator_id => {
+                return Err(BrokkrError::InvalidRequest(format!(
+                    "stack \"{stack_name}\" belongs to another generator"
+                )));
+            }
             Some(s) => s,
             None => self
                 .inner

@@ -358,3 +358,75 @@ describe("non-idempotent POSTs are single-attempt (BROKKR-T-0212)", () => {
     expect(calls.length).toBe(1);
   });
 });
+
+// =============================================================================
+// apply: who owns the stack (BROKKR-T-0332)
+// =============================================================================
+
+describe("BrokkrClient.apply generator resolution", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function manifests(): string {
+    const dir = mkdtempSync(join(tmpdir(), "brokkr-apply-"));
+    writeFileSync(join(dir, "cm.yaml"), "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: c\n");
+    return dir;
+  }
+
+  const generatorId = "22222222-2222-2222-2222-222222222222";
+  const stackId = "33333333-3333-3333-3333-333333333333";
+
+  it("an admin names the generator and the new stack is owned by it", async () => {
+    const { fetch: scripted, calls } = scriptedFetch([
+      { status: 200, body: { admin: true, readonly: false } },
+      { status: 200, body: [{ id: generatorId, name: "acme" }] },
+      { status: 200, body: [] },
+      { status: 201, body: { id: stackId, name: "payments", generator_id: generatorId } },
+      { status: 200, body: [] },
+      { status: 201, body: { id: "o1", stack_id: stackId, sequence_id: 1, yaml_checksum: "x" } },
+    ]);
+    vi.stubGlobal("fetch", scripted);
+    const c = new BrokkrClient({ baseUrl, token: "bk_admin" });
+    const out = await c.apply("payments", manifests(), [], "acme");
+    expect(out.status).toBe("created");
+    expect(calls[1]!.url).toContain("/generators");
+    expect(calls[3]!.url).toMatch(/\/stacks$/);
+    expect(calls[5]!.url).toContain(`/stacks/${stackId}/deployment-objects`);
+  });
+
+  it("an admin without a generator is refused, and the error names the flag", async () => {
+    const { fetch: scripted, calls } = scriptedFetch([
+      { status: 200, body: { admin: true, readonly: false } },
+    ]);
+    vi.stubGlobal("fetch", scripted);
+    const c = new BrokkrClient({ baseUrl, token: "bk_admin" });
+    await expect(c.apply("payments", manifests())).rejects.toThrow("--generator");
+    expect(calls).toHaveLength(1);
+  });
+
+  it("a generator PAK cannot apply for another generator", async () => {
+    const { fetch: scripted } = scriptedFetch([
+      { status: 200, body: { admin: false, readonly: false, generator: generatorId } },
+      { status: 200, body: { id: generatorId, name: "acme" } },
+    ]);
+    vi.stubGlobal("fetch", scripted);
+    const c = new BrokkrClient({ baseUrl, token: "bk_gen" });
+    await expect(c.apply("payments", manifests(), [], "globex")).rejects.toThrow(
+      'belongs to generator "acme"',
+    );
+  });
+
+  it("a stack of that name owned by another generator is refused", async () => {
+    const { fetch: scripted } = scriptedFetch([
+      { status: 200, body: { admin: true, readonly: false } },
+      { status: 200, body: { id: generatorId, name: "acme" } },
+      { status: 200, body: [{ id: stackId, name: "payments", generator_id: "44444444-4444-4444-4444-444444444444" }] },
+    ]);
+    vi.stubGlobal("fetch", scripted);
+    const c = new BrokkrClient({ baseUrl, token: "bk_admin" });
+    await expect(c.apply("payments", manifests(), [], generatorId)).rejects.toThrow(
+      "belongs to another generator",
+    );
+  });
+});

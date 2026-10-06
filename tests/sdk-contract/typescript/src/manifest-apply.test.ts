@@ -45,11 +45,13 @@ describe("brokkr SDK contract — TypeScript manifest apply", () => {
       baseUrl: BASE_URL,
       headers: { Authorization: ADMIN_PAK },
     });
+    const genName = unique("ts-apply-gen");
     const genRes = await admin.POST("/generators", {
-      body: { name: unique("ts-apply-gen"), description: "apply contract" },
+      body: { name: genName, description: "apply contract" },
     });
     expect(genRes.error, JSON.stringify(genRes.error)).toBeUndefined();
     const generatorPak = (genRes.data as { pak: string }).pak;
+    const generatorId = (genRes.data as { generator: { id: string } }).generator.id;
 
     const wrapper = new BrokkrClient({ baseUrl: BASE_URL, token: generatorPak });
 
@@ -93,5 +95,31 @@ describe("brokkr SDK contract — TypeScript manifest apply", () => {
     // submitManifests against the existing stack id
     const obj = await wrapper.submitManifests(stack!.id, dir);
     expect((obj as { stack_id: string }).stack_id).toBe(stack!.id);
+
+    // Admin form (BROKKR-T-0332): an admin PAK applies on behalf of a
+    // generator, named by name or by id. The stack belongs to that generator.
+    const adminWrapper = new BrokkrClient({ baseUrl: BASE_URL, token: ADMIN_PAK });
+    const adminStack = unique("ts-admin-apply-stack");
+    const a1 = await adminWrapper.apply(adminStack, dir, [], genName);
+    expect(a1.status).toBe("created");
+    const a2 = await adminWrapper.apply(adminStack, dir, [], generatorId);
+    expect(a2.status).toBe("unchanged");
+    const ownedRes = await gen.GET("/stacks", {});
+    expect(
+      (ownedRes.data as Array<{ name: string }>).some((s) => s.name === adminStack),
+      "generator does not own the stack",
+    ).toBe(true);
+
+    // Without a generator, an admin is refused; the error names the flag.
+    await expect(adminWrapper.apply(adminStack, dir)).rejects.toThrow("--generator");
+    await expect(adminWrapper.apply(adminStack, dir, [], "no-such-generator")).rejects.toThrow(
+      "no generator named",
+    );
+    // A tenant cannot apply for another tenant; its own name is fine.
+    await expect(wrapper.apply(adminStack, dir, [], "no-such-generator")).rejects.toThrow(
+      "cannot apply for",
+    );
+    const a3 = await wrapper.apply(adminStack, dir, [], genName);
+    expect(a3.status).toBe("unchanged");
   });
 });
