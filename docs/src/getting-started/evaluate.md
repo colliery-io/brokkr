@@ -36,9 +36,9 @@ angreal local up
 
 This starts the `brokkr-dev` Docker Compose project: PostgreSQL, a local container registry, the broker, a k3s cluster (with Tekton + Shipwright), a pre-created agent, and a couple of demo containers. The first run builds images from your working tree, so give it a few minutes.
 
-When it finishes, the broker is on `http://localhost:3000` and the stack has already created an agent named `brokkr-integration-test-agent` (cluster `brokkr-dev-integration-cluster`) and started an agent container for it.
+When it finishes, the command prints the URLs (the broker API and the operator console on `http://localhost:3000`), the dev admin PAK, and the path of the dev agent's key. The stack has already created an agent named `brokkr-integration-test-agent` (cluster `brokkr-dev-integration-cluster`) and started an agent container for it. A second `angreal local up` keeps that agent, its PAK and its registrations.
 
-> **If `angreal local up` fails:** make sure Docker is running and you have enough free disk for the source build, and that ports `3000`, `3001`, and `5433` aren't already in use. To start clean, run `angreal local down --hard` (removes volumes) and try again. The same stack is documented in more depth in [Local Development Environment](./development.md).
+> **If `angreal local up` fails:** make sure Docker is running and you have enough free disk for the source build, and that ports `3000`, `3001`, `5050`, `5433`, `6443`, `8090` and `8474` aren't already in use (`angreal local up` names the service that could not bind; for the webhook catcher, set `BROKKR_DEV_WEBHOOK_PORT` to a free port). To start clean, run `angreal local down --hard` (removes volumes) and try again. The same stack is documented in more depth in [Local Development Environment](./development.md).
 
 ### 2. Set your admin key and confirm the broker is up
 
