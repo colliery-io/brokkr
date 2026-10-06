@@ -53,10 +53,11 @@ def print_ready_banner():
     _say("")
 
 
-def _ready_state(project=DEFAULT_PROJECT):
-    """`(state, exit_code)` of the compose `ready` service, or `(None, None)`."""
+def _compose_rows(project=DEFAULT_PROJECT, service=""):
+    """The rows of `docker compose ps --all --format json`, for one service or
+    for the project."""
     out = subprocess.run(
-        f"docker compose -f {DOCKER_COMPOSE_FILE} -p {project} ps --all --format json ready",
+        f"docker compose -f {DOCKER_COMPOSE_FILE} -p {project} ps --all --format json {service}",
         cwd=cwd,
         shell=True,
         capture_output=True,
@@ -69,9 +70,41 @@ def _ready_state(project=DEFAULT_PROJECT):
             rows.extend(parsed if isinstance(parsed, list) else [parsed])
         except json.JSONDecodeError:
             pass
-    for r in rows:
+    return rows
+
+
+def _ready_state(project=DEFAULT_PROJECT):
+    """`(state, exit_code)` of the compose `ready` service, or `(None, None)`."""
+    for r in _compose_rows(project, "ready"):
         return r.get("State"), r.get("ExitCode")
     return None, None
+
+
+def wait_for_stack(project=DEFAULT_PROJECT, timeout_s=300):
+    """Wait until every container of the project is running (and healthy,
+    where it has a health check) or has exited 0. False when one exited with
+    another code, is unhealthy, or the time is up. For a subset of services,
+    where there is no `ready` service to ask (BROKKR-T-0330)."""
+    import time
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        rows = _compose_rows(project)
+        settled = bool(rows)
+        for r in rows:
+            state, health, code = r.get("State"), r.get("Health", ""), r.get("ExitCode", 0)
+            if state == "exited" and code != 0:
+                return False
+            if health == "unhealthy":
+                return False
+            if state == "exited" and code == 0:
+                continue
+            if state == "running" and health in ("", "healthy"):
+                continue
+            settled = False
+        if settled:
+            return True
+        time.sleep(5)
+    return False
 
 
 def wait_for_ready(project=DEFAULT_PROJECT, timeout_s=900):
@@ -116,7 +149,8 @@ def docker_up(services=None, project=DEFAULT_PROJECT):
         _say("Waiting for the ready service (health checks, Tekton, Shipwright)...")
         ok = wait_for_ready(project)
     else:
-        ok = result.returncode == 0
+        _say("Waiting for the services to be healthy...")
+        ok = wait_for_stack(project)
     if not ok:
         _say("")
         _say(f"docker compose up failed (exit {result.returncode}). The services and their states:")
