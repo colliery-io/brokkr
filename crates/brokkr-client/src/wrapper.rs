@@ -487,7 +487,7 @@ impl BrokkrClient {
                 "no tenant named \"{wanted}\""
             ))),
             [id] => Ok(*id),
-            _ => Err(ambiguous_name("generator", wanted, &ids)),
+            _ => Err(ambiguous_name("tenant", wanted, &ids)),
         }
     }
 
@@ -1302,6 +1302,19 @@ mod tests {
         let msg = err.to_string();
         assert!(msg.contains("2 agents have the name \"twin\""), "{msg}");
         assert!(msg.contains(&Uuid::from_u128(2).to_string()), "{msg}");
+    }
+
+    #[test]
+    fn ambiguous_tenant_name_says_tenants() {
+        let ids = [Uuid::from_u128(1), Uuid::from_u128(2)];
+        let msg = ambiguous_name("tenant", "acme", &ids).to_string();
+        assert!(
+            msg.contains(&format!(
+                "2 tenants have the name \"acme\". Give the id instead: {}, {}",
+                ids[0], ids[1]
+            )),
+            "{msg}"
+        );
     }
 
 }
