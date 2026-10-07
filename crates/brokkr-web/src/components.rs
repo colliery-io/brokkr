@@ -34,6 +34,44 @@ pub fn poll(f: impl Fn() + 'static, every: std::time::Duration) {
     }
 }
 
+/// The text of a panel that waits for a new session.
+pub const WAITING_FOR_SESSION: &str = "Waiting for a new session.";
+
+/// The failed state of a panel. Every view uses this, not Aurora's
+/// `ErrorState` directly.
+///
+/// While the broker refuses the console's token (session `Expired` or
+/// `Refused`), the shell banner says what happened and offers a reload. A 401
+/// or 403 in a panel is the same refusal, so the panel shows a short neutral
+/// state, not a red "Not authorized" with the raw broker body. Any other error
+/// (404, 5xx, network), or a 401/403 while the session works, shows Aurora's
+/// `ErrorState` with its retry. The session can change after the error (for
+/// example, a refused token that later works), so the choice is reactive.
+#[component]
+pub fn PanelError(
+    error: aurora_leptos::tokens::ApiError,
+    #[prop(optional)] on_retry: Option<Callback<()>>,
+) -> impl IntoView {
+    use aurora_leptos::components::{Empty, ErrorState};
+    let session = crate::api::session();
+    move || {
+        if session.get().quiets(&error) {
+            view! {
+                <div class="brk-panel-wait" role="status">
+                    <Empty message=WAITING_FOR_SESSION hint="Reload the page." />
+                </div>
+            }
+            .into_any()
+        } else {
+            let error = error.clone();
+            match on_retry {
+                Some(cb) => view! { <ErrorState error=error on_retry=cb /> }.into_any(),
+                None => view! { <ErrorState error=error /> }.into_any(),
+            }
+        }
+    }
+}
+
 /// A heartbeat is fresh (its status dot pulses) under this many seconds.
 pub const FRESH_BEAT_SECS: i64 = 8;
 

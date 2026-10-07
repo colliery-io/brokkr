@@ -4,7 +4,7 @@
 //! that panel renders a note and the history still shows.
 
 use crate::api;
-use crate::components::{sev, DOCS};
+use crate::components::{sev, PanelError, DOCS};
 use crate::models::WorkOrderLogEntry;
 use aurora_leptos::components::*;
 use aurora_leptos::data::{DetailList, KeyValue};
@@ -93,7 +93,7 @@ pub fn WorkOrdersView() -> impl IntoView {
             {move || match data.get() {
                 None => view! { <Loading label="loading history" /> }.into_any(),
                 Some(Err(e)) => view! {
-                    <ErrorState error=e on_retry=Callback::new(move |_| { data.refetch(); }) />
+                    <PanelError error=e on_retry=Callback::new(move |_| { data.refetch(); }) />
                 }
                 .into_any(),
                 Some(Ok(log)) if log.is_empty() => {

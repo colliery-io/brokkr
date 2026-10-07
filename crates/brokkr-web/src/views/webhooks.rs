@@ -5,7 +5,7 @@
 //! broker enhancement (logged on the task).
 
 use crate::api;
-use crate::components::{sev, DOCS};
+use crate::components::{sev, PanelError, DOCS};
 use crate::models::WebhookSummary;
 use aurora_leptos::components::*;
 use aurora_leptos::data::{DetailList, KeyValue, SectionLabel};
@@ -45,7 +45,7 @@ pub fn WebhooksView() -> impl IntoView {
         {move || match data.get() {
             None => view! { <Loading label="loading webhooks" /> }.into_any(),
             Some(Err(e)) => view! {
-                <ErrorState error=e on_retry=Callback::new(move |_| { data.refetch(); }) />
+                <PanelError error=e on_retry=Callback::new(move |_| { data.refetch(); }) />
             }
             .into_any(),
             Some(Ok(subs)) if subs.is_empty() => {

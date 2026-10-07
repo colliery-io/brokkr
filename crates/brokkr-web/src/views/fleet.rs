@@ -17,7 +17,7 @@
 
 use crate::api;
 use crate::components::{
-    agent_events_href, same_agent, sev, stack_href, LiveDot, DOCS, FRESH_BEAT_SECS,
+    agent_events_href, same_agent, sev, stack_href, LiveDot, PanelError, DOCS, FRESH_BEAT_SECS,
 };
 use crate::models::{DiagEvent, DiagnosticData, DiagnosticOutcome, FleetAgentRecord, PodStatus};
 use crate::views::ago;
@@ -295,7 +295,7 @@ pub fn FleetView() -> impl IntoView {
         {move || match data.get() {
             None => view! { <Loading label="loading fleet" /> }.into_any(),
             Some(Err(e)) => view! {
-                <ErrorState error=e on_retry=Callback::new(move |_| { data.refetch(); }) />
+                <PanelError error=e on_retry=Callback::new(move |_| { data.refetch(); }) />
             }
             .into_any(),
             Some(Ok(agents)) if agents.is_empty() => {
@@ -641,7 +641,7 @@ pub fn FleetView() -> impl IntoView {
                                     Some(Some(Err(e))) => view! {
                                         <Stack gap="sm">
                                             {heading("diagnostic result")}
-                                            <ErrorState error=e on_retry=recheck />
+                                            <PanelError error=e on_retry=recheck />
                                         </Stack>
                                     }.into_any(),
                                     Some(Some(Ok(d))) => {

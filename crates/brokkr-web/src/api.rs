@@ -106,6 +106,20 @@ impl Session {
             (state, _) => state,
         }
     }
+
+    /// Whether a panel shows `error` as a quiet wait, not as an error.
+    ///
+    /// While the broker refuses the token (`Refused` or `Expired`), the shell
+    /// banner already says what happened and that a reload is the fix. A 401
+    /// or 403 in a panel is the same refusal, so the panel must not repeat it
+    /// as a red "Not authorized" with the raw broker body. Other errors (404,
+    /// 5xx, network) are not caused by the token and keep the error state.
+    pub fn quiets(self, error: &ApiError) -> bool {
+        match error {
+            ApiError::Http { status, .. } => self.refused() && matches!(status, 401 | 403),
+            ApiError::Network | ApiError::Unknown(_) => false,
+        }
+    }
 }
 
 thread_local! {
@@ -119,6 +133,19 @@ thread_local! {
 /// Make every later request with the injected token update `signal`.
 pub fn watch_session(signal: leptos::prelude::RwSignal<Session>) {
     SESSION.with(|cell| cell.set(Some(signal)));
+}
+
+/// The shell's session signal, as [`watch_session`] registered it. Before the
+/// shell registers it, the session is always `Unknown`.
+///
+/// A panel reads this, not a Leptos context: the shell registers the signal
+/// once for the fetch path, and the panels read the same registration, so the
+/// session state has one source.
+pub fn session() -> leptos::prelude::Signal<Session> {
+    SESSION.with(|cell| match cell.get() {
+        Some(signal) => signal.into(),
+        None => leptos::prelude::Signal::stored(Session::Unknown),
+    })
 }
 
 /// Feed one response status to the session signal, if the shell set one.
@@ -528,6 +555,35 @@ pub async fn set_agent_status(
 #[cfg(test)]
 mod tests {
     use super::Session;
+    use aurora_leptos::tokens::ApiError;
+
+    fn http(status: u16) -> ApiError {
+        ApiError::Http {
+            status,
+            message: r#"{"code":"unauthorized","message":""}"#.to_string(),
+            code: Some("unauthorized".to_string()),
+        }
+    }
+
+    #[test]
+    fn a_refused_session_quiets_401_and_403_only() {
+        for session in [Session::Expired, Session::Refused] {
+            assert!(session.quiets(&http(401)));
+            assert!(session.quiets(&http(403)));
+            assert!(!session.quiets(&http(404)));
+            assert!(!session.quiets(&http(500)));
+            assert!(!session.quiets(&ApiError::Network));
+        }
+    }
+
+    #[test]
+    fn a_working_session_quiets_nothing() {
+        for session in [Session::Unknown, Session::Valid] {
+            assert!(!session.quiets(&http(401)));
+            assert!(!session.quiets(&http(403)));
+            assert!(!session.quiets(&http(500)));
+        }
+    }
 
     #[test]
     fn a_refusal_after_a_success_expires_the_session() {

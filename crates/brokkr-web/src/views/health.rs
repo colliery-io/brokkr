@@ -2,7 +2,7 @@
 //! WS connections panel (`GET /api/v1/admin/ws/connections`).
 
 use crate::api;
-use crate::components::{agent_href, agent_name};
+use crate::components::{agent_href, agent_name, PanelError};
 use crate::models::WsConnectionInfo;
 use aurora_leptos::components::*;
 use aurora_leptos::data::{DetailList, KeyValue, StatTile};
@@ -53,7 +53,7 @@ pub fn BrokerHealthView() -> impl IntoView {
             {move || match metrics.get() {
                 None => view! { <Loading label="loading metrics" /> }.into_any(),
                 Some(Err(e)) => view! {
-                    <ErrorState error=e on_retry=Callback::new(move |_| { metrics.refetch(); }) />
+                    <PanelError error=e on_retry=Callback::new(move |_| { metrics.refetch(); }) />
                 }
                 .into_any(),
                 Some(Ok(text)) => {
@@ -77,7 +77,7 @@ pub fn BrokerHealthView() -> impl IntoView {
                 {move || match conns.get() {
                     None => view! { <Loading label="loading connections" /> }.into_any(),
                     Some(Err(e)) => view! {
-                        <ErrorState error=e on_retry=Callback::new(move |_| { conns.refetch(); }) />
+                        <PanelError error=e on_retry=Callback::new(move |_| { conns.refetch(); }) />
                     }
                     .into_any(),
                     Some(Ok(r)) if r.connections.is_empty() => view! {

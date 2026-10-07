@@ -168,7 +168,7 @@ The repository also contains `examples/ui-slim`, a small React application. It i
 
 > The broker restarted, or this page reached a different replica. Reload to get a new session.
 
-The indicator in the top bar shows **session expired**. The views below the banner show "Not authorized".
+The indicator in the top bar shows **session expired**. The panels below the banner show "Waiting for a new session." and do not show their data. A panel that fails for a different reason (for example, the broker answers 500) shows its own error and a **Retry** button.
 
 **Cause.** The page holds the read-only credential of the broker process that served it. The broker keeps that credential in memory only. When the broker restarts, it makes a new credential, and the broker refuses the old one with `401 Unauthorized`. If you run more than one broker replica, each replica has its own credential. A request that a load balancer sends to a different replica is refused in the same way.
 
@@ -185,7 +185,7 @@ The banner shows only after a request succeeded. If the first requests are refus
 
 > The broker refused the token of this console. Reload the page. If this does not help, open the console directly at the address of one broker. Each broker process gives a different token to the page that it serves.
 
-The indicator in the top bar shows **token refused**. The views below the banner show "Not authorized".
+The indicator in the top bar shows **token refused**. The panels below the banner show "Waiting for a new session." and do not show their data. A panel that fails for a different reason (for example, the broker answers 500) shows its own error and a **Retry** button.
 
 **Cause.** The broker answered the first requests of the console with `401 Unauthorized` or `403 Forbidden`, and no request succeeded. The broker puts the read-only credential of its process into the page that it serves. These are the usual causes:
 
