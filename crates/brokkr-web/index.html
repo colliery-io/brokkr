@@ -7,7 +7,7 @@
     <title>Brokkr · Operator Console</title>
     <!-- Aurora THEME_INIT_SCRIPT: sets data-theme from the stored choice before
          the first paint. A test (tests/theme.rs) keeps it equal to the constant. -->
-    <script>(function(){try{var t=localStorage.getItem("aurora-theme");if(t==="light"||t==="dark"){var d=document.documentElement;d.setAttribute("data-theme",t);d.style.colorScheme=t;}}catch(e){}})();</script>
+    <script>(function(){try{var t=localStorage.getItem("aurora-theme");if(t==="light"||t==="dark"||t==="hyper"){var d=document.documentElement;d.setAttribute("data-theme",t);if(t!=="hyper")d.style.colorScheme=t;}}catch(e){}})();</script>
     <!-- Aurora's CSS is injected at runtime by <AuroraStyles/> (see app.rs).
          The console's own few classes, all on Aurora tokens: -->
     <link data-trunk rel="css" href="style/brokkr.css" />
