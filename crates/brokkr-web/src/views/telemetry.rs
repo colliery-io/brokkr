@@ -5,7 +5,7 @@
 //! answer (BROKKR-T-0338). REST poll every 5 s.
 
 use crate::api;
-use crate::components::{agent_href, agent_name, same_agent, sev};
+use crate::components::{agent_href, agent_name, same_agent, sev, PanelError};
 use crate::models::{AgentEventDto, RetentionInfo};
 use aurora_leptos::components::*;
 use aurora_leptos::data::{
@@ -142,7 +142,7 @@ pub fn TelemetryView() -> impl IntoView {
                     {move || match events.get() {
                         None => view! { <Loading label="loading events" /> }.into_any(),
                         Some(Err(e)) => view! {
-                            <ErrorState error=e on_retry=Callback::new(move |_| { events.refetch(); }) />
+                            <PanelError error=e on_retry=Callback::new(move |_| { events.refetch(); }) />
                         }
                         .into_any(),
                         Some(Ok(evs)) => {
@@ -237,7 +237,7 @@ pub fn TelemetryView() -> impl IntoView {
                         }
                         .into_any(),
                         Some(Some(Err(e))) => view! {
-                            <ErrorState error=e on_retry=Callback::new(move |_| { kube.refetch(); }) />
+                            <PanelError error=e on_retry=Callback::new(move |_| { kube.refetch(); }) />
                         }
                         .into_any(),
                         Some(Some(Ok(h))) if h.events.is_empty() => view! {
@@ -295,7 +295,7 @@ pub fn TelemetryView() -> impl IntoView {
                         }
                         .into_any(),
                         Some(Some(Err(e))) => view! {
-                            <ErrorState error=e on_retry=Callback::new(move |_| { logs.refetch(); }) />
+                            <PanelError error=e on_retry=Callback::new(move |_| { logs.refetch(); }) />
                         }
                         .into_any(),
                         Some(Some(Ok(h))) => view! {

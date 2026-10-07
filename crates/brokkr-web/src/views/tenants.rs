@@ -15,7 +15,7 @@
 //! credential store at all — BROKKR-T-0320 removed the one it used to have.
 
 use crate::api;
-use crate::components::sev;
+use crate::components::{sev, PanelError};
 use crate::models::Generator;
 use aurora_leptos::components::*;
 use aurora_leptos::data::{DetailList, KeyValue};
@@ -132,7 +132,7 @@ pub fn TenantsView() -> impl IntoView {
             {move || match data.get() {
                 None => view! { <Loading label="loading tenants" /> }.into_any(),
                 Some(Err(e)) => view! {
-                    <ErrorState error=e on_retry=Callback::new(move |_| { data.refetch(); }) />
+                    <PanelError error=e on_retry=Callback::new(move |_| { data.refetch(); }) />
                 }
                 .into_any(),
                 Some(Ok(gens)) if gens.is_empty() => view! {

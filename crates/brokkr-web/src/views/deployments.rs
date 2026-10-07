@@ -5,7 +5,7 @@
 //! fetched when the drawer opens, not on a poll.
 
 use crate::api;
-use crate::components::{agent_href, sev, DOCS};
+use crate::components::{agent_href, sev, PanelError, DOCS};
 use crate::models::{FleetAgentRecord, Stack};
 use aurora_leptos::components::*;
 use aurora_leptos::data::{DetailList, KeyValue, SectionLabel};
@@ -100,7 +100,7 @@ pub fn DeploymentsView() -> impl IntoView {
         {move || match data.get() {
             None => view! { <Loading label="loading stacks" /> }.into_any(),
             Some(Err(e)) => view! {
-                <ErrorState error=e on_retry=Callback::new(move |_| { data.refetch(); }) />
+                <PanelError error=e on_retry=Callback::new(move |_| { data.refetch(); }) />
             }
             .into_any(),
             Some(Ok(stacks)) if stacks.is_empty() => {

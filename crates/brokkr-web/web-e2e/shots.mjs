@@ -243,6 +243,8 @@ const EMPTY_SHELL = { "/fleet": [], "/agent-events": [], "/work-orders": [], "/s
 const EXPIRED_BANNER = "Reload to get a new session.";
 const REFUSED_BANNER = "The broker refused the token of this console.";
 const BANNERS = [EXPIRED_BANNER, REFUSED_BANNER];
+// The neutral state of a panel under a session banner (src/components.rs).
+const WAITING = "Waiting for a new session.";
 
 const SCENES = [
   // `settle` waits for a second /metrics poll, so the throughput shows a rate.
@@ -360,6 +362,11 @@ const SCENES = [
   // and there is no banner.
   { name: "session-broker-unreachable", expire: "abort", expire_at_load: true, expect_net: true,
     banner: null, indicator: "broker unreachable" },
+  // An ordinary failure (BROKKR-T-0347): a 500 is not a refused token, so the
+  // panel keeps Aurora's error state with its Retry button. `assert_error` is
+  // the title of that error state.
+  { name: "panel-server-error", nav: "Webhooks", expect_http: [500], assert_error: "Something went wrong",
+    mocks: { "/webhooks": { __status: 500, code: "internal", message: "database unavailable" } } },
 ];
 
 // ---- driver --------------------------------------------------------------
@@ -453,7 +460,9 @@ await page.route("**/api/v1/**", (route) => {
     // the rejected-PAK scene needs a 403).
     const body = MOCKS[key];
     const status = body && body.__status ? body.__status : 200;
-    return route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
+    // `__status` is for the mock only; the broker body does not carry it.
+    const sent = body && body.__status ? { ...body, __status: undefined } : body;
+    return route.fulfill({ status, contentType: "application/json", body: JSON.stringify(sent) });
   }
   return route.fulfill({
     status: 404,
@@ -461,6 +470,15 @@ await page.route("**/api/v1/**", (route) => {
     body: JSON.stringify({ code: "not_found", message: `no mock for ${suffix}` }),
   });
 });
+
+/// How many elements with exactly `text` are visible.
+async function visibleCount(text) {
+  let n = 0;
+  for (const el of await page.getByText(text, { exact: true }).all()) {
+    if (await el.isVisible()) n++;
+  }
+  return n;
+}
 
 /// The page header's title, or "" if it is not rendered yet.
 async function headerTitle() {
@@ -583,6 +601,28 @@ for (const s of SCENES.filter((x) => !ONLY || ONLY.test(x.name))) {
       errs.push(`[assert] ${s.name}: ${total} session banner(s), want ${want}; "${s.indicator}" shown ${shown}x`);
     } else {
       console.log(`  assert: ${want} session banner, indicator "${s.indicator}" ✓`);
+    }
+  }
+  // Under a session banner, a panel that got 401/403 waits quietly: no
+  // "Not authorized" with the raw broker body (BROKKR-T-0347).
+  if (s.expire && s.banner) {
+    const raw = await visibleCount("Not authorized");
+    const waiting = await visibleCount(WAITING);
+    if (raw !== 0 || waiting < 1) {
+      errs.push(`[assert] ${s.name}: "Not authorized" shown ${raw}x, "${WAITING}" shown ${waiting}x`);
+    } else {
+      console.log(`  assert: no "Not authorized", ${waiting} panel(s) wait for a new session ✓`);
+    }
+  }
+  // Any other error keeps Aurora's error state and its Retry.
+  if (s.assert_error) {
+    const title = await visibleCount(s.assert_error);
+    const retry = await page.getByRole("button", { name: "Retry" }).count();
+    const waiting = await visibleCount(WAITING);
+    if (title < 1 || retry < 1 || waiting !== 0) {
+      errs.push(`[assert] ${s.name}: "${s.assert_error}" shown ${title}x, Retry ${retry}x, waiting ${waiting}x`);
+    } else {
+      console.log(`  assert: "${s.assert_error}" with Retry, no waiting panel ✓`);
     }
   }
   // Reload against a healthy broker: the page gets a new token, the banner goes.

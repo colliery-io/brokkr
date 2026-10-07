@@ -8,7 +8,7 @@
 //! the Deployments view shows it on demand (BROKKR-T-0328).
 
 use crate::api;
-use crate::components::{agent_href, agent_name, sev, DOCS};
+use crate::components::{agent_href, agent_name, sev, PanelError, DOCS};
 use crate::models::FleetAgentRecord;
 use aurora_leptos::components::*;
 use aurora_leptos::data::{FeedList, FeedRow, Segment, SegmentedBar, Sparkline, StatTile};
@@ -294,7 +294,7 @@ pub fn OverviewView() -> impl IntoView {
                     <Panel title="Live activity">
                         {move || match events.get() {
                             None => view! { <Loading label="" /> }.into_any(),
-                            Some(Err(e)) => view! { <ErrorState error=e on_retry=Callback::new(move |_| { events.refetch(); }) /> }.into_any(),
+                            Some(Err(e)) => view! { <PanelError error=e on_retry=Callback::new(move |_| { events.refetch(); }) /> }.into_any(),
                             Some(Ok(evs)) if evs.is_empty() => view! {
                                 <Empty
                                     message="No activity yet."
@@ -327,7 +327,7 @@ pub fn OverviewView() -> impl IntoView {
                     <Panel title="Work orders">
                         {move || match orders.get() {
                             None => view! { <Loading label="" /> }.into_any(),
-                            Some(Err(e)) => view! { <ErrorState error=e on_retry=Callback::new(move |_| { orders.refetch(); }) /> }.into_any(),
+                            Some(Err(e)) => view! { <PanelError error=e on_retry=Callback::new(move |_| { orders.refetch(); }) /> }.into_any(),
                             Some(Ok(wos)) => {
                                 let act: Vec<_> = wos.into_iter().filter(|w| w.is_active()).collect();
                                 if act.is_empty() {

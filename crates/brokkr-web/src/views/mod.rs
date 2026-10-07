@@ -1,5 +1,5 @@
 //! Operator-console views. Each is a read-only surface bound to a broker API and
-//! wrapped in Aurora `Loading`/`Empty`/`ErrorState`.
+//! wrapped in Aurora `Loading`/`Empty` and the local `PanelError`.
 
 pub mod deployments;
 pub mod fleet;
