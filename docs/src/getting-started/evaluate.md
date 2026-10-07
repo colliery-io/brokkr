@@ -60,13 +60,11 @@ List registered agents — the pre-created agent should already be there.
 brokkr agent list
 ```
 
-You should see `brokkr-integration-test-agent`. A freshly registered agent starts with `status` `INACTIVE` — the broker only hands it deployment objects once you mark it `ACTIVE`. Until then, the agent log says so on each poll. Activate it, and save its ID for the next step:
+You should see `brokkr-integration-test-agent`. A freshly registered agent starts with `status` `INACTIVE` — the broker only hands it deployment objects once you mark it `ACTIVE`. Until then, the agent log says so on each poll. Activate it:
 
 ```bash
 # Activate the agent so it will pull and reconcile deployment objects
 brokkr agent activate brokkr-integration-test-agent
-
-export AGENT_ID=$(brokkr agent list | awk '$1 == "brokkr-integration-test-agent" {print $2}')
 ```
 
 The output should say that the agent `is ACTIVE`, meaning the agent will pull and reconcile what you target to it.
@@ -108,8 +106,8 @@ STACK_ID=$(curl -s -X POST http://localhost:3000/api/v1/stacks \
 
 # Register the agent with the admin-generator. An agent must be registered with a
 # generator before any stack that generator owns can be targeted at it — without
-# this, the next command fails with agent_not_registered.
-brokkr register --agent "$AGENT_ID" --generator "$GEN_ID"
+# this, the next command fails with agent_not_registered. Give each one by name.
+brokkr register --agent brokkr-integration-test-agent --generator admin-generator
 
 # Now target the stack at the agent so the agent receives the deployment.
 brokkr stack target evaluate brokkr-integration-test-agent
@@ -272,8 +270,6 @@ Create a stack, target the agent, and push a namespace through the broker.
 # Activate the agent so it will pull and reconcile deployment objects
 brokkr agent activate eval-agent
 
-export AGENT_ID=$(brokkr agent list | awk '$1 == "eval-agent" {print $2}')
-
 GEN_ID=$(curl -s http://localhost:3000/api/v1/generators \
   -H "Authorization: Bearer $ADMIN_PAK" \
   | jq -r '.[] | select(.name=="admin-generator") | .id')
@@ -286,7 +282,7 @@ STACK_ID=$(curl -s -X POST http://localhost:3000/api/v1/stacks \
 
 # Register the agent with the admin-generator before targeting it. Targeting a stack
 # at an agent that is not registered with the stack's generator fails with agent_not_registered.
-brokkr register --agent "$AGENT_ID" --generator "$GEN_ID"
+brokkr register --agent eval-agent --generator admin-generator
 
 brokkr stack target evaluate eval-agent
 

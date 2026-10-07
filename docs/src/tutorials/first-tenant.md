@@ -84,14 +84,17 @@ curl -s -X PUT "$BROKER/api/v1/agents/$AGENT_ID" \
 
 ### Step 3 (admin): Register the agent with the tenant
 
-Registration is the agent's consent to receive stacks from this tenant. Without it, the tenant's target in Step 6 fails with `agent_not_registered`. `brokkr register` takes ids, so get the agent id from the agent list first:
+Registration is the agent's consent to receive stacks from this tenant. Without it, the tenant's target in Step 6 fails with `agent_not_registered`. Give the agent and the tenant by name:
 
 ```bash
-AGENT_ID=$(brokkr --pak "$ADMIN_PAK" agent list | awk -v name="$AGENT_NAME" '$1 == name {print $2}')
-echo "Agent id: $AGENT_ID"
-
-brokkr --pak "$ADMIN_PAK" register --agent "$AGENT_ID" --generator "$TENANT_ID"
+brokkr --pak "$ADMIN_PAK" register --agent "$AGENT_NAME" --generator team-tutorial
 ```
+
+```
+registered agent "brokkr-integration-test-agent" (6b1f...) with tenant "team-tutorial" (e5fe...) (registration 0c7d...)
+```
+
+`brokkr --pak "$ADMIN_PAK" registrations --agent "$AGENT_NAME"` lists the tenants of the agent.
 
 <details>
 <summary>The same step with <code>curl</code></summary>
@@ -247,6 +250,10 @@ curl -s "$BROKER/api/v1/stacks/$STACK_ID/deployment-objects" \
 The agent's events and the stack's health are admin views. The admin sees them with:
 
 ```bash
+AGENT_ID=$(curl -s "$BROKER/api/v1/agents" \
+  -H "Authorization: Bearer $ADMIN_PAK" \
+  | jq -r --arg name "$AGENT_NAME" '.[] | select(.name==$name) | .id')
+
 curl -s "$BROKER/api/v1/agents/$AGENT_ID/events" \
   -H "Authorization: Bearer $ADMIN_PAK" | jq '.[0] | {event_type, status}'
 ```

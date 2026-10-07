@@ -60,7 +60,8 @@ enum Command {
     ///
     /// Agents usually register themselves when they start. Use this command to
     /// register an agent for it: for example, before the agent is live, or to
-    /// add a tenant. Requires an admin PAK. If the agent is already registered
+    /// add a tenant. Give the agent and the tenant by name or id. Requires an
+    /// admin PAK. If the agent is already registered
     /// with the tenant, the broker returns 409 `already_registered` and the
     /// command exits with status 1.
     Register(RegisterArgs),
@@ -69,10 +70,14 @@ enum Command {
     ///
     /// DESTRUCTIVE: the broker also removes the agent's targets for that
     /// tenant and notifies the agent, which then prunes the corresponding
-    /// Kubernetes resources on its next reconcile. Requires an admin PAK.
+    /// Kubernetes resources on its next reconcile. Give the agent and the
+    /// tenant by name or id. Requires an admin PAK.
     Deregister(RegisterArgs),
 
     /// List tenant registrations: for one agent or for one tenant.
+    ///
+    /// Give the agent or the tenant by name or id. A name lookup needs an
+    /// admin PAK. With an agent PAK or a tenant PAK, give the id.
     Registrations(RegistrationsArgs),
 
     /// Activate, pause, label and list agents. Give each agent by name or id.
@@ -86,27 +91,27 @@ enum Command {
 
 #[derive(Debug, Args)]
 struct RegisterArgs {
-    /// UUID of the agent to (de)register.
-    #[arg(long)]
-    agent: Uuid,
+    /// The name or the id of the agent to register or deregister.
+    #[arg(long, value_name = "NAME_OR_ID")]
+    agent: String,
 
-    /// UUID of the tenant to (de)register the agent with. The API calls a
-    /// tenant a generator.
-    #[arg(long)]
-    generator: Uuid,
+    /// The name or the id of the tenant. The API calls a tenant a generator.
+    #[arg(long, value_name = "NAME_OR_ID")]
+    generator: String,
 }
 
 #[derive(Debug, Args)]
 #[command(group(ArgGroup::new("subject").required(true).args(["agent", "generator"])))]
 struct RegistrationsArgs {
-    /// List the tenants this agent is registered with.
-    #[arg(long)]
-    agent: Option<Uuid>,
+    /// List the tenants this agent is registered with. Give the name or the
+    /// id of the agent.
+    #[arg(long, value_name = "NAME_OR_ID")]
+    agent: Option<String>,
 
-    /// List the agents registered with this tenant. The API calls a tenant a
-    /// generator.
-    #[arg(long)]
-    generator: Option<Uuid>,
+    /// List the agents registered with this tenant. Give the name or the id
+    /// of the tenant. The API calls a tenant a generator.
+    #[arg(long, value_name = "NAME_OR_ID")]
+    generator: Option<String>,
 }
 
 #[derive(Debug, Args)]
@@ -204,26 +209,55 @@ async fn apply(client: &BrokkrClient, args: ApplyArgs) -> Result<(), String> {
     Ok(())
 }
 
+/// Find the ids of the agent and the tenant of a register or deregister
+/// command. Each one is a name or an id.
+async fn resolve_pair(client: &BrokkrClient, args: &RegisterArgs) -> Result<(Uuid, Uuid), String> {
+    let agent = client
+        .resolve_agent_id(&args.agent)
+        .await
+        .map_err(|e| e.to_string())?;
+    let generator = client
+        .resolve_generator_id(&args.generator)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok((agent, generator))
+}
+
+/// Show a name-or-id argument with its id: `"edge-1" (<id>)` for a name,
+/// only the id for an id.
+fn shown(given: &str, id: Uuid) -> String {
+    if Uuid::parse_str(given).is_ok() {
+        id.to_string()
+    } else {
+        format!("\"{given}\" ({id})")
+    }
+}
+
 async fn register(client: &BrokkrClient, args: RegisterArgs) -> Result<(), String> {
+    let (agent, generator) = resolve_pair(client, &args).await?;
     let reg = client
-        .register_agent(args.generator, Some(args.agent))
+        .register_agent(generator, Some(agent))
         .await
         .map_err(|e| e.to_string())?;
     println!(
         "registered agent {} with tenant {} (registration {})",
-        reg.agent_id, reg.generator_id, reg.id
+        shown(&args.agent, reg.agent_id),
+        shown(&args.generator, reg.generator_id),
+        reg.id
     );
     Ok(())
 }
 
 async fn deregister(client: &BrokkrClient, args: RegisterArgs) -> Result<(), String> {
+    let (agent, generator) = resolve_pair(client, &args).await?;
     client
-        .deregister_agent(args.generator, Some(args.agent))
+        .deregister_agent(generator, Some(agent))
         .await
         .map_err(|e| e.to_string())?;
     println!(
         "deregistered agent {} from tenant {}",
-        args.agent, args.generator
+        shown(&args.agent, agent),
+        shown(&args.generator, generator)
     );
     println!(
         "note: the agent's targets for this tenant were removed; it will prune \
@@ -234,9 +268,14 @@ async fn deregister(client: &BrokkrClient, args: RegisterArgs) -> Result<(), Str
 
 async fn registrations(client: &BrokkrClient, args: RegistrationsArgs) -> Result<(), String> {
     // ArgGroup guarantees exactly one of --agent / --generator is set.
-    if let Some(agent) = args.agent {
+    if let Some(given) = args.agent {
+        let id = client
+            .resolve_agent_id(&given)
+            .await
+            .map_err(|e| e.to_string())?;
+        let agent = shown(&given, id);
         let regs = client
-            .list_agent_registrations(agent)
+            .list_agent_registrations(id)
             .await
             .map_err(|e| e.to_string())?;
         if regs.is_empty() {
@@ -247,9 +286,14 @@ async fn registrations(client: &BrokkrClient, args: RegistrationsArgs) -> Result
                 println!("  tenant {}  (registered {})", r.generator_id, r.registered_at);
             }
         }
-    } else if let Some(generator) = args.generator {
+    } else if let Some(given) = args.generator {
+        let id = client
+            .resolve_generator_id(&given)
+            .await
+            .map_err(|e| e.to_string())?;
+        let generator = shown(&given, id);
         let regs = client
-            .list_generator_registered_agents(generator)
+            .list_generator_registered_agents(id)
             .await
             .map_err(|e| e.to_string())?;
         if regs.is_empty() {
@@ -299,8 +343,31 @@ mod tests {
     }
 
     #[test]
-    fn malformed_uuid_is_rejected() {
-        assert!(Cli::try_parse_from(["brokkr", "register", "--agent", "nope", "--generator", NIL])
-            .is_err());
+    fn registration_flags_take_a_name_or_an_id() {
+        for (command, tenant) in [("register", "acme"), ("deregister", NIL)] {
+            let args = [
+                "brokkr",
+                command,
+                "--agent",
+                "edge-1",
+                "--generator",
+                tenant,
+            ];
+            let cli = Cli::try_parse_from(args).unwrap();
+            let (Command::Register(a) | Command::Deregister(a)) = cli.command else {
+                panic!("expected register or deregister");
+            };
+            assert_eq!(a.agent, "edge-1");
+            assert_eq!(a.generator, tenant);
+        }
+        assert!(Cli::try_parse_from(["brokkr", "registrations", "--agent", "edge-1"]).is_ok());
+        assert!(Cli::try_parse_from(["brokkr", "registrations", "--generator", "acme"]).is_ok());
+    }
+
+    #[test]
+    fn an_id_is_shown_alone_and_a_name_with_its_id() {
+        let id = Uuid::from_u128(7);
+        assert_eq!(shown(&id.to_string(), id), id.to_string());
+        assert_eq!(shown("edge-1", id), format!("\"edge-1\" ({id})"));
     }
 }
