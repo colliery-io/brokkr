@@ -87,7 +87,7 @@ def test_manifest_apply(admin_client, base_url, admin_pak, tmp_path):
         # Without a generator, an admin is refused; the error names the flag.
         with pytest.raises(BrokkrError, match="--generator"):
             await admin_wrapper.apply(admin_stack, tmp_path)
-        with pytest.raises(BrokkrError, match="no generator named"):
+        with pytest.raises(BrokkrError, match="no tenant named"):
             await admin_wrapper.apply(admin_stack, tmp_path, generator="no-such-generator")
         # A tenant cannot apply for another tenant; its own name is fine.
         with pytest.raises(BrokkrError, match="cannot apply for"):

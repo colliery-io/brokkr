@@ -463,4 +463,28 @@ describe("BrokkrClient.apply generator resolution", () => {
       "belongs to another generator",
     );
   });
+
+  it("an unknown tenant name is refused, and the error says tenant", async () => {
+    const { fetch: scripted } = scriptedFetch([
+      { status: 200, body: { admin: true, readonly: false } },
+      { status: 200, body: [{ id: generatorId, name: "acme" }] },
+    ]);
+    vi.stubGlobal("fetch", scripted);
+    const c = new BrokkrClient({ baseUrl, token: "bk_admin" });
+    await expect(c.apply("payments", manifests(), [], "globex")).rejects.toThrow(
+      'no tenant named "globex"',
+    );
+  });
+
+  it("an unknown tenant id is refused, and the error says tenant", async () => {
+    const { fetch: scripted } = scriptedFetch([
+      { status: 200, body: { admin: true, readonly: false } },
+      { status: 404, body: { error: "generator_not_found", message: "not found" } },
+    ]);
+    vi.stubGlobal("fetch", scripted);
+    const c = new BrokkrClient({ baseUrl, token: "bk_admin" });
+    await expect(c.apply("payments", manifests(), [], generatorId)).rejects.toThrow(
+      `no tenant with id ${generatorId}`,
+    );
+  });
 });

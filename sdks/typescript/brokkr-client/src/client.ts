@@ -244,7 +244,7 @@ export class BrokkrClient {
         return g.id;
       } catch (e) {
         if (e instanceof BrokkrError && e.status === 404) {
-          throw new BrokkrError({ message: `no generator with id ${wanted}` });
+          throw new BrokkrError({ message: `no tenant with id ${wanted}` });
         }
         throw e;
       }
@@ -254,7 +254,7 @@ export class BrokkrClient {
     );
     const match = generators.find((g) => g.name === wanted);
     if (!match) {
-      throw new BrokkrError({ message: `no generator named "${wanted}"` });
+      throw new BrokkrError({ message: `no tenant named "${wanted}"` });
     }
     return match.id;
   }

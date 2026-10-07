@@ -351,3 +351,27 @@ async def test_apply_refuses_a_stack_owned_by_another_generator(
     c = BrokkrClient("http://localhost:3000/api/v1", token="bk_admin")
     with pytest.raises(BrokkrError, match="belongs to another generator"):
         await c.apply("payments", _manifests(tmp_path), generator=str(GENERATOR_ID))
+
+
+async def test_apply_admin_unknown_tenant_name_says_tenant(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _patch(monkeypatch, "auth.verify_pak", _resp(200, SimpleNamespace(admin=True, generator=None)))
+    _patch(
+        monkeypatch,
+        "generators.list_generators",
+        _resp(200, [SimpleNamespace(id=GENERATOR_ID, name="acme")]),
+    )
+    c = BrokkrClient("http://localhost:3000/api/v1", token="bk_admin")
+    with pytest.raises(BrokkrError, match='no tenant named "globex"'):
+        await c.apply("payments", _manifests(tmp_path), generator="globex")
+
+
+async def test_apply_admin_unknown_tenant_id_says_tenant(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _patch(monkeypatch, "auth.verify_pak", _resp(200, SimpleNamespace(admin=True, generator=None)))
+    _patch(monkeypatch, "generators.get_generator", _resp(404, None))
+    c = BrokkrClient("http://localhost:3000/api/v1", token="bk_admin")
+    with pytest.raises(BrokkrError, match=f"no tenant with id {GENERATOR_ID}"):
+        await c.apply("payments", _manifests(tmp_path), generator=str(GENERATOR_ID))

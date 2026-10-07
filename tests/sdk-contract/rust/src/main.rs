@@ -757,7 +757,7 @@ async fn scenario_manifest_apply(base_url: &str, admin_pak: &str) -> Result<()> 
     }
     // An unknown generator is refused.
     match admin.apply_for_generator("no-such-generator", &admin_stack, dir.path(), &[]).await {
-        Err(e) if e.to_string().contains("no generator named") => {}
+        Err(e) if e.to_string().contains("no tenant named") => {}
         other => return Err(anyhow!("expected an unknown-generator error, got {other:?}")),
     }
     // A tenant cannot apply for another tenant; its own name is fine.
@@ -1199,7 +1199,7 @@ async fn registration_by_name_cli_checks(
     expect_cli(
         admin(&["registrations", "--generator", "sdk-contract-no-such-tenant"])?,
         false,
-        "no generator named",
+        "no tenant named",
     )?;
 
     // Two agents with the same name: the command stops and lists both ids.
