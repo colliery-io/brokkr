@@ -158,6 +158,8 @@ The repository also contains `examples/ui-slim`, a small React application. It i
 
 **The console says the session expired.** See [The Console Says the Session Expired](#the-console-says-the-session-expired) below.
 
+**The console says the broker refused its token.** See [The Console Says the Broker Refused Its Token](#the-console-says-the-broker-refused-its-token) below.
+
 **An action you expected is refused with 403.** The console authenticates read-only by design. Perform the change with an admin PAK through the [CLI](../reference/cli.md), an [SDK](./sdks/README.md), or the API.
 
 ### The Console Says the Session Expired
@@ -175,7 +177,30 @@ The indicator in the top bar shows **session expired**. The views below the bann
 1. Click **Reload** in the banner, or reload the page in the browser. The page then gets the credential of the broker that serves it.
 2. If the banner comes back when the broker did not restart, you have more than one replica behind a load balancer without session affinity. Enable session affinity (sticky sessions) on the load balancer, or send console traffic to one replica. See [Running More Than One Broker Replica](#running-more-than-one-broker-replica).
 
-The banner shows only after a request succeeded. If the first requests are refused, the console does not show the banner, and the indicator shows **broker unreachable**. In that case, examine the broker logs and the address you opened.
+The banner shows only after a request succeeded. If the first requests are refused, see [The Console Says the Broker Refused Its Token](#the-console-says-the-broker-refused-its-token).
+
+### The Console Says the Broker Refused Its Token
+
+**Symptom.** The console loads, but no data shows. A banner shows above the view:
+
+> The broker refused the token of this console. Reload the page. If this does not help, open the console directly at the address of one broker. Each broker process gives a different token to the page that it serves.
+
+The indicator in the top bar shows **token refused**. The views below the banner show "Not authorized".
+
+**Cause.** The broker answered the first requests of the console with `401 Unauthorized` or `403 Forbidden`, and no request succeeded. The broker puts the read-only credential of its process into the page that it serves. These are the usual causes:
+
+- A load balancer sent the page request to one replica and the API requests to a different replica. The other replica refuses the credential.
+- The page did not come from a broker. For example, a different web server or a development server served it. Then the page has no credential, and the broker refuses the requests with `401 Unauthorized`.
+- A proxy between the browser and the broker removes the `Authorization` header. The broker refuses a request without that header with `401 Unauthorized`.
+
+**Fix.**
+
+1. Click **Reload** in the banner, or reload the page in the browser. The broker does not let the browser cache the page, so the reload gets the current credential.
+2. If the banner comes back, open the console directly at the address of one broker, for example with `kubectl port-forward` as in [Step 1](#step-1-open-the-console). If the console then works, enable session affinity on the load balancer (see [Running More Than One Broker Replica](#running-more-than-one-broker-replica)), or make sure that the proxy keeps the `Authorization` header.
+
+If a later request succeeds, the banner goes away without a reload.
+
+If the broker does not answer at all, the console shows no banner, and the indicator shows **broker unreachable**. In that case, make sure that the broker runs, examine the broker logs, and examine the address that you opened.
 
 ## Related
 
