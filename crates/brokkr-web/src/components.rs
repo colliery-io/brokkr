@@ -49,6 +49,19 @@ pub fn LiveDot(#[prop(into)] color: String, live: bool) -> impl IntoView {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sev_maps_brokkr_statuses_to_hues() {
+        assert_eq!(sev("Healthy"), token::OK);
+        assert_eq!(sev("degraded"), token::GOLD);
+        assert_eq!(sev("FAILING"), token::BAD);
+        assert_eq!(sev("something-new"), token::MUTED);
+    }
+}
+
 /// The docs site, for the "next step" links of empty states.
 pub const DOCS: &str = "https://colliery-io.github.io/brokkr";
 
