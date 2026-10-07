@@ -2,10 +2,12 @@
 //! (`/agent-events`: Apply, Heartbeat, Reconcile). "Kube events" and "Pod
 //! logs" are per stack (`/stacks/:id/{events,logs}`): a selector above the
 //! tabs picks the stack, and the broker states the retention window on each
-//! answer (BROKKR-T-0338). REST poll every 5 s.
+//! answer (BROKKR-T-0338). REST poll every 5 s; the Pod logs tab also tails
+//! the stack's live stream (`crate::live`, BROKKR-T-0348).
 
 use crate::api;
-use crate::components::{agent_href, agent_name, same_agent, sev, PanelError};
+use crate::components::{agent_href, agent_name, same_agent, sev, LiveDot, PanelError};
+use crate::live::{Entry, LiveTail};
 use crate::models::{AgentEventDto, RetentionInfo};
 use aurora_leptos::components::*;
 use aurora_leptos::data::{
@@ -77,36 +79,79 @@ pub fn TelemetryView() -> impl IntoView {
             }
         }
     });
+    // The live tail of the Pod logs tab: open only while the tab shows a
+    // stack; a change of tab or stack, or leaving the view, closes it. Each
+    // time the stream opens, the history is read once more, so lines written
+    // while it was down are not lost; the buffer drops the duplicates.
+    let tail = LiveTail::new(Callback::new(move |_| logs.refetch()));
+    Effect::new(move |_| {
+        let id = stack.get();
+        let shown = tab.get() == "logs";
+        tail.follow((shown && !id.is_empty()).then_some(id));
+    });
+    Effect::new(move |_| {
+        if let Some(Some(Ok(h))) = logs.get() {
+            tail.lines.update(|b| b.merge_history(&h.lines));
+        }
+    });
     crate::components::poll(
         move || {
             events.refetch();
             kube.refetch();
-            logs.refetch();
+            // While the stream is live it brings every line, so the 5 s
+            // history read stops; it runs again while the stream is down.
+            if !tail.state.get_untracked().is_live() {
+                logs.refetch();
+            }
         },
         std::time::Duration::from_secs(5),
     );
     let selected = RwSignal::new(None::<AgentEventDto>);
     let open = RwSignal::new(false);
 
-    // The pod log lines, as Aurora's LogView wants them.
+    // The pod log lines (history, then live), as Aurora's LogView wants
+    // them. A gap is a row with a "gap" pill.
     let log_lines = Signal::derive(move || {
-        logs.get()
-            .flatten()
-            .and_then(|r| r.ok())
-            .map(|h| {
-                h.lines
-                    .iter()
-                    .map(|l| {
-                        let mut line = LogLine::new(format!("{}: {}", l.source(), l.line));
-                        if let Some(t) = l.clock() {
-                            line = line.time(t);
-                        }
-                        line
-                    })
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default()
+        tail.lines.with(|b| {
+            b.entries()
+                .map(|e| {
+                    let (line, clock) = match e {
+                        Entry::Line(l) => (
+                            LogLine::new(format!("{}: {}", l.source(), l.line)),
+                            l.clock(),
+                        ),
+                        Entry::Gap(g) => (
+                            LogLine::new(g.text()).level_color("gap", token::GOLD),
+                            g.clock(),
+                        ),
+                    };
+                    match clock {
+                        Some(t) => line.time(t),
+                        None => line,
+                    }
+                })
+                .collect::<Vec<_>>()
+        })
     });
+    let logs_ready = Memo::new(move |_| matches!(logs.get(), Some(Some(Ok(_)))));
+    // The state of the stream, next to the Pod logs title.
+    let live_state = move || {
+        let st = tail.state.get();
+        let hue = match st {
+            crate::live::LiveState::Live => token::OK,
+            crate::live::LiveState::Reconnecting { .. } | crate::live::LiveState::Polling => {
+                token::GOLD
+            }
+            _ => token::MUTED,
+        };
+        view! {
+            <Group gap="sm">
+                <LiveDot color=hue live=st.is_live() />
+                <span class="brk-live-state" data-live-state=st.label()>{st.label()}</span>
+                <span class="brk-meta">{st.hint()}</span>
+            </Group>
+        }
+    };
 
     view! {
         <Stack gap="md">
@@ -298,21 +343,31 @@ pub fn TelemetryView() -> impl IntoView {
                             <PanelError error=e on_retry=Callback::new(move |_| { logs.refetch(); }) />
                         }
                         .into_any(),
-                        Some(Some(Ok(h))) => view! {
-                            <Stack gap="sm">
-                                <Panel title="Pod logs">
-                                    <LogView
-                                        lines=log_lines
-                                        max_height="520px"
-                                        empty="No log lines for this stack in the retention window."
-                                        label="Pod logs"
-                                    />
-                                </Panel>
-                                <Retention info=h.retention.clone() />
-                            </Stack>
-                        }
-                        .into_any(),
+                        // The panel below shows the lines.
+                        Some(Some(Ok(_))) => ().into_any(),
                     }}
+                    // Outside the match: a history read (each 5 s while the
+                    // stream is down) must not make a new LogView, which would
+                    // lose the scroll position, and a frame callback of the
+                    // old one would then read its disposed node.
+                    <Show when=move || logs_ready.get()>
+                        <Stack gap="sm">
+                            <Panel title="Pod logs">
+                                {live_state}
+                                <LogView
+                                    lines=log_lines
+                                    max_height="520px"
+                                    empty="No log lines for this stack in the retention window."
+                                    label="Pod logs"
+                                />
+                            </Panel>
+                            {move || {
+                                logs.get().flatten().and_then(|r| r.ok()).map(|h| {
+                                    view! { <Retention info=h.retention /> }
+                                })
+                            }}
+                        </Stack>
+                    </Show>
                 </TabPanel>
             </Tabs>
         </Stack>

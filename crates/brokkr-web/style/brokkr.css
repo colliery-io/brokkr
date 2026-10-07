@@ -128,6 +128,8 @@
 .brk-note { font: 11px var(--font-mono); color: var(--faint); line-height: 1.5; }
 /* A secondary mono fact (a status word, a count, "3m ago"). */
 .brk-meta { font: 11px var(--font-mono); color: var(--muted); }
+/* The state of a live stream ("live", "reconnecting"), next to its dot. */
+.brk-live-state { font: 600 11px var(--font-mono); color: var(--fg-bright); letter-spacing: 0.04em; }
 /* A primary mono value in a row (an agent name, a pod path). */
 .brk-value { font: var(--fs-xs) var(--font-mono); color: var(--fg); }
 /* Body text in a panel or a callout. */
