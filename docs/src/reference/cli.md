@@ -309,15 +309,25 @@ On any error (no connection settings, malformed config, unreadable bundle, broke
 Registers an agent with a tenant for the agent. An agent must be registered with a tenant before any of the stacks of that tenant can target it. Agents normally self-register on startup (see [`brokkr-agent start`](#brokkr-agent-start)); use this to register an agent before it is live, or to add a tenant. Requires an admin PAK. Re-registering an already-registered pair returns `409 already_registered` and exits `1` (only the agent's own startup self-registration treats that as success).
 
 ```bash
-brokkr register --agent <agent-id> --generator <tenant-id>
+brokkr register --agent <NAME_OR_ID> --generator <NAME_OR_ID>
 ```
 
 **Flags:**
 
 | Flag | Required | Description |
 |------|----------|-------------|
-| `--agent <UUID>` | yes | The agent to register. |
-| `--generator <UUID>` | yes | The tenant to register it with (its generator id in the API). |
+| `--agent <NAME_OR_ID>` | yes | The agent to register, by name or id. |
+| `--generator <NAME_OR_ID>` | yes | The tenant to register it with, by name or id (the API calls a tenant a generator). |
+
+The CLI finds each name or id in the same way as `brokkr agent` and `brokkr stack`. An id is used as it is. A name is looked up in the agent list or the tenant list. If two agents have the same name (in different clusters), the command stops and lists their ids; give the id instead. For example:
+
+```bash
+brokkr register --agent prod-1 --generator payments-team
+```
+
+```
+registered agent "prod-1" (6b1f...) with tenant "payments-team" (e5fe...) (registration 0c7d...)
+```
 
 See [Generator Registration](../explanation/security-model.md#generator-registration-and-application-scopes) for the model and [Agent registration](../how-to/agent-registration.md) for the operational guide.
 
@@ -326,15 +336,17 @@ See [Generator Registration](../explanation/security-model.md#generator-registra
 Removes an agent's registration from a tenant. Requires an admin PAK.
 
 ```bash
-brokkr deregister --agent <agent-id> --generator <tenant-id>
+brokkr deregister --agent <NAME_OR_ID> --generator <NAME_OR_ID>
 ```
 
 **Flags:**
 
 | Flag | Required | Description |
 |------|----------|-------------|
-| `--agent <UUID>` | yes | The agent to deregister. |
-| `--generator <UUID>` | yes | The tenant to remove the agent from. |
+| `--agent <NAME_OR_ID>` | yes | The agent to deregister, by name or id. |
+| `--generator <NAME_OR_ID>` | yes | The tenant to remove the agent from, by name or id. |
+
+The lookup is the same as for [`brokkr register`](#brokkr-register).
 
 Destructive: the broker also removes the agent's `agent_targets` for the stacks of that tenant and pushes a target-changed frame to the agent, which prunes the corresponding Kubernetes resources on its next reconcile.
 
@@ -344,20 +356,22 @@ Lists the tenants that one agent is registered with, or the agents registered wi
 
 ```bash
 # Tenants an agent is registered with
-brokkr registrations --agent <agent-id>
+brokkr registrations --agent <NAME_OR_ID>
 
 # Agents registered with a tenant
-brokkr registrations --generator <tenant-id>
+brokkr registrations --generator <NAME_OR_ID>
 ```
 
 **Flags:**
 
 | Flag | Required | Description |
 |------|----------|-------------|
-| `--agent <UUID>` | one of¹ | List the tenant registrations of the agent. |
-| `--generator <UUID>` | one of¹ | List the registered agents of the tenant. |
+| `--agent <NAME_OR_ID>` | one of¹ | List the tenant registrations of the agent, given by name or id. |
+| `--generator <NAME_OR_ID>` | one of¹ | List the registered agents of the tenant, given by name or id. |
 
 ¹ Exactly one of `--agent` or `--generator` must be given (mutually exclusive).
+
+A name lookup reads the agent list or the tenant list. Only an admin PAK can read the tenant list. With an agent PAK or a tenant PAK, give the id. An id is used as it is, with no lookup.
 
 ### Day-zero commands: `brokkr agent` and `brokkr stack`
 

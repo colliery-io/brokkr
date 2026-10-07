@@ -477,11 +477,18 @@ impl BrokkrClient {
             };
         }
         let generators = self.inner.list_generators().send().await?.into_inner();
-        generators
-            .into_iter()
-            .find(|g| g.name == wanted)
+        let ids: Vec<Uuid> = generators
+            .iter()
+            .filter(|g| g.name == wanted)
             .map(|g| g.id)
-            .ok_or_else(|| BrokkrError::InvalidRequest(format!("no generator named \"{wanted}\"")))
+            .collect();
+        match ids.as_slice() {
+            [] => Err(BrokkrError::InvalidRequest(format!(
+                "no generator named \"{wanted}\""
+            ))),
+            [id] => Ok(*id),
+            _ => Err(ambiguous_name("generator", wanted, &ids)),
+        }
     }
 
     async fn apply_inner(
@@ -618,6 +625,26 @@ impl BrokkrClient {
             .send()
             .await?;
         Ok(())
+    }
+
+    /// The id of an agent, given by name or id. A UUID is used as it is,
+    /// with no lookup, so this works for each PAK that the registration
+    /// endpoints accept. A name is looked up with [`Self::find_agent`].
+    pub async fn resolve_agent_id(&self, agent: &str) -> Result<Uuid, BrokkrError> {
+        match Uuid::parse_str(agent) {
+            Ok(id) => Ok(id),
+            Err(_) => Ok(self.find_agent(agent).await?.id),
+        }
+    }
+
+    /// The id of a generator (a tenant), given by name or id. A UUID is used
+    /// as it is, with no lookup. A name is looked up in the generator list,
+    /// which only an admin PAK can read.
+    pub async fn resolve_generator_id(&self, generator: &str) -> Result<Uuid, BrokkrError> {
+        match Uuid::parse_str(generator) {
+            Ok(id) => Ok(id),
+            Err(_) => self.find_generator(generator).await,
+        }
     }
 
     /// List the generator scopes an agent is registered with.
@@ -887,14 +914,21 @@ fn pick_one<T>(
             "no {kind} has the name or id \"{wanted}\" (or this PAK cannot see it)"
         ))),
         1 => Ok(matches.remove(0)),
-        n => {
-            let ids: Vec<String> = matches.iter().map(|i| key(i).0.to_string()).collect();
-            Err(BrokkrError::InvalidRequest(format!(
-                "{n} {kind}s have the name \"{wanted}\". Give the id instead: {}",
-                ids.join(", ")
-            )))
+        _ => {
+            let ids: Vec<Uuid> = matches.iter().map(|i| key(i).0).collect();
+            Err(ambiguous_name(kind, wanted, &ids))
         }
     }
+}
+
+/// The error for a name that more than one item has. It lists their ids.
+fn ambiguous_name(kind: &str, wanted: &str, ids: &[Uuid]) -> BrokkrError {
+    let ids: Vec<String> = ids.iter().map(Uuid::to_string).collect();
+    BrokkrError::InvalidRequest(format!(
+        "{} {kind}s have the name \"{wanted}\". Give the id instead: {}",
+        ids.len(),
+        ids.join(", ")
+    ))
 }
 
 /// Outcome of [`BrokkrClient::apply`].

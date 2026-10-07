@@ -124,6 +124,10 @@ async fn main() -> ExitCode {
         "T-0333: day-zero commands via the brokkr CLI binary",
         scenario_day_zero_cli(&base_url, &admin_pak)
     );
+    run!(
+        "T-0344: register, registrations and deregister by name via the brokkr CLI binary",
+        scenario_registration_by_name_cli(&base_url, &admin_pak)
+    );
 
     println!("══════════════════════════════════════════════════════════════════");
     println!("📊 Results: {} passed, {} failed", passed, failed);
@@ -773,6 +777,7 @@ async fn scenario_manifest_apply(base_url: &str, admin_pak: &str) -> Result<()> 
 /// Objects that a day-zero scenario creates, so it can delete them after.
 struct DayZeroFixture {
     generator_id: Uuid,
+    generator_name: String,
     generator_pak: String,
     /// Registered with the generator, so stacks of the generator can target it.
     agent_id: Uuid,
@@ -837,6 +842,7 @@ async fn day_zero_fixture(admin: &BrokkrClient, prefix: &str) -> Result<DayZeroF
     let (agent_id, agent_name) = created.pop().expect("two agents");
     Ok(DayZeroFixture {
         generator_id,
+        generator_name,
         generator_pak: gen_resp.pak,
         agent_id,
         agent_name,
@@ -1122,6 +1128,118 @@ fn day_zero_cli_checks(
         .unwrap_or_default();
     if !ok || !row.contains("env:cli") {
         return Err(anyhow!("the stack list row is wrong: {row:?}"));
+    }
+    Ok(())
+}
+
+/// BROKKR-T-0344: `brokkr register`, `registrations` and `deregister` take
+/// the agent and the tenant by name, run as the real binary. The stray agent
+/// of the fixture is registered by name, listed by name, and deregistered by
+/// name. A twin of the stray agent (same name, other cluster) makes the name
+/// ambiguous, and the command must stop and list both ids.
+async fn scenario_registration_by_name_cli(base_url: &str, admin_pak: &str) -> Result<()> {
+    let cli = env::var("BROKKR_CLI").map_err(|_| {
+        anyhow!(
+            "BROKKR_CLI is not set. Run `angreal tests sdk-contract rust`, \
+             or set BROKKR_CLI to the path of the brokkr binary"
+        )
+    })?;
+    let admin = client(base_url, admin_pak)?;
+    let fx = day_zero_fixture(&admin, "sdk-contract-rust-regcli").await?;
+    let result = registration_by_name_cli_checks(&cli, &admin, base_url, admin_pak, &fx).await;
+    day_zero_cleanup(&admin, &fx).await;
+    result
+}
+
+async fn registration_by_name_cli_checks(
+    cli: &str,
+    admin_client: &BrokkrClient,
+    base_url: &str,
+    admin_pak: &str,
+    fx: &DayZeroFixture,
+) -> Result<()> {
+    let admin = |args: &[&str]| brokkr_cli(cli, base_url, admin_pak, args);
+    let stray = fx.stray_name.as_str();
+    let tenant = fx.generator_name.as_str();
+    let stray_id = fx.stray_id.to_string();
+
+    // The SDK resolves a name to the same id that the fixture created.
+    println!("  → resolve_agent_id / resolve_generator_id by name");
+    if admin_client.resolve_agent_id(stray).await? != fx.stray_id
+        || admin_client.resolve_generator_id(tenant).await? != fx.generator_id
+    {
+        return Err(anyhow!("a name resolved to the wrong id"));
+    }
+
+    expect_cli(
+        admin(&["register", "--agent", stray, "--generator", tenant])?,
+        true,
+        &format!("registered agent \"{stray}\" ({stray_id}) with tenant \"{tenant}\""),
+    )?;
+    let regs = admin_client.list_agent_registrations(fx.stray_id).await?;
+    if !regs.iter().any(|r| r.generator_id == fx.generator_id) {
+        return Err(anyhow!("register by name stored no registration: {regs:?}"));
+    }
+    expect_cli(
+        admin(&["registrations", "--agent", stray])?,
+        true,
+        &format!("tenant {}", fx.generator_id),
+    )?;
+    expect_cli(
+        admin(&["registrations", "--generator", tenant])?,
+        true,
+        &format!("agent {stray_id}"),
+    )?;
+    // An id still works as before.
+    expect_cli(
+        admin(&["registrations", "--agent", &stray_id])?,
+        true,
+        &format!("agent {stray_id} is registered"),
+    )?;
+    expect_cli(
+        admin(&["registrations", "--generator", "sdk-contract-no-such-tenant"])?,
+        false,
+        "no generator named",
+    )?;
+
+    // Two agents with the same name: the command stops and lists both ids.
+    let twin = admin_client
+        .api()
+        .create_agent()
+        .body(
+            CreateAgentRequest::builder()
+                .name(stray.to_string())
+                .cluster_name("sdk-contract-rust-regcli-twin".to_string())
+                .generator_ids(Vec::new()),
+        )
+        .send()
+        .await
+        .map_err(berr)
+        .context("create twin agent")?
+        .into_inner()
+        .agent
+        .id;
+    let ambiguous = admin(&["deregister", "--agent", stray, "--generator", tenant]);
+    let _ = admin_client.api().delete_agent().id(twin).send().await;
+    let (ok, out, err) = ambiguous?;
+    if ok
+        || !err.contains(&format!("2 agents have the name \"{stray}\""))
+        || !err.contains(&stray_id)
+        || !err.contains(&twin.to_string())
+    {
+        return Err(anyhow!(
+            "expected an ambiguous-name error with both ids; got success={ok}, stdout={out:?}, stderr={err:?}"
+        ));
+    }
+
+    expect_cli(
+        admin(&["deregister", "--agent", stray, "--generator", tenant])?,
+        true,
+        &format!("deregistered agent \"{stray}\" ({stray_id}) from tenant \"{tenant}\""),
+    )?;
+    let regs = admin_client.list_agent_registrations(fx.stray_id).await?;
+    if regs.iter().any(|r| r.generator_id == fx.generator_id) {
+        return Err(anyhow!("deregister by name left the registration: {regs:?}"));
     }
     Ok(())
 }

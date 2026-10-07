@@ -239,3 +239,36 @@ fn agent_list_without_connection_config_errors_clearly() {
         "expected a connection-config error, got: {stderr}"
     );
 }
+
+// --- BROKKR-T-0344: register, deregister and registrations take a name or
+// an id. The live path is in the Rust SDK contract suite
+// (`scenario_registration_by_name_cli`). ---
+
+#[test]
+fn registration_commands_take_a_name_or_an_id() {
+    for command in ["register", "deregister", "registrations"] {
+        let mut cmd = brokkr();
+        cmd.args([command, "--help"]);
+        let (output, stdout, _) = run(cmd);
+        assert!(output.status.success());
+        assert!(stdout.contains("NAME_OR_ID"), "{command}: {stdout}");
+        assert!(stdout.contains("name or the id"), "{command}: {stdout}");
+    }
+}
+
+#[test]
+fn register_with_names_parses_then_needs_a_connection() {
+    // A name is not a parse error: the command gets as far as the
+    // connection config before it fails.
+    let cmd = sandboxed({
+        let mut c = brokkr();
+        c.args(["register", "--agent", "edge-1", "--generator", "acme"]);
+        c
+    });
+    let (output, _, stderr) = run(cmd);
+    assert!(!output.status.success());
+    assert!(
+        stderr.contains("broker URL") || stderr.contains("PAK"),
+        "expected a connection-config error, got: {stderr}"
+    );
+}
