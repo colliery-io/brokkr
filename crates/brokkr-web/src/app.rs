@@ -205,12 +205,13 @@ pub fn App() -> impl IntoView {
         }),
     };
     // Every request with the injected token feeds this, so a refusal after a
-    // success (a broker restart, or a different replica) shows in the shell.
+    // success (a broker restart, or a different replica) and a token refused
+    // from the first request show in the shell.
     let session = RwSignal::new(crate::api::Session::default());
     crate::api::watch_session(session);
-    let expired = Signal::derive(move || session.get() == crate::api::Session::Expired);
+    let session: Signal<crate::api::Session> = session.into();
     let live = Signal::derive(move || match fleet.get() {
-        _ if expired.get() => LiveState::Offline,
+        _ if session.get().refused() => LiveState::Offline,
         None => LiveState::Connecting,
         Some(Ok(_)) => LiveState::Live,
         Some(Err(_)) => LiveState::Offline,
@@ -220,10 +221,10 @@ pub fn App() -> impl IntoView {
         <AuroraStyles/>
         <AppShell
             brand=std::sync::Arc::new(|| view! { <Brand /> }.into_any())
-            header=Box::new(move || view! { <TopBar live=live expired=expired clock=clock /> }.into_any())
+            header=Box::new(move || view! { <TopBar live=live session=session clock=clock /> }.into_any())
             navbar=Box::new(move || view! { <Sidebar route=route counts=counts /> }.into_any())
         >
-            <SessionBanner expired=expired />
+            <SessionBanner session=session />
             <Main route=route />
         </AppShell>
         <ToastStack />
@@ -253,18 +254,25 @@ fn Brand() -> impl IntoView {
 }
 
 /// The right side of the top bar: the broker's live state, the clock and the
-/// theme toggle. When the session expired, the broker is reachable, so the
-/// indicator says "session expired", not "broker unreachable".
+/// theme toggle. When the broker refused the token, the broker is reachable,
+/// so the indicator says "session expired" or "token refused", not "broker
+/// unreachable". A network failure with no answer does not change the session,
+/// so it still says "broker unreachable".
 #[component]
 fn TopBar(
     live: Signal<LiveState>,
-    expired: Signal<bool>,
+    session: Signal<crate::api::Session>,
     clock: RwSignal<String>,
 ) -> impl IntoView {
+    use crate::api::Session;
     view! {
         <div class="brk-topbar">
             {move || {
-                let offline = if expired.get() { "session expired" } else { "broker unreachable" };
+                let offline = match session.get() {
+                    Session::Expired => "session expired",
+                    Session::Refused => "token refused",
+                    Session::Unknown | Session::Valid => "broker unreachable",
+                };
                 view! {
                     <LiveIndicator
                         state=live
@@ -284,29 +292,41 @@ fn TopBar(
 const SESSION_EXPIRED: &str =
     "The broker restarted, or this page reached a different replica. Reload to get a new session.";
 
-/// One banner for the whole console when the session expired, above every
-/// view, so the views' own "Not authorized" errors have an explanation and a
-/// fix. A reload gets the page again, with the token of the broker that
+/// The text of the banner when the broker refused the token from the first
+/// request. Each broker process makes its own token and puts it in the page
+/// that it serves (`brokkr-broker/src/utils/ui_pak.rs`), and the page is not
+/// cached (`Cache-Control: no-store`), so a reload gets a token again.
+const TOKEN_REFUSED: &str = "The broker refused the token of this console. Reload the page. \
+     If this does not help, open the console directly at the address of one broker. \
+     Each broker process gives a different token to the page that it serves.";
+
+/// One banner for the whole console when the broker refused the token, above
+/// every view, so the views' own "Not authorized" errors have an explanation
+/// and a fix. A reload gets the page again, with the token of the broker that
 /// serves it.
 #[component]
-fn SessionBanner(expired: Signal<bool>) -> impl IntoView {
+fn SessionBanner(session: Signal<crate::api::Session>) -> impl IntoView {
+    use crate::api::Session;
     let reload = Callback::new(|_| {
         if let Some(w) = web_sys::window() {
             let _ = w.location().reload();
         }
     });
     move || {
-        expired.get().then(|| {
-            view! {
-                <div class="brk-page brk-session">
-                    <Alert title="Session expired" color=token::GOLD>
-                        <div class="brk-session__body">
-                            <span class="brk-text">{SESSION_EXPIRED}</span>
-                            <Button on_click=reload>"Reload"</Button>
-                        </div>
-                    </Alert>
-                </div>
-            }
+        let (title, text) = match session.get() {
+            Session::Expired => ("Session expired", SESSION_EXPIRED),
+            Session::Refused => ("Token refused", TOKEN_REFUSED),
+            Session::Unknown | Session::Valid => return None,
+        };
+        Some(view! {
+            <div class="brk-page brk-session">
+                <Alert title=title color=token::GOLD>
+                    <div class="brk-session__body">
+                        <span class="brk-text">{text}</span>
+                        <Button on_click=reload>"Reload"</Button>
+                    </div>
+                </Alert>
+            </div>
         })
     }
 }

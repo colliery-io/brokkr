@@ -239,6 +239,11 @@ const NEW_AGENT = { agent_id: "5e7d2c11-9a0b-4c3d-8e2f-1a2b3c4d5e6f", name: "che
   health_failing: 0, health_degraded: 0, pending_object_count: 0, pending_work_orders: 0, claimed_work_orders: 0 };
 const EMPTY_SHELL = { "/fleet": [], "/agent-events": [], "/work-orders": [], "/stacks": [] };
 
+// One sentence of each shell banner (src/app.rs), to find and count them.
+const EXPIRED_BANNER = "Reload to get a new session.";
+const REFUSED_BANNER = "The broker refused the token of this console.";
+const BANNERS = [EXPIRED_BANNER, REFUSED_BANNER];
+
 const SCENES = [
   // `settle` waits for a second /metrics poll, so the throughput shows a rate.
   { name: "overview", settle: 5500, mocks: { "/fleet": FLEET, "/agent-events": EVENTS } },
@@ -336,12 +341,25 @@ const SCENES = [
   // refused. `expire` sets the status of every API answer after the Overview
   // has loaded; the navigation then reads with the dead token. The shell must
   // show one banner, and the indicator must say "session expired".
+  // `banner` is a sentence of the one banner the scene must show (null: no
+  // banner); `indicator` is the text of the top bar indicator.
   // `assert_reload` clicks Reload against a healthy broker and asserts the
   // banner is gone.
-  { name: "session-expired-401", nav: "Fleet", expire: 401, expect_http: [401], assert_reload: true },
-  { name: "session-expired-403", nav: "Deployments", expire: 403, expect_http: [403] },
-  // A token refused from the first request is not a restart: no banner.
-  { name: "session-refused-at-load", expire: 401, expire_at_load: true, expect_http: [401] },
+  { name: "session-expired-401", nav: "Fleet", expire: 401, expect_http: [401], assert_reload: true,
+    banner: EXPIRED_BANNER, indicator: "session expired" },
+  { name: "session-expired-403", nav: "Deployments", expire: 403, expect_http: [403],
+    banner: EXPIRED_BANNER, indicator: "session expired" },
+  // A token refused from the first request (BROKKR-T-0345): the broker
+  // answered, so the indicator says "token refused" and one banner says what
+  // to do.
+  { name: "session-refused-at-load", expire: 401, expire_at_load: true, expect_http: [401], assert_reload: true,
+    banner: REFUSED_BANNER, indicator: "token refused" },
+  { name: "session-refused-at-load-403", expire: 403, expire_at_load: true, expect_http: [403],
+    banner: REFUSED_BANNER, indicator: "token refused" },
+  // No answer at all (the connection is refused): the broker is unreachable,
+  // and there is no banner.
+  { name: "session-broker-unreachable", expire: "abort", expire_at_load: true, expect_net: true,
+    banner: null, indicator: "broker unreachable" },
 ];
 
 // ---- driver --------------------------------------------------------------
@@ -356,11 +374,15 @@ const errs = [];
 // A scene that mocks an HTTP error on purpose (`expect_http: [403]`) is not a
 // console error: the browser logs the failed load, and this filters it.
 let EXPECT_HTTP = new Set();
+// A scene that drops the connection on purpose (`expect_net: true`) expects
+// the browser's network errors too.
+let EXPECT_NET = false;
 page.on("console", (m) => {
   if (m.type() !== "error") return;
   const t = m.text();
   const hit = /status of (\d+)/.exec(t);
   if (hit && EXPECT_HTTP.has(Number(hit[1]))) return;
+  if (EXPECT_NET && /net::ERR_/.test(t)) return;
   errs.push(`[console] ${t}`);
 });
 page.on("pageerror", (e) => errs.push(`[pageerror] ${e.message}`));
@@ -382,8 +404,10 @@ await page.route("**/metrics", (route) => {
 
 let MOCKS = {};
 // Non-zero: every API request answers with this status (a stale session).
+// "abort": every API request fails with no answer (the broker is down).
 let EXPIRE = 0;
 await page.route("**/api/v1/**", (route) => {
+  if (EXPIRE === "abort") return route.abort("connectionrefused");
   if (EXPIRE) {
     return route.fulfill({
       status: EXPIRE,
@@ -483,6 +507,7 @@ const ONLY = process.env.ONLY ? new RegExp(process.env.ONLY) : null;
 for (const s of SCENES.filter((x) => !ONLY || ONLY.test(x.name))) {
   MOCKS = s.mocks || {};
   EXPECT_HTTP = new Set(s.expect_http || []);
+  EXPECT_NET = !!s.expect_net;
   EXPIRE = s.expire && s.expire_at_load ? s.expire : 0;
   // `hash` opens a view with a selection (BROKKR-T-0337): `#fleet/agent/<id>`.
   await page.goto(BASE + (s.hash || ""), { waitUntil: "domcontentloaded" });
@@ -546,17 +571,18 @@ for (const s of SCENES.filter((x) => !ONLY || ONLY.test(x.name))) {
   await page.screenshot({ path: `${OUT}/${s.name}.png`, fullPage: true });
   console.log(`shot: ${s.name}`);
 
-  // The stale-session scenes assert what the screenshot shows: one banner
-  // after an expiry, none for a token refused at load.
+  // The session scenes assert what the screenshot shows: exactly the
+  // expected banner (or none), and the indicator text.
   if (s.expire) {
-    const banners = await page.getByText("Reload to get a new session.").count();
-    const want = s.expire_at_load ? 0 : 1;
-    const indicator = s.expire_at_load ? "broker unreachable" : "session expired";
-    const shown = await page.getByText(indicator, { exact: true }).count();
-    if (banners !== want || shown !== 1) {
-      errs.push(`[assert] ${s.name}: ${banners} session banner(s), want ${want}; "${indicator}" shown ${shown}x`);
+    let total = 0;
+    for (const b of BANNERS) total += await page.getByText(b).count();
+    const mine = s.banner ? await page.getByText(s.banner).count() : 0;
+    const want = s.banner ? 1 : 0;
+    const shown = await page.getByText(s.indicator, { exact: true }).count();
+    if (total !== want || mine !== want || shown !== 1) {
+      errs.push(`[assert] ${s.name}: ${total} session banner(s), want ${want}; "${s.indicator}" shown ${shown}x`);
     } else {
-      console.log(`  assert: ${want} session banner, indicator "${indicator}" ✓`);
+      console.log(`  assert: ${want} session banner, indicator "${s.indicator}" ✓`);
     }
   }
   // Reload against a healthy broker: the page gets a new token, the banner goes.
@@ -564,7 +590,7 @@ for (const s of SCENES.filter((x) => !ONLY || ONLY.test(x.name))) {
     EXPIRE = 0;
     await page.getByRole("button", { name: "Reload" }).click();
     await page.getByText("broker ready").waitFor({ timeout: 10000 }).catch(() => {});
-    const left = await page.getByText("Reload to get a new session.").count();
+    const left = await page.getByText(s.banner).count();
     if (left) errs.push(`[assert] ${s.name}: the banner is still there after Reload`);
     else console.log("  assert: Reload clears the banner ✓");
   }

@@ -62,7 +62,9 @@ fn token() -> Option<String> {
 /// broker restart, or a request that a load balancer sends to a different
 /// replica, makes every later request fail with 401 or 403. Each view would
 /// then show its own "Not authorized"; the shell instead reads this state and
-/// shows one banner that says a reload fixes it.
+/// shows one banner that says a reload fixes it. A token refused from the
+/// first request (`Refused`) gets its own banner: the broker answered, so the
+/// shell must not say "broker unreachable".
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Session {
     /// No request with the injected token has succeeded yet.
@@ -70,16 +72,28 @@ pub enum Session {
     Unknown,
     /// A request with the injected token succeeded.
     Valid,
+    /// The first answers refused the token (401 or 403) and none succeeded.
+    /// The broker answered, so this is not "unreachable".
+    Refused,
     /// A request was refused (401 or 403) after an earlier one succeeded.
     Expired,
 }
 
 impl Session {
+    /// Whether the broker refused the injected token: it answered, so the
+    /// shell must not say "broker unreachable".
+    pub fn refused(self) -> bool {
+        matches!(self, Session::Refused | Session::Expired)
+    }
+
     /// The state after a response with `status` to a request that carried the
     /// injected token.
     ///
-    /// A refusal before any success stays `Unknown`: a token that never worked
-    /// is not evidence of a restart, so the views keep their own error. Once
+    /// A refusal before any success is `Refused`, not `Expired`: a token that
+    /// never worked is not evidence of a restart. `Refused` becomes `Valid`
+    /// when a later request succeeds: the token works after all (for example,
+    /// a load balancer sent the first requests to a different replica), and
+    /// the banner must not ask for a reload that is not necessary. Once
     /// `Expired`, the state stays there until a reload: behind a load balancer
     /// without session affinity some later requests can still succeed, and the
     /// page is broken all the same.
@@ -88,6 +102,7 @@ impl Session {
             (Session::Expired, _) => Session::Expired,
             (_, 200..=299) => Session::Valid,
             (Session::Valid, 401 | 403) => Session::Expired,
+            (Session::Unknown, 401 | 403) => Session::Refused,
             (state, _) => state,
         }
     }
@@ -523,10 +538,29 @@ mod tests {
     }
 
     #[test]
-    fn a_refusal_before_any_success_is_not_an_expiry() {
-        assert_eq!(Session::Unknown.after(401), Session::Unknown);
-        assert_eq!(Session::Unknown.after(403), Session::Unknown);
-        assert_eq!(Session::Unknown.after(401).after(200), Session::Valid);
+    fn a_refusal_before_any_success_is_a_refused_token() {
+        assert_eq!(Session::Unknown.after(401), Session::Refused);
+        assert_eq!(Session::Unknown.after(403), Session::Refused);
+        assert_eq!(Session::Refused.after(401), Session::Refused);
+        assert_eq!(Session::Refused.after(403), Session::Refused);
+    }
+
+    #[test]
+    fn a_refused_token_that_later_works_is_valid() {
+        let ok = Session::Unknown.after(401).after(200);
+        assert_eq!(ok, Session::Valid);
+        // A refusal after that success is a normal expiry.
+        assert_eq!(ok.after(401), Session::Expired);
+    }
+
+    #[test]
+    fn other_failures_before_any_success_are_not_a_refusal() {
+        // A network failure has no status and never reaches `after`; a 5xx or
+        // 404 at load is not a refused token either.
+        for status in [404, 409, 500, 502, 503] {
+            assert_eq!(Session::Unknown.after(status), Session::Unknown, "{status}");
+            assert_eq!(Session::Refused.after(status), Session::Refused, "{status}");
+        }
     }
 
     #[test]
