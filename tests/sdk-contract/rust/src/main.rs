@@ -26,7 +26,9 @@ use brokkr_client::types::{
     CreateAgentRequest, CreateAgentResponse, CreateDeploymentObjectRequest, ErrorResponse,
     NewAgentTarget, NewGenerator, NewStack, NewStackAnnotation,
 };
-use brokkr_client::{ApplyOutcome, BrokkrClient, BrokkrError, Client as RawClient};
+use brokkr_client::{
+    ApplyOutcome, BrokkrClient, BrokkrError, Client as RawClient, AGENT_ACTIVE, AGENT_INACTIVE,
+};
 use uuid::Uuid;
 
 /// Convert a progenitor `Error<ErrorResponse>` into our typed [`BrokkrError`].
@@ -113,6 +115,14 @@ async fn main() -> ExitCode {
     run!(
         "I-0021: submit_manifests + idempotent apply (folder helpers)",
         scenario_manifest_apply(&base_url, &admin_pak)
+    );
+    run!(
+        "T-0333: day-zero helpers (activate, label, target, list) via wrapper",
+        scenario_day_zero(&base_url, &admin_pak)
+    );
+    run!(
+        "T-0333: day-zero commands via the brokkr CLI binary",
+        scenario_day_zero_cli(&base_url, &admin_pak)
     );
 
     println!("══════════════════════════════════════════════════════════════════");
@@ -757,5 +767,361 @@ async fn scenario_manifest_apply(base_url: &str, admin_pak: &str) -> Result<()> 
         other => return Err(anyhow!("expected Unchanged, got {other:?}")),
     }
 
+    Ok(())
+}
+
+/// Objects that a day-zero scenario creates, so it can delete them after.
+struct DayZeroFixture {
+    generator_id: Uuid,
+    generator_pak: String,
+    /// Registered with the generator, so stacks of the generator can target it.
+    agent_id: Uuid,
+    agent_name: String,
+    /// Not registered with the generator.
+    stray_id: Uuid,
+    stray_name: String,
+    stack_name: String,
+}
+
+/// Create a generator, two agents (one registered with the generator) and a
+/// stack of the generator.
+async fn day_zero_fixture(admin: &BrokkrClient, prefix: &str) -> Result<DayZeroFixture> {
+    let generator_name = unique(&format!("{prefix}-gen"));
+    let gen_resp = admin
+        .api()
+        .create_generator()
+        .body(
+            NewGenerator::builder()
+                .name(generator_name.clone())
+                .description(Some("day zero".to_string())),
+        )
+        .send()
+        .await
+        .map_err(berr)
+        .context("create_generator")?
+        .into_inner();
+    let generator_id = gen_resp.generator.id;
+
+    let mut created = Vec::new();
+    for (role, generators) in [("agent", vec![generator_id]), ("stray", vec![])] {
+        let name = unique(&format!("{prefix}-{role}"));
+        let resp = admin
+            .api()
+            .create_agent()
+            .body(
+                CreateAgentRequest::builder()
+                    .name(name.clone())
+                    .cluster_name(format!("{prefix}-cluster"))
+                    .generator_ids(generators),
+            )
+            .send()
+            .await
+            .map_err(berr)
+            .context("create_agent")?
+            .into_inner();
+        created.push((resp.agent.id, name));
+    }
+
+    let dir = tempfile::tempdir().context("tempdir")?;
+    std::fs::write(
+        dir.path().join("cm.yaml"),
+        "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: day-zero\n",
+    )?;
+    let stack_name = unique(&format!("{prefix}-stack"));
+    admin
+        .apply_for_generator(&generator_name, &stack_name, dir.path(), &[])
+        .await
+        .context("apply_for_generator")?;
+
+    let (stray_id, stray_name) = created.pop().expect("two agents");
+    let (agent_id, agent_name) = created.pop().expect("two agents");
+    Ok(DayZeroFixture {
+        generator_id,
+        generator_pak: gen_resp.pak,
+        agent_id,
+        agent_name,
+        stray_id,
+        stray_name,
+        stack_name,
+    })
+}
+
+/// Delete what [`day_zero_fixture`] created. Best effort: a failed delete
+/// does not fail the scenario.
+async fn day_zero_cleanup(admin: &BrokkrClient, fx: &DayZeroFixture) {
+    if let Ok(stack) = admin.find_stack(&fx.stack_name).await {
+        let _ = admin.api().delete_stack().id(stack.id).send().await;
+    }
+    for id in [fx.agent_id, fx.stray_id] {
+        let _ = admin.api().delete_agent().id(id).send().await;
+    }
+    let _ = admin
+        .api()
+        .delete_generator()
+        .id(fx.generator_id)
+        .send()
+        .await;
+}
+
+/// BROKKR-T-0333: the wrapper methods behind `brokkr agent` and `brokkr stack`.
+async fn scenario_day_zero(base_url: &str, admin_pak: &str) -> Result<()> {
+    let admin = client(base_url, admin_pak)?;
+    let fx = day_zero_fixture(&admin, "sdk-contract-rust-d0").await?;
+    let result = day_zero_checks(&admin, base_url, &fx).await;
+    day_zero_cleanup(&admin, &fx).await;
+    result
+}
+
+async fn day_zero_checks(admin: &BrokkrClient, base_url: &str, fx: &DayZeroFixture) -> Result<()> {
+    let gen = client(base_url, &fx.generator_pak)?;
+    let agent_id = fx.agent_id.to_string();
+
+    // Lookup by name and by id finds the same agent; an unknown name fails.
+    println!("  → find_agent by name and by id");
+    let by_name = admin.find_agent(&fx.agent_name).await?;
+    let by_id = admin.find_agent(&agent_id).await?;
+    if by_name.id != fx.agent_id || by_id.name != fx.agent_name {
+        return Err(anyhow!("find_agent by name and by id disagree"));
+    }
+    if by_name.status != AGENT_INACTIVE {
+        return Err(anyhow!(
+            "a new agent should be INACTIVE, got {}",
+            by_name.status
+        ));
+    }
+    match admin.find_agent("sdk-contract-no-such-agent").await {
+        Err(e) if e.to_string().contains("no agent has the name or id") => {}
+        other => return Err(anyhow!("expected an unknown-agent error, got {other:?}")),
+    }
+
+    println!("  → set_agent_status ACTIVE then INACTIVE");
+    let active = admin.set_agent_status(&fx.agent_name, AGENT_ACTIVE).await?;
+    if active.status != AGENT_ACTIVE {
+        return Err(anyhow!("expected ACTIVE, got {}", active.status));
+    }
+    let paused = admin.set_agent_status(&agent_id, AGENT_INACTIVE).await?;
+    if paused.status != AGENT_INACTIVE {
+        return Err(anyhow!("expected INACTIVE, got {}", paused.status));
+    }
+
+    println!("  → add_agent_label twice (added, then unchanged)");
+    let (_, added) = admin
+        .add_agent_label(&fx.agent_name, "env:day-zero")
+        .await?;
+    let (_, again) = admin.add_agent_label(&agent_id, "env:day-zero").await?;
+    if !added || again {
+        return Err(anyhow!(
+            "add_agent_label: expected added then unchanged, got {added} then {again}"
+        ));
+    }
+    if admin.agent_labels(fx.agent_id).await? != vec!["env:day-zero".to_string()] {
+        return Err(anyhow!("the agent label was not stored exactly once"));
+    }
+
+    println!("  → [generator] add_stack_label twice (added, then unchanged)");
+    let (stack, added) = gen.add_stack_label(&fx.stack_name, "env:day-zero").await?;
+    let (_, again) = gen
+        .add_stack_label(&stack.id.to_string(), "env:day-zero")
+        .await?;
+    if !added || again {
+        return Err(anyhow!(
+            "add_stack_label: expected added then unchanged, got {added} then {again}"
+        ));
+    }
+
+    println!("  → [generator] target_stack twice (added, then unchanged)");
+    let (_, _, added) = gen.target_stack(&fx.stack_name, &fx.agent_name).await?;
+    let (_, _, again) = gen.target_stack(&stack.id.to_string(), &agent_id).await?;
+    if !added || again {
+        return Err(anyhow!(
+            "target_stack: expected added then unchanged, got {added} then {again}"
+        ));
+    }
+    let targets = admin
+        .api()
+        .list_targets()
+        .id(fx.agent_id)
+        .send()
+        .await
+        .map_err(berr)?
+        .into_inner();
+    if targets.iter().filter(|t| t.stack_id == stack.id).count() != 1 {
+        return Err(anyhow!("expected exactly one target row, got {targets:?}"));
+    }
+
+    // An agent that is not registered with the generator: the error names
+    // the command that fixes it.
+    println!("  → [admin] target_stack at an unregistered agent (expect a register hint)");
+    match admin.target_stack(&fx.stack_name, &fx.stray_name).await {
+        Err(e) if e.to_string().contains("brokkr register --agent") => {}
+        other => return Err(anyhow!("expected a register hint, got {other:?}")),
+    }
+
+    // Lists: the admin sees both agents; the generator sees its registered
+    // agent and its stack, and not the stray agent.
+    println!("  → list_agents / list_stacks for admin and generator");
+    if !admin
+        .list_agents()
+        .await?
+        .iter()
+        .any(|a| a.id == fx.stray_id)
+    {
+        return Err(anyhow!("admin list_agents misses the stray agent"));
+    }
+    let mine = gen.list_agents().await?;
+    if !mine.iter().any(|a| a.id == fx.agent_id) || mine.iter().any(|a| a.id == fx.stray_id) {
+        return Err(anyhow!(
+            "generator list_agents must show only its registered agents"
+        ));
+    }
+    if !gen.list_stacks().await?.iter().any(|s| s.id == stack.id) {
+        return Err(anyhow!("generator list_stacks misses its stack"));
+    }
+    Ok(())
+}
+
+/// BROKKR-T-0333: the `brokkr agent` and `brokkr stack` commands, run as the
+/// real binary. `angreal tests sdk-contract rust` builds it and sets
+/// `BROKKR_CLI` to its path.
+async fn scenario_day_zero_cli(base_url: &str, admin_pak: &str) -> Result<()> {
+    let cli = env::var("BROKKR_CLI").map_err(|_| {
+        anyhow!(
+            "BROKKR_CLI is not set. Run `angreal tests sdk-contract rust`, \
+             or set BROKKR_CLI to the path of the brokkr binary"
+        )
+    })?;
+    let admin = client(base_url, admin_pak)?;
+    let fx = day_zero_fixture(&admin, "sdk-contract-rust-d0cli").await?;
+    let result = day_zero_cli_checks(&cli, base_url, admin_pak, &fx);
+    day_zero_cleanup(&admin, &fx).await;
+    result
+}
+
+/// Output of one CLI run: (success, stdout, stderr).
+type CliRun = (bool, String, String);
+
+fn brokkr_cli(cli: &str, base_url: &str, pak: &str, args: &[&str]) -> Result<CliRun> {
+    println!("  $ brokkr {}", args.join(" "));
+    let out = std::process::Command::new(cli)
+        .args(args)
+        .env("BROKKR_BROKER_URL", base_url)
+        .env("BROKKR_PAK", pak)
+        // No ~/.brokkr/config may leak into the run.
+        .env("HOME", "/nonexistent-brokkr-home")
+        .output()
+        .with_context(|| format!("cannot run {cli}"))?;
+    let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
+    let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
+    print!("{stdout}{stderr}");
+    Ok((out.status.success(), stdout, stderr))
+}
+
+/// Fail unless the run has the wanted result and its stdout (on success) or
+/// stderr (on failure) contains `needle`.
+fn expect_cli(run: CliRun, want_ok: bool, needle: &str) -> Result<()> {
+    let (ok, out, err) = run;
+    let text = if want_ok { &out } else { &err };
+    if ok != want_ok || !text.contains(needle) {
+        return Err(anyhow!(
+            "expected success={want_ok} with {needle:?}; got success={ok}, stdout={out:?}, stderr={err:?}"
+        ));
+    }
+    Ok(())
+}
+
+fn day_zero_cli_checks(
+    cli: &str,
+    base_url: &str,
+    admin_pak: &str,
+    fx: &DayZeroFixture,
+) -> Result<()> {
+    let admin = |args: &[&str]| brokkr_cli(cli, base_url, admin_pak, args);
+    let gen = |args: &[&str]| brokkr_cli(cli, base_url, &fx.generator_pak, args);
+    let agent_id = fx.agent_id.to_string();
+
+    expect_cli(
+        admin(&["agent", "activate", &fx.agent_name])?,
+        true,
+        "is ACTIVE",
+    )?;
+    expect_cli(
+        admin(&["agent", "pause", &agent_id])?,
+        true,
+        "brokkr agent activate",
+    )?;
+    expect_cli(admin(&["agent", "activate", &agent_id])?, true, "is ACTIVE")?;
+    expect_cli(
+        admin(&["agent", "label", &fx.agent_name, "env:cli"])?,
+        true,
+        "added label",
+    )?;
+    expect_cli(
+        admin(&["agent", "label", &agent_id, "env:cli"])?,
+        true,
+        "unchanged",
+    )?;
+    expect_cli(
+        admin(&["agent", "label", &fx.agent_name, "env=cli"])?,
+        false,
+        "key:value",
+    )?;
+    expect_cli(
+        gen(&["stack", "label", &fx.stack_name, "env:cli"])?,
+        true,
+        "added label",
+    )?;
+    expect_cli(
+        gen(&["stack", "label", &fx.stack_name, "env:cli"])?,
+        true,
+        "unchanged",
+    )?;
+    expect_cli(
+        gen(&["stack", "target", &fx.stack_name, &fx.agent_name])?,
+        true,
+        "targeted stack",
+    )?;
+    expect_cli(
+        admin(&["stack", "target", &fx.stack_name, &agent_id])?,
+        true,
+        "unchanged",
+    )?;
+    expect_cli(
+        admin(&["stack", "target", &fx.stack_name, &fx.stray_name])?,
+        false,
+        "brokkr register --agent",
+    )?;
+    expect_cli(
+        admin(&["agent", "activate", "sdk-contract-no-such-agent"])?,
+        false,
+        "no agent has the name or id",
+    )?;
+
+    let (ok, out, _) = admin(&["agent", "list"])?;
+    let row = out
+        .lines()
+        .find(|l| l.starts_with(fx.agent_name.as_str()))
+        .unwrap_or_default();
+    let cells: Vec<&str> = row.split_whitespace().collect();
+    if !ok
+        || !cells.contains(&agent_id.as_str())
+        || !cells.contains(&"ACTIVE")
+        || !row.contains("env:cli")
+    {
+        return Err(anyhow!("the agent list row is wrong: {row:?}"));
+    }
+    // A generator PAK cannot read agent labels, so its list has no LABELS
+    // column, and it shows only the agents registered with it.
+    let (ok, out, _) = gen(&["agent", "list"])?;
+    if !ok || out.contains("LABELS") || !out.contains(&agent_id) || out.contains(&fx.stray_name) {
+        return Err(anyhow!("the generator agent list is wrong: {out:?}"));
+    }
+    let (ok, out, _) = gen(&["stack", "list"])?;
+    let row = out
+        .lines()
+        .find(|l| l.starts_with(fx.stack_name.as_str()))
+        .unwrap_or_default();
+    if !ok || !row.contains("env:cli") {
+        return Err(anyhow!("the stack list row is wrong: {row:?}"));
+    }
     Ok(())
 }

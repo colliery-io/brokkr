@@ -160,3 +160,82 @@ fn config_file_supplies_connection_then_bundle_read_runs() {
     // Sanity: the temp config path is what we wrote.
     assert!(Path::new(&config).exists());
 }
+
+// --- BROKKR-T-0333: day-zero commands. The live paths run in the Rust SDK
+// contract suite (`scenario_day_zero_cli`), which runs this binary against a
+// broker. ---
+
+#[test]
+fn agent_and_stack_help_list_the_day_zero_commands() {
+    for (group, commands) in [
+        ("agent", &["activate", "pause", "label", "list"][..]),
+        ("stack", &["label", "target", "list"][..]),
+    ] {
+        let mut cmd = brokkr();
+        cmd.args([group, "--help"]);
+        let (output, stdout, _) = run(cmd);
+        assert!(output.status.success());
+        for c in commands {
+            assert!(stdout.contains(c), "{group} help is missing {c}: {stdout}");
+        }
+    }
+}
+
+#[test]
+fn day_zero_commands_take_a_name_or_an_id() {
+    for args in [
+        &["agent", "activate", "--help"][..],
+        &["agent", "pause", "--help"][..],
+        &["agent", "label", "--help"][..],
+        &["stack", "label", "--help"][..],
+        &["stack", "target", "--help"][..],
+    ] {
+        let mut cmd = brokkr();
+        cmd.args(args);
+        let (output, stdout, _) = run(cmd);
+        assert!(output.status.success());
+        assert!(stdout.contains("name or the id"), "{args:?}: {stdout}");
+    }
+}
+
+#[test]
+fn label_must_have_the_key_value_shape() {
+    // The label check runs before any connection, so no broker is needed.
+    for (group, target) in [("agent", "my-agent"), ("stack", "my-stack")] {
+        let cmd = sandboxed({
+            let mut c = brokkr();
+            c.args([group, "label", target, "env=prod"]);
+            c
+        });
+        let (output, _, stderr) = run(cmd);
+        assert!(!output.status.success());
+        assert!(stderr.contains("key:value"), "{group}: {stderr}");
+    }
+}
+
+#[test]
+fn stack_target_needs_a_stack_and_an_agent() {
+    let mut cmd = brokkr();
+    cmd.args(["stack", "target", "my-stack"]);
+    let (output, _, stderr) = run(cmd);
+    assert!(!output.status.success());
+    assert!(
+        stderr.contains("<AGENT>"),
+        "expected a usage error, got: {stderr}"
+    );
+}
+
+#[test]
+fn agent_list_without_connection_config_errors_clearly() {
+    let cmd = sandboxed({
+        let mut c = brokkr();
+        c.args(["agent", "list"]);
+        c
+    });
+    let (output, _, stderr) = run(cmd);
+    assert!(!output.status.success());
+    assert!(
+        stderr.contains("broker URL") || stderr.contains("PAK"),
+        "expected a connection-config error, got: {stderr}"
+    );
+}

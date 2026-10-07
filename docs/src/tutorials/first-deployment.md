@@ -15,12 +15,15 @@ In this tutorial, you'll deploy an nginx web server to a Kubernetes cluster thro
 - The admin PAK (Prefixed API Key) for that broker. The PAK itself is never logged. In the development environment it is the publicly known dev PAK `brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8`, which corresponds to the embedded default `broker.pak_hash`. After a Helm install it is the PAK you minted with `brokkr-broker generate-pak` — you can run that from the published image without installing anything: `docker run --rm ghcr.io/colliery-io/brokkr-broker:latest generate-pak`. (Only if a broker is explicitly configured with an empty `broker.pak_hash` does it generate a fresh PAK at first startup and write it to `/tmp/brokkr-keys/key.txt` inside the broker container; leaving the setting untouched keeps the embedded default hash.)
 - **A running agent connected to a Kubernetes cluster.** This tutorial checks its own results with `kubectl`, so an agent *process* has to be polling and applying — an agent record in the broker alone is not enough. The development environment pre-creates one called `brokkr-integration-test-agent`; after a Helm install it is the agent you created and installed in [Quick Start steps 4 and 5](../getting-started/installation.md#4-create-an-agent-and-get-its-pak), named by your `broker.agentName`.
 - `curl` and `jq` installed
+- The `brokkr` CLI on your `PATH`, for the agent steps. Download it from the [GitHub Release](https://github.com/colliery-io/brokkr/releases), or build it with `cargo build --release -p brokkr-cli`. Each step that uses it also shows the `curl` form.
 
-Export your agent's name before you start — the commands below use it:
+Export your agent's name and the CLI's connection settings before you start. The commands below use them:
 
 ```bash
 export AGENT_NAME=brokkr-integration-test-agent   # development environment
 # export AGENT_NAME=my-agent                      # Helm install: your broker.agentName
+export BROKKR_BROKER_URL=http://localhost:3000
+export BROKKR_PAK=<your-admin-pak>
 ```
 
 A freshly created agent — the development environment's test agent included — starts `INACTIVE` and is registered only with the **system generator**. You'll activate it and register it with the `admin-generator` in Step 3 before targeting it to your stack — see [Registering Agents with Generators](../how-to/agent-registration.md) for the operational details. (If you already activated and registered your agent while following the installation guide, those steps are idempotent enough to re-run: re-registering returns `409 already_registered`.)
@@ -93,7 +96,16 @@ AGENT_ID=$(curl -s http://localhost:3000/api/v1/agents \
 echo "Agent ID: $AGENT_ID"
 ```
 
-Every new agent starts with status `INACTIVE`, and an inactive agent skips all deployment work — nothing reaches the cluster until you activate it. Activate yours now (harmless if it is already `ACTIVE`):
+Every new agent starts with status `INACTIVE`, and an inactive agent skips all deployment work — nothing reaches the cluster until you activate it. While it is inactive, the agent log says so on each poll. Activate yours now (harmless if it is already `ACTIVE`):
+
+```bash
+brokkr agent activate "$AGENT_NAME"
+```
+
+The output should say that the agent `is ACTIVE`.
+
+<details>
+<summary>The same step with <code>curl</code></summary>
 
 ```bash
 curl -s -X PUT "http://localhost:3000/api/v1/agents/${AGENT_ID}" \
@@ -103,6 +115,8 @@ curl -s -X PUT "http://localhost:3000/api/v1/agents/${AGENT_ID}" \
 ```
 
 The response should show `"status": "ACTIVE"`.
+
+</details>
 
 Next, register the agent with the `admin-generator` (the `$GEN_ID` you looked up in Step 2):
 
@@ -115,7 +129,16 @@ curl -s -X POST "http://localhost:3000/api/v1/generators/${GEN_ID}/register" \
 
 Registration gates which generators an agent can serve, ensuring agents opt in to application scopes before receiving their deployments. Without it, the next request fails with a `403 agent_not_registered` error — and admins cannot bypass the gate.
 
-Now target the agent to your stack:
+Now target the agent to your stack. The first argument is the stack, the second is the agent:
+
+```bash
+brokkr stack target tutorial-nginx "$AGENT_NAME"
+```
+
+The output says `targeted stack "tutorial-nginx" at agent ...`. If you run it again, it says `unchanged:` and changes nothing.
+
+<details>
+<summary>The same step with <code>curl</code></summary>
 
 ```bash
 curl -s -X POST "http://localhost:3000/api/v1/agents/${AGENT_ID}/targets" \
@@ -124,7 +147,9 @@ curl -s -X POST "http://localhost:3000/api/v1/agents/${AGENT_ID}/targets" \
   -d "{\"agent_id\": \"${AGENT_ID}\", \"stack_id\": \"${STACK_ID}\"}" | jq .
 ```
 
-The request body carries both `agent_id` and `stack_id` — the broker requires both fields even though the agent also appears in the URL.
+The request body carries both `agent_id` and `stack_id`. The broker requires both fields, although the agent also appears in the URL.
+
+</details>
 
 The agent will now receive deployment objects from this stack on its next poll cycle.
 
@@ -167,7 +192,7 @@ You should see a SUCCESS event:
 }
 ```
 
-> **Troubleshooting:** If the events list stays empty and nothing appears on the cluster, the usual cause is an agent that is still `INACTIVE` — re-run the activation command from Step 3 and check that the response shows `"status": "ACTIVE"`.
+> **Troubleshooting:** If the events list stays empty and nothing appears on the cluster, the usual cause is an agent that is still `INACTIVE`. The agent log says so on each poll. Run `brokkr agent activate "$AGENT_NAME"` from Step 3 again, and check that `brokkr agent list` shows the agent as `ACTIVE`.
 
 With `kubectl` pointed at the cluster your agent manages (the bundled k3s in the development environment, or the cluster you installed the agent chart into), verify the resources directly:
 

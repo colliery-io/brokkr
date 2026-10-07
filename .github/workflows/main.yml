@@ -45,6 +45,7 @@ jobs:
             sdk_contract:
               - 'crates/brokkr-broker/**'
               - 'crates/brokkr-client/**'
+              - 'crates/brokkr-cli/**'
               - 'sdks/python/brokkr-client/**'
               - 'sdks/typescript/brokkr-client/**'
               - 'openapi/**'

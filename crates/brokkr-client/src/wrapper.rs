@@ -37,9 +37,9 @@ use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 
 use crate::Client;
 use crate::types::{
-    AgentGeneratorRegistration, AgentRegistrationBody, CreateDeploymentObjectRequest,
-    DeploymentObject, ErrorResponse, K8sEventHistoryResponse, NewStack, PodLogHistoryResponse,
-    Stack, WsConnectionsResponse,
+    Agent, AgentGeneratorRegistration, AgentRegistrationBody, CreateDeploymentObjectRequest,
+    DeploymentObject, ErrorResponse, K8sEventHistoryResponse, NewAgentLabel, NewAgentTarget,
+    NewStack, PodLogHistoryResponse, Stack, WsConnectionsResponse,
 };
 use chrono::{DateTime, Utc};
 use std::path::Path;
@@ -648,6 +648,186 @@ impl BrokkrClient {
         Ok(resp.into_inner())
     }
 
+    // -------------------------------------------------------------------
+    // Day-zero helpers (BROKKR-T-0333). Each takes an agent or a stack by
+    // name or by id, so a caller does not need to look the id up first.
+    // Lookups use the list endpoints, which serve both an admin PAK (every
+    // agent and stack) and a generator PAK (its registered agents and its
+    // own stacks).
+    // -------------------------------------------------------------------
+
+    /// Every agent this PAK can see. An admin sees the fleet; a generator
+    /// sees the agents registered with it.
+    pub async fn list_agents(&self) -> Result<Vec<Agent>, BrokkrError> {
+        Ok(self.inner.list_agents().send().await?.into_inner())
+    }
+
+    /// Every stack this PAK can see. An admin sees all stacks; a generator
+    /// sees its own.
+    pub async fn list_stacks(&self) -> Result<Vec<Stack>, BrokkrError> {
+        Ok(self.inner.list_stacks().send().await?.into_inner())
+    }
+
+    /// Find one agent by id or by name. An id is matched first. A name that
+    /// more than one agent has is an error that lists their ids.
+    pub async fn find_agent(&self, wanted: &str) -> Result<Agent, BrokkrError> {
+        let agents = self.list_agents().await?;
+        pick_one(agents, wanted, "agent", |a| (a.id, a.name.as_str()))
+    }
+
+    /// Find one stack by id or by name. An id is matched first.
+    pub async fn find_stack(&self, wanted: &str) -> Result<Stack, BrokkrError> {
+        let stacks = self.list_stacks().await?;
+        pick_one(stacks, wanted, "stack", |s| (s.id, s.name.as_str()))
+    }
+
+    /// The labels on an agent, by agent id.
+    pub async fn agent_labels(&self, agent_id: Uuid) -> Result<Vec<String>, BrokkrError> {
+        let labels = self
+            .inner
+            .agents_list_labels()
+            .id(agent_id)
+            .send()
+            .await?
+            .into_inner();
+        Ok(labels.into_iter().map(|l| l.label).collect())
+    }
+
+    /// The labels on a stack, by stack id.
+    pub async fn stack_labels(&self, stack_id: Uuid) -> Result<Vec<String>, BrokkrError> {
+        let labels = self
+            .inner
+            .stacks_list_labels()
+            .id(stack_id)
+            .send()
+            .await?
+            .into_inner();
+        Ok(labels.into_iter().map(|l| l.label).collect())
+    }
+
+    /// Set the status of an agent, given by name or id. An agent applies
+    /// deployment objects only while its status is `ACTIVE`; a new agent
+    /// starts `INACTIVE`. Use [`AGENT_ACTIVE`] and [`AGENT_INACTIVE`].
+    /// Requires an admin PAK. Returns the updated agent.
+    pub async fn set_agent_status(&self, agent: &str, status: &str) -> Result<Agent, BrokkrError> {
+        let found = self.find_agent(agent).await?;
+        let mut body = serde_json::Map::new();
+        body.insert("status".to_string(), serde_json::Value::from(status));
+        let updated = self
+            .inner
+            .update_agent()
+            .id(found.id)
+            .body(serde_json::Value::Object(body))
+            .send()
+            .await?
+            .into_inner();
+        Ok(updated)
+    }
+
+    /// Add a label to an agent, given by name or id. Requires an admin PAK.
+    /// A label the agent already has is not added again. Returns the agent
+    /// and `true` when the label was added, `false` when it was present.
+    pub async fn add_agent_label(
+        &self,
+        agent: &str,
+        label: &str,
+    ) -> Result<(Agent, bool), BrokkrError> {
+        let found = self.find_agent(agent).await?;
+        let added = self
+            .inner
+            .agents_add_label()
+            .id(found.id)
+            // The broker wants the agent id in the body as well as the path.
+            .body(NewAgentLabel {
+                agent_id: found.id,
+                label: label.to_string(),
+            })
+            .send()
+            .await;
+        match added {
+            Ok(_) => Ok((found, true)),
+            // The broker answers 409 when the agent has the label already.
+            Err(e) => match BrokkrError::from(e) {
+                err if err.status() == Some(reqwest::StatusCode::CONFLICT) => Ok((found, false)),
+                err => Err(err),
+            },
+        }
+    }
+
+    /// Add a label to a stack, given by name or id. Requires an admin PAK or
+    /// the PAK of the generator that owns the stack. A label the stack
+    /// already has is not added again. Returns the stack and `true` when the
+    /// label was added, `false` when it was present.
+    pub async fn add_stack_label(
+        &self,
+        stack: &str,
+        label: &str,
+    ) -> Result<(Stack, bool), BrokkrError> {
+        let found = self.find_stack(stack).await?;
+        let added = self
+            .inner
+            .stacks_add_label()
+            .id(found.id)
+            .body(label.to_string())
+            .send()
+            .await;
+        match added {
+            Ok(_) => Ok((found, true)),
+            // The broker answers 409 when the stack has the label already.
+            Err(e) => match BrokkrError::from(e) {
+                err if err.status() == Some(reqwest::StatusCode::CONFLICT) => Ok((found, false)),
+                err => Err(err),
+            },
+        }
+    }
+
+    /// Target a stack at an agent, each given by name or id. The agent then
+    /// receives the stack's deployment objects whatever its labels are.
+    ///
+    /// Requires an admin PAK or the PAK of the generator that owns the stack.
+    /// The agent must be registered with the stack's generator; if it is not,
+    /// the error names the `brokkr register` command to run. A target that
+    /// already exists is not added again. Returns the stack, the agent, and
+    /// `true` when the target was added, `false` when it was present.
+    pub async fn target_stack(
+        &self,
+        stack: &str,
+        agent: &str,
+    ) -> Result<(Stack, Agent, bool), BrokkrError> {
+        let stack = self.find_stack(stack).await?;
+        let agent = self.find_agent(agent).await?;
+        let added = self
+            .inner
+            .add_target()
+            .id(agent.id)
+            // The broker wants the agent id in the body as well as the path.
+            .body(NewAgentTarget {
+                agent_id: agent.id,
+                stack_id: stack.id,
+            })
+            .send()
+            .await;
+        match added {
+            Ok(_) => Ok((stack, agent, true)),
+            // The broker answers 409 when the target exists already. A
+            // generator PAK cannot list the targets of an agent, so the
+            // conflict is the only check that works for both PAK kinds.
+            Err(e) => match BrokkrError::from(e) {
+                err if err.status() == Some(reqwest::StatusCode::CONFLICT) => {
+                    Ok((stack, agent, false))
+                }
+                err if err.code() == Some("agent_not_registered") => {
+                    Err(BrokkrError::InvalidRequest(format!(
+                        "agent \"{}\" is not registered with the tenant that owns stack \"{}\". \
+                         Register it first: brokkr register --agent {} --generator {}",
+                        agent.name, stack.name, agent.id, stack.generator_id
+                    )))
+                }
+                err => Err(err),
+            },
+        }
+    }
+
     /// Run `op` with exponential backoff on retryable errors.
     ///
     /// The closure is invoked at most `max_retries + 1` times (configured via
@@ -678,6 +858,41 @@ impl BrokkrClient {
                     attempt += 1;
                 }
             }
+        }
+    }
+}
+
+/// The status of an agent that applies deployment objects.
+pub const AGENT_ACTIVE: &str = "ACTIVE";
+/// The status of an agent that applies nothing. A new agent starts with it.
+pub const AGENT_INACTIVE: &str = "INACTIVE";
+
+/// Pick the one item whose id or name is `wanted`. An id match wins. More
+/// than one name match is an error that lists the ids, so the caller can
+/// repeat the command with an id.
+fn pick_one<T>(
+    items: Vec<T>,
+    wanted: &str,
+    kind: &str,
+    key: impl Fn(&T) -> (Uuid, &str),
+) -> Result<T, BrokkrError> {
+    if let Ok(id) = Uuid::parse_str(wanted)
+        && let Some(pos) = items.iter().position(|i| key(i).0 == id)
+    {
+        return Ok(items.into_iter().nth(pos).expect("position is in range"));
+    }
+    let mut matches: Vec<T> = items.into_iter().filter(|i| key(i).1 == wanted).collect();
+    match matches.len() {
+        0 => Err(BrokkrError::InvalidRequest(format!(
+            "no {kind} has the name or id \"{wanted}\" (or this PAK cannot see it)"
+        ))),
+        1 => Ok(matches.remove(0)),
+        n => {
+            let ids: Vec<String> = matches.iter().map(|i| key(i).0.to_string()).collect();
+            Err(BrokkrError::InvalidRequest(format!(
+                "{n} {kind}s have the name \"{wanted}\". Give the id instead: {}",
+                ids.join(", ")
+            )))
         }
     }
 }
@@ -1016,6 +1231,43 @@ mod tests {
         let a = "apiVersion: v1\nkind: ConfigMap\n";
         assert_eq!(sha256_hex(a), sha256_hex(a));
         assert_ne!(sha256_hex(a), sha256_hex("apiVersion: v1\nkind: Secret\n"));
+    }
+
+    // --- BROKKR-T-0333: name-or-id lookup ---
+
+    fn key<'a>(i: &'a (Uuid, &'static str)) -> (Uuid, &'a str) {
+        (i.0, i.1)
+    }
+
+    fn named(items: &[(u128, &'static str)]) -> Vec<(Uuid, &'static str)> {
+        items
+            .iter()
+            .map(|(n, s)| (Uuid::from_u128(*n), *s))
+            .collect()
+    }
+
+    #[test]
+    fn pick_one_matches_id_then_name() {
+        let items = named(&[(1, "alpha"), (2, "beta")]);
+        let by_name = pick_one(items.clone(), "beta", "agent", key).unwrap();
+        assert_eq!(by_name.0, Uuid::from_u128(2));
+        let id = Uuid::from_u128(1).to_string();
+        let by_id = pick_one(items, &id, "agent", key).unwrap();
+        assert_eq!(by_id.1, "alpha");
+    }
+
+    #[test]
+    fn pick_one_reports_missing_and_ambiguous_names() {
+        let err = pick_one(named(&[(1, "alpha")]), "gamma", "stack", key).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("no stack has the name or id \"gamma\""),
+            "{err}"
+        );
+        let err = pick_one(named(&[(1, "twin"), (2, "twin")]), "twin", "agent", key).unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("2 agents have the name \"twin\""), "{msg}");
+        assert!(msg.contains(&Uuid::from_u128(2).to_string()), "{msg}");
     }
 
 }
