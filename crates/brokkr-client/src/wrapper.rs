@@ -468,7 +468,7 @@ impl BrokkrClient {
                     let err = BrokkrError::from(e);
                     if err.status() == Some(reqwest::StatusCode::NOT_FOUND) {
                         Err(BrokkrError::InvalidRequest(format!(
-                            "no generator with id {id}"
+                            "no tenant with id {id}"
                         )))
                     } else {
                         Err(err)
@@ -484,7 +484,7 @@ impl BrokkrClient {
             .collect();
         match ids.as_slice() {
             [] => Err(BrokkrError::InvalidRequest(format!(
-                "no generator named \"{wanted}\""
+                "no tenant named \"{wanted}\""
             ))),
             [id] => Ok(*id),
             _ => Err(ambiguous_name("generator", wanted, &ids)),

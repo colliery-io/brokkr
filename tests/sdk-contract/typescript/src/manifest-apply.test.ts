@@ -113,7 +113,7 @@ describe("brokkr SDK contract — TypeScript manifest apply", () => {
     // Without a generator, an admin is refused; the error names the flag.
     await expect(adminWrapper.apply(adminStack, dir)).rejects.toThrow("--generator");
     await expect(adminWrapper.apply(adminStack, dir, [], "no-such-generator")).rejects.toThrow(
-      "no generator named",
+      "no tenant named",
     );
     // A tenant cannot apply for another tenant; its own name is fine.
     await expect(wrapper.apply(adminStack, dir, [], "no-such-generator")).rejects.toThrow(

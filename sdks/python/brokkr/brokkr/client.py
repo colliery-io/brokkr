@@ -216,7 +216,7 @@ class BrokkrClient:
         if wanted_id is not None:
             resp = await get_generator.asyncio_detailed(wanted_id, client=self.api)
             if int(resp.status_code) == 404:
-                raise BrokkrError(message=f"no generator with id {wanted_id}")
+                raise BrokkrError(message=f"no tenant with id {wanted_id}")
             return _expect(resp, "get_generator").id
         generators = _expect(
             await list_generators.asyncio_detailed(client=self.api),
@@ -224,7 +224,7 @@ class BrokkrClient:
         )
         match = next((g for g in generators if g.name == wanted), None)
         if match is None:
-            raise BrokkrError(message=f'no generator named "{wanted}"')
+            raise BrokkrError(message=f'no tenant named "{wanted}"')
         return match.id
 
     async def apply(
