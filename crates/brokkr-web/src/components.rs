@@ -38,27 +38,14 @@ pub fn poll(f: impl Fn() + 'static, every: std::time::Duration) {
 pub const FRESH_BEAT_SECS: i64 = 8;
 
 /// A status dot that pulses while `live` (design/README.md: "pulses if active
-/// and last beat < 8s"). The pulse is Aurora's `cl-pulse` keyframes; it stops
-/// when the system asks for less motion (style/brokkr.css).
+/// and last beat < 8s"). The pulse is Aurora's `.cl-pulse`, which stops when
+/// the system asks for less motion.
 #[component]
 pub fn LiveDot(#[prop(into)] color: String, live: bool) -> impl IntoView {
     if live {
-        view! { <span class="brk-pulse"><Dot color=color glow=true /></span> }.into_any()
+        view! { <span class="brk-pulse cl-pulse"><Dot color=color glow=true /></span> }.into_any()
     } else {
         view! { <Dot color=color /> }.into_any()
-    }
-}
-
-/// An indeterminate progress bar (the design's `brk-sweep`), for work that has
-/// no percentage, such as a diagnostic the agent is collecting.
-#[component]
-pub fn Sweep(#[prop(into)] label: String) -> impl IntoView {
-    let aria = label.clone();
-    view! {
-        <div role="status" aria-label=aria>
-            <div class="brk-sweep" aria-hidden="true"></div>
-            <div class="brk-note">{label}</div>
-        </div>
     }
 }
 
@@ -77,34 +64,6 @@ mod tests {
 
 /// The docs site, for the "next step" links of empty states.
 pub const DOCS: &str = "https://colliery-io.github.io/brokkr";
-
-/// An empty state that says the next step (BROKKR-T-0336). Aurora's `Empty`
-/// takes one message and has no slot for a step or a link (AURORA-T-0007
-/// item 20), so this composes Aurora's `Text` and `Anchor` under a local
-/// layout class.
-#[component]
-pub fn EmptyNext(
-    #[prop(into)] message: String,
-    #[prop(into)] next: String,
-    #[prop(optional, into)] href: String,
-    #[prop(optional, into)] link: String,
-) -> impl IntoView {
-    use aurora_leptos::components::{Anchor, Text};
-    let link = (!href.is_empty()).then(|| {
-        let label = if link.is_empty() {
-            "Read how".to_string()
-        } else {
-            link
-        };
-        view! { <Anchor href=href>{label}</Anchor> }
-    });
-    view! {
-        <div class="brk-empty">
-            <Text dimmed=true>{message}</Text>
-            <span class="brk-empty__next">{next} " " {link}</span>
-        </div>
-    }
-}
 
 /// A link to another view, as a hash route plus a selection
 /// (`#fleet/agent/<id>`), so the browser's back button works

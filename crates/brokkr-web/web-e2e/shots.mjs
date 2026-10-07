@@ -294,6 +294,9 @@ const SCENES = [
   // look alike: a real collection, an empty-but-successful one, and a failure.
   { name: "fleet-diagnostic", nav: "Fleet", click: "prod-agent-01", then_click: "Run diagnostic",
     mocks: { ...DIAG_MOCKS, "/diagnostics/9f10ab22": DIAG_DONE } },
+  // Still collecting: the indeterminate progress bar (Aurora's Meter).
+  { name: "fleet-diagnostic-pending", nav: "Fleet", click: "prod-agent-01", then_click: "Run diagnostic",
+    mocks: { ...DIAG_MOCKS, "/diagnostics/9f10ab22": { request: DIAG_CREATED } } },
   { name: "fleet-diagnostic-empty", nav: "Fleet", click: "prod-agent-01", then_click: "Run diagnostic",
     mocks: { ...DIAG_MOCKS, "/diagnostics/9f10ab22": DIAG_EMPTY } },
   { name: "fleet-diagnostic-error", nav: "Fleet", click: "prod-agent-01", then_click: "Run diagnostic",

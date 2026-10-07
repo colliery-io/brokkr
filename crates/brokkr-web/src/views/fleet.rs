@@ -17,8 +17,7 @@
 
 use crate::api;
 use crate::components::{
-    agent_events_href, same_agent, sev, stack_href, EmptyNext, LiveDot, Sweep, DOCS,
-    FRESH_BEAT_SECS,
+    agent_events_href, same_agent, sev, stack_href, LiveDot, DOCS, FRESH_BEAT_SECS,
 };
 use crate::models::{DiagEvent, DiagnosticData, DiagnosticOutcome, FleetAgentRecord, PodStatus};
 use crate::views::ago;
@@ -26,6 +25,7 @@ use aurora_leptos::components::*;
 use aurora_leptos::data::{CodeBlock, DetailList, KeyValue, SectionLabel, StatTile};
 use aurora_leptos::frame::{use_toaster, Drawer};
 use aurora_leptos::tokens::token;
+use aurora_leptos::widgets::Meter;
 use leptos::prelude::*;
 use std::collections::BTreeMap;
 use wasm_bindgen_futures::spawn_local;
@@ -300,9 +300,9 @@ pub fn FleetView() -> impl IntoView {
             .into_any(),
             Some(Ok(agents)) if agents.is_empty() => {
                 view! {
-                    <EmptyNext
+                    <Empty
                         message="No agents registered with this broker."
-                        next="Create an agent record, start the agent with its PAK and a matching name and cluster, then open it here and activate it."
+                        hint="Create an agent record, start the agent with its PAK and a matching name and cluster, then open it here and activate it."
                         href=format!("{DOCS}/how-to/agent-registration.html")
                         link="How an agent registers"
                     />
@@ -583,18 +583,13 @@ pub fn FleetView() -> impl IntoView {
                                 }.into_any(),
                                 Some(Some(Ok(objs))) => {
                                     let options: Vec<String> = objs.iter().map(|o| o.label()).collect();
-                                    // Aurora's Select shows its value: start on the first object.
-                                    if chosen.get_untracked().is_empty() {
-                                        if let Some(first) = options.first() {
-                                            chosen.set(first.clone());
-                                        }
-                                    }
                                     let agent_id = agent_id.clone();
                                     view! {
                                         <Select label="deployment object" options=options value=chosen />
                                         <Group><Button on_click=Callback::new(move |_| {
-                                            // Empty/stale selection falls back to the first
-                                            // option, which is what the <select> is showing.
+                                            // An empty or stale selection means the first
+                                            // object: Aurora's Select shows the first option
+                                            // and does not write the value.
                                             let want = chosen.get();
                                             let Some(obj) = objs
                                                 .iter()
@@ -671,7 +666,8 @@ pub fn FleetView() -> impl IntoView {
                                                 </Alert>
                                             }.into_any(),
                                             DiagnosticOutcome::InFlight => view! {
-                                                <Sweep label="waiting for the agent to collect pod statuses, events, log tails\u{2026}" />
+                                                <Meter indeterminate=true label="waiting for the agent to collect pod statuses, events, log tails" />
+                                                <span class="brk-note">"waiting for the agent to collect pod statuses, events, log tails\u{2026}"</span>
                                             }.into_any(),
                                             // `completed` + an `error` entry in `events` is a
                                             // FAILED collection, not an empty one.
