@@ -56,7 +56,7 @@ The sidebar groups seven views:
 - **Overview** — the at-a-glance landing view: headline counts, a fleet-health bar, a broker-throughput sparkline drawn from the broker's Prometheus metrics, and a recent activity feed of agent events.
 - **Fleet** — every agent, grouped into a panel per cluster, with counts of active, degraded, and failing agents across the top. Each row shows the agent's status and health pills, whether it holds an internal WebSocket connection to the broker, and how long ago it last checked in. Clicking a row opens the agent detail panel, which is also where diagnostics live (Step 5).
 - **Deployments** — the stacks this broker knows about. Clicking one opens its detail, including the per-deployment-object health rollup for that stack.
-- **Telemetry** — two tabs. *Kube events* lists the agent lifecycle events (applies, heartbeats, reconciles) the broker has retained; clicking one opens its detail. *Pod logs* is a placeholder — pod log tails are per-stack and there is no global feed, so the tab explains that rather than showing data. Both sit behind a short retention window, which the view states on screen: this is a window into recent activity, not a log archive. For anything longer-lived, ship logs onward as described in [Streaming Pod Logs & Live Tail](./log-streaming.md).
+- **Telemetry** — three tabs. *Agent events* lists the agent lifecycle events (applies, heartbeats, reconciles) that the broker keeps; click one to see its detail. *Kube events* and *Pod logs* show one stack: select the stack above the tabs. *Kube events* lists the Kubernetes events of the objects of that stack. *Pod logs* is a live tail of the pods of that stack (see [The Pod Logs Tab Is Live](#the-pod-logs-tab-is-live)). The broker keeps each stream for a short window only, and the view shows that window: this is a view of recent activity, not a log archive. To keep logs for longer, send them on as [Streaming Pod Logs & Live Tail](./log-streaming.md) tells.
 
 **Operations**
 
@@ -69,13 +69,32 @@ The sidebar groups seven views:
 
 ### How the Views Refresh
 
-The console reads the REST API and nothing else — it opens no WebSocket and streams nothing. Most views simply re-read their endpoints on a short timer, so the page stays roughly current on its own without you reloading it.
+Most views read the REST API again on a 5 s timer, so the page stays current without a reload. The *Pod logs* tab is the only view that also opens a WebSocket (see below).
 
 The header carries a wall clock. It once also carried a Live/Paused control that was wired to nothing; it was removed in 0.9.0 rather than left as decoration, because in a deployment tool a global "Paused" reads as *the fleet is paused* — which it never was. Pausing is now a real, per-agent action: see [Pause or Resume an Agent](#pause-or-resume-an-agent).
 
 There is no way to stop the console's periodic re-reads. They are read-only and cheap; close the tab if you need them to stop.
 
 If you want a genuine live stream of fleet state, that is an API capability rather than a console one — see [Monitoring Your Agent Fleet](./fleet-monitoring.md).
+
+### The Pod Logs Tab Is Live
+
+When the *Pod logs* tab shows a stack, the console opens the live stream of that stack (`/api/v1/stacks/{id}/live`, the stream that [Streaming Pod Logs & Live Tail](./log-streaming.md) describes). The console first shows the lines that the broker keeps. Then it adds each new line when the agent sends it, usually in less than 1 s. The view shows each line one time, also when a line comes from the stream and from a history read. The view keeps the newest 2000 lines.
+
+The console closes the stream when you go to a different tab, select a different stack, or go to a different view.
+
+A state shows above the lines:
+
+| State | Meaning |
+|-------|---------|
+| **connecting** | The console opens the stream. |
+| **live** | The stream is open. New lines show when the pod writes them. The console does not read the history again while the stream is open. |
+| **reconnecting** | The stream closed. The console tries again after the delay that it shows (1 s, then 2 s, 4 s and more, to a maximum of 30 s). Until the stream is open again, the console reads the history every 5 s, so you see new lines at most 5 s late. When the stream opens, the console reads the history one time to get the lines that it did not get. |
+| **polling** | The browser cannot open the stream. The console reads the history every 5 s. |
+
+A line with a **gap** label tells you that lines are missing at that position, and how many. The agent sends a gap when it drops lines (for example, when a pod writes more lines than its rate limit). The broker sends a gap when the console reads the stream too slowly. The broker keeps the lines that it got, so a reload can show lines that the gap replaced, if the agent did not drop them.
+
+The console does not use the stream to find out if its token is valid. If the broker refuses the stream, the tab shows **reconnecting**, and the REST reads show the session state as usual.
 
 ## Step 4: Scope the View to One Tenant
 

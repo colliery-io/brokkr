@@ -97,6 +97,20 @@ const POD_LOGS = { retention: RETENTION, lines: [
   { ts: ago(31), namespace: "payments", pod: "payments-api-7d9f4-q8m3", container: "api", line: "pulling image ghcr.io/app:sha-7f3a01" },
   { ts: ago(12), namespace: "payments", pod: "payments-api-7d9f4-x2k1", container: "api", line: "POST /charge 201 48ms" },
 ] };
+// The live stream of payments-api (BROKKR-T-0348): the frames the broker
+// relays on /api/v1/stacks/s1/live, in the wire shape of brokkr_wire::WsMessage
+// ({"type": "<snake_case>", "body": {...}}). The first line repeats the
+// newest history line: the view must show it once.
+const liveLine = (ts, pod, line) => ({ type: "pod_log_line", body: {
+  agent_id: "a1", stack_id: "s1", namespace: "payments", pod, container: "api", ts, line } });
+const LIVE_FRAMES = [
+  liveLine(POD_LOGS.lines[3].ts, POD_LOGS.lines[3].pod, POD_LOGS.lines[3].line),
+  liveLine(ago(2), "payments-api-7d9f4-x2k1", "POST /charge 201 39ms"),
+  { type: "log_gap", body: { agent_id: "00000000-0000-0000-0000-000000000000", stack_id: "s1",
+    since_ts: ago(1), dropped_count: 42, reason: "buffer_full" } },
+  liveLine(ago(0), "payments-api-7d9f4-q8m3", "image pulled, container started"),
+  { type: "k8s_event", body: { reason: "Pulled" } },
+];
 // Named PAKs (tenants) for the scope selector (BROKKR-I-0032). IDs line up
 // with STACKS.generator_id so scoped mocks stay coherent.
 const PAKS = [
@@ -292,7 +306,21 @@ const SCENES = [
   // or its pod logs; and the Pod logs tab with no stack picked.
   { name: "telemetry-kube-events", nav: "Telemetry", select: "payments-api", tab: "Kube events",
     mocks: { "/agent-events": TELEM, "/stacks": STACKS, "/stacks/s1/events": K8S_EVENTS } },
+  // The Pod logs tab tails the live stream (BROKKR-T-0348): the history, then
+  // the live lines and a gap row, with no duplicate line, and the state "live".
   { name: "telemetry-logs", nav: "Telemetry", select: "payments-api", tab: "Pod logs",
+    live: { frames: LIVE_FRAMES }, settle: 600,
+    live_state: "live",
+    assert_text: ["listening on :8080", "POST /charge 201 39ms", "image pulled, container started",
+      "Gap: 42 lines are missing here (buffer full)."],
+    assert_once: ["POST /charge 201 48ms"],
+    mocks: { "/agent-events": TELEM, "/stacks": STACKS, "/stacks/s1/logs": POD_LOGS } },
+  // The stream closes and every new socket closes at once: the tab says
+  // "reconnecting" and keeps the lines it has (the 5 s poll reads on).
+  { name: "telemetry-logs-reconnecting", nav: "Telemetry", select: "payments-api", tab: "Pod logs",
+    live: { frames: LIVE_FRAMES.slice(1, 3), close_after: 300 }, settle: 600,
+    live_state: "reconnecting",
+    assert_text: ["POST /charge 201 39ms", "Gap: 42 lines are missing here (buffer full)."],
     mocks: { "/agent-events": TELEM, "/stacks": STACKS, "/stacks/s1/logs": POD_LOGS } },
   { name: "telemetry-logs-no-stack", nav: "Telemetry", tab: "Pod logs",
     mocks: { "/agent-events": TELEM, "/stacks": STACKS } },
@@ -410,6 +438,24 @@ await page.route("**/metrics", (route) => {
 });
 
 let MOCKS = {};
+// The live stack stream (BROKKR-T-0348). The page's sockets to
+// /api/v1/stacks/<id>/live are mocked: the route opens, and the scene's
+// `live` sends its `frames`; with `close_after` (ms) the socket closes then,
+// and each later socket closes at once, so the console stays down.
+let LIVE = null;
+let liveSockets = 0;
+await page.routeWebSocket(/\/api\/v1\/stacks\/[^/]+\/live$/, (ws) => {
+  const live = LIVE;
+  if (!live) return;
+  if (live.close_after && liveSockets++ > 0) {
+    ws.close({ code: 1011, reason: "mock: stream down" });
+    return;
+  }
+  setTimeout(() => {
+    for (const f of live.frames || []) ws.send(JSON.stringify(f));
+    if (live.close_after) setTimeout(() => ws.close({ code: 1011, reason: "mock: stream down" }), live.close_after);
+  }, 200);
+});
 // Non-zero: every API request answers with this status (a stale session).
 // "abort": every API request fails with no answer (the broker is down).
 let EXPIRE = 0;
@@ -524,6 +570,8 @@ async function navigateTo(scene, label) {
 const ONLY = process.env.ONLY ? new RegExp(process.env.ONLY) : null;
 for (const s of SCENES.filter((x) => !ONLY || ONLY.test(x.name))) {
   MOCKS = s.mocks || {};
+  LIVE = s.live || null;
+  liveSockets = 0;
   EXPECT_HTTP = new Set(s.expect_http || []);
   EXPECT_NET = !!s.expect_net;
   EXPIRE = s.expire && s.expire_at_load ? s.expire : 0;
@@ -624,6 +672,24 @@ for (const s of SCENES.filter((x) => !ONLY || ONLY.test(x.name))) {
     } else {
       console.log(`  assert: "${s.assert_error}" with Retry, no waiting panel ✓`);
     }
+  }
+  // The live tail (BROKKR-T-0348): the state next to the Pod logs title, the
+  // lines that must show, and the lines that must show once.
+  if (s.live_state) {
+    const st = await page.locator("[data-live-state]").first().getAttribute("data-live-state").catch(() => null);
+    if (st !== s.live_state) errs.push(`[assert] ${s.name}: live state "${st}", want "${s.live_state}"`);
+    else console.log(`  assert: live state "${st}" ✓`);
+  }
+  for (const t of s.assert_text || []) {
+    const n = await page.getByText(t).count();
+    if (n < 1) errs.push(`[assert] ${s.name}: "${t}" is not shown`);
+  }
+  for (const t of s.assert_once || []) {
+    const n = await page.getByText(t).count();
+    if (n !== 1) errs.push(`[assert] ${s.name}: "${t}" shown ${n}x, want 1`);
+  }
+  if ((s.assert_text || []).length || (s.assert_once || []).length) {
+    console.log(`  assert: ${(s.assert_text || []).length} lines shown, ${(s.assert_once || []).length} shown once`);
   }
   // Reload against a healthy broker: the page gets a new token, the banner goes.
   if (s.assert_reload) {

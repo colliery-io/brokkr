@@ -52,7 +52,7 @@ fn injected_token() -> Option<String> {
 /// now served properly by the per-action admin PAK prompt in the tenants view,
 /// which holds the credential in memory for one request instead of parking it
 /// in browser storage indefinitely.
-fn token() -> Option<String> {
+pub(crate) fn token() -> Option<String> {
     injected_token()
 }
 

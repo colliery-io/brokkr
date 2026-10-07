@@ -1,0 +1,24 @@
+[
+  {
+    "type": "pod_log_line",
+    "body": {
+      "agent_id": "6f1d2c3b-4a59-4e8f-9b0a-1c2d3e4f5a6b",
+      "stack_id": "0b1c2d3e-4f5a-4b6c-8d7e-9f0a1b2c3d4e",
+      "namespace": "payments",
+      "pod": "payments-api-7d9f4-x2k1",
+      "container": "api",
+      "ts": "2026-10-07T12:04:53.123456789Z",
+      "line": "POST /charge 201 48ms"
+    }
+  },
+  {
+    "type": "log_gap",
+    "body": {
+      "agent_id": "00000000-0000-0000-0000-000000000000",
+      "stack_id": "0b1c2d3e-4f5a-4b6c-8d7e-9f0a1b2c3d4e",
+      "since_ts": "2026-10-07T12:04:54Z",
+      "dropped_count": 17,
+      "reason": "buffer_full"
+    }
+  }
+]
