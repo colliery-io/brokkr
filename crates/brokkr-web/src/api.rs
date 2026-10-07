@@ -56,6 +56,70 @@ fn token() -> Option<String> {
     injected_token()
 }
 
+/// Whether the injected token still works, as the responses show it.
+///
+/// The token is per broker process (`brokkr-broker/src/utils/ui_pak.rs`), so a
+/// broker restart, or a request that a load balancer sends to a different
+/// replica, makes every later request fail with 401 or 403. Each view would
+/// then show its own "Not authorized"; the shell instead reads this state and
+/// shows one banner that says a reload fixes it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Session {
+    /// No request with the injected token has succeeded yet.
+    #[default]
+    Unknown,
+    /// A request with the injected token succeeded.
+    Valid,
+    /// A request was refused (401 or 403) after an earlier one succeeded.
+    Expired,
+}
+
+impl Session {
+    /// The state after a response with `status` to a request that carried the
+    /// injected token.
+    ///
+    /// A refusal before any success stays `Unknown`: a token that never worked
+    /// is not evidence of a restart, so the views keep their own error. Once
+    /// `Expired`, the state stays there until a reload: behind a load balancer
+    /// without session affinity some later requests can still succeed, and the
+    /// page is broken all the same.
+    pub fn after(self, status: u16) -> Session {
+        match (self, status) {
+            (Session::Expired, _) => Session::Expired,
+            (_, 200..=299) => Session::Valid,
+            (Session::Valid, 401 | 403) => Session::Expired,
+            (state, _) => state,
+        }
+    }
+}
+
+thread_local! {
+    /// The shell's session signal, set once by [`watch_session`]. A thread
+    /// local, not a Leptos context: a fetch continues after an `.await`, where
+    /// there is no reactive owner to read a context from.
+    static SESSION: std::cell::Cell<Option<leptos::prelude::RwSignal<Session>>> =
+        const { std::cell::Cell::new(None) };
+}
+
+/// Make every later request with the injected token update `signal`.
+pub fn watch_session(signal: leptos::prelude::RwSignal<Session>) {
+    SESSION.with(|cell| cell.set(Some(signal)));
+}
+
+/// Feed one response status to the session signal, if the shell set one.
+fn note_status(status: u16) {
+    use leptos::prelude::{GetUntracked, Set};
+    SESSION.with(|cell| {
+        if let Some(signal) = cell.get() {
+            let now = signal.get_untracked();
+            let next = now.after(status);
+            if next != now {
+                signal.set(next);
+            }
+        }
+    });
+}
+
 /// GET `/api/v1{path}` with `params` as the query string, and deserialize the
 /// JSON body. Params go through the builder's query API rather than being baked
 /// into `path` so the URL stays canonical (no stray separators — gloo-net
@@ -74,6 +138,7 @@ async fn get_query<T: DeserializeOwned>(
     }
     let resp = req.send().await.map_err(|_| ApiError::Network)?;
     let status = resp.status();
+    note_status(status);
     if !(200..300).contains(&status) {
         let message = resp.text().await.unwrap_or_default();
         let code = serde_json::from_str::<ErrorBody>(&message)
@@ -222,6 +287,7 @@ pub async fn post_json<B: Serialize, T: DeserializeOwned>(
         .await
         .map_err(|_| ApiError::Network)?;
     let status = resp.status();
+    note_status(status);
     if !(200..300).contains(&status) {
         let message = resp.text().await.unwrap_or_default();
         let code = serde_json::from_str::<ErrorBody>(&message)
@@ -442,4 +508,37 @@ pub async fn set_agent_status(
         admin_pak,
     )
     .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Session;
+
+    #[test]
+    fn a_refusal_after_a_success_expires_the_session() {
+        let ok = Session::Unknown.after(200);
+        assert_eq!(ok, Session::Valid);
+        assert_eq!(ok.after(401), Session::Expired);
+        assert_eq!(ok.after(403), Session::Expired);
+    }
+
+    #[test]
+    fn a_refusal_before_any_success_is_not_an_expiry() {
+        assert_eq!(Session::Unknown.after(401), Session::Unknown);
+        assert_eq!(Session::Unknown.after(403), Session::Unknown);
+        assert_eq!(Session::Unknown.after(401).after(200), Session::Valid);
+    }
+
+    #[test]
+    fn other_failures_do_not_expire_the_session() {
+        for status in [404, 409, 500, 502, 503] {
+            assert_eq!(Session::Valid.after(status), Session::Valid, "{status}");
+        }
+    }
+
+    #[test]
+    fn an_expired_session_stays_expired_until_a_reload() {
+        assert_eq!(Session::Expired.after(200), Session::Expired);
+        assert_eq!(Session::Expired.after(401), Session::Expired);
+    }
 }

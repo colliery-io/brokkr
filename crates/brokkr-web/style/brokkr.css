@@ -58,6 +58,9 @@
 
 /* ----- Layout ----- */
 .brk-page { max-width: 1500px; margin: 0 auto; display: flex; flex-direction: column; gap: var(--space-md); }
+/* The session banner: one per shell, above the view, as wide as the page. */
+.brk-session { margin-bottom: var(--space-md); }
+.brk-session__body { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); flex-wrap: wrap; }
 /* KPI row: auto-fit tiles, as in design/README.md. */
 .brk-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: var(--space-sm); }
 .brk-kpis > * { min-width: 0; }

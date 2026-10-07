@@ -6,6 +6,7 @@
 // Aurora has a light and a dark theme that follow the OS. THEME=light or
 // THEME=dark emulates that OS setting (default dark); OUT sets the folder.
 //   THEME=light OUT=shots/light node shots.mjs
+// ONLY=<regex> runs only the scenes whose names match: ONLY=^session- node shots.mjs
 import { chromium } from "@playwright/test";
 import { mkdirSync } from "node:fs";
 
@@ -327,6 +328,17 @@ const SCENES = [
     // admin PAK must appear nowhere in browser storage afterwards.
     assert_no_stored: TYPED_ADMIN_PAK,
     mocks: { "/generators": GENERATORS, "POST /generators": CREATED_GENERATOR } },
+  // A stale session (BROKKR-T-0340): the first reads succeed, then the broker
+  // restarts (or a load balancer picks another replica) and every request is
+  // refused. `expire` sets the status of every API answer after the Overview
+  // has loaded; the navigation then reads with the dead token. The shell must
+  // show one banner, and the indicator must say "session expired".
+  // `assert_reload` clicks Reload against a healthy broker and asserts the
+  // banner is gone.
+  { name: "session-expired-401", nav: "Fleet", expire: 401, expect_http: [401], assert_reload: true },
+  { name: "session-expired-403", nav: "Deployments", expire: 403, expect_http: [403] },
+  // A token refused from the first request is not a restart: no banner.
+  { name: "session-refused-at-load", expire: 401, expire_at_load: true, expect_http: [401] },
 ];
 
 // ---- driver --------------------------------------------------------------
@@ -366,7 +378,16 @@ await page.route("**/metrics", (route) => {
 });
 
 let MOCKS = {};
+// Non-zero: every API request answers with this status (a stale session).
+let EXPIRE = 0;
 await page.route("**/api/v1/**", (route) => {
+  if (EXPIRE) {
+    return route.fulfill({
+      status: EXPIRE,
+      contentType: "application/json",
+      body: JSON.stringify({ code: EXPIRE === 401 ? "unauthorized" : "forbidden", message: "" }),
+    });
+  }
   const url = new URL(route.request().url());
   const suffix = url.pathname.replace(/^\/api\/v1/, "");
   // Query-aware first (scoped fixtures like "/fleet?pak_id=..."), then bare
@@ -454,9 +475,12 @@ async function navigateTo(scene, label) {
   return false;
 }
 
-for (const s of SCENES) {
+// ONLY=<regex> runs the scenes whose names match (ONLY=^session- for one feature).
+const ONLY = process.env.ONLY ? new RegExp(process.env.ONLY) : null;
+for (const s of SCENES.filter((x) => !ONLY || ONLY.test(x.name))) {
   MOCKS = s.mocks || {};
   EXPECT_HTTP = new Set(s.expect_http || []);
+  EXPIRE = s.expire && s.expire_at_load ? s.expire : 0;
   // `hash` opens a view with a selection (BROKKR-T-0337): `#fleet/agent/<id>`.
   await page.goto(BASE + (s.hash || ""), { waitUntil: "domcontentloaded" });
   // Wait for the WASM app to mount before interacting. `domcontentloaded` fires
@@ -468,6 +492,12 @@ for (const s of SCENES) {
     .getByText("control plane", { exact: true })
     .waitFor({ state: "visible", timeout: 15000 })
     .catch(() => errs.push(`[mount] ${s.name}: app never rendered`));
+  if (s.expire && !s.expire_at_load) {
+    // Let the first reads succeed, then refuse everything after.
+    await page.getByText("broker ready").waitFor({ timeout: 10000 })
+      .catch(() => errs.push(`[expire] ${s.name}: the first reads never succeeded`));
+    EXPIRE = s.expire;
+  }
   if (s.nav) {
     await navigateTo(s.name, s.nav);
   } else {
@@ -512,6 +542,30 @@ for (const s of SCENES) {
   await page.waitForTimeout(700);
   await page.screenshot({ path: `${OUT}/${s.name}.png`, fullPage: true });
   console.log(`shot: ${s.name}`);
+
+  // The stale-session scenes assert what the screenshot shows: one banner
+  // after an expiry, none for a token refused at load.
+  if (s.expire) {
+    const banners = await page.getByText("Reload to get a new session.").count();
+    const want = s.expire_at_load ? 0 : 1;
+    const indicator = s.expire_at_load ? "broker unreachable" : "session expired";
+    const shown = await page.getByText(indicator, { exact: true }).count();
+    if (banners !== want || shown !== 1) {
+      errs.push(`[assert] ${s.name}: ${banners} session banner(s), want ${want}; "${indicator}" shown ${shown}x`);
+    } else {
+      console.log(`  assert: ${want} session banner, indicator "${indicator}" ✓`);
+    }
+  }
+  // Reload against a healthy broker: the page gets a new token, the banner goes.
+  if (s.assert_reload) {
+    EXPIRE = 0;
+    await page.getByRole("button", { name: "Reload" }).click();
+    await page.getByText("broker ready").waitFor({ timeout: 10000 }).catch(() => {});
+    const left = await page.getByText("Reload to get a new session.").count();
+    if (left) errs.push(`[assert] ${s.name}: the banner is still there after Reload`);
+    else console.log("  assert: Reload clears the banner ✓");
+  }
+  EXPIRE = 0;
 
   // Behavioural check, not a pixel one: a secret typed into the page must not
   // survive in localStorage or sessionStorage. A screenshot can show the reveal
