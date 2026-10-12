@@ -29,6 +29,7 @@ jobs:
       sdk_contract: ${{ steps.filter.outputs.sdk_contract }}
       openapi: ${{ steps.filter.outputs.openapi }}
       console: ${{ steps.filter.outputs.console }}
+      e2e_scenarios: ${{ steps.filter.outputs.e2e_scenarios }}
     steps:
       - uses: actions/checkout@v6
       - uses: dorny/paths-filter@v4.0.1
@@ -76,6 +77,12 @@ jobs:
               - 'crates/brokkr-web/**'
               - '.github/workflows/main.yml'
               - '.github/workflows/console.yml'
+            # The e2e scenarios outside the walkthrough (BROKKR-T-0323). Main
+            # runs them each night; a PR runs them when it changes them.
+            e2e_scenarios:
+              - 'tests/e2e/**'
+              - '.angreal/files/**'
+              - '.github/workflows/e2e_scenarios.yml'
 
   integration_tests:
     needs: [setup, changes]
@@ -139,3 +146,10 @@ jobs:
             case "${r#*=}" in success|skipped) ;; *) echo "::error::${r}"; status=1 ;; esac
           done
           exit "$status"
+  # Advisory on a PR: slow, and it severs links on purpose. Nightly runs it
+  # on main each night and files an issue when it fails (BROKKR-T-0323).
+  e2e_scenarios:
+    needs: changes
+    if: github.event_name == 'pull_request' && needs.changes.outputs.e2e_scenarios == 'true'
+    uses: ./.github/workflows/e2e_scenarios.yml
+    secrets: inherit
