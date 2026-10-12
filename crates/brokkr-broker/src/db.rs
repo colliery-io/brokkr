@@ -344,4 +344,52 @@ impl ConnectionPool {
 
         Ok(())
     }
+
+    /// Checks that the configured schema holds the Brokkr tables.
+    ///
+    /// Each checkout sets `search_path TO <schema>, public`. PostgreSQL
+    /// accepts a schema that does not exist in that list, and resolves a table
+    /// that the schema does not have from `public`. So a command run with a
+    /// schema that is missing, misspelled or not migrated reads and writes the
+    /// tables in `public`, and reports no error (BROKKR-T-0327). `serve`
+    /// creates and migrates the schema before it uses it, so only the one-shot
+    /// commands need this check.
+    ///
+    /// The check looks for diesel's migration table in the schema itself, by
+    /// a qualified name, so the `public` fallback cannot satisfy it. With no
+    /// schema configured there is nothing to check.
+    pub fn check_schema_migrated(&self) -> Result<(), String> {
+        use diesel::prelude::*;
+        use diesel::sql_types::{Bool, Text};
+
+        let Some(ref schema) = self.schema else {
+            return Ok(());
+        };
+        validate_schema_name(schema).map_err(|e| format!("Invalid schema name: {}", e))?;
+
+        #[derive(QueryableByName)]
+        struct Present {
+            #[diesel(sql_type = Bool)]
+            present: bool,
+        }
+
+        let mut conn = self
+            .pool
+            .get()
+            .map_err(|e| format!("Failed to get connection: {}", e))?;
+        let row: Present = diesel::sql_query("SELECT to_regclass($1) IS NOT NULL AS present")
+            .bind::<Text, _>(format!("{}.__diesel_schema_migrations", schema))
+            .get_result(&mut conn)
+            .map_err(|e| format!("Failed to check schema '{}': {}", schema, e))?;
+
+        if row.present {
+            Ok(())
+        } else {
+            Err(format!(
+                "database schema '{}' has no Brokkr tables. Check BROKKR__DATABASE__SCHEMA, \
+                 or start the broker once with this schema so that it creates and migrates it",
+                schema
+            ))
+        }
+    }
 }
