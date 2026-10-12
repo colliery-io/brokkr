@@ -30,6 +30,11 @@ const MOVED = {
 	// A Swagger UI page with an old copy of the spec. The REST API reference
 	// replaces it.
 	'openapi/index': 'reference/rest-api',
+	// plissken 0.2 no longer writes these pages: they go to their crate.
+	'api/rust/brokkr-agent/bin': 'reference/api/rust/brokkr-agent',
+	'api/rust/brokkr-agent/k8s': 'reference/api/rust/brokkr-agent',
+	'api/rust/brokkr-models/models': 'reference/api/rust/brokkr-models',
+	'api/rust/brokkr-models/schema': 'reference/api/rust/brokkr-models',
 };
 
 // The Rust API pages were at api/rust/<module>.html. plissken writes them

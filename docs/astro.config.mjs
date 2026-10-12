@@ -158,7 +158,9 @@ export default defineConfig({
 							label: 'API Documentation',
 							items: [
 								page('reference/rust-api', 'Overview'),
-								...(apiSidebar ? apiSidebar.items : []),
+								// Not plissken's own Overview (reference/api): the page above
+								// links to it.
+								...(apiSidebar ? apiSidebar.items.filter((i) => i.slug !== 'reference/api') : []),
 								page('reference/client-sdks', 'Client SDKs'),
 							],
 						},
