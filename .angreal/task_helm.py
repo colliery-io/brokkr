@@ -1,6 +1,7 @@
 import angreal
 import json
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -420,6 +421,54 @@ def validate_health_endpoint(service_name, port, path, namespace="default"):
     return success
 
 
+def validate_config_hot_reload(release_name, namespace="default", timeout=180):
+    """Change the dynamic ConfigMap and wait for the broker to reload it.
+
+    BROKKR-T-0292 / BROKKR-T-0309. Proves the chart path end to end: the
+    kubelet updates the mounted file, the broker's file watcher sees it, and it
+    reloads -- as the chart's own ServiceAccount, with no RBAC. The kubelet
+    can take about a minute to update a ConfigMap volume, so the wait is long.
+    """
+    print("\nValidating config hot reload through the dynamic ConfigMap...", flush=True)
+    toml = (
+        "[log]\nlevel = \"info\"\n\n[broker]\n"
+        "diagnostic_cleanup_interval_seconds = 900\n"
+        "diagnostic_max_age_hours = 2\n"
+        "webhook_delivery_interval_seconds = 5\n"
+        "webhook_delivery_batch_size = 50\n"
+        "webhook_cleanup_retention_days = 7\n"
+    )
+    patch = shlex.quote(json.dumps({"data": {"brokkr.toml": toml}}))
+    if not run_in_k8s_container(
+        f"kubectl patch configmap {release_name}-dynamic -n {namespace} "
+        f"--type merge -p {patch}",
+        "Patching the dynamic ConfigMap",
+    ):
+        return False
+
+    expected = "Config file watcher triggered configuration reload"
+    start = time.time()
+    while time.time() - start < timeout:
+        result = subprocess.run([
+            "docker", "run", "--rm",
+            "--network", get_network_name(),
+            "-v", f"{get_volume_name('brokkr-keys')}:/keys:ro",
+            "-e", "KUBECONFIG=/keys/kubeconfig.docker.yaml",
+            "alpine/k8s:1.30.10",
+            "sh", "-c",
+            f"kubectl logs deploy/{release_name} -n {namespace} -c broker --tail=-1",
+        ], capture_output=True, text=True, cwd=cwd)
+        if expected in result.stdout:
+            elapsed = int(time.time() - start)
+            print(f"✓ Broker reloaded the changed ConfigMap ({elapsed}s)", flush=True)
+            return True
+        time.sleep(10)
+
+    print(f"✗ No '{expected}' in broker logs after {timeout}s", flush=True)
+    log_broker_diagnostics(release_name, namespace)
+    return False
+
+
 def test_broker_chart(tag, registry, no_cleanup, test_external_db=False):
     """Test the broker Helm chart.
 
@@ -535,6 +584,10 @@ spec:
         health_passed = True
         health_passed &= validate_health_endpoint(release_name, 3000, "/healthz")
         health_passed &= validate_health_endpoint(release_name, 3000, "/readyz")
+
+        # Hot reload works in a chart install (BROKKR-T-0292, BROKKR-T-0309).
+        if not test_external_db:
+            health_passed &= validate_config_hot_reload(release_name)
 
         return health_passed
 
@@ -2403,6 +2456,82 @@ def check_broker_values(yaml_mod, checks):
         "with reload disabled the dynamic keys fall back to the env ConfigMap",
         not missing,
         missing,
+    )
+    checks.expect(
+        BROKER_CHART,
+        "configReload.enabled",
+        "BROKKR_CONFIGMAP_NAME not rendered (no code reads it)",
+        "BROKKR_CONFIGMAP_NAME" not in on_env,
+        on_env.get("BROKKR_CONFIGMAP_NAME"),
+    )
+
+    # --- serviceAccount ------------------------------------------------------
+    # BROKKR-T-0309. The pod ran as the namespace `default` account. The broker
+    # watches a mounted file, not the Kubernetes API, so the fix is its own
+    # ServiceAccount with no API token and no RBAC -- not a Role granting
+    # get/watch on ConfigMaps.
+    sa = single_manifest(default_docs, "ServiceAccount")
+    sa_name = (sa or {}).get("metadata", {}).get("name")
+    pod_spec = dep["spec"]["template"]["spec"]
+    checks.expect(
+        BROKER_CHART,
+        "serviceAccount.create",
+        "a ServiceAccount is rendered and the Deployment runs as it",
+        sa is not None and pod_spec.get("serviceAccountName") == sa_name,
+        (sa_name, pod_spec.get("serviceAccountName")),
+    )
+    checks.expect(
+        BROKER_CHART,
+        "serviceAccount.automountServiceAccountToken",
+        "no API token mounted by default (ServiceAccount and pod both false)",
+        (sa or {}).get("automountServiceAccountToken") is False
+        and pod_spec.get("automountServiceAccountToken") is False,
+        ((sa or {}).get("automountServiceAccountToken"),
+         pod_spec.get("automountServiceAccountToken")),
+    )
+    rbac_kinds = [
+        d.get("kind") for d in default_docs
+        if d.get("kind") in ("Role", "RoleBinding", "ClusterRole", "ClusterRoleBinding")
+    ]
+    checks.expect(
+        BROKER_CHART,
+        "serviceAccount",
+        "no RBAC rendered (the broker does not call the Kubernetes API)",
+        not rbac_kinds,
+        rbac_kinds,
+    )
+    marker = "brokkr.io/render-check"
+    sa_on = render_own(
+        yaml_mod,
+        BROKER_CHART,
+        {"serviceAccount": {"name": "custom-sa", "annotations": {marker: "present"},
+                            "automountServiceAccountToken": True}},
+    )
+    sa2 = single_manifest(sa_on, "ServiceAccount") or {}
+    pod2 = single_manifest(sa_on, "Deployment")["spec"]["template"]["spec"]
+    checks.expect(
+        BROKER_CHART,
+        "serviceAccount.name/annotations/automountServiceAccountToken",
+        "name, annotations and token setting all reach the rendered objects",
+        sa2.get("metadata", {}).get("name") == "custom-sa"
+        and (sa2.get("metadata", {}).get("annotations") or {}).get(marker) == "present"
+        and sa2.get("automountServiceAccountToken") is True
+        and pod2.get("serviceAccountName") == "custom-sa"
+        and pod2.get("automountServiceAccountToken") is True,
+        (sa2.get("metadata"), pod2.get("serviceAccountName"),
+         pod2.get("automountServiceAccountToken")),
+    )
+    sa_off = render_own(
+        yaml_mod, BROKER_CHART, {"serviceAccount": {"create": False, "name": "existing-sa"}}
+    )
+    pod3 = single_manifest(sa_off, "Deployment")["spec"]["template"]["spec"]
+    checks.expect(
+        BROKER_CHART,
+        "serviceAccount.create",
+        "with create=false no ServiceAccount renders and the pod uses serviceAccount.name",
+        single_manifest(sa_off, "ServiceAccount") is None
+        and pod3.get("serviceAccountName") == "existing-sa",
+        pod3.get("serviceAccountName"),
     )
 
     # --- service.annotations -------------------------------------------------

@@ -703,6 +703,19 @@ impl ReloadableConfig {
                 // carried good changes; the level simply stays where it was.
                 eprintln!("failed to apply reloaded log level '{new_log_level}': {e}");
             }
+            // The broker logs through `tracing`, and `update_log_level` above
+            // only moves the `log` crate's level. Change the `tracing` filter
+            // too, or the reload is reported and the output does not change.
+            match crate::telemetry::set_log_level(&new_log_level) {
+                Ok(true) => {}
+                Ok(false) => eprintln!(
+                    "reloaded log level '{new_log_level}' not applied to tracing: \
+                     RUST_LOG set the filter at startup, or tracing is not initialized"
+                ),
+                Err(e) => {
+                    eprintln!("failed to apply reloaded log level '{new_log_level}': {e}")
+                }
+            }
         }
 
         Ok(changes)

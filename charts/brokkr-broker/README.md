@@ -355,6 +355,33 @@ containerSecurityContext:
 Each object is rendered verbatim, so overriding one replaces it wholesale — restate any
 defaults you want to keep.
 
+### Configuration hot reload
+
+With `configReload.enabled: true` (the default), these values apply without a pod restart:
+`broker.logLevel`, `broker.diagnosticCleanupIntervalSeconds`, `broker.diagnosticMaxAgeHours`,
+`broker.webhookDeliveryIntervalSeconds`, `broker.webhookDeliveryBatchSize` and
+`broker.webhookCleanupRetentionDays`.
+
+How it works:
+
+1. The chart renders these values as `brokkr.toml` in a second ConfigMap, `<release>-dynamic`.
+   They are not in the environment ConfigMap, because an environment variable overrides the file.
+2. The chart mounts that ConfigMap at `/etc/brokkr` as a directory (not `subPath`, which never
+   updates) and sets `BROKKR_CONFIG_FILE=/etc/brokkr/brokkr.toml`.
+3. After `helm upgrade` or `kubectl edit configmap <release>-dynamic`, the kubelet updates the
+   file, usually within about a minute. The broker sees the change, waits
+   `configReload.debounceSeconds`, and reloads. The log shows
+   `Config file watcher triggered configuration reload`.
+
+The broker watches a file. It does not call the Kubernetes API, so the chart creates no Role or
+RoleBinding, and the pod runs as its own ServiceAccount without an API token
+(`serviceAccount.*`).
+
+All other values need a pod restart, and `helm upgrade` does not restart the pod for you:
+the pod template has no checksum annotation. Run
+`kubectl rollout restart deploy/<release>-brokkr-broker`, or use an external reload controller.
+`cors.*` is restart-only: the CORS layer is built once at startup.
+
 ## Migration notes
 
 Two values were renamed or removed because neither ever had an effect. Helm ignores stale entries
@@ -390,7 +417,11 @@ removed, see [TLS/SSL Configuration](#tlsssl-configuration).
 | `replicaCount` | int | `1` | Number of broker replicas. Ignored while `autoscaling.enabled` is true. |
 | `nameOverride` | string | unset (*not in values.yaml*) | Overrides the chart name portion of generated resource names |
 | `fullnameOverride` | string | unset (*not in values.yaml*) | Overrides the full generated resource name |
-| `extraEnv` | array | `[]` | Extra container env entries appended verbatim (plain `value` or `valueFrom`). The escape hatch for settings the chart does not expose. |
+| `extraEnv` | array | `[]` | Extra container env entries appended verbatim (plain `value` or `valueFrom`). The escape hatch for settings the chart does not expose. Do not set `RUST_LOG` here unless you want it to override `broker.logLevel`: when `RUST_LOG` is set, `broker.logLevel` has no effect and does not hot-reload. |
+| `serviceAccount.create` | bool | `true` | Create a ServiceAccount for the broker pod. When false, the pod uses `serviceAccount.name`, or the namespace `default` account when that is empty. |
+| `serviceAccount.name` | string | `""` | ServiceAccount name; generated from the release name when empty |
+| `serviceAccount.annotations` | object | `{}` | Annotations on the created ServiceAccount (for example a cloud IAM role) |
+| `serviceAccount.automountServiceAccountToken` | bool | `false` | Mount the Kubernetes API token in the pod. The broker does not call the Kubernetes API, so the chart creates no Role or RoleBinding and does not mount the token. |
 
 ### Service and ingress
 
@@ -434,34 +465,34 @@ which accepts many more keys than the chart's `values.yaml` lists.
 
 ### Broker application settings
 
-`configReload` marks which of these apply without a restart; see the header comment in
-`values.yaml` for the authoritative hot-reload list.
+With `configReload.enabled: true` (the default), the settings marked *Hot-reloadable* apply
+without a pod restart. See [Configuration hot reload](#configuration-hot-reload).
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `broker.logLevel` | string | `"info"` | `BROKKR__LOG__LEVEL` (`trace`/`debug`/`info`/`warn`/`error`). Hot-reloadable. The binary's own default is `debug`, so running outside the chart is noisier. |
+| `broker.logLevel` | string | `"info"` | `BROKKR__LOG__LEVEL` (`trace`/`debug`/`info`/`warn`/`error`). Hot-reloadable, unless `RUST_LOG` is set (see `extraEnv`). The binary's own default is `debug`, so running outside the chart is noisier. |
 | `broker.diagnosticCleanupIntervalSeconds` | int | `900` | How often diagnostics are pruned. Hot-reloadable. |
 | `broker.diagnosticMaxAgeHours` | int | `1` | Diagnostic retention. Hot-reloadable. |
-| `broker.webhookDeliveryIntervalSeconds` | int | `5` | Webhook delivery worker poll interval. Read once at worker start — **requires a pod restart**. |
-| `broker.webhookDeliveryBatchSize` | int | `50` | Deliveries claimed per pass. Read once at worker start — **requires a pod restart**. |
-| `broker.webhookCleanupRetentionDays` | int | `7` | Delivery-record retention. Read once at cleanup-worker start — **requires a pod restart**. |
+| `broker.webhookDeliveryIntervalSeconds` | int | `5` | Webhook delivery worker poll interval. Hot-reloadable. |
+| `broker.webhookDeliveryBatchSize` | int | `50` | Deliveries claimed per pass. Hot-reloadable. |
+| `broker.webhookCleanupRetentionDays` | int | `7` | Delivery-record retention. Hot-reloadable. |
 | `broker.webhookEncryptionKey` | string | unset (commented in `values.yaml`) | Hex-encoded 32-byte key protecting webhook secrets at rest. Rendered into the ConfigMap in plaintext (dev/test only); ignored when `webhookEncryptionKeyExistingSecret` is set. **Unset means a fresh random key each boot, making previously encrypted webhook data unreadable after a restart.** |
 | `broker.webhookEncryptionKeyExistingSecret` | string | `""` | Name of a pre-existing Secret to source the webhook encryption key from. Injected via `secretKeyRef`, kept out of the ConfigMap/values/git (GitOps-friendly). |
 | `broker.webhookEncryptionKeyExistingSecretKey` | string | `"BROKKR__BROKER__WEBHOOK_ENCRYPTION_KEY"` | Key within that Secret holding the webhook encryption key |
 | `broker.pakHash` | string | unset (commented in `values.yaml`) | Admin PAK hash for day-zero bootstrap. Rendered into the ConfigMap in plaintext (dev/test only); ignored when `pakHashExistingSecret` is set. **Unset or empty leaves the publicly-known development admin PAK active** — see [Admin Credential](#admin-credential-day-zero-bootstrap). |
 | `broker.pakHashExistingSecret` | string | `""` | Name of a pre-existing Secret to source the admin PAK hash from. Injected via `secretKeyRef`. |
 | `broker.pakHashExistingSecretKey` | string | `"BROKKR__BROKER__PAK_HASH"` | Key within that Secret holding the admin PAK hash |
-| `configReload.enabled` | bool | `true` | Sets `BROKKR_CONFIG_WATCHER_ENABLED`, so the broker watches its own ConfigMap and reloads hot-reloadable settings. Note the Deployment sets no `serviceAccountName` and the chart creates no RBAC, so the pod runs as the namespace `default` ServiceAccount — grant it `get`/`watch` on ConfigMaps separately if the watcher must work. |
+| `configReload.enabled` | bool | `true` | Render the hot-reloadable settings as `brokkr.toml` in the `<release>-dynamic` ConfigMap, mount it at `/etc/brokkr`, and set `BROKKR_CONFIG_FILE` so the broker watches the file. When false, those settings are environment variables and need a restart. No RBAC is needed: the broker watches a file, not the Kubernetes API. |
 | `configReload.debounceSeconds` | int | `5` | Debounce window between successive reloads |
 
 ### CORS
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `cors.allowedOrigins` | array | `["*"]` | `BROKKR__CORS__ALLOWED_ORIGINS` (joined with commas). Hot-reloadable. **The default allows every origin — narrow it for any internet-reachable broker.** |
+| `cors.allowedOrigins` | array | `["*"]` | `BROKKR__CORS__ALLOWED_ORIGINS` (joined with commas). **Requires a pod restart.** **The default allows every origin — narrow it for any internet-reachable broker.** |
 | `cors.allowedMethods` | array | `[GET, POST, PUT, PATCH, DELETE, OPTIONS]` | Allowed HTTP methods |
 | `cors.allowedHeaders` | array | `[Authorization, Content-Type, Accept]` | Allowed request headers |
-| `cors.maxAgeSeconds` | int | `3600` | Preflight cache lifetime. Hot-reloadable. |
+| `cors.maxAgeSeconds` | int | `3600` | Preflight cache lifetime. **Requires a pod restart.** |
 
 ### Scaling and availability
 
