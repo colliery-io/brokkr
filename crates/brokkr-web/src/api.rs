@@ -398,6 +398,18 @@ pub async fn webhook_deliveries(
     get(&format!("/webhooks/{id}/deliveries")).await
 }
 
+/// Rows the Webhooks view asks for in its "Recent deliveries" panel.
+pub const RECENT_DELIVERIES_LIMIT: usize = 20;
+
+/// `GET /api/v1/webhook-deliveries` — newest deliveries across all
+/// subscriptions (BROKKR-T-0264).
+pub async fn recent_webhook_deliveries() -> Result<Vec<crate::models::WebhookFeedItem>, ApiError> {
+    get(&format!(
+        "/webhook-deliveries?limit={RECENT_DELIVERIES_LIMIT}"
+    ))
+    .await
+}
+
 /// `GET /api/v1/work-orders` — full work-order list (admin-gated).
 pub async fn work_orders() -> Result<Vec<crate::models::WorkOrder>, ApiError> {
     get("/work-orders").await

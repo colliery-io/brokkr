@@ -30,7 +30,7 @@ use crate::api::v1::templates::{
 };
 use crate::api::v1::webhooks::{
     CreateWebhookRequest, DeliveryResultRequest, ListDeliveriesQuery, PendingWebhookDelivery,
-    UpdateWebhookRequest, WebhookResponse,
+    UpdateWebhookRequest, WebhookDeliveryFeedItem, WebhookResponse,
 };
 use crate::api::v1::work_orders::{
     ClaimWorkOrderRequest, CompleteWorkOrderRequest, CreateWorkOrderRequest, WorkOrderTargeting,
@@ -166,6 +166,7 @@ use utoipa_swagger_ui::SwaggerUi;
         webhooks::update_webhook,
         webhooks::delete_webhook,
         webhooks::list_deliveries,
+        webhooks::list_recent_deliveries,
         webhooks::test_webhook,
         webhooks::get_pending_agent_webhooks,
         webhooks::report_delivery_result,
@@ -254,6 +255,7 @@ use utoipa_swagger_ui::SwaggerUi;
             UpdateWebhookRequest,
             WebhookResponse,
             ListDeliveriesQuery,
+            WebhookDeliveryFeedItem,
             PendingWebhookDelivery,
             DeliveryResultRequest,
         )

@@ -1019,3 +1019,55 @@ fn test_released_delivery_claimable_by_different_agent() {
     assert_eq!(claimed2[0].id, delivery_id);
     assert_eq!(claimed2[0].acquired_by, Some(agent2.id));
 }
+
+// =============================================================================
+// Broker-wide delivery feed (BROKKR-T-0264)
+// =============================================================================
+
+#[test]
+#[serial(webhook_queue)]
+fn test_list_recent_spans_subscriptions_newest_first() {
+    let fixture = TestFixture::new();
+    let deliveries = fixture.dal.webhook_deliveries();
+
+    let sub_a = fixture
+        .dal
+        .webhook_subscriptions()
+        .create(&create_test_subscription("Feed A"))
+        .unwrap();
+    let sub_b = fixture
+        .dal
+        .webhook_subscriptions()
+        .create(&create_test_subscription("Feed B"))
+        .unwrap();
+
+    // Created in order: a1, b1, a2. Newest first is a2, b1, a1.
+    let mut created = Vec::new();
+    for sub_id in [sub_a.id, sub_b.id, sub_a.id] {
+        let new = NewWebhookDelivery::new(sub_id, &create_test_event(), None).unwrap();
+        created.push(deliveries.create(&new).unwrap());
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    deliveries.mark_success(created[1].id).unwrap();
+
+    let all = deliveries.list_recent(None, 10, 0).unwrap();
+    let ids: Vec<Uuid> = all.iter().map(|(d, _)| d.id).collect();
+    assert_eq!(ids, vec![created[2].id, created[1].id, created[0].id]);
+    let names: Vec<Option<&str>> = all.iter().map(|(_, n)| n.as_deref()).collect();
+    assert_eq!(names, vec![Some("Feed A"), Some("Feed B"), Some("Feed A")]);
+
+    // Status filter.
+    let success = deliveries.list_recent(Some("success"), 10, 0).unwrap();
+    assert_eq!(success.len(), 1);
+    assert_eq!(success[0].0.id, created[1].id);
+
+    // Pages do not overlap and keep the order.
+    let page1 = deliveries.list_recent(None, 2, 0).unwrap();
+    let page2 = deliveries.list_recent(None, 2, 2).unwrap();
+    assert_eq!(
+        page1.iter().map(|(d, _)| d.id).collect::<Vec<_>>(),
+        vec![created[2].id, created[1].id]
+    );
+    assert_eq!(page2.len(), 1);
+    assert_eq!(page2[0].0.id, created[0].id);
+}

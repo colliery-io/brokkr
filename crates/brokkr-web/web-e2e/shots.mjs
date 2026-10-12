@@ -71,6 +71,20 @@ const HOOKS = [
   { id: "h1", name: "prod-alerts", enabled: true, has_url: true, event_types: ["stack.updated", "agent.failed"] },
   { id: "h2", name: "audit-sink", enabled: false, has_url: true, event_types: ["pak.rotated"] },
 ];
+// The delivery feed across all subscriptions (BROKKR-T-0264), newest first.
+// "h9" is a subscription that is gone, so it has no name.
+const FEED = [
+  { id: "d1", subscription_id: "h1", subscription_name: "prod-alerts", event_type: "agent.failed", status: "failed",
+    attempts: 3, last_error: "connect ETIMEDOUT 192.0.2.4:443", created_at: ago(25) },
+  { id: "d2", subscription_id: "h2", subscription_name: "audit-sink", event_type: "pak.rotated", status: "dead",
+    attempts: 1, last_error: "HTTP 404 Not Found", created_at: ago(240) },
+  { id: "d3", subscription_id: "h1", subscription_name: "prod-alerts", event_type: "stack.updated", status: "acquired",
+    attempts: 0, last_error: null, created_at: ago(300) },
+  { id: "d4", subscription_id: "h1", subscription_name: "prod-alerts", event_type: "stack.updated", status: "success",
+    attempts: 1, last_error: null, created_at: ago(1900) },
+  { id: "d5", subscription_id: "h9", subscription_name: null, event_type: "stack.deleted", status: "pending",
+    attempts: 0, last_error: null, created_at: ago(7300) },
+];
 const STACKS = [
   { id: "s1", name: "payments-api", description: "prod payments service", generator_id: "1b9d6bcd-bbfd" },
   { id: "s2", name: "ingest-worker", description: "event ingest", generator_id: "7c9e6679-7425" },
@@ -271,7 +285,7 @@ const SCENES = [
   { name: "overview-empty", mocks: EMPTY_SHELL },
   { name: "deployments-empty", nav: "Deployments", mocks: { ...EMPTY_SHELL, "/stacks": [] } },
   { name: "telemetry-empty", nav: "Telemetry", mocks: { ...EMPTY_SHELL } },
-  { name: "webhooks-empty", nav: "Webhooks", mocks: { ...EMPTY_SHELL, "/webhooks": [] } },
+  { name: "webhooks-empty", nav: "Webhooks", mocks: { ...EMPTY_SHELL, "/webhooks": [], "/webhook-deliveries": [] } },
   { name: "jobs-empty", nav: "Work orders", mocks: { ...EMPTY_SHELL, "/work-order-log": [] } },
   // A new agent: no heartbeat, so health is unknown and the drawer offers Activate.
   { name: "fleet-new-agent", nav: "Fleet", mocks: { ...EMPTY_SHELL, "/fleet": [NEW_AGENT] } },
@@ -292,8 +306,13 @@ const SCENES = [
   { name: "health-modal", nav: "Broker health", click: "1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed", mocks: { "/admin/ws/connections": WSCONN } },
   { name: "jobs", nav: "Work orders", mocks: { "/work-order-log": JOBS, "/work-orders": ACTIVE_WOS } },
   { name: "jobs-modal", nav: "Work orders", click: "completed", mocks: { "/work-order-log": JOBS, "/work-orders": ACTIVE_WOS } },
-  { name: "webhooks", nav: "Webhooks", mocks: { "/webhooks": HOOKS } },
-  { name: "webhooks-modal", nav: "Webhooks", click: "prod-alerts", mocks: { "/webhooks": HOOKS,
+  { name: "webhooks", nav: "Webhooks", mocks: { "/webhooks": HOOKS, "/webhook-deliveries": FEED } },
+  // The "Recent deliveries" panel with no deliveries, and with a broker error
+  // (BROKKR-T-0264).
+  { name: "webhooks-recent-empty", nav: "Webhooks", mocks: { "/webhooks": HOOKS, "/webhook-deliveries": [] } },
+  { name: "webhooks-recent-error", nav: "Webhooks", expect_http: [500], assert_error: "Something went wrong",
+    mocks: { "/webhooks": HOOKS, "/webhook-deliveries": { __status: 500, code: "internal", message: "failed to fetch deliveries" } } },
+  { name: "webhooks-modal", nav: "Webhooks", click: "prod-alerts", mocks: { "/webhooks": HOOKS, "/webhook-deliveries": FEED,
     "/webhooks/h1/deliveries": [
       { event_type: "stack.updated", status: "delivered", attempts: 1, last_error: null },
       { event_type: "agent.failed", status: "failed", attempts: 3, last_error: "connect ETIMEDOUT 10.0.0.4:443" },
@@ -394,7 +413,7 @@ const SCENES = [
   // panel keeps Aurora's error state with its Retry button. `assert_error` is
   // the title of that error state.
   { name: "panel-server-error", nav: "Webhooks", expect_http: [500], assert_error: "Something went wrong",
-    mocks: { "/webhooks": { __status: 500, code: "internal", message: "database unavailable" } } },
+    mocks: { "/webhooks": { __status: 500, code: "internal", message: "database unavailable" }, "/webhook-deliveries": [] } },
 ];
 
 // ---- driver --------------------------------------------------------------

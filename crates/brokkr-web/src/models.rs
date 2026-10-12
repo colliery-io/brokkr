@@ -419,6 +419,28 @@ pub struct WebhookDeliveryDto {
     pub last_error: Option<String>,
 }
 
+/// One row of `GET /api/v1/webhook-deliveries`, the delivery feed across all
+/// subscriptions (BROKKR-T-0264). The broker never sends the URL or the payload.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct WebhookFeedItem {
+    pub id: String,
+    pub subscription_id: String,
+    /// `None` when the subscription is gone.
+    #[serde(default)]
+    pub subscription_name: Option<String>,
+    #[serde(default)]
+    pub event_type: String,
+    #[serde(default)]
+    pub status: String,
+    #[serde(default)]
+    pub attempts: i32,
+    #[serde(default)]
+    pub last_error: Option<String>,
+    /// When the delivery was made (RFC 3339).
+    #[serde(default)]
+    pub created_at: Option<String>,
+}
+
 /// One work order in `GET /api/v1/work-orders` (admin-gated list). NOTE: requires
 /// an admin PAK; with an operator-scoped PAK the Active panel renders an error.
 #[derive(Debug, Clone, PartialEq, Deserialize)]

@@ -1794,3 +1794,159 @@ async fn test_legacy_stored_labels_filter_still_delivers() {
         "a legacy labels-only filter must not stop deliveries"
     );
 }
+
+// =============================================================================
+// Broker-wide delivery feed (BROKKR-T-0264)
+// =============================================================================
+
+fn feed_subscription(fixture: &TestFixture, name: &str) -> uuid::Uuid {
+    use brokkr_models::models::webhooks::NewWebhookSubscription;
+    fixture
+        .dal
+        .webhook_subscriptions()
+        .create(&NewWebhookSubscription {
+            name: name.to_string(),
+            url_encrypted: b"https://example.com/secret-hook".to_vec(),
+            auth_header_encrypted: Some(b"Bearer secret".to_vec()),
+            event_types: vec![Some("deployment.applied".to_string())],
+            filters: None,
+            target_labels: None,
+            enabled: true,
+            max_retries: 5,
+            timeout_seconds: 30,
+            created_by: Some("test".to_string()),
+        })
+        .unwrap()
+        .id
+}
+
+fn feed_delivery(fixture: &TestFixture, subscription_id: uuid::Uuid) -> uuid::Uuid {
+    use brokkr_models::models::webhooks::{BrokkrEvent, NewWebhookDelivery};
+    let event = BrokkrEvent::new("deployment.applied", json!({"test": true}));
+    let delivery = fixture
+        .dal
+        .webhook_deliveries()
+        .create(&NewWebhookDelivery::new(subscription_id, &event, None).unwrap())
+        .unwrap();
+    // created_at must differ so that the newest-first order is deterministic.
+    std::thread::sleep(std::time::Duration::from_millis(5));
+    delivery.id
+}
+
+async fn get_feed(
+    fixture: &TestFixture,
+    pak: &str,
+    query: &str,
+) -> (StatusCode, serde_json::Value) {
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/api/v1/webhook-deliveries{}", query))
+                .header("Authorization", format!("Bearer {}", pak))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = response.status();
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    (status, serde_json::from_slice(&body).unwrap_or(json!(null)))
+}
+
+#[tokio::test]
+async fn test_recent_deliveries_newest_first_across_subscriptions() {
+    let fixture = TestFixture::new();
+    let a = feed_subscription(&fixture, "Alpha hook");
+    let b = feed_subscription(&fixture, "Beta hook");
+    let first = feed_delivery(&fixture, a);
+    let second = feed_delivery(&fixture, b);
+    fixture
+        .dal
+        .webhook_deliveries()
+        .mark_dead(second, "HTTP 404")
+        .unwrap();
+
+    let (status, body) = get_feed(&fixture, &fixture.admin_pak, "").await;
+    assert_eq!(status, StatusCode::OK);
+    let rows = body.as_array().unwrap();
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[0]["id"], second.to_string());
+    assert_eq!(rows[0]["subscription_name"], "Beta hook");
+    assert_eq!(rows[0]["status"], "dead");
+    assert_eq!(rows[0]["attempts"], 1);
+    assert_eq!(rows[0]["last_error"], "HTTP 404");
+    assert_eq!(rows[1]["id"], first.to_string());
+    assert_eq!(rows[1]["subscription_name"], "Alpha hook");
+
+    // No secret leaves the broker, and the payload stays on the
+    // per-subscription list.
+    let text = body.to_string();
+    assert!(!text.contains("secret"), "feed leaked a secret: {text}");
+    for key in ["url", "url_encrypted", "auth_header", "payload"] {
+        assert!(rows[0].get(key).is_none(), "feed row carries `{key}`");
+    }
+}
+
+#[tokio::test]
+async fn test_recent_deliveries_status_filter_and_pagination() {
+    let fixture = TestFixture::new();
+    let sub = feed_subscription(&fixture, "Paged hook");
+    let ids: Vec<uuid::Uuid> = (0..3).map(|_| feed_delivery(&fixture, sub)).collect();
+    fixture
+        .dal
+        .webhook_deliveries()
+        .mark_success(ids[0])
+        .unwrap();
+
+    let (_, pending) = get_feed(&fixture, &fixture.admin_pak, "?status=pending").await;
+    let pending = pending.as_array().unwrap();
+    assert_eq!(pending.len(), 2);
+    assert!(pending.iter().all(|r| r["status"] == "pending"));
+
+    let (_, page1) = get_feed(&fixture, &fixture.admin_pak, "?limit=2").await;
+    let (_, page2) = get_feed(&fixture, &fixture.admin_pak, "?limit=2&offset=2").await;
+    assert_eq!(page1[0]["id"], ids[2].to_string());
+    assert_eq!(page1[1]["id"], ids[1].to_string());
+    assert_eq!(page2.as_array().unwrap().len(), 1);
+    assert_eq!(page2[0]["id"], ids[0].to_string());
+
+    // Out-of-range values are clamped, not passed to Postgres.
+    let (status, clamped) = get_feed(&fixture, &fixture.admin_pak, "?limit=-5&offset=-1").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(clamped.as_array().unwrap().len(), 1);
+    let (status, all) = get_feed(&fixture, &fixture.admin_pak, "?limit=100000").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(all.as_array().unwrap().len(), 3);
+}
+
+#[tokio::test]
+async fn test_recent_deliveries_rejects_unknown_status() {
+    let fixture = TestFixture::new();
+    let (status, body) = get_feed(&fixture, &fixture.admin_pak, "?status=bogus").await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["code"], "invalid_status");
+}
+
+#[tokio::test]
+async fn test_recent_deliveries_non_admin_forbidden() {
+    let fixture = TestFixture::new();
+    let (_, generator_pak) =
+        fixture.create_test_generator_with_pak("Feed Generator".to_string(), None);
+    let (status, _) = get_feed(&fixture, &generator_pak, "").await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn test_recent_deliveries_keeps_rows_of_a_deleted_subscription() {
+    let fixture = TestFixture::new();
+    let sub = feed_subscription(&fixture, "Gone hook");
+    let delivery = feed_delivery(&fixture, sub);
+    delete_subscription_without_cascade(&fixture, sub);
+
+    let (status, body) = get_feed(&fixture, &fixture.admin_pak, "").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body[0]["id"], delivery.to_string());
+    assert!(body[0]["subscription_name"].is_null());
+}
