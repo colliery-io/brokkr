@@ -138,6 +138,19 @@ serviceAccount:
   create: true
   name: ""
 
+# Additional environment variables for the agent container, appended verbatim.
+# Use for settings the chart does not expose. An entry here overrides a
+# variable with the same name from the agent ConfigMap.
+# extraEnv:
+#   - name: RUST_LOG
+#     value: "debug"
+#   - name: CUSTOM_CONFIG
+#     valueFrom:
+#       configMapKeyRef:
+#         name: my-config
+#         key: custom-value
+extraEnv: []
+
 resources:
   requests:
     memory: "128Mi"

@@ -70,9 +70,11 @@ resources:
     memory: "256Mi"
     cpu: "200m"
 
-# Security Context
+# Pod Security Context
+# Merged into the chart's podSecurityContext defaults (runAsGroup and the
+# containerSecurityContext defaults stay in place).
 # Relaxed for easier debugging, but still non-root
-securityContext:
+podSecurityContext:
   runAsNonRoot: true
   runAsUser: 10001
   fsGroup: 10001

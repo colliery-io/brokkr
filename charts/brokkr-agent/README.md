@@ -340,8 +340,9 @@ containerSecurityContext:
     drop: [ALL]
 ```
 
-Each object is rendered verbatim, so overriding one replaces it wholesale — restate any
-defaults you want to keep.
+Each object is rendered verbatim. Helm merges your keys into the defaults, so the keys you do
+not set keep their default values; set a key to `null` to remove it. The `values/` overlays
+set `podSecurityContext` this way: staging and production add `seccompProfile: RuntimeDefault`.
 
 ## Migration notes
 
@@ -374,6 +375,7 @@ if this table and the chart ever disagree.
 | `nameOverride` | string | unset (*not in values.yaml*) | Overrides the chart name portion of generated resource names |
 | `fullnameOverride` | string | unset (*not in values.yaml*) | Overrides the full generated resource name |
 | `hostAliases` | array | `[]` | `hostAliases` entries injected into the pod, for resolving a broker that lives outside the cluster |
+| `extraEnv` | array | `[]` | Extra container env entries appended verbatim (plain `value` or `valueFrom`), for example `RUST_LOG`. An entry overrides a variable with the same name from the agent ConfigMap. |
 
 ### Broker connection
 
@@ -441,7 +443,7 @@ See [What a Default Install Does to Your Cluster](#what-a-default-install-does-t
 | `resources.limits.cpu` | string | `"200m"` | CPU limit |
 | `apparmor.enabled` | bool | `false` | Add the `container.apparmor.security.beta.kubernetes.io/agent` pod annotation. Requires AppArmor-enabled nodes. |
 | `apparmor.profile` | string | `"runtime/default"` | AppArmor profile referenced by that annotation |
-| `podSecurityContext` | object | `{runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, fsGroup: 10001}` | Rendered verbatim as the pod `securityContext`. Replacing this object replaces all of it — re-state the defaults you want to keep. `seccompProfile: {type: RuntimeDefault}` is commented out in `values.yaml` and recommended for hardening. |
+| `podSecurityContext` | object | `{runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, fsGroup: 10001}` | Rendered verbatim as the pod `securityContext`. Your keys merge into these defaults; set a key to `null` to remove it. `seccompProfile: {type: RuntimeDefault}` is commented out in `values.yaml` and recommended for hardening (the staging and production overlays set it). |
 | `containerSecurityContext` | object | `{allowPrivilegeEscalation: false, readOnlyRootFilesystem: false, runAsNonRoot: true, runAsUser: 10001, capabilities: {drop: [ALL]}}` | Rendered verbatim as the container `securityContext`. The chart already mounts an `emptyDir` at `/tmp`, so `readOnlyRootFilesystem: true` is the hardened setting. |
 
 ### Metrics
