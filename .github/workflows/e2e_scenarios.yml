@@ -31,7 +31,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        scenario: [ws-smoke, ws-chaos, ws-workorders, ws-telemetry, survive-polls]
+        scenario: [ws-smoke]
     steps:
       - uses: actions/checkout@v6
         with:

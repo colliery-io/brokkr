@@ -1166,7 +1166,7 @@ pub async fn test_ws_smoke(client: &Client) -> Result<()> {
     // -------------------------------------------------------------------
     println!("  → Waiting for agent WS connection (gauge >= 1, 30s timeout)...");
     let initial_connected = client
-        .wait_for_metric("brokkr_ws_connected_agents", &[], 30, |v| v >= 1.0)
+        .wait_for_metric("brokkr_ws_connected_agents", &[], 30, |v| v >= 100.0)
         .await?;
     println!("    brokkr_ws_connected_agents = {} ✓", initial_connected);
 
