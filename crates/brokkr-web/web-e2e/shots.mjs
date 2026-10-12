@@ -347,7 +347,7 @@ const SCENES = [
   // The "Recent deliveries" panel with no deliveries, and with a broker error
   // (BROKKR-T-0264).
   { name: "webhooks-recent-empty", nav: "Webhooks", mocks: { "/webhooks": HOOKS, "/webhook-deliveries": [] } },
-  { name: "webhooks-recent-error", nav: "Webhooks", expect_http: [500], assert_error: "Something went wrong",
+  { name: "webhooks-recent-error", nav: "Webhooks", expect_http: [500], assert_error: "Deliberate break",
     mocks: { "/webhooks": HOOKS, "/webhook-deliveries": { __status: 500, code: "internal", message: "failed to fetch deliveries" } } },
   { name: "webhooks-modal", nav: "Webhooks", click: "prod-alerts", mocks: { "/webhooks": HOOKS, "/webhook-deliveries": FEED,
     "/webhooks/h1/deliveries": [
@@ -449,7 +449,7 @@ const SCENES = [
   // An ordinary failure (BROKKR-T-0347): a 500 is not a refused token, so the
   // panel keeps Aurora's error state with its Retry button. `assert_error` is
   // the title of that error state.
-  { name: "panel-server-error", nav: "Webhooks", expect_http: [500], assert_error: "Something went wrong",
+  { name: "panel-server-error", nav: "Webhooks", expect_http: [500], assert_error: "Deliberate break",
     mocks: { "/webhooks": { __status: 500, code: "internal", message: "database unavailable" }, "/webhook-deliveries": [] } },
 ];
 
