@@ -235,6 +235,22 @@ The test is sent immediately, using the subscription's own `timeout_seconds`, an
 
 ## Viewing Delivery Status
 
+### Find Failed Deliveries Across All Subscriptions
+
+Use the delivery feed when you do not know which subscription has a problem. The feed shows the newest deliveries of all subscriptions in one list. Use the per-subscription list below when you know the subscription.
+
+```bash
+# The 50 newest deliveries
+curl "http://broker:3000/api/v1/webhook-deliveries" \
+  -H "Authorization: Bearer $ADMIN_PAK"
+
+# Only dead deliveries, 200 per page, second page
+curl "http://broker:3000/api/v1/webhook-deliveries?status=dead&limit=200&offset=200" \
+  -H "Authorization: Bearer $ADMIN_PAK"
+```
+
+Each row has the subscription name, so you can find the subscription. The feed does not include the event payload. See [List Recent Deliveries](../../reference/webhooks/#list-recent-deliveries-all-subscriptions) for the parameters and the fields. The operator console shows the same feed in the **Recent deliveries** panel of the **Webhooks** view (see [Using the Operator Console](../operator-console/#step-3-find-your-way-around)).
+
 ### List Deliveries for a Subscription
 
 ```bash

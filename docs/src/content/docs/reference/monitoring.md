@@ -176,6 +176,56 @@ sum(rate(brokkr_ws_messages_total{direction="in"}[5m])) by (type)
 - **Labels:**
   - `table` - `agent_k8s_events` or `agent_pod_logs`
 
+### Database Metrics
+
+These metrics show the load of the broker on its PostgreSQL database. A hook on each connection in the broker's pool records each query. No label holds SQL text or a parameter value.
+
+**What counts as a query:** each database round trip that the hook sees. This includes the `SELECT 1` that the pool sends to test a connection each time the broker takes one from the pool. It also includes `SET search_path` on a pool that uses a schema. These queries are real load on the database, so the broker counts them.
+
+#### `brokkr_database_queries_total`
+- **Type:** Counter
+- **Description:** Database queries that finished, by result
+- **Labels:**
+  - `result` - `ok` or `error` (`error` when the database driver reports an error for the query)
+
+The broker sends both series with the value 0 from start-up. Thus a broker with no queries shows 0, and an older broker shows no series.
+
+#### `brokkr_database_query_duration_seconds`
+- **Type:** Histogram
+- **Description:** Time from the start to the end of a query on one connection, in seconds
+- **Labels:** None
+- **Buckets:** 0.0005, 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5
+
+Most broker queries take less than 10 ms, so the small buckets are finer than the buckets of `brokkr_http_request_duration_seconds`. The 5 s bucket shows lock waits and slow scans. If the hook does not see the start of a query, the counter counts the query, but the histogram does not.
+
+#### `brokkr_database_pool_connections`
+- **Type:** Gauge
+- **Description:** Connections in the broker's database pool, by state
+- **Labels:**
+  - `state` - `idle` or `in_use`
+
+#### `brokkr_database_pool_max_connections`
+- **Type:** Gauge
+- **Description:** The maximum number of connections that the pool can open
+- **Labels:** None
+
+The broker sets the two pool gauges when `/metrics` is read. Thus the values are correct at the time of the read.
+
+**Example PromQL:**
+```promql
+# Queries per second
+sum(rate(brokkr_database_queries_total[5m]))
+
+# Failed queries per second
+rate(brokkr_database_queries_total{result="error"}[5m])
+
+# 95th percentile query time
+histogram_quantile(0.95, rate(brokkr_database_query_duration_seconds_bucket[5m]))
+
+# Pool use as a fraction of the maximum
+brokkr_database_pool_connections{state="in_use"} / brokkr_database_pool_max_connections
+```
+
 ## Agent Metrics Catalog
 
 ### Broker Polling Metrics
