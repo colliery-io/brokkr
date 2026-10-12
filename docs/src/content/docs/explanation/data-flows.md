@@ -62,7 +62,7 @@ sequenceDiagram
     participant K8s as Kubernetes API
     participant Cluster as Cluster State
 
-    loop Every polling interval (binary default 10s; chart default 30s)
+    loop Every polling interval (binary default 10s, chart default 30s)
         Agent->>Broker: GET /api/v1/agents/{id}/target-state
         Broker->>DB: Resolve associated stacks (targets ∪ registered-generator label/annotation matches)
         Broker->>DB: Query their deployment objects
@@ -182,7 +182,7 @@ flowchart LR
     end
 
     Apply --> Report
-    Report -->|POST /agents/{id}/events| API
+    Report -->|"POST /agents/{id}/events"| API
     API --> DB
     API --> Emit
     Emit -->|Match subscriptions & insert deliveries| DB
