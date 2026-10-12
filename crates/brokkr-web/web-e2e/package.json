@@ -5,10 +5,11 @@
   "description": "Playwright screenshot / pixel-verification harness for the brokkr-web operator console (BROKKR-I-0031). Mirrors Skadi's web-e2e, but mocks the broker API via route interception so views render with fixtures (no live broker needed).",
   "type": "module",
   "scripts": {
+    "postinstall": "PLAYWRIGHT_BROWSERS_PATH=0 playwright install chromium-headless-shell",
     "shots": "node shots.mjs",
-    "install-browser": "playwright install chromium"
+    "all": "./run.sh"
   },
   "devDependencies": {
-    "@playwright/test": "^1.60.0"
+    "@playwright/test": "1.61.1"
   }
 }

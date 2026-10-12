@@ -7,8 +7,16 @@
 // THEME=dark emulates that OS setting (default dark); OUT sets the folder.
 //   THEME=light OUT=shots/light node shots.mjs
 // ONLY=<regex> runs only the scenes whose names match: ONLY=^session- node shots.mjs
-import { chromium } from "@playwright/test";
+//   npm install, then ./run.sh runs all of it in one command (see README.md).
 import { mkdirSync } from "node:fs";
+
+// The browser lives in node_modules, not in the shared user cache: a
+// `playwright install` of a different version in another project deletes the
+// browsers of each install it cannot find, and a removed worktree is one of
+// those (BROKKR-T-0354). `npm install` puts it there (postinstall). The
+// import comes after the variable is set, because Playwright reads it on load.
+process.env.PLAYWRIGHT_BROWSERS_PATH ??= "0";
+const { chromium } = await import("@playwright/test");
 
 const BASE = process.env.URL || "http://127.0.0.1:9080";
 const THEME = process.env.THEME === "light" ? "light" : "dark";
@@ -618,7 +626,12 @@ async function navigateTo(scene, label) {
 
 // ONLY=<regex> runs the scenes whose names match (ONLY=^session- for one feature).
 const ONLY = process.env.ONLY ? new RegExp(process.env.ONLY) : null;
-for (const s of SCENES.filter((x) => !ONLY || ONLY.test(x.name))) {
+const RUN = SCENES.filter((x) => !ONLY || ONLY.test(x.name));
+if (RUN.length === 0) {
+  console.error(`ONLY=${process.env.ONLY} matches no scene`);
+  process.exit(1);
+}
+for (const s of RUN) {
   MOCKS = s.mocks || {};
   DB = !!s.db;
   LIVE = s.live || null;
@@ -786,3 +799,5 @@ for (const s of SCENES.filter((x) => !ONLY || ONLY.test(x.name))) {
 
 console.log(errs.length ? `CONSOLE ERRORS:\n${errs.join("\n")}` : "no console errors");
 await browser.close();
+// A console error or a failed assert fails the run, so CI can gate on it.
+if (errs.length) process.exitCode = 1;

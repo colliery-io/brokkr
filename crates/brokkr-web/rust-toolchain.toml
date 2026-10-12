@@ -1,0 +1,10 @@
+# The console builds for the browser, so its toolchain must have the
+# wasm32-unknown-unknown target. rustup reads this file for each cargo or
+# trunk command in this folder and installs the toolchain and the target when
+# they are missing (BROKKR-T-0354). CI uses the same file. Change the version
+# here, and only here.
+[toolchain]
+channel = "1.93.0"
+components = ["clippy", "rustfmt"]
+targets = ["wasm32-unknown-unknown"]
+profile = "minimal"
