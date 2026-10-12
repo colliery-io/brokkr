@@ -28,6 +28,7 @@ jobs:
       code: ${{ steps.filter.outputs.code }}
       sdk_contract: ${{ steps.filter.outputs.sdk_contract }}
       openapi: ${{ steps.filter.outputs.openapi }}
+      e2e_scenarios: ${{ steps.filter.outputs.e2e_scenarios }}
     steps:
       - uses: actions/checkout@v6
       - uses: dorny/paths-filter@v4.0.1
@@ -69,6 +70,12 @@ jobs:
               - '.angreal/task_openapi.py'
               - '.github/workflows/main.yml'
               - '.github/workflows/openapi.yml'
+            # The e2e scenarios outside the walkthrough (BROKKR-T-0323). Main
+            # runs them each night; a PR runs them when it changes them.
+            e2e_scenarios:
+              - 'tests/e2e/**'
+              - '.angreal/files/**'
+              - '.github/workflows/e2e_scenarios.yml'
 
   integration_tests:
     needs: [setup, changes]
@@ -89,4 +96,12 @@ jobs:
     needs: [setup, changes]
     if: needs.changes.outputs.openapi == 'true'
     uses: ./.github/workflows/openapi.yml
+    secrets: inherit
+
+  # Advisory on a PR: slow, and it severs links on purpose. Nightly runs it
+  # on main each night and files an issue when it fails (BROKKR-T-0323).
+  e2e_scenarios:
+    needs: changes
+    if: github.event_name == 'pull_request' && needs.changes.outputs.e2e_scenarios == 'true'
+    uses: ./.github/workflows/e2e_scenarios.yml
     secrets: inherit
