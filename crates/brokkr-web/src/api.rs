@@ -273,6 +273,77 @@ pub fn metric_sum(text: &str, name: &str) -> Option<f64> {
     found.then_some(total)
 }
 
+/// The `_bucket` samples of a Prometheus histogram `name`, as
+/// `(upper bound, cumulative count)` sorted by bound; `+Inf` is
+/// `f64::INFINITY`. Samples with the same bound (other labels) are summed.
+/// Empty when the broker does not export the histogram.
+pub fn histogram_buckets(text: &str, name: &str) -> Vec<(f64, f64)> {
+    let prefix = format!("{name}_bucket{{");
+    let mut out: Vec<(f64, f64)> = Vec::new();
+    for line in text.lines() {
+        let line = line.trim();
+        let Some(rest) = line.strip_prefix(&prefix) else {
+            continue;
+        };
+        let Some((labels, value)) = rest.split_once('}') else {
+            continue;
+        };
+        let Some(le) = labels
+            .split(',')
+            .find_map(|kv| kv.trim().strip_prefix("le=\""))
+            .and_then(|v| v.strip_suffix('"'))
+        else {
+            continue;
+        };
+        let bound = if le == "+Inf" {
+            f64::INFINITY
+        } else {
+            match le.parse::<f64>() {
+                Ok(b) => b,
+                Err(_) => continue,
+            }
+        };
+        let Some(Ok(count)) = value.split_whitespace().next().map(str::parse::<f64>) else {
+            continue;
+        };
+        match out.iter_mut().find(|(b, _)| *b == bound) {
+            Some((_, c)) => *c += count,
+            None => out.push((bound, count)),
+        }
+    }
+    out.sort_by(|a, b| a.0.total_cmp(&b.0));
+    out
+}
+
+/// The `q` quantile (0..=1) of cumulative histogram buckets, by linear
+/// interpolation inside the bucket that holds it, as Prometheus
+/// `histogram_quantile()` does. A quantile in the `+Inf` bucket gives the
+/// highest finite bound. None when the buckets hold no observations.
+pub fn histogram_quantile(buckets: &[(f64, f64)], q: f64) -> Option<f64> {
+    let total = buckets.last()?.1;
+    if total <= 0.0 {
+        return None;
+    }
+    let rank = q * total;
+    let mut lower_bound = 0.0;
+    let mut lower_count = 0.0;
+    for &(bound, count) in buckets {
+        if count >= rank {
+            if bound.is_infinite() {
+                return Some(lower_bound);
+            }
+            let in_bucket = count - lower_count;
+            if in_bucket <= 0.0 {
+                return Some(bound);
+            }
+            return Some(lower_bound + (bound - lower_bound) * (rank - lower_count) / in_bucket);
+        }
+        lower_bound = bound;
+        lower_count = count;
+    }
+    Some(lower_bound)
+}
+
 /// `GET /api/v1/webhooks` — subscription summaries.
 pub async fn webhooks() -> Result<Vec<crate::models::WebhookSummary>, ApiError> {
     get("/webhooks").await
@@ -642,5 +713,51 @@ mod tests {
     fn an_expired_session_stays_expired_until_a_reload() {
         assert_eq!(Session::Expired.after(200), Session::Expired);
         assert_eq!(Session::Expired.after(401), Session::Expired);
+    }
+
+    const HIST: &str = "\
+# TYPE brokkr_database_query_duration_seconds histogram
+brokkr_database_query_duration_seconds_bucket{le=\"0.001\"} 50
+brokkr_database_query_duration_seconds_bucket{le=\"0.01\"} 90
+brokkr_database_query_duration_seconds_bucket{le=\"0.1\"} 100
+brokkr_database_query_duration_seconds_bucket{le=\"+Inf\"} 100
+brokkr_database_query_duration_seconds_sum 0.4
+brokkr_database_query_duration_seconds_count 100
+";
+
+    #[test]
+    fn histogram_buckets_are_read_in_bound_order() {
+        let b = super::histogram_buckets(HIST, "brokkr_database_query_duration_seconds");
+        assert_eq!(
+            b,
+            vec![
+                (0.001, 50.0),
+                (0.01, 90.0),
+                (0.1, 100.0),
+                (f64::INFINITY, 100.0)
+            ]
+        );
+        assert!(super::histogram_buckets(HIST, "brokkr_missing").is_empty());
+    }
+
+    #[test]
+    fn histogram_quantile_interpolates_inside_the_bucket() {
+        let b = super::histogram_buckets(HIST, "brokkr_database_query_duration_seconds");
+        // Rank 95 is 5 of the 10 queries in (0.01, 0.1]: halfway.
+        let p95 = super::histogram_quantile(&b, 0.95).unwrap();
+        assert!((p95 - 0.055).abs() < 1e-9, "{p95}");
+        // Rank 50 is the top of the first bucket.
+        let p50 = super::histogram_quantile(&b, 0.5).unwrap();
+        assert!((p50 - 0.001).abs() < 1e-9, "{p50}");
+        // No observations: no quantile.
+        assert_eq!(
+            super::histogram_quantile(&[(0.1, 0.0), (f64::INFINITY, 0.0)], 0.95),
+            None
+        );
+        // A quantile in +Inf gives the highest finite bound.
+        assert_eq!(
+            super::histogram_quantile(&[(0.1, 0.0), (f64::INFINITY, 4.0)], 0.95),
+            Some(0.1)
+        );
     }
 }

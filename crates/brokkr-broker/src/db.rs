@@ -9,8 +9,60 @@
 //! For detailed documentation, see the [Brokkr Documentation](https://brokkr.io/explanation/components#database-module).
 
 use diesel::PgConnection;
-use diesel::r2d2::{ConnectionManager, Pool};
+use diesel::connection::{Connection, Instrumentation, InstrumentationEvent};
+use diesel::r2d2::{ConnectionManager, CustomizeConnection, Pool};
+use std::time::Instant;
 use url::Url;
+
+/// Per-connection diesel hook that feeds the database query metrics
+/// (BROKKR-T-0265).
+///
+/// A connection runs one query at a time, so one start time per connection is
+/// enough: `StartQuery` stores it, `FinishQuery` takes it. The hook holds no
+/// heap data and reads neither the SQL text nor the bind values.
+#[derive(Debug, Default)]
+pub struct QueryMetrics {
+    started: Option<Instant>,
+}
+
+impl QueryMetrics {
+    /// Marks the start of a query on this connection.
+    pub fn start(&mut self) {
+        self.started = Some(Instant::now());
+    }
+
+    /// Records the finish of a query on this connection.
+    ///
+    /// A finish with no seen start is counted but not timed.
+    pub fn finish(&mut self, failed: bool) {
+        let elapsed = self.started.take().map(|t| t.elapsed().as_secs_f64());
+        crate::metrics::record_database_query(elapsed, failed);
+    }
+}
+
+impl Instrumentation for QueryMetrics {
+    fn on_connection_event(&mut self, event: InstrumentationEvent<'_>) {
+        match event {
+            InstrumentationEvent::StartQuery { .. } => self.start(),
+            InstrumentationEvent::FinishQuery { error, .. } => self.finish(error.is_some()),
+            _ => {}
+        }
+    }
+}
+
+/// Installs [`QueryMetrics`] on each connection the pool opens.
+///
+/// `on_acquire` runs once per new physical connection, not per checkout, so
+/// the cost is paid once per connection.
+#[derive(Debug, Default)]
+struct QueryMetricsCustomizer;
+
+impl CustomizeConnection<PgConnection, diesel::r2d2::Error> for QueryMetricsCustomizer {
+    fn on_acquire(&self, conn: &mut PgConnection) -> Result<(), diesel::r2d2::Error> {
+        conn.set_instrumentation(QueryMetrics::default());
+        Ok(())
+    }
+}
 
 /// Represents a pool of PostgreSQL database connections.
 #[derive(Clone)]
@@ -63,9 +115,11 @@ pub fn create_shared_connection_pool(
     // Create a connection manager
     let manager = ConnectionManager::<PgConnection>::new(url.as_str());
 
-    // Build the connection pool
+    // Build the connection pool. The customizer attaches the query metrics
+    // hook to each connection (BROKKR-T-0265).
     let pool = Pool::builder()
         .max_size(max_size)
+        .connection_customizer(Box::new(QueryMetricsCustomizer))
         .build(manager)
         .expect("Failed to create connection pool");
 
@@ -93,7 +147,41 @@ fn resolve_database_url(base_url: &str, database_name: Option<&str>) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::resolve_database_url;
+    use super::{QueryMetrics, resolve_database_url};
+    use crate::metrics::{DATABASE_QUERIES_TOTAL, DATABASE_QUERY_DURATION_SECONDS};
+
+    /// A finished query moves the counter and the histogram. diesel's event
+    /// constructors are feature-gated, so this drives the hook's own start and
+    /// finish; the integration suite drives it through a real connection.
+    #[test]
+    fn query_metrics_records_a_finished_query() {
+        let ok_before = DATABASE_QUERIES_TOTAL.with_label_values(&["ok"]).get();
+        let err_before = DATABASE_QUERIES_TOTAL.with_label_values(&["error"]).get();
+        let count_before = DATABASE_QUERY_DURATION_SECONDS.get_sample_count();
+
+        let mut hook = QueryMetrics::default();
+        hook.start();
+        hook.finish(false);
+        hook.start();
+        hook.finish(true);
+
+        // The registry is process-global and tests run in parallel.
+        assert!(DATABASE_QUERIES_TOTAL.with_label_values(&["ok"]).get() > ok_before);
+        assert!(DATABASE_QUERIES_TOTAL.with_label_values(&["error"]).get() > err_before);
+        assert!(DATABASE_QUERY_DURATION_SECONDS.get_sample_count() >= count_before + 2);
+    }
+
+    /// A finish without a start is counted, not timed, and the start time does
+    /// not leak into the next query.
+    #[test]
+    fn query_metrics_finish_takes_the_start_time() {
+        let mut hook = QueryMetrics::default();
+        hook.start();
+        hook.finish(false);
+        assert!(hook.started.is_none());
+        hook.finish(false);
+        assert!(hook.started.is_none());
+    }
 
     /// The BROKKR-T-0306 regression: production passes `None`, and the database
     /// named in the configured URL must survive.
