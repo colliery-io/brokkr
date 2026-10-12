@@ -112,7 +112,9 @@ Shipwright provides a Kubernetes-native build abstraction:
 - **Strategy flexibility** — swap between Buildah, Kaniko, ko, S2I without changing build definitions
 - **Build caching** — strategies can cache layers for faster rebuilds
 
-Builds have a 15-minute timeout — if the BuildRun doesn't complete in time, it's reported as failed. That limit is a compile-time constant in the agent, not configurable at runtime. The custom work-order path derives its watch window differently, from the work order itself — see [Custom Work Orders](#custom-work-orders).
+The agent watches a BuildRun for a limited time. The limit is the smaller of two values: 15 minutes, and the watch window that the work order's `claim_timeout_seconds` gives (the same window as for a Job, see [The watch window, and why it is bounded](#the-watch-window-and-why-it-is-bounded)). Thus a short claim timeout makes the build window shorter, but a long claim timeout cannot make it longer than 15 minutes. The 15-minute limit is a compile-time constant in the agent. You cannot change it at runtime.
+
+If the BuildRun is still running at the end of the window, the agent fails the work order and does not retry it. The agent does not cancel the BuildRun. The result message says that the BuildRun did not finish in the window, and that its final outcome is unknown to Brokkr. It does not say that the build failed. A retry is not safe: it would start a second BuildRun while the first one still runs.
 
 ## Work Order Log
 
@@ -159,7 +161,7 @@ So the watch window is derived from the work order's own `claim_timeout_seconds`
 
 If the window runs out with the Job still going, the work order is completed with `success: false` — but the result message says the Job *did not finish within the window*, explicitly distinct from the message for a Job that *ran and failed*. These are different operator situations: in the timeout case the Job is still running in the cluster, Brokkr did not cancel it, and its final outcome is unknown to Brokkr. Neither outcome is marked retryable, because re-dispatching a work order whose Job may still be running is the failure mode the bounded window exists to prevent.
 
-> **Contrast with builds:** the build path also watches to completion, but against a fixed 15-minute compile-time constant and a Shipwright `BuildRun`'s `Succeeded` condition, and it monitors exactly one resource — the BuildRun it created. The custom path monitors whichever applied objects happen to be Jobs, against a window derived from the work order, and applies everything else without waiting.
+> **Contrast with builds:** the build path also watches to completion, with the same window from `claim_timeout_seconds`, but never longer than 15 minutes. It watches a Shipwright `BuildRun`'s `Succeeded` condition, and it monitors exactly one resource — the BuildRun it created. When its window runs out, it also fails the work order without a retry and does not cancel the BuildRun. The custom path monitors whichever applied objects happen to be Jobs, with no 15-minute limit, and applies everything else without waiting.
 
 ## Related Documentation
 

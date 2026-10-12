@@ -274,7 +274,7 @@ curl -X POST "http://broker:3000/api/v1/work-orders" \
   }'
 ```
 
-A matching agent claims the work order, applies the Build, creates a BuildRun, and watches it to completion with a 15-minute timeout. On success, the work order completes with the image digest as its result message; on failure, the error details are recorded instead. Completed work orders move to the work-order log:
+A matching agent claims the work order, applies the Build, creates a BuildRun, and watches it to completion. The watch lasts at most 15 minutes, and less when the work order has a short `claim_timeout_seconds`. On success, the work order completes with the image digest as its result message; on failure, the error details are recorded instead. If the BuildRun is still running at the end of the watch, the work order fails without a retry. The agent does not cancel the BuildRun, so it can still finish in the cluster. Completed work orders move to the work-order log:
 
 ```bash
 # View completed builds (the message field carries the image digest)
