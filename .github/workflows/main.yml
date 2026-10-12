@@ -28,6 +28,7 @@ jobs:
       code: ${{ steps.filter.outputs.code }}
       sdk_contract: ${{ steps.filter.outputs.sdk_contract }}
       openapi: ${{ steps.filter.outputs.openapi }}
+      console: ${{ steps.filter.outputs.console }}
     steps:
       - uses: actions/checkout@v6
       - uses: dorny/paths-filter@v4.0.1
@@ -69,6 +70,12 @@ jobs:
               - '.angreal/task_openapi.py'
               - '.github/workflows/main.yml'
               - '.github/workflows/openapi.yml'
+            # The operator console is outside the root workspace, so `code`
+            # does not cover its gates (BROKKR-T-0351).
+            console:
+              - 'crates/brokkr-web/**'
+              - '.github/workflows/main.yml'
+              - '.github/workflows/console.yml'
 
   integration_tests:
     needs: [setup, changes]
@@ -90,3 +97,45 @@ jobs:
     if: needs.changes.outputs.openapi == 'true'
     uses: ./.github/workflows/openapi.yml
     secrets: inherit
+
+  # wasm32 clippy, host tests, release build and the screenshot harness of
+  # crates/brokkr-web (BROKKR-T-0351).
+  console:
+    needs: changes
+    if: needs.changes.outputs.console == 'true'
+    uses: ./.github/workflows/console.yml
+    secrets: inherit
+
+  # One check that reports on each PR under one name, so branch protection can
+  # require it (BROKKR-T-0316). A reusable job reports under its nested names
+  # when it runs, and under the caller name when an `if:` skips it, so the
+  # per-suite names cannot be required. `skipped` is accepted for the
+  # path-filtered suites only; setup, changes and unit_tests must succeed.
+  ci_gate:
+    name: CI gate
+    needs: [setup, changes, unit_tests, integration_tests, sdk_contract_tests, openapi, console]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if a suite failed
+        env:
+          ALWAYS: >-
+            setup=${{ needs.setup.result }}
+            changes=${{ needs.changes.result }}
+            unit_tests=${{ needs.unit_tests.result }}
+          FILTERED: >-
+            integration_tests=${{ needs.integration_tests.result }}
+            sdk_contract_tests=${{ needs.sdk_contract_tests.result }}
+            openapi=${{ needs.openapi.result }}
+            console=${{ needs.console.result }}
+        run: |
+          status=0
+          for r in $ALWAYS; do
+            echo "$r"
+            case "${r#*=}" in success) ;; *) echo "::error::${r}"; status=1 ;; esac
+          done
+          for r in $FILTERED; do
+            echo "$r"
+            case "${r#*=}" in success|skipped) ;; *) echo "::error::${r}"; status=1 ;; esac
+          done
+          exit "$status"

@@ -1,0 +1,123 @@
+---
+name: Console
+# Reusable, called by main.yml behind its `changes` path filter, so it reports
+# a status on each PR (run or skipped). See the header of openapi.yml.
+#
+# The operator console (crates/brokkr-web) is outside the root workspace and
+# builds for wasm32, so no other workflow checks it (BROKKR-T-0351).
+#
+# Pins: crates/brokkr-web/rust-toolchain.toml sets the Rust version and the
+# wasm32 target; web-e2e/package-lock.json sets the Playwright version, and
+# that sets the browser build; TRUNK_VERSION and NODE_VERSION are below.
+on:
+  workflow_call:
+
+env:
+  CARGO_TERM_COLOR: always
+  TRUNK_VERSION: "0.21.14"
+  NODE_VERSION: "24"
+
+jobs:
+  checks:
+    name: lint, tests and release build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: crates/brokkr-web
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+
+      # rustup reads rust-toolchain.toml in this folder.
+      - name: Install the pinned Rust toolchain
+        run: |
+          rustup toolchain install
+          rustc --version
+          rustup target list --installed
+
+      - name: Cache build
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            crates/brokkr-web/target
+          key: ${{ runner.os }}-console-${{ hashFiles('crates/brokkr-web/Cargo.lock', 'crates/brokkr-web/rust-toolchain.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-console-
+
+      - name: Install trunk
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl -sSfL "https://github.com/trunk-rs/trunk/releases/download/v${TRUNK_VERSION}/trunk-x86_64-unknown-linux-gnu.tar.gz" \
+            | tar -xz -C "$HOME/.local/bin" trunk
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/trunk" --version
+
+      - name: Clippy (wasm32)
+        run: cargo clippy --target wasm32-unknown-unknown -- -D warnings
+
+      - name: Tests (host)
+        run: cargo test
+
+      - name: Release build
+        run: trunk build --release
+
+  screenshots:
+    name: screenshot harness (dark and light)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+
+      - name: Install the pinned Rust toolchain
+        working-directory: crates/brokkr-web
+        run: |
+          rustup toolchain install
+          rustc --version
+
+      - name: Cache build
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            crates/brokkr-web/target
+          key: ${{ runner.os }}-console-shots-${{ hashFiles('crates/brokkr-web/Cargo.lock', 'crates/brokkr-web/rust-toolchain.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-console-shots-
+
+      - name: Install trunk
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl -sSfL "https://github.com/trunk-rs/trunk/releases/download/v${TRUNK_VERSION}/trunk-x86_64-unknown-linux-gnu.tar.gz" \
+            | tar -xz -C "$HOME/.local/bin" trunk
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/trunk" --version
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      # npm ci runs the postinstall, which puts the pinned headless shell in
+      # node_modules. install-deps adds the system libraries it needs.
+      - name: Install the harness and its browser
+        working-directory: crates/brokkr-web/web-e2e
+        run: |
+          npm ci
+          npx playwright install-deps chromium-headless-shell
+
+      - name: Run all scenes, dark and light
+        working-directory: crates/brokkr-web/web-e2e
+        run: ./run.sh
+
+      - name: Upload the screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: console-screenshots
+          path: crates/brokkr-web/web-e2e/shots/
+          if-no-files-found: warn
+          retention-days: 14

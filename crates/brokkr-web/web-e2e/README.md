@@ -43,3 +43,11 @@ URL=http://127.0.0.1:9080 THEME=light OUT=shots/light node shots.mjs
   another project removes the browsers of each Playwright install that it
   cannot find, for example one in a removed worktree. Each checkout downloads
   the browser one time (about 200 MB).
+
+## CI
+
+`.github/workflows/console.yml` runs on each PR that changes
+`crates/brokkr-web/**`, and on main. One job runs clippy for wasm32, the host
+tests and `trunk build --release`. One job runs `./run.sh` and uploads
+`shots/` as the artifact `console-screenshots`. The `CI gate` check in
+`main.yml` fails when one of them fails.
