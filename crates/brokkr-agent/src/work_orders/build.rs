@@ -19,6 +19,7 @@
 //! - **BuildRun**: Execution instance created from a Build
 //! - **ClusterBuildStrategy**: Pre-installed strategy (e.g., buildah)
 
+use super::{WorkOrderOutcomeError, job_watch_budget};
 use crate::k8s;
 use kube::{
     Client as K8sClient, Discovery,
@@ -26,7 +27,7 @@ use kube::{
 };
 use serde::Deserialize;
 use serde_json::json;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::time::sleep;
 use tracing::{debug, error, info};
 
@@ -37,7 +38,8 @@ const SHIPWRIGHT_API_VERSION: &str = "v1beta1";
 /// BuildRun status conditions
 const CONDITION_SUCCEEDED: &str = "Succeeded";
 
-/// Maximum time to wait for a build to complete (15 minutes)
+/// Upper bound on the BuildRun watch (15 minutes), whatever the claim timeout.
+/// A shorter claim timeout shortens the watch; see [`build_watch_budget`].
 const BUILD_TIMEOUT_SECS: u64 = 900;
 
 /// Polling interval for build status checks
@@ -84,6 +86,17 @@ pub(crate) struct FailureDetails {
     pub message: Option<String>,
 }
 
+/// How long the agent may watch a BuildRun, counted from the claim request.
+///
+/// This is the smaller of [`BUILD_TIMEOUT_SECS`] and the budget that
+/// [`job_watch_budget`] derives from the work order's `claim_timeout_seconds`.
+/// The broker releases a claim when `claim_timeout_seconds` has passed. A watch
+/// that lives longer than the claim lets a second agent claim the order and
+/// start a second BuildRun while the first one still runs.
+pub(crate) fn build_watch_budget(claim_timeout_seconds: i32) -> Duration {
+    job_watch_budget(claim_timeout_seconds).min(Duration::from_secs(BUILD_TIMEOUT_SECS))
+}
+
 /// Executes a build using Shipwright.
 ///
 /// This function:
@@ -97,6 +110,7 @@ pub(crate) struct FailureDetails {
 /// * `k8s_client` - Kubernetes client
 /// * `yaml_content` - Multi-document YAML containing Build and WorkOrder
 /// * `work_order_id` - Work order ID for labeling resources
+/// * `deadline` - When the agent stops watching the BuildRun (see [`build_watch_budget`])
 ///
 /// # Returns
 /// Optional result message (image digest on success)
@@ -104,6 +118,7 @@ pub async fn execute_build(
     k8s_client: &K8sClient,
     yaml_content: &str,
     work_order_id: &str,
+    deadline: Instant,
 ) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
     info!("Starting build execution for work order {}", work_order_id);
 
@@ -192,7 +207,8 @@ pub async fn execute_build(
     );
 
     // Watch BuildRun until completion
-    let result = watch_buildrun_completion(k8s_client, &buildrun_name, &build_namespace).await?;
+    let result =
+        watch_buildrun_completion(k8s_client, &buildrun_name, &build_namespace, deadline).await?;
 
     Ok(result)
 }
@@ -257,11 +273,18 @@ async fn create_buildrun(
     Ok(result)
 }
 
-/// Watches a BuildRun until it completes (success or failure).
+/// Watches a BuildRun until it completes (success or failure) or `deadline`
+/// passes.
+///
+/// Status is read before the deadline is checked, so a BuildRun that is
+/// already finished is reported correctly even with a zero budget. When the
+/// deadline passes, the error is a non-retryable [`WorkOrderOutcomeError`]:
+/// a retry would start a second BuildRun while the first one still runs.
 async fn watch_buildrun_completion(
     k8s_client: &K8sClient,
     name: &str,
     namespace: &str,
+    deadline: Instant,
 ) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
     // Discover the BuildRun API
     let discovery = Discovery::new(k8s_client.clone()).run().await?;
@@ -275,18 +298,9 @@ async fn watch_buildrun_completion(
 
     let api: Api<DynamicObject> = Api::namespaced_with(k8s_client.clone(), namespace, &ar);
 
-    let start_time = std::time::Instant::now();
-    let timeout = Duration::from_secs(BUILD_TIMEOUT_SECS);
+    let poll_interval = Duration::from_secs(STATUS_POLL_INTERVAL_SECS);
 
     loop {
-        if start_time.elapsed() > timeout {
-            return Err(format!(
-                "BuildRun '{}' timed out after {} seconds",
-                name, BUILD_TIMEOUT_SECS
-            )
-            .into());
-        }
-
         let buildrun = api.get(name).await?;
 
         // Check status
@@ -338,8 +352,13 @@ async fn watch_buildrun_completion(
             }
         }
 
-        // Wait before next check
-        sleep(Duration::from_secs(STATUS_POLL_INTERVAL_SECS)).await;
+        let now = Instant::now();
+        if now >= deadline {
+            return Err(Box::new(build_watch_expired_error(namespace, name)));
+        }
+
+        // Wait before next check, never past the deadline.
+        sleep(poll_interval.min(deadline.saturating_duration_since(now))).await;
     }
 }
 
@@ -426,6 +445,18 @@ pub(crate) fn parse_build_yaml(
         build_namespace,
         build_docs,
     })
+}
+
+/// The outcome when a BuildRun is still running at the watch deadline.
+fn build_watch_expired_error(namespace: &str, name: &str) -> WorkOrderOutcomeError {
+    WorkOrderOutcomeError::non_retryable(format!(
+        "BuildRun {namespace}/{name} did not finish within the watch window and was still \
+         running when the agent stopped watching. The window is at most {BUILD_TIMEOUT_SECS} \
+         seconds and is bounded below the work order's claim_timeout_seconds, so the order \
+         cannot be reclaimed and built again while this BuildRun is still going. The BuildRun \
+         was NOT cancelled and its final outcome is unknown to Brokkr. This is not a report \
+         that the build failed."
+    ))
 }
 
 /// Interprets a BuildRun status to determine completion state.
@@ -630,6 +661,53 @@ spec: {}
         let result = parse_build_yaml(yaml).unwrap();
         assert_eq!(result.build_name, "second-build");
         assert_eq!(result.build_docs.len(), 2);
+    }
+
+    // ==================== Watch Budget Tests ====================
+
+    #[test]
+    fn test_build_watch_budget_short_claim_timeout_shortens_watch() {
+        // 600s claim timeout: 60s margin, so 540s, below the 900s ceiling.
+        assert_eq!(build_watch_budget(600), Duration::from_secs(540));
+        assert_eq!(build_watch_budget(300), Duration::from_secs(240));
+    }
+
+    #[test]
+    fn test_build_watch_budget_long_claim_timeout_keeps_ceiling() {
+        assert_eq!(
+            build_watch_budget(3600),
+            Duration::from_secs(BUILD_TIMEOUT_SECS)
+        );
+        assert_eq!(
+            build_watch_budget(86_400),
+            Duration::from_secs(BUILD_TIMEOUT_SECS)
+        );
+    }
+
+    #[test]
+    fn test_build_watch_budget_is_always_below_claim_timeout() {
+        for claim_timeout in [1, 30, 60, 61, 120, 600, 900, 1000, 3600] {
+            let budget = build_watch_budget(claim_timeout);
+            assert!(budget < Duration::from_secs(claim_timeout as u64));
+            assert!(budget <= Duration::from_secs(BUILD_TIMEOUT_SECS));
+        }
+        assert_eq!(build_watch_budget(0), Duration::ZERO);
+        assert_eq!(build_watch_budget(-1), Duration::ZERO);
+    }
+
+    #[test]
+    fn test_build_watch_expired_error_is_non_retryable_and_says_not_cancelled() {
+        let err = build_watch_expired_error("builds", "app-1234abcd");
+        assert!(!err.is_retryable());
+        let msg = err.to_string();
+        assert!(msg.contains("builds/app-1234abcd"));
+        assert!(msg.contains("NOT cancelled"));
+
+        // The dispatcher must see the explicit disposition, not the text
+        // classifier, which treats "timeout" wording as retryable.
+        let boxed: Box<dyn std::error::Error + Send + Sync> = Box::new(err);
+        let outcome = boxed.downcast_ref::<WorkOrderOutcomeError>();
+        assert!(matches!(outcome, Some(o) if !o.is_retryable()));
     }
 
     // ==================== BuildRunStatus Deserialization Tests ====================
