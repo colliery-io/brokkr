@@ -17,6 +17,27 @@ use uuid::Uuid;
 // `test_release_expired`'s `released >= 1` in CI). `#[serial(webhook_queue)]`
 // runs them one-at-a-time relative to each other while still parallelising
 // against the rest of the suite.
+//
+// `#[serial]` does NOT exclude the broker. The integration suite runs against
+// the compose stack, and its broker (`serve`) runs the webhook delivery worker
+// on the same database: every few seconds it claims each pending delivery with
+// NULL or empty target_labels (BROKKR-T-0324). So a test that must see one of
+// its rows stay `pending`, or stay claimed by the test, uses an agent-targeted
+// delivery with a label that only that test has
+// (`create_unreachable_subscription`). The broker worker never claims it, and
+// no real agent has the label. Only the tests of `claim_for_broker` itself
+// still use broker rows; see the note on `test_claim_for_broker`.
+
+/// A subscription whose deliveries only an agent with the returned label can
+/// claim. The label is unique, so the broker's delivery worker and the compose
+/// agent cannot take the rows of the test.
+fn create_unreachable_subscription(name: &str) -> (NewWebhookSubscription, String) {
+    let label = format!("test-only-{}", Uuid::new_v4());
+    (
+        create_test_subscription_with_labels(name, vec![label.clone()]),
+        label,
+    )
+}
 
 fn create_test_subscription(name: &str) -> NewWebhookSubscription {
     NewWebhookSubscription {
@@ -146,6 +167,12 @@ fn test_get_delivery() {
     assert_eq!(retrieved.event_id, created.event_id);
 }
 
+// The tests of `claim_for_broker` (this one, `test_claim_pagination` and
+// `test_empty_target_labels_matches_broker`) must use broker rows, so the
+// broker container's delivery worker can still take one of their rows between
+// `create` and the claim (BROKKR-T-0324). The window is a few milliseconds
+// against a poll of some seconds, so the risk is small, but it is not zero.
+// The full fix is a test stack whose broker does not run the worker.
 #[test]
 #[serial(webhook_queue)]
 fn test_claim_for_broker() {
@@ -253,43 +280,47 @@ fn test_claim_for_agent_without_matching_labels() {
 fn test_release_expired() {
     let fixture = TestFixture::new();
 
-    // Use unique subscription name to help with test isolation
-    let sub = create_test_subscription(&format!("Release Expired Sub {}", uuid::Uuid::new_v4()));
+    // An agent-targeted delivery with a unique label. A broker delivery (NULL
+    // target_labels) is not safe here: the broker container's delivery worker
+    // can claim it between `release_expired()` and the read below, and the
+    // row is then `acquired`, not `pending`. `#[serial]` does not stop that
+    // worker (BROKKR-T-0324). No worker and no real agent can claim this row.
+    let (sub, label) = create_unreachable_subscription("Release Expired Sub");
     let subscription = fixture.dal.webhook_subscriptions().create(&sub).unwrap();
+    let (agent, _) =
+        fixture.create_test_agent_with_pak("Release Agent".to_string(), "test-cluster".to_string());
 
     let event = create_test_event();
-    let new_delivery = NewWebhookDelivery::new(subscription.id, &event, None).unwrap();
-    let created_delivery = fixture
+    let new_delivery =
+        NewWebhookDelivery::new(subscription.id, &event, Some(vec![Some(label.clone())])).unwrap();
+    let created_id = fixture
         .dal
         .webhook_deliveries()
         .create(&new_delivery)
-        .unwrap();
-    let created_id = created_delivery.id;
+        .unwrap()
+        .id;
 
-    // Claim with 0 TTL (immediately expired)
+    // Claim with 0 TTL (immediately expired).
     let claimed = fixture
         .dal
         .webhook_deliveries()
-        .claim_for_broker(100, Some(0)) // Claim more to ensure we get our delivery
+        .claim_for_agent(agent.id, &[label], 1, Some(0))
         .unwrap();
-
-    // Find our specific delivery among the claimed ones
-    let our_delivery = claimed.iter().find(|d| d.id == created_id);
-    assert!(
-        our_delivery.is_some(),
-        "Our delivery should have been claimed"
-    );
-    assert_eq!(our_delivery.unwrap().status, "acquired");
+    assert_eq!(claimed.len(), 1, "our delivery should have been claimed");
+    assert_eq!(claimed[0].id, created_id);
+    assert_eq!(claimed[0].status, "acquired");
+    assert_eq!(claimed[0].acquired_by, Some(agent.id));
 
     // Sleep briefly to ensure TTL expires
     std::thread::sleep(std::time::Duration::from_millis(100));
 
-    // Release expired claims. NOTE: release_expired() sweeps the GLOBAL expired
-    // set, so the returned *count* is not deterministic on a shared DB — an external
-    // delivery worker (or another queue test) can release our row first, making this
-    // call return 0 even though the sweep works. Asserting `released >= 1` on that
-    // count is what flaked in CI. The race-free invariant is checked below: OUR
-    // delivery — observed "acquired" above — must be transitioned back to "pending".
+    // The guarantee of release_expired(): each `acquired` row whose
+    // acquired_until is in the past goes back to `pending`, with no claimant.
+    // The returned count covers the GLOBAL expired set, so it is not checked:
+    // another sweep (the broker worker also releases expired claims) can
+    // release our row first and make this call return 0. The state of our row
+    // is checked instead. Nothing else can change it, because nothing else
+    // can claim it.
     fixture
         .dal
         .webhook_deliveries()
@@ -472,12 +503,15 @@ fn test_mark_failed_max_retries_exceeded() {
 fn test_list_for_subscription() {
     let fixture = TestFixture::new();
 
-    let sub = create_test_subscription("Test Sub");
+    // Agent-targeted with a unique label: the broker worker would claim a
+    // pending broker row and change the `pending` count (BROKKR-T-0324).
+    let (sub, label) = create_unreachable_subscription("Test Sub");
     let subscription = fixture.dal.webhook_subscriptions().create(&sub).unwrap();
+    let targets = Some(vec![Some(label)]);
 
     // Create deliveries with different statuses
     let event1 = create_test_event();
-    let new_delivery1 = NewWebhookDelivery::new(subscription.id, &event1, None).unwrap();
+    let new_delivery1 = NewWebhookDelivery::new(subscription.id, &event1, targets.clone()).unwrap();
     let delivery1 = fixture
         .dal
         .webhook_deliveries()
@@ -490,7 +524,7 @@ fn test_list_for_subscription() {
         .unwrap();
 
     let event2 = create_test_event();
-    let new_delivery2 = NewWebhookDelivery::new(subscription.id, &event2, None).unwrap();
+    let new_delivery2 = NewWebhookDelivery::new(subscription.id, &event2, targets).unwrap();
     fixture
         .dal
         .webhook_deliveries()
@@ -663,13 +697,17 @@ fn test_retry_failed_delivery() {
 fn test_get_stats() {
     let fixture = TestFixture::new();
 
-    let sub = create_test_subscription("Test Sub");
+    // Agent-targeted with a unique label: the broker worker would claim a
+    // pending broker row and change the `pending` count (BROKKR-T-0324).
+    let (sub, label) = create_unreachable_subscription("Test Sub");
     let subscription = fixture.dal.webhook_subscriptions().create(&sub).unwrap();
+    let targets = Some(vec![Some(label)]);
 
     // Create deliveries in different states
     for _ in 0..2 {
         let event = create_test_event();
-        let new_delivery = NewWebhookDelivery::new(subscription.id, &event, None).unwrap();
+        let new_delivery =
+            NewWebhookDelivery::new(subscription.id, &event, targets.clone()).unwrap();
         fixture
             .dal
             .webhook_deliveries()
@@ -678,7 +716,8 @@ fn test_get_stats() {
     }
 
     let event_success = create_test_event();
-    let delivery_success = NewWebhookDelivery::new(subscription.id, &event_success, None).unwrap();
+    let delivery_success =
+        NewWebhookDelivery::new(subscription.id, &event_success, targets.clone()).unwrap();
     let d = fixture
         .dal
         .webhook_deliveries()
@@ -687,7 +726,7 @@ fn test_get_stats() {
     fixture.dal.webhook_deliveries().mark_success(d.id).unwrap();
 
     let event_dead = create_test_event();
-    let delivery_dead = NewWebhookDelivery::new(subscription.id, &event_dead, None).unwrap();
+    let delivery_dead = NewWebhookDelivery::new(subscription.id, &event_dead, targets).unwrap();
     let d2 = fixture
         .dal
         .webhook_deliveries()
@@ -930,11 +969,16 @@ fn test_empty_target_labels_matches_broker() {
 fn test_valid_acquired_until_stays_acquired() {
     let fixture = TestFixture::new();
 
-    let sub = create_test_subscription("Test Sub");
+    // Agent-targeted with a unique label, so the broker worker cannot claim
+    // the row before the test does (BROKKR-T-0324).
+    let (sub, label) = create_unreachable_subscription("Valid TTL Sub");
     let subscription = fixture.dal.webhook_subscriptions().create(&sub).unwrap();
+    let (agent, _) =
+        fixture.create_test_agent_with_pak("TTL Agent".to_string(), "test-cluster".to_string());
 
     let event = create_test_event();
-    let new_delivery = NewWebhookDelivery::new(subscription.id, &event, None).unwrap();
+    let new_delivery =
+        NewWebhookDelivery::new(subscription.id, &event, Some(vec![Some(label.clone())])).unwrap();
     fixture
         .dal
         .webhook_deliveries()
@@ -945,16 +989,16 @@ fn test_valid_acquired_until_stays_acquired() {
     let claimed = fixture
         .dal
         .webhook_deliveries()
-        .claim_for_broker(1, Some(300))
+        .claim_for_agent(agent.id, &[label], 1, Some(300))
         .unwrap();
 
     assert_eq!(claimed.len(), 1);
     let delivery_id = claimed[0].id;
 
-    // Try to release expired - should release 0 since TTL not expired
-    let released = fixture.dal.webhook_deliveries().release_expired().unwrap();
-
-    assert_eq!(released, 0, "Should not release delivery with valid TTL");
+    // A sweep must not release a claim whose TTL is still valid. The returned
+    // count covers the GLOBAL expired set (an expired claim of the broker
+    // worker can be in it), so the state of our row is checked, not the count.
+    fixture.dal.webhook_deliveries().release_expired().unwrap();
 
     // Verify still acquired
     let delivery = fixture
@@ -964,6 +1008,7 @@ fn test_valid_acquired_until_stays_acquired() {
         .unwrap()
         .unwrap();
     assert_eq!(delivery.status, "acquired");
+    assert_eq!(delivery.acquired_by, Some(agent.id));
 }
 
 #[test]
