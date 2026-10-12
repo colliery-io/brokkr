@@ -52,6 +52,28 @@ brokkr_stacks_total 12
 brokkr_deployment_objects_total 47
 `;
 
+// The database series of a broker that exports them (BROKKR-T-0265), at the
+// n-th /metrics poll. Each poll adds 300 queries (3600 per minute) with the
+// same spread, so the p95 of each window is 7.5 ms: rank 285 of 300 sits
+// halfway in the (5 ms, 10 ms] bucket. A scene sets `db: true` to get them.
+const DB_BUCKETS = [[0.0005, 100], [0.001, 180], [0.0025, 250], [0.005, 280], [0.01, 290],
+  [0.025, 297], [0.05, 300], [0.1, 300], [0.25, 300], [0.5, 300], [1, 300], [2.5, 300], [5, 300], ["+Inf", 300]];
+const promDb = (n) => {
+  const k = n + 10; // ten polls of history before the first one
+  const buckets = DB_BUCKETS.map(([le, c]) =>
+    `brokkr_database_query_duration_seconds_bucket{le="${le}"} ${c * k}`).join("\n");
+  return `brokkr_database_queries_total{result="ok"} ${298 * k}
+brokkr_database_queries_total{result="error"} ${2 * k}
+${buckets}
+brokkr_database_query_duration_seconds_sum ${(0.9 * k).toFixed(3)}
+brokkr_database_query_duration_seconds_count ${300 * k}
+brokkr_database_pool_connections{state="idle"} 3
+brokkr_database_pool_connections{state="in_use"} 2
+brokkr_database_pool_max_connections 10
+`;
+};
+let DB = false;
+
 // scene = { name, nav?: sidebar label to click, mocks: { "/path": json } }
 // A time `s` seconds ago, as the broker sends it (RFC 3339). The feed shows it
 // as "3m ago" (BROKKR-T-0328).
@@ -303,6 +325,13 @@ const SCENES = [
   { name: "telemetry-agent", hash: "#telemetry/agent/a1", settle: 800,
     mocks: { "/agent-events": TELEM, "/stacks": STACKS, "/fleet": FLEET_A } },
   { name: "health", nav: "Broker health", mocks: { "/admin/ws/connections": WSCONN } },
+  // The database tiles (BROKKR-T-0265): `settle` waits for a second poll, so
+  // the rate and the window p95 show. `health` above is a broker with no
+  // database series: the tiles show a dash, not zero.
+  { name: "health-db", nav: "Broker health", db: true, settle: 5500, mocks: { "/admin/ws/connections": WSCONN },
+    assert_text: ["DB queries / min", "7.5 ms", "last ", "2/10"] },
+  { name: "health-db-absent", nav: "Broker health", mocks: { "/admin/ws/connections": WSCONN },
+    assert_text: ["not sent by this broker"] },
   { name: "health-modal", nav: "Broker health", click: "1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed", mocks: { "/admin/ws/connections": WSCONN } },
   { name: "jobs", nav: "Work orders", mocks: { "/work-order-log": JOBS, "/work-orders": ACTIVE_WOS } },
   { name: "jobs-modal", nav: "Work orders", click: "completed", mocks: { "/work-order-log": JOBS, "/work-orders": ACTIVE_WOS } },
@@ -452,7 +481,9 @@ page.on("pageerror", (e) => errs.push(`[pageerror] ${e.message}`));
 // (BROKKR-T-0339): 60 requests per 5 s poll is 720 per minute.
 let metricsHits = 0;
 await page.route("**/metrics", (route) => {
-  const body = PROM.replace(/(brokkr_http_requests_total\{[^}]*\}) (\d+)/, (_, m, n) => `${m} ${Number(n) + 60 * metricsHits++}`);
+  const hit = metricsHits++;
+  const body = PROM.replace(/(brokkr_http_requests_total\{[^}]*\}) (\d+)/, (_, m, n) => `${m} ${Number(n) + 60 * hit}`)
+    + (DB ? promDb(hit) : "");
   return route.fulfill({ status: 200, contentType: "text/plain", body });
 });
 
@@ -589,6 +620,7 @@ async function navigateTo(scene, label) {
 const ONLY = process.env.ONLY ? new RegExp(process.env.ONLY) : null;
 for (const s of SCENES.filter((x) => !ONLY || ONLY.test(x.name))) {
   MOCKS = s.mocks || {};
+  DB = !!s.db;
   LIVE = s.live || null;
   liveSockets = 0;
   EXPECT_HTTP = new Set(s.expect_http || []);

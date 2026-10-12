@@ -413,7 +413,12 @@ fn readyz_response(ready: bool) -> (StatusCode, &'static str) {
 /// # Returns
 ///
 /// Returns a 200 OK status code with Prometheus metrics in text format.
-async fn metrics_handler() -> impl IntoResponse {
+async fn metrics_handler(State(dal): State<DAL>) -> impl IntoResponse {
+    // The pool gauges are set on scrape: `state()` takes the pool lock once,
+    // and nothing runs between scrapes (BROKKR-T-0265).
+    let pool = &dal.pool.pool;
+    let state = pool.state();
+    metrics::set_database_pool_state(state.connections, state.idle_connections, pool.max_size());
     let metrics_data = metrics::encode_metrics();
     (
         StatusCode::OK,

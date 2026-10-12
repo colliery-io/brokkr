@@ -299,3 +299,63 @@ async fn test_metrics_contains_all_defined_metrics() {
         );
     }
 }
+
+/// Reads the value of the first sample line that starts with `prefix`.
+fn sample_value(body: &str, prefix: &str) -> f64 {
+    let line = body
+        .lines()
+        .find(|l| l.starts_with(prefix))
+        .unwrap_or_else(|| panic!("{prefix} missing: {body}"));
+    line.rsplit(' ').next().unwrap().parse().unwrap()
+}
+
+/// BROKKR-T-0265: the diesel hook on pooled connections feeds the database
+/// query series, and the pool gauges are set on scrape.
+#[tokio::test]
+async fn test_metrics_records_database_queries() {
+    let fixture = TestFixture::new();
+
+    // `/readyz` runs a real query on a pooled connection.
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/readyz")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/metrics")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body_str = String::from_utf8(body.to_vec()).unwrap();
+
+    let ok = sample_value(&body_str, "brokkr_database_queries_total{result=\"ok\"}");
+    assert!(ok >= 1.0, "a finished query must count, got {ok}");
+    let timed = sample_value(&body_str, "brokkr_database_query_duration_seconds_count");
+    assert!(timed >= 1.0, "a finished query must be timed, got {timed}");
+
+    for needle in [
+        "brokkr_database_query_duration_seconds_bucket{le=\"0.0005\"}",
+        "brokkr_database_pool_connections{state=\"idle\"}",
+        "brokkr_database_pool_connections{state=\"in_use\"}",
+        "brokkr_database_pool_max_connections",
+    ] {
+        assert!(body_str.contains(needle), "missing {needle}: {body_str}");
+    }
+}

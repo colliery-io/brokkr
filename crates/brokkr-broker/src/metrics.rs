@@ -11,8 +11,8 @@
 
 use once_cell::sync::Lazy;
 use prometheus::{
-    CounterVec, Encoder, GaugeVec, HistogramOpts, HistogramVec, IntCounter, IntCounterVec,
-    IntGauge, Opts, Registry, TextEncoder,
+    CounterVec, Encoder, GaugeVec, Histogram, HistogramOpts, HistogramVec, IntCounter,
+    IntCounterVec, IntGauge, IntGaugeVec, Opts, Registry, TextEncoder,
 };
 
 /// Global Prometheus registry for all broker metrics
@@ -211,6 +211,122 @@ pub static WEBHOOK_DECRYPT_FAILURES_TOTAL: Lazy<IntCounterVec> = Lazy::new(|| {
     c
 });
 
+// =============================================================================
+// Database metrics (BROKKR-T-0265).
+//
+// Fed by the diesel `Instrumentation` hook that `db::create_shared_connection_pool`
+// installs on each pooled connection. No SQL text is ever a label: the only
+// label is `result` (ok | error), so the series count is fixed at two.
+// =============================================================================
+
+/// Database queries finished, by result.
+///
+/// result ∈ {ok, error}. The split lets an operator see a run of failing
+/// queries without reading logs; it is bounded, so it costs one extra series.
+pub static DATABASE_QUERIES_TOTAL: Lazy<IntCounterVec> = Lazy::new(|| {
+    let opts = Opts::new(
+        "brokkr_database_queries_total",
+        "Database queries finished by the broker, by result (ok or error)",
+    );
+    let c = IntCounterVec::new(opts, &["result"]).expect("database queries counter");
+    REGISTRY
+        .register(Box::new(c.clone()))
+        .expect("register database_queries_total");
+    c
+});
+
+/// Bucket bounds of [`DATABASE_QUERY_DURATION_SECONDS`], in seconds.
+///
+/// They run from 0.5 ms to 5 s. Most broker queries are point reads and
+/// small writes that finish in under 10 ms, so the low end is finer than the
+/// HTTP histogram's; the top end catches lock waits and slow scans.
+pub const DATABASE_QUERY_BUCKETS: [f64; 13] = [
+    0.0005, 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0,
+];
+
+/// Database query latency, from query start to finish on one connection.
+/// No label, so this is one histogram.
+pub static DATABASE_QUERY_DURATION_SECONDS: Lazy<Histogram> = Lazy::new(|| {
+    let opts = HistogramOpts::new(
+        "brokkr_database_query_duration_seconds",
+        "Database query latency distribution in seconds",
+    )
+    .buckets(DATABASE_QUERY_BUCKETS.to_vec());
+    let h = Histogram::with_opts(opts).expect("database query duration histogram");
+    REGISTRY
+        .register(Box::new(h.clone()))
+        .expect("register database_query_duration_seconds");
+    h
+});
+
+/// Connections in the broker's database pool, by state.
+///
+/// state ∈ {idle, in_use}. Set from `r2d2::Pool::state()` each time
+/// `/metrics` is scraped, so the value is exact at scrape time and costs
+/// nothing between scrapes.
+pub static DATABASE_POOL_CONNECTIONS: Lazy<IntGaugeVec> = Lazy::new(|| {
+    let opts = Opts::new(
+        "brokkr_database_pool_connections",
+        "Connections in the database pool by state (idle or in_use)",
+    );
+    let g = IntGaugeVec::new(opts, &["state"]).expect("database pool connections gauge");
+    REGISTRY
+        .register(Box::new(g.clone()))
+        .expect("register database_pool_connections");
+    g
+});
+
+/// Maximum size of the broker's database pool. With
+/// `brokkr_database_pool_connections{state="in_use"}` it shows saturation.
+pub static DATABASE_POOL_MAX_CONNECTIONS: Lazy<IntGauge> = Lazy::new(|| {
+    let opts = Opts::new(
+        "brokkr_database_pool_max_connections",
+        "Maximum number of connections the database pool can open",
+    );
+    let g = IntGauge::with_opts(opts).expect("database pool max gauge");
+    REGISTRY
+        .register(Box::new(g.clone()))
+        .expect("register database_pool_max_connections");
+    g
+});
+
+/// Label children resolved once, so recording a query does no label hashing
+/// and no allocation: one atomic add for the counter, and a bucket search plus
+/// atomic adds for the histogram.
+static DATABASE_QUERIES_OK: Lazy<IntCounter> =
+    Lazy::new(|| DATABASE_QUERIES_TOTAL.with_label_values(&["ok"]));
+static DATABASE_QUERIES_ERROR: Lazy<IntCounter> =
+    Lazy::new(|| DATABASE_QUERIES_TOTAL.with_label_values(&["error"]));
+
+/// Records one finished database query.
+///
+/// # Arguments
+/// * `duration_seconds` - Time from query start to finish, or `None` when the
+///   start was not seen (the query is still counted)
+/// * `failed` - Whether diesel reported an error for the query
+pub fn record_database_query(duration_seconds: Option<f64>, failed: bool) {
+    if failed {
+        DATABASE_QUERIES_ERROR.inc();
+    } else {
+        DATABASE_QUERIES_OK.inc();
+    }
+    if let Some(seconds) = duration_seconds {
+        DATABASE_QUERY_DURATION_SECONDS.observe(seconds);
+    }
+}
+
+/// Sets the pool gauges from an r2d2 pool state snapshot.
+pub fn set_database_pool_state(connections: u32, idle: u32, max_size: u32) {
+    let in_use = connections.saturating_sub(idle);
+    DATABASE_POOL_CONNECTIONS
+        .with_label_values(&["idle"])
+        .set(i64::from(idle));
+    DATABASE_POOL_CONNECTIONS
+        .with_label_values(&["in_use"])
+        .set(i64::from(in_use));
+    DATABASE_POOL_MAX_CONNECTIONS.set(i64::from(max_size));
+}
+
 /// Convenience accessors keep call sites short and avoid the static names
 /// leaking into call-site readability.
 pub fn ws_connected_agents() -> &'static IntGauge {
@@ -267,6 +383,13 @@ pub fn init() {
     let _ = &*AGENT_HEARTBEAT_AGE_SECONDS;
     let _ = &*STACKS_TOTAL;
     let _ = &*DEPLOYMENT_OBJECTS_TOTAL;
+    // Resolve both label children so both result series export as 0 before
+    // the first query: the console can then tell a new broker from an old one.
+    let _ = &*DATABASE_QUERIES_OK;
+    let _ = &*DATABASE_QUERIES_ERROR;
+    let _ = &*DATABASE_QUERY_DURATION_SECONDS;
+    let _ = &*DATABASE_POOL_CONNECTIONS;
+    let _ = &*DATABASE_POOL_MAX_CONNECTIONS;
 }
 
 /// Encodes all registered metrics in Prometheus text format
@@ -422,6 +545,53 @@ mod tests {
             output.contains("field=\"url\"") && output.contains("path=\"broker\""),
             "Should have field and path labels"
         );
+    }
+
+    #[test]
+    fn test_record_database_query_moves_counter_and_histogram() {
+        init();
+        let ok_before = DATABASE_QUERIES_TOTAL.with_label_values(&["ok"]).get();
+        let err_before = DATABASE_QUERIES_TOTAL.with_label_values(&["error"]).get();
+        let count_before = DATABASE_QUERY_DURATION_SECONDS.get_sample_count();
+
+        record_database_query(Some(0.002), false);
+        record_database_query(Some(0.3), true);
+        // A finish without a seen start counts but does not observe.
+        record_database_query(None, false);
+
+        // Other tests may record in parallel, so assert a lower bound.
+        assert!(DATABASE_QUERIES_TOTAL.with_label_values(&["ok"]).get() >= ok_before + 2);
+        assert!(DATABASE_QUERIES_TOTAL.with_label_values(&["error"]).get() > err_before);
+        assert!(DATABASE_QUERY_DURATION_SECONDS.get_sample_count() >= count_before + 2);
+
+        let output = encode_metrics();
+        assert!(output.contains("brokkr_database_queries_total{result=\"ok\"}"));
+        assert!(output.contains("brokkr_database_queries_total{result=\"error\"}"));
+        assert!(output.contains("brokkr_database_query_duration_seconds_bucket{le=\"0.0005\"}"));
+        assert!(output.contains("brokkr_database_query_duration_seconds_count"));
+    }
+
+    /// Both result series and the histogram export before any query, so the
+    /// console sees 0 rather than a missing series on a new, idle broker.
+    #[test]
+    fn test_database_series_export_before_first_query() {
+        init();
+        let output = encode_metrics();
+        assert!(output.contains("brokkr_database_queries_total{result=\"ok\"}"));
+        assert!(output.contains("brokkr_database_queries_total{result=\"error\"}"));
+        assert!(output.contains("brokkr_database_query_duration_seconds_count"));
+    }
+
+    #[test]
+    fn test_set_database_pool_state() {
+        let _guard = lock_gauges();
+        init();
+        set_database_pool_state(7, 3, 10);
+
+        let output = encode_metrics();
+        assert!(output.contains("brokkr_database_pool_connections{state=\"idle\"} 3"));
+        assert!(output.contains("brokkr_database_pool_connections{state=\"in_use\"} 4"));
+        assert!(output.contains("brokkr_database_pool_max_connections 10"));
     }
 
     #[test]
