@@ -69,9 +69,11 @@ resources:
     memory: "1Gi"
     cpu: "1000m"
 
-# Security Context
+# Pod Security Context
+# Merged into the chart's podSecurityContext defaults (runAsGroup and the
+# containerSecurityContext defaults stay in place).
 # Production security best practices
-securityContext:
+podSecurityContext:
   # Run as non-root user
   runAsNonRoot: true
   runAsUser: 10001

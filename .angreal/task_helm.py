@@ -2097,31 +2097,10 @@ VALUES_KEY_ALLOWLIST = {
         # NOT allowlisted -- _helpers.tpl reads username/password/database to
         # build BROKKR__DATABASE__URL, so it must stay referenced.
         "postgresql.primary.*": "consumed by the Bitnami postgresql subchart",
-        # DEFECT, pre-existing: values/{development,production,staging}.yaml set
-        # a top-level `securityContext`, but the chart implements
-        # `podSecurityContext` and `containerSecurityContext`. The block renders
-        # nothing. Left allowlisted so this check can land green; remove the
-        # entry when the overlays are fixed.
-        "securityContext.*": (
-            "DEFECT: set by values/ overlays but the chart uses "
-            "podSecurityContext/containerSecurityContext; renders nothing"
-        ),
     },
-    AGENT_CHART: {
-        # DEFECT, pre-existing: same inert `securityContext` block as the broker
-        # overlays.
-        "securityContext.*": (
-            "DEFECT: set by values/ overlays but the chart uses "
-            "podSecurityContext/containerSecurityContext; renders nothing"
-        ),
-        # DEFECT, pre-existing: values/{development,production,staging}.yaml set
-        # `extraEnv`, but only the *broker* deployment renders extraEnv. The
-        # agent deployment has no such block, so these entries are dropped.
-        "extraEnv*": (
-            "DEFECT: set by agent values/ overlays but only the broker "
-            "deployment renders extraEnv"
-        ),
-    },
+    # The overlay `securityContext` blocks (both charts) and the agent's
+    # `extraEnv` were DEFECT entries here; fixed in BROKKR-T-0314.
+    AGENT_CHART: {},
 }
 
 # A Helm action, e.g. `{{- toYaml .Values.resources | nindent 10 }}`. Scanning
@@ -2675,6 +2654,33 @@ def check_agent_values(yaml_mod, checks):
 
     default_docs = render_own(yaml_mod, AGENT_CHART)
 
+    # --- extraEnv -------------------------------------------------------------
+    # BROKKR-T-0314: the agent overlays set extraEnv, but only the broker
+    # deployment rendered it. Check it renders in each env shape: alone (no
+    # other env entries), and next to the namespace-scoped entry.
+    extra = [{"name": "BROKKR_RENDER_CHECK", "value": "present"}]
+    for label, vals in [
+        ("alone", {"extraEnv": extra}),
+        ("with rbac.clusterWide=false", {"extraEnv": extra, "rbac": {"clusterWide": False}}),
+    ]:
+        dep = single_manifest(render_own(yaml_mod, AGENT_CHART, vals), "Deployment")
+        env = container_env(dep, "agent")
+        checks.expect(
+            AGENT_CHART,
+            "extraEnv",
+            f"extraEnv entries appended to the agent container env ({label})",
+            (env.get("BROKKR_RENDER_CHECK") or {}).get("value") == "present"
+            and (label == "alone" or "BROKKR__AGENT__WATCH_NAMESPACE" in env),
+            sorted(env),
+        )
+    checks.expect(
+        AGENT_CHART,
+        "extraEnv",
+        "no env block when extraEnv is empty and nothing else needs one (the default)",
+        not container_env(single_manifest(default_docs, "Deployment"), "agent"),
+        container_env(single_manifest(default_docs, "Deployment"), "agent"),
+    )
+
     # --- metrics.podMonitor.enabled + port linkage ---------------------------
     # The agent renders no Service, so Prometheus scrapes the pod directly and
     # the PodMonitor's `port` is a *container* port name. The BROKKR-T-0308 bug
@@ -2831,6 +2837,50 @@ def check_agent_values(yaml_mod, checks):
         secret_key_ref(sourced_env.get("BROKKR__AGENT__PAK")) == ("agent-pak", "PAK_KEY"),
         secret_key_ref(sourced_env.get("BROKKR__AGENT__PAK")),
     )
+
+
+def check_overlays_render(yaml_mod, chart, checks):
+    """The shipped values/ overlays must reach the rendered pod (BROKKR-T-0314).
+
+    The overlays set a top-level `securityContext` that no template read, and
+    the agent overlays set `extraEnv` that the agent did not render. The generic
+    key check catches a key no template names; this checks the values arrive.
+    """
+    chart_dir = CHARTS_DIR / chart
+    container = "broker" if chart == BROKER_CHART else "agent"
+    print(f"\n{chart}: values/ overlays reach the pod")
+    for values_file in sorted((chart_dir / "values").glob("*.yaml")):
+        label = str(values_file.relative_to(chart_dir))
+        overlay = yaml_mod.safe_load(values_file.read_text()) or {}
+        docs = own_manifests(
+            helm_render(yaml_mod, chart, values_file=values_file), chart
+        )
+        dep = single_manifest(docs, "Deployment")
+        pod = dep["spec"]["template"]["spec"]
+        want_psc = overlay.get("podSecurityContext") or {}
+        got_psc = pod.get("securityContext") or {}
+        checks.expect(
+            chart,
+            f"{label} podSecurityContext",
+            "no top-level securityContext key, every overlay key in the pod "
+            "securityContext, and runAsGroup kept from defaults",
+            "securityContext" not in overlay
+            and all(got_psc.get(k) == v for k, v in want_psc.items())
+            and got_psc.get("runAsGroup") == 10001,
+            (sorted(overlay), got_psc),
+        )
+        env = container_env(dep, container)
+        missing = [
+            e["name"] for e in overlay.get("extraEnv") or []
+            if env.get(e["name"]) != e
+        ]
+        checks.expect(
+            chart,
+            f"{label} extraEnv",
+            "every overlay extraEnv entry in the container env",
+            not missing,
+            missing,
+        )
 
 
 def check_chart_renders(yaml_mod, chart, checks):
@@ -2993,6 +3043,8 @@ def run_render_assertions():
             check_chart_renders(yaml_mod, chart, checks)
         check_broker_values(yaml_mod, checks)
         check_agent_values(yaml_mod, checks)
+        for chart in (BROKER_CHART, AGENT_CHART):
+            check_overlays_render(yaml_mod, chart, checks)
         for chart in (BROKER_CHART, AGENT_CHART):
             check_values_are_referenced(yaml_mod, chart, checks)
     except RuntimeError as e:
