@@ -44,6 +44,7 @@ export default defineConfig({
 				'Brokkr: an environment-aware control plane that distributes Kubernetes objects to clusters.',
 			social: [{ icon: 'github', label: 'GitHub', href: REPO }],
 			editLink: { baseUrl: `${REPO}/edit/main/docs/` },
+			routeMiddleware: './src/route-data.ts',
 			expressiveCode: {
 				frames: { extractFileNameFromCode: false },
 				// Shiki has no PromQL grammar: show it as plain text.
