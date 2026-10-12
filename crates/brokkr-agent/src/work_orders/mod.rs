@@ -59,12 +59,13 @@ const CLAIM_SAFETY_MARGIN_PERCENT: u64 = 10;
 /// [`process_single_work_order`] does not have to infer retryability from
 /// error text via [`is_error_retryable`].
 ///
-/// This exists specifically for Job watch outcomes. `is_error_retryable`
-/// classifies any message containing "timeout" as retryable, and a retry of a
-/// timed-out work order would re-dispatch the order **while the original Job
-/// is still running in the cluster** — the exact double-execution this watch
-/// is meant to prevent. Job outcomes therefore carry their disposition
-/// explicitly rather than through wording.
+/// This exists specifically for Job and BuildRun watch outcomes.
+/// `is_error_retryable` classifies any message containing "timeout" as
+/// retryable, and a retry of a timed-out work order would re-dispatch the
+/// order **while the original Job or BuildRun is still running in the
+/// cluster** — the exact double-execution this watch is meant to prevent.
+/// Watch outcomes therefore carry their disposition explicitly rather than
+/// through wording.
 #[derive(Debug)]
 pub struct WorkOrderOutcomeError {
     message: String,
@@ -254,7 +255,19 @@ async fn process_single_work_order(
 
     // Execute based on work type
     let result = match work_order.work_type.as_str() {
-        "build" => execute_build_work_order(config, http_client, k8s_client, agent, &claimed).await,
+        "build" => {
+            let build_deadline =
+                claim_requested_at + build::build_watch_budget(claimed.claim_timeout_seconds);
+            execute_build_work_order(
+                config,
+                http_client,
+                k8s_client,
+                agent,
+                &claimed,
+                build_deadline,
+            )
+            .await
+        }
         "custom" => execute_custom_work_order(k8s_client, agent, &claimed, watch_deadline).await,
         unknown => Err(format!("Unknown work type: {}", unknown).into()),
     };
@@ -309,6 +322,7 @@ async fn execute_build_work_order(
     k8s_client: &K8sClient,
     agent: &Agent,
     work_order: &WorkOrder,
+    deadline: Instant,
 ) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
     info!(
         "Executing build work order {} for agent {}",
@@ -335,6 +349,7 @@ async fn execute_build_work_order(
         k8s_client,
         &work_order.yaml_content,
         &work_order.id.to_string(),
+        deadline,
     )
     .await?;
 
