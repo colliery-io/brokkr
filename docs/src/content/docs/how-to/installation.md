@@ -126,7 +126,7 @@ The response wraps the agent record and the one-time PAK in `initial_pak`:
 
 Save the `initial_pak` value (`jq -r '.initial_pak'`) — it is shown only once; you'll need it to install the agent.
 
-Note the `"status": "INACTIVE"` in the response: every new agent starts inactive and applies nothing until you activate it. You'll activate this agent in the [Test Deployment](#test-deployment) section before deploying anything through it.
+Note the `"status": "INACTIVE"` in the response: every new agent starts inactive. The agent reads its own status and applies nothing until you activate it. The broker does not stop the work; the agent does (see [Agent Status Is Not an Access Control](../../explanation/security-model/#agent-status-is-not-an-access-control)). You'll activate this agent in the [Test Deployment](#test-deployment) section before deploying anything through it.
 
 ### 5. Install the Agent
 

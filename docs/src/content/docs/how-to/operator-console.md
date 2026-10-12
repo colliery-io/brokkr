@@ -123,7 +123,7 @@ For the request lifecycle, retention, and how to drive the same capability from 
 
 Open **Fleet**, click the agent, and use the control under **Agent state**. Like tenant creation, it asks for an admin PAK for that one request — the console's own credential is read-only and cannot change agent state.
 
-**What pausing does:** the agent stops fetching deployment objects and stops picking up work orders. It keeps heartbeating, so it stays visible and healthy in the console rather than looking offline.
+**What pausing does:** the agent stops fetching deployment objects and stops picking up work orders. It also stops health checks, diagnostics and webhook deliveries, so a diagnostic that you request for a paused agent stays pending. It keeps heartbeating, so it stays visible and healthy in the console rather than looking offline.
 
 **What it does not do:** it does not roll anything back. Resources the agent has already applied stay in the cluster exactly as they are. Pausing stops new work being taken up; it is not an undo.
 
