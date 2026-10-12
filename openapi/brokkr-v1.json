@@ -2467,6 +2467,86 @@
         ],
         "type": "object"
       },
+      "WebhookDeliveryFeedItem": {
+        "description": "One row of the broker-wide delivery feed (BROKKR-T-0264).\n\nLike [`WebhookResponse`], it never carries the subscription's encrypted\nURL or auth header. It also leaves out the event payload: the feed is for\ntriage, and the per-subscription list keeps the full record.",
+        "properties": {
+          "acquired_by": {
+            "description": "Agent that holds the delivery now (`null` = broker or not held).",
+            "format": "uuid",
+            "nullable": true,
+            "type": "string"
+          },
+          "attempts": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "completed_at": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "event_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "event_type": {
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "last_attempt_at": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "last_error": {
+            "nullable": true,
+            "type": "string"
+          },
+          "next_retry_at": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "status": {
+            "description": "pending, acquired, success, failed or dead.",
+            "type": "string"
+          },
+          "subscription_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "subscription_name": {
+            "description": "Name of the subscription, or `null` when the subscription is gone.",
+            "nullable": true,
+            "type": "string"
+          },
+          "target_labels": {
+            "description": "Labels that select the agent that delivers; empty means the broker.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "subscription_id",
+          "event_type",
+          "event_id",
+          "status",
+          "attempts",
+          "target_labels",
+          "created_at"
+        ],
+        "type": "object"
+      },
       "WebhookFilters": {
         "description": "Filters for webhook subscriptions.\n\nA filter narrows an event-type match further, using field values carried in\nthe event payload. Evaluated by [`WebhookFilters::matches`] at emission time\n(see `brokkr_broker::utils::event_bus::emit_event`).\n\nSemantics (BROKKR-T-0288):\n\n* Every filter field that is set must match: the fields are ANDed.\n* **An event that does not carry a filtered field does not match.** A\n  subscription filtering on `stack_id` therefore receives nothing for event\n  types whose payload has no `stack_id` (`agent.*` and `workorder.*`; the\n  whole `deployment.*` family does carry it). This is deliberate: a filter\n  is a narrowing\n  statement, and widening it to \"…or the event didn't say\" would deliver\n  precisely the events the operator asked to exclude.\n* A JSON `null` counts as absent, not as a value. Several payloads emit\n  `\"stack_id\": null` / `\"agent_id\": null` when the source column is NULL\n  (e.g. `deployment.deleted` for an already-purged object,\n  `workorder.completed` for an unclaimed order).\n\n# Read/write asymmetry\n\nThis type is the **read** path: deserialization deliberately ignores unknown\nkeys, so rows written before a field was removed still load — notably the\ndropped `labels` filter, which was never evaluated and is superseded by\n`target_labels` delivery routing. A legacy row must keep delivering exactly\nas it does today; a broker that refused to load it would silently stop the\nsubscription instead. **Do not add `deny_unknown_fields` here.**\n\nThe **write** path is strict, and intentionally not symmetric: `POST` and\n`PUT /webhooks` reject a body carrying `filters.labels` with a 422 that names\n`target_labels` as the replacement (see\n`brokkr_broker::api::v1::webhooks::reject_removed_write_fields`). Accepting\nthe key and dropping it would leave the caller believing their deliveries\nwere scoped when they were not — the failure mode that motivated\nBROKKR-T-0288 in the first place. Rejection is enforced on the raw request\nbody, above this type, precisely so the tolerant deserialization below is\npreserved.",
         "properties": {
@@ -8508,6 +8588,95 @@
         ],
         "tags": [
           "templates"
+        ]
+      }
+    },
+    "/webhook-deliveries": {
+      "get": {
+        "operationId": "list_recent_deliveries",
+        "parameters": [
+          {
+            "description": "Filter by delivery status: pending, acquired, success, failed or dead",
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Maximum number of results (default 50, max 200)",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Number of results to skip",
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/WebhookDeliveryFeedItem"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Recent deliveries across all subscriptions, newest first"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unknown delivery status"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden - Admin access required"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "admin_pak": []
+          }
+        ],
+        "tags": [
+          "webhooks"
         ]
       }
     },

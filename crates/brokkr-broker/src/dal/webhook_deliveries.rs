@@ -36,7 +36,7 @@ use brokkr_models::models::webhooks::{
     DELIVERY_STATUS_ACQUIRED, DELIVERY_STATUS_DEAD, DELIVERY_STATUS_FAILED,
     DELIVERY_STATUS_PENDING, DELIVERY_STATUS_SUCCESS, NewWebhookDelivery, WebhookDelivery,
 };
-use brokkr_models::schema::webhook_deliveries;
+use brokkr_models::schema::{webhook_deliveries, webhook_subscriptions};
 use chrono::{DateTime, Duration, Utc};
 use diesel::prelude::*;
 use uuid::Uuid;
@@ -469,6 +469,52 @@ impl WebhookDeliveriesDAL<'_> {
 
         query
             .order(webhook_deliveries::created_at.desc())
+            .limit(limit)
+            .offset(offset)
+            .load(conn)
+    }
+
+    /// Lists the most recent deliveries across all subscriptions, newest first
+    /// (BROKKR-T-0264).
+    ///
+    /// This backs the broker-wide delivery feed. It is one query: a left join
+    /// to `webhook_subscriptions` gives the subscription name, so callers do
+    /// not look up each subscription. Only the name is read from the
+    /// subscription row; its encrypted URL and auth header are never selected.
+    /// The name is `None` when the delivery outlived its subscription.
+    ///
+    /// Ties on `created_at` are broken by `id` so that offset pages are stable.
+    ///
+    /// # Arguments
+    ///
+    /// * `status_filter` - Optional status to filter by.
+    /// * `limit` - Maximum number of deliveries to return.
+    /// * `offset` - Number of deliveries to skip for pagination.
+    pub fn list_recent(
+        &self,
+        status_filter: Option<&str>,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<(WebhookDelivery, Option<String>)>, diesel::result::Error> {
+        let conn = &mut self.dal.conn()?;
+
+        let mut query = webhook_deliveries::table
+            .left_join(webhook_subscriptions::table)
+            .select((
+                WebhookDelivery::as_select(),
+                webhook_subscriptions::name.nullable(),
+            ))
+            .into_boxed();
+
+        if let Some(status) = status_filter {
+            query = query.filter(webhook_deliveries::status.eq(status));
+        }
+
+        query
+            .order((
+                webhook_deliveries::created_at.desc(),
+                webhook_deliveries::id.desc(),
+            ))
             .limit(limit)
             .offset(offset)
             .load(conn)

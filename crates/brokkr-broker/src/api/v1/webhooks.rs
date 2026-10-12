@@ -22,8 +22,8 @@ use brokkr_models::models::audit_logs::{
     ACTION_WEBHOOK_UPDATED, ACTOR_TYPE_ADMIN, ACTOR_TYPE_SYSTEM, RESOURCE_TYPE_WEBHOOK,
 };
 use brokkr_models::models::webhooks::{
-    NewWebhookSubscription, UpdateWebhookSubscription, VALID_EVENT_TYPES, WebhookDelivery,
-    WebhookFilters, WebhookSubscription,
+    NewWebhookSubscription, UpdateWebhookSubscription, VALID_DELIVERY_STATUSES, VALID_EVENT_TYPES,
+    WebhookDelivery, WebhookFilters, WebhookSubscription,
 };
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error, info, warn};
@@ -392,6 +392,79 @@ fn delivery_failure_message(error: Option<&str>, status_code: Option<u16>) -> St
     }
 }
 
+/// Query of `GET /webhook-deliveries`, the broker-wide delivery feed
+/// (BROKKR-T-0264).
+///
+/// Pagination is `limit`/`offset`, the same shape as the per-subscription
+/// deliveries and the audit log, so clients page every list the same way.
+/// The parameters are documented on the handler, so this struct is not a
+/// spec component.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ListRecentDeliveriesQuery {
+    /// Filter by delivery status: pending, acquired, success, failed or dead.
+    #[serde(default)]
+    pub status: Option<String>,
+    /// Maximum number of results (default 50, max 200).
+    #[serde(default)]
+    pub limit: Option<i64>,
+    /// Number of results to skip.
+    #[serde(default)]
+    pub offset: Option<i64>,
+}
+
+/// Default page size of the delivery feed.
+const RECENT_DELIVERIES_DEFAULT_LIMIT: i64 = 50;
+/// Largest page the delivery feed returns.
+const RECENT_DELIVERIES_MAX_LIMIT: i64 = 200;
+
+/// One row of the broker-wide delivery feed (BROKKR-T-0264).
+///
+/// Like [`WebhookResponse`], it never carries the subscription's encrypted
+/// URL or auth header. It also leaves out the event payload: the feed is for
+/// triage, and the per-subscription list keeps the full record.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct WebhookDeliveryFeedItem {
+    pub id: Uuid,
+    pub subscription_id: Uuid,
+    /// Name of the subscription, or `null` when the subscription is gone.
+    pub subscription_name: Option<String>,
+    pub event_type: String,
+    pub event_id: Uuid,
+    /// pending, acquired, success, failed or dead.
+    pub status: String,
+    pub attempts: i32,
+    /// Labels that select the agent that delivers; empty means the broker.
+    pub target_labels: Vec<String>,
+    /// Agent that holds the delivery now (`null` = broker or not held).
+    pub acquired_by: Option<Uuid>,
+    pub last_attempt_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub next_retry_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub last_error: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub completed_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+impl From<(WebhookDelivery, Option<String>)> for WebhookDeliveryFeedItem {
+    fn from((d, subscription_name): (WebhookDelivery, Option<String>)) -> Self {
+        Self {
+            id: d.id,
+            subscription_id: d.subscription_id,
+            subscription_name,
+            event_type: d.event_type,
+            event_id: d.event_id,
+            status: d.status,
+            attempts: d.attempts,
+            target_labels: d.target_labels.into_iter().flatten().flatten().collect(),
+            acquired_by: d.acquired_by,
+            last_attempt_at: d.last_attempt_at,
+            next_retry_at: d.next_retry_at,
+            last_error: d.last_error,
+            created_at: d.created_at,
+            completed_at: d.completed_at,
+        }
+    }
+}
+
 // =============================================================================
 // Routes
 // =============================================================================
@@ -411,6 +484,7 @@ pub fn routes() -> Router<DAL> {
             "/agents/:agent_id/webhooks/pending",
             get(get_pending_agent_webhooks),
         )
+        .route("/webhook-deliveries", get(list_recent_deliveries))
         .route(
             "/webhook-deliveries/:id/result",
             post(report_delivery_result),
@@ -855,6 +929,65 @@ async fn list_deliveries(
         id
     );
     Ok(Json(deliveries))
+}
+
+#[utoipa::path(
+    get, path = "/webhook-deliveries", tag = "webhooks",
+    params(
+        ("status" = Option<String>, Query, description = "Filter by delivery status: pending, acquired, success, failed or dead"),
+        ("limit" = Option<i64>, Query, description = "Maximum number of results (default 50, max 200)"),
+        ("offset" = Option<i64>, Query, description = "Number of results to skip")
+    ),
+    responses(
+        (status = 200, description = "Recent deliveries across all subscriptions, newest first", body = Vec<WebhookDeliveryFeedItem>),
+        (status = 400, description = "Unknown delivery status", body = ErrorResponse),
+        (status = 403, description = "Forbidden - Admin access required", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    ),
+    security(("admin_pak" = []))
+)]
+async fn list_recent_deliveries(
+    State(dal): State<DAL>,
+    Extension(auth_payload): Extension<AuthPayload>,
+    Query(query): Query<ListRecentDeliveriesQuery>,
+) -> Result<Json<Vec<WebhookDeliveryFeedItem>>, ApiError> {
+    info!("Handling request to list recent webhook deliveries");
+    if !auth_payload.admin {
+        return Err(ApiError::forbidden(
+            "admin_required",
+            "admin access required",
+        ));
+    }
+
+    if let Some(status) = query.status.as_deref()
+        && !VALID_DELIVERY_STATUSES.contains(&status)
+    {
+        return Err(ApiError::bad_request(
+            "invalid_status",
+            format!(
+                "status must be one of: {}",
+                VALID_DELIVERY_STATUSES.join(", ")
+            ),
+        ));
+    }
+
+    // Clamp to valid ranges: a negative limit or offset reaches Postgres as
+    // an error and 500s, and an unbounded limit reads the whole table.
+    let limit = query
+        .limit
+        .unwrap_or(RECENT_DELIVERIES_DEFAULT_LIMIT)
+        .clamp(1, RECENT_DELIVERIES_MAX_LIMIT);
+    let offset = query.offset.unwrap_or(0).max(0);
+
+    let deliveries = dal
+        .webhook_deliveries()
+        .list_recent(query.status.as_deref(), limit, offset)
+        .map_err(|e| {
+            error!("Failed to fetch recent webhook deliveries: {:?}", e);
+            ApiError::internal("failed to fetch deliveries")
+        })?;
+    info!("Retrieved {} recent webhook deliveries", deliveries.len());
+    Ok(Json(deliveries.into_iter().map(Into::into).collect()))
 }
 
 #[utoipa::path(

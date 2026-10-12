@@ -973,6 +973,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/webhook-deliveries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_recent_deliveries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/webhook-deliveries/{id}/result": {
         parameters: {
             query?: never;
@@ -2547,6 +2563,44 @@ export interface components {
             subscription_id: string;
             /** @description Labels for delivery targeting (copied from subscription). */
             target_labels?: (string | null)[] | null;
+        };
+        /**
+         * @description One row of the broker-wide delivery feed (BROKKR-T-0264).
+         *
+         *     Like [`WebhookResponse`], it never carries the subscription's encrypted
+         *     URL or auth header. It also leaves out the event payload: the feed is for
+         *     triage, and the per-subscription list keeps the full record.
+         */
+        WebhookDeliveryFeedItem: {
+            /**
+             * Format: uuid
+             * @description Agent that holds the delivery now (`null` = broker or not held).
+             */
+            acquired_by?: string | null;
+            /** Format: int32 */
+            attempts: number;
+            /** Format: date-time */
+            completed_at?: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: uuid */
+            event_id: string;
+            event_type: string;
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            last_attempt_at?: string | null;
+            last_error?: string | null;
+            /** Format: date-time */
+            next_retry_at?: string | null;
+            /** @description pending, acquired, success, failed or dead. */
+            status: string;
+            /** Format: uuid */
+            subscription_id: string;
+            /** @description Name of the subscription, or `null` when the subscription is gone. */
+            subscription_name?: string | null;
+            /** @description Labels that select the agent that delivers; empty means the broker. */
+            target_labels: string[];
         };
         /**
          * @description Filters for webhook subscriptions.
@@ -6764,6 +6818,60 @@ export interface operations {
             };
             /** @description Template or label not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_recent_deliveries: {
+        parameters: {
+            query?: {
+                /** @description Filter by delivery status: pending, acquired, success, failed or dead */
+                status?: string;
+                /** @description Maximum number of results (default 50, max 200) */
+                limit?: number;
+                /** @description Number of results to skip */
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Recent deliveries across all subscriptions, newest first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookDeliveryFeedItem"][];
+                };
+            };
+            /** @description Unknown delivery status */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden - Admin access required */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
