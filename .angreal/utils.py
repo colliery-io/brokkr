@@ -49,7 +49,7 @@ def print_ready_banner():
     _say("  Agent PAK:   /tmp/brokkr-keys/agent.pak")
     _say("  Kubeconfig:  /tmp/brokkr-keys/kubeconfig.local.yaml")
     _say("")
-    _say("  Next: docs/src/getting-started/evaluate.md, or `angreal docs serve`.")
+    _say("  Next: docs/src/content/docs/tutorials/evaluate.md, or `angreal docs serve`.")
     _say("")
 
 

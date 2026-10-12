@@ -14,7 +14,7 @@ This Helm chart deploys the Brokkr agent to a Kubernetes cluster. The agent conn
   The floor was introduced together with the Shipwright Build integration and is
   documented in `Chart.yaml` as the Kubernetes baseline that integration requires
   (the same 1.29 floor is stated in
-  [Shipwright Builds](https://github.com/colliery-io/brokkr/blob/main/docs/src/how-to/shipwright-builds.md)).
+  [Shipwright Builds](https://colliery-io.github.io/brokkr/how-to/shipwright-builds/)).
   Note that the pin is **chart-wide and unconditional** — setting `shipwright.enabled=false`
   does not lower it. If you need the agent on an older cluster you would have to relax
   `kubeVersion` in a fork; nothing else in the agent's own manifests is known to require 1.29.
@@ -89,7 +89,7 @@ helm template my-agent charts/brokkr-agent --set shipwright.enabled=false | grep
 ```
 
 For the full build workflow see
-[Shipwright Builds](https://github.com/colliery-io/brokkr/blob/main/docs/src/how-to/shipwright-builds.md).
+[Shipwright Builds](https://colliery-io.github.io/brokkr/how-to/shipwright-builds/).
 
 ## Installation
 

@@ -30,4 +30,4 @@ groups:
             past the hard 6h ceiling. Check the broker logs for the eviction
             task and restart the broker if needed. Retention is an operational
             buffer, not a log store — see docs/explanation/internal-ws-channel.
-          runbook: "docs/src/explanation/internal-ws-channel.md#telemetry-track--short-lived-buffer-not-a-log-store"
+          runbook: "docs/src/content/docs/explanation/internal-ws-channel.md#telemetry-track--short-lived-buffer-not-a-log-store"

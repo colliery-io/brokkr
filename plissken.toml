@@ -4,8 +4,8 @@ version_from = "cargo"
 
 [output]
 format = "markdown"
-path = ".plissken/output"
-template = "mdbook"
+path = "docs/src/content/docs/reference/api"
+template = "starlight"
 
 [rust]
 crates = [
@@ -14,3 +14,7 @@ crates = [
     "crates/brokkr-models",
     "crates/brokkr-utils",
 ]
+
+[python]
+package = "brokkr"
+source = "sdks/python/brokkr/brokkr"

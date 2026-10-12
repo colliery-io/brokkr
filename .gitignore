@@ -19,9 +19,6 @@ examples/ui/node_modules/*
 # MSVC Windows builds of rustc generate these, which store debugging information
 *.pdb
 
-# mdBook documentation
-/docs/book/
-
 # RustRover
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
 #  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
@@ -192,12 +189,8 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
-# Ignore mdBook build output
-/docs/book
-
-# Plissken staging output and generated API docs (auto-generated from source)
-/.plissken/
-/docs/src/api/rust/
+# API pages written by `plissken render` (plissken.toml) before each docs build
+/docs/src/content/docs/reference/api/
 
 # Helm dependency charts (like node_modules)
 # Keep Chart.lock but ignore downloaded chart tarballs

@@ -76,4 +76,4 @@ argument: `client.apply("hello-brokkr", "./manifests", [], "<generator name>")`.
 ## More
 
 For errors, retry, telemetry and the live-tail URL, see the
-[TypeScript SDK documentation](https://github.com/colliery-io/brokkr/blob/main/docs/src/how-to/sdks/typescript.md).
+[TypeScript SDK documentation](https://colliery-io.github.io/brokkr/how-to/sdks/typescript/).

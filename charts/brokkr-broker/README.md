@@ -10,7 +10,7 @@ This Helm chart deploys the Brokkr control plane broker to a Kubernetes cluster.
   `autoscaling.enabled` renders `autoscaling/v2` (1.23+) while `podDisruptionBudget.enabled`
   renders `policy/v1` (1.21+). If you also run the agent chart in the same cluster, its
   `kubeVersion: ">=1.29.0-0"` pin makes **1.29** the effective floor for a Brokkr fleet — see
-  [Installing Brokkr](https://github.com/colliery-io/brokkr/blob/main/docs/src/getting-started/installation.md).
+  [Installing Brokkr](https://colliery-io.github.io/brokkr/how-to/installation/).
 - Helm 3.8+ (3.8 is the floor for `helm install oci://…` against the published charts;
   installing from a local checkout works with any Helm 3.x)
 - PostgreSQL database (bundled by default, or external)
@@ -42,7 +42,7 @@ helm install my-broker charts/brokkr-broker \
   --set broker.pakHash=<pak-hash-from-generate-pak>
 ```
 
-**WARNING:** installing without `broker.pakHash` or `broker.pakHashExistingSecret` leaves the broker running with the publicly-known development admin PAK compiled into the binary — anyone who can reach the broker can authenticate as admin. Set one of the two on every install. The only exception is a throwaway local evaluation cluster that nobody else can reach, such as Path B of [Evaluate Brokkr Locally](https://github.com/colliery-io/brokkr/blob/main/docs/src/getting-started/evaluate.md). A restart does not replace the development hash, because the broker runs the admin bootstrap only on its first startup. Setting `broker.pakHash` to an empty string is the same as omitting it: the chart only renders the variable when the value is non-empty.
+**WARNING:** installing without `broker.pakHash` or `broker.pakHashExistingSecret` leaves the broker running with the publicly-known development admin PAK compiled into the binary — anyone who can reach the broker can authenticate as admin. Set one of the two on every install. The only exception is a throwaway local evaluation cluster that nobody else can reach, such as Path B of [Evaluate Brokkr Locally](https://colliery-io.github.io/brokkr/tutorials/evaluate/). A restart does not replace the development hash, because the broker runs the admin bootstrap only on its first startup. Setting `broker.pakHash` to an empty string is the same as omitting it: the chart only renders the variable when the value is non-empty.
 
 ### Production Installation
 

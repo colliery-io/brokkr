@@ -99,4 +99,4 @@ client; reach for it via `client.api` when the wrapper doesn't cover what
 you need.
 
 For the full guide, see the
-[Python SDK documentation](https://github.com/colliery-io/brokkr/blob/main/docs/src/how-to/sdks/python.md).
+[Python SDK documentation](https://colliery-io.github.io/brokkr/how-to/sdks/python/).
