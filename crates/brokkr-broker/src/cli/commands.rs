@@ -65,6 +65,22 @@ pub fn connection_pool_from_settings(config: &Settings, max_size: u32) -> Connec
     )
 }
 
+/// Builds the pool for a one-shot command, and refuses a configured schema
+/// that has no Brokkr tables.
+///
+/// Without this check, a missing or misspelled `database.schema` made the
+/// command read and write the tables in `public`, because the search path
+/// falls back to `public` (BROKKR-T-0327). `serve` does not use this: it
+/// creates and migrates the schema itself.
+fn migrated_pool_from_settings(
+    config: &Settings,
+    max_size: u32,
+) -> Result<ConnectionPool, Box<dyn std::error::Error>> {
+    let pool = connection_pool_from_settings(config, max_size);
+    pool.check_schema_migrated()?;
+    Ok(pool)
+}
+
 /// Function to start the Brokkr Broker server
 ///
 /// This function initializes the database, runs migrations, checks for first-time setup,
@@ -335,7 +351,7 @@ pub fn rotate_admin(config: &Settings) -> Result<(), Box<dyn std::error::Error>>
     info!("Rotating admin key");
 
     // Create database connection (search_path applied on checkout)
-    let pool = connection_pool_from_settings(config, 1);
+    let pool = migrated_pool_from_settings(config, 1)?;
     let mut conn = pool.get()?;
 
     let outcome = utils::upsert_admin(&mut conn, config)?;
@@ -450,7 +466,7 @@ pub fn rotate_agent_key(
 ) -> Result<String, Box<dyn std::error::Error>> {
     info!("Rotating agent key");
 
-    let pool = connection_pool_from_settings(config, 1);
+    let pool = migrated_pool_from_settings(config, 1)?;
     let dal = DAL::new(pool.clone());
 
     let agent = dal.agents().get(uuid)?.ok_or("Agent not found")?;
@@ -478,7 +494,7 @@ pub fn rotate_generator_key(
 ) -> Result<String, Box<dyn std::error::Error>> {
     info!("Rotating generator key");
 
-    let pool = connection_pool_from_settings(config, 1);
+    let pool = migrated_pool_from_settings(config, 1)?;
     let dal = DAL::new(pool.clone());
 
     let generator = dal.generators().get(uuid)?.ok_or("Generator not found")?;
@@ -522,7 +538,7 @@ pub fn create_agent(
 
     // Use pool size 2 because agent creation emits webhook events
     // which require a second connection while the first is still held
-    let pool = connection_pool_from_settings(config, 2);
+    let pool = migrated_pool_from_settings(config, 2)?;
     let dal = DAL::new(pool.clone());
 
     // Validate every requested generator before creating anything, so a typo
@@ -586,7 +602,7 @@ pub fn create_generator(
 ) -> Result<(), Box<dyn std::error::Error>> {
     info!("Creating new generator: {}", name);
 
-    let pool = connection_pool_from_settings(config, 1);
+    let pool = migrated_pool_from_settings(config, 1)?;
     let dal = DAL::new(pool.clone());
 
     let new_generator = NewGenerator::new(name, description)
