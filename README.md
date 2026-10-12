@@ -18,7 +18,7 @@ Brokkr supports sophisticated targeting through labels and annotations, allowing
 
 ### Prerequisites
 
-The [Prerequisites](docs/src/getting-started/README.md#prerequisites) list in the Getting Started guide tells you what to install. The tools depend on your path: evaluate, install with Helm, or develop. For the `angreal local up` command below, install the tools in [To evaluate with `angreal local up`](docs/src/getting-started/README.md#to-evaluate-with-angreal-local-up). You do not need Rust or PostgreSQL for it.
+The [Prerequisites](https://colliery-io.github.io/brokkr/tutorials/getting-started/#prerequisites) list in the Getting Started guide tells you what to install. The tools depend on your path: evaluate, install with Helm, or develop. For the `angreal local up` command below, install the tools in [To evaluate with `angreal local up`](https://colliery-io.github.io/brokkr/tutorials/getting-started/#to-evaluate-with-angreal-local-up). You do not need Rust or PostgreSQL for it.
 
 ### Running Locally
 
@@ -40,11 +40,11 @@ Every request to the API carries a PAK (Prefixed API Key) in the `Authorization:
 docker run --rm ghcr.io/colliery-io/brokkr-broker:latest generate-pak
 ```
 
-and pass its hash to the broker as `broker.pakHash`. The [installation guide](docs/src/getting-started/installation.md) covers that.
+and pass its hash to the broker as `broker.pakHash`. The [installation guide](https://colliery-io.github.io/brokkr/how-to/installation/) covers that.
 
 ### Your first deployment
 
-The shortest path from this empty broker to a manifest running on a cluster is the tutorial [Your First Tenant](docs/src/tutorials/first-tenant.md). It creates a tenant with its own PAK, activates the agent, registers it with the tenant, pushes a manifest and shows it with `kubectl`, in about fifteen minutes. Start there.
+The shortest path from this empty broker to a manifest running on a cluster is the tutorial [Your First Tenant](https://colliery-io.github.io/brokkr/tutorials/first-tenant/). It creates a tenant with its own PAK, activates the agent, registers it with the tenant, pushes a manifest and shows it with `kubectl`, in about fifteen minutes. Start there.
 
 To check what the broker knows right now:
 
@@ -57,7 +57,7 @@ A new agent is `INACTIVE` until an admin activates it; the tutorial does that in
 
 ## Documentation
 
-Comprehensive documentation is available in the [docs/](./docs/) directory or can be built locally with `angreal docs build` (or served with `angreal docs serve`). The `angreal local docs` task builds the Rust API documentation with `cargo doc`. The documentation follows the Divio documentation system, organized into four categories:
+Comprehensive documentation is published at [colliery-io.github.io/brokkr](https://colliery-io.github.io/brokkr/). Its source is in the [docs/](./docs/) directory, and it can be built locally with `angreal docs build` (or served with `angreal docs serve`). The `angreal local docs` task builds the Rust API documentation with `cargo doc`. The documentation follows the Divio documentation system, organized into four categories:
 
 The **Getting Started** guide covers installation options including Helm charts for production and development environment setup. **Tutorials** provide step-by-step walkthroughs of common tasks like deploying your first application or setting up multi-cluster targeting. **How-To Guides** give focused instructions for specific tasks such as configuring webhooks, using templates, or integrating with CI/CD systems. The **Explanation** section dives deep into Brokkr's architecture, data model, and design decisions.
 

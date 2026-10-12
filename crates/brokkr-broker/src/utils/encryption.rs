@@ -516,7 +516,7 @@ mod tests {
         // data[0], so a nonce starting with 0x00/0x01 would be mis-routed. A
         // random nonce here made this test flaky (~0.78%, when nonce[0] hit a
         // marker). The legacy-format ambiguity itself is documented in
-        // docs/src/explanation/security-model.md.
+        // docs/src/content/docs/explanation/security-model.md.
         let nonce = [0x42u8; LEGACY_XOR_NONCE_SIZE];
 
         let mut hasher = Sha256::new();

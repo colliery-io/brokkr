@@ -172,7 +172,7 @@ pub struct ContainerStatus {
 /// `error` is not a Kubernetes event field: when collection fails the agent
 /// submits `[{"error": "..."}]` here and the broker still marks the request
 /// `completed` (there is no `failed` status — see
-/// `docs/src/reference/diagnostics.md`, "Collection Errors"). Modelling it as an
+/// `docs/src/content/docs/reference/diagnostics.md`, "Collection Errors"). Modelling it as an
 /// optional field on the same struct lets one parse cover both shapes.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct DiagEvent {

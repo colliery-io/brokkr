@@ -83,4 +83,4 @@ the stack:
 ## More
 
 For errors, retry and the raw client, see the
-[Rust SDK documentation](https://github.com/colliery-io/brokkr/blob/main/docs/src/how-to/sdks/rust.md).
+[Rust SDK documentation](https://colliery-io.github.io/brokkr/how-to/sdks/rust/).

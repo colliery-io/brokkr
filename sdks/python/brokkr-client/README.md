@@ -9,7 +9,7 @@ Most users want the `brokkr-client` package instead (`from brokkr import
 BrokkrClient`). That wrapper adds one-step authentication, typed errors, a
 retry helper, and `apply` for a folder of manifests. It installs this package
 for you. See the
-[Python SDK guide](https://github.com/colliery-io/brokkr/blob/main/docs/src/how-to/sdks/python.md).
+[Python SDK guide](https://colliery-io.github.io/brokkr/how-to/sdks/python/).
 
 ## Version
 
