@@ -127,8 +127,11 @@ services:
   k3s:
     image: rancher/k3s:v1.30.10-k3s1
     command:
+      # No --cluster-init: k3s uses its default single-server datastore
+      # (SQLite). Embedded etcd keeps the container IP as its peer URL, so
+      # after `down` and `up` (a new IP) k3s did not start ("not a member of
+      # the etcd cluster"). SQLite also writes less to a busy disk.
       - server
-      - --cluster-init
       - --write-kubeconfig=/output/kubeconfig.yaml
       - --write-kubeconfig-mode=666
       - --tls-san=k3s
@@ -136,16 +139,13 @@ services:
       # after `angreal local down` and `up` the old pods stay on a NotReady
       # node for 5 minutes and the `ready` service times out.
       - --node-name=brokkr-dev-k3s
-      # Builds on the same Docker VM can make etcd and the API server slow
-      # (requests over 4 s). With the default leader election, a slow lease
-      # renewal makes k3s exit ("leaderelection lost"). This is a single
-      # server, so these controllers do not need leader election.
+      # Builds on the same Docker VM can make the API server slow (requests
+      # over 4 s). With the default leader election, a slow lease renewal
+      # makes k3s exit ("leaderelection lost"). This is a single server, so
+      # these controllers do not need leader election.
       - --kube-controller-manager-arg=leader-elect=false
       - --kube-scheduler-arg=leader-elect=false
       - --kube-cloud-controller-manager-arg=leader-elect=false
-      # etcd: a longer heartbeat and election timeout for a slow disk.
-      - --etcd-arg=heartbeat-interval=500
-      - --etcd-arg=election-timeout=5000
     privileged: true
     # k3s exits when it loses a lease. Start it again on a failure only, so
     # that the dev stack does not start by itself when Docker starts.
