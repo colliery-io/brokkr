@@ -64,8 +64,9 @@ services:
     command: ["-host", "0.0.0.0", "-config", "/etc/toxiproxy/config.json"]
     ports:
       - "8474:8474"  # admin API (host-reachable for chaos scenarios)
-    volumes:
-      - ./toxiproxy.json:/etc/toxiproxy/config.json:ro
+    configs:
+      - source: toxiproxy-config
+        target: /etc/toxiproxy/config.json
     depends_on:
       broker:
         condition: service_healthy
@@ -131,14 +132,34 @@ services:
       - --write-kubeconfig=/output/kubeconfig.yaml
       - --write-kubeconfig-mode=666
       - --tls-san=k3s
+      # Builds on the same Docker VM can make etcd and the API server slow
+      # (requests over 4 s). With the default leader election, a slow lease
+      # renewal makes k3s exit ("leaderelection lost"). This is a single
+      # server, so these controllers do not need leader election.
+      - --kube-controller-manager-arg=leader-elect=false
+      - --kube-scheduler-arg=leader-elect=false
+      - --kube-cloud-controller-manager-arg=leader-elect=false
+      # etcd: a longer heartbeat and election timeout for a slow disk.
+      - --etcd-arg=heartbeat-interval=500
+      - --etcd-arg=election-timeout=5000
     privileged: true
+    # k3s exits when it loses a lease. Start it again on a failure only, so
+    # that the dev stack does not start by itself when Docker starts.
+    restart: on-failure
     environment:
       - K3S_TOKEN=brokkr-secret
       - K3S_KUBECONFIG_OUTPUT=/output/kubeconfig.yaml
+      # The k3s controllers (wrangler) keep their leader election. Give their
+      # lease more time than the defaults (45 s, 30 s, 2 s).
+      - CATTLE_ELECTION_LEASE_DURATION=120s
+      - CATTLE_ELECTION_RENEW_DEADLINE=90s
+      - CATTLE_ELECTION_RETRY_PERIOD=10s
     volumes:
       - k3s-data:/var/lib/rancher/k3s
       - brokkr-keys:/output
-      - ./k3s-registries.yaml:/etc/rancher/k3s/registries.yaml:ro
+    configs:
+      - source: k3s-registries
+        target: /etc/rancher/k3s/registries.yaml
     depends_on:
       registry:
         condition: service_healthy
@@ -182,7 +203,6 @@ services:
         condition: service_completed_successfully
     volumes:
       - brokkr-keys:/tmp/brokkr-keys
-      - ../../charts/brokkr-agent:/charts/brokkr-agent:ro
     entrypoint: []
     command: >
       sh -c '
@@ -401,6 +421,43 @@ services:
         echo "Strategies:  $$CBS_COUNT ClusterBuildStrategies"
         echo ""
       '
+
+# Config files go into the containers as inline configs. Compose copies the
+# content into each container when it creates the container, so no container
+# bind-mounts a file from the checkout. A container then starts again after
+# the checkout (for example a git worktree) that ran `up` is removed.
+configs:
+  # k3s registry mirrors: pull from the dev registry over plain HTTP.
+  k3s-registries:
+    content: |
+      mirrors:
+        "registry:5000":
+          endpoint:
+            - "http://registry:5000"
+        "localhost:5000":
+          endpoint:
+            - "http://registry:5000"
+        "localhost:5050":
+          endpoint:
+            - "http://registry:5000"
+      configs:
+        "registry:5000":
+          tls:
+            insecure_skip_verify: true
+        "localhost:5050":
+          tls:
+            insecure_skip_verify: true
+  # toxiproxy: one proxy in front of the broker's WebSocket port.
+  toxiproxy-config:
+    content: |
+      [
+        {
+          "name": "ws-channel",
+          "listen": "0.0.0.0:8666",
+          "upstream": "broker:3000",
+          "enabled": true
+        }
+      ]
 
 volumes:
   k3s-data:
