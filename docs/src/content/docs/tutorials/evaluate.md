@@ -62,7 +62,7 @@ List registered agents — the pre-created agent should already be there.
 brokkr agent list
 ```
 
-You should see `brokkr-integration-test-agent`. A freshly registered agent starts with `status` `INACTIVE` — the broker only hands it deployment objects once you mark it `ACTIVE`. Until then, the agent log says so on each poll. Activate it:
+You should see `brokkr-integration-test-agent`. A freshly registered agent starts with `status` `INACTIVE`. While it is `INACTIVE`, the agent does not ask the broker for deployment objects. The agent checks its own status: the broker does not stop the work (see [Agent Status Is Not an Access Control](../../explanation/security-model/#agent-status-is-not-an-access-control)). Until you mark it `ACTIVE`, the agent log says so on each poll. Activate it:
 
 ```bash
 # Activate the agent so it will pull and reconcile deployment objects
