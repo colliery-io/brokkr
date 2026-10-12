@@ -38,9 +38,58 @@ use opentelemetry::trace::TracerProvider;
 use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::trace::Sampler;
 use opentelemetry_sdk::{Resource, runtime};
-use tracing_subscriber::EnvFilter;
+use std::sync::OnceLock;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::{EnvFilter, Registry, reload};
+
+/// Handle to the live log filter, set by `init` (BROKKR-T-0292).
+///
+/// The broker logs through `tracing`. Its filter is built once in `init`, so a
+/// config reload of `log.level` must change the filter through this handle.
+/// Changing `log::max_level` (the `logging` module) does not reach it.
+///
+/// Not set when `RUST_LOG` chose the filter at startup: `RUST_LOG` wins over
+/// `log.level` at startup, so a reload does not override it either.
+static LOG_FILTER: OnceLock<reload::Handle<EnvFilter, Registry>> = OnceLock::new();
+
+/// Set the live log filter to `level` (for example "debug").
+///
+/// Returns `Ok(false)` and changes nothing when there is no live filter to
+/// change: `init` did not run, or `RUST_LOG` set the filter.
+pub fn set_log_level(level: &str) -> Result<bool, String> {
+    match LOG_FILTER.get() {
+        Some(handle) => apply_log_level(handle, level).map(|()| true),
+        None => Ok(false),
+    }
+}
+
+/// Replace the filter behind `handle` with one built from `level`.
+fn apply_log_level(
+    handle: &reload::Handle<EnvFilter, Registry>,
+    level: &str,
+) -> Result<(), String> {
+    let filter = EnvFilter::try_new(level).map_err(|e| e.to_string())?;
+    handle.reload(filter).map_err(|e| e.to_string())
+}
+
+/// Build the startup filter as a reloadable layer.
+///
+/// Returns the handle only when the filter came from `log_level`, not from
+/// `RUST_LOG`.
+fn reloadable_filter(
+    log_level: &str,
+) -> (
+    reload::Layer<EnvFilter, Registry>,
+    Option<reload::Handle<EnvFilter, Registry>>,
+) {
+    let (filter, from_config) = match EnvFilter::try_from_default_env() {
+        Ok(filter) => (filter, false),
+        Err(_) => (EnvFilter::new(log_level), true),
+    };
+    let (layer, handle) = reload::Layer::new(filter);
+    (layer, from_config.then_some(handle))
+}
 
 /// Error type for telemetry initialization
 #[derive(Debug)]
@@ -83,8 +132,12 @@ pub fn init(
     log_level: &str,
     log_format: &str,
 ) -> Result<(), TelemetryError> {
-    let env_filter =
-        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(log_level));
+    let (env_filter, handle) = reloadable_filter(log_level);
+    if let Some(handle) = handle {
+        // A second `init` in one process fails at `try_init` below, so the
+        // first handle is the right one to keep.
+        let _ = LOG_FILTER.set(handle);
+    }
 
     if !config.enabled {
         // Telemetry disabled - just set up basic tracing subscriber
@@ -195,6 +248,28 @@ mod tests {
 
         assert!(!config.enabled);
         assert_eq!(config.service_name, "test-service");
+    }
+
+    #[test]
+    fn test_reloaded_log_level_changes_what_tracing_emits() {
+        // The handle must change the live filter, not only a stored value.
+        // A local subscriber is used so the test does not need the global one.
+        let (layer, handle) = reload::Layer::new(EnvFilter::new("error"));
+        let subscriber = tracing_subscriber::registry().with(layer);
+        tracing::subscriber::with_default(subscriber, || {
+            assert!(!tracing::enabled!(tracing::Level::DEBUG));
+            apply_log_level(&handle, "debug").unwrap();
+            assert!(tracing::enabled!(tracing::Level::DEBUG));
+            apply_log_level(&handle, "warn").unwrap();
+            assert!(!tracing::enabled!(tracing::Level::INFO));
+            assert!(tracing::enabled!(tracing::Level::WARN));
+        });
+    }
+
+    #[test]
+    fn test_bad_log_level_is_an_error() {
+        let (_layer, handle) = reload::Layer::<EnvFilter, Registry>::new(EnvFilter::new("info"));
+        assert!(apply_log_level(&handle, "[").is_err());
     }
 
     #[test]
