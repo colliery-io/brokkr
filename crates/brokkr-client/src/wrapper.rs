@@ -590,8 +590,13 @@ impl BrokkrClient {
 
     /// Register an agent with a generator scope. Pass `agent_id = None` to
     /// register the calling agent (implied by its PAK); an admin supplies the
-    /// target agent's id. Registering an already-registered pair returns the
-    /// existing registration. Returns the registration record.
+    /// target agent's id. Returns the new registration record.
+    ///
+    /// This call is not idempotent. If the agent is already registered with
+    /// the generator, the broker returns 409 `already_registered`, and this
+    /// method returns [`BrokkrError::Api`] with that status and code. To make
+    /// a repeat safe, treat that error as success, as the agent's own startup
+    /// self-registration does (`brokkr-agent`, `cli/commands.rs`).
     pub async fn register_agent(
         &self,
         generator_id: Uuid,
