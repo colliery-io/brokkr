@@ -169,7 +169,16 @@ def docker_up(services=None, project=DEFAULT_PROJECT):
 
 
 def docker_down(project=DEFAULT_PROJECT):
-    """Stop and remove docker compose services."""
+    """Stop and remove docker compose services.
+
+    `rm -v` first removes the anonymous volumes of the containers (the k3s
+    image makes three on each create). Named volumes stay; `docker_clean`
+    removes them."""
+    subprocess.run(
+        f"docker compose -f {DOCKER_COMPOSE_FILE} -p {project} rm --stop --force -v",
+        cwd=cwd,
+        shell=True
+    )
     subprocess.run(
         f"docker compose -f {DOCKER_COMPOSE_FILE} -p {project} down",
         cwd=cwd,

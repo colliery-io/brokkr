@@ -132,6 +132,10 @@ services:
       - --write-kubeconfig=/output/kubeconfig.yaml
       - --write-kubeconfig-mode=666
       - --tls-san=k3s
+      # A fixed node name. Without it the node name is the container id, so
+      # after `angreal local down` and `up` the old pods stay on a NotReady
+      # node for 5 minutes and the `ready` service times out.
+      - --node-name=brokkr-dev-k3s
       # Builds on the same Docker VM can make etcd and the API server slow
       # (requests over 4 s). With the default leader election, a slow lease
       # renewal makes k3s exit ("leaderelection lost"). This is a single
