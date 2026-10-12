@@ -54,5 +54,17 @@ jobs:
         uses: hoverkraft-tech/compose-action@v3.0.0
         with:
           compose-file: ".angreal/files/docker-compose.yaml"
+      - name: Repeat the webhook delivery DAL tests 20 times (BROKKR-T-0324 evidence)
+        if: matrix.crate == 'brokkr-broker'
+        env:
+          BROKKR__DATABASE__URL: postgres://brokkr:brokkr@localhost:5433/brokkr
+        run: |
+          for i in $(seq 1 20); do
+            echo "== run $i"
+            rc=0
+            cargo test -p brokkr-broker --test integration -- dal::webhook_deliveries --test-threads=1 > run.log 2>&1 || rc=$?
+            grep -E "^test result|FAILED|panicked" run.log || true
+            if [ "$rc" -ne 0 ]; then tail -n 60 run.log; echo "run $i failed"; exit 1; fi
+          done
       - name: Execute integration tests
         run: angreal tests integration --skip-docker ${{ matrix.crate }}
