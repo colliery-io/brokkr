@@ -63,11 +63,40 @@ The sidebar groups seven views:
 **Operations**
 
 - **Work orders** — active work orders above the completed history; clicking a history row opens its detail. The active list is admin-gated, and the panel says so plainly if the broker declines to serve it.
-- **Webhooks** — the webhook subscriptions and their configured events. The API deliberately redacts subscription URLs, so the console shows only whether one is set. Clicking a subscription lists its recent delivery attempts.
+- **Webhooks** — the webhook subscriptions and their configured events. The API deliberately redacts subscription URLs, so the console shows only whether one is set. Clicking a subscription lists its recent delivery attempts. Below the subscriptions, the **Recent deliveries** panel shows the newest deliveries of all subscriptions (see [The Recent Deliveries Panel](#the-recent-deliveries-panel)).
 
 **System**
 
-- **Broker health** — headline broker metrics (active agents, connected agents, HTTP request volume, live subscribers, stack and deployment-object counts) drawn from the broker's `/metrics` endpoint, alongside the current internal WebSocket connections.
+- **Broker health** — headline broker metrics (active agents, connected agents, HTTP request volume, live subscribers, stack and deployment-object counts) drawn from the broker's `/metrics` endpoint, alongside the current internal WebSocket connections. Three cards show the database (see [The Database Cards](#the-database-cards)).
+
+### The Recent Deliveries Panel
+
+The **Recent deliveries** panel is on the **Webhooks** view, below the subscription cards. It shows the 20 newest deliveries of all subscriptions, newest first. It reads them from `GET /api/v1/webhook-deliveries` (see the [delivery feed reference](../../reference/webhooks/#list-recent-deliveries-all-subscriptions)). The panel reads the feed again every 10 s.
+
+Each row shows:
+
+| Column | Meaning |
+|--------|---------|
+| **Subscription** | The name of the subscription. "(subscription removed)" shows when the subscription is gone. |
+| **Status** | `pending`, `acquired`, `success`, `failed` or `dead`. |
+| **Event** | The event type, for example `deployment.failed`. |
+| **Attempts** | The number of delivery attempts. |
+| **Age** | The time since the broker made the delivery. |
+| **Last error** | The error of the last attempt, if there is one. |
+
+Click a row to open the detail of its subscription. If the panel cannot read the feed, it shows an error and a retry control. The subscription cards above it continue to show.
+
+### The Database Cards
+
+The **Broker health** view has three database cards. They come from the database metrics on `/metrics` (see [Database Metrics](../../reference/monitoring/#database-metrics)). The view reads `/metrics` every 5 s.
+
+| Card | Value | Text below the value |
+|------|-------|----------------------|
+| **DB queries / min** | The query rate, from the change in `brokkr_database_queries_total` between the two newest reads. Until the view has two reads, the value is "collecting" and the text is "the rate needs two samples". | The metric name. |
+| **DB query p95** | The 95th percentile query time, from `brokkr_database_query_duration_seconds`. Until the broker has a measured query, the value is "collecting" and the text is "no queries yet". | "last *n* s": the queries of the last minute or less. "since broker start": the window has no queries, or the broker restarted in the window, so the value is for all queries since the broker started. |
+| **DB pool in use** | Connections in use, and the pool maximum, for example `2/10`. | The metric name. |
+
+A card shows "—" and "not sent by this broker" when the broker does not send that metric. An older broker does not send the database metrics. Upgrade the broker to get the cards.
 
 ### How the Views Refresh
 
@@ -123,7 +152,7 @@ For the request lifecycle, retention, and how to drive the same capability from 
 
 Open **Fleet**, click the agent, and use the control under **Agent state**. Like tenant creation, it asks for an admin PAK for that one request — the console's own credential is read-only and cannot change agent state.
 
-**What pausing does:** the agent stops fetching deployment objects and stops picking up work orders. It keeps heartbeating, so it stays visible and healthy in the console rather than looking offline.
+**What pausing does:** the agent stops fetching deployment objects and stops picking up work orders. It also stops health checks, diagnostics and webhook deliveries, so a diagnostic that you request for a paused agent stays pending. It keeps heartbeating, so it stays visible and healthy in the console rather than looking offline.
 
 **What it does not do:** it does not roll anything back. Resources the agent has already applied stay in the cluster exactly as they are. Pausing stops new work being taken up; it is not an undo.
 

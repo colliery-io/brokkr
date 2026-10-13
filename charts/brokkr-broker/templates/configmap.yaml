@@ -5,9 +5,10 @@ metadata:
   labels:
     {{- include "brokkr-broker.labels" . | nindent 4 }}
   annotations:
-    # Annotation for tools like Stakater Reloader to trigger pod restarts on ConfigMap changes
-    # Only needed if using external reload controllers - broker has built-in ConfigMap watching
-    # Hash of values that affect this ConfigMap - changes trigger annotation update
+    # For external reload controllers (for example Stakater Reloader). The pod
+    # template has no checksum annotation, so `helm upgrade` does not restart
+    # the pod when a value here changes. The broker reloads only the settings
+    # in the dynamic ConfigMap (configmap-dynamic.yaml).
     checksum/config: {{ toJson .Values | sha256sum | trunc 63 }}
 data:
   # =============================================================================
@@ -69,13 +70,13 @@ data:
   BROKKR__CORS__MAX_AGE_SECONDS: {{ .Values.cors.maxAgeSeconds | default 3600 | quote }}
   {{- end }}
   # =============================================================================
-  # ConfigMap watcher settings (for automatic hot-reload in Kubernetes)
+  # Config file watcher settings. The watcher watches the mounted file
+  # (BROKKR_CONFIG_FILE), not the Kubernetes API, so it needs no RBAC.
   # =============================================================================
   {{- if .Values.configReload }}
   {{- if .Values.configReload.enabled }}
   BROKKR_CONFIG_WATCHER_ENABLED: "true"
   BROKKR_CONFIG_WATCHER_DEBOUNCE_SECONDS: {{ .Values.configReload.debounceSeconds | default 5 | quote }}
-  BROKKR_CONFIGMAP_NAME: {{ include "brokkr-broker.fullname" . | quote }}
   {{- else }}
   BROKKR_CONFIG_WATCHER_ENABLED: "false"
   {{- end }}

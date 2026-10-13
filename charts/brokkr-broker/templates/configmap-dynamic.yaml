@@ -16,9 +16,12 @@
 # reintroduce exactly the restart-only behaviour this replaces. Expect the
 # kubelet's own sync period (tens of seconds) on top of the debounce below.
 #
-# Deliberately carries no checksum annotation. The static ConfigMap has one so
-# that changing a restart-only value rolls the pod; these keys are the opposite
-# case — they are meant to apply *without* a roll.
+# The kubelet updates the mounted file. The broker watches the file, not the
+# Kubernetes API, so this needs no Role or RoleBinding (BROKKR-T-0309).
+#
+# Deliberately carries no checksum annotation: these keys apply without a pod
+# restart. (The static ConfigMap's checksum is for external reload controllers;
+# the pod template has none, so `helm upgrade` does not restart the pod.)
 apiVersion: v1
 kind: ConfigMap
 metadata:

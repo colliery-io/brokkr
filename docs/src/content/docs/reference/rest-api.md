@@ -224,6 +224,7 @@ UUID returns `400`.
 | DELETE | `/webhooks/:id` | Delete webhook subscription |
 | POST | `/webhooks/:id/test` | Test webhook delivery |
 | GET | `/webhooks/:id/deliveries` | List webhook deliveries |
+| GET | `/webhook-deliveries` | List recent deliveries of all subscriptions (admin; `status`, `limit`, `offset`). See [the delivery feed](../webhooks/#list-recent-deliveries-all-subscriptions). |
 | POST | `/webhook-deliveries/:id/result` | Report delivery result (agent) |
 
 #### Admin
@@ -246,7 +247,7 @@ UUID returns `400`.
 
 ### Pagination
 
-Most list endpoints return the full collection without pagination. The exceptions take query parameters: `/admin/audit-logs` (`limit`/`offset`), the stack telemetry endpoints (`since`/`limit`, clamped to the 6-hour retention window), `/work-order-log` (`work_type`, `success`, `agent_id`, `limit`), and `/webhooks/:id/deliveries` (`status` filter).
+Most list endpoints return the full collection without pagination. The exceptions take query parameters: `/admin/audit-logs` (`limit`/`offset`), the stack telemetry endpoints (`since`/`limit`, clamped to the 6-hour retention window), `/work-order-log` (`work_type`, `success`, `agent_id`, `limit`), `/webhooks/:id/deliveries` (`status`, `limit`, `offset`), and `/webhook-deliveries` (`status`, `limit` default 50 and maximum 200, `offset`).
 
 ### WebSocket Endpoints
 

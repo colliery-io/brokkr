@@ -69,9 +69,11 @@ resources:
     memory: "1Gi"
     cpu: "1000m"
 
-# Security Context
+# Pod Security Context
+# Merged into the chart's podSecurityContext defaults (runAsGroup and the
+# containerSecurityContext defaults stay in place).
 # Production security best practices
-securityContext:
+podSecurityContext:
   # Run as non-root user
   runAsNonRoot: true
   runAsUser: 10001
@@ -125,12 +127,15 @@ ingress:
       hosts:
         - brokkr.production.example.com
 
+# Log level
+# Set it here, not as RUST_LOG in extraEnv: RUST_LOG overrides
+# broker.logLevel and stops it from hot-reloading.
+broker:
+  logLevel: info
+
 # Additional Environment Variables
 # Use for production-specific configuration
-extraEnv:
-  # Set appropriate log level for production
-  - name: RUST_LOG
-    value: "info"
+extraEnv: []
   # Example: Configure connection pool size
   # - name: DATABASE_POOL_SIZE
   #   value: "20"

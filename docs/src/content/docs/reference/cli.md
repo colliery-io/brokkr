@@ -409,6 +409,8 @@ This is the same as `PUT /api/v1/agents/{id}` with `{"status": "ACTIVE"}`.
 
 Stops an agent from applying its stacks. The command sets the status to `INACTIVE`. The agent keeps the resources that it applied, but it applies no new changes until you activate it again.
 
+**The agent stops its own work.** The agent reads its status from the broker on each heartbeat. While the status is not `ACTIVE`, the agent does not fetch deployment objects, work orders, health checks, diagnostics or webhook deliveries. It continues to send heartbeats. The broker does not check the status: it serves deployment objects to an `INACTIVE` agent that asks for them. Thus `INACTIVE` is not an access control. To stop an agent that you do not trust, revoke or rotate its PAK (Prefixed API Key). See [Agent Status Is Not an Access Control](../../explanation/security-model/#agent-status-is-not-an-access-control).
+
 ```bash
 brokkr agent pause prod-1
 ```

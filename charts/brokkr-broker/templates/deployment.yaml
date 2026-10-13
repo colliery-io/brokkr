@@ -23,6 +23,10 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      # The broker does not call the Kubernetes API, so it gets no RBAC and,
+      # by default, no API token (BROKKR-T-0309).
+      serviceAccountName: {{ include "brokkr-broker.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:

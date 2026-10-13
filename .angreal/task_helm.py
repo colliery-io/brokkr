@@ -1,6 +1,7 @@
 import angreal
 import json
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -420,6 +421,54 @@ def validate_health_endpoint(service_name, port, path, namespace="default"):
     return success
 
 
+def validate_config_hot_reload(release_name, namespace="default", timeout=180):
+    """Change the dynamic ConfigMap and wait for the broker to reload it.
+
+    BROKKR-T-0292 / BROKKR-T-0309. Proves the chart path end to end: the
+    kubelet updates the mounted file, the broker's file watcher sees it, and it
+    reloads -- as the chart's own ServiceAccount, with no RBAC. The kubelet
+    can take about a minute to update a ConfigMap volume, so the wait is long.
+    """
+    print("\nValidating config hot reload through the dynamic ConfigMap...", flush=True)
+    toml = (
+        "[log]\nlevel = \"info\"\n\n[broker]\n"
+        "diagnostic_cleanup_interval_seconds = 900\n"
+        "diagnostic_max_age_hours = 2\n"
+        "webhook_delivery_interval_seconds = 5\n"
+        "webhook_delivery_batch_size = 50\n"
+        "webhook_cleanup_retention_days = 7\n"
+    )
+    patch = shlex.quote(json.dumps({"data": {"brokkr.toml": toml}}))
+    if not run_in_k8s_container(
+        f"kubectl patch configmap {release_name}-dynamic -n {namespace} "
+        f"--type merge -p {patch}",
+        "Patching the dynamic ConfigMap",
+    ):
+        return False
+
+    expected = "Config file watcher triggered configuration reload"
+    start = time.time()
+    while time.time() - start < timeout:
+        result = subprocess.run([
+            "docker", "run", "--rm",
+            "--network", get_network_name(),
+            "-v", f"{get_volume_name('brokkr-keys')}:/keys:ro",
+            "-e", "KUBECONFIG=/keys/kubeconfig.docker.yaml",
+            "alpine/k8s:1.30.10",
+            "sh", "-c",
+            f"kubectl logs deploy/{release_name} -n {namespace} -c broker --tail=-1",
+        ], capture_output=True, text=True, cwd=cwd)
+        if expected in result.stdout:
+            elapsed = int(time.time() - start)
+            print(f"✓ Broker reloaded the changed ConfigMap ({elapsed}s)", flush=True)
+            return True
+        time.sleep(10)
+
+    print(f"✗ No '{expected}' in broker logs after {timeout}s", flush=True)
+    log_broker_diagnostics(release_name, namespace)
+    return False
+
+
 def test_broker_chart(tag, registry, no_cleanup, test_external_db=False):
     """Test the broker Helm chart.
 
@@ -535,6 +584,10 @@ spec:
         health_passed = True
         health_passed &= validate_health_endpoint(release_name, 3000, "/healthz")
         health_passed &= validate_health_endpoint(release_name, 3000, "/readyz")
+
+        # Hot reload works in a chart install (BROKKR-T-0292, BROKKR-T-0309).
+        if not test_external_db:
+            health_passed &= validate_config_hot_reload(release_name)
 
         return health_passed
 
@@ -2097,31 +2150,10 @@ VALUES_KEY_ALLOWLIST = {
         # NOT allowlisted -- _helpers.tpl reads username/password/database to
         # build BROKKR__DATABASE__URL, so it must stay referenced.
         "postgresql.primary.*": "consumed by the Bitnami postgresql subchart",
-        # DEFECT, pre-existing: values/{development,production,staging}.yaml set
-        # a top-level `securityContext`, but the chart implements
-        # `podSecurityContext` and `containerSecurityContext`. The block renders
-        # nothing. Left allowlisted so this check can land green; remove the
-        # entry when the overlays are fixed.
-        "securityContext.*": (
-            "DEFECT: set by values/ overlays but the chart uses "
-            "podSecurityContext/containerSecurityContext; renders nothing"
-        ),
     },
-    AGENT_CHART: {
-        # DEFECT, pre-existing: same inert `securityContext` block as the broker
-        # overlays.
-        "securityContext.*": (
-            "DEFECT: set by values/ overlays but the chart uses "
-            "podSecurityContext/containerSecurityContext; renders nothing"
-        ),
-        # DEFECT, pre-existing: values/{development,production,staging}.yaml set
-        # `extraEnv`, but only the *broker* deployment renders extraEnv. The
-        # agent deployment has no such block, so these entries are dropped.
-        "extraEnv*": (
-            "DEFECT: set by agent values/ overlays but only the broker "
-            "deployment renders extraEnv"
-        ),
-    },
+    # The overlay `securityContext` blocks (both charts) and the agent's
+    # `extraEnv` were DEFECT entries here; fixed in BROKKR-T-0314.
+    AGENT_CHART: {},
 }
 
 # A Helm action, e.g. `{{- toYaml .Values.resources | nindent 10 }}`. Scanning
@@ -2404,6 +2436,82 @@ def check_broker_values(yaml_mod, checks):
         not missing,
         missing,
     )
+    checks.expect(
+        BROKER_CHART,
+        "configReload.enabled",
+        "BROKKR_CONFIGMAP_NAME not rendered (no code reads it)",
+        "BROKKR_CONFIGMAP_NAME" not in on_env,
+        on_env.get("BROKKR_CONFIGMAP_NAME"),
+    )
+
+    # --- serviceAccount ------------------------------------------------------
+    # BROKKR-T-0309. The pod ran as the namespace `default` account. The broker
+    # watches a mounted file, not the Kubernetes API, so the fix is its own
+    # ServiceAccount with no API token and no RBAC -- not a Role granting
+    # get/watch on ConfigMaps.
+    sa = single_manifest(default_docs, "ServiceAccount")
+    sa_name = (sa or {}).get("metadata", {}).get("name")
+    pod_spec = dep["spec"]["template"]["spec"]
+    checks.expect(
+        BROKER_CHART,
+        "serviceAccount.create",
+        "a ServiceAccount is rendered and the Deployment runs as it",
+        sa is not None and pod_spec.get("serviceAccountName") == sa_name,
+        (sa_name, pod_spec.get("serviceAccountName")),
+    )
+    checks.expect(
+        BROKER_CHART,
+        "serviceAccount.automountServiceAccountToken",
+        "no API token mounted by default (ServiceAccount and pod both false)",
+        (sa or {}).get("automountServiceAccountToken") is False
+        and pod_spec.get("automountServiceAccountToken") is False,
+        ((sa or {}).get("automountServiceAccountToken"),
+         pod_spec.get("automountServiceAccountToken")),
+    )
+    rbac_kinds = [
+        d.get("kind") for d in default_docs
+        if d.get("kind") in ("Role", "RoleBinding", "ClusterRole", "ClusterRoleBinding")
+    ]
+    checks.expect(
+        BROKER_CHART,
+        "serviceAccount",
+        "no RBAC rendered (the broker does not call the Kubernetes API)",
+        not rbac_kinds,
+        rbac_kinds,
+    )
+    marker = "brokkr.io/render-check"
+    sa_on = render_own(
+        yaml_mod,
+        BROKER_CHART,
+        {"serviceAccount": {"name": "custom-sa", "annotations": {marker: "present"},
+                            "automountServiceAccountToken": True}},
+    )
+    sa2 = single_manifest(sa_on, "ServiceAccount") or {}
+    pod2 = single_manifest(sa_on, "Deployment")["spec"]["template"]["spec"]
+    checks.expect(
+        BROKER_CHART,
+        "serviceAccount.name/annotations/automountServiceAccountToken",
+        "name, annotations and token setting all reach the rendered objects",
+        sa2.get("metadata", {}).get("name") == "custom-sa"
+        and (sa2.get("metadata", {}).get("annotations") or {}).get(marker) == "present"
+        and sa2.get("automountServiceAccountToken") is True
+        and pod2.get("serviceAccountName") == "custom-sa"
+        and pod2.get("automountServiceAccountToken") is True,
+        (sa2.get("metadata"), pod2.get("serviceAccountName"),
+         pod2.get("automountServiceAccountToken")),
+    )
+    sa_off = render_own(
+        yaml_mod, BROKER_CHART, {"serviceAccount": {"create": False, "name": "existing-sa"}}
+    )
+    pod3 = single_manifest(sa_off, "Deployment")["spec"]["template"]["spec"]
+    checks.expect(
+        BROKER_CHART,
+        "serviceAccount.create",
+        "with create=false no ServiceAccount renders and the pod uses serviceAccount.name",
+        single_manifest(sa_off, "ServiceAccount") is None
+        and pod3.get("serviceAccountName") == "existing-sa",
+        pod3.get("serviceAccountName"),
+    )
 
     # --- service.annotations -------------------------------------------------
     # BROKKR-T-0308: this value was accepted and documented but the Service
@@ -2675,6 +2783,33 @@ def check_agent_values(yaml_mod, checks):
 
     default_docs = render_own(yaml_mod, AGENT_CHART)
 
+    # --- extraEnv -------------------------------------------------------------
+    # BROKKR-T-0314: the agent overlays set extraEnv, but only the broker
+    # deployment rendered it. Check it renders in each env shape: alone (no
+    # other env entries), and next to the namespace-scoped entry.
+    extra = [{"name": "BROKKR_RENDER_CHECK", "value": "present"}]
+    for label, vals in [
+        ("alone", {"extraEnv": extra}),
+        ("with rbac.clusterWide=false", {"extraEnv": extra, "rbac": {"clusterWide": False}}),
+    ]:
+        dep = single_manifest(render_own(yaml_mod, AGENT_CHART, vals), "Deployment")
+        env = container_env(dep, "agent")
+        checks.expect(
+            AGENT_CHART,
+            "extraEnv",
+            f"extraEnv entries appended to the agent container env ({label})",
+            (env.get("BROKKR_RENDER_CHECK") or {}).get("value") == "present"
+            and (label == "alone" or "BROKKR__AGENT__WATCH_NAMESPACE" in env),
+            sorted(env),
+        )
+    checks.expect(
+        AGENT_CHART,
+        "extraEnv",
+        "no env block when extraEnv is empty and nothing else needs one (the default)",
+        not container_env(single_manifest(default_docs, "Deployment"), "agent"),
+        container_env(single_manifest(default_docs, "Deployment"), "agent"),
+    )
+
     # --- metrics.podMonitor.enabled + port linkage ---------------------------
     # The agent renders no Service, so Prometheus scrapes the pod directly and
     # the PodMonitor's `port` is a *container* port name. The BROKKR-T-0308 bug
@@ -2831,6 +2966,50 @@ def check_agent_values(yaml_mod, checks):
         secret_key_ref(sourced_env.get("BROKKR__AGENT__PAK")) == ("agent-pak", "PAK_KEY"),
         secret_key_ref(sourced_env.get("BROKKR__AGENT__PAK")),
     )
+
+
+def check_overlays_render(yaml_mod, chart, checks):
+    """The shipped values/ overlays must reach the rendered pod (BROKKR-T-0314).
+
+    The overlays set a top-level `securityContext` that no template read, and
+    the agent overlays set `extraEnv` that the agent did not render. The generic
+    key check catches a key no template names; this checks the values arrive.
+    """
+    chart_dir = CHARTS_DIR / chart
+    container = "broker" if chart == BROKER_CHART else "agent"
+    print(f"\n{chart}: values/ overlays reach the pod")
+    for values_file in sorted((chart_dir / "values").glob("*.yaml")):
+        label = str(values_file.relative_to(chart_dir))
+        overlay = yaml_mod.safe_load(values_file.read_text()) or {}
+        docs = own_manifests(
+            helm_render(yaml_mod, chart, values_file=values_file), chart
+        )
+        dep = single_manifest(docs, "Deployment")
+        pod = dep["spec"]["template"]["spec"]
+        want_psc = overlay.get("podSecurityContext") or {}
+        got_psc = pod.get("securityContext") or {}
+        checks.expect(
+            chart,
+            f"{label} podSecurityContext",
+            "no top-level securityContext key, every overlay key in the pod "
+            "securityContext, and runAsGroup kept from defaults",
+            "securityContext" not in overlay
+            and all(got_psc.get(k) == v for k, v in want_psc.items())
+            and got_psc.get("runAsGroup") == 10001,
+            (sorted(overlay), got_psc),
+        )
+        env = container_env(dep, container)
+        missing = [
+            e["name"] for e in overlay.get("extraEnv") or []
+            if env.get(e["name"]) != e
+        ]
+        checks.expect(
+            chart,
+            f"{label} extraEnv",
+            "every overlay extraEnv entry in the container env",
+            not missing,
+            missing,
+        )
 
 
 def check_chart_renders(yaml_mod, chart, checks):
@@ -2993,6 +3172,8 @@ def run_render_assertions():
             check_chart_renders(yaml_mod, chart, checks)
         check_broker_values(yaml_mod, checks)
         check_agent_values(yaml_mod, checks)
+        for chart in (BROKER_CHART, AGENT_CHART):
+            check_overlays_render(yaml_mod, chart, checks)
         for chart in (BROKER_CHART, AGENT_CHART):
             check_values_are_referenced(yaml_mod, chart, checks)
     except RuntimeError as e:

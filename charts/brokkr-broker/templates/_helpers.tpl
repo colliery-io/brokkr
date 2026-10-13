@@ -103,3 +103,14 @@ Database port
 {{- end -}}
 {{- end }}
 
+{{/*
+Name of the ServiceAccount the broker pod runs as
+*/}}
+{{- define "brokkr-broker.serviceAccountName" -}}
+{{- if .Values.serviceAccount.create }}
+{{- default (include "brokkr-broker.fullname" .) .Values.serviceAccount.name }}
+{{- else }}
+{{- default "default" .Values.serviceAccount.name }}
+{{- end }}
+{{- end }}
+

@@ -342,6 +342,62 @@ Response:
 ]
 ```
 
+#### List Recent Deliveries (All Subscriptions)
+
+```
+GET /api/v1/webhook-deliveries
+Authorization: Bearer <admin_pak>
+```
+
+This is the delivery feed. It returns the newest deliveries of all subscriptions in one list. Use it to find failed deliveries when you do not know which subscription has a problem.
+
+The endpoint needs an admin PAK (Prefixed API Key). A PAK that is not admin gets 403 `admin_required`.
+
+Query parameters:
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `status` | string | none | Show only deliveries with this status: `pending`, `acquired`, `success`, `failed` or `dead`. |
+| `limit` | int | 50 | Maximum number of results. The broker changes a value below 1 to 1, and a value above 200 to 200. |
+| `offset` | int | 0 | Number of results to skip. The broker changes a negative value to 0. |
+
+An unknown `status` value gets 400 `invalid_status`. Thus a typing error does not look like "no failed deliveries".
+
+The order is newest first, by `created_at`, then by `id`. Thus pages stay stable when two deliveries have the same time.
+
+Response:
+
+```json
+[
+  {
+    "id": "uuid",
+    "subscription_id": "uuid",
+    "subscription_name": "slack-alerts",
+    "event_type": "deployment.failed",
+    "event_id": "uuid",
+    "status": "failed",
+    "attempts": 2,
+    "target_labels": [],
+    "acquired_by": null,
+    "last_attempt_at": "2025-01-02T10:00:00Z",
+    "next_retry_at": "2025-01-02T10:00:04Z",
+    "last_error": "HTTP 503",
+    "created_at": "2025-01-02T09:59:58Z",
+    "completed_at": null
+  }
+]
+```
+
+| Field | Description |
+|-------|-------------|
+| `subscription_name` | Name of the subscription. It is `null` when the subscription row is gone. |
+| `target_labels` | Labels that select the agent that sends the delivery. An empty list means that the broker sends it. |
+| `acquired_by` | The agent that holds the delivery now. `null` means that the broker holds it, or that nothing holds it. |
+
+The other fields have the same meaning as in [List Deliveries](#list-deliveries).
+
+The feed never returns the subscription URL, the auth header or the event payload. To see the payload of a delivery, use [List Deliveries](#list-deliveries) for its subscription.
+
 ## Delivery Modes
 
 ### Broker Delivery (Default)

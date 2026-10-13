@@ -1,51 +1,61 @@
 ---
 # =============================================================================
-# CONFIGURATION HOT-RELOAD  --  NOT FUNCTIONAL IN A CHART INSTALL
+# CONFIGURATION HOT-RELOAD
 # =============================================================================
-# **Settings not listed as hot-reloadable require a pod restart, and
-# `helm upgrade` will not do it for you.** The pod template carries no
-# ConfigMap checksum annotation, so changing a value updates the ConfigMap and
-# leaves the running pod with the environment it started with. Restart it
-# yourself (`kubectl rollout restart deploy/<release>-brokkr-broker`) or run an
-# external reload controller -- the ConfigMap does carry a `checksum/config`
-# annotation for exactly that.
-#
-# Two things have to be true for hot reload to work, and neither is today
-# (BROKKR-T-0292):
-#
-#   1. The watcher only starts when BROKKR_CONFIG_FILE points at an existing
-#      file. This chart injects configuration as environment variables via
-#      envFrom and never mounts a file, so the watcher never starts.
-#   2. Even when it does run, nothing reads the reloaded values back. Every
-#      consumer -- the log filter, the CORS layer, the background workers --
-#      captures its settings once at startup.
-#
-# `configReload.*` below is kept because it is a real input to a feature that
-# is intended to exist, not because it currently does anything.
-#
-# Static settings (require pod restart):
-#   - database.url, database.schema
-#   - broker.webhookDeliveryIntervalSeconds
-#   - broker.webhookDeliveryBatchSize
+# With `configReload.enabled: true` (the default), these settings apply
+# without a pod restart (BROKKR-T-0292):
+#   - broker.logLevel
+#   - broker.diagnosticCleanupIntervalSeconds, broker.diagnosticMaxAgeHours
+#   - broker.webhookDeliveryIntervalSeconds, broker.webhookDeliveryBatchSize
 #   - broker.webhookCleanupRetentionDays
-#   - broker.webhookEncryptionKey
-#   - telemetry.* (all telemetry settings)
 #
-# To trigger a manual reload, call: POST /api/v1/admin/config/reload
-# In Kubernetes, the broker automatically watches its ConfigMap for changes.
+# How it works: the chart renders these keys as a TOML file in a second
+# ConfigMap (`<release>-dynamic`), mounts it at /etc/brokkr as a directory, and
+# sets BROKKR_CONFIG_FILE. The broker watches that file. The kubelet updates the
+# file after the ConfigMap changes, usually within about a minute, and the
+# broker then reloads after `configReload.debounceSeconds`.
+#
+# The broker does not call the Kubernetes API to do this, so the chart creates
+# no Role or RoleBinding for it (BROKKR-T-0309).
+#
+# Limits:
+#   - If you set RUST_LOG (for example in `extraEnv`), RUST_LOG sets the log
+#     filter and `broker.logLevel` has no effect, at startup or on reload.
+#   - Every other setting requires a pod restart, and `helm upgrade` does not
+#     do it for you: the pod template has no ConfigMap checksum annotation.
+#     Run `kubectl rollout restart deploy/<release>-brokkr-broker`, or use an
+#     external reload controller (the env ConfigMap has a `checksum/config`
+#     annotation for that). Restart-only settings include:
+#       - database.*, postgresql.*
+#       - cors.* (the CORS layer is built once at startup)
+#       - broker.webhookEncryptionKey, broker.pakHash
+#       - telemetry.*
+#
+# `POST /api/v1/admin/config/reload` re-reads the same file on demand.
 # =============================================================================
 
 # Configuration hot-reload settings
 configReload:
-  # Intended to enable ConfigMap watching so hot-reloadable settings apply
-  # without a restart. **Currently has no effect in a chart install** -- see the
-  # header of this file (BROKKR-T-0292). Left in place because it is a real
-  # input to the feature, and defaulted true so behaviour does not change when
-  # the feature lands.
+  # Mount the dynamic settings as a file and watch it, so the settings listed
+  # above apply without a restart. When false, those settings are delivered
+  # as environment variables and need a restart like the others.
   enabled: true
 
   # Debounce duration in seconds to prevent rapid successive reloads
   debounceSeconds: 5
+
+# ServiceAccount for the broker pod (BROKKR-T-0309).
+# The broker does not call the Kubernetes API, so the chart creates no RBAC.
+serviceAccount:
+  # Create a ServiceAccount for the broker. When false, the pod uses `name`,
+  # or the namespace `default` account when `name` is empty.
+  create: true
+  # ServiceAccount name; generated from the release name when empty
+  name: ""
+  # Annotations for the ServiceAccount (for example a cloud IAM role binding)
+  annotations: {}
+  # Mount the Kubernetes API token in the pod. The broker does not use it.
+  automountServiceAccountToken: false
 
 # Broker container image configuration
 image:
@@ -197,26 +207,22 @@ extraEnv: []
 # These control runtime behavior of the broker
 broker:
   # Log level for the broker application
-  # @hot-reload: false - requires restart (BROKKR-T-0292: the log filter is
-  # captured once at startup, so a reload would not reach it)
+  # @hot-reload: true - when configReload.enabled and RUST_LOG is not set
   # Valid values: trace, debug, info, warn, error
   logLevel: info
 
   # Diagnostic cleanup settings
-  # @hot-reload: false - requires restart (BROKKR-T-0292: the cleanup task
-  # captures these when it spawns)
+  # @hot-reload: true - when configReload.enabled (the task reads them each pass)
   diagnosticCleanupIntervalSeconds: 900  # 15 minutes
   diagnosticMaxAgeHours: 1
 
   # Webhook delivery settings
-  # @hot-reload: false - read once when the delivery worker starts; changing
-  # either value requires a pod restart to take effect
+  # @hot-reload: true - when configReload.enabled (the worker reads them each pass)
   webhookDeliveryIntervalSeconds: 5
   webhookDeliveryBatchSize: 50
 
   # Webhook delivery retention
-  # @hot-reload: false - read once when the cleanup worker starts; changing
-  # this requires a pod restart to take effect
+  # @hot-reload: true - when configReload.enabled (the worker reads it each pass)
   webhookCleanupRetentionDays: 7
 
   # Webhook encryption key (hex-encoded 32-byte key)
@@ -244,8 +250,8 @@ broker:
   pakHashExistingSecretKey: BROKKR__BROKER__PAK_HASH   # key within that Secret
 
 # CORS configuration for API access
-# @hot-reload: false - requires restart (BROKKR-T-0292: the CORS layer is built
-# once when the router is constructed)
+# @hot-reload: false - requires restart (the CORS layer is built once when the
+# router is constructed)
 cors:
   # Allowed origins for CORS requests
   # Use "*" to allow all origins (not recommended for production)

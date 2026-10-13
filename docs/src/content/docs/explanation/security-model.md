@@ -250,6 +250,15 @@ This resolution happens server-side on every request, so agents can never see de
 
 Registration is the consent boundary on both sides of that union. An explicit target can only be created when the agent is registered with the stack's owning generator — an attempt to target a stack whose generator the agent is not registered with fails with `agent_not_registered` (HTTP 403). Label and annotation matching is filtered by the same rule at read time, so a stack reaches an agent through a selector only when the agent has registered with that stack's generator. An agent with no registrations receives nothing from matching at all, and two tenants can reuse the same label vocabulary without colliding. See [Generator Registration and Application Scopes](#generator-registration-and-application-scopes).
 
+#### Agent Status Is Not an Access Control
+
+An agent has a `status`. The CLI and the console set it to `ACTIVE` or `INACTIVE`. A new agent starts `INACTIVE`. The status is a convention that the agent keeps. It is not a boundary that the broker enforces.
+
+- **The agent enforces it.** The agent reads its own record on each heartbeat. While the status is not `ACTIVE`, the agent does not fetch deployment objects, work orders, health checks, diagnostics or webhook deliveries. A change of status has an effect in one poll cycle.
+- **The broker does not enforce it.** `GET /agents/{id}/target-state` has no status filter. The broker serves the same deployment objects to an `INACTIVE` agent and to an `ACTIVE` agent. The broker uses the status only for the `brokkr_active_agents` metric and in event and audit data.
+
+Thus a changed agent binary, or an older one that does not check its status, gets work while it is `INACTIVE`. Do not use `INACTIVE` to contain an agent that you do not trust. To stop such an agent, revoke or rotate its PAK (see [Credential Revocation](#credential-revocation)), or block it at the network.
+
 **Generator Scope** restricts generators to stacks they created:
 
 ```sql

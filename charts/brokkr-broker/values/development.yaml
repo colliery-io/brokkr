@@ -70,9 +70,11 @@ resources:
     memory: "256Mi"
     cpu: "200m"
 
-# Security Context
+# Pod Security Context
+# Merged into the chart's podSecurityContext defaults (runAsGroup and the
+# containerSecurityContext defaults stay in place).
 # Relaxed for easier debugging, but still non-root
-securityContext:
+podSecurityContext:
   runAsNonRoot: true
   runAsUser: 10001
   fsGroup: 10001
@@ -88,12 +90,15 @@ ingress:
   # kubectl port-forward svc/brokkr-broker-dev 3000:3000
   enabled: false
 
+# Log level
+# Set it here, not as RUST_LOG in extraEnv: RUST_LOG overrides
+# broker.logLevel and stops it from hot-reloading.
+broker:
+  logLevel: debug
+
 # Additional Environment Variables
 # Useful for development debugging
-extraEnv:
-  # Verbose logging for development
-  - name: RUST_LOG
-    value: "debug"
+extraEnv: []
   # Example: Enable development-only features
   # - name: DEV_MODE
   #   value: "true"

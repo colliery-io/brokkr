@@ -48,6 +48,8 @@ Container image builds using Shipwright. The `yaml_content` should contain a Shi
 
 The agent watches the resulting BuildRun to a terminal state, so success means the image was built.
 
+The watch has a limit: the smaller of 15 minutes and the window from `claim_timeout_seconds` (10% less, minimum 60 seconds less, as for a Job). A BuildRun that is still running at the end of the window fails the work order terminally. The work order is not retried, and the agent does not cancel the BuildRun.
+
 See [Container Builds with Shipwright](../../how-to/shipwright-builds/) for details.
 
 ### Custom (`custom`)
@@ -257,7 +259,7 @@ This mechanism handles several failure scenarios:
 - **Network partitions**: If an agent loses connectivity, work doesn't remain stuck indefinitely
 - **Slow operations**: Legitimate long-running operations should set an appropriate `claim_timeout_seconds` value
 
-The default `claim_timeout_seconds` is 3600 (1 hour). For build operations that may take longer, increase this value in the work order creation request.
+The default `claim_timeout_seconds` is 3600 (1 hour). For a long `custom` Job, increase this value in the work order creation request: the Job watch window grows with it. A `build` cannot run longer than 15 minutes, whatever the claim timeout. A claim timeout below 1000 seconds makes the build window shorter than 15 minutes (see [Build](#build-build)).
 
 ## Example: Container Build
 
