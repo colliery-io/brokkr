@@ -115,6 +115,8 @@ if let Some(schema) = &self.schema {
 }
 ```
 
+The search path holds the schema only, with no `public` fallback. A query for a table that the schema lacks fails with `relation "<table>" does not exist`. Built-in functions such as `gen_random_uuid()` are in `pg_catalog`, which PostgreSQL always searches.
+
 Schema names are validated to prevent SQL injection before use.
 
 #### Error Handling
