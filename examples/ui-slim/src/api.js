@@ -459,9 +459,9 @@ export const getMetrics = async () => {
   return res.text();
 };
 
-// Webhook catcher (demo-only test sink, runs in docker-compose on port 8090).
+// Webhook catcher (demo-only test sink, runs in docker-compose on host port 18090).
 // Not part of the broker; uses bare fetch.
-const WEBHOOK_CATCHER_URL = "http://localhost:8090";
+const WEBHOOK_CATCHER_URL = "http://localhost:18090";
 
 export const getWebhookCatcherStats = async () => {
   const res = await fetch(`${WEBHOOK_CATCHER_URL}/messages`);

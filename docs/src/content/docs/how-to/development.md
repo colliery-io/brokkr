@@ -64,7 +64,7 @@ angreal local rebuild agent
 | Broker | `3000` | Built from your working tree; also serves the Operator Console at <http://localhost:3000/> |
 | k3s | `6443` | Kubernetes cluster with Tekton + Shipwright installed |
 | Demo admin UI | `3001` | `examples/ui-slim` — a standalone demo, not the supported console |
-| Webhook catcher | `8090` | `examples/webhook-catcher` |
+| Webhook catcher | `18090` | `examples/webhook-catcher`. Set `BROKKR_DEV_WEBHOOK_PORT` to use another host port |
 
 It also pre-creates an agent named `brokkr-integration-test-agent` (cluster `brokkr-dev-integration-cluster`) and starts an agent container with it. The broker runs with the default configuration, so the publicly known dev admin PAK (Prefixed API Key) `brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8` works against it.
 
@@ -95,7 +95,7 @@ It is also **not compiled into the broker by default.** The broker only embeds t
 ### Bundled Examples
 
 - **`examples/ui-slim`** — a React demo UI served on port `3001`, pre-wired to the broker with the dev admin PAK. It is a consumer example showing what can be built against the API — notably the live WebSocket tail, which the Operator Console does not use — and not the supported console. Its presence is why the broker's default CORS configuration allows `http://localhost:3001`.
-- **`examples/webhook-catcher`** — a small receiver on port `8090` for exercising [webhooks](../webhooks/) end to end.
+- **`examples/webhook-catcher`** — a small receiver on host port `18090` for exercising [webhooks](../webhooks/) end to end.
 
 ## Running the Tests
 
