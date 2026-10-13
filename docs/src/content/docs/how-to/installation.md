@@ -449,8 +449,11 @@ Key configuration options for the broker chart:
 | `image.tag` | Image tag to use | `latest` |
 | `broker.logLevel` | Log level | `info` |
 | `broker.webhookEncryptionKey` | Hex-encoded 32-byte key for webhook secrets at rest; a random key is generated on every boot if unset. Rendered into the ConfigMap in plaintext — prefer `broker.webhookEncryptionKeyExistingSecret` | unset |
-| `configReload.enabled` | Intended to watch the ConfigMap and reload settings automatically. **Currently has no effect** — the watcher needs a config file, which the chart does not mount, and reloaded values are not read back (BROKKR-T-0292). Treat every setting as restart-only | `true` |
-| `configReload.debounceSeconds` | Debounce window for successive reloads | `5` |
+| `configReload.enabled` | Mount the hot-reload settings (`broker.logLevel`, `broker.diagnostic*`, `broker.webhookDelivery*`, `broker.webhookCleanupRetentionDays`) as a file and watch it, so they apply without a pod restart. `broker.logLevel` does not reload when `RUST_LOG` is set in `extraEnv`. All other values need a restart. See [Hot-Reload Configuration](../configuration/#hot-reload-configuration) | `true` |
+| `configReload.debounceSeconds` | Time the broker waits after a file change before it reloads, in seconds | `5` |
+| `serviceAccount.create` | Create a ServiceAccount for the broker pod. When `false`, the pod uses `serviceAccount.name`, or the namespace `default` account when the name is empty. The chart creates no Role or RoleBinding: the broker does not call the Kubernetes API | `true` |
+| `serviceAccount.name` | ServiceAccount name. When empty, the chart makes a name from the release name | `""` |
+| `serviceAccount.annotations` | Annotations for the ServiceAccount, for example a cloud IAM role binding | `{}` |
 | `resources.limits.cpu` | CPU limit | `500m` |
 | `resources.limits.memory` | Memory limit | `512Mi` |
 | `ingress.tls` | TLS termination for the ingress — the broker itself serves plain HTTP and cannot terminate TLS | unset |
