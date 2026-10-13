@@ -1180,6 +1180,19 @@ async fn registration_by_name_cli_checks(
     if !regs.iter().any(|r| r.generator_id == fx.generator_id) {
         return Err(anyhow!("register by name stored no registration: {regs:?}"));
     }
+    // A repeat register changes nothing and succeeds (BROKKR-T-0358).
+    println!("  → brokkr register again: unchanged, exit 0");
+    expect_cli(
+        admin(&["register", "--agent", stray, "--generator", tenant])?,
+        true,
+        &format!(
+            "unchanged: agent \"{stray}\" ({stray_id}) is registered with tenant \"{tenant}\""
+        ),
+    )?;
+    let again = admin_client.list_agent_registrations(fx.stray_id).await?;
+    if again.len() != regs.len() {
+        return Err(anyhow!("a repeat register changed the registrations: {again:?}"));
+    }
     expect_cli(
         admin(&["registrations", "--agent", stray])?,
         true,

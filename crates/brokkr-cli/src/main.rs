@@ -16,7 +16,8 @@
 mod config;
 mod fleet;
 
-use brokkr_client::{ApplyOutcome, BrokkrClient};
+use brokkr_client::types::AgentGeneratorRegistration;
+use brokkr_client::{ApplyOutcome, BrokkrClient, BrokkrError};
 use clap::{ArgGroup, Args, Parser, Subcommand};
 use config::{ConfigLayer, ResolvedConfig};
 use std::path::PathBuf;
@@ -61,9 +62,9 @@ enum Command {
     /// Agents usually register themselves when they start. Use this command to
     /// register an agent for it: for example, before the agent is live, or to
     /// add a tenant. Give the agent and the tenant by name or id. Requires an
-    /// admin PAK. If the agent is already registered
-    /// with the tenant, the broker returns 409 `already_registered` and the
-    /// command exits with status 1.
+    /// admin PAK. You can run this command again: if the agent is registered
+    /// with the tenant already, the command changes nothing, prints a line
+    /// that starts with `unchanged:`, and exits with status 0.
     Register(RegisterArgs),
 
     /// Remove an agent's registration from a tenant (admin).
@@ -235,17 +236,40 @@ fn shown(given: &str, id: Uuid) -> String {
 
 async fn register(client: &BrokkrClient, args: RegisterArgs) -> Result<(), String> {
     let (agent, generator) = resolve_pair(client, &args).await?;
-    let reg = client
-        .register_agent(generator, Some(agent))
-        .await
-        .map_err(|e| e.to_string())?;
-    println!(
-        "registered agent {} with tenant {} (registration {})",
-        shown(&args.agent, reg.agent_id),
-        shown(&args.generator, reg.generator_id),
-        reg.id
-    );
+    let result = client.register_agent(generator, Some(agent)).await;
+    println!("{}", register_message(result, &args, agent, generator)?);
     Ok(())
+}
+
+/// The line that `register` prints. The broker answers 409
+/// `already_registered` when the pair is registered already. Then, like
+/// `agent label` and `stack target`, the command changes nothing and
+/// succeeds.
+fn register_message(
+    result: Result<AgentGeneratorRegistration, BrokkrError>,
+    args: &RegisterArgs,
+    agent: Uuid,
+    generator: Uuid,
+) -> Result<String, String> {
+    match result {
+        Ok(reg) => Ok(format!(
+            "registered agent {} with tenant {} (registration {})",
+            shown(&args.agent, reg.agent_id),
+            shown(&args.generator, reg.generator_id),
+            reg.id
+        )),
+        Err(e)
+            if e.status().map(|s| s.as_u16()) == Some(409)
+                && e.code() == Some("already_registered") =>
+        {
+            Ok(format!(
+                "unchanged: agent {} is registered with tenant {} already",
+                shown(&args.agent, agent),
+                shown(&args.generator, generator)
+            ))
+        }
+        Err(e) => Err(e.to_string()),
+    }
 }
 
 async fn deregister(client: &BrokkrClient, args: RegisterArgs) -> Result<(), String> {
@@ -362,6 +386,39 @@ mod tests {
         }
         assert!(Cli::try_parse_from(["brokkr", "registrations", "--agent", "edge-1"]).is_ok());
         assert!(Cli::try_parse_from(["brokkr", "registrations", "--generator", "acme"]).is_ok());
+    }
+
+    fn api_error(status: u16, code: &str) -> BrokkrError {
+        BrokkrError::Api(
+            brokkr_client::types::ErrorResponse {
+                code: code.to_string(),
+                message: "x".to_string(),
+                details: None,
+            },
+            status.try_into().unwrap(),
+        )
+    }
+
+    #[test]
+    fn a_repeat_register_is_unchanged_and_succeeds() {
+        let args = RegisterArgs {
+            agent: "edge-1".to_string(),
+            generator: "acme".to_string(),
+        };
+        let (agent, generator) = (Uuid::from_u128(1), Uuid::from_u128(2));
+        let message =
+            register_message(Err(api_error(409, "already_registered")), &args, agent, generator);
+        assert_eq!(
+            message,
+            Ok(format!(
+                "unchanged: agent \"edge-1\" ({agent}) is registered with tenant \"acme\" ({generator}) already"
+            ))
+        );
+        // A different conflict, or another error, still fails.
+        for (status, code) in [(409, "unique_violation"), (404, "generator_not_found")] {
+            let message = register_message(Err(api_error(status, code)), &args, agent, generator);
+            assert!(message.unwrap_err().contains(code));
+        }
     }
 
     #[test]

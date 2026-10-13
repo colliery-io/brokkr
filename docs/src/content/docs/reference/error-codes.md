@@ -82,7 +82,7 @@ These come from the database classifier (`ApiError::from_diesel`) on create/upda
 | `system_generator_not_a_tenant` | 403 | A non-admin caller asked for a tenant-scoped view of the system generator (`GET /agents` under a system-generator PAK, or `GET /generators/{id}/registered-agents` with that id). Every agent is auto-registered with the system generator, so it is not a tenant and has no scoped view; admin callers are unaffected. |
 | `generator_required` | 403 | `GET /agents` was called by a credential that is neither admin nor a generator — an agent PAK, for example. Distinct from `system_generator_not_a_tenant`, which means the caller *is* a generator but not a tenant one. |
 | `missing_agent_id` | 400 | An admin caller invoked `POST /generators/{id}/register` without an `agent_id` in the body; only an agent self-registering may omit it. |
-| `already_registered` | 409 | The agent is already registered with this generator. `POST /generators/{id}/register` is not idempotent; a repeat returns this. (The agent's startup self-registration treats it as success.) |
+| `already_registered` | 409 | The agent is already registered with this generator. `POST /generators/{id}/register` is not idempotent; a repeat returns this. (The agent's startup self-registration and `brokkr register` treat it as success.) |
 | `invalid_generator_id` | 400 | A `generator_ids` entry supplied to `POST /agents` references a generator that does not exist. |
 | `forbidden` | 403 | A generator PAK called a registration endpoint (`POST`/`DELETE /generators/{id}/register`); only an agent (self) or an admin may. |
 

@@ -234,7 +234,8 @@ curl -X DELETE "http://broker:3000/api/v1/generators/$GENERATOR_ID/register" \
 The `brokkr` CLI wraps these endpoints (an admin PAK is required for cross-entity operations):
 
 ```bash
-# Register an agent with a generator
+# Register an agent with a generator. Safe to run again: a repeat prints
+# a line that starts with "unchanged:" and exits 0.
 brokkr register --agent <agent-id> --generator <generator-id>
 
 # Deregister (destructive — cascades target removal)
