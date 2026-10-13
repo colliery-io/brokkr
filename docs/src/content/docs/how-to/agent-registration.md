@@ -72,7 +72,7 @@ brokkr register \
 
 You can give the agent and the generator by name instead of by id, for example `brokkr register --agent prod-1 --generator payments-team --pak "$ADMIN_PAK"`. The same is true for `brokkr deregister` and `brokkr registrations`. If two agents have the same name, the command stops and lists their ids. See [`brokkr register`](../../reference/cli/#brokkr-register).
 
-Re-running `brokkr register` for an already-registered pair returns `409 already_registered` and exits non-zero; registering a new pair prints the registration record. (Agent *startup* self-registration, by contrast, treats `409` as success — see [Register an Agent at Deploy Time](#register-an-agent-at-deploy-time).)
+You can run `brokkr register` again. For a pair that is registered already, the command changes nothing, prints a line that starts with `unchanged:`, and exits `0`. For a new pair, it prints the registration record. Thus a bootstrap script does not need to check first. Agent *startup* self-registration also treats a repeat as success — see [Register an Agent at Deploy Time](#register-an-agent-at-deploy-time). The REST API still returns `409 already_registered` for a repeat.
 
 ### Register via the REST API
 

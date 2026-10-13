@@ -5,7 +5,8 @@
  */
 
 //! Each database path of the broker must use the configured schema
-//! (BROKKR-T-0327, ADR BROKKR-A-0004).
+//! (BROKKR-T-0327, ADR BROKKR-A-0004), and only that schema: the search path
+//! has no `public` fallback (BROKKR-T-0361).
 //!
 //! Each test uses a new database. In it, `public` and two schemas each hold a
 //! full set of Brokkr tables with the same names. A write through one path must
@@ -313,7 +314,7 @@ fn test_cli_commands_use_configured_schema() {
     );
 }
 
-/// The fault that BROKKR-T-0327 found: `search_path` is `<schema>, public`,
+/// The fault that BROKKR-T-0327 found: `search_path` was `<schema>, public`,
 /// and PostgreSQL accepts a schema that does not exist. A CLI command run with
 /// a misspelled or not migrated schema then wrote into `public` and reported
 /// success. It must now fail, and write nothing.
@@ -372,4 +373,108 @@ fn test_cli_refuses_schema_without_tables() {
             .unwrap()
             .is_some()
     );
+}
+
+#[derive(QueryableByName)]
+struct SearchPath {
+    #[diesel(sql_type = diesel::sql_types::Text)]
+    search_path: String,
+}
+
+/// A checkout with a schema searches that schema only: `public` is not on
+/// the path (BROKKR-T-0361).
+#[test]
+fn test_search_path_is_the_schema_only() {
+    let db = TestDb::new();
+    db.migrate(Some(SCHEMA_A));
+
+    let mut conn = db.pool(Some(SCHEMA_A)).get().unwrap();
+    let row: SearchPath = sql_query("SHOW search_path").get_result(&mut conn).unwrap();
+    assert_eq!(row.search_path, SCHEMA_A);
+}
+
+/// BROKKR-T-0361: a connection to a schema that lacks a table fails with
+/// "relation does not exist". It does not read or write the table of the same
+/// name in `public` or in another schema.
+#[test]
+fn test_schema_missing_a_table_fails_instead_of_reading_public() {
+    let db = three_schema_db();
+
+    let log = || {
+        NewAuditLog::new(
+            ACTOR_TYPE_ADMIN,
+            None,
+            ACTION_PAK_ROTATED,
+            RESOURCE_TYPE_GENERATOR,
+            None,
+        )
+        .unwrap()
+    };
+    db.dal(None).audit_logs().create(&log()).unwrap();
+    db.dal(Some(SCHEMA_B)).audit_logs().create(&log()).unwrap();
+
+    // tenant_a loses one table; public and tenant_b keep theirs.
+    let mut conn = db.pool(None).get().unwrap();
+    sql_query(format!("DROP TABLE {}.audit_logs", SCHEMA_A))
+        .execute(&mut conn)
+        .unwrap();
+
+    let read = db.dal(Some(SCHEMA_A)).audit_logs().count(None);
+    let err = read.expect_err("a read of a missing table must fail, not read public");
+    assert!(
+        err.to_string()
+            .contains("relation \"audit_logs\" does not exist"),
+        "the error must name the missing table, got: {}",
+        err
+    );
+
+    let write = db.dal(Some(SCHEMA_A)).audit_logs().create(&log());
+    assert!(
+        write.is_err(),
+        "a write to a missing table must fail, not write public"
+    );
+
+    assert_eq!(db.dal(None).audit_logs().count(None).unwrap(), 1);
+    assert_eq!(db.dal(Some(SCHEMA_B)).audit_logs().count(None).unwrap(), 1);
+
+    // Other tables of tenant_a still work.
+    assert_eq!(
+        db.dal(Some(SCHEMA_A))
+            .generators()
+            .get_system_generator_id()
+            .unwrap(),
+        None
+    );
+}
+
+/// BROKKR-T-0361: a schema that does not exist has no tables, so each query
+/// through the pool fails. Before, the same query read `public`.
+#[test]
+fn test_missing_schema_fails_instead_of_reading_public() {
+    let db = three_schema_db();
+    db.dal(None)
+        .audit_logs()
+        .create(
+            &NewAuditLog::new(
+                ACTOR_TYPE_ADMIN,
+                None,
+                ACTION_PAK_ROTATED,
+                RESOURCE_TYPE_GENERATOR,
+                None,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+
+    let err = db
+        .dal(Some("tenant_missing"))
+        .audit_logs()
+        .count(None)
+        .expect_err("a schema that does not exist must not read public");
+    assert!(
+        err.to_string().contains("does not exist"),
+        "the error must say the relation does not exist, got: {}",
+        err
+    );
+    assert_eq!(db.dal(None).audit_logs().count(None).unwrap(), 1);
 }

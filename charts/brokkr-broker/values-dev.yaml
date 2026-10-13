@@ -8,7 +8,8 @@
 
 image:
   # Local registry in docker-compose environment
-  # Uses localhost:5050 which k3s-registries.yaml mirrors to http://registry:5000
+  # Uses localhost:5050, which the `k3s-registries` inline config in
+  # .angreal/files/docker-compose.yaml mirrors to http://registry:5000
   repository: localhost:5050/brokkr-broker
   tag: dev
   pullPolicy: Always

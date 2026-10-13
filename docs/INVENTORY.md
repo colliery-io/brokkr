@@ -137,7 +137,7 @@ Dashboards: `docs/grafana/brokkr-{agent,broker,ws-channel}-dashboard.json`, aler
 
 ## 13. Dev / build / test / release lifecycle
 
-- Local dev: `angreal local up|down|reset|clean|rebuild <svc>|docs`; compose `.angreal/files/docker-compose.yaml`, project `brokkr-dev` (suites must not run in parallel). Services/ports: postgres 5433, registry 5050, broker 3000, toxiproxy 8474 (WS chaos on 8666), k3s 6443, agent health 8080 (internal), ui 3001, webhook-catcher 8090. Keys land in /tmp/brokkr-keys/ (agent.pak, kubeconfigs). Demo admin PAK `brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8`.
+- Local dev: `angreal local up|down|reset|clean|rebuild <svc>|docs`; compose `.angreal/files/docker-compose.yaml`, project `brokkr-dev` (suites must not run in parallel). Services/ports: postgres 5433, registry 5050, broker 3000, toxiproxy 8474 (WS chaos on 8666), k3s 6443, agent health 8080 (internal), ui 3001, webhook-catcher 18090 (`BROKKR_DEV_WEBHOOK_PORT`). Keys land in /tmp/brokkr-keys/ (agent.pak, kubeconfigs). Demo admin PAK `brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8`.
 - Tests: `angreal tests unit <crate|all>` (also brokkr-wire), `integration <crate|all> [--skip-docker]`, `sdk-contract <lang|all>`, `e2e [--scenario]` (mirrors `examples/ui-slim/DEMO_WALKTHROUGH.md`, env E2E_SCENARIO).
 - Models: `angreal models schema|migrations|test` — diesel CLI required; DATABASE_URL port 5432 vs compose 5433 gotcha.
 - Build: `angreal build multi-arch <component> [--push --tag --platforms --registry]` (buildx, ghcr.io/colliery-io).

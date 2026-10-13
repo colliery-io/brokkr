@@ -390,7 +390,14 @@ If the broker exits at startup with an error naming `BROKKR__BROKER__WEBHOOK_ENC
 
 ### Changing Delivery Batch Size or Interval Has No Effect
 
-`broker.webhookDeliveryIntervalSeconds` and `broker.webhookDeliveryBatchSize` are read once when the broker starts. A configuration reload does not apply them; restart the broker pod after changing either.
+The delivery worker reads `broker.webhookDeliveryIntervalSeconds` and `broker.webhookDeliveryBatchSize` again on each pass, after a configuration reload. If a change has no effect, do these checks:
+
+- `configReload.enabled` is `true`. When it is `false`, the chart puts these values in the environment, and a change needs a pod restart.
+- The kubelet updated the mounted file. This usually takes about one minute.
+- The broker log shows `Config file watcher triggered configuration reload`.
+- `extraEnv` does not set `BROKKR__BROKER__WEBHOOK_DELIVERY_INTERVAL_SECONDS` or `BROKKR__BROKER__WEBHOOK_DELIVERY_BATCH_SIZE`. An environment variable overrides the file.
+
+See [Hot-Reload Configuration](../configuration/#hot-reload-configuration).
 
 ### Agent-Delivered Webhooks Failing
 

@@ -42,7 +42,7 @@ struct Count {
 /// this: it is the single place that plumbs the configured schema into the
 /// pool. The schema is *not* applied once at construction — it is applied per
 /// connection by [`ConnectionPool::get`], which issues
-/// `SET search_path TO <schema>, public` on each checkout. Callers must
+/// `SET search_path TO <schema>` on each checkout. Callers must
 /// therefore take connections via `pool.get()` (which the DAL does internally),
 /// never `pool.pool.get()`, or the connection lands on `public` regardless of
 /// configuration.
@@ -68,10 +68,12 @@ pub fn connection_pool_from_settings(config: &Settings, max_size: u32) -> Connec
 /// Builds the pool for a one-shot command, and refuses a configured schema
 /// that has no Brokkr tables.
 ///
-/// Without this check, a missing or misspelled `database.schema` made the
-/// command read and write the tables in `public`, because the search path
-/// falls back to `public` (BROKKR-T-0327). `serve` does not use this: it
-/// creates and migrates the schema itself.
+/// A missing or misspelled `database.schema` once made the command read and
+/// write the tables in `public` (BROKKR-T-0327). The search path has no
+/// `public` fallback now (BROKKR-T-0361), so such a command would fail with
+/// "relation does not exist"; this check fails first, with an error that
+/// names the schema. `serve` does not use this: it creates and migrates the
+/// schema itself.
 fn migrated_pool_from_settings(
     config: &Settings,
     max_size: u32,

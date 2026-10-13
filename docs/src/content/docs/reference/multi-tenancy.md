@@ -160,7 +160,7 @@ Setting `database.schema` places one broker's tables in a named PostgreSQL schem
 
 ### Behavior
 
-When `database.schema` is set, the broker creates the schema on startup (`CREATE SCHEMA IF NOT EXISTS`), sets `search_path` on every connection checkout, and runs migrations within the schema. Each instance has its own complete set of tables invisible to the others.
+When `database.schema` is set, the broker creates the schema on startup (`CREATE SCHEMA IF NOT EXISTS`), sets `search_path` to that schema only on every connection checkout, and runs migrations within the schema. Each instance has its own complete set of tables invisible to the others. The search path does not include `public`: if the schema lacks a table, the query fails with `relation "<table>" does not exist` and does not use the table in `public`.
 
 ### Configuration
 
@@ -232,7 +232,7 @@ Each broker instance:
 When a schema is configured:
 
 - The connection pool calls `setup_schema(schema)` at initialization
-- Every connection acquired from the pool automatically executes `SET search_path TO <schema>` before use
+- Every connection acquired from the pool automatically executes `SET search_path TO <schema>` before use. There is no `public` fallback.
 - This happens at the r2d2 pool level, so application code doesn't need schema awareness
 
 The connection pool size is 50 by default. The total connection count across all broker instances on one database server is bounded by PostgreSQL's `max_connections`; each additional instance adds up to one pool's worth of connections.

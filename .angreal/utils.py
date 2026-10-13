@@ -16,9 +16,9 @@ DEFAULT_PROJECT = "brokkr-dev"
 # default.toml), so this publicly known PAK opens it. Dev only.
 DEV_ADMIN_PAK = "brokkr_BR3rVsDa_GK3QN7CDUzYc6iKgMkJ98M2WSimM5t6U8"
 
-# The webhook catcher's host port. 8090 is a common port; set
-# BROKKR_DEV_WEBHOOK_PORT when another service holds it.
-WEBHOOK_PORT = os.environ.get("BROKKR_DEV_WEBHOOK_PORT", "8090")
+# The webhook catcher's host port. The default is 18090, because other local
+# stacks often hold 8090. Set BROKKR_DEV_WEBHOOK_PORT to use another port.
+WEBHOOK_PORT = os.environ.get("BROKKR_DEV_WEBHOOK_PORT", "18090")
 
 
 def _say(line=""):

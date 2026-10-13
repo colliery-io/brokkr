@@ -273,8 +273,11 @@ pub fn validate_schema_name(schema: &str) -> Result<(), String> {
 impl ConnectionPool {
     /// Gets a connection from the pool with automatic schema search_path configuration.
     ///
-    /// If a schema is configured, this method automatically executes `SET search_path` on the
-    /// connection to ensure all queries execute in the correct schema context.
+    /// If a schema is configured, this method executes `SET search_path TO <schema>` on the
+    /// connection, so all queries execute in that schema only. There is no `public` fallback
+    /// (BROKKR-T-0361): a table that the schema does not have gives "relation does not exist",
+    /// and is never read from or written to `public`. `pg_catalog` stays on the path implicitly,
+    /// so built-in functions such as `gen_random_uuid()` still resolve.
     ///
     /// # Returns
     ///
@@ -297,8 +300,9 @@ impl ConnectionPool {
             // Validate schema name to prevent SQL injection
             validate_schema_name(schema).expect("Invalid schema name");
 
-            // Set search_path for this connection
-            let sql = format!("SET search_path TO {}, public", schema);
+            // Set search_path for this connection: the schema only, no
+            // `public` fallback (BROKKR-T-0361).
+            let sql = format!("SET search_path TO {}", schema);
             diesel::sql_query(&sql)
                 .execute(&mut conn)
                 .expect("Failed to set search_path");
@@ -337,7 +341,7 @@ impl ConnectionPool {
             .map_err(|e| format!("Failed to create schema '{}': {}", schema, e))?;
 
         // Set search_path for subsequent operations
-        let set_search_path_sql = format!("SET search_path TO {}, public", schema);
+        let set_search_path_sql = format!("SET search_path TO {}", schema);
         diesel::sql_query(&set_search_path_sql)
             .execute(&mut conn)
             .map_err(|e| format!("Failed to set search path: {}", e))?;
@@ -347,17 +351,17 @@ impl ConnectionPool {
 
     /// Checks that the configured schema holds the Brokkr tables.
     ///
-    /// Each checkout sets `search_path TO <schema>, public`. PostgreSQL
-    /// accepts a schema that does not exist in that list, and resolves a table
-    /// that the schema does not have from `public`. So a command run with a
-    /// schema that is missing, misspelled or not migrated reads and writes the
-    /// tables in `public`, and reports no error (BROKKR-T-0327). `serve`
-    /// creates and migrates the schema before it uses it, so only the one-shot
-    /// commands need this check.
+    /// Each checkout sets `search_path TO <schema>`, and PostgreSQL accepts a
+    /// schema that does not exist. Before BROKKR-T-0361 the path also held
+    /// `public`, so a command run with a schema that is missing, misspelled or
+    /// not migrated read and wrote the tables in `public` (BROKKR-T-0327).
+    /// Now such a command fails on its first query with "relation does not
+    /// exist"; this check fails first, with an error that names the schema
+    /// and says what to do. `serve` creates and migrates the schema before it
+    /// uses it, so only the one-shot commands need this check.
     ///
     /// The check looks for diesel's migration table in the schema itself, by
-    /// a qualified name, so the `public` fallback cannot satisfy it. With no
-    /// schema configured there is nothing to check.
+    /// a qualified name. With no schema configured there is nothing to check.
     pub fn check_schema_migrated(&self) -> Result<(), String> {
         use diesel::prelude::*;
         use diesel::sql_types::{Bool, Text};

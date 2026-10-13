@@ -12,7 +12,7 @@ The `brokkr-broker` and `brokkr-agent` binaries load configuration from three la
 2. **Configuration file** (optional) — set `BROKKR_CONFIG_FILE` to a TOML file path
 3. **Environment variables** prefixed with `BROKKR__`
 
-Environment variables always win: defaults work out of the box, a file can carry environment-specific settings, and `BROKKR__*` variables override both. In Kubernetes, the Helm charts take the third route exclusively — they render your chart values into a ConfigMap of `BROKKR__*` variables and inject it into the pod as environment, never as a file. A chart install therefore has no configuration file at all, which has consequences for reloading (see [Hot-Reload Configuration](#hot-reload-configuration)).
+Environment variables always win: defaults work out of the box, a file can carry environment-specific settings, and `BROKKR__*` variables override both. In Kubernetes, the Helm charts render most chart values into a ConfigMap of `BROKKR__*` variables and inject it into the pod as environment. The broker chart also mounts a small TOML file for the settings that reload without a restart (see [Hot-Reload Configuration](#hot-reload-configuration)). The agent chart mounts no file.
 
 ## Environment Variable Naming
 
@@ -78,25 +78,65 @@ The same list can be supplied by the `--generator-ids` CLI flag (highest precede
 
 ## Hot-Reload Configuration
 
-> **Hot reload does not currently change broker behaviour.** Several settings are *designated* hot-reloadable, and the machinery to detect a change exists — but no part of the broker reads the reloaded values back. The log filter, the CORS layer and the background workers each capture their settings once at startup. **Treat every setting as restart-only.** This is tracked as BROKKR-T-0292; the rest of this section describes what the reload machinery does today, which is detection and reporting.
+The broker can apply some settings without a restart. The agent cannot: it reads its configuration once, at startup.
 
-The settings designated hot-reloadable are the log level, CORS origins and preflight max-age, and the diagnostic/webhook background-task tunables. The authoritative list is in the [Environment Variables Reference](../../reference/environment-variables/#configuration-file-and-hot-reload).
+### Settings that reload
 
-Trigger a reload explicitly:
+| Setting | Chart value | Effect of a reload |
+|---------|-------------|--------------------|
+| `log.level` | `broker.logLevel` | The log filter changes. |
+| `broker.diagnostic_cleanup_interval_seconds` | `broker.diagnosticCleanupIntervalSeconds` | The cleanup task uses the new interval. |
+| `broker.diagnostic_max_age_hours` | `broker.diagnosticMaxAgeHours` | The next cleanup pass uses the new age. |
+| `broker.webhook_delivery_interval_seconds` | `broker.webhookDeliveryIntervalSeconds` | The delivery worker uses the new interval. |
+| `broker.webhook_delivery_batch_size` | `broker.webhookDeliveryBatchSize` | The next delivery pass uses the new batch size. |
+| `broker.webhook_cleanup_retention_days` | `broker.webhookCleanupRetentionDays` | The next webhook cleanup pass uses the new retention. |
+
+The background tasks read these values again on each pass. When an interval changes, the task starts a new timer with the new interval.
+
+The `log.level` reload has one limit. If `RUST_LOG` is set when the broker starts, `RUST_LOG` sets the log filter, and a reload does not change it. The broker prints a message that tells you this. To make `log.level` reload, do not set `RUST_LOG` (in a chart install, do not put it in `extraEnv`).
+
+### Settings that need a restart
+
+All other settings need a broker restart. These include:
+
+- `database.*` and the database URL
+- `cors.*`: the broker builds the CORS layer one time, at startup. A reload reports a change to `cors.allowed_origins` or `cors.max_age_seconds`, but the broker does not apply it.
+- `broker.webhook_encryption_key` and `broker.pak_hash`
+- `telemetry.*` and `log.format`
+- The other background task settings, for example `broker.audit_log_retention_days`
+
+### How a reload starts
+
+A reload starts in one of two ways:
+
+- **The config-file watcher.** When `BROKKR_CONFIG_FILE` names a file that exists at startup, the broker watches that file. When the file changes, the broker waits for the debounce time (default 5 seconds, set with `BROKKR_CONFIG_WATCHER_DEBOUNCE_SECONDS`), then reloads. The log shows `Config file watcher triggered configuration reload`. Set `BROKKR_CONFIG_WATCHER_ENABLED=false` to stop the watcher.
+- **The admin endpoint.** Send this request with an admin PAK (Prefixed API Key):
 
 ```bash
 curl -X POST https://broker.example.com/api/v1/admin/config/reload \
   -H "Authorization: Bearer $ADMIN_PAK"
 ```
 
-A reload re-reads all three layers and records the change set in the audit log as `config.reloaded`. That audit entry is the whole observable effect: the recomputed values are stored, but nothing consults them afterwards, so the broker keeps behaving as it did before. In a chart install the endpoint additionally has nothing new to find — the process environment is fixed for the pod's lifetime — so it consistently reports no changes.
+A reload reads the defaults, the file and the environment again. It applies the settings in the table above and records the changes in the audit log as `config.reloaded`. The process environment does not change while the broker runs. Thus a reload finds changes only in the file. A key that is also set as a `BROKKR__*` variable keeps the value of the variable, because environment variables override the file.
 
-There is also an automatic path, but it depends on how the broker was deployed:
+### Hot reload in a chart install
 
-- **Deployed with a configuration file** — when `BROKKR_CONFIG_FILE` points at an existing file, the broker watches that file and reloads on its own whenever the contents change (5-second debounce, tunable via `BROKKR_CONFIG_WATCHER_DEBOUNCE_SECONDS`; turn it off with `BROKKR_CONFIG_WATCHER_ENABLED=false`).
-- **Deployed with the Helm chart** — the watcher never starts. The chart delivers settings as environment variables and sets no `BROKKR_CONFIG_FILE`, so there is no file to watch. Editing chart values and upgrading changes the ConfigMap, but the running process keeps the environment it started with; **restart the broker pods to pick the new values up**. The explicit reload endpoint above still works, though with no file layer to re-read it only reflects what the process can already see.
+With `configReload.enabled: true` (the default), the broker chart does these steps:
 
-To get automatic reload under Kubernetes today you would have to depart from the chart: mount a ConfigMap as a file and set `BROKKR_CONFIG_FILE` to its path yourself. Note that a mounted ConfigMap's contents propagate on the kubelet's own sync schedule, so the change is not instantaneous even then. Making the chart-installed broker reload without a restart is an open design question for Brokkr, so expect this area to improve.
+1. It renders the settings in the table above as `brokkr.toml` in a second ConfigMap, `<release>-brokkr-broker-dynamic`. These settings are not in the environment ConfigMap, because an environment variable overrides the file.
+2. It mounts that ConfigMap at `/etc/brokkr` as a directory and sets `BROKKR_CONFIG_FILE=/etc/brokkr/brokkr.toml`.
+
+To change a setting, run `helm upgrade` with the new value, or edit the `<release>-brokkr-broker-dynamic` ConfigMap. The kubelet updates the mounted file, usually in about one minute. Then the watcher reloads the broker. The broker does not call the Kubernetes API for this, so the chart creates no Role or RoleBinding.
+
+With `configReload.enabled: false`, the chart mounts no file and sets no `BROKKR_CONFIG_FILE`. The settings go into the environment ConfigMap, and each one needs a restart.
+
+`helm upgrade` does not restart the broker pod: the pod template has no checksum annotation. After you change a setting that needs a restart, run:
+
+```bash
+kubectl rollout restart deploy/<release>-brokkr-broker
+```
+
+For the chart side, see the "Configuration hot reload" section of the broker chart README (`charts/brokkr-broker/README.md`).
 
 ## Next Steps
 
