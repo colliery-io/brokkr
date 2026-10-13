@@ -1,0 +1,86 @@
+---
+name: E2E Scenarios
+# Reusable. Runs the e2e scenarios that the default walkthrough
+# (`angreal tests e2e`, e2e_tests.yml) does not run: the binary reaches them
+# only when E2E_SCENARIO is set (tests/e2e/src/main.rs). Before this workflow,
+# nothing set it, so they never ran in CI (BROKKR-T-0323).
+#
+# Callers:
+#   - nightly.yml: each night. A failure opens or comments on the
+#     nightly-failure issue.
+#   - main.yml: on a PR that changes tests/e2e, the compose stack, or this
+#     file. Advisory there: CI gate does not include it.
+# release.yml does not call it. ws-chaos and ws-workorders sever the WS link
+# with toxiproxy, and ws-smoke stops and starts the broker, so they are slower
+# and more failure-prone than the walkthrough.
+#
+# Each scenario gets its own runner and its own compose stack, because three
+# of them stop a container or sever a link, and the next scenario must not
+# start from that state.
+on:
+  workflow_call:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  scenario:
+    runs-on: ubuntu-latest
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario: [ws-smoke, ws-chaos, ws-workorders, ws-telemetry, survive-polls]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Install angreal
+        run: |
+          python -m pip install --upgrade pip
+          pip install angreal
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@1.90
+
+      - name: Cache build
+        uses: actions/cache@v5
+        with:
+          path: |
+            target
+            tests/e2e/target
+          key: ${{ runner.os }}-e2e-build-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-e2e-build-
+
+      - name: Create required directories
+        run: |
+          mkdir -p /tmp/brokkr-keys
+          chmod 777 /tmp/brokkr-keys
+
+      - name: Log in to Docker Hub (raise base-image pull rate limit)
+        if: ${{ env.DOCKERHUB_USERNAME != '' }}
+        uses: docker/login-action@v4.2.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: docker compose up
+        uses: hoverkraft-tech/compose-action@v3.0.0
+        with:
+          compose-file: ".angreal/files/docker-compose.yaml"
+
+      - name: Run scenario ${{ matrix.scenario }}
+        run: angreal tests e2e --skip-docker --scenario ${{ matrix.scenario }}
+
+      - name: Compose logs on failure
+        if: failure()
+        run: docker compose -f .angreal/files/docker-compose.yaml logs --no-color --tail 300 broker agent toxiproxy
