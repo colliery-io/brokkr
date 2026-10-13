@@ -46,7 +46,6 @@ export default defineConfig({
 			editLink: { baseUrl: `${REPO}/edit/main/docs/` },
 			routeMiddleware: './src/route-data.ts',
 			expressiveCode: {
-				frames: { extractFileNameFromCode: false },
 				// Shiki has no PromQL grammar: show it as plain text.
 				shiki: { langAlias: { promql: 'txt' } },
 			},
