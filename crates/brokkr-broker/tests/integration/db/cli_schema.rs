@@ -63,9 +63,9 @@ fn provision_schema(settings: &Settings, schema: &str, sentinel: &str) {
     pool.setup_schema(schema)
         .unwrap_or_else(|e| panic!("failed to set up schema {}: {}", schema, e));
 
-    // `get()` sets `search_path TO <schema>, public`, so the migrations (and
-    // diesel's own `__diesel_schema_migrations` bookkeeping table) are created
-    // in `schema`, shadowing anything already migrated into `public`.
+    // `get()` sets `search_path TO <schema>`, so the migrations (and diesel's
+    // own `__diesel_schema_migrations` bookkeeping table) are created in
+    // `schema`, apart from anything already migrated into `public`.
     let mut conn = pool.get().expect("failed to get connection");
     conn.run_pending_migrations(MIGRATIONS)
         .unwrap_or_else(|e| panic!("failed to migrate schema {}: {}", schema, e));
