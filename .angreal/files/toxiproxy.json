@@ -1,8 +1,0 @@
-[
-  {
-    "name": "ws-channel",
-    "listen": "0.0.0.0:8666",
-    "upstream": "broker:3000",
-    "enabled": true
-  }
-]
