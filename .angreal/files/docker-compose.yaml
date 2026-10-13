@@ -360,7 +360,9 @@ services:
       context: ../../examples/webhook-catcher
       dockerfile: Dockerfile
     ports:
-      - "${BROKKR_DEV_WEBHOOK_PORT:-8090}:8080"
+      # Host port 18090, not 8090: other local stacks often hold 8090.
+      # Set BROKKR_DEV_WEBHOOK_PORT to use another port.
+      - "${BROKKR_DEV_WEBHOOK_PORT:-18090}:8080"
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/healthz"]
       interval: 5s
@@ -419,7 +421,7 @@ services:
         echo ""
         echo "Broker:      http://localhost:3000"
         echo "UI:          http://localhost:3001"
-        echo "Webhook:     http://localhost:8090"
+        echo "Webhook:     http://localhost:${BROKKR_DEV_WEBHOOK_PORT:-18090}"
         echo "Tekton:      $$(kubectl get pods -n tekton-pipelines --no-headers | wc -l) pods"
         echo "Shipwright:  $$(kubectl get pods -n shipwright-build --no-headers | wc -l) pods"
         echo "Strategies:  $$CBS_COUNT ClusterBuildStrategies"

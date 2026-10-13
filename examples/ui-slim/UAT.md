@@ -157,7 +157,7 @@ Parameters schema (JSON Schema):
 | WH5 | Test the webhook | Click **Test** (if exposed) | Network: `POST /api/v1/webhooks/{id}/test` returns 200. Webhook-catcher receives the test payload (see WH8). |
 | WH6 | Trigger a real event | Re-apply a deployment object (S6 again, slightly different YAML) | Agent applies → broker emits `deployment.applied` → webhook fires. |
 | WH7 | View deliveries | Webhook detail → Deliveries | Recent deliveries list with status (`pending`, `success`, `failed`). Network: `GET /api/v1/webhooks/{id}/deliveries` returns 200. |
-| WH8 | Open webhook-catcher | http://localhost:8090/messages (or the UI's webhook-catcher panel) | Recent messages include the events from WH5 / WH6. |
+| WH8 | Open webhook-catcher | http://localhost:18090/messages (or the UI's webhook-catcher panel) | Recent messages include the events from WH5 / WH6. |
 | WH9 | Delete the webhook (cleanup) | Click **Delete** | Removed. Network: `DELETE /api/v1/webhooks/{id}` returns 204. |
 
 ---

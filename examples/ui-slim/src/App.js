@@ -2279,7 +2279,7 @@ const DemoPanel = () => {
         ) : (
           <span>Polling paused</span>
         )}
-        <span>webhook-catcher:8090</span>
+        <span>webhook-catcher:18090</span>
       </div>
     </div>
   );
@@ -2471,7 +2471,7 @@ const DemoPanel = () => {
     // Check webhook catcher
     addStep(1, { text: 'Checking webhook catcher...', status: 'running' });
     try {
-      const res = await fetch('http://localhost:8090/healthz');
+      const res = await fetch('http://localhost:18090/healthz');
       if (res.ok) {
         addStep(1, { text: 'Webhook catcher ready', status: 'success', icon: '✓' });
       } else {
@@ -2560,7 +2560,7 @@ const DemoPanel = () => {
     try {
       const webhook = await api.createWebhook(
         'demo-workorder-events',
-        'http://host.docker.internal:8090/receive',
+        'http://host.docker.internal:18090/receive',
         ['workorder.completed', 'workorder.failed'],
         null,
         { enabled: true, maxRetries: 3, timeoutSeconds: 30 }
@@ -2585,7 +2585,7 @@ const DemoPanel = () => {
     try {
       const webhook = await api.createWebhook(
         'demo-deployment-events',
-        'http://host.docker.internal:8090/receive',
+        'http://host.docker.internal:18090/receive',
         ['deployment.created', 'deployment.applied', 'deployment.failed'],
         null,
         { enabled: true, maxRetries: 3, timeoutSeconds: 30 }
@@ -2610,7 +2610,7 @@ const DemoPanel = () => {
     try {
       const webhook = await api.createWebhook(
         'demo-stack-events',
-        'http://host.docker.internal:8090/receive',
+        'http://host.docker.internal:18090/receive',
         ['stack.created', 'stack.deleted'],
         null,
         { enabled: true, maxRetries: 3, timeoutSeconds: 30 }
