@@ -689,7 +689,7 @@ Deliveries in terminal states (`success`, `dead`) are retained for the full 7-da
 
 - Background task polls every 5 seconds, set by `broker.webhook_delivery_interval_seconds`
 - Batch size: 50 deliveries per cycle, set by `broker.webhook_delivery_batch_size`
-- Both values are read once when the delivery worker starts. Changing them requires a broker restart; they are not applied by a configuration reload.
+- The worker reads both values again on each pass, so a configuration reload applies them without a restart. See [Hot-Reload Configuration](../../how-to/configuration/#hot-reload-configuration).
 - Deliveries within a batch are attempted sequentially, single-threaded per broker instance
 
 ### Agent Delivery

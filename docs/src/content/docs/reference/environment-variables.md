@@ -20,7 +20,7 @@ Configuration precedence (highest wins): Environment variables > Config file > E
 | `BROKKR__LOG__LEVEL` | String | `debug` | Log level: `trace`, `debug`, `info`, `warn`, `error` |
 | `BROKKR__LOG__FORMAT` | String | `text` | Log format: `text` (human-readable) or `json` (structured) |
 
-Both are read once at process start. See [Configuration File and Hot-Reload](#configuration-file-and-hot-reload) for what a configuration reload does and does not change.
+The broker reads `BROKKR__LOG__FORMAT` once, at startup. A configuration reload can change the broker's `log.level`, but not when `RUST_LOG` was set at startup. The agent reads both once, at startup. See [Configuration File and Hot-Reload](#configuration-file-and-hot-reload).
 
 ## Broker
 
@@ -131,22 +131,24 @@ These environment variables control the configuration system itself and are **no
 
 The watcher is a **config-file** watcher, not a ConfigMap watcher. It arms only when `BROKKR_CONFIG_FILE` names a file that exists at startup; if the variable is unset or points at a missing path, the watcher is silently disabled regardless of `BROKKR_CONFIG_WATCHER_ENABLED`.
 
-This matters for Helm deployments. The broker chart supplies configuration as environment variables (`envFrom`) and mounts no configuration file, so `BROKKR_CONFIG_FILE` is unset and no watching occurs. The chart also renders a `BROKKR_CONFIGMAP_NAME` variable that no component reads. To change broker configuration under the chart, edit the values and let the pod restart.
+The broker chart uses this file. With `configReload.enabled: true` (the default), it mounts the `<release>-brokkr-broker-dynamic` ConfigMap at `/etc/brokkr` and sets `BROKKR_CONFIG_FILE=/etc/brokkr/brokkr.toml`. That file holds only the settings that reload. The chart sets `BROKKR_CONFIG_WATCHER_ENABLED` and `BROKKR_CONFIG_WATCHER_DEBOUNCE_SECONDS` from `configReload.*`. With `configReload.enabled: false`, the chart mounts no file. The agent has no watcher.
 
 ### What a Reload Does
 
-A reload is triggered by a config-file change (when the watcher is armed) or by `POST /api/v1/admin/config/reload`. It re-reads the configuration sources, compares them against the values captured at startup, and reports which keys changed — in the API response and in the broker log. The keys tracked for this comparison are:
+A config-file change (when the watcher is armed) or `POST /api/v1/admin/config/reload` starts a reload. The broker reads the configuration sources again, compares them with the current values, and reports which keys changed, in the API response and in the broker log. It records the change set in the audit log as `config.reloaded`. The broker applies these keys:
 
-- `log.level`
-- `broker.diagnostic_cleanup_interval_seconds`
-- `broker.diagnostic_max_age_hours`
-- `broker.webhook_delivery_interval_seconds`
-- `broker.webhook_delivery_batch_size`
-- `broker.webhook_cleanup_retention_days`
-- `cors.allowed_origins`
-- `cors.max_age_seconds`
+| Key | Applied by |
+|-----|------------|
+| `log.level` | The log filter. Not applied when `RUST_LOG` was set at startup. |
+| `broker.diagnostic_cleanup_interval_seconds` | The diagnostic cleanup task, on its next pass |
+| `broker.diagnostic_max_age_hours` | The diagnostic cleanup task, on its next pass |
+| `broker.webhook_delivery_interval_seconds` | The webhook delivery worker, on its next pass |
+| `broker.webhook_delivery_batch_size` | The webhook delivery worker, on its next pass |
+| `broker.webhook_cleanup_retention_days` | The webhook cleanup task, on its next pass |
 
-A reload is a **detection** mechanism, not an application mechanism. The running components — the log filter, the CORS layer, the webhook delivery worker, and the cleanup tasks — each captured their settings at startup and do not consult the reloaded values. Changing any of these settings takes effect on the next broker restart.
+A reload also reports changes to `cors.allowed_origins` and `cors.max_age_seconds`, but it does not apply them: the broker builds the CORS layer one time, at startup. All other settings need a restart.
+
+The process environment does not change while the broker runs. Thus a reload finds changes only in the configuration file. A key that is also set as a `BROKKR__*` variable keeps the value of the variable.
 
 ## Related Documentation
 

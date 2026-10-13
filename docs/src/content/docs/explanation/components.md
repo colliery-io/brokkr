@@ -369,7 +369,7 @@ BROKKR__AGENT__GENERATOR_IDS=<uuid>,<uuid>
 
 The full configuration catalogs for both components live in the [Configuration guide](../../how-to/configuration/) and the [Environment Variables reference](../../reference/environment-variables/).
 
-The broker supports hot-reloading a limited set of values without a restart: the log level, diagnostic cleanup settings, webhook delivery interval/batch size/retention, and — of the CORS settings — only the allowed origins and the preflight `max_age_seconds` (allowed methods and headers require a restart). A manual reload can be triggered via `POST /api/v1/admin/config/reload`; when a configuration file is specified, the broker also watches it for filesystem changes with a 5-second debounce.
+The broker can reload a small set of values without a restart: the log level, the diagnostic cleanup settings, and the webhook delivery interval, batch size and cleanup retention. The log level does not reload when `RUST_LOG` was set at startup. All CORS settings need a restart. `POST /api/v1/admin/config/reload` starts a reload. When `BROKKR_CONFIG_FILE` names a file, the broker also watches it, with a 5-second debounce. The broker chart mounts such a file by default. The agent does not reload its configuration. For details, see [Hot-Reload Configuration](../../how-to/configuration/#hot-reload-configuration).
 
 ## Component Lifecycle
 
