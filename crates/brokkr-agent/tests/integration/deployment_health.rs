@@ -112,9 +112,15 @@ async fn test_health_pod_attribution_via_owner_references() {
     let objects: Vec<DynamicObject> = vec![serde_json::from_value(deployment).unwrap()];
 
     let agent_id = Uuid::new_v4();
-    let result =
-        reconcile_target_state(&objects, client.clone(), &stack_id, &checksum, &agent_id, None)
-            .await;
+    let result = reconcile_target_state(
+        &objects,
+        client.clone(),
+        &stack_id,
+        &checksum,
+        &agent_id,
+        None,
+    )
+    .await;
     assert!(
         result.is_ok(),
         "Reconciliation of the Deployment should succeed: {:?}",

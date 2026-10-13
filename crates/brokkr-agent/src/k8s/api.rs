@@ -329,8 +329,13 @@ pub async fn get_all_objects_by_annotation(
     // Search through all API groups and resources
     for group in discovery.groups() {
         for (ar, caps) in group.recommended_resources() {
-            let api: Api<DynamicObject> =
-                dynamic_api(ar.clone(), caps.clone(), k8s_client.clone(), list_ns, all_ns);
+            let api: Api<DynamicObject> = dynamic_api(
+                ar.clone(),
+                caps.clone(),
+                k8s_client.clone(),
+                list_ns,
+                all_ns,
+            );
 
             attempted += 1;
             match api.list(&Default::default()).await {
@@ -925,7 +930,10 @@ pub async fn reconcile_target_state(
             let gvk_meta = match object.types.as_ref() {
                 Some(t) => t,
                 None => {
-                    error!("Object {} has no TypeMeta; aborting reconcile before prune", key);
+                    error!(
+                        "Object {} has no TypeMeta; aborting reconcile before prune",
+                        key
+                    );
                     rollback_namespaces(&client, &created_namespaces).await;
                     return Err(format!("object {} has no TypeMeta", key).into());
                 }
@@ -1022,9 +1030,7 @@ pub async fn reconcile_target_state(
             );
             if let Some(gvk) = existing_obj.types.as_ref() {
                 let gvk = GroupVersionKind::try_from(gvk)?;
-                if let Some((ar, caps)) =
-                    resolve_gvk_cached(&mut discovery, &client, &gvk).await?
-                {
+                if let Some((ar, caps)) = resolve_gvk_cached(&mut discovery, &client, &gvk).await? {
                     let api = dynamic_api(ar, caps, client.clone(), Some(&namespace), false);
                     let delete_name = name.clone();
                     let result = with_retries(

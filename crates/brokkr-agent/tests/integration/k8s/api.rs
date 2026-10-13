@@ -195,7 +195,15 @@ async fn test_reconcile_single_object() {
         .collect();
 
     // Apply the object
-    let result = reconcile_target_state(&objects, client.clone(), &stack_id, &checksum, &agent_id, None).await;
+    let result = reconcile_target_state(
+        &objects,
+        client.clone(),
+        &stack_id,
+        &checksum,
+        &agent_id,
+        None,
+    )
+    .await;
     assert!(result.is_ok(), "Initial reconciliation should succeed");
 
     // Verify ConfigMap exists with correct data
@@ -253,8 +261,15 @@ async fn test_reconcile_update_object() {
         .collect();
 
     // Apply initial object
-    let result =
-        reconcile_target_state(&initial_objects, client.clone(), stack_id, initial_checksum, &agent_id, None).await;
+    let result = reconcile_target_state(
+        &initial_objects,
+        client.clone(),
+        stack_id,
+        initial_checksum,
+        &agent_id,
+        None,
+    )
+    .await;
     assert!(result.is_ok(), "Initial reconciliation should succeed");
 
     // Verify initial state
@@ -288,8 +303,15 @@ async fn test_reconcile_update_object() {
         .collect();
 
     // Apply update
-    let result =
-        reconcile_target_state(&updated_objects, client.clone(), stack_id, updated_checksum, &agent_id, None).await;
+    let result = reconcile_target_state(
+        &updated_objects,
+        client.clone(),
+        stack_id,
+        updated_checksum,
+        &agent_id,
+        None,
+    )
+    .await;
     assert!(result.is_ok(), "Update reconciliation should succeed");
 
     // Verify update
@@ -562,9 +584,15 @@ async fn test_reconcile_does_not_prune_other_agents_objects() {
         }))
         .unwrap(),
     ];
-    let result =
-        reconcile_target_state(&objects_a, client.clone(), &stack_id, &checksum_a, &agent_a, None)
-            .await;
+    let result = reconcile_target_state(
+        &objects_a,
+        client.clone(),
+        &stack_id,
+        &checksum_a,
+        &agent_a,
+        None,
+    )
+    .await;
     assert!(result.is_ok(), "agent A reconciliation should succeed");
 
     // Agent B reconciles the SAME stack with a different object + checksum.
@@ -581,9 +609,15 @@ async fn test_reconcile_does_not_prune_other_agents_objects() {
         }))
         .unwrap(),
     ];
-    let result =
-        reconcile_target_state(&objects_b, client.clone(), &stack_id, &checksum_b, &agent_b, None)
-            .await;
+    let result = reconcile_target_state(
+        &objects_b,
+        client.clone(),
+        &stack_id,
+        &checksum_b,
+        &agent_b,
+        None,
+    )
+    .await;
     assert!(result.is_ok(), "agent B reconciliation should succeed");
 
     // config-a is owned by agent A and has a stale checksum, but agent B must
@@ -655,8 +689,15 @@ async fn test_reconcile_empty_object_list() {
         .collect();
 
     // Apply initial objects
-    let result =
-        reconcile_target_state(&initial_objects, client.clone(), stack_id, initial_checksum, &agent_id, None).await;
+    let result = reconcile_target_state(
+        &initial_objects,
+        client.clone(),
+        stack_id,
+        initial_checksum,
+        &agent_id,
+        None,
+    )
+    .await;
     assert!(result.is_ok(), "Initial reconciliation should succeed");
 
     // Verify initial objects exist
@@ -682,8 +723,15 @@ async fn test_reconcile_empty_object_list() {
 
     // Reconcile with empty object list (should delete everything)
     let empty_objects: Vec<DynamicObject> = vec![];
-    let result =
-        reconcile_target_state(&empty_objects, client.clone(), stack_id, empty_checksum, &agent_id, None).await;
+    let result = reconcile_target_state(
+        &empty_objects,
+        client.clone(),
+        stack_id,
+        empty_checksum,
+        &agent_id,
+        None,
+    )
+    .await;
     assert!(result.is_ok(), "Empty reconciliation should succeed");
 
     // Verify all objects are deleted
@@ -1005,7 +1053,8 @@ async fn test_get_objects_by_annotation_found() {
     assert!(result.is_ok(), "Failed to apply k8s objects");
 
     // Get objects by annotation
-    let result = get_all_objects_by_annotation(&client, "brokkr.io/test-key", "test-value", None).await;
+    let result =
+        get_all_objects_by_annotation(&client, "brokkr.io/test-key", "test-value", None).await;
     assert!(result.is_ok(), "Failed to get objects by annotation");
 
     let found_objects = result.unwrap();
@@ -1242,7 +1291,15 @@ async fn test_reconcile_namespace_in_same_deployment() {
         .collect();
 
     // This should succeed - namespace is applied first, then ConfigMap is validated and applied
-    let result = reconcile_target_state(&objects, client.clone(), &stack_id, &checksum, &agent_id, None).await;
+    let result = reconcile_target_state(
+        &objects,
+        client.clone(),
+        &stack_id,
+        &checksum,
+        &agent_id,
+        None,
+    )
+    .await;
     assert!(
         result.is_ok(),
         "Reconciliation with namespace in same deployment should succeed: {:?}",
@@ -1317,7 +1374,15 @@ async fn test_reconcile_rollback_spares_preexisting_namespace() {
         .map(|obj| serde_json::from_value(obj).unwrap())
         .collect();
 
-    let result = reconcile_target_state(&objects, client.clone(), &stack_id, &checksum, &agent_id, None).await;
+    let result = reconcile_target_state(
+        &objects,
+        client.clone(),
+        &stack_id,
+        &checksum,
+        &agent_id,
+        None,
+    )
+    .await;
     assert!(
         result.is_err(),
         "Reconciliation should fail due to invalid Pod"
@@ -1395,7 +1460,15 @@ async fn test_reconcile_rollback_deletes_newly_created_namespace() {
         .map(|obj| serde_json::from_value(obj).unwrap())
         .collect();
 
-    let result = reconcile_target_state(&objects, client.clone(), &stack_id, &checksum, &agent_id, None).await;
+    let result = reconcile_target_state(
+        &objects,
+        client.clone(),
+        &stack_id,
+        &checksum,
+        &agent_id,
+        None,
+    )
+    .await;
     assert!(
         result.is_err(),
         "Reconciliation should fail due to invalid Pod"
@@ -1476,7 +1549,15 @@ async fn test_reconcile_namespace_rollback_on_failure() {
         .collect();
 
     // This should fail because Pod is invalid
-    let result = reconcile_target_state(&objects, client.clone(), &stack_id, &checksum, &agent_id, None).await;
+    let result = reconcile_target_state(
+        &objects,
+        client.clone(),
+        &stack_id,
+        &checksum,
+        &agent_id,
+        None,
+    )
+    .await;
     assert!(
         result.is_err(),
         "Reconciliation should fail due to invalid Pod"

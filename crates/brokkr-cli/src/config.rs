@@ -86,7 +86,10 @@ pub fn load_file(path: &Path) -> Result<ConfigLayer, String> {
         Ok(contents) => parse_file(&contents)
             .map_err(|e| format!("failed to parse config file {}: {e}", path.display())),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(ConfigLayer::default()),
-        Err(e) => Err(format!("failed to read config file {}: {e}", path.display())),
+        Err(e) => Err(format!(
+            "failed to read config file {}: {e}",
+            path.display()
+        )),
     }
 }
 

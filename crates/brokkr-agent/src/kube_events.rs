@@ -163,7 +163,9 @@ pub fn spawn(
             .await
             {
                 Ok(()) => backoff = Duration::from_secs(1),
-                Err(e) => warn!(error = %e, "kube events tailer fell out of watch loop; retrying in {:?}", backoff),
+                Err(e) => {
+                    warn!(error = %e, "kube events tailer fell out of watch loop; retrying in {:?}", backoff)
+                }
             }
             tokio::time::sleep(backoff).await;
             backoff = (backoff * 2).min(MAX_BACKOFF);
