@@ -55,6 +55,9 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           "$HOME/.local/bin/trunk" --version
 
+      - name: Check format
+        run: cargo fmt -- --check
+
       - name: Clippy (wasm32)
         run: cargo clippy --target wasm32-unknown-unknown -- -D warnings
 
