@@ -348,8 +348,7 @@ pub fn TelemetryView() -> impl IntoView {
                     }}
                     // Outside the match: a history read (each 5 s while the
                     // stream is down) must not make a new LogView, which would
-                    // lose the scroll position, and a frame callback of the
-                    // old one would then read its disposed node.
+                    // lose the scroll position.
                     <Show when=move || logs_ready.get()>
                         <Stack gap="sm">
                             <Panel title="Pod logs">

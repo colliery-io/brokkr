@@ -36,7 +36,9 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  PLISSKEN_VERSION: "0.1.0"
+  PLISSKEN_VERSION: "0.2.0"
+  # sha256 of plissken-<version>-x86_64-unknown-linux-gnu.tar.gz
+  PLISSKEN_SHA256: "2166e15d69bd891959704a0f70c60724ccae4615584a70b4e524ed4c9460e253"
 
 jobs:
   build:
@@ -52,7 +54,10 @@ jobs:
 
       - name: Install plissken
         run: |
-          curl -sSfL "https://github.com/colliery-io/plissken/releases/download/v${PLISSKEN_VERSION}/plissken-${PLISSKEN_VERSION}-x86_64-unknown-linux-gnu.tar.gz" | tar -xz
+          tarball="plissken-${PLISSKEN_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+          curl -sSfLo "$tarball" "https://github.com/colliery-io/plissken/releases/download/v${PLISSKEN_VERSION}/${tarball}"
+          echo "${PLISSKEN_SHA256}  ${tarball}" | sha256sum -c -
+          tar -xzf "$tarball" plissken
           sudo mv plissken /usr/local/bin/
 
       - name: Write the API pages

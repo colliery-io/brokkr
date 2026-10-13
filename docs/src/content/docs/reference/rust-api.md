@@ -6,6 +6,8 @@ This section contains the complete Rust API documentation for all Brokkr crates,
 
 These docs are regenerated on every build, so they always reflect the current state of the codebase.
 
+[All modules](../api/) lists every page with its summary.
+
 ## Crates
 
 - [**brokkr-broker**](../api/rust/brokkr-broker/) — The main control plane and API server
@@ -18,8 +20,8 @@ These docs are regenerated on every build, so they always reflect the current st
 plissken also writes the API pages of the Python SDK (`sdks/python/brokkr`):
 
 - [**brokkr**](../api/brokkr/) — The package
-- [**client**](../api/client/) — `BrokkrClient`, the client
-- [**errors**](../api/errors/) — `BrokkrError`, the typed error
+- [**client**](../api/brokkr/client/) — `BrokkrClient`, the client
+- [**errors**](../api/brokkr/errors/) — `BrokkrError`, the typed error
 
 ## Client SDKs
 
