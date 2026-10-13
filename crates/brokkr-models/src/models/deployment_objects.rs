@@ -203,10 +203,7 @@ mod tests {
     fn test_new_deployment_object_empty_deletion_marker_allowed() {
         // Deletion markers may carry an empty body (BROKKR-T-0194).
         let result = NewDeploymentObject::new(Uuid::new_v4(), "".to_string(), true);
-        assert!(
-            result.is_ok(),
-            "an empty deletion marker should be allowed"
-        );
+        assert!(result.is_ok(), "an empty deletion marker should be allowed");
         let obj = result.unwrap();
         assert!(obj.is_deletion_marker);
         assert!(obj.yaml_content.is_empty());

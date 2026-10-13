@@ -307,7 +307,10 @@ async fn registrations(client: &BrokkrClient, args: RegistrationsArgs) -> Result
         } else {
             println!("agent {agent} is registered with {} tenant(s):", regs.len());
             for r in regs {
-                println!("  tenant {}  (registered {})", r.generator_id, r.registered_at);
+                println!(
+                    "  tenant {}  (registered {})",
+                    r.generator_id, r.registered_at
+                );
             }
         }
     } else if let Some(given) = args.generator {
@@ -361,8 +364,15 @@ mod tests {
         assert!(Cli::try_parse_from(["brokkr", "registrations"]).is_err());
         // both: error (mutually exclusive group)
         assert!(
-            Cli::try_parse_from(["brokkr", "registrations", "--agent", NIL, "--generator", NIL])
-                .is_err()
+            Cli::try_parse_from([
+                "brokkr",
+                "registrations",
+                "--agent",
+                NIL,
+                "--generator",
+                NIL
+            ])
+            .is_err()
         );
     }
 
@@ -406,8 +416,12 @@ mod tests {
             generator: "acme".to_string(),
         };
         let (agent, generator) = (Uuid::from_u128(1), Uuid::from_u128(2));
-        let message =
-            register_message(Err(api_error(409, "already_registered")), &args, agent, generator);
+        let message = register_message(
+            Err(api_error(409, "already_registered")),
+            &args,
+            agent,
+            generator,
+        );
         assert_eq!(
             message,
             Ok(format!(

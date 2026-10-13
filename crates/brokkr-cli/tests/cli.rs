@@ -51,7 +51,10 @@ fn apply_help_documents_flags() {
     let (output, stdout, _) = run(cmd);
     assert!(output.status.success());
     for needle in ["--filename", "--stack", "--target-label", "--generator"] {
-        assert!(stdout.contains(needle), "apply help missing {needle}: {stdout}");
+        assert!(
+            stdout.contains(needle),
+            "apply help missing {needle}: {stdout}"
+        );
     }
 }
 

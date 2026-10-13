@@ -145,99 +145,6 @@ fn resolve_database_url(base_url: &str, database_name: Option<&str>) -> String {
     url.to_string()
 }
 
-#[cfg(test)]
-mod tests {
-    use super::{QueryMetrics, resolve_database_url};
-    use crate::metrics::{DATABASE_QUERIES_TOTAL, DATABASE_QUERY_DURATION_SECONDS};
-
-    /// A finished query moves the counter and the histogram. diesel's event
-    /// constructors are feature-gated, so this drives the hook's own start and
-    /// finish; the integration suite drives it through a real connection.
-    #[test]
-    fn query_metrics_records_a_finished_query() {
-        let ok_before = DATABASE_QUERIES_TOTAL.with_label_values(&["ok"]).get();
-        let err_before = DATABASE_QUERIES_TOTAL.with_label_values(&["error"]).get();
-        let count_before = DATABASE_QUERY_DURATION_SECONDS.get_sample_count();
-
-        let mut hook = QueryMetrics::default();
-        hook.start();
-        hook.finish(false);
-        hook.start();
-        hook.finish(true);
-
-        // The registry is process-global and tests run in parallel.
-        assert!(DATABASE_QUERIES_TOTAL.with_label_values(&["ok"]).get() > ok_before);
-        assert!(DATABASE_QUERIES_TOTAL.with_label_values(&["error"]).get() > err_before);
-        assert!(DATABASE_QUERY_DURATION_SECONDS.get_sample_count() >= count_before + 2);
-    }
-
-    /// A finish without a start is counted, not timed, and the start time does
-    /// not leak into the next query.
-    #[test]
-    fn query_metrics_finish_takes_the_start_time() {
-        let mut hook = QueryMetrics::default();
-        hook.start();
-        hook.finish(false);
-        assert!(hook.started.is_none());
-        hook.finish(false);
-        assert!(hook.started.is_none());
-    }
-
-    /// The BROKKR-T-0306 regression: production passes `None`, and the database
-    /// named in the configured URL must survive.
-    #[test]
-    fn configured_database_name_is_preserved_when_not_overridden() {
-        let url = resolve_database_url("postgres://user:pw@db.internal:5432/tenant_prod", None);
-        assert!(
-            url.ends_with("/tenant_prod"),
-            "the operator's database name must be honoured verbatim, got: {url}"
-        );
-        assert!(
-            !url.contains("/brokkr"),
-            "the old behaviour rewrote every URL to /brokkr, got: {url}"
-        );
-    }
-
-    /// The override still works, because the test harnesses point one base URL
-    /// at many per-test databases.
-    #[test]
-    fn explicit_override_replaces_the_database_name() {
-        let url = resolve_database_url(
-            "postgres://user:pw@db.internal:5432/ignored",
-            Some("brokkr_test_42"),
-        );
-        assert!(
-            url.ends_with("/brokkr_test_42"),
-            "an explicit override must win, got: {url}"
-        );
-    }
-
-    /// A base URL carrying no database at all is the other harness shape
-    /// (`base_url_without_db` in the integration suite).
-    #[test]
-    fn override_supplies_a_database_when_the_url_has_none() {
-        let url = resolve_database_url("postgres://user:pw@db.internal:5432", Some("brokkr_test"));
-        assert!(
-            url.ends_with("/brokkr_test"),
-            "override must supply the missing database, got: {url}"
-        );
-    }
-
-    /// Credentials, host and port must be untouched by either path — the bug
-    /// was in the path component only, and a fix that mangled the rest would be
-    /// worse than what it replaced.
-    #[test]
-    fn authority_is_untouched() {
-        for name in [None, Some("other")] {
-            let url = resolve_database_url("postgres://user:pw@db.internal:5432/mydb", name);
-            assert!(
-                url.starts_with("postgres://user:pw@db.internal:5432/"),
-                "authority must survive, got: {url}"
-            );
-        }
-    }
-}
-
 /// Validates a PostgreSQL schema name to prevent SQL injection.
 ///
 /// Schema names must start with a letter and contain only alphanumeric characters and underscores.
@@ -394,6 +301,99 @@ impl ConnectionPool {
                  or start the broker once with this schema so that it creates and migrates it",
                 schema
             ))
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{QueryMetrics, resolve_database_url};
+    use crate::metrics::{DATABASE_QUERIES_TOTAL, DATABASE_QUERY_DURATION_SECONDS};
+
+    /// A finished query moves the counter and the histogram. diesel's event
+    /// constructors are feature-gated, so this drives the hook's own start and
+    /// finish; the integration suite drives it through a real connection.
+    #[test]
+    fn query_metrics_records_a_finished_query() {
+        let ok_before = DATABASE_QUERIES_TOTAL.with_label_values(&["ok"]).get();
+        let err_before = DATABASE_QUERIES_TOTAL.with_label_values(&["error"]).get();
+        let count_before = DATABASE_QUERY_DURATION_SECONDS.get_sample_count();
+
+        let mut hook = QueryMetrics::default();
+        hook.start();
+        hook.finish(false);
+        hook.start();
+        hook.finish(true);
+
+        // The registry is process-global and tests run in parallel.
+        assert!(DATABASE_QUERIES_TOTAL.with_label_values(&["ok"]).get() > ok_before);
+        assert!(DATABASE_QUERIES_TOTAL.with_label_values(&["error"]).get() > err_before);
+        assert!(DATABASE_QUERY_DURATION_SECONDS.get_sample_count() >= count_before + 2);
+    }
+
+    /// A finish without a start is counted, not timed, and the start time does
+    /// not leak into the next query.
+    #[test]
+    fn query_metrics_finish_takes_the_start_time() {
+        let mut hook = QueryMetrics::default();
+        hook.start();
+        hook.finish(false);
+        assert!(hook.started.is_none());
+        hook.finish(false);
+        assert!(hook.started.is_none());
+    }
+
+    /// The BROKKR-T-0306 regression: production passes `None`, and the database
+    /// named in the configured URL must survive.
+    #[test]
+    fn configured_database_name_is_preserved_when_not_overridden() {
+        let url = resolve_database_url("postgres://user:pw@db.internal:5432/tenant_prod", None);
+        assert!(
+            url.ends_with("/tenant_prod"),
+            "the operator's database name must be honoured verbatim, got: {url}"
+        );
+        assert!(
+            !url.contains("/brokkr"),
+            "the old behaviour rewrote every URL to /brokkr, got: {url}"
+        );
+    }
+
+    /// The override still works, because the test harnesses point one base URL
+    /// at many per-test databases.
+    #[test]
+    fn explicit_override_replaces_the_database_name() {
+        let url = resolve_database_url(
+            "postgres://user:pw@db.internal:5432/ignored",
+            Some("brokkr_test_42"),
+        );
+        assert!(
+            url.ends_with("/brokkr_test_42"),
+            "an explicit override must win, got: {url}"
+        );
+    }
+
+    /// A base URL carrying no database at all is the other harness shape
+    /// (`base_url_without_db` in the integration suite).
+    #[test]
+    fn override_supplies_a_database_when_the_url_has_none() {
+        let url = resolve_database_url("postgres://user:pw@db.internal:5432", Some("brokkr_test"));
+        assert!(
+            url.ends_with("/brokkr_test"),
+            "override must supply the missing database, got: {url}"
+        );
+    }
+
+    /// Credentials, host and port must be untouched by either path — the bug
+    /// was in the path component only, and a fix that mangled the rest would be
+    /// worse than what it replaced.
+    #[test]
+    fn authority_is_untouched() {
+        for name in [None, Some("other")] {
+            let url = resolve_database_url("postgres://user:pw@db.internal:5432/mydb", name);
+            assert!(
+                url.starts_with("postgres://user:pw@db.internal:5432/"),
+                "authority must survive, got: {url}"
+            );
         }
     }
 }

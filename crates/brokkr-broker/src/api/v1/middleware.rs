@@ -223,10 +223,10 @@ fn readonly_request_allowed(method: &axum::http::Method, path: &str) -> bool {
         if path == "/auth/pak" {
             return true;
         }
-        if let Some(rest) = path.strip_prefix("/deployment-objects/") {
-            if let Some(id) = rest.strip_suffix("/diagnostics") {
-                return !id.is_empty() && !id.contains('/');
-            }
+        if let Some(rest) = path.strip_prefix("/deployment-objects/")
+            && let Some(id) = rest.strip_suffix("/diagnostics")
+        {
+            return !id.is_empty() && !id.contains('/');
         }
     }
     false

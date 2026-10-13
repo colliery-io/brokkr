@@ -1219,21 +1219,36 @@ mod tests {
     fn read_manifests_concatenates_folder_in_sorted_order() {
         let dir = tempfile::tempdir().unwrap();
         // intentionally out of order on disk; sorted by name on read
-        write(dir.path(), "02-deploy.yaml", "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: d\n");
-        write(dir.path(), "01-namespace.yaml", "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: ns\n");
+        write(
+            dir.path(),
+            "02-deploy.yaml",
+            "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: d\n",
+        );
+        write(
+            dir.path(),
+            "01-namespace.yaml",
+            "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: ns\n",
+        );
         write(dir.path(), "notes.txt", "ignored");
         let stream = read_manifests(dir.path()).unwrap();
         let ns_at = stream.find("kind: Namespace").unwrap();
         let dep_at = stream.find("kind: Deployment").unwrap();
         assert!(ns_at < dep_at, "01-namespace should come before 02-deploy");
-        assert!(stream.contains("\n---\n"), "documents joined with a separator");
+        assert!(
+            stream.contains("\n---\n"),
+            "documents joined with a separator"
+        );
         assert!(!stream.contains("ignored"), "non-yaml files are skipped");
     }
 
     #[test]
     fn read_manifests_accepts_single_file_and_multidoc() {
         let dir = tempfile::tempdir().unwrap();
-        write(dir.path(), "all.yaml", "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: a\n---\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: b\n");
+        write(
+            dir.path(),
+            "all.yaml",
+            "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: a\n---\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: b\n",
+        );
         let stream = read_manifests(&dir.path().join("all.yaml")).unwrap();
         assert!(stream.contains("kind: Namespace") && stream.contains("kind: ConfigMap"));
     }
@@ -1241,7 +1256,11 @@ mod tests {
     #[test]
     fn read_manifests_rejects_missing_apiversion_or_kind() {
         let dir = tempfile::tempdir().unwrap();
-        write(dir.path(), "bad.yaml", "kind: ConfigMap\nmetadata:\n  name: x\n");
+        write(
+            dir.path(),
+            "bad.yaml",
+            "kind: ConfigMap\nmetadata:\n  name: x\n",
+        );
         let err = read_manifests(dir.path()).unwrap_err();
         assert!(matches!(err, BrokkrError::InvalidRequest(_)), "got {err:?}");
     }
@@ -1257,7 +1276,10 @@ mod tests {
     fn read_manifests_errors_on_empty_dir_and_missing_path() {
         let dir = tempfile::tempdir().unwrap();
         assert!(read_manifests(dir.path()).is_err(), "empty dir");
-        assert!(read_manifests(&dir.path().join("nope")).is_err(), "missing path");
+        assert!(
+            read_manifests(&dir.path().join("nope")).is_err(),
+            "missing path"
+        );
     }
 
     #[test]
@@ -1321,5 +1343,4 @@ mod tests {
             "{msg}"
         );
     }
-
 }

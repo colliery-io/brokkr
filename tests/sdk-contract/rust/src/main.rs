@@ -196,7 +196,11 @@ async fn scenario_uat_walkthrough(base_url: &str, admin_pak: &str) -> Result<()>
         .into_inner();
     let generator_id = gen_resp.generator.id;
     let generator_pak = gen_resp.pak.clone();
-    println!("    generator_id={} pak=…{}", generator_id, last4(&generator_pak));
+    println!(
+        "    generator_id={} pak=…{}",
+        generator_id,
+        last4(&generator_pak)
+    );
 
     // Step 2: admin creates agent → capture agent id + agent PAK
     let agent_name = unique("sdk-contract-rust-agent");
@@ -346,7 +350,10 @@ async fn scenario_uat_walkthrough(base_url: &str, admin_pak: &str) -> Result<()>
             "list_stacks (as generator) leaked stacks from another generator"
         ));
     }
-    println!("    saw {} stack(s), all owned by this generator", listed.len());
+    println!(
+        "    saw {} stack(s), all owned by this generator",
+        listed.len()
+    );
 
     // Step 8: GET the stack and verify shape
     println!("  → [generator] get stack");
@@ -378,7 +385,13 @@ async fn scenario_uat_walkthrough(base_url: &str, admin_pak: &str) -> Result<()>
 
     // Cleanup (best-effort).
     println!("  → cleanup (best-effort)");
-    let _ = admin.api().remove_target().id(agent_id).stack_id(stack_id).send().await;
+    let _ = admin
+        .api()
+        .remove_target()
+        .id(agent_id)
+        .stack_id(stack_id)
+        .send()
+        .await;
     let _ = admin.api().delete_stack().id(stack_id).send().await;
     let _ = admin.api().delete_agent().id(agent_id).send().await;
     let _ = admin.api().delete_generator().id(generator_id).send().await;
@@ -469,11 +482,27 @@ async fn scenario_target_mismatch(base_url: &str, admin_pak: &str) -> Result<()>
     let err = match result {
         Ok(_) => {
             // Cleanup, then fail.
-            let _ = admin.api().remove_target().id(agent_id).stack_id(stack_b.id).send().await;
+            let _ = admin
+                .api()
+                .remove_target()
+                .id(agent_id)
+                .stack_id(stack_b.id)
+                .send()
+                .await;
             let _ = admin.api().delete_stack().id(stack_b.id).send().await;
             let _ = admin.api().delete_agent().id(agent_id).send().await;
-            let _ = admin.api().delete_generator().id(gen_a.generator.id).send().await;
-            let _ = admin.api().delete_generator().id(gen_b.generator.id).send().await;
+            let _ = admin
+                .api()
+                .delete_generator()
+                .id(gen_a.generator.id)
+                .send()
+                .await;
+            let _ = admin
+                .api()
+                .delete_generator()
+                .id(gen_b.generator.id)
+                .send()
+                .await;
             return Err(anyhow!(
                 "expected 403 target_generator_mismatch but call succeeded"
             ));
@@ -498,8 +527,18 @@ async fn scenario_target_mismatch(base_url: &str, admin_pak: &str) -> Result<()>
     // Cleanup (best-effort).
     let _ = admin.api().delete_stack().id(stack_b.id).send().await;
     let _ = admin.api().delete_agent().id(agent_id).send().await;
-    let _ = admin.api().delete_generator().id(gen_a.generator.id).send().await;
-    let _ = admin.api().delete_generator().id(gen_b.generator.id).send().await;
+    let _ = admin
+        .api()
+        .delete_generator()
+        .id(gen_a.generator.id)
+        .send()
+        .await;
+    let _ = admin
+        .api()
+        .delete_generator()
+        .id(gen_b.generator.id)
+        .send()
+        .await;
 
     Ok(())
 }
@@ -641,7 +680,6 @@ fn last4(s: &str) -> String {
     }
 }
 
-
 /// BROKKR-T-0195: the manifest folder helpers — `submit_manifests` on an
 /// existing stack, and idempotent `apply` (create → unchanged → updated).
 async fn scenario_manifest_apply(base_url: &str, admin_pak: &str) -> Result<()> {
@@ -652,7 +690,11 @@ async fn scenario_manifest_apply(base_url: &str, admin_pak: &str) -> Result<()> 
     let gen_resp = admin
         .api()
         .create_generator()
-        .body(NewGenerator::builder().name(gen_name.clone()).description(Some("apply contract".to_string())))
+        .body(
+            NewGenerator::builder()
+                .name(gen_name.clone())
+                .description(Some("apply contract".to_string())),
+        )
         .send()
         .await
         .map_err(berr)
@@ -676,7 +718,10 @@ async fn scenario_manifest_apply(base_url: &str, admin_pak: &str) -> Result<()> 
 
     // First apply → Created, stack auto-created, label set.
     println!("  → [generator] apply folder (expect Created)");
-    match gen.apply(&stack_name, dir.path(), &["env:contract".to_string()]).await? {
+    match gen
+        .apply(&stack_name, dir.path(), &["env:contract".to_string()])
+        .await?
+    {
         ApplyOutcome::Created(obj) => {
             if obj.is_deletion_marker {
                 return Err(anyhow!("first apply should not be a deletion marker"));
@@ -687,7 +732,10 @@ async fn scenario_manifest_apply(base_url: &str, admin_pak: &str) -> Result<()> 
 
     // Second apply, unchanged folder → Unchanged (no new revision).
     println!("  → [generator] apply same folder (expect Unchanged)");
-    match gen.apply(&stack_name, dir.path(), &["env:contract".to_string()]).await? {
+    match gen
+        .apply(&stack_name, dir.path(), &["env:contract".to_string()])
+        .await?
+    {
         ApplyOutcome::Unchanged => {}
         other => return Err(anyhow!("expected Unchanged, got {other:?}")),
     }
@@ -698,13 +746,22 @@ async fn scenario_manifest_apply(base_url: &str, admin_pak: &str) -> Result<()> 
         "apiVersion: v1\nkind: Service\nmetadata:\n  name: apply-svc\nspec:\n  selector:\n    app: x\n  ports:\n  - port: 80\n",
     )?;
     println!("  → [generator] apply changed folder (expect Updated)");
-    match gen.apply(&stack_name, dir.path(), &["env:contract".to_string()]).await? {
+    match gen
+        .apply(&stack_name, dir.path(), &["env:contract".to_string()])
+        .await?
+    {
         ApplyOutcome::Updated(_) => {}
         other => return Err(anyhow!("expected Updated, got {other:?}")),
     }
 
     // The stack now exists and carries the targeting label.
-    let stacks = gen.api().list_stacks().send().await.map_err(berr)?.into_inner();
+    let stacks = gen
+        .api()
+        .list_stacks()
+        .send()
+        .await
+        .map_err(berr)?
+        .into_inner();
     let stack = stacks
         .iter()
         .find(|s| s.name == stack_name)
@@ -725,14 +782,19 @@ async fn scenario_manifest_apply(base_url: &str, admin_pak: &str) -> Result<()> 
     println!("  → [generator] submit_manifests on stack id");
     let obj = gen.submit_manifests(stack.id, dir.path()).await?;
     if obj.stack_id != stack.id {
-        return Err(anyhow!("submit_manifests returned object for the wrong stack"));
+        return Err(anyhow!(
+            "submit_manifests returned object for the wrong stack"
+        ));
     }
 
     // Admin form (BROKKR-T-0332): an admin PAK applies on behalf of a
     // generator, named by name or by id. The stack belongs to that generator.
     let admin_stack = unique("sdk-contract-rust-admin-apply-stack");
     println!("  → [admin] apply_for_generator by name (expect Created)");
-    match admin.apply_for_generator(&gen_name, &admin_stack, dir.path(), &[]).await? {
+    match admin
+        .apply_for_generator(&gen_name, &admin_stack, dir.path(), &[])
+        .await?
+    {
         ApplyOutcome::Created(_) => {}
         other => return Err(anyhow!("expected Created, got {other:?}")),
     }
@@ -744,29 +806,54 @@ async fn scenario_manifest_apply(base_url: &str, admin_pak: &str) -> Result<()> 
         ApplyOutcome::Unchanged => {}
         other => return Err(anyhow!("expected Unchanged, got {other:?}")),
     }
-    let owned = gen.api().list_stacks().send().await.map_err(berr)?.into_inner();
+    let owned = gen
+        .api()
+        .list_stacks()
+        .send()
+        .await
+        .map_err(berr)?
+        .into_inner();
     if !owned.iter().any(|s| s.name == admin_stack) {
-        return Err(anyhow!("the generator does not own the stack the admin applied"));
+        return Err(anyhow!(
+            "the generator does not own the stack the admin applied"
+        ));
     }
 
     // Without a generator, an admin is refused, and the error names the flag.
     println!("  → [admin] apply without a generator (expect an error naming --generator)");
     match admin.apply(&admin_stack, dir.path(), &[]).await {
         Err(e) if e.to_string().contains("--generator") => {}
-        other => return Err(anyhow!("expected an error naming --generator, got {other:?}")),
+        other => {
+            return Err(anyhow!(
+                "expected an error naming --generator, got {other:?}"
+            ))
+        }
     }
     // An unknown generator is refused.
-    match admin.apply_for_generator("no-such-generator", &admin_stack, dir.path(), &[]).await {
+    match admin
+        .apply_for_generator("no-such-generator", &admin_stack, dir.path(), &[])
+        .await
+    {
         Err(e) if e.to_string().contains("no tenant named") => {}
-        other => return Err(anyhow!("expected an unknown-generator error, got {other:?}")),
+        other => {
+            return Err(anyhow!(
+                "expected an unknown-generator error, got {other:?}"
+            ))
+        }
     }
     // A tenant cannot apply for another tenant; its own name is fine.
     println!("  → [generator] apply_for_generator for another tenant (expect refusal)");
-    match gen.apply_for_generator("no-such-generator", &admin_stack, dir.path(), &[]).await {
+    match gen
+        .apply_for_generator("no-such-generator", &admin_stack, dir.path(), &[])
+        .await
+    {
         Err(e) if e.to_string().contains("cannot apply for") => {}
         other => return Err(anyhow!("expected a cannot-apply-for error, got {other:?}")),
     }
-    match gen.apply_for_generator(&gen_name, &admin_stack, dir.path(), &[]).await? {
+    match gen
+        .apply_for_generator(&gen_name, &admin_stack, dir.path(), &[])
+        .await?
+    {
         ApplyOutcome::Unchanged => {}
         other => return Err(anyhow!("expected Unchanged, got {other:?}")),
     }
@@ -1191,7 +1278,9 @@ async fn registration_by_name_cli_checks(
     )?;
     let again = admin_client.list_agent_registrations(fx.stray_id).await?;
     if again.len() != regs.len() {
-        return Err(anyhow!("a repeat register changed the registrations: {again:?}"));
+        return Err(anyhow!(
+            "a repeat register changed the registrations: {again:?}"
+        ));
     }
     expect_cli(
         admin(&["registrations", "--agent", stray])?,
@@ -1210,7 +1299,11 @@ async fn registration_by_name_cli_checks(
         &format!("agent {stray_id} is registered"),
     )?;
     expect_cli(
-        admin(&["registrations", "--generator", "sdk-contract-no-such-tenant"])?,
+        admin(&[
+            "registrations",
+            "--generator",
+            "sdk-contract-no-such-tenant",
+        ])?,
         false,
         "no tenant named",
     )?;
@@ -1252,7 +1345,9 @@ async fn registration_by_name_cli_checks(
     )?;
     let regs = admin_client.list_agent_registrations(fx.stray_id).await?;
     if regs.iter().any(|r| r.generator_id == fx.generator_id) {
-        return Err(anyhow!("deregister by name left the registration: {regs:?}"));
+        return Err(anyhow!(
+            "deregister by name left the registration: {regs:?}"
+        ));
     }
     Ok(())
 }

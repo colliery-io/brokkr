@@ -22,6 +22,10 @@ LICENSE
 docker/
 
 # Rust-specific
+# The builder image sets the Rust version (rust:1.90). Leave the root
+# toolchain file out, so rustup in the build does not add its components
+# (BROKKR-T-0355).
+rust-toolchain.toml
 # Cargo.lock is now included for deterministic builds
 
 # Miscellaneous

@@ -1,0 +1,10 @@
+# The Rust version of the root workspace. CI installs the same version
+# (dtolnay/rust-toolchain@1.90 in the workflows installs the toolchain named
+# 1.90.0, the name used here, so rustup does not install a second one) and the
+# Docker builder images use rust:1.90, so clippy and rustfmt give the same
+# result locally and in CI (BROKKR-T-0355). Change the version here, in the
+# workflows and in the Dockerfiles together. crates/brokkr-web has its own file.
+[toolchain]
+channel = "1.90.0"
+components = ["clippy", "rustfmt"]
+profile = "minimal"

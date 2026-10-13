@@ -69,8 +69,7 @@ pub fn spawn(
     watch_namespace: Option<String>,
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
-        let active: ActiveTails =
-            Arc::new(RwLock::new(HashMap::new()));
+        let active: ActiveTails = Arc::new(RwLock::new(HashMap::new()));
         // Capped exponential backoff so a persistent failure (e.g. an RBAC
         // denial) doesn't re-dial the API server every 5s forever.
         const MAX_BACKOFF: Duration = Duration::from_secs(60);
