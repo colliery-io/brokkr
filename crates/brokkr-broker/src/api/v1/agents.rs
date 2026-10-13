@@ -194,7 +194,7 @@ async fn create_agent(
             .ok_or_else(|| {
                 ApiError::bad_request(
                     "invalid_generator_id",
-                    &format!("generator {} does not exist", gid),
+                    format!("generator {} does not exist", gid),
                 )
             })?;
     }
