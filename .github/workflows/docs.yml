@@ -36,9 +36,9 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  PLISSKEN_VERSION: "0.2.0"
+  PLISSKEN_VERSION: "0.2.1"
   # sha256 of plissken-<version>-x86_64-unknown-linux-gnu.tar.gz
-  PLISSKEN_SHA256: "2166e15d69bd891959704a0f70c60724ccae4615584a70b4e524ed4c9460e253"
+  PLISSKEN_SHA256: "bf41f2fbc6f375552e29cf56a78b675cf857a1fa689c9905a5caba109ad292bf"
 
 jobs:
   build:
