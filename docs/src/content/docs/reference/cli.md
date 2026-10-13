@@ -308,7 +308,7 @@ On any error (no connection settings, malformed config, unreadable bundle, broke
 
 ### `brokkr register`
 
-Registers an agent with a tenant for the agent. An agent must be registered with a tenant before any of the stacks of that tenant can target it. Agents normally self-register on startup (see [`brokkr-agent start`](#brokkr-agent-start)); use this to register an agent before it is live, or to add a tenant. Requires an admin PAK. Re-registering an already-registered pair returns `409 already_registered` and exits `1` (only the agent's own startup self-registration treats that as success).
+Registers an agent with a tenant for the agent. An agent must be registered with a tenant before any of the stacks of that tenant can target it. Agents normally self-register on startup (see [`brokkr-agent start`](#brokkr-agent-start)); use this to register an agent before it is live, or to add a tenant. Requires an admin PAK. You can run this command again: if the agent is registered with the tenant already, the command changes nothing and exits `0`, the same as [`brokkr agent label`](#day-zero-commands-brokkr-agent-and-brokkr-stack). The API still returns `409 already_registered` for a repeat; the CLI shows it as `unchanged:`.
 
 ```bash
 brokkr register --agent <NAME_OR_ID> --generator <NAME_OR_ID>
@@ -331,6 +331,15 @@ brokkr register --agent prod-1 --generator payments-team
 registered agent "prod-1" (6b1f...) with tenant "payments-team" (e5fe...) (registration 0c7d...)
 ```
 
+It prints one of two lines and exits `0`:
+
+| Output | Meaning |
+|--------|---------|
+| `registered agent <agent> with tenant <tenant> (registration <id>)` | The broker added the registration. |
+| `unchanged: agent <agent> is registered with tenant <tenant> already` | The registration exists already. The broker changed nothing. |
+
+On an error, the command prints `error: <message>` to stderr and exits `1`.
+
 See [Generator Registration](../../explanation/security-model/#generator-registration-and-application-scopes) for the model and [Agent registration](../../how-to/agent-registration/) for the operational guide.
 
 ### `brokkr deregister`
@@ -351,6 +360,8 @@ brokkr deregister --agent <NAME_OR_ID> --generator <NAME_OR_ID>
 The lookup is the same as for [`brokkr register`](#brokkr-register).
 
 Destructive: the broker also removes the agent's `agent_targets` for the stacks of that tenant and pushes a target-changed frame to the agent, which prunes the corresponding Kubernetes resources on its next reconcile.
+
+If the agent is not registered with the tenant, the broker removes nothing and returns success. The command prints the same `deregistered` line and exits `0`.
 
 ### `brokkr registrations`
 

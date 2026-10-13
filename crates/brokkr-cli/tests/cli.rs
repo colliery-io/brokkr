@@ -256,6 +256,18 @@ fn registration_commands_take_a_name_or_an_id() {
     }
 }
 
+// BROKKR-T-0358: a repeat register succeeds, like `agent label`. The live
+// path is in `scenario_registration_by_name_cli`.
+#[test]
+fn register_help_says_a_repeat_is_unchanged() {
+    let mut cmd = brokkr();
+    cmd.args(["register", "--help"]);
+    let (output, stdout, _) = run(cmd);
+    assert!(output.status.success());
+    assert!(stdout.contains("unchanged:"), "{stdout}");
+    assert!(stdout.contains("status 0"), "{stdout}");
+}
+
 #[test]
 fn register_with_names_parses_then_needs_a_connection() {
     // A name is not a parse error: the command gets as far as the
