@@ -23,7 +23,7 @@ use crate::models::{DiagEvent, DiagnosticData, DiagnosticOutcome, FleetAgentReco
 use crate::views::ago;
 use aurora_leptos::components::*;
 use aurora_leptos::data::{CodeBlock, DetailList, KeyValue, SectionLabel, StatTile};
-use aurora_leptos::frame::{use_toaster, Drawer};
+use aurora_leptos::frame::{use_toaster, Drawer, Modal, SecretReveal};
 use aurora_leptos::tokens::token;
 use aurora_leptos::widgets::Meter;
 use leptos::prelude::*;
@@ -181,6 +181,52 @@ fn result_view(data: DiagnosticData) -> AnyView {
     .into_any()
 }
 
+/// The agent just created, held only while the reveal panel is open
+/// (BROKKR-T-0372). Not persisted anywhere.
+#[derive(Clone)]
+struct CreatedReveal {
+    id: String,
+    name: String,
+    cluster: String,
+    pak: String,
+    tenant_ids: Vec<String>,
+}
+
+/// The origin of this page: the broker that serves the console. The agent
+/// may reach the broker by another address; the operator edits the command.
+fn page_origin() -> String {
+    web_sys::window()
+        .and_then(|w| w.location().origin().ok())
+        .unwrap_or_else(|| "http://brokkr-broker:3000".to_string())
+}
+
+/// The Helm command that installs an agent with these values. The same
+/// shape as `brokkr agent create` prints.
+fn helm_install_command(
+    broker_url: &str,
+    pak: &str,
+    name: &str,
+    cluster: &str,
+    tenant_ids: &[String],
+) -> String {
+    let mut lines = vec![
+        "helm install brokkr-agent oci://ghcr.io/colliery-io/charts/brokkr-agent \\".to_string(),
+        format!("  --set broker.url={} \\", broker_url.trim_end_matches('/')),
+        format!("  --set broker.pak={pak} \\"),
+        format!("  --set broker.agentName={name} \\"),
+        format!("  --set broker.clusterName={cluster}"),
+    ];
+    if !tenant_ids.is_empty() {
+        let last = lines.len() - 1;
+        lines[last].push_str(" \\");
+        lines.push(format!(
+            "  --set broker.generatorIds=\"{{{}}}\"",
+            tenant_ids.join(",")
+        ));
+    }
+    lines.join("\n")
+}
+
 #[component]
 pub fn FleetView() -> impl IntoView {
     // Scope-reactive (BROKKR-I-0032): reading the scope signal inside the
@@ -296,6 +342,72 @@ pub fn FleetView() -> impl IntoView {
         },
         std::time::Duration::from_millis(POLL_EVERY_MS),
     );
+    // ---- New agent (BROKKR-T-0372) ---------------------------------------
+    // The shape of New tenant: name, cluster, the tenants to register with,
+    // an admin PAK held while the dialog is open. The reveal panel shows the
+    // PAK once and the Helm command with the values filled in.
+    let new_open = RwSignal::new(false);
+    let new_name = RwSignal::new(String::new());
+    let new_cluster = RwSignal::new(String::new());
+    let new_pak = RwSignal::new(String::new());
+    let new_busy = RwSignal::new(false);
+    let new_error = RwSignal::new(None::<String>);
+    // The tenants to pick from: `(id, name, picked)`, set when the dialog opens.
+    let new_tenants = RwSignal::new(Vec::<(String, String, RwSignal<bool>)>::new());
+    let created = RwSignal::new(None::<CreatedReveal>);
+    let new_locked = Signal::derive(move || new_busy.get() || created.get().is_some());
+    let reset_new = move || {
+        new_name.set(String::new());
+        new_cluster.set(String::new());
+        new_pak.set(String::new());
+        new_error.set(None);
+        new_tenants.set(Vec::new());
+        created.set(None);
+    };
+    let submit_new = move || {
+        let name = new_name.get().trim().to_string();
+        let cluster = new_cluster.get().trim().to_string();
+        if name.is_empty() || cluster.is_empty() {
+            new_error.set(Some("Enter a name and a cluster.".into()));
+            return;
+        }
+        let pak = new_pak.get();
+        if pak.trim().is_empty() {
+            new_error.set(Some("Enter an admin PAK to create an agent.".into()));
+            return;
+        }
+        let ids: Vec<String> = new_tenants
+            .get()
+            .into_iter()
+            .filter(|(_, _, on)| on.get())
+            .map(|(id, _, _)| id)
+            .collect();
+        new_busy.set(true);
+        new_error.set(None);
+        spawn_local(async move {
+            let result = api::create_agent(&name, &cluster, &ids, &pak).await;
+            // One request, then cleared, on both paths.
+            new_pak.set(String::new());
+            new_busy.set(false);
+            match result {
+                Ok(resp) => {
+                    created.set(Some(CreatedReveal {
+                        id: resp.agent.id,
+                        name: resp.agent.name,
+                        cluster: resp.agent.cluster_name,
+                        pak: resp.initial_pak,
+                        tenant_ids: ids,
+                    }));
+                    data.refetch();
+                }
+                Err(e) => {
+                    new_error.set(Some(crate::components::write_error(e)));
+                    toaster.error("The agent was not created.");
+                }
+            }
+        });
+    };
+
     // Drop any previous run's state (used on row click and on a fresh request).
     let reset_diagnostic = move || {
         diag_id.set(None);
@@ -304,6 +416,21 @@ pub fn FleetView() -> impl IntoView {
     };
 
     view! {
+        <Group justify="end">
+            <Button on_click=Callback::new(move |_| {
+                reset_new();
+                let tenants = generators
+                    .get()
+                    .and_then(|r| r.ok())
+                    .unwrap_or_default()
+                    .into_iter()
+                    .filter(|g| !g.is_system)
+                    .map(|g| (g.id, g.name, RwSignal::new(false)))
+                    .collect();
+                new_tenants.set(tenants);
+                new_open.set(true);
+            })>"+ New agent"</Button>
+        </Group>
         {move || match data.get() {
             None => view! { <Loading label="loading fleet" /> }.into_any(),
             Some(Err(e)) => view! {
@@ -414,6 +541,95 @@ pub fn FleetView() -> impl IntoView {
             }
         }}
 
+        // Locked while the request runs and while the PAK is on screen: only
+        // Done closes it then (the rule of BROKKR-T-0367).
+        <Modal open=new_open title="New agent" close_on_scrim=false locked=new_locked
+            on_close=Callback::new(move |_| reset_new())>
+            {move || match created.get() {
+                Some(c) => {
+                    let id = c.id.clone();
+                    let id_text = c.id.clone();
+                    let helm = helm_install_command(
+                        &page_origin(),
+                        &c.pak,
+                        &c.name,
+                        &c.cluster,
+                        &c.tenant_ids,
+                    );
+                    view! {
+                        <Stack gap="md">
+                            <DetailList mono=true>
+                                <KeyValue label="Agent">{c.name.clone()}</KeyValue>
+                                <KeyValue label="Cluster">{c.cluster.clone()}</KeyValue>
+                                <KeyValue label="Agent id">
+                                    <Group gap="sm">
+                                        <span>{id_text}</span>
+                                        <CopyButton value=id.clone() icon=true label="Copy agent id" />
+                                    </Group>
+                                </KeyValue>
+                            </DetailList>
+                            <CodeBlock code=helm label="Helm command" wrap=true max_height="240px" />
+                            <SecretReveal
+                                secret=c.pak.clone()
+                                label="PAK"
+                                done_label="Done"
+                                on_done=Callback::new(move |_| {
+                                    reset_new();
+                                    new_open.set(false);
+                                })
+                            />
+                            <span class="brk-note">
+                                "After the agent checks in, open it here and choose Activate."
+                            </span>
+                        </Stack>
+                    }
+                    .into_any()
+                }
+                None => view! {
+                    <Stack gap="md">
+                        <TextInput label="Name" placeholder="prod-1" value=new_name />
+                        <TextInput label="Cluster" placeholder="us-east-1" value=new_cluster />
+                        {move || {
+                            let tenants = new_tenants.get();
+                            if tenants.is_empty() {
+                                return ().into_any();
+                            }
+                            let rows = tenants.into_iter().map(|(_, name, on)| view! {
+                                <Switch checked=on label=name />
+                            }).collect_view();
+                            view! {
+                                <SectionLabel label="tenants" />
+                                <Stack gap="xs">{rows}</Stack>
+                            }.into_any()
+                        }}
+                        <Stack gap="xs">
+                            <PasswordInput
+                                label="Admin PAK"
+                                placeholder="brokkr_\u{2026}"
+                                value=new_pak
+                                autocomplete="off"
+                            />
+                            <span class="brk-note">"Not stored."</span>
+                        </Stack>
+                        {move || new_error.get().map(|e| view! {
+                            <Alert color=token::BAD>{e}</Alert>
+                        })}
+                        <Group justify="end" gap="sm">
+                            <Button variant="default" on_click=Callback::new(move |_| {
+                                reset_new();
+                                new_open.set(false);
+                            })>"Cancel"</Button>
+                            <Button loading=new_busy loading_label="Creating\u{2026}"
+                                on_click=Callback::new(move |_| submit_new())>
+                                "Create agent"
+                            </Button>
+                        </Group>
+                    </Stack>
+                }
+                .into_any(),
+            }}
+        </Modal>
+
         <Drawer open=open title="Agent detail" size="lg">
             {move || match selected.get() {
                 None => ().into_any(),
@@ -470,7 +686,7 @@ pub fn FleetView() -> impl IntoView {
                                         {if active {
                                             "Active: the agent fetches and applies the deployment objects that target it."
                                         } else if !a_checked_in {
-                                            "Not activated: the agent has not sent a heartbeat yet. Start the agent with its PAK, the same name and the same cluster. Then activate it here. A new agent applies nothing until an admin activates it."
+                                            "Not activated: the agent has not checked in yet. Start it with its PAK, then choose Activate here."
                                         } else {
                                             "Inactive: the agent sends heartbeats, but it fetches no deployment objects and no work orders. A new agent starts inactive. A paused agent stays inactive until an admin activates it. Resources that the agent applied stay in the cluster."
                                         }}

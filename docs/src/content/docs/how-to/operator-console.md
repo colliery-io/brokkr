@@ -148,6 +148,16 @@ Collection is not instantaneous — the agent picks up pending requests on its o
 
 For the request lifecycle, retention, and how to drive the same capability from the API or CLI, see [Running On-Demand Diagnostics](../diagnostics/) and the [Diagnostics reference](../../reference/diagnostics/).
 
+## Create an Agent
+
+Open **Fleet** and choose **+ New agent**. Give the agent a name and its cluster, switch on the tenants it serves, and paste an admin PAK. The panel that follows shows the agent id, the Helm command that installs the agent with these values, and the PAK, each with a **Copy** button. The PAK is shown once: copy it before you choose **Done**. Escape and × do nothing while it is on screen.
+
+The Helm command uses the address of this page as the broker URL. If the cluster reaches the broker by another address, change `broker.url` before you run it.
+
+A new agent is inactive. After the agent checks in, open it in the Fleet list and choose **Activate** (next section).
+
+The equivalents outside the console are `brokkr agent create` and `POST /api/v1/agents`; see the [CLI reference](../../reference/cli/#brokkr-agent-create) and [Agent Registration](../agent-registration/#pre-register-at-agent-creation).
+
 ## Pause or Resume an Agent
 
 Open **Fleet**, click the agent, and use the control under **Agent state**. Like tenant creation, it asks for an admin PAK for that one request — the console's own credential is read-only and cannot change agent state.
@@ -184,7 +194,7 @@ The admin PAK you pasted is held in memory for that dialog and cleared as soon a
 
 If the PAK is rejected, the dialog says whether it was not an admin credential (403) or the name was already taken (409). Nothing is created in either case.
 
-Outside the console, use `POST /api/v1/generators` or `brokkr-broker create generator` (the API calls a tenant a generator); see [Generators](../../reference/generators/). Creating **agents** is not available here — only tenants.
+Outside the console, use `POST /api/v1/generators` or `brokkr-broker create generator` (the API calls a tenant a generator); see [Generators](../../reference/generators/). Agents are created from **Fleet**; see [Create an Agent](#create-an-agent).
 
 ## Tenant Detail
 
