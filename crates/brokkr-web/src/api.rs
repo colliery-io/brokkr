@@ -718,6 +718,23 @@ pub async fn deregister_agent(
     .await
 }
 
+/// `POST /api/v1/generators/{id}/rotate-pak` with an admin PAK supplied for
+/// this request (BROKKR-T-0369). The current PAK stops working at once: the
+/// broker replaces the stored hash and evicts the old PAK from its auth
+/// cache. The response carries the new PAK in plaintext, exactly once. The
+/// handler reads no body; the empty object only sets the content type.
+pub async fn rotate_generator_pak(
+    generator_id: &str,
+    admin_pak: &str,
+) -> Result<crate::models::CreateGeneratorResponse, ApiError> {
+    post_json_with_token(
+        &format!("/generators/{generator_id}/rotate-pak"),
+        &serde_json::json!({}),
+        admin_pak,
+    )
+    .await
+}
+
 #[cfg(test)]
 mod tests {
     use super::Session;

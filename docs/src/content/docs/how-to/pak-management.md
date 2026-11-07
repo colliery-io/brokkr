@@ -221,6 +221,10 @@ curl -s -X POST "http://localhost:3000/api/v1/generators/${GEN_ID}/rotate-pak" \
   -H "Authorization: <generator-pak>" | jq .
 ```
 
+### Via the operator console
+
+Under **Tenants**, open the tenant's drawer, paste an admin PAK and choose **Rotate PAK**. After the confirmation, the new PAK is shown once; copy it before you choose **Done**. This is the API rotation above, so the old PAK stops working at once. See [Using the Operator Console](../operator-console/#tenant-detail).
+
 ### Updating CI/CD After Rotation
 
 Update the stored secret in your CI/CD system:

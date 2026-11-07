@@ -188,12 +188,14 @@ Outside the console, use `POST /api/v1/generators` or `brokkr-broker create gene
 
 ## Tenant Detail
 
-Click a tenant in the **Tenants** list for its drawer: the id with a **Copy** button, the description, when it was last active, and **registered agents** — the agents that serve it, each a link to its Fleet drawer.
+Click a tenant in the **Tenants** list for its drawer: the id with a **Copy** button, the description, when it was last active, **registered agents** — the agents that serve it, each a link to its Fleet drawer — and its **credential**. One **Admin PAK** field serves the writes below it; each request clears it.
 
 - **Register** an agent: paste an admin PAK, pick an agent that is not registered yet, and choose **Register**. The PAK is used for that one request and cleared.
 - **Deregister** an agent: paste an admin PAK and choose **Deregister** next to the agent. A confirmation says what follows, because this is destructive: the broker removes the agent's targets for this tenant's stacks and tells the agent, which prunes those resources from its cluster on its next reconcile.
 
-The system generator has no registration controls: every agent is registered with it, so fleet-wide stacks reach them all.
+- **Rotate PAK**: paste an admin PAK and choose **Rotate PAK**. A confirmation says what follows: the current PAK stops working at once, and every pipeline that uses it fails until it has the new one. The new PAK is then shown once, in a dialog that only **Done** closes, the same as a mint. See [Rotating Generator PAKs](../pak-management/#rotating-generator-paks).
+
+The system generator has no registration or rotation controls: every agent is registered with it, so fleet-wide stacks reach them all.
 
 The equivalents outside the console are `brokkr register`, `brokkr deregister` and `brokkr registrations --generator <tenant>`; see [Agent Registration](../agent-registration/).
 

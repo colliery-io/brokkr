@@ -283,8 +283,11 @@ const AGENT_REGS = [
   { id: "r1", agent_id: "1b9d6bcd", generator_id: "1b9d6bcd-bbfd", registered_at: "2026-07-29T09:00:00Z" },
   { id: "r0", agent_id: "1b9d6bcd", generator_id: "00000000-system", registered_at: "2026-07-29T08:00:00Z" },
 ];
+// Rotation (BROKKR-T-0369): the new PAK, distinct from every other fixture.
+const ROTATED_PAK = "brokkr_ROTATED1_Qp3kLm9vXz2sWd7tRb4yNc6eFh8jAg5U";
 const TENANT_MOCKS = {
   "/generators": GENERATORS,
+  "POST /generators/1b9d6bcd-bbfd/rotate-pak": { generator: GENERATORS[0], pak: ROTATED_PAK },
   "/generators/1b9d6bcd-bbfd/registered-agents": REGS_PAYMENTS,
   "/generators/a1b2c3d4-0000/registered-agents": [],
   "/generators/f00dcafe-1234/registered-agents": [],
@@ -475,6 +478,13 @@ const SCENES = [
   { name: "tenants-drawer-register", nav: "Tenants", click: "team-sandbox", settle: 800,
     steps: [{ fill: ["brokkr_…", TYPED_ADMIN_PAK] }, { select: "prod-agent-01" }, { click: "Register" }],
     assert_text: ["agent registered"],
+    assert_no_stored: TYPED_ADMIN_PAK,
+    mocks: TENANT_MOCKS },
+  // Rotating from the drawer (BROKKR-T-0369): admin PAK, Rotate PAK, confirm;
+  // the new PAK is on screen once, and the typed PAK is not in storage.
+  { name: "tenants-drawer-rotate", nav: "Tenants", click: "team-payments", settle: 800,
+    steps: [{ fill: ["brokkr_…", TYPED_ADMIN_PAK] }, { click: "Rotate PAK" }, { click: "Rotate" }],
+    assert_text: [ROTATED_PAK], assert_button: ["Done"],
     assert_no_stored: TYPED_ADMIN_PAK,
     mocks: TENANT_MOCKS },
   // The Fleet drawer lists the agent's tenants, without the system generator.

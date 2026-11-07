@@ -1,6 +1,7 @@
 //! Tenants view — the generator list from `GET /api/v1/generators`, plus the
 //! console's privileged actions on tenants: minting a new generator tenant
-//! (BROKKR-T-0318) and registering agents with it (BROKKR-T-0368).
+//! (BROKKR-T-0318), registering agents with it (BROKKR-T-0368) and rotating
+//! its PAK (BROKKR-T-0369).
 //!
 //! **Why this view asks for a PAK when nothing else does.** Every other console
 //! surface rides the broker-injected UI token, which is a *read-only* admin
@@ -54,6 +55,36 @@ pub fn TenantsView() -> impl IntoView {
     let drawer_open = RwSignal::new(false);
     // The drawer's admin PAK: one request, then cleared (BROKKR-T-0322).
     let drawer_pak = RwSignal::new(String::new());
+    // PAK rotation (BROKKR-T-0369): the confirmation, the request, and the
+    // new PAK, shown once in its own locked dialog.
+    let rotate_confirm = RwSignal::new(false);
+    let rotate_busy = RwSignal::new(false);
+    let rotate_error = RwSignal::new(None::<String>);
+    let rotated = RwSignal::new(None::<Minted>);
+    let rotated_open = RwSignal::new(false);
+    let rotate = move |id: String, name: String| {
+        let pak = drawer_pak.get();
+        rotate_busy.set(true);
+        rotate_error.set(None);
+        spawn_local(async move {
+            let result = api::rotate_generator_pak(&id, &pak).await;
+            // One request, then cleared, on both paths.
+            drawer_pak.set(String::new());
+            rotate_busy.set(false);
+            rotate_confirm.set(false);
+            match result {
+                Ok(resp) => {
+                    rotated.set(Some(Minted {
+                        id: resp.generator.id,
+                        name,
+                        pak: resp.pak,
+                    }));
+                    rotated_open.set(true);
+                }
+                Err(e) => rotate_error.set(Some(write_error(e))),
+            }
+        });
+    };
 
     // ---- the New tenant dialog (BROKKR-T-0318) -----------------------------
     let open = RwSignal::new(false);
@@ -164,6 +195,7 @@ pub fn TenantsView() -> impl IntoView {
                                     })
                                     on_click=Callback::new(move |_| {
                                         drawer_pak.set(String::new());
+                                        rotate_error.set(None);
                                         selected.set(Some(g_sel.clone()));
                                         drawer_open.set(true);
                                     })
@@ -249,12 +281,61 @@ pub fn TenantsView() -> impl IntoView {
                                     </span>
                                 }.into_any()
                             } else {
+                                let rot_id = g.id.clone();
+                                let rot_name = g.name.clone();
+                                let confirm_name = g.name.clone();
                                 view! {
+                                    <Stack gap="xs">
+                                        <PasswordInput
+                                            label="Admin PAK"
+                                            placeholder="brokkr_\u{2026}"
+                                            value=drawer_pak
+                                            autocomplete="off"
+                                        />
+                                        <span class="brk-note">
+                                            "For the writes below. Used for one request, then cleared."
+                                        </span>
+                                    </Stack>
                                     <Registrations
                                         generator_id=reg_id
                                         pak=drawer_pak
-                                        ask_pak=true
+                                        clear_pak=true
                                         fleet=fleet
+                                    />
+                                    // ---- PAK rotation (BROKKR-T-0369) ----------------
+                                    <SectionLabel label="credential" />
+                                    <span class="brk-note">
+                                        "Rotating mints a new PAK for this tenant and revokes the \
+                                         current one at once. Every pipeline that uses it fails \
+                                         until it has the new one."
+                                    </span>
+                                    <Group gap="sm">
+                                        <Button variant="default" disabled=rotate_busy
+                                            on_click=Callback::new(move |_| {
+                                                if drawer_pak.get().trim().is_empty() {
+                                                    rotate_error.set(Some(
+                                                        "An admin PAK is required to rotate.".into(),
+                                                    ));
+                                                    return;
+                                                }
+                                                rotate_error.set(None);
+                                                rotate_confirm.set(true);
+                                            })>"Rotate PAK"</Button>
+                                    </Group>
+                                    {move || rotate_error.get().map(|e| view! {
+                                        <Alert color=token::BAD>{e}</Alert>
+                                    })}
+                                    <ConfirmDialog
+                                        open=rotate_confirm
+                                        title=format!("Rotate the PAK of {confirm_name}?")
+                                        message="The new PAK is shown once, in the next dialog."
+                                        impacts=vec![
+                                            "The current PAK stops working at once.".to_string(),
+                                            "Every pipeline that uses it fails until it has the new one.".to_string(),
+                                        ]
+                                        confirm_label="Rotate"
+                                        busy=rotate_busy
+                                        on_confirm=Callback::new(move |_| rotate(rot_id.clone(), rot_name.clone()))
                                     />
                                 }.into_any()
                             }}
@@ -264,6 +345,38 @@ pub fn TenantsView() -> impl IntoView {
                 }
             }}
         </Drawer>
+
+        // The rotated PAK (BROKKR-T-0369): shown once, in a dialog that only
+        // Done closes, the same as a mint.
+        <Modal open=rotated_open title="PAK rotated" close_on_scrim=false
+            locked=Signal::derive(move || rotated.get().is_some())
+            on_close=Callback::new(move |_| rotated.set(None))>
+            {move || rotated.get().map(|m| view! {
+                <Stack gap="md">
+                    <DetailList mono=true>
+                        <KeyValue label="Tenant">{m.name.clone()}</KeyValue>
+                        <KeyValue label="Tenant id">{m.id.clone()}</KeyValue>
+                    </DetailList>
+                    <span class="brk-text">
+                        "The previous PAK no longer works. Give this one to the tenant's CI \
+                         and to whoever runs "
+                        <code>"brokkr apply"</code>
+                        " for it."
+                    </span>
+                    <SecretReveal
+                        secret=m.pak.clone()
+                        label="New PAK"
+                        warning="This PAK is shown once and cannot be recovered. Store it now \u{2014} \
+                                 the broker keeps only a hash, so the only way back is to rotate again."
+                        done_label="Done"
+                        on_done=Callback::new(move |_| {
+                            rotated.set(None);
+                            rotated_open.set(false);
+                        })
+                    />
+                </Stack>
+            })}
+        </Modal>
 
         // The dialog stays open on a stray scrim click: it may hold a typed
         // admin PAK or a one-time secret. While the mint runs or the secret is
@@ -304,7 +417,7 @@ pub fn TenantsView() -> impl IntoView {
                         <Registrations
                             generator_id=reg_id
                             pak=admin_pak
-                            ask_pak=false
+                            clear_pak=false
                             fleet=fleet
                         />
                         <SecretReveal
@@ -377,15 +490,15 @@ pub fn TenantsView() -> impl IntoView {
 /// tenant's stacks: without it, a target for the agent is refused and a label
 /// match is ignored.
 ///
-/// `pak` is the admin PAK the writes carry. With `ask_pak` the section shows
-/// the field and clears it after each request, success or failure. Without,
-/// the caller holds it: the New tenant dialog, where it was typed for the
-/// mint and lives until the dialog closes.
+/// `pak` is the admin PAK the writes carry; the caller shows the field. With
+/// `clear_pak` each request clears it, success or failure: the tenant drawer.
+/// Without, the caller holds it: the New tenant dialog, where it was typed
+/// for the mint and lives until the dialog closes.
 #[component]
 fn Registrations(
     generator_id: String,
     pak: RwSignal<String>,
-    ask_pak: bool,
+    clear_pak: bool,
     fleet: Fleet,
 ) -> impl IntoView {
     let toaster = use_toaster();
@@ -465,7 +578,7 @@ fn Registrations(
         let id = gid.get_value();
         spawn_local(async move {
             let result = api::register_agent(&id, &agent_id, &p).await;
-            if ask_pak {
+            if clear_pak {
                 pak.set(String::new());
             }
             busy.set(false);
@@ -490,7 +603,7 @@ fn Registrations(
         let id = gid.get_value();
         spawn_local(async move {
             let result = api::deregister_agent(&id, &agent_id, &p).await;
-            if ask_pak {
+            if clear_pak {
                 pak.set(String::new());
             }
             busy.set(false);
@@ -544,14 +657,6 @@ fn Registrations(
                 view! { <Stack gap="xs">{rows}</Stack> }.into_any()
             }
         }}
-        {ask_pak.then(|| view! {
-            <PasswordInput
-                label="Admin PAK"
-                placeholder="brokkr_\u{2026}"
-                value=pak
-                autocomplete="off"
-            />
-        })}
         {move || {
             let options = unregistered.get();
             if options.is_empty() {
