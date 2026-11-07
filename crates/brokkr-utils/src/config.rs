@@ -217,9 +217,11 @@ pub struct Agent {
     pub max_retries: u32,
     /// PAK
     pub pak: String,
-    /// Agent name
+    /// Agent name. A check, not the lookup key (BROKKR-T-0374): the agent
+    /// finds its record by its PAK. Empty, or the placeholder `DEFAULT`,
+    /// means "use the record's name"; a different value stops the agent.
     pub agent_name: String,
-    /// Cluster name
+    /// Cluster name. The same rule as `agent_name`.
     pub cluster_name: String,
     /// Health check HTTP server port
     pub health_port: Option<u16>,

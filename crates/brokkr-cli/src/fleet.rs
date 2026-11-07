@@ -19,6 +19,14 @@ const LABEL_MAX: usize = 64;
 
 #[derive(Debug, Subcommand)]
 pub enum AgentCommand {
+    /// Create an agent record and print its PAK, once.
+    ///
+    /// Prints the id, the PAK, the Helm command that installs the agent with
+    /// these values, and the next step. The broker keeps only a hash of the
+    /// PAK, so it is shown once. A new agent is INACTIVE: after it checks in,
+    /// run brokkr agent activate. Requires an admin PAK.
+    Create(AgentCreateArgs),
+
     /// Let an agent apply its stacks.
     ///
     /// A new agent is INACTIVE and applies nothing. This command sets its
@@ -72,6 +80,23 @@ pub enum StackCommand {
 }
 
 #[derive(Debug, Args)]
+pub struct AgentCreateArgs {
+    /// The name of the agent, for example prod-1.
+    #[arg(value_name = "NAME")]
+    name: String,
+
+    /// The name of the cluster the agent runs in, for example us-east-1.
+    #[arg(long, value_name = "CLUSTER")]
+    cluster: String,
+
+    /// A tenant to register the agent with, by name or id. Repeatable. The
+    /// API calls a tenant a generator. Every agent is also registered with
+    /// the system generator.
+    #[arg(long = "tenant", value_name = "NAME_OR_ID")]
+    tenants: Vec<String>,
+}
+
+#[derive(Debug, Args)]
 pub struct AgentRef {
     /// The name or the id of the agent.
     #[arg(value_name = "AGENT")]
@@ -111,6 +136,37 @@ pub struct StackTargetArgs {
     agent: String,
 }
 
+/// The Helm command that installs an agent with these values (BROKKR-T-0373).
+/// The broker URL is the one this CLI uses, without the `/api/v1` suffix; the
+/// cluster may reach the broker by another address.
+pub fn helm_install_command(
+    broker_url: &str,
+    pak: &str,
+    name: &str,
+    cluster: &str,
+    generator_ids: &[uuid::Uuid],
+) -> String {
+    let url = broker_url.trim_end_matches('/');
+    let url = url.strip_suffix("/api/v1").unwrap_or(url);
+    let mut lines = vec![
+        "helm install brokkr-agent oci://ghcr.io/colliery-io/charts/brokkr-agent \\".to_string(),
+        format!("  --set broker.url={url} \\"),
+        format!("  --set broker.pak={pak} \\"),
+        format!("  --set broker.agentName={name} \\"),
+        format!("  --set broker.clusterName={cluster}"),
+    ];
+    if !generator_ids.is_empty() {
+        let ids: Vec<String> = generator_ids.iter().map(|id| id.to_string()).collect();
+        let last = lines.len() - 1;
+        lines[last].push_str(" \\");
+        lines.push(format!(
+            "  --set broker.generatorIds=\"{{{}}}\"",
+            ids.join(",")
+        ));
+    }
+    lines.join("\n")
+}
+
 /// Accept a label only in the one label shape, `key:value`. The broker
 /// compares labels as exact strings, so `env=prod` would never match
 /// `env:prod`; refusing it here stops that mistake before it is stored.
@@ -133,6 +189,45 @@ pub fn parse_label(raw: &str) -> Result<String, String> {
 
 pub async fn agent(client: &BrokkrClient, command: AgentCommand) -> Result<(), String> {
     match command {
+        AgentCommand::Create(args) => {
+            let mut ids = Vec::with_capacity(args.tenants.len());
+            for tenant in &args.tenants {
+                ids.push(
+                    client
+                        .resolve_generator_id(tenant)
+                        .await
+                        .map_err(|e| e.to_string())?,
+                );
+            }
+            let created = client
+                .create_agent(&args.name, &args.cluster, ids.clone())
+                .await
+                .map_err(|e| e.to_string())?;
+            let agent = created.agent;
+            println!(
+                "created agent \"{}\" ({}) in cluster \"{}\"",
+                agent.name, agent.id, agent.cluster_name
+            );
+            println!("PAK: {}", created.initial_pak);
+            println!("The PAK is shown once.");
+            println!();
+            println!("Install the agent:");
+            println!(
+                "{}",
+                helm_install_command(
+                    client.base_url(),
+                    &created.initial_pak,
+                    &agent.name,
+                    &agent.cluster_name,
+                    &ids,
+                )
+            );
+            println!();
+            println!(
+                "The agent is INACTIVE. After it checks in, run: brokkr agent activate {}",
+                agent.name
+            );
+        }
         AgentCommand::Activate(args) => {
             let agent = client
                 .set_agent_status(&args.agent, AGENT_ACTIVE)
@@ -290,6 +385,35 @@ fn format_table(header: &[&str], rows: &[Vec<String>]) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn helm_command_fills_the_values_and_drops_the_api_suffix() {
+        let id = uuid::Uuid::nil();
+        let cmd = super::helm_install_command(
+            "http://broker:3000/api/v1",
+            "brokkr_x",
+            "prod-1",
+            "us-east-1",
+            &[id],
+        );
+        assert!(
+            cmd.contains("--set broker.url=http://broker:3000 \\"),
+            "{cmd}"
+        );
+        assert!(cmd.contains("--set broker.pak=brokkr_x"), "{cmd}");
+        assert!(cmd.contains("--set broker.agentName=prod-1"), "{cmd}");
+        assert!(
+            cmd.contains("--set broker.clusterName=us-east-1 \\"),
+            "{cmd}"
+        );
+        assert!(
+            cmd.ends_with(&format!("--set broker.generatorIds=\"{{{id}}}\"")),
+            "{cmd}"
+        );
+        let none = super::helm_install_command("http://broker:3000", "p", "a", "c", &[]);
+        assert!(none.ends_with("--set broker.clusterName=c"), "{none}");
+        assert!(!none.contains("generatorIds"), "{none}");
+    }
+
     use super::*;
 
     #[test]

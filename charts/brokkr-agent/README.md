@@ -96,11 +96,10 @@ For the full build workflow see
 ### Basic Installation
 
 First create the agent record on the broker (`POST /api/v1/agents` with a `name` and a
-`cluster_name`). The response gives the agent PAK. `broker.agentName` and `broker.clusterName`
-are **required**. They must match the `name` and `cluster_name` of that agent record exactly.
-At startup the agent looks up its own record by that pair. If a value is empty or different,
-the lookup fails, the agent logs "Agent not found", and the pod crashloops. The chart does not
-generate a name.
+`cluster_name`). The response gives the agent PAK. The agent finds its record by that PAK.
+`broker.agentName` and `broker.clusterName` are optional checks: set them to the `name` and
+`cluster_name` of the record, and the agent stops with an error that names both values if a
+value differs. Leave them empty to use the record's values.
 
 Deploy with default settings (cluster-wide RBAC — **and the cluster-wide Tekton/Shipwright
 install described above**):
@@ -135,8 +134,8 @@ The agent requires connection details to communicate with the broker:
 ```yaml
 broker:
   url: http://brokkr-broker:3000  # Broker service URL
-  agentName: ""                    # Required: must match the agent record's name on the broker
-  clusterName: ""                  # Required: must match the agent record's cluster_name
+  agentName: ""                    # Optional check against the agent record's name
+  clusterName: ""                  # Optional check against the agent record's cluster_name
   pak: ""                          # Prefixed API Key for agent authentication
   generatorIds: []                 # Generator scopes this agent serves (see below)
 ```

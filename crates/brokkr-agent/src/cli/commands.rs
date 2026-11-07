@@ -406,7 +406,7 @@ pub async fn start(
                             status.last_heartbeat = Some(chrono::Utc::now().to_rfc3339());
                         }
                         // Fetch updated agent details after heartbeat
-                        match broker::fetch_agent_details(&config, &sdk_client).await {
+                        match broker::fetch_agent_by_id(&config, &sdk_client, agent.id).await {
                             Ok(updated_agent) => {
                                 debug!("Successfully fetched updated agent details. Status: {}", updated_agent.status);
                                 agent = updated_agent;

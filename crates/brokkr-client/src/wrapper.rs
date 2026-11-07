@@ -37,10 +37,10 @@ use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 
 use crate::Client;
 use crate::types::{
-    Agent, AgentGeneratorRegistration, AgentRegistrationBody, CreateDeploymentObjectRequest,
-    CreateGeneratorResponse, DeploymentObject, ErrorResponse, Generator, K8sEventHistoryResponse,
-    NewAgentLabel, NewAgentTarget, NewGenerator, NewStack, PodLogHistoryResponse, Stack,
-    WsConnectionsResponse,
+    Agent, AgentGeneratorRegistration, AgentRegistrationBody, CreateAgentRequest,
+    CreateAgentResponse, CreateDeploymentObjectRequest, CreateGeneratorResponse, DeploymentObject,
+    ErrorResponse, Generator, K8sEventHistoryResponse, NewAgentLabel, NewAgentTarget, NewGenerator,
+    NewStack, PodLogHistoryResponse, Stack, WsConnectionsResponse,
 };
 use chrono::{DateTime, Utc};
 use std::path::Path;
@@ -676,6 +676,34 @@ impl BrokkrClient {
             .inner
             .list_generator_registered_agents()
             .id(generator_id)
+            .send()
+            .await?;
+        Ok(resp.into_inner())
+    }
+
+    /// The base URL this client talks to, with the `/api/v1` suffix.
+    pub fn base_url(&self) -> &str {
+        &self.inner.baseurl
+    }
+
+    /// Create an agent record with the admin PAK (BROKKR-T-0373). The agent
+    /// is registered with the system generator and with `generator_ids`.
+    /// The response carries the record and its PAK, which the broker returns
+    /// once. A new agent is INACTIVE until an admin activates it.
+    pub async fn create_agent(
+        &self,
+        name: &str,
+        cluster_name: &str,
+        generator_ids: Vec<Uuid>,
+    ) -> Result<CreateAgentResponse, BrokkrError> {
+        let resp = self
+            .inner
+            .create_agent()
+            .body(CreateAgentRequest {
+                name: name.to_string(),
+                cluster_name: cluster_name.to_string(),
+                generator_ids,
+            })
             .send()
             .await?;
         Ok(resp.into_inner())

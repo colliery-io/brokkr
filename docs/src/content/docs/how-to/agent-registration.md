@@ -179,6 +179,14 @@ brokkr-broker create agent \
 
 Every UUID is validated before anything is written, so a typo fails the command rather than leaving a half-registered agent behind.
 
+The `brokkr` client CLI takes tenants by name or id, and prints the Helm command with `broker.generatorIds` filled in:
+
+```bash
+brokkr agent create prod-1 --cluster us-east-1 --tenant team-acme --tenant team-globex
+```
+
+The operator console does the same from **Fleet → + New agent**, where the tenants are a list to pick from.
+
 ## System Generator Scope
 
 The system generator (`__system__`) is provisioned at broker startup, and **every** agent is auto-registered with it at creation — through `POST /agents` and `brokkr-broker create agent` alike. It carries fleet- and system-wide stacks that should reach all agents, so an agent with an empty `generator_ids` still serves those stacks. The system generator is excluded from the public `GET /generators` listing.

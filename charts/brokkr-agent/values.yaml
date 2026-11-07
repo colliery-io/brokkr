@@ -64,9 +64,10 @@ shipwright:
 
 broker:
   url: http://brokkr-broker:3000
-  # Required. Set both values to the name and cluster_name of the agent record
-  # on the broker. The agent looks up its record by this pair at startup, and
-  # an empty or different value fails with "Agent not found".
+  # Optional. The agent finds its record by its PAK. Set these to check that
+  # the PAK belongs to the record you expect: a value that differs from the
+  # record stops the agent with an error that names both values. Empty means
+  # "use the record's name and cluster".
   agentName: ""
   clusterName: ""
   # Prefixed API Key. Used only when broker.existingSecret is empty.

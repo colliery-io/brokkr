@@ -510,6 +510,26 @@ pub struct Registration {
     pub registered_at: Option<String>,
 }
 
+/// The agent record in the `POST /api/v1/agents` response (BROKKR-T-0372).
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct CreatedAgent {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub cluster_name: String,
+    #[serde(default)]
+    pub status: String,
+}
+
+/// `POST /api/v1/agents` response: the record and its one-time PAK
+/// (BROKKR-T-0372). The PAK is unrecoverable afterwards: the broker stores a
+/// hash, so losing it means rotating.
+#[derive(Debug, Clone, Deserialize)]
+pub struct CreateAgentResponse {
+    pub agent: CreatedAgent,
+    pub initial_pak: String,
+}
+
 /// The broker's `Agent` as returned by `PUT /api/v1/agents/{id}`
 /// (BROKKR-T-0322).
 ///

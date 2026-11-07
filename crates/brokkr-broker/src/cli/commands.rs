@@ -593,6 +593,12 @@ pub fn create_agent(
     println!("Cluster: {}", agent.cluster_name);
     println!("Initial PAK: {}", pak);
     println!("Registered with: {}", registered.join(", "));
+    println!("The PAK is shown once.");
+    println!(
+        "Next: install the agent with this PAK (helm install brokkr-agent ... --set broker.pak=<PAK>). \
+         The agent is INACTIVE: after it checks in, run: brokkr agent activate {}",
+        agent.name
+    );
 
     Ok(())
 }

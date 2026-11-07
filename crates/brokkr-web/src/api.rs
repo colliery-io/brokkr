@@ -735,6 +735,28 @@ pub async fn rotate_generator_pak(
     .await
 }
 
+/// `POST /api/v1/agents` with an admin PAK supplied for this request
+/// (BROKKR-T-0372). The agent is registered with the system generator and
+/// with `generator_ids`. The response carries the PAK in plaintext, exactly
+/// once. A new agent is INACTIVE until an admin activates it.
+pub async fn create_agent(
+    name: &str,
+    cluster_name: &str,
+    generator_ids: &[String],
+    admin_pak: &str,
+) -> Result<crate::models::CreateAgentResponse, ApiError> {
+    post_json_with_token(
+        "/agents",
+        &serde_json::json!({
+            "name": name,
+            "cluster_name": cluster_name,
+            "generator_ids": generator_ids,
+        }),
+        admin_pak,
+    )
+    .await
+}
+
 #[cfg(test)]
 mod tests {
     use super::Session;
