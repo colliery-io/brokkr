@@ -161,30 +161,66 @@ pub async fn verify_agent_pak(config: &Settings) -> Result<(), Box<dyn std::erro
     }
 }
 
-/// Fetches the details of the agent from the broker.
+/// The id of the agent that this PAK belongs to (BROKKR-T-0374). The PAK is
+/// the agent's identity: `POST /auth/pak` names the agent. An admin or a
+/// tenant PAK is an error, because the agent cannot run as one.
+pub async fn pak_agent_id(config: &Settings) -> Result<Uuid, Box<dyn std::error::Error>> {
+    let sdk = crate::broker_sdk::build_client(config)
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+    let auth = sdk
+        .api()
+        .verify_pak()
+        .send()
+        .await
+        .map_err(|raw| boxed("PAK verification failed", BrokkrError::from(raw)))?
+        .into_inner();
+    let Some(id) = auth.agent else {
+        return Err(
+            "The PAK is not an agent PAK. Give the agent the PAK of its agent record.".into(),
+        );
+    };
+    Uuid::parse_str(&id)
+        .map_err(|e| format!("The broker returned an agent id that is not a UUID: {e}").into())
+}
+
+/// Fetches the details of the agent from the broker: the record of the
+/// agent that the PAK belongs to, checked against the configured name and
+/// cluster. See [`fetch_agent_by_id`].
 pub async fn fetch_agent_details(
     config: &Settings,
     client: &BrokkrClient,
 ) -> Result<Agent, Box<dyn std::error::Error>> {
-    debug!(
-        "Fetching agent details for name={} cluster={}",
-        config.agent.agent_name, config.agent.cluster_name
-    );
+    let id = pak_agent_id(config).await?;
+    fetch_agent_by_id(config, client, id).await
+}
 
-    let result = client
-        .api()
-        .search_agent()
-        .name(&config.agent.agent_name)
-        .cluster_name(&config.agent.cluster_name)
-        .send()
-        .await;
-
+/// Fetches the agent record `id` and checks it against the configured name
+/// and cluster (BROKKR-T-0374).
+///
+/// The PAK already says which agent this is, so the record is read by id.
+/// `agent.agent_name` and `agent.cluster_name` are a check: when set, each
+/// must equal the record, and a difference stops the agent with an error
+/// that names the field, both values and the Helm value to fix. Empty, or
+/// the shipped placeholder `DEFAULT`, means "use the record's value".
+pub async fn fetch_agent_by_id(
+    config: &Settings,
+    client: &BrokkrClient,
+    id: Uuid,
+) -> Result<Agent, Box<dyn std::error::Error>> {
+    debug!("Fetching agent details for id={id}");
+    let result = client.api().get_agent().id(id).send().await;
     match result {
         Ok(rv) => {
             let agent: Agent = convert(rv.into_inner()).map_err(|e| {
                 error!("Failed to convert agent details: {}", e);
                 Box::new(e) as Box<dyn std::error::Error>
             })?;
+            check_identity(
+                &config.agent.agent_name,
+                &config.agent.cluster_name,
+                &agent.name,
+                &agent.cluster_name,
+            )?;
             info!(
                 "Successfully fetched details for agent {} in cluster {}",
                 agent.name, agent.cluster_name
@@ -194,10 +230,7 @@ pub async fn fetch_agent_details(
         Err(raw) => {
             let wrapped = BrokkrError::from(raw);
             if status_u16(&wrapped) == Some(404) {
-                error!(
-                    "Agent not found: name={}, cluster={}",
-                    config.agent.agent_name, config.agent.cluster_name
-                );
+                error!("Agent not found: id={id}. The agent record of this PAK was deleted.");
                 Err("Agent not found".into())
             } else {
                 error!("Failed to fetch agent details: {}", wrapped);
@@ -205,6 +238,53 @@ pub async fn fetch_agent_details(
             }
         }
     }
+}
+
+/// Whether a configured name or cluster is unset: empty, or the placeholder
+/// that `default.toml` ships.
+fn identity_unset(value: &str) -> bool {
+    let v = value.trim();
+    v.is_empty() || v == "DEFAULT"
+}
+
+/// The configured name and cluster against the agent record (BROKKR-T-0374).
+/// An unset value passes. A set value must equal the record; the error names
+/// the field, both values and the fix.
+fn check_identity(
+    configured_name: &str,
+    configured_cluster: &str,
+    record_name: &str,
+    record_cluster: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let checks = [
+        (
+            "name",
+            "agentName",
+            "BROKKR__AGENT__AGENT_NAME",
+            configured_name,
+            record_name,
+        ),
+        (
+            "cluster",
+            "clusterName",
+            "BROKKR__AGENT__CLUSTER_NAME",
+            configured_cluster,
+            record_cluster,
+        ),
+    ];
+    for (field, helm, env, configured, record) in checks {
+        if identity_unset(configured) || configured.trim() == record {
+            continue;
+        }
+        let message = format!(
+            "The agent record of this PAK has the {field} \"{record}\", but the configuration \
+             says \"{}\". Set broker.{helm} ({env}) to \"{record}\", or leave it empty.",
+            configured.trim()
+        );
+        error!("{message}");
+        return Err(message.into());
+    }
+    Ok(())
 }
 
 /// Fetches the ids of the stacks the broker associates with this agent: its
@@ -712,5 +792,43 @@ pub async fn submit_diagnostic_result(
             );
             Err(boxed("Failed to submit diagnostic result", wrapped))
         }
+    }
+}
+
+#[cfg(test)]
+mod identity_tests {
+    use super::check_identity;
+
+    #[test]
+    fn unset_values_use_the_record() {
+        assert!(check_identity("", "", "edge-1", "us-east-1").is_ok());
+        assert!(check_identity("DEFAULT", "DEFAULT", "edge-1", "us-east-1").is_ok());
+        assert!(check_identity("  ", "DEFAULT", "edge-1", "us-east-1").is_ok());
+    }
+
+    #[test]
+    fn equal_values_pass() {
+        assert!(check_identity("edge-1", "us-east-1", "edge-1", "us-east-1").is_ok());
+        assert!(check_identity("edge-1", "", "edge-1", "us-east-1").is_ok());
+    }
+
+    #[test]
+    fn a_different_name_names_the_field_both_values_and_the_fix() {
+        let err = check_identity("edge-2", "us-east-1", "edge-1", "us-east-1")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("name \"edge-1\""), "{err}");
+        assert!(err.contains("says \"edge-2\""), "{err}");
+        assert!(err.contains("broker.agentName"), "{err}");
+        assert!(err.contains("BROKKR__AGENT__AGENT_NAME"), "{err}");
+    }
+
+    #[test]
+    fn a_different_cluster_names_the_cluster() {
+        let err = check_identity("edge-1", "eu-west-1", "edge-1", "us-east-1")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("cluster \"us-east-1\""), "{err}");
+        assert!(err.contains("broker.clusterName"), "{err}");
     }
 }
