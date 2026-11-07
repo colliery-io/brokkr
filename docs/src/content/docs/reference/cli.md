@@ -324,6 +324,23 @@ The PAK is shown once. Store it where the tenant's CI reads it; the only way bac
 
 The PAK is printed once: the broker keeps only a hash. A name that exists already is a `409`; the command prints `error: <message>` to stderr and exits `1`. This is the same as `POST /api/v1/generators`.
 
+#### `brokkr tenant rotate`
+
+Rotates a tenant's PAK and prints the new one once. With a tenant PAK, it rotates its own: give no tenant. With an admin PAK, name the tenant. The current PAK stops at once.
+
+```bash
+brokkr tenant rotate            # as the tenant
+brokkr tenant rotate team-acme  # as an admin
+```
+
+```
+rotated the PAK of tenant "team-acme" (a1b2c3d4-...)
+PAK: brokkr_BRnew34cd_GeneratorLongTokenExample02
+The PAK is shown once. The previous PAK stopped: update every pipeline that uses it.
+```
+
+This is `POST /api/v1/generators/{id}/rotate-pak`.
+
 #### `brokkr tenant list`
 
 ```bash
@@ -331,6 +348,21 @@ brokkr tenant list
 ```
 
 Prints a table with `NAME`, `ID`, `STATUS`, `LAST ACTIVE` and `DESCRIPTION`. The system generator is not a tenant and is not listed. This is the same as `GET /api/v1/generators`.
+
+### `brokkr whoami`
+
+Says what the PAK is and which broker the CLI talks to.
+
+```bash
+brokkr whoami
+```
+
+```
+broker: https://broker.example.com
+PAK: tenant "team-acme" (a1b2c3d4-...)
+```
+
+An admin PAK prints `PAK: admin`; an agent PAK prints the agent's name, id and cluster. This is `POST /api/v1/auth/pak`.
 
 ### `brokkr register`
 
@@ -428,6 +460,10 @@ Every command that adds something is safe to run again. If the label or the targ
 | `brokkr stack label <STACK> <LABEL>` | admin or owning tenant | Adds a label to the stack. |
 | `brokkr stack target <STACK> <AGENT>` | admin or owning tenant | Sends the stack to the agent. |
 | `brokkr stack list` | admin or tenant | Lists the stacks. |
+| `brokkr stack status <STACK>` | admin or owning tenant | The latest revision, the agents that have the stack with their health, and the stack's health. |
+| `brokkr stack events <STACK> [--limit N]` | admin or owning tenant | The retained Kubernetes events of the stack. |
+| `brokkr stack logs <STACK> [--limit N]` | admin or owning tenant | The retained pod log lines of the stack. |
+| `brokkr stack delete <STACK>` | admin or owning tenant | Deletes the stack; each agent that has it removes its resources on its next poll. |
 
 #### `brokkr agent create`
 
@@ -525,6 +561,8 @@ added label "env:prod" to stack "payments"
 
 `brokkr apply --target-label env:prod` adds the same label when it applies a folder.
 
+After the label line, `brokkr stack label` says which agents the stack's labels reach now: the agents the PAK can see (every agent for an admin; the registered agents for a tenant) that carry one of the stack's labels. When none does, it says so, and that the stack reaches no agent until one that is registered with its tenant has one of its labels.
+
 #### `brokkr stack target`
 
 Sends a stack to one agent, whatever the labels of the agent are. The first argument is the stack; the second is the agent.
@@ -544,6 +582,43 @@ error: invalid request: agent "prod-1" is not registered with the tenant that ow
 ```
 
 The API form is `POST /api/v1/agents/{id}/targets` with `{"agent_id": "<id>", "stack_id": "<id>"}`. The body repeats the agent id.
+
+#### `brokkr stack status`
+
+Where a stack is and whether it is healthy. The latest revision, then one row per agent and deployment object with the agent's latest health report.
+
+```bash
+brokkr stack status payments
+```
+
+```
+stack "payments" (a1b2c3d4-...)
+latest revision: sequence 7, submitted 2026-11-07T15:00:00+00:00
+health: healthy
+AGENT   DEPLOYMENT OBJECT  STATUS   CHECKED
+prod-1  d1a2b3c4-...       healthy  2026-11-07T15:00:30+00:00
+```
+
+Before any agent has reported, the table is replaced by one line that says so. This is `GET /api/v1/stacks/{id}/deployment-objects` and `GET /api/v1/stacks/{id}/health`; the tenant that owns the stack may read both.
+
+#### `brokkr stack events` and `brokkr stack logs`
+
+The retained Kubernetes events of the stack, and the retained pod log lines. The broker keeps a short window (at most six hours). Only pods whose template carries the `brokkr.io/stream-logs` annotation are streamed. `--limit N` caps the rows, newest first; the broker's default is 500.
+
+```bash
+brokkr stack events payments --limit 20
+brokkr stack logs payments
+```
+
+These are `GET /api/v1/stacks/{id}/events` and `GET /api/v1/stacks/{id}/logs`.
+
+#### `brokkr stack delete`
+
+Deletes a stack. The broker records a deletion marker, and each agent that has the stack removes its resources on its next poll. Requires an admin PAK or the PAK of the tenant that owns the stack.
+
+```bash
+brokkr stack delete payments
+```
 
 #### `brokkr stack list`
 

@@ -6,6 +6,7 @@ from .agent_annotation import AgentAnnotation
 from .agent_event import AgentEvent
 from .agent_fleet_status_response import AgentFleetStatusResponse
 from .agent_generator_registration import AgentGeneratorRegistration
+from .agent_health_report import AgentHealthReport
 from .agent_k8s_event import AgentK8SEvent
 from .agent_label import AgentLabel
 from .agent_pod_log import AgentPodLog
@@ -93,6 +94,7 @@ __all__ = (
     "AgentEvent",
     "AgentFleetStatusResponse",
     "AgentGeneratorRegistration",
+    "AgentHealthReport",
     "AgentK8SEvent",
     "AgentLabel",
     "AgentPodLog",

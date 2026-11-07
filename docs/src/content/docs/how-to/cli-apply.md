@@ -67,7 +67,7 @@ Labels are additive and applied every run; a label that already exists is left a
 - **Label and annotation matching** is filtered at read time. An agent that never registered with your tenant is served nothing, however its labels are set, and no error is raised anywhere — the stack simply doesn't arrive.
 - **Explicit per-agent targets** (`POST /agents/{id}/targets`, created by an admin or by the tenant that owns the stack) are rejected outright with HTTP `403` / `agent_not_registered` when the agent isn't registered.
 
-So register the agents you intend to reach before you rely on labels: `brokkr register --agent <id> --generator <tenant-id>` with an admin PAK, or set `BROKKR__AGENT__GENERATOR_IDS` on the agent at startup so it self-registers. See [Registering agents with generators](../agent-registration/) and the [error code reference](../../reference/error-codes/).
+`brokkr stack label` ends with the agents that match the stack's labels now, or says that none does. A tenant sees the labels of the agents registered with it (`brokkr agent list`). So register the agents you intend to reach before you rely on labels: `brokkr register --agent <id> --generator <tenant-id>` with an admin PAK, or set `BROKKR__AGENT__GENERATOR_IDS` on the agent at startup so it self-registers. See [Registering agents with generators](../agent-registration/) and the [error code reference](../../reference/error-codes/).
 
 ## Re-run safely in CI
 
@@ -79,6 +79,14 @@ BROKKR_BROKER_URL="$BROKER_URL" BROKKR_PAK="$BROKKR_GENERATOR_PAK" \
 ```
 
 A successful run exits `0` (including the `unchanged` case); any failure prints `error: …` to stderr and exits `1`, so a failed apply fails the job.
+
+## See whether it worked
+
+```bash
+brokkr stack status payments
+```
+
+The latest revision, the agents that have the stack and each one's health report. Before an agent has reported, one line says so: target an agent or match a label, then wait one poll. For what the cluster said, `brokkr stack events payments` and `brokkr stack logs payments` print the broker's retained window. A tenant PAK may read all three for its own stacks.
 
 ## Remove a resource
 

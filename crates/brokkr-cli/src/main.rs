@@ -90,9 +90,12 @@ enum Command {
     #[command(subcommand)]
     Stack(fleet::StackCommand),
 
-    /// Create and list tenants. The API calls a tenant a generator.
+    /// Create, list and rotate tenants. The API calls a tenant a generator.
     #[command(subcommand)]
     Tenant(tenant::TenantCommand),
+
+    /// Say what this PAK is: admin, a tenant, or an agent, and the broker.
+    Whoami,
 }
 
 #[derive(Debug, Args)]
@@ -168,6 +171,7 @@ async fn run(cli: Cli) -> Result<(), String> {
         Command::Agent(command) => fleet::agent(&client, command).await,
         Command::Stack(command) => fleet::stack(&client, command).await,
         Command::Tenant(command) => tenant::tenant(&client, command).await,
+        Command::Whoami => tenant::whoami(&client).await,
     }
 }
 

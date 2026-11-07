@@ -136,6 +136,10 @@ async fn main() -> ExitCode {
         "T-0373: agent create via the brokkr CLI binary, registered with a tenant",
         scenario_agent_create_cli(&base_url, &admin_pak)
     );
+    run!(
+        "T-0379/0380/0381: a tenant's flow after apply via the brokkr CLI binary",
+        scenario_tenant_flow_cli(&base_url, &admin_pak)
+    );
 
     println!("══════════════════════════════════════════════════════════════════");
     println!("📊 Results: {} passed, {} failed", passed, failed);
@@ -1540,4 +1544,111 @@ async fn scenario_agent_create_cli(base_url: &str, admin_pak: &str) -> Result<()
         .send()
         .await;
     result.map(|_| ())
+}
+
+/// BROKKR-T-0379, 0380, 0381: with its own PAK, a tenant sees where its stack
+/// is (`stack status`, `stack events`, `stack logs`), sees the labels of its
+/// registered agents and which ones a stack label reaches, says what its PAK
+/// is (`whoami`), rotates its PAK (`tenant rotate`) and deletes its stack
+/// (`stack delete`). No admin PAK after the fixture.
+async fn scenario_tenant_flow_cli(base_url: &str, admin_pak: &str) -> Result<()> {
+    let cli = env::var("BROKKR_CLI").map_err(|_| {
+        anyhow!(
+            "BROKKR_CLI is not set. Run `angreal tests sdk-contract rust`, \
+             or set BROKKR_CLI to the path of the brokkr binary"
+        )
+    })?;
+    let admin = client(base_url, admin_pak)?;
+    let fx = day_zero_fixture(&admin, "sdk-contract-rust-flow").await?;
+    let result = tenant_flow_cli_checks(&cli, &admin, base_url, &fx).await;
+    day_zero_cleanup(&admin, &fx).await;
+    result
+}
+
+async fn tenant_flow_cli_checks(
+    cli: &str,
+    admin: &BrokkrClient,
+    base_url: &str,
+    fx: &DayZeroFixture,
+) -> Result<()> {
+    let tenant = |args: &[&str]| brokkr_cli(cli, base_url, &fx.generator_pak, args);
+    let stack = fx.stack_name.as_str();
+
+    println!("  → whoami names the tenant");
+    expect_cli(
+        tenant(&["whoami"])?,
+        true,
+        &format!(
+            "PAK: tenant \"{}\" ({})",
+            fx.generator_name, fx.generator_id
+        ),
+    )?;
+
+    println!("  → stack status before any agent reports");
+    expect_cli(tenant(&["stack", "status", stack])?, true, "health:")?;
+    expect_cli(
+        tenant(&["stack", "status", stack])?,
+        true,
+        "No agent has reported",
+    )?;
+
+    println!("  → stack events and logs read the retained window");
+    expect_cli(
+        tenant(&["stack", "events", stack, "--limit", "5"])?,
+        true,
+        "",
+    )?;
+    expect_cli(tenant(&["stack", "logs", stack])?, true, "")?;
+
+    println!("  → the tenant sees the labels of its registered agent");
+    admin
+        .add_agent_label(&fx.agent_name, "flow:contract")
+        .await?;
+    let (ok, out, err) = tenant(&["agent", "list"])?;
+    if !ok || !out.contains("LABELS") || !out.contains("flow:contract") {
+        return Err(anyhow!(
+            "agent list as the tenant lacks the labels column: ok={ok} out={out:?} err={err:?}"
+        ));
+    }
+
+    println!("  → stack label says which registered agents match");
+    expect_cli(
+        tenant(&["stack", "label", stack, "flow:contract"])?,
+        true,
+        &format!("match: {}", fx.agent_name),
+    )?;
+
+    println!("  → the tenant rotates its own PAK; the old one stops");
+    let (ok, out, err) = tenant(&["tenant", "rotate"])?;
+    if !ok {
+        return Err(anyhow!("tenant rotate failed: {err}"));
+    }
+    let new_pak = out
+        .lines()
+        .find_map(|l| l.strip_prefix("PAK: "))
+        .ok_or_else(|| anyhow!("no PAK line in {out:?}"))?
+        .trim()
+        .to_string();
+    let (ok, _, _) = tenant(&["whoami"])?;
+    if ok {
+        return Err(anyhow!("the old tenant PAK still works after rotation"));
+    }
+    let rotated = |args: &[&str]| brokkr_cli(cli, base_url, &new_pak, args);
+    expect_cli(
+        rotated(&["whoami"])?,
+        true,
+        &format!("tenant \"{}\"", fx.generator_name),
+    )?;
+
+    println!("  → the tenant deletes its stack");
+    expect_cli(
+        rotated(&["stack", "delete", stack])?,
+        true,
+        &format!("deleted stack \"{stack}\""),
+    )?;
+    let (ok, _, err) = rotated(&["stack", "status", stack])?;
+    if ok || err.is_empty() {
+        return Err(anyhow!("the deleted stack is still found by name"));
+    }
+    Ok(())
 }

@@ -64,7 +64,9 @@ pub fn routes() -> Router<DAL> {
 }
 
 /// Fetch a stack or return 404; also enforces admin-or-generator-owner access.
-async fn fetch_owned_stack(
+/// The stack, if the caller may read it: an admin, or the tenant that owns
+/// it. Shared with the health module (BROKKR-T-0379).
+pub(crate) async fn fetch_owned_stack(
     dal: &DAL,
     auth: &AuthPayload,
     stack_id: Uuid,

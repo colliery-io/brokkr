@@ -255,6 +255,11 @@ brokkr registrations --generator <generator-id>
 # Create a tenant (prints its id and its PAK, once) and list the tenants
 brokkr tenant create <name> --description <text>
 brokkr tenant list
+
+# As the tenant: what this PAK is, rotate it, see where a stack is
+brokkr whoami
+brokkr tenant rotate
+brokkr stack status <stack>
 ```
 
 ## PAK Rotation
