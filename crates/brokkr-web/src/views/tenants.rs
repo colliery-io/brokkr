@@ -268,14 +268,11 @@ pub fn TenantsView() -> impl IntoView {
                             <Group gap="sm">
                                 <Pill color=color>{status}</Pill>
                             </Group>
-                            <span class="brk-note">
-                                "A stack names this id as its owner. An agent lists it under broker.generatorIds to register itself at startup."
-                            </span>
                             {if g.is_system {
                                 view! {
                                     <SectionLabel label="registered agents" />
                                     <span class="brk-note">
-                                        "The system generator is not a tenant. Every agent is registered with it, so fleet-wide stacks reach all agents."
+                                        "Every agent is registered with the system generator."
                                     </span>
                                 }.into_any()
                             } else {
@@ -290,9 +287,6 @@ pub fn TenantsView() -> impl IntoView {
                                             value=drawer_pak
                                             autocomplete="off"
                                         />
-                                        <span class="brk-note">
-                                            "The controls below use this PAK for one request. Then the console clears it."
-                                        </span>
                                     </Stack>
                                     <Registrations
                                         generator_id=reg_id
@@ -302,9 +296,6 @@ pub fn TenantsView() -> impl IntoView {
                                     />
                                     // ---- PAK rotation (BROKKR-T-0369) ----------------
                                     <SectionLabel label="credential" />
-                                    <span class="brk-note">
-                                        "Rotate PAK creates a new PAK for this tenant. The current PAK stops at once. Every pipeline that uses it fails until it gets the new PAK."
-                                    </span>
                                     <Group gap="sm">
                                         <Button variant="default" disabled=rotate_busy
                                             on_click=Callback::new(move |_| {
@@ -353,15 +344,9 @@ pub fn TenantsView() -> impl IntoView {
                         <KeyValue label="Tenant">{m.name.clone()}</KeyValue>
                         <KeyValue label="Tenant id">{m.id.clone()}</KeyValue>
                     </DetailList>
-                    <span class="brk-text">
-                        "The previous PAK does not work now. Give the new PAK to the tenant's CI and to the people who run "
-                        <code>"brokkr apply"</code>
-                        " for it."
-                    </span>
                     <SecretReveal
                         secret=m.pak.clone()
                         label="New PAK"
-                        warning="Copy the PAK now. You cannot see it again. The broker keeps only a hash. To get a PAK later, rotate again."
                         done_label="Done"
                         on_done=Callback::new(move |_| {
                             rotated.set(None);
@@ -394,17 +379,6 @@ pub fn TenantsView() -> impl IntoView {
                                 </Group>
                             </KeyValue>
                         </DetailList>
-                        <span class="brk-text">
-                            "Give this PAK to the tenant: its CI or a developer. With the PAK, "
-                            <code>"brokkr apply"</code>
-                            " creates stacks and pushes manifests for this tenant only. The console cannot use the PAK. The console is read-only. "
-                            <Anchor href=format!("{}/tutorials/cicd-generators.html", crate::components::DOCS)>
-                                "How a tenant deploys"
-                            </Anchor>
-                        </span>
-                        <span class="brk-text">
-                            "Then register the agents that serve this tenant. A tenant's stacks reach an agent only after the agent is registered with the tenant. The console uses the admin PAK that you entered for this too. Done clears it."
-                        </span>
                         <Registrations
                             generator_id=reg_id
                             pak=admin_pak
@@ -414,7 +388,6 @@ pub fn TenantsView() -> impl IntoView {
                         <SecretReveal
                             secret=m.pak.clone()
                             label="PAK"
-                            warning="Copy the PAK now. You cannot see it again. The broker keeps only a hash. To get a PAK later, rotate it."
                             done_label="Done"
                             on_done=Callback::new(move |_| {
                                 reset();
@@ -443,7 +416,7 @@ pub fn TenantsView() -> impl IntoView {
                                 autocomplete="off"
                             />
                             <span class="brk-note">
-                                "Required. The console's own credential is read-only, so it cannot create a tenant. The console keeps this PAK in memory while the dialog is open, for the tenant and for its registrations. It never stores the PAK. It clears the PAK when the dialog closes."
+                                "Not stored."
                             </span>
                         </Stack>
 
@@ -662,9 +635,6 @@ fn Registrations(
                 </Group>
             }.into_any()
         }}
-        <span class="brk-note">
-            "Register an agent to let this tenant target it. Deregister an agent to remove its targets for this tenant's stacks. The agent then removes those resources from its cluster on its next poll."
-        </span>
         {move || error.get().map(|e| view! {
             <Alert color=token::BAD>{e}</Alert>
         })}
