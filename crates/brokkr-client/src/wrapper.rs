@@ -38,8 +38,9 @@ use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 use crate::Client;
 use crate::types::{
     Agent, AgentGeneratorRegistration, AgentRegistrationBody, CreateDeploymentObjectRequest,
-    DeploymentObject, ErrorResponse, K8sEventHistoryResponse, NewAgentLabel, NewAgentTarget,
-    NewStack, PodLogHistoryResponse, Stack, WsConnectionsResponse,
+    CreateGeneratorResponse, DeploymentObject, ErrorResponse, Generator, K8sEventHistoryResponse,
+    NewAgentLabel, NewAgentTarget, NewGenerator, NewStack, PodLogHistoryResponse, Stack,
+    WsConnectionsResponse,
 };
 use chrono::{DateTime, Utc};
 use std::path::Path;
@@ -678,6 +679,33 @@ impl BrokkrClient {
             .send()
             .await?;
         Ok(resp.into_inner())
+    }
+
+    /// Create a tenant (a generator in the API) with the admin PAK
+    /// (BROKKR-T-0370). The response carries the tenant and its PAK, which
+    /// the broker returns once: it keeps only a hash, so a lost PAK needs a
+    /// rotation. A `409` means the name is taken.
+    pub async fn create_generator(
+        &self,
+        name: &str,
+        description: Option<&str>,
+    ) -> Result<CreateGeneratorResponse, BrokkrError> {
+        let resp = self
+            .inner
+            .create_generator()
+            .body(NewGenerator {
+                name: name.to_string(),
+                description: description.map(str::to_string),
+            })
+            .send()
+            .await?;
+        Ok(resp.into_inner())
+    }
+
+    /// Every generator, the system generator included. Requires an admin
+    /// PAK (BROKKR-T-0370).
+    pub async fn list_generators(&self) -> Result<Vec<Generator>, BrokkrError> {
+        Ok(self.inner.list_generators().send().await?.into_inner())
     }
 
     // -------------------------------------------------------------------

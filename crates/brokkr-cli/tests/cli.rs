@@ -287,3 +287,64 @@ fn register_with_names_parses_then_needs_a_connection() {
         "expected a connection-config error, got: {stderr}"
     );
 }
+
+// BROKKR-T-0370: `brokkr tenant create|list`, so the admin's one-time steps
+// (create the tenant, activate the agent, register it) are one tool. The
+// live path is in `scenario_tenant_cli` of the SDK contract suite.
+#[test]
+fn tenant_help_lists_create_and_list() {
+    let mut cmd = brokkr();
+    cmd.args(["tenant", "--help"]);
+    let (output, stdout, _) = run(cmd);
+    assert!(output.status.success());
+    for c in ["create", "list"] {
+        assert!(stdout.contains(c), "tenant help is missing {c}: {stdout}");
+    }
+    let mut cmd = brokkr();
+    cmd.arg("--help");
+    let (_, stdout, _) = run(cmd);
+    assert!(stdout.contains("tenant"), "top-level help: {stdout}");
+}
+
+#[test]
+fn tenant_create_help_says_the_pak_is_shown_once() {
+    let mut cmd = brokkr();
+    cmd.args(["tenant", "create", "--help"]);
+    let (output, stdout, _) = run(cmd);
+    assert!(output.status.success());
+    assert!(stdout.contains("--description"), "{stdout}");
+    assert!(stdout.contains("shown once"), "{stdout}");
+    assert!(stdout.contains("generator"), "{stdout}");
+}
+
+#[test]
+fn tenant_create_needs_a_name() {
+    let mut cmd = brokkr();
+    cmd.args(["tenant", "create"]);
+    let (output, _, stderr) = run(cmd);
+    assert!(!output.status.success());
+    assert!(
+        stderr.contains("NAME"),
+        "expected a usage error, got: {stderr}"
+    );
+}
+
+#[test]
+fn tenant_commands_parse_then_need_a_connection() {
+    for args in [
+        &["tenant", "create", "team-acme", "--description", "Acme"][..],
+        &["tenant", "list"][..],
+    ] {
+        let cmd = sandboxed({
+            let mut c = brokkr();
+            c.args(args);
+            c
+        });
+        let (output, _, stderr) = run(cmd);
+        assert!(!output.status.success());
+        assert!(
+            stderr.contains("broker URL") || stderr.contains("PAK"),
+            "{args:?}: expected a connection-config error, got: {stderr}"
+        );
+    }
+}

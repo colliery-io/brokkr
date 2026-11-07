@@ -49,6 +49,12 @@ The response includes the generator details and its PAK:
 }
 ```
 
+With the `brokkr` CLI, the same step is one command with the admin PAK; it prints the id and the PAK once:
+
+```bash
+brokkr --pak "$ADMIN_PAK" tenant create github-actions-prod --description "Production deployment pipeline"
+```
+
 ### Step 2: Store the PAK Securely
 
 The PAK is only returned once at creation time, and the generator's UUID is what stack creation requests must reference as `generator_id`. Store both immediately in your secret management system — never in source code, configuration files, or logs:
@@ -245,6 +251,10 @@ brokkr deregister --agent <agent-id> --generator <generator-id>
 
 # List registrations by agent or by generator
 brokkr registrations --generator <generator-id>
+
+# Create a tenant (prints its id and its PAK, once) and list the tenants
+brokkr tenant create <name> --description <text>
+brokkr tenant list
 ```
 
 ## PAK Rotation
