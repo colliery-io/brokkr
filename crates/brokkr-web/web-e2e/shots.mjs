@@ -283,6 +283,12 @@ const AGENT_REGS = [
   { id: "r1", agent_id: "1b9d6bcd", generator_id: "1b9d6bcd-bbfd", registered_at: "2026-07-29T09:00:00Z" },
   { id: "r0", agent_id: "1b9d6bcd", generator_id: "00000000-system", registered_at: "2026-07-29T08:00:00Z" },
 ];
+// New agent (BROKKR-T-0372): the created record and its one-time PAK.
+const AGENT_PAK = "brokkr_AGENTNEW_Hs4kQm2vLp9xZt7wRb3yNc6eFj8dAg5U";
+const CREATED_AGENT = {
+  agent: { id: "9b1c2d3e-4f50-6172-8394-a5b6c7d8e9f0", name: "prod-agent-03", cluster_name: "prod-us-east-1", status: "INACTIVE" },
+  initial_pak: AGENT_PAK,
+};
 // Rotation (BROKKR-T-0369): the new PAK, distinct from every other fixture.
 const ROTATED_PAK = "brokkr_ROTATED1_Qp3kLm9vXz2sWd7tRb4yNc6eFh8jAg5U";
 const TENANT_MOCKS = {
@@ -487,6 +493,18 @@ const SCENES = [
     assert_text: [ROTATED_PAK], assert_button: ["Done"],
     assert_no_stored: TYPED_ADMIN_PAK,
     mocks: TENANT_MOCKS },
+  // New agent (BROKKR-T-0372): the dialog with the tenants to pick, and the
+  // reveal panel with the Helm command and the PAK; the typed admin PAK is
+  // not in storage afterwards.
+  { name: "fleet-new-agent-dialog", nav: "Fleet", click: "+ New agent", settle: 500,
+    assert_text: ["team-payments", "team-ingest"],
+    mocks: { "/fleet": FLEET, "/generators": GENERATORS } },
+  { name: "fleet-agent-created", nav: "Fleet", click: "+ New agent", settle: 500,
+    fill: [["prod-1", "prod-agent-03"], ["us-east-1", "prod-us-east-1"], ["brokkr_…", TYPED_ADMIN_PAK]],
+    then_click: "Create agent",
+    assert_text: [AGENT_PAK, "broker.agentName=prod-agent-03"], assert_button: ["Copy code", "Copy agent id", "Done"],
+    assert_no_stored: TYPED_ADMIN_PAK,
+    mocks: { "/fleet": FLEET, "/generators": GENERATORS, "POST /agents": CREATED_AGENT } },
   // The Fleet drawer lists the agent's tenants, without the system generator.
   { name: "fleet-tenants", hash: "#fleet/agent/1b9d6bcd", settle: 800,
     assert_text: ["team-payments"], assert_absent: ["system"],
@@ -622,6 +640,12 @@ await page.route("**/api/v1/**", (route) => {
   // Fleet reads /stacks and Deployments reads /generators for names
   // (BROKKR-T-0337), so those get fixtures too.
   const SHELL = { "/fleet": FLEET, "/work-orders": ACTIVE_WOS, "/agent-events": EVENTS, "/stacks": STACKS, "/generators": GENERATORS };
+  // The Fleet drawer reads the agent's tenants and the tenant drawer reads the
+  // registered agents (BROKKR-T-0368) on every open; scenes that don't mock
+  // these get an empty list instead of 404 noise.
+  if (!(key in MOCKS) && /^\/(agents\/[^/]+\/registrations|generators\/[^/]+\/registered-agents)$/.test(suffix)) {
+    return route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
+  }
   if (!(key in MOCKS) && suffix in SHELL) {
     return route.fulfill({
       status: 200,
