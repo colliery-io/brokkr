@@ -181,6 +181,8 @@ An agent must be registered with a generator before any of that generator's stac
 
 Registration is performed by an admin or by the agent itself — a generator PAK cannot register agents on its own behalf. This section covers registration from the admin's side; for the full operational workflow (including agent self-registration at startup) see [Agent Registration](../agent-registration/).
 
+In the operator console, the same happens under **Tenants**: the New tenant dialog registers agents right after the mint, and a tenant's drawer registers and deregisters later. Each asks for an admin PAK. See [Using the Operator Console](../operator-console/#step-6-create-a-tenant-and-register-its-agents).
+
 ### Step 1: Register an Agent
 
 Register an agent with the generator (admin, or the agent acting on itself — a generator PAK is rejected):

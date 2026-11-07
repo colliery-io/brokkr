@@ -269,6 +269,30 @@ const CREATED_GENERATOR = {
 // after the mint scene.
 const TYPED_ADMIN_PAK = "brokkr_ADMINxx_TypedByOperatorNeverPersisted00";
 
+// Registrations (BROKKR-T-0368). The tenant drawer reads the agents registered
+// with the tenant; the Fleet drawer reads the tenants of the agent. The system
+// generator is in the agent's list and must not show.
+const SYSTEM_GENERATOR = { id: "00000000-system", name: "system", description: "fleet scope",
+  is_active: true, is_system: true, last_active_at: null };
+const REGS_PAYMENTS = [
+  { id: "r1", agent_id: "1b9d6bcd", generator_id: "1b9d6bcd-bbfd", registered_at: "2026-07-29T09:00:00Z" },
+  { id: "r2", agent_id: "7c9e6679", generator_id: "1b9d6bcd-bbfd", registered_at: "2026-07-29T09:01:00Z" },
+];
+const REG_CREATED = { id: "r9", agent_id: "a1b2c3d4", generator_id: "f00dcafe-1234", registered_at: "2026-11-07T12:00:00Z" };
+const AGENT_REGS = [
+  { id: "r1", agent_id: "1b9d6bcd", generator_id: "1b9d6bcd-bbfd", registered_at: "2026-07-29T09:00:00Z" },
+  { id: "r0", agent_id: "1b9d6bcd", generator_id: "00000000-system", registered_at: "2026-07-29T08:00:00Z" },
+];
+const TENANT_MOCKS = {
+  "/generators": GENERATORS,
+  "/generators/1b9d6bcd-bbfd/registered-agents": REGS_PAYMENTS,
+  "/generators/a1b2c3d4-0000/registered-agents": [],
+  "/generators/f00dcafe-1234/registered-agents": [],
+  "POST /generators": CREATED_GENERATOR,
+  "POST /generators/f00dcafe-1234/register": REG_CREATED,
+  "POST /generators/a1b2c3d4-0000/register": { ...REG_CREATED, generator_id: "a1b2c3d4-0000" },
+};
+
 // Pause/resume (BROKKR-T-0322). PUT /agents/:id answers with the updated agent;
 // the modal reads back `status` so the pill flips without waiting for the 5s
 // fleet refetch. Method-aware key so it does not collide with any GET.
@@ -421,7 +445,43 @@ const SCENES = [
     // Asserts the credential-handling criterion a screenshot cannot: the typed
     // admin PAK must appear nowhere in browser storage afterwards.
     assert_no_stored: TYPED_ADMIN_PAK,
-    mocks: { "/generators": GENERATORS, "POST /generators": CREATED_GENERATOR } },
+    // The reveal panel carries the id and the register control (BROKKR-T-0368).
+    assert_text: ["f00dcafe-1234"], assert_button: ["Copy tenant id", "Register", "Done"],
+    mocks: TENANT_MOCKS },
+  // Escape while the one-time PAK is on screen must not close the dialog
+  // (BROKKR-T-0367): the PAK and the Done button are still there after it.
+  { name: "tenants-minted-escape", nav: "Tenants", click: "+ New tenant",
+    fill: [["acme-payments", "team-checkout"], ["brokkr_…", TYPED_ADMIN_PAK]],
+    then_click: "Create tenant",
+    steps: [{ press: "Escape" }],
+    assert_text: [MINTED_PAK, "Done"],
+    mocks: TENANT_MOCKS },
+  // Onboarding finished in the dialog (BROKKR-T-0368): after the mint, the
+  // admin registers an agent with the same typed PAK. The POST answers, the
+  // toast says so, and the PAK is still not in storage.
+  { name: "tenants-minted-register", nav: "Tenants", click: "+ New tenant",
+    fill: [["acme-payments", "team-checkout"], ["brokkr_…", TYPED_ADMIN_PAK]],
+    then_click: "Create tenant",
+    steps: [{ select: "staging-agent-01" }, { click: "Register" }],
+    assert_text: ["agent registered"],
+    assert_no_stored: TYPED_ADMIN_PAK,
+    mocks: TENANT_MOCKS },
+  // The tenant drawer (BROKKR-T-0368): the id with its copy button, and the
+  // agents registered with the tenant, by name.
+  { name: "tenants-drawer", nav: "Tenants", click: "team-payments", settle: 800,
+    assert_text: ["prod-agent-01", "prod-agent-02"], assert_button: ["Copy tenant id", "Deregister"],
+    mocks: TENANT_MOCKS },
+  // Registering from the drawer: one admin PAK, one request, cleared after.
+  { name: "tenants-drawer-register", nav: "Tenants", click: "team-sandbox", settle: 800,
+    steps: [{ fill: ["brokkr_…", TYPED_ADMIN_PAK] }, { select: "prod-agent-01" }, { click: "Register" }],
+    assert_text: ["agent registered"],
+    assert_no_stored: TYPED_ADMIN_PAK,
+    mocks: TENANT_MOCKS },
+  // The Fleet drawer lists the agent's tenants, without the system generator.
+  { name: "fleet-tenants", hash: "#fleet/agent/1b9d6bcd", settle: 800,
+    assert_text: ["team-payments"], assert_absent: ["system"],
+    mocks: { "/fleet": FLEET, "/stacks": STACKS, "/agents/1b9d6bcd/target-state": TARGET_STATE,
+      "/agents/1b9d6bcd/registrations": AGENT_REGS, "/generators": [...GENERATORS, SYSTEM_GENERATOR] } },
   // A stale session (BROKKR-T-0340): the first reads succeed, then the broker
   // restarts (or a load balancer picks another replica) and every request is
   // refused. `expire` sets the status of every API answer after the Overview
@@ -697,6 +757,17 @@ for (const s of RUN) {
     await page.getByText(s.then_click).first().click().catch(() => {});
     await page.waitForTimeout(900);
   }
+  // Ordered actions after the ones above (BROKKR-T-0368), for a scene that
+  // fills, selects and clicks more than once: `{ click }`, `{ fill: [placeholder,
+  // value] }`, `{ select: label }` (the last <select> on the page), `{ press:
+  // key }` (a key on the focused element: Escape on an open dialog).
+  for (const step of s.steps || []) {
+    if (step.click) await page.getByText(step.click, { exact: true }).last().click().catch(() => {});
+    if (step.fill) await page.getByPlaceholder(step.fill[0]).last().fill(step.fill[1]).catch(() => {});
+    if (step.select) await page.locator("select").last().selectOption({ label: step.select }).catch(() => {});
+    if (step.press) await page.keyboard.press(step.press);
+    await page.waitForTimeout(step.wait ?? 700);
+  }
   await page.waitForTimeout(700);
   await page.screenshot({ path: `${OUT}/${s.name}.png`, fullPage: true });
   console.log(`shot: ${s.name}`);
@@ -751,6 +822,15 @@ for (const s of RUN) {
   for (const t of s.assert_once || []) {
     const n = await page.getByText(t).count();
     if (n !== 1) errs.push(`[assert] ${s.name}: "${t}" shown ${n}x, want 1`);
+  }
+  // A button by its accessible name: an icon button has no text.
+  for (const t of s.assert_button || []) {
+    const n = await page.getByRole("button", { name: t }).count();
+    if (n < 1) errs.push(`[assert] ${s.name}: no button "${t}"`);
+  }
+  for (const t of s.assert_absent || []) {
+    const n = await visibleCount(t);
+    if (n !== 0) errs.push(`[assert] ${s.name}: "${t}" shown ${n}x, want 0`);
   }
   if ((s.assert_text || []).length || (s.assert_once || []).length) {
     console.log(`  assert: ${(s.assert_text || []).length} lines shown, ${(s.assert_once || []).length} shown once`);

@@ -194,6 +194,19 @@ pub fn FleetView() -> impl IntoView {
     let toaster = use_toaster();
     // Stack names for the drawer's links (BROKKR-T-0337).
     let stacks = LocalResource::new(move || api::stacks(scope.get()));
+    // The tenants the selected agent is registered with (BROKKR-T-0368), and
+    // the tenant list for their names. The system generator is left out: every
+    // agent is registered with it, so it says nothing about this one.
+    let generators = LocalResource::new(api::generators);
+    let registrations = LocalResource::new(move || {
+        let id = selected.get().map(|a: FleetAgentRecord| a.agent_id.clone());
+        async move {
+            match id {
+                Some(id) => Some(api::agent_registrations(&id).await),
+                None => None,
+            }
+        }
+    });
     // A link from another view (`#fleet/agent/<id>`) opens that agent's drawer
     // once; a drawer the operator closed stays closed through the next poll.
     let selection = crate::app::use_selection();
@@ -568,6 +581,31 @@ pub fn FleetView() -> impl IntoView {
                                 }
                             }}
                             <Anchor href=agent_events_href(&a_id_links)>"Events of this agent"</Anchor>
+                            // ---- the tenants this agent serves (BROKKR-T-0368) ----
+                            <SectionLabel label="tenants" />
+                            {move || match registrations.get() {
+                                None | Some(None) => view! { <Loading label="loading tenants" /> }.into_any(),
+                                Some(Some(Err(_))) => view! { <span class="brk-note">"tenants unavailable"</span> }.into_any(),
+                                Some(Some(Ok(regs))) => {
+                                    let gens = generators.get().and_then(|r| r.ok()).unwrap_or_default();
+                                    let names: Vec<String> = regs
+                                        .iter()
+                                        .filter(|r| !gens.iter().any(|g| g.id == r.generator_id && g.is_system))
+                                        .map(|r| crate::components::generator_name(&gens, &r.generator_id))
+                                        .collect();
+                                    if names.is_empty() {
+                                        return view! {
+                                            <span class="brk-note">
+                                                "No tenant has registered this agent. Register it from the \
+                                                 tenant's detail under Tenants; until then only fleet-wide \
+                                                 stacks reach it."
+                                            </span>
+                                        }.into_any();
+                                    }
+                                    let items = names.into_iter().map(|n| view! { <span>{n}</span> }).collect_view();
+                                    view! { <Stack gap="xs">{items}</Stack> }.into_any()
+                                }
+                            }}
                             <SectionLabel label="diagnostics" />
                             {move || match objects.get() {
                                 None | Some(None) => {

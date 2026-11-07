@@ -52,7 +52,7 @@ echo "Tenant id: $TENANT_ID"
 
 Store `TENANT_PAK` where the tenant's CI will read it. It cannot be shown again; the only way back is `POST /api/v1/generators/{id}/rotate-pak`, which the admin runs.
 
-The operator console does the same from **Tenants → New tenant**, with the admin PAK typed into the form.
+The operator console does the same from **Tenants → New tenant**, with the admin PAK typed into the form. Its reveal panel shows the id with a copy button, and registers the agent (Step 3) in the same dialog.
 
 ### Step 2 (admin): Activate the agent
 
@@ -97,6 +97,8 @@ registered agent "brokkr-integration-test-agent" (6b1f...) with tenant "team-tut
 ```
 
 `brokkr --pak "$ADMIN_PAK" registrations --agent "$AGENT_NAME"` lists the tenants of the agent.
+
+In the console, the same registration is in the New tenant dialog right after the mint, and later in the tenant's drawer under **Tenants**, with the admin PAK typed into the form.
 
 <details>
 <summary>The same step with <code>curl</code></summary>

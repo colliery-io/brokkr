@@ -498,6 +498,18 @@ pub struct CreateGeneratorResponse {
     pub pak: String,
 }
 
+/// One agent-tenant registration, from `GET /api/v1/generators/{id}/registered-agents`
+/// and `GET /api/v1/agents/{id}/registrations` (BROKKR-T-0368). The ids are
+/// what the console joins against the fleet and the tenant list for names.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct Registration {
+    pub id: String,
+    pub agent_id: String,
+    pub generator_id: String,
+    #[serde(default)]
+    pub registered_at: Option<String>,
+}
+
 /// The broker's `Agent` as returned by `PUT /api/v1/agents/{id}`
 /// (BROKKR-T-0322).
 ///
