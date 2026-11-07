@@ -1214,10 +1214,16 @@ fn day_zero_cli_checks(
     {
         return Err(anyhow!("the agent list row is wrong: {row:?}"));
     }
-    // A generator PAK cannot read agent labels, so its list has no LABELS
-    // column, and it shows only the agents registered with it.
+    // A generator PAK lists only the agents registered with it, with their
+    // labels (BROKKR-T-0380: a tenant reads the labels of its registered
+    // agents).
     let (ok, out, _) = gen(&["agent", "list"])?;
-    if !ok || out.contains("LABELS") || !out.contains(&agent_id) || out.contains(&fx.stray_name) {
+    if !ok
+        || !out.contains("LABELS")
+        || !out.contains("env:cli")
+        || !out.contains(&agent_id)
+        || out.contains(&fx.stray_name)
+    {
         return Err(anyhow!("the generator agent list is wrong: {out:?}"));
     }
     let (ok, out, _) = gen(&["stack", "list"])?;
