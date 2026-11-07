@@ -590,7 +590,7 @@ fn Registrations(
             }.into_any(),
             Some(Ok(list)) if list.is_empty() => view! {
                 <span class="brk-note">
-                    "No agent is registered with this tenant. Its stacks reach no cluster until an agent is registered."
+                    "No agents registered."
                 </span>
             }.into_any(),
             Some(Ok(list)) => {
