@@ -14,8 +14,10 @@ RUN apt-get update && apt-get install -y \
 # trunk so the broker can embed + serve it via `--features embed-ui`. brokkr-web is
 # excluded from the workspace, so this is a standalone build; trunk fetches the
 # matching wasm-bindgen + wasm-opt itself.
+# The version is the one .github/workflows/console.yml pins (TRUNK_VERSION):
+# a newer trunk needs a newer rustc than this image has (BROKKR-T-0377).
 RUN rustup target add wasm32-unknown-unknown \
-    && cargo install --locked trunk
+    && cargo install --locked trunk --version 0.21.14
 
 # Copy source code and build
 COPY . .
