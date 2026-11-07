@@ -50,6 +50,8 @@ The response carries the tenant's record and its PAK:
 
 The `pak` is returned **once**. Hand it to the team over a secure channel and have them store it in their secret manager; the only recovery path is `POST /api/v1/generators/{id}/rotate-pak`. Keep the generator `id` too — the team needs it as `generator_id` on every stack they create, and you need it for scoped views later.
 
+With the `brokkr` CLI, `brokkr --pak "$ADMIN_PAK" tenant create team-acme --description "Acme platform team"` does the same and prints the id and the PAK once.
+
 Repeat for `team-globex`, into `GLOBEX_GEN_ID` and `GLOBEX_GENERATOR_PAK`.
 
 ## Step 2: Create Each Team's Agents, Registered to Their Generator

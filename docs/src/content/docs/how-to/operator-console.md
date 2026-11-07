@@ -162,24 +162,44 @@ The change takes effect within a poll cycle — the agent re-reads its own recor
 
 The equivalent outside the console is `PUT /api/v1/agents/{id}` with `{"status": "INACTIVE"}`. A newly created agent starts paused (`INACTIVE`) and must be activated before it applies anything — the same control does that.
 
-## Step 6: Create a Tenant
+## Step 6: Create a Tenant and Register Its Agents
 
-**Tenants** lists the tenants on this broker, and is the one place the console writes anything. Because a tenant's PAK is a credential, the console will not mint one on the strength of the read-only identity it carries — you supply an admin PAK for that single request.
+**Tenants** lists the tenants on this broker, and is where the console writes. Because a tenant's PAK is a credential, and a registration decides which clusters run a tenant's stacks, the console will not do either on the strength of the read-only identity it carries — you supply an admin PAK.
+
+The admin does three things once per tenant: create it, activate its agent, and register the agent with it. The first and the third happen in this one dialog; the second is the **Activate** control in the agent's drawer under **Fleet**.
 
 1. Open **Tenants** in the sidebar and choose **+ New tenant**.
 2. Give the tenant a name, and a description if it helps whoever inherits it.
-3. Paste an **admin PAK**. This is the only step in the console that asks for a credential.
+3. Paste an **admin PAK**. The console holds it in memory while the dialog is open, for this step and the next.
 4. Choose **Create tenant**.
 
-The new tenant's PAK is then shown once, with a **Copy** button.
+The new tenant's **id** and its **PAK** are then shown, each with a **Copy** button. The id is what a stack names as its owner and what an agent lists under `broker.generatorIds`; the PAK is shown once.
 
-> **Copy it before you close the dialog.** The broker stores only a hash, so a PAK that is not captured cannot be recovered — the only remedy is [rotating it](../pak-management/#rotating-generator-paks). This is the same one-shot behaviour as `brokkr-broker create generator`.
+> **Copy the PAK before you choose Done.** The broker stores only a hash, so a PAK that is not captured cannot be recovered — the only remedy is [rotating it](../pak-management/#rotating-generator-paks). While the PAK is on screen, Escape and the × button do nothing: only **Done** closes the dialog. This is the same one-shot behaviour as `brokkr-broker create generator`.
 
-The admin PAK you pasted is held in memory for that one request and cleared as soon as it finishes, whether it succeeded or not. It is never written to browser storage and never logged, so creating a second tenant asks for it again — deliberately, so that a browser left open is not a standing admin credential.
+5. Under **registered agents**, pick an agent and choose **Register**. Repeat for each cluster that should run this tenant's stacks. Registration is the agent's consent to receive the tenant's stacks: until an agent is registered, the tenant cannot target it and a label match is ignored.
+6. Choose **Done**. The dialog clears the PAKs it held.
+
+The admin PAK you pasted is held in memory for that dialog and cleared as soon as it closes, whether the mint succeeded or not. It is never written to browser storage and never logged, so creating a second tenant asks for it again — deliberately, so that a browser left open is not a standing admin credential.
 
 If the PAK is rejected, the dialog says whether it was not an admin credential (403) or the name was already taken (409). Nothing is created in either case.
 
 Outside the console, use `POST /api/v1/generators` or `brokkr-broker create generator` (the API calls a tenant a generator); see [Generators](../../reference/generators/). Creating **agents** is not available here — only tenants.
+
+## Tenant Detail
+
+Click a tenant in the **Tenants** list for its drawer: the id with a **Copy** button, the description, when it was last active, **registered agents** — the agents that serve it, each a link to its Fleet drawer — and its **credential**. One **Admin PAK** field serves the writes below it; each request clears it.
+
+- **Register** an agent: paste an admin PAK, pick an agent that is not registered yet, and choose **Register**. The PAK is used for that one request and cleared.
+- **Deregister** an agent: paste an admin PAK and choose **Deregister** next to the agent. A confirmation says what follows, because this is destructive: the broker removes the agent's targets for this tenant's stacks and tells the agent, which prunes those resources from its cluster on its next reconcile.
+
+- **Rotate PAK**: paste an admin PAK and choose **Rotate PAK**. A confirmation says what follows: the current PAK stops working at once, and every pipeline that uses it fails until it has the new one. The new PAK is then shown once, in a dialog that only **Done** closes, the same as a mint. See [Rotating Generator PAKs](../pak-management/#rotating-generator-paks).
+
+The system generator has no registration or rotation controls: every agent is registered with it, so fleet-wide stacks reach them all.
+
+The equivalents outside the console are `brokkr register`, `brokkr deregister` and `brokkr registrations --generator <tenant>`; see [Agent Registration](../agent-registration/).
+
+The agent's drawer under **Fleet** shows the other side: the tenants that agent is registered with, without the system generator.
 
 ## Running More Than One Broker Replica
 

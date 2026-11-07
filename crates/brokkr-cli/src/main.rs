@@ -15,6 +15,7 @@
 
 mod config;
 mod fleet;
+mod tenant;
 
 use brokkr_client::types::AgentGeneratorRegistration;
 use brokkr_client::{ApplyOutcome, BrokkrClient, BrokkrError};
@@ -88,6 +89,10 @@ enum Command {
     /// Label, target and list stacks. Give each stack by name or id.
     #[command(subcommand)]
     Stack(fleet::StackCommand),
+
+    /// Create and list tenants. The API calls a tenant a generator.
+    #[command(subcommand)]
+    Tenant(tenant::TenantCommand),
 }
 
 #[derive(Debug, Args)]
@@ -162,6 +167,7 @@ async fn run(cli: Cli) -> Result<(), String> {
         Command::Registrations(args) => registrations(&client, args).await,
         Command::Agent(command) => fleet::agent(&client, command).await,
         Command::Stack(command) => fleet::stack(&client, command).await,
+        Command::Tenant(command) => tenant::tenant(&client, command).await,
     }
 }
 

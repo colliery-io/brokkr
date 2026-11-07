@@ -235,7 +235,7 @@ pub fn OverviewView() -> impl IntoView {
                             Some(Ok(a)) if a.is_empty() => view! {
                                 <Empty
                                     message="No agents yet."
-                                    hint="Create an agent record, start the agent with its PAK, then activate it from Fleet."
+                                    hint="Create an agent record. Start the agent with its PAK. Then activate it from Fleet."
                                     href=format!("{DOCS}/how-to/agent-registration.html")
                                     link="How an agent registers"
                                 />
@@ -275,7 +275,7 @@ pub fn OverviewView() -> impl IntoView {
                         <Stack gap="sm">
                             {move || match samples.with(|s| s.latest()) {
                                 Some(r) => view! { <span class="brk-big">{format!("{} req/min", r.round() as i64)}</span> }.into_any(),
-                                None => view! { <span class="brk-meta">"collecting: the rate needs two samples"</span> }.into_any(),
+                                None => view! { <span class="brk-meta">"Collecting. The rate needs two samples."</span> }.into_any(),
                             }}
                             <Sparkline
                                 values=rates
@@ -298,7 +298,7 @@ pub fn OverviewView() -> impl IntoView {
                             Some(Ok(evs)) if evs.is_empty() => view! {
                                 <Empty
                                     message="No activity yet."
-                                    hint="An agent reports an event each time it applies, reconciles or heartbeats."
+                                    hint="An agent reports an event each time it applies, reconciles or sends a heartbeat."
                                 />
                             }.into_any(),
                             Some(Ok(evs)) => {

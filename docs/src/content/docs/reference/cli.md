@@ -258,7 +258,7 @@ See the [Configuration Guide](../../how-to/configuration/) for all available set
 
 ## brokkr
 
-`brokkr` is the control-plane client. It submits a folder of Kubernetes manifests as a stack's desired state. It wraps the Rust SDK's `apply` operation. It also does the day-zero steps: it activates, labels and lists agents, and labels, targets and lists stacks (see [Day-zero commands](#day-zero-commands-brokkr-agent-and-brokkr-stack)).
+`brokkr` is the control-plane client. It submits a folder of Kubernetes manifests as a stack's desired state. It wraps the Rust SDK's `apply` operation. It also does the admin's one-time steps: it creates and lists tenants (see [`brokkr tenant`](#brokkr-tenant)), registers agents with them, and does the day-zero steps: it activates, labels and lists agents, and labels, targets and lists stacks (see [Day-zero commands](#day-zero-commands-brokkr-agent-and-brokkr-stack)).
 
 ### Connection settings
 
@@ -305,6 +305,32 @@ With a **tenant** PAK, the tenant of that PAK owns the stack. With an **admin** 
 | `unchanged: stack "<name>" already current` | Latest deployment object already matches the bundle; nothing submitted. |
 
 On any error (no connection settings, malformed config, unreadable bundle, broker rejection) the command prints `error: <message>` to stderr and exits `1`.
+
+### `brokkr tenant`
+
+Creates and lists tenants (the API calls a tenant a generator). With `brokkr register` and `brokkr agent activate`, the admin's one-time steps for a new tenant are one tool. Both commands require an admin PAK.
+
+#### `brokkr tenant create`
+
+```bash
+brokkr tenant create <NAME> [--description <TEXT>]
+```
+
+```
+created tenant "team-acme" (a1b2c3d4-e5f6-7890-abcd-ef1234567890)
+PAK: brokkr_BRgen12ab_GeneratorLongTokenExample01
+The PAK is shown once. Store it where the tenant's CI reads it; the only way back is a rotation. Next: brokkr register --agent <AGENT> --generator team-acme
+```
+
+The PAK is printed once: the broker keeps only a hash. A name that exists already is a `409`; the command prints `error: <message>` to stderr and exits `1`. This is the same as `POST /api/v1/generators`.
+
+#### `brokkr tenant list`
+
+```bash
+brokkr tenant list
+```
+
+Prints a table with `NAME`, `ID`, `STATUS`, `LAST ACTIVE` and `DESCRIPTION`. The system generator is not a tenant and is not listed. This is the same as `GET /api/v1/generators`.
 
 ### `brokkr register`
 

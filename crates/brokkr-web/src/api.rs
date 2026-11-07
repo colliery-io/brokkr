@@ -635,6 +635,106 @@ pub async fn set_agent_status(
     .await
 }
 
+/// DELETE `/api/v1{path}` with a JSON body, authenticating with an
+/// **explicitly supplied** bearer token (BROKKR-T-0368). Same rule as
+/// [`post_json_with_token`]: the token is borrowed for one request and never
+/// captured, logged, or stored. A `204` has no body, so this returns `()`.
+async fn delete_json_with_token<B: Serialize>(
+    path: &str,
+    body: &B,
+    bearer: &str,
+) -> Result<(), ApiError> {
+    let url = format!("/api/v1{path}");
+    let resp = Request::delete(&url)
+        .header("Authorization", &format!("Bearer {bearer}"))
+        .json(body)
+        .map_err(|_| ApiError::Network)?
+        .send()
+        .await
+        .map_err(|_| ApiError::Network)?;
+    let status = resp.status();
+    if !(200..300).contains(&status) {
+        let message = resp.text().await.unwrap_or_default();
+        let code = serde_json::from_str::<ErrorBody>(&message)
+            .ok()
+            .map(|b| b.code);
+        return Err(ApiError::Http {
+            status,
+            message,
+            code,
+        });
+    }
+    Ok(())
+}
+
+/// `GET /api/v1/generators/{id}/registered-agents` — the agents registered
+/// with one tenant (BROKKR-T-0368). Admin-readable, so the console's read-only
+/// token passes.
+pub async fn registered_agents(
+    generator_id: &str,
+) -> Result<Vec<crate::models::Registration>, ApiError> {
+    get(&format!("/generators/{generator_id}/registered-agents")).await
+}
+
+/// `GET /api/v1/agents/{id}/registrations` — the tenants one agent is
+/// registered with, the system generator included (BROKKR-T-0368).
+pub async fn agent_registrations(
+    agent_id: &str,
+) -> Result<Vec<crate::models::Registration>, ApiError> {
+    get(&format!("/agents/{agent_id}/registrations")).await
+}
+
+/// `POST /api/v1/generators/{id}/register` with an admin PAK supplied for this
+/// request (BROKKR-T-0368). Registration is the agent's consent to receive the
+/// tenant's stacks; without it a target for the agent is refused. A `409`
+/// (`already_registered`) means the agent was registered already.
+pub async fn register_agent(
+    generator_id: &str,
+    agent_id: &str,
+    admin_pak: &str,
+) -> Result<crate::models::Registration, ApiError> {
+    post_json_with_token(
+        &format!("/generators/{generator_id}/register"),
+        &serde_json::json!({ "agent_id": agent_id }),
+        admin_pak,
+    )
+    .await
+}
+
+/// `DELETE /api/v1/generators/{id}/register` with an admin PAK supplied for
+/// this request (BROKKR-T-0368). Destructive: the broker removes the agent's
+/// targets for this tenant's stacks and tells the agent, which prunes those
+/// resources from its cluster on its next reconcile.
+pub async fn deregister_agent(
+    generator_id: &str,
+    agent_id: &str,
+    admin_pak: &str,
+) -> Result<(), ApiError> {
+    delete_json_with_token(
+        &format!("/generators/{generator_id}/register"),
+        &serde_json::json!({ "agent_id": agent_id }),
+        admin_pak,
+    )
+    .await
+}
+
+/// `POST /api/v1/generators/{id}/rotate-pak` with an admin PAK supplied for
+/// this request (BROKKR-T-0369). The current PAK stops working at once: the
+/// broker replaces the stored hash and evicts the old PAK from its auth
+/// cache. The response carries the new PAK in plaintext, exactly once. The
+/// handler reads no body; the empty object only sets the content type.
+pub async fn rotate_generator_pak(
+    generator_id: &str,
+    admin_pak: &str,
+) -> Result<crate::models::CreateGeneratorResponse, ApiError> {
+    post_json_with_token(
+        &format!("/generators/{generator_id}/rotate-pak"),
+        &serde_json::json!({}),
+        admin_pak,
+    )
+    .await
+}
+
 #[cfg(test)]
 mod tests {
     use super::Session;

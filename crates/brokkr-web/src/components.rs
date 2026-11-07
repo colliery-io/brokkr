@@ -132,3 +132,41 @@ pub fn agent_name(fleet: &[crate::models::FleetAgentRecord], id: &str) -> String
         .map(|a| a.name.clone())
         .unwrap_or_else(|| id.chars().take(8).collect())
 }
+
+/// The tenant's name from the tenant list, or the first 8 characters of its id.
+pub fn generator_name(gens: &[crate::models::Generator], id: &str) -> String {
+    gens.iter()
+        .find(|g| g.id == id)
+        .map(|g| g.name.clone())
+        .unwrap_or_else(|| id.chars().take(8).collect())
+}
+
+/// The message the console shows when a write made with an operator-supplied
+/// admin PAK fails (BROKKR-T-0368). Shared by tenant minting, registration and
+/// agent state changes, so the wording is one.
+///
+/// A 400, 404 or 409 shows the broker's own message: `ErrorResponse` never
+/// echoes the Authorization header, so this cannot leak the PAK that was just
+/// used. Everything else is a fixed sentence: never interpolate the raw error,
+/// which is the one place a future change could surface request details.
+pub fn write_error(e: aurora_leptos::tokens::ApiError) -> String {
+    use aurora_leptos::tokens::ApiError;
+    match e {
+        ApiError::Http { status: 403, .. } => {
+            "The broker refused the PAK. It is not an admin PAK.".to_string()
+        }
+        ApiError::Http {
+            status: status @ (400 | 404 | 409),
+            message,
+            ..
+        } => match serde_json::from_str::<crate::models::ErrorBody>(&message) {
+            Ok(b) if !b.message.is_empty() => {
+                format!("The broker refused the request: {}.", b.message)
+            }
+            _ => format!("The broker refused the request (HTTP {status})."),
+        },
+        ApiError::Http { status, .. } => format!("The broker refused the request (HTTP {status})."),
+        ApiError::Network => "The console cannot reach the broker.".to_string(),
+        _ => "The request failed.".to_string(),
+    }
+}

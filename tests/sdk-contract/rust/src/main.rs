@@ -128,6 +128,10 @@ async fn main() -> ExitCode {
         "T-0344: register, registrations and deregister by name via the brokkr CLI binary",
         scenario_registration_by_name_cli(&base_url, &admin_pak)
     );
+    run!(
+        "T-0370: tenant create and list via the wrapper and the brokkr CLI binary",
+        scenario_tenant_cli(&base_url, &admin_pak)
+    );
 
     println!("══════════════════════════════════════════════════════════════════");
     println!("📊 Results: {} passed, {} failed", passed, failed);
@@ -1348,6 +1352,107 @@ async fn registration_by_name_cli_checks(
         return Err(anyhow!(
             "deregister by name left the registration: {regs:?}"
         ));
+    }
+    Ok(())
+}
+
+/// BROKKR-T-0370: `brokkr tenant create` prints the id and the PAK once, the
+/// PAK works as the tenant's own credential, and `brokkr tenant list` shows
+/// the tenant and not the system generator.
+async fn scenario_tenant_cli(base_url: &str, admin_pak: &str) -> Result<()> {
+    let cli = env::var("BROKKR_CLI").map_err(|_| {
+        anyhow!(
+            "BROKKR_CLI is not set. Run `angreal tests sdk-contract rust`, \
+             or set BROKKR_CLI to the path of the brokkr binary"
+        )
+    })?;
+    let admin = client(base_url, admin_pak)?;
+    let name = unique("sdk-contract-rust-tenant");
+    let run = |args: &[&str]| brokkr_cli(&cli, base_url, admin_pak, args);
+
+    let (ok, out, err) = run(&["tenant", "create", &name, "--description", "contract suite"])?;
+    if !ok {
+        return Err(anyhow!("tenant create failed: {err}"));
+    }
+    let id = out
+        .lines()
+        .find_map(|l| l.strip_prefix(&format!("created tenant \"{name}\" (")))
+        .and_then(|rest| rest.strip_suffix(')'))
+        .and_then(|id| Uuid::parse_str(id).ok())
+        .ok_or_else(|| anyhow!("no created line with an id in {out:?}"))?;
+    let pak = out
+        .lines()
+        .find_map(|l| l.strip_prefix("PAK: "))
+        .ok_or_else(|| anyhow!("no PAK line in {out:?}"))?
+        .trim()
+        .to_string();
+    if !out.contains("shown once") {
+        return Err(anyhow!("the output does not say the PAK is shown once"));
+    }
+    let result = tenant_cli_checks(&admin, &run, &name, id, &pak, base_url).await;
+    // Clean up whatever the checks did.
+    let _ = admin.api().delete_generator().id(id).send().await;
+    result
+}
+
+async fn tenant_cli_checks(
+    admin: &BrokkrClient,
+    run: &dyn Fn(&[&str]) -> Result<CliRun>,
+    name: &str,
+    id: Uuid,
+    pak: &str,
+    base_url: &str,
+) -> Result<()> {
+    // The wrapper sees it, by name, with the id the CLI printed.
+    println!("  → list_generators / resolve_generator_id");
+    let listed = admin.list_generators().await?;
+    let mine = listed
+        .iter()
+        .find(|g| g.name == name)
+        .ok_or_else(|| anyhow!("the new tenant is not in list_generators"))?;
+    if mine.id != id || mine.description.as_deref() != Some("contract suite") {
+        return Err(anyhow!("the listed tenant does not match: {mine:?}"));
+    }
+    if admin.resolve_generator_id(name).await? != id {
+        return Err(anyhow!("resolve_generator_id gave another id"));
+    }
+    // The printed PAK is the tenant's credential: it reads its own record.
+    println!("  → the printed PAK authenticates as the tenant");
+    let tenant = client(base_url, pak)?;
+    let me = tenant
+        .api()
+        .get_generator()
+        .id(id)
+        .send()
+        .await?
+        .into_inner();
+    if me.id != id {
+        return Err(anyhow!("the tenant PAK read another generator"));
+    }
+    // A repeat of the name is a 409, and creates nothing.
+    println!("  → a second create with the same name is refused");
+    let (ok, _, err) = run(&["tenant", "create", name])?;
+    if ok || err.is_empty() {
+        return Err(anyhow!("a duplicate name was accepted"));
+    }
+    if admin
+        .list_generators()
+        .await?
+        .iter()
+        .filter(|g| g.name == name)
+        .count()
+        != 1
+    {
+        return Err(anyhow!("a duplicate create added a generator"));
+    }
+    // The list shows the tenant and not the system generator.
+    expect_cli(run(&["tenant", "list"])?, true, name)?;
+    let (_, out, _) = run(&["tenant", "list"])?;
+    if out
+        .lines()
+        .any(|l| l.starts_with("system ") || l.starts_with("system\t"))
+    {
+        return Err(anyhow!("tenant list shows the system generator: {out:?}"));
     }
     Ok(())
 }

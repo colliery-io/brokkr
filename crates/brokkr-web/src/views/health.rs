@@ -125,13 +125,13 @@ fn db_tiles(
         (false, _) => ("—".to_string(), NOT_EXPORTED.to_string()),
         (true, None) => (
             "collecting".to_string(),
-            "the rate needs two samples".to_string(),
+            "The rate needs two samples.".to_string(),
         ),
         (true, Some(r)) => (fmt(Some(r.round())), DB_QUERIES.to_string()),
     };
     let latency = match (has_latency, p95) {
         (false, _) => ("—".to_string(), NOT_EXPORTED.to_string()),
-        (true, None) => ("collecting".to_string(), "no queries yet".to_string()),
+        (true, None) => ("collecting".to_string(), "No queries yet".to_string()),
         (true, Some((v, QuantileWindow::Recent(s)))) => (fmt_latency(v), format!("last {s} s")),
         (true, Some((v, QuantileWindow::SinceStart))) => {
             (fmt_latency(v), "since broker start".to_string())
@@ -224,7 +224,7 @@ pub fn BrokerHealthView() -> impl IntoView {
                     }
                     .into_any(),
                     Some(Ok(r)) if r.connections.is_empty() => view! {
-                        <Empty message="No agents connected on the internal WS channel." />
+                        <Empty message="No agents are connected on the internal WS channel." />
                     }
                     .into_any(),
                     Some(Ok(r)) => {

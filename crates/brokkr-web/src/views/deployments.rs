@@ -107,7 +107,7 @@ pub fn DeploymentsView() -> impl IntoView {
                 view! {
                     <Empty
                         message="No stacks yet."
-                        hint="A tenant creates a stack with its own PAK, then pushes manifests to it."
+                        hint="A tenant creates a stack with its PAK. Then it pushes manifests to the stack."
                         href=format!("{DOCS}/tutorials/first-deployment.html")
                         link="Deploy a first application"
                     />
@@ -198,7 +198,7 @@ pub fn DeploymentsView() -> impl IntoView {
                         {move || match agents.get() {
                             None | Some(None) => view! { <Loading label="loading agents" /> }.into_any(),
                             Some(Some(list)) if list.is_empty() => view! {
-                                <span class="brk-note">"No agent has this stack yet. An admin targets an agent, or a label matches one."</span>
+                                <span class="brk-note">"No agent has this stack yet. An admin targets an agent, or a label matches an agent."</span>
                             }.into_any(),
                             Some(Some(list)) => {
                                 let rows = list.into_iter().map(|(a, n)| {

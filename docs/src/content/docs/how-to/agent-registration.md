@@ -74,6 +74,10 @@ You can give the agent and the generator by name instead of by id, for example `
 
 You can run `brokkr register` again. For a pair that is registered already, the command changes nothing, prints a line that starts with `unchanged:`, and exits `0`. For a new pair, it prints the registration record. Thus a bootstrap script does not need to check first. Agent *startup* self-registration also treats a repeat as success — see [Register an Agent at Deploy Time](#register-an-agent-at-deploy-time). The REST API still returns `409 already_registered` for a repeat.
 
+### Register via the operator console
+
+Under **Tenants**, open the tenant's drawer, paste an admin PAK, pick the agent and choose **Register**. The New tenant dialog offers the same right after a mint. Deregister is next to each registered agent, behind a confirmation. See [Using the Operator Console](../operator-console/#tenant-detail).
+
 ### Register via the REST API
 
 `POST /generators/{id}/register` with an `agent_id` in the body registers that agent (admin acting cross-entity). Omit `agent_id` and the calling agent registers itself. A generator PAK cannot call this endpoint — it returns `403 forbidden`:

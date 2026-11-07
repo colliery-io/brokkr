@@ -42,7 +42,7 @@ pub fn WorkOrdersView() -> impl IntoView {
                 Some(Err(_)) => view! {
                     <Panel title="Active">
                         <span class="brk-note">
-                            "unavailable (the active list requires an admin PAK)"
+                            "Not available. The active list needs an admin PAK."
                         </span>
                     </Panel>
                 }.into_any(),
@@ -52,7 +52,7 @@ pub fn WorkOrdersView() -> impl IntoView {
                         view! {
                             <Panel title="Active">
                                 <Empty
-                                    message="No work orders in flight."
+                                    message="No active work orders."
                                     hint="A work order appears when a tenant requests an image build."
                                     href=format!("{DOCS}/reference/work-orders.html")
                                     link="What a work order is"

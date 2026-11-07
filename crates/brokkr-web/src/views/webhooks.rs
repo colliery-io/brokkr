@@ -75,7 +75,7 @@ pub fn WebhooksView() -> impl IntoView {
                 view! {
                     <Empty
                         message="No webhook subscriptions."
-                        hint="Create a subscription with the API to get events pushed to a URL."
+                        hint="Create a subscription with the API. The broker then pushes events to a URL."
                         href=format!("{DOCS}/how-to/webhooks.html")
                         link="How to configure webhooks"
                     />
@@ -200,7 +200,7 @@ pub fn WebhooksView() -> impl IntoView {
                                     <span class="brk-note">"deliveries unavailable"</span>
                                 }.into_any(),
                                 Some(Some(Ok(ds))) if ds.is_empty() => view! {
-                                    <span class="brk-note">"no deliveries yet"</span>
+                                    <span class="brk-note">"No deliveries yet"</span>
                                 }.into_any(),
                                 Some(Some(Ok(ds))) => {
                                     let rows = ds.into_iter().take(8).map(|d| {

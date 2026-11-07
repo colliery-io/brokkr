@@ -262,7 +262,7 @@ fn join_labels(mut labels: Vec<String>) -> String {
 }
 
 /// Print rows under a header, with each column padded to its widest cell.
-fn print_table(header: &[&str], rows: Vec<Vec<String>>) {
+pub(crate) fn print_table(header: &[&str], rows: Vec<Vec<String>>) {
     print!("{}", format_table(header, &rows));
 }
 
