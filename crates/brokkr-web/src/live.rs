@@ -282,9 +282,9 @@ impl LiveState {
         match self {
             LiveState::Idle => String::new(),
             LiveState::Connecting => "The console opens the live stream of this stack.".into(),
-            LiveState::Live => "New lines show when the pod writes them.".into(),
+            LiveState::Live => "New lines appear when the pod writes them.".into(),
             LiveState::Reconnecting { in_secs } => format!(
-                "The live stream stopped. The console tries again in {in_secs} s and reads the logs every 5 s until then."
+                "The live stream stopped. The console tries again in {in_secs} s. Until then, it reads the logs every 5 s."
             ),
             LiveState::Polling => {
                 "The live stream is not available. The console reads the logs every 5 s.".into()

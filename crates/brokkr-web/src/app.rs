@@ -290,15 +290,13 @@ fn TopBar(
 
 /// The text of the session banner.
 const SESSION_EXPIRED: &str =
-    "The broker restarted, or this page reached a different replica. Reload to get a new session.";
+    "The broker restarted, or this page reached a different broker. Reload the page to get a new session.";
 
 /// The text of the banner when the broker refused the token from the first
 /// request. Each broker process makes its own token and puts it in the page
 /// that it serves (`brokkr-broker/src/utils/ui_pak.rs`), and the page is not
 /// cached (`Cache-Control: no-store`), so a reload gets a token again.
-const TOKEN_REFUSED: &str = "The broker refused the token of this console. Reload the page. \
-     If this does not help, open the console directly at the address of one broker. \
-     Each broker process gives a different token to the page that it serves.";
+const TOKEN_REFUSED: &str = "The broker refused the token of this console. Reload the page. If the error stays, open the console at the address of one broker. Each broker gives a different token to the page that it serves.";
 
 /// One banner for the whole console when the broker refused the token, above
 /// every view, so the views' own "Not authorized" errors have an explanation
@@ -452,7 +450,7 @@ fn Main(route: RwSignal<&'static str>) -> impl IntoView {
                     let (title, _) = meta(other);
                     view! {
                         <Panel title="Coming soon">
-                            <Text dimmed=true>{format!("{title} — not yet implemented.")}</Text>
+                            <Text dimmed=true>{format!("{title} is not available yet.")}</Text>
                         </Panel>
                     }
                     .into_any()

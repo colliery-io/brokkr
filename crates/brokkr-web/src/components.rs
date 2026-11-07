@@ -153,7 +153,7 @@ pub fn write_error(e: aurora_leptos::tokens::ApiError) -> String {
     use aurora_leptos::tokens::ApiError;
     match e {
         ApiError::Http { status: 403, .. } => {
-            "Rejected: that PAK is not an admin credential.".to_string()
+            "The broker refused the PAK. It is not an admin PAK.".to_string()
         }
         ApiError::Http {
             status: status @ (400 | 404 | 409),
@@ -161,12 +161,12 @@ pub fn write_error(e: aurora_leptos::tokens::ApiError) -> String {
             ..
         } => match serde_json::from_str::<crate::models::ErrorBody>(&message) {
             Ok(b) if !b.message.is_empty() => {
-                format!("Broker rejected the request: {}.", b.message)
+                format!("The broker refused the request: {}.", b.message)
             }
-            _ => format!("Broker rejected the request (HTTP {status})."),
+            _ => format!("The broker refused the request (HTTP {status})."),
         },
-        ApiError::Http { status, .. } => format!("Broker rejected the request (HTTP {status})."),
-        ApiError::Network => "Could not reach the broker.".to_string(),
+        ApiError::Http { status, .. } => format!("The broker refused the request (HTTP {status})."),
+        ApiError::Network => "The console cannot reach the broker.".to_string(),
         _ => "The request failed.".to_string(),
     }
 }

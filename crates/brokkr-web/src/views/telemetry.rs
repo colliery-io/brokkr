@@ -203,7 +203,7 @@ pub fn TelemetryView() -> impl IntoView {
                                         <Stack gap="sm">
                                             <Empty
                                                 message=format!("No events from {} in the retention window.", agent_name(&names, &id))
-                                                hint="An agent reports an event each time it applies, reconciles or heartbeats."
+                                                hint="An agent reports an event each time it applies, reconciles or sends a heartbeat."
                                                 href="#telemetry"
                                                 link="Show all agents"
                                             />
@@ -213,7 +213,7 @@ pub fn TelemetryView() -> impl IntoView {
                                     None => view! {
                                         <Empty
                                             message="No agent events yet."
-                                            hint="An agent reports an event each time it applies, reconciles or heartbeats."
+                                            hint="An agent reports an event each time it applies, reconciles or sends a heartbeat."
                                         />
                                     }
                                     .into_any(),
@@ -277,7 +277,7 @@ pub fn TelemetryView() -> impl IntoView {
                         Some(None) => view! {
                             <Empty
                                 message="Select a stack to see its Kubernetes events."
-                                hint="The agent that applies the stack reports the events of the objects it manages."
+                                hint="The agent that applies the stack reports the events of the objects that it manages."
                             />
                         }
                         .into_any(),
@@ -289,7 +289,7 @@ pub fn TelemetryView() -> impl IntoView {
                             <Stack gap="sm">
                                 <Empty
                                     message="No Kubernetes events for this stack in the retention window."
-                                    hint="Events appear once the agent applies the stack and its objects change state."
+                                    hint="Events appear after the agent applies the stack and its objects change state."
                                 />
                                 <Retention info=h.retention.clone() />
                             </Stack>
@@ -334,8 +334,8 @@ pub fn TelemetryView() -> impl IntoView {
                         None => view! { <Loading label="loading logs" /> }.into_any(),
                         Some(None) => view! {
                             <Empty
-                                message="Select a stack to tail its pod logs."
-                                hint="The agent streams the log lines of the stack's pods to the broker, which keeps a short window of them."
+                                message="Select a stack to see its pod logs."
+                                hint="The agent streams the log lines of the stack's pods to the broker. The broker keeps a short window of them."
                             />
                         }
                         .into_any(),

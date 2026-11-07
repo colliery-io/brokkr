@@ -60,10 +60,9 @@ fn note(text: String) -> AnyView {
 /// note, not as an error.
 fn pods_view(pods: Result<Vec<PodStatus>, String>) -> AnyView {
     match pods {
-        Err(e) => note(format!("pod statuses unreadable: {e}")),
+        Err(e) => note(format!("The console cannot read the pod statuses: {e}")),
         Ok(v) if v.is_empty() => note(
-            "No pods attributed to this deployment object \u{2014} expected when it applies \
-             only non-workload resources, or its workload has not created pods yet."
+            "No pods belong to this deployment object. This is normal when the object has no workloads, or when its workloads have no pods yet."
                 .to_string(),
         ),
         Ok(v) => {
@@ -106,7 +105,7 @@ fn pods_view(pods: Result<Vec<PodStatus>, String>) -> AnyView {
 fn events_view(events: Result<Vec<DiagEvent>, String>) -> AnyView {
     const SHOW: usize = 25;
     match events {
-        Err(e) => note(format!("events unreadable: {e}")),
+        Err(e) => note(format!("The console cannot read the events: {e}")),
         Ok(v) if v.is_empty() => note("No events in the searched namespaces.".to_string()),
         Ok(v) => {
             let total = v.len();
@@ -145,8 +144,8 @@ fn events_view(events: Result<Vec<DiagEvent>, String>) -> AnyView {
 /// Parsed log tails (`pod/container` -> last lines).
 fn logs_view(tails: Result<Vec<(String, String)>, String>) -> AnyView {
     match tails {
-        Err(e) => note(format!("log tails unreadable: {e}")),
-        Ok(v) if v.is_empty() => note("No log tails collected.".to_string()),
+        Err(e) => note(format!("The console cannot read the log tails: {e}")),
+        Ok(v) if v.is_empty() => note("The agent collected no log tails.".to_string()),
         Ok(v) => {
             let blocks = v
                 .into_iter()
@@ -314,8 +313,8 @@ pub fn FleetView() -> impl IntoView {
             Some(Ok(agents)) if agents.is_empty() => {
                 view! {
                     <Empty
-                        message="No agents registered with this broker."
-                        hint="Create an agent record, start the agent with its PAK and a matching name and cluster, then open it here and activate it."
+                        message="No agents are registered with this broker."
+                        hint="Create an agent record. Start the agent with its PAK, the same name and the same cluster. Then open the agent here and activate it."
                         href=format!("{DOCS}/how-to/agent-registration.html")
                         link="How an agent registers"
                     />
@@ -469,19 +468,11 @@ pub fn FleetView() -> impl IntoView {
                                 view! {
                                     <span class="brk-text">
                                         {if active {
-                                            "Active: this agent fetches and applies the deployment \
-                                             objects targeted at it."
+                                            "Active: the agent fetches and applies the deployment objects that target it."
                                         } else if !a_checked_in {
-                                            "Not yet activated: this agent has never checked in. Start \
-                                             the agent with its PAK and a matching name and cluster, \
-                                             then activate it here. A new agent applies nothing until \
-                                             an admin activates it."
+                                            "Not activated: the agent has not sent a heartbeat yet. Start the agent with its PAK, the same name and the same cluster. Then activate it here. A new agent applies nothing until an admin activates it."
                                         } else {
-                                            "Inactive: this agent checks in, but it fetches no \
-                                             deployment objects and no work orders. A new agent starts \
-                                             inactive, and a paused agent stays inactive, until an \
-                                             admin activates it. Already-applied resources stay in the \
-                                             cluster."
+                                            "Inactive: the agent sends heartbeats, but it fetches no deployment objects and no work orders. A new agent starts inactive. A paused agent stays inactive until an admin activates it. Resources that the agent applied stay in the cluster."
                                         }}
                                     </span>
                                     <PasswordInput
@@ -498,7 +489,7 @@ pub fn FleetView() -> impl IntoView {
                                             let pak = pause_pak.get();
                                             if pak.trim().is_empty() {
                                                 pause_error.set(Some(
-                                                    "An admin PAK is required to change agent state.".into(),
+                                                    "Enter an admin PAK to change the agent state.".into(),
                                                 ));
                                                 return;
                                             }
@@ -516,9 +507,9 @@ pub fn FleetView() -> impl IntoView {
                                                         pause_status.set(Some(updated.status.clone()));
                                                         data.refetch();
                                                         toaster.success(if target == "ACTIVE" {
-                                                            "agent activated"
+                                                            "Agent activated"
                                                         } else {
-                                                            "agent paused"
+                                                            "Agent paused"
                                                         });
                                                     }
                                                     Err(e) => {
@@ -540,7 +531,7 @@ pub fn FleetView() -> impl IntoView {
                                                             }
                                                             _ => "The request failed.".to_string(),
                                                         }));
-                                                        toaster.error("agent state change failed");
+                                                        toaster.error("The agent state did not change.");
                                                     }
                                                 }
                                             });
@@ -596,9 +587,7 @@ pub fn FleetView() -> impl IntoView {
                                     if names.is_empty() {
                                         return view! {
                                             <span class="brk-note">
-                                                "No tenant has registered this agent. Register it from the \
-                                                 tenant's detail under Tenants; until then only fleet-wide \
-                                                 stacks reach it."
+                                                "No tenant has registered this agent. Only fleet-wide stacks reach it. To register it, open the tenant under Tenants."
                                             </span>
                                         }.into_any();
                                     }
@@ -612,11 +601,11 @@ pub fn FleetView() -> impl IntoView {
                                     view! { <Loading label="loading deployment objects" /> }.into_any()
                                 }
                                 Some(Some(Err(_))) => view! {
-                                    <span class="brk-note">"deployment objects unavailable"</span>
+                                    <span class="brk-note">"The deployment objects are not available."</span>
                                 }.into_any(),
                                 Some(Some(Ok(objs))) if objs.is_empty() => view! {
                                     <span class="brk-note">
-                                        "No deployment objects target this agent \u{2014} nothing to diagnose."
+                                        "No deployment objects target this agent. There is nothing to diagnose."
                                     </span>
                                 }.into_any(),
                                 Some(Some(Ok(objs))) => {
@@ -645,17 +634,16 @@ pub fn FleetView() -> impl IntoView {
                                                     // Keep the id: it's what makes the result readable.
                                                     Ok(req) => {
                                                         diag_id.set(Some(req.id));
-                                                        toaster.success("diagnostic requested \u{2014} collecting\u{2026}");
+                                                        toaster.success("Diagnostic requested. The agent collects the data.");
                                                     }
                                                     Err(_) => {
-                                                        toaster.error("diagnostic request failed");
+                                                        toaster.error("The diagnostic request failed.");
                                                     }
                                                 }
                                             });
                                         })>"\u{2315} Run diagnostic"</Button></Group>
                                         <span class="brk-note">
-                                            "Asks the agent to collect pod status, events and log tails \
-                                             for this deployment object."
+                                            "The agent collects the pod statuses, the events and the log tails of this deployment object."
                                         </span>
                                     }.into_any()
                                 }
@@ -686,17 +674,14 @@ pub fn FleetView() -> impl IntoView {
                                         let status = d.request.status.clone();
                                         let id8: String = d.request.id.chars().take(8).collect();
                                         let stalled_msg = format!(
-                                            "Stopped polling after {}s; the request is still {status}. \
-                                             A claimed request can stay claimed indefinitely if the \
-                                             agent never submits, so this is not \
-                                             proof that collection failed.",
+                                            "The console waited {}s. The request is still {status}. A request stays claimed if the agent does not submit a result. This does not show that the collection failed.",
                                             POLL_MAX as u64 * POLL_EVERY_MS / 1000,
                                         );
                                         let body = match d.outcome() {
                                             // Bounded, and honest about what the bound does and
                                             // does not prove.
                                             DiagnosticOutcome::InFlight if exhausted => view! {
-                                                <Alert title="no result yet" color=token::GOLD>
+                                                <Alert title="No result yet" color=token::GOLD>
                                                     <Stack gap="xs">
                                                         <span class="brk-text">{stalled_msg}</span>
                                                         <Button on_click=recheck>"\u{21bb} Check again"</Button>
@@ -704,8 +689,8 @@ pub fn FleetView() -> impl IntoView {
                                                 </Alert>
                                             }.into_any(),
                                             DiagnosticOutcome::InFlight => view! {
-                                                <Meter indeterminate=true label="waiting for the agent to collect pod statuses, events, log tails" />
-                                                <span class="brk-note">"waiting for the agent to collect pod statuses, events, log tails\u{2026}"</span>
+                                                <Meter indeterminate=true label="The agent collects the pod statuses, the events and the log tails" />
+                                                <span class="brk-note">"The agent collects the pod statuses, the events and the log tails…"</span>
                                             }.into_any(),
                                             // `completed` + an `error` entry in `events` is a
                                             // FAILED collection, not an empty one.
@@ -717,9 +702,7 @@ pub fn FleetView() -> impl IntoView {
                                                     <Alert title="collection failed" color=token::BAD>
                                                         <Stack gap="xs">
                                                             <span class="brk-text">
-                                                                "The agent could not read the cluster. The broker still \
-                                                                 reports the request as completed \u{2014} the error is \
-                                                                 carried inside the result."
+                                                                "The agent could not read the cluster. The broker shows the request as completed, and the result holds the error."
                                                             </span>
                                                             {lines}
                                                         </Stack>
@@ -732,20 +715,18 @@ pub fn FleetView() -> impl IntoView {
                                                     "expired" => (
                                                         "request expired",
                                                         token::BAD,
-                                                        "No agent claimed the request before its retention window \
-                                                         closed \u{2014} the agent is likely offline.".to_string(),
+                                                        "No agent claimed the request before it expired. The agent is probably offline.".to_string(),
                                                     ),
                                                     "failed" => (
                                                         "collection failed",
                                                         token::BAD,
-                                                        "The request was claimed but no result was ever submitted."
+                                                        "An agent claimed the request but submitted no result."
                                                             .to_string(),
                                                     ),
                                                     _ => (
-                                                        "no result stored",
+                                                        "No result stored",
                                                         token::GOLD,
-                                                        format!("The request is {s}, but the broker holds no result \
-                                                                 payload for it."),
+                                                        format!("The request is {s}, but the broker has no result for it."),
                                                     ),
                                                 };
                                                 view! {

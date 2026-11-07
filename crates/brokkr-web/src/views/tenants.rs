@@ -115,12 +115,12 @@ pub fn TenantsView() -> impl IntoView {
     let submit = move || {
         let n = name.get().trim().to_string();
         if n.is_empty() {
-            error.set(Some("Name is required.".into()));
+            error.set(Some("Enter a name.".into()));
             return;
         }
         let pak = admin_pak.get();
         if pak.trim().is_empty() {
-            error.set(Some("An admin PAK is required to mint a tenant.".into()));
+            error.set(Some("Enter an admin PAK to create a tenant.".into()));
             return;
         }
         let d = description.get().trim().to_string();
@@ -149,12 +149,12 @@ pub fn TenantsView() -> impl IntoView {
                     admin_pak.set(String::new());
                     let msg = match e {
                         ApiError::Http { status: 409, .. } => {
-                            "A tenant with that name already exists.".to_string()
+                            "A tenant with this name already exists.".to_string()
                         }
                         other => write_error(other),
                     };
                     error.set(Some(msg));
-                    toaster.error("tenant creation failed");
+                    toaster.error("The tenant was not created.");
                 }
             }
         });
@@ -176,7 +176,7 @@ pub fn TenantsView() -> impl IntoView {
                 }
                 .into_any(),
                 Some(Ok(gens)) if gens.is_empty() => view! {
-                    <Empty message="No tenants yet. Create one to scope stacks and agents to an application." />
+                    <Empty message="No tenants yet. Create a tenant to give an application its own stacks and agents." />
                 }
                 .into_any(),
                 Some(Ok(gens)) => {
@@ -214,7 +214,7 @@ pub fn TenantsView() -> impl IntoView {
                         })
                         .collect_view();
                     view! {
-                        <Panel title="Tenants" caption="click a tenant for its agents">
+                        <Panel title="Tenants" caption="Select a tenant to see its agents">
                             <Table mono=true label="Tenants">
                                 <thead>
                                     <tr>
@@ -269,15 +269,13 @@ pub fn TenantsView() -> impl IntoView {
                                 <Pill color=color>{status}</Pill>
                             </Group>
                             <span class="brk-note">
-                                "The id is what a stack names as its owner, and what an agent \
-                                 lists under broker.generatorIds to register itself at startup."
+                                "A stack names this id as its owner. An agent lists it under broker.generatorIds to register itself at startup."
                             </span>
                             {if g.is_system {
                                 view! {
                                     <SectionLabel label="registered agents" />
                                     <span class="brk-note">
-                                        "The system generator is not a tenant: every agent is \
-                                         registered with it, so fleet-wide stacks reach them all."
+                                        "The system generator is not a tenant. Every agent is registered with it, so fleet-wide stacks reach all agents."
                                     </span>
                                 }.into_any()
                             } else {
@@ -293,7 +291,7 @@ pub fn TenantsView() -> impl IntoView {
                                             autocomplete="off"
                                         />
                                         <span class="brk-note">
-                                            "For the writes below. Used for one request, then cleared."
+                                            "The controls below use this PAK for one request. Then the console clears it."
                                         </span>
                                     </Stack>
                                     <Registrations
@@ -305,16 +303,14 @@ pub fn TenantsView() -> impl IntoView {
                                     // ---- PAK rotation (BROKKR-T-0369) ----------------
                                     <SectionLabel label="credential" />
                                     <span class="brk-note">
-                                        "Rotating mints a new PAK for this tenant and revokes the \
-                                         current one at once. Every pipeline that uses it fails \
-                                         until it has the new one."
+                                        "Rotate PAK creates a new PAK for this tenant. The current PAK stops at once. Every pipeline that uses it fails until it gets the new PAK."
                                     </span>
                                     <Group gap="sm">
                                         <Button variant="default" disabled=rotate_busy
                                             on_click=Callback::new(move |_| {
                                                 if drawer_pak.get().trim().is_empty() {
                                                     rotate_error.set(Some(
-                                                        "An admin PAK is required to rotate.".into(),
+                                                        "Enter an admin PAK to rotate the PAK.".into(),
                                                     ));
                                                     return;
                                                 }
@@ -328,10 +324,10 @@ pub fn TenantsView() -> impl IntoView {
                                     <ConfirmDialog
                                         open=rotate_confirm
                                         title=format!("Rotate the PAK of {confirm_name}?")
-                                        message="The new PAK is shown once, in the next dialog."
+                                        message="The console shows the new PAK once, in the next dialog."
                                         impacts=vec![
-                                            "The current PAK stops working at once.".to_string(),
-                                            "Every pipeline that uses it fails until it has the new one.".to_string(),
+                                            "The current PAK stops at once.".to_string(),
+                                            "Every pipeline that uses it fails until it gets the new PAK.".to_string(),
                                         ]
                                         confirm_label="Rotate"
                                         busy=rotate_busy
@@ -358,16 +354,14 @@ pub fn TenantsView() -> impl IntoView {
                         <KeyValue label="Tenant id">{m.id.clone()}</KeyValue>
                     </DetailList>
                     <span class="brk-text">
-                        "The previous PAK no longer works. Give this one to the tenant's CI \
-                         and to whoever runs "
+                        "The previous PAK does not work now. Give the new PAK to the tenant's CI and to the people who run "
                         <code>"brokkr apply"</code>
                         " for it."
                     </span>
                     <SecretReveal
                         secret=m.pak.clone()
                         label="New PAK"
-                        warning="This PAK is shown once and cannot be recovered. Store it now \u{2014} \
-                                 the broker keeps only a hash, so the only way back is to rotate again."
+                        warning="Copy the PAK now. You cannot see it again. The broker keeps only a hash. To get a PAK later, rotate again."
                         done_label="Done"
                         on_done=Callback::new(move |_| {
                             rotated.set(None);
@@ -401,18 +395,15 @@ pub fn TenantsView() -> impl IntoView {
                             </KeyValue>
                         </DetailList>
                         <span class="brk-text">
-                            "Give this PAK to the tenant: its CI, or a developer. With it, "
+                            "Give this PAK to the tenant: its CI or a developer. With the PAK, "
                             <code>"brokkr apply"</code>
-                            " creates stacks and pushes manifests for this tenant only. The console \
-                             cannot use it: the console is read-only. "
+                            " creates stacks and pushes manifests for this tenant only. The console cannot use the PAK. The console is read-only. "
                             <Anchor href=format!("{}/tutorials/cicd-generators.html", crate::components::DOCS)>
                                 "How a tenant deploys"
                             </Anchor>
                         </span>
                         <span class="brk-text">
-                            "Say which clusters serve it: a tenant's stacks reach an agent only \
-                             once the agent is registered with the tenant. The admin PAK you \
-                             typed is used for this too, and cleared at Done."
+                            "Then register the agents that serve this tenant. A tenant's stacks reach an agent only after the agent is registered with the tenant. The console uses the admin PAK that you entered for this too. Done clears it."
                         </span>
                         <Registrations
                             generator_id=reg_id
@@ -423,8 +414,7 @@ pub fn TenantsView() -> impl IntoView {
                         <SecretReveal
                             secret=m.pak.clone()
                             label="PAK"
-                            warning="This PAK is shown once and cannot be recovered. Store it now \u{2014} \
-                                     the broker keeps only a hash, so the only way back is to rotate."
+                            warning="Copy the PAK now. You cannot see it again. The broker keeps only a hash. To get a PAK later, rotate it."
                             done_label="Done"
                             on_done=Callback::new(move |_| {
                                 reset();
@@ -453,10 +443,7 @@ pub fn TenantsView() -> impl IntoView {
                                 autocomplete="off"
                             />
                             <span class="brk-note">
-                                "Required: the console's own credential is read-only, so it cannot \
-                                 mint tenants. Held in memory while this dialog is open, for the \
-                                 mint and for registering the tenant's agents \u{2014} never \
-                                 stored, and cleared when the dialog closes."
+                                "Required. The console's own credential is read-only, so it cannot create a tenant. The console keeps this PAK in memory while the dialog is open, for the tenant and for its registrations. It never stores the PAK. It clears the PAK when the dialog closes."
                             </span>
                         </Stack>
 
@@ -543,7 +530,7 @@ fn Registrations(
         let p = pak.get();
         if p.trim().is_empty() {
             error.set(Some(
-                "An admin PAK is required to change registrations.".into(),
+                "Enter an admin PAK to change the registrations.".into(),
             ));
             None
         } else {
@@ -586,11 +573,11 @@ fn Registrations(
                 Ok(_) => {
                     pick.set(String::new());
                     regs.refetch();
-                    toaster.success("agent registered");
+                    toaster.success("Agent registered");
                 }
                 Err(e) => {
                     error.set(Some(write_error(e)));
-                    toaster.error("registration failed");
+                    toaster.error("The agent was not registered.");
                 }
             }
         });
@@ -611,11 +598,11 @@ fn Registrations(
             match result {
                 Ok(()) => {
                     regs.refetch();
-                    toaster.success("agent deregistered");
+                    toaster.success("Agent deregistered");
                 }
                 Err(e) => {
                     error.set(Some(write_error(e)));
-                    toaster.error("deregistration failed");
+                    toaster.error("The agent was not deregistered.");
                 }
             }
         });
@@ -626,12 +613,11 @@ fn Registrations(
         {move || match regs.get() {
             None => view! { <Loading label="loading registrations" /> }.into_any(),
             Some(Err(_)) => view! {
-                <span class="brk-note">"registrations unavailable"</span>
+                <span class="brk-note">"The registrations are not available."</span>
             }.into_any(),
             Some(Ok(list)) if list.is_empty() => view! {
                 <span class="brk-note">
-                    "No agent is registered with this tenant. Its stacks reach no cluster \
-                     until one is."
+                    "No agent is registered with this tenant. Its stacks reach no cluster until an agent is registered."
                 </span>
             }.into_any(),
             Some(Ok(list)) => {
@@ -677,9 +663,7 @@ fn Registrations(
             }.into_any()
         }}
         <span class="brk-note">
-            "Registering an agent lets this tenant target it. Deregistering removes the \
-             agent's targets for this tenant's stacks, and the agent prunes those resources \
-             from its cluster on its next reconcile."
+            "Register an agent to let this tenant target it. Deregister an agent to remove its targets for this tenant's stacks. The agent then removes those resources from its cluster on its next poll."
         </span>
         {move || error.get().map(|e| view! {
             <Alert color=token::BAD>{e}</Alert>
@@ -688,10 +672,10 @@ fn Registrations(
             <ConfirmDialog
                 open=confirm_open
                 title=format!("Deregister {n}?")
-                message="The agent stops receiving this tenant's stacks."
+                message="The agent does not receive this tenant's stacks after this."
                 impacts=vec![
-                    "Removes the agent's targets for this tenant's stacks.".to_string(),
-                    "The agent prunes those resources from its cluster on its next reconcile.".to_string(),
+                    "The broker removes the agent's targets for this tenant's stacks.".to_string(),
+                    "The agent removes those resources from its cluster on its next poll.".to_string(),
                 ]
                 confirm_label="Deregister"
                 busy=busy

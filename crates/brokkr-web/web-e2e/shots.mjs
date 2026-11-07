@@ -325,7 +325,7 @@ const NEW_AGENT = { agent_id: "5e7d2c11-9a0b-4c3d-8e2f-1a2b3c4d5e6f", name: "che
 const EMPTY_SHELL = { "/fleet": [], "/agent-events": [], "/work-orders": [], "/stacks": [] };
 
 // One sentence of each shell banner (src/app.rs), to find and count them.
-const EXPIRED_BANNER = "Reload to get a new session.";
+const EXPIRED_BANNER = "Reload the page to get a new session.";
 const REFUSED_BANNER = "The broker refused the token of this console.";
 const BANNERS = [EXPIRED_BANNER, REFUSED_BANNER];
 // The neutral state of a panel under a session banner (src/components.rs).
@@ -466,7 +466,7 @@ const SCENES = [
     fill: [["acme-payments", "team-checkout"], ["brokkr_…", TYPED_ADMIN_PAK]],
     then_click: "Create tenant",
     steps: [{ select: "staging-agent-01" }, { click: "Register" }],
-    assert_text: ["agent registered"],
+    assert_text: ["Agent registered"],
     assert_no_stored: TYPED_ADMIN_PAK,
     mocks: TENANT_MOCKS },
   // The tenant drawer (BROKKR-T-0368): the id with its copy button, and the
@@ -477,7 +477,7 @@ const SCENES = [
   // Registering from the drawer: one admin PAK, one request, cleared after.
   { name: "tenants-drawer-register", nav: "Tenants", click: "team-sandbox", settle: 800,
     steps: [{ fill: ["brokkr_…", TYPED_ADMIN_PAK] }, { select: "prod-agent-01" }, { click: "Register" }],
-    assert_text: ["agent registered"],
+    assert_text: ["Agent registered"],
     assert_no_stored: TYPED_ADMIN_PAK,
     mocks: TENANT_MOCKS },
   // Rotating from the drawer (BROKKR-T-0369): admin PAK, Rotate PAK, confirm;
