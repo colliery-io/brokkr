@@ -27,7 +27,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install angreal
       - name: Set up Rust
-        uses: dtolnay/rust-toolchain@1.90
+        uses: dtolnay/rust-toolchain@1.99
       - name: Cache build
         uses: actions/cache@v5
         with:

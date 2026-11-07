@@ -14,7 +14,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  TRUNK_VERSION: "0.21.14"
+  TRUNK_VERSION: "0.22.1"
   NODE_VERSION: "24"
 
 jobs:

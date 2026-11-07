@@ -219,13 +219,9 @@ impl HealthChecker {
                                 overall_status = "unknown";
                             }
                         }
-                        "Pending" => {
-                            // Check if pending for too long might indicate an issue
-                            // For now, we just note it's pending
-                            if overall_status == "healthy" {
-                                // Could add logic to check if pending too long
-                            }
-                        }
+                        // A pending pod leaves the status as it is. A check for
+                        // "pending for too long" could go here.
+                        "Pending" => {}
                         _ => {}
                     }
                 }

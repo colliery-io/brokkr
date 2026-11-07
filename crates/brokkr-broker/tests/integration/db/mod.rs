@@ -4,6 +4,11 @@
  * See LICENSE file in the project root for full license text.
  */
 
+// clippy 1.99 reads diesel's QueryableByName expansion as `field: field` and
+// reports it on the struct's fields; the derived impl is a sibling of the
+// struct, so the allow has to cover the module.
+#![allow(clippy::redundant_field_names)]
+
 mod cli_schema;
 mod default_admin_pak;
 mod multi_tenant;

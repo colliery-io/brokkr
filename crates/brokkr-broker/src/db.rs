@@ -8,6 +8,11 @@
 //!
 //! For detailed documentation, see the [Brokkr Documentation](https://brokkr.io/explanation/components#database-module).
 
+// clippy 1.99 reads diesel's QueryableByName expansion as `field: field` and
+// reports it on the struct's fields; the derived impl is a sibling of the
+// struct, so the allow has to cover the module.
+#![allow(clippy::redundant_field_names)]
+
 use diesel::PgConnection;
 use diesel::connection::{Connection, Instrumentation, InstrumentationEvent};
 use diesel::r2d2::{ConnectionManager, CustomizeConnection, Pool};

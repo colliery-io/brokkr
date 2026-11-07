@@ -264,7 +264,7 @@ impl DeploymentObjectsDAL<'_> {
 
         // Step 4: Sort by sequence_id in descending order
         let mut sorted_objects = objects;
-        sorted_objects.sort_by(|a, b| b.sequence_id.cmp(&a.sequence_id));
+        sorted_objects.sort_by_key(|o| std::cmp::Reverse(o.sequence_id));
 
         Ok(sorted_objects)
     }

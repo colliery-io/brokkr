@@ -142,16 +142,17 @@ impl AuditLogger {
     /// * `entry` - The audit log entry to record.
     ///
     /// # Returns
-    /// Ok if the entry was accepted, Err if the channel is closed.
+    /// Ok if the entry was accepted, Err if the channel is closed. The error
+    /// carries the entry back, so it is boxed: it is as large as the entry.
     pub async fn log_async(
         &self,
         entry: NewAuditLog,
-    ) -> Result<(), mpsc::error::SendError<NewAuditLog>> {
+    ) -> Result<(), Box<mpsc::error::SendError<NewAuditLog>>> {
         let action = entry.action.clone();
 
         self.sender.send(entry).await.map_err(|e| {
             error!("Failed to queue audit entry (action: {}): {}", action, e);
-            e
+            Box::new(e)
         })?;
 
         debug!("Audit entry queued (async): {}", action);

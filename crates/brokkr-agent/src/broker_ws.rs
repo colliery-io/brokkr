@@ -296,12 +296,14 @@ fn is_auth_rejection(err: &tokio_tungstenite::tungstenite::Error) -> bool {
     )
 }
 
+/// The error is boxed: `tungstenite::Error` is large, and the loop above only
+/// inspects it on the rare failure path.
 async fn dial(
     url: &str,
     pak: &str,
 ) -> Result<
     tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
-    tokio_tungstenite::tungstenite::Error,
+    Box<tokio_tungstenite::tungstenite::Error>,
 > {
     let mut request = url.into_client_request()?;
     request.headers_mut().insert(
