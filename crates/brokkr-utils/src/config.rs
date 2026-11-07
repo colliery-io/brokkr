@@ -801,14 +801,8 @@ impl ReloadableConfig {
 mod tests {
     use super::{DynamicConfig, ReloadableConfig, Settings, Telemetry, TelemetryOverride};
 
-    /// The tests below read the process environment through `Settings::new`
-    /// and some set `BROKKR__LOG__LEVEL` or move the logger's level. Cargo
-    /// runs tests in parallel in one process, so without one lock a reload in
-    /// one test sees the environment of another (BROKKR-T-0378).
-    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
     fn env_guard() -> std::sync::MutexGuard<'static, ()> {
-        ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner())
+        crate::test_lock::guard()
     }
 
     /// `DEFAULT_ADMIN_PAK_HASH` is a hand-copied literal, and the whole point of
