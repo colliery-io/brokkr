@@ -420,6 +420,7 @@ Every command that adds something is safe to run again. If the label or the targ
 
 | Command | PAK | What it does |
 |---------|-----|--------------|
+| `brokkr agent create <NAME> --cluster <CLUSTER> [--tenant <NAME_OR_ID>]...` | admin | Creates the agent record and prints its PAK once, with the Helm command. |
 | `brokkr agent activate <AGENT>` | admin | Sets the agent status to `ACTIVE`. |
 | `brokkr agent pause <AGENT>` | admin | Sets the agent status to `INACTIVE`. |
 | `brokkr agent label <AGENT> <LABEL>` | admin | Adds a label to the agent. |
@@ -427,6 +428,32 @@ Every command that adds something is safe to run again. If the label or the targ
 | `brokkr stack label <STACK> <LABEL>` | admin or owning tenant | Adds a label to the stack. |
 | `brokkr stack target <STACK> <AGENT>` | admin or owning tenant | Sends the stack to the agent. |
 | `brokkr stack list` | admin or tenant | Lists the stacks. |
+
+#### `brokkr agent create`
+
+Creates the agent record and prints its PAK once, the Helm command that installs the agent with these values, and the next step. Each `--tenant` registers the agent with that tenant; every agent is also registered with the system generator.
+
+```bash
+brokkr agent create prod-1 --cluster us-east-1 --tenant team-acme
+```
+
+```
+created agent "prod-1" (6b1f...) in cluster "us-east-1"
+PAK: brokkr_BRagt56ef_AgentLongTokenExample01
+The PAK is shown once.
+
+Install the agent:
+helm install brokkr-agent oci://ghcr.io/colliery-io/charts/brokkr-agent \
+  --set broker.url=http://broker:3000 \
+  --set broker.pak=brokkr_BRagt56ef_AgentLongTokenExample01 \
+  --set broker.agentName=prod-1 \
+  --set broker.clusterName=us-east-1 \
+  --set broker.generatorIds="{e5fe...}"
+
+The agent is INACTIVE. After it checks in, run: brokkr agent activate prod-1
+```
+
+The broker URL in the command is the one the CLI uses; change it if the cluster reaches the broker by another address. This is the same as `POST /api/v1/agents` with `generator_ids`.
 
 #### `brokkr agent activate`
 

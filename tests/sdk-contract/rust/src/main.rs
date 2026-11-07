@@ -132,6 +132,10 @@ async fn main() -> ExitCode {
         "T-0370: tenant create and list via the wrapper and the brokkr CLI binary",
         scenario_tenant_cli(&base_url, &admin_pak)
     );
+    run!(
+        "T-0373: agent create via the brokkr CLI binary, registered with a tenant",
+        scenario_agent_create_cli(&base_url, &admin_pak)
+    );
 
     println!("══════════════════════════════════════════════════════════════════");
     println!("📊 Results: {} passed, {} failed", passed, failed);
@@ -1455,4 +1459,85 @@ async fn tenant_cli_checks(
         return Err(anyhow!("tenant list shows the system generator: {out:?}"));
     }
     Ok(())
+}
+
+/// BROKKR-T-0373: `brokkr agent create` prints the id and the PAK once and the
+/// Helm command; the PAK works as the agent's own credential; the agent is
+/// registered with the named tenant and with the system generator.
+async fn scenario_agent_create_cli(base_url: &str, admin_pak: &str) -> Result<()> {
+    let cli = env::var("BROKKR_CLI").map_err(|_| {
+        anyhow!(
+            "BROKKR_CLI is not set. Run `angreal tests sdk-contract rust`, \
+             or set BROKKR_CLI to the path of the brokkr binary"
+        )
+    })?;
+    let admin = client(base_url, admin_pak)?;
+    let tenant_name = unique("sdk-contract-rust-agent-tenant");
+    let tenant = admin.create_generator(&tenant_name, None).await?;
+    let agent_name = unique("sdk-contract-rust-agent");
+    let run = |args: &[&str]| brokkr_cli(&cli, base_url, admin_pak, args);
+
+    let (ok, out, err) = run(&[
+        "agent",
+        "create",
+        &agent_name,
+        "--cluster",
+        "contract-suite",
+        "--tenant",
+        &tenant_name,
+    ])?;
+    let result = async {
+        if !ok {
+            return Err(anyhow!("agent create failed: {err}"));
+        }
+        let id = out
+            .lines()
+            .find_map(|l| l.strip_prefix(&format!("created agent \"{agent_name}\" (")))
+            .and_then(|rest| rest.split(')').next())
+            .and_then(|id| Uuid::parse_str(id).ok())
+            .ok_or_else(|| anyhow!("no created line with an id in {out:?}"))?;
+        let pak = out
+            .lines()
+            .find_map(|l| l.strip_prefix("PAK: "))
+            .ok_or_else(|| anyhow!("no PAK line in {out:?}"))?
+            .trim()
+            .to_string();
+        for needle in ["shown once", "helm install", "brokkr agent activate"] {
+            if !out.contains(needle) {
+                return Err(anyhow!("the output lacks {needle:?}: {out:?}"));
+            }
+        }
+        println!("  → the printed PAK authenticates as the agent");
+        let me = client(base_url, &pak)?
+            .api()
+            .get_agent()
+            .id(id)
+            .send()
+            .await?
+            .into_inner();
+        if me.id != id || me.status != "INACTIVE" {
+            return Err(anyhow!(
+                "the agent PAK read another record, or the agent is not INACTIVE: {me:?}"
+            ));
+        }
+        println!("  → registered with the tenant and the system generator");
+        let regs = admin.list_agent_registrations(id).await?;
+        if !regs.iter().any(|r| r.generator_id == tenant.generator.id) || regs.len() < 2 {
+            return Err(anyhow!(
+                "registrations do not hold the tenant and the system generator: {regs:?}"
+            ));
+        }
+        Ok(id)
+    }
+    .await;
+    if let Ok(id) = result {
+        let _ = admin.api().delete_agent().id(id).send().await;
+    }
+    let _ = admin
+        .api()
+        .delete_generator()
+        .id(tenant.generator.id)
+        .send()
+        .await;
+    result.map(|_| ())
 }

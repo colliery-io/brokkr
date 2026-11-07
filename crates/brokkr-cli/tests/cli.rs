@@ -348,3 +348,60 @@ fn tenant_commands_parse_then_need_a_connection() {
         );
     }
 }
+
+// BROKKR-T-0373: `brokkr agent create`, the last of the admin's one-time
+// steps that needed curl. The live path is in `scenario_agent_create_cli`.
+#[test]
+fn agent_create_help_says_the_pak_is_shown_once_and_names_activate() {
+    let mut cmd = brokkr();
+    cmd.args(["agent", "create", "--help"]);
+    let (output, stdout, _) = run(cmd);
+    assert!(output.status.success());
+    for needle in [
+        "--cluster",
+        "--tenant",
+        "shown once",
+        "activate",
+        "NAME_OR_ID",
+    ] {
+        assert!(
+            stdout.contains(needle),
+            "agent create help missing {needle}: {stdout}"
+        );
+    }
+}
+
+#[test]
+fn agent_create_needs_a_name_and_a_cluster() {
+    let mut cmd = brokkr();
+    cmd.args(["agent", "create", "prod-1"]);
+    let (output, _, stderr) = run(cmd);
+    assert!(!output.status.success());
+    assert!(
+        stderr.contains("--cluster"),
+        "expected a usage error, got: {stderr}"
+    );
+}
+
+#[test]
+fn agent_create_parses_then_needs_a_connection() {
+    let cmd = sandboxed({
+        let mut c = brokkr();
+        c.args([
+            "agent",
+            "create",
+            "prod-1",
+            "--cluster",
+            "us-east-1",
+            "--tenant",
+            "acme",
+        ]);
+        c
+    });
+    let (output, _, stderr) = run(cmd);
+    assert!(!output.status.success());
+    assert!(
+        stderr.contains("broker URL") || stderr.contains("PAK"),
+        "expected a connection-config error, got: {stderr}"
+    );
+}

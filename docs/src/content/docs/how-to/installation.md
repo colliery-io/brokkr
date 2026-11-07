@@ -126,11 +126,19 @@ The response wraps the agent record and the one-time PAK in `initial_pak`:
 
 Save the `initial_pak` value (`jq -r '.initial_pak'`) — it is shown only once; you'll need it to install the agent.
 
+With the `brokkr` CLI, the same step is one command. It prints the PAK once and the Helm command for step 5 with the values filled in:
+
+```bash
+brokkr --pak "$ADMIN_PAK" agent create my-agent --cluster development
+```
+
+The operator console does the same from **Fleet → + New agent**; see [Using the Operator Console](../operator-console/#create-an-agent).
+
 Note the `"status": "INACTIVE"` in the response: every new agent starts inactive. The agent reads its own status and applies nothing until you activate it. The broker does not stop the work; the agent does (see [Agent Status Is Not an Access Control](../../explanation/security-model/#agent-status-is-not-an-access-control)). You'll activate this agent in the [Test Deployment](#test-deployment) section before deploying anything through it.
 
 ### 5. Install the Agent
 
-Install the agent using the `initial_pak` from step 4. The `broker.agentName` and `broker.clusterName` values must exactly match the name and cluster you registered in step 4 — at startup the agent looks up its own registration by that pair, and a mismatch leaves the pod crashlooping with "Agent not found".
+Install the agent using the `initial_pak` from step 4. The agent finds its record by that PAK. `broker.agentName` and `broker.clusterName` are optional checks: set them to the name and cluster from step 4, and the agent stops with an error that names both values if one differs.
 
 > **Warning: the default agent install changes the whole cluster.** With the chart defaults, a pre-install hook Job installs Tekton Pipelines and Shipwright Build cluster-wide. The Job runs under a ServiceAccount with a `cluster-admin` ClusterRoleBinding. `helm uninstall` does not remove Tekton or Shipwright. If you do not use build work orders, add `--set shipwright.enabled=false`. If Tekton and Shipwright are already in the cluster, add `--set shipwright.install.tekton=false --set shipwright.install.shipwright=false`. For the full list of effects, see [What a Default Install Does to Your Cluster](https://github.com/colliery-io/brokkr/blob/main/charts/brokkr-agent/README.md#what-a-default-install-does-to-your-cluster).
 
@@ -153,7 +161,17 @@ NAME                             READY   STATUS    RESTARTS   AGE
 brokkr-agent-xxxxxxxxxxx-xxxxx   1/1     Running   0          1m
 ```
 
-### 6. Verify Installation
+### 6. Activate the Agent
+
+A new agent is `INACTIVE` and applies nothing until an admin activates it. Once the agent pod runs, activate it by name:
+
+```bash
+brokkr --pak "$ADMIN_PAK" agent activate my-agent
+```
+
+The console does the same from the agent's drawer under **Fleet**. With `curl`, it is `PUT /api/v1/agents/{id}` with `{"status": "ACTIVE"}`.
+
+### 7. Verify Installation
 
 Check that both components are healthy:
 

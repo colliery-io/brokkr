@@ -82,6 +82,8 @@ The response contains the agent record and its one-time `initial_pak`:
 
 Every agent is also auto-registered with the system generator, so fleet-wide stacks still reach it. A `generator_ids` entry that does not exist is rejected with `400 invalid_generator_id`.
 
+With the `brokkr` CLI, `brokkr --pak "$ADMIN_PAK" agent create acme-prod --cluster us-east-1 --tenant team-acme` does the same, and prints the Helm command for step 3 with the values filled in.
+
 Repeat for `globex-prod` with `$GLOBEX_GEN_ID`, into `GLOBEX_AGENT_ID` and `GLOBEX_AGENT_PAK`.
 
 ## Step 3: Deploy Each Team's Agent
