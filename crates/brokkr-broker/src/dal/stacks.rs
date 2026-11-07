@@ -394,7 +394,7 @@ impl StacksDAL<'_> {
 
         // Convert HashSet to Vec, sort, and return
         let mut result: Vec<Stack> = associated_stacks.into_iter().collect();
-        result.sort_by(|a, b| a.id.cmp(&b.id));
+        result.sort_by_key(|a| a.id);
 
         Ok(result)
     }

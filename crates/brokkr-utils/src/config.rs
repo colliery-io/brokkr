@@ -801,6 +801,10 @@ impl ReloadableConfig {
 mod tests {
     use super::{DynamicConfig, ReloadableConfig, Settings, Telemetry, TelemetryOverride};
 
+    fn env_guard() -> std::sync::MutexGuard<'static, ()> {
+        crate::test_lock::guard()
+    }
+
     /// `DEFAULT_ADMIN_PAK_HASH` is a hand-copied literal, and the whole point of
     /// the BROKKR-T-0298 startup backstop is that it recognizes the credential
     /// the repository actually ships. If the two ever disagree, the broker would
@@ -1073,6 +1077,7 @@ mod tests {
 
     #[test]
     fn test_reloadable_config_creation() {
+        let _env = env_guard();
         let config = ReloadableConfig::new(None).unwrap();
 
         // Verify static config is accessible
@@ -1089,6 +1094,7 @@ mod tests {
 
     #[test]
     fn test_dynamic_config_from_settings() {
+        let _env = env_guard();
         let settings = Settings::new(None).unwrap();
         let dynamic = DynamicConfig::from_settings(&settings);
 
@@ -1103,6 +1109,7 @@ mod tests {
 
     #[test]
     fn test_reloadable_config_accessors_with_defaults() {
+        let _env = env_guard();
         let config = ReloadableConfig::new(None).unwrap();
 
         // These should match the defaults in DynamicConfig::from_settings
@@ -1116,6 +1123,7 @@ mod tests {
 
     #[test]
     fn test_reloadable_config_dynamic_snapshot() {
+        let _env = env_guard();
         let config = ReloadableConfig::new(None).unwrap();
 
         let snapshot = config.dynamic_snapshot();
@@ -1131,6 +1139,7 @@ mod tests {
 
     #[test]
     fn test_reloadable_config_reload_no_changes() {
+        let _env = env_guard();
         let config = ReloadableConfig::new(None).unwrap();
 
         // Reload should detect no changes when nothing changed
@@ -1154,6 +1163,7 @@ mod tests {
     /// copying them at spawn.
     #[test]
     fn test_reload_applies_log_level_to_the_logger() {
+        let _env = env_guard();
         // A distinctive starting point, so the assertion cannot pass by
         // coincidence with whatever the ambient default happens to be.
         let _ = crate::logging::update_log_level("error");
@@ -1183,6 +1193,7 @@ mod tests {
 
     #[test]
     fn test_reloadable_config_is_clone() {
+        let _env = env_guard();
         let config = ReloadableConfig::new(None).unwrap();
         let config_clone = config.clone();
 
@@ -1192,6 +1203,7 @@ mod tests {
 
     #[test]
     fn test_reloadable_config_thread_safety() {
+        let _env = env_guard();
         use std::sync::Arc;
         use std::thread;
 

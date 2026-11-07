@@ -35,7 +35,7 @@ jobs:
           pip install angreal uv
 
       - name: Set up Rust
-        uses: dtolnay/rust-toolchain@1.90
+        uses: dtolnay/rust-toolchain@1.99
 
       - name: Cache build
         uses: actions/cache@v5

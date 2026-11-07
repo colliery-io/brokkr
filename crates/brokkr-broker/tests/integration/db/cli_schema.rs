@@ -18,6 +18,11 @@
 //! database (as `serve` does), so these tests isolate on non-`public` schemas
 //! inside that database rather than on a throwaway database.
 
+// clippy 1.99 reads diesel's QueryableByName expansion as `field: field` and
+// reports it on the struct's fields; the derived impl is a sibling of the
+// struct, so the allow has to cover the module.
+#![allow(clippy::redundant_field_names)]
+
 use brokkr_broker::cli::commands::{connection_pool_from_settings, rotate_admin};
 use brokkr_broker::db::create_shared_connection_pool;
 use brokkr_utils::Settings;

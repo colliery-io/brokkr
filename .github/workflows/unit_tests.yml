@@ -21,7 +21,7 @@ jobs:
       # The version matches rust-toolchain.toml at the root, so rustup uses
       # this toolchain for each cargo command below.
       - name: Set up Rust
-        uses: dtolnay/rust-toolchain@1.90
+        uses: dtolnay/rust-toolchain@1.99
         with:
           components: clippy, rustfmt
       - name: Cache build

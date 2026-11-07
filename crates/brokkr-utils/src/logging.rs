@@ -230,6 +230,7 @@ mod tests {
     /// 2. Checks that initialization is successful
     /// 3. Verifies that the current log level is set to Info
     fn test_init() {
+        let _env = crate::test_lock::guard();
         assert!(init("info").is_ok());
         assert_eq!(
             CURRENT_LEVEL.load(Ordering::Relaxed),
@@ -245,6 +246,7 @@ mod tests {
     /// 2. Updates the log level to "debug" and verifies the change
     /// 3. Updates the log level to "warn" and verifies the change
     fn test_update_log_level() {
+        let _env = crate::test_lock::guard();
         init("info").expect("Failed to initialize logger");
 
         assert!(update_log_level("debug").is_ok());
@@ -267,6 +269,7 @@ mod tests {
     /// 1. Attempts to initialize with an invalid level, expecting it to default to Info
     /// 2. Tries to update to another invalid level, expecting no change
     fn test_invalid_log_level() {
+        let _env = crate::test_lock::guard();
         assert!(init("invalid_level").is_ok());
         assert_eq!(
             CURRENT_LEVEL.load(Ordering::Relaxed),
@@ -287,6 +290,7 @@ mod tests {
     /// It doesn't verify the output, only that the calls don't cause errors.
     #[allow(clippy::assertions_on_constants)]
     fn test_log_macros() {
+        let _env = crate::test_lock::guard();
         init("debug").expect("Failed to initialize logger");
 
         debug!("This is a debug message");
@@ -306,6 +310,7 @@ mod tests {
     /// 3. Verifies that all operations complete without errors or deadlocks
     /// 4. Checks that no single log operation takes an unusually long time
     fn test_thread_safety_and_performance() {
+        let _env = crate::test_lock::guard();
         init("info").expect("Failed to initialize logger");
 
         let thread_count = 10;

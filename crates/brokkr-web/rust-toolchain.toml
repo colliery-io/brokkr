@@ -4,7 +4,7 @@
 # they are missing (BROKKR-T-0354). CI uses the same file. Change the version
 # here, and only here.
 [toolchain]
-channel = "1.93.0"
+channel = "1.99.1"
 components = ["clippy", "rustfmt"]
 targets = ["wasm32-unknown-unknown"]
 profile = "minimal"

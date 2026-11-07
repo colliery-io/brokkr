@@ -15,6 +15,11 @@
 //! a fresh database it would fail with "relation does not exist" and hide the
 //! fault.
 
+// clippy 1.99 reads diesel's QueryableByName expansion as `field: field` and
+// reports it on the struct's fields; the derived impl is a sibling of the
+// struct, so the allow has to cover the module.
+#![allow(clippy::redundant_field_names)]
+
 use brokkr_broker::cli::commands::{
     create_agent, create_generator, rotate_agent_key, rotate_generator_key,
 };
