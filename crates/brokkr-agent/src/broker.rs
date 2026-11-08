@@ -308,6 +308,33 @@ pub async fn fetch_associated_stack_ids(
     Ok(stacks.into_iter().map(|s| s.id).collect())
 }
 
+/// The ids of the deployment objects this agent serves now: the latest
+/// object of each stack the broker associates with it, deployed or not
+/// (`GET /agents/{id}/target-state?mode=full`). This is the set the health
+/// tick checks (BROKKR-T-0386). The incremental list cannot serve: an object
+/// leaves it once this agent reported it deployed, so a set built from it was
+/// empty again before the health tick.
+pub async fn fetch_served_deployment_object_ids(
+    client: &BrokkrClient,
+    agent: &Agent,
+) -> Result<Vec<Uuid>, Box<dyn std::error::Error>> {
+    let rv = client
+        .api()
+        .get_target_state()
+        .id(agent.id)
+        .mode("full")
+        .send()
+        .await
+        .map_err(|e| {
+            boxed(
+                "Failed to fetch the agent's served objects",
+                BrokkrError::from(e),
+            )
+        })?;
+    let objects: Vec<DeploymentObject> = convert(rv.into_inner())?;
+    Ok(objects.into_iter().map(|o| o.id).collect())
+}
+
 /// Fetches deployment objects to apply from the broker's target-state view.
 pub async fn fetch_and_process_deployment_objects(
     _config: &Settings,
