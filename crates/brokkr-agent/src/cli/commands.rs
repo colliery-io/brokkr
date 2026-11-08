@@ -318,10 +318,6 @@ pub async fn start(
     let health_check_interval_secs = config.agent.deployment_health_interval.unwrap_or(60);
     let mut health_check_interval = interval(Duration::from_secs(health_check_interval_secs));
 
-    // Track deployment objects we've applied for health checking
-    let tracked_deployment_objects: Arc<RwLock<HashSet<Uuid>>> =
-        Arc::new(RwLock::new(HashSet::new()));
-
     // Track stack IDs from the previous reconcile cycle. Used for gap detection:
     // if a stack disappears between cycles its K8s resources must be cleaned up.
     let mut previous_stack_ids: HashSet<Uuid> = HashSet::new();
@@ -472,11 +468,6 @@ pub async fn start(
                             }
                         }
 
-                        // Collect this cycle's successfully-applied ids and
-                        // replace the tracked set at the end, so superseded
-                        // deployment objects stop being health-checked and the
-                        // set can't grow without bound (was insert-only).
-                        let mut applied_ids: Vec<Uuid> = Vec::new();
                         for obj in objects {
                             // A malformed bundle must not crash the agent: log it,
                             // report a failure event, and move on. Otherwise the
@@ -513,8 +504,6 @@ pub async fn start(
                                     info!("Successfully applied {} Kubernetes objects for deployment object {} in agent '{}' (id: {})",
                                         k8s_objects.len(), obj.id, agent.name, agent.id);
 
-                                    // Track this deployment object for health checking
-                                    applied_ids.push(obj.id);
 
                                     if let Err(e) = broker::send_success_event(
                                         &config,
@@ -544,12 +533,6 @@ pub async fn start(
                                     }
                                 }
                             }
-                        }
-                        // Rebuild the health-tracking set to exactly this
-                        // cycle's applied objects.
-                        {
-                            let mut tracked = tracked_deployment_objects.write().await;
-                            *tracked = applied_ids.into_iter().collect();
                         }
                     }
                     Err(e) => error!("Failed to fetch deployment objects for agent '{}' (id: {}): {}",
@@ -601,10 +584,16 @@ pub async fn start(
                     continue;
                 }
 
-                // Get the list of tracked deployment objects
-                let deployment_ids: Vec<Uuid> = {
-                    let tracked = tracked_deployment_objects.read().await;
-                    tracked.iter().cloned().collect()
+                // The objects this agent serves now, from the broker's full
+                // view (BROKKR-T-0386). A set kept from the apply loop was
+                // rebuilt from the incremental list every poll, so it was
+                // empty by the time this tick ran and no report ever left.
+                let deployment_ids = match broker::fetch_served_deployment_object_ids(&sdk_client, &agent).await {
+                    Ok(ids) => ids,
+                    Err(e) => {
+                        warn!("Could not read the agent's served objects; skipping this health check: {}", e);
+                        continue;
+                    }
                 };
 
                 if deployment_ids.is_empty() {

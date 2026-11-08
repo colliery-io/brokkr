@@ -608,24 +608,69 @@ pub async fn test_health_diagnostics(client: &Client) -> Result<()> {
     let deployment_id: Uuid = deployment["id"].as_str().unwrap().parse()?;
     println!("    Created stack and deployment");
 
-    // Get stack health
-    println!("  → Checking stack health...");
-    let health = client.get_stack_health(stack_id).await?;
-    println!("    Stack health retrieved: {:?}", health.get("summary"));
+    // The stack must reach the running agent for a report to exist: register
+    // the agent with the generator, make sure it is active, and target it.
+    println!("  → Sending the stack to the running agent...");
+    let agents = client.list_agents().await?;
+    let agent = agents
+        .iter()
+        .find(|a| a["name"] == "brokkr-integration-test-agent")
+        .ok_or("No running agent found - is brokkr-agent running?")?;
+    let agent_id: Uuid = agent["id"].as_str().unwrap().parse()?;
+    if agent["status"] != "ACTIVE" {
+        client
+            .update_agent(agent_id, serde_json::json!({ "status": "ACTIVE" }))
+            .await?;
+    }
+    client
+        .register_agent_with_generator(generator_id, agent_id)
+        .await?;
+    client.add_agent_target(agent_id, stack_id).await?;
 
-    // Get deployment health
-    println!("  → Checking deployment health...");
-    let dep_health = client.get_deployment_health(deployment_id).await?;
-    let records = dep_health.get("health_records").and_then(|r| r.as_array());
+    // The agent applies on its poll and reports health on its health tick
+    // (60 s by default). A report must arrive: before BROKKR-T-0386 the agent
+    // rebuilt its tracked set from the incremental target list every poll,
+    // so the set was empty at the tick and no report ever left, and this
+    // scenario only printed the count.
+    println!("  → Waiting for the agent's health report (up to 180 s)...");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(180);
+    let mut reports = 0usize;
+    while std::time::Instant::now() < deadline {
+        let dep_health = client.get_deployment_health(deployment_id).await?;
+        reports = dep_health
+            .get("health_records")
+            .and_then(|r| r.as_array())
+            .map(|r| r.len())
+            .unwrap_or(0);
+        if reports > 0 {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+    }
+    let health = client.get_stack_health(stack_id).await?;
     println!(
-        "    Deployment health: {} agent report(s)",
-        records.map(|r| r.len()).unwrap_or(0)
+        "    {} agent report(s); stack health: {}",
+        reports,
+        health
+            .get("overall_status")
+            .unwrap_or(&serde_json::Value::Null)
     );
 
-    // Note: Diagnostics require an agent that has processed the deployment,
-    // which may not be available in all test environments. We verify the
-    // API is callable but may not have data.
-    println!("  → Health monitoring APIs verified");
+    let _ = client.remove_agent_target(agent_id, stack_id).await;
+
+    if reports == 0 {
+        return Err("the agent sent no health report within 180 s".into());
+    }
+    let agents_in_health = health["deployment_objects"]
+        .as_array()
+        .and_then(|objs| objs.first())
+        .and_then(|o| o["agents"].as_array())
+        .map(|a| a.len())
+        .unwrap_or(0);
+    if agents_in_health == 0 {
+        return Err("the stack health carries no agent report".into());
+    }
+    println!("  → Health monitoring verified end to end");
 
     Ok(())
 }
