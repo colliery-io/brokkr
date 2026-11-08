@@ -540,14 +540,19 @@ async fn test_list_deliveries_with_status_filter() {
         BrokkrEvent, NewWebhookDelivery, NewWebhookSubscription,
     };
 
-    // Create a subscription
+    // A delivery the broker's worker never claims (BROKKR-T-0383): the suite
+    // runs against the compose stack, whose broker claims every pending
+    // delivery with no target labels every few seconds, so a broker-delivered
+    // row left `pending` here and stopped being pending before the request.
+    // An agent-targeted delivery with a label no agent has stays pending.
+    let label = format!("test-only-{}", uuid::Uuid::new_v4());
     let new_sub = NewWebhookSubscription {
         name: "Test Webhook".to_string(),
         url_encrypted: b"https://example.com/webhook".to_vec(),
         auth_header_encrypted: None,
         event_types: vec![Some("deployment.applied".to_string())],
         filters: None,
-        target_labels: None,
+        target_labels: Some(vec![Some(label.clone())]),
         enabled: true,
         max_retries: 5,
         timeout_seconds: 30,
@@ -561,7 +566,8 @@ async fn test_list_deliveries_with_status_filter() {
 
     // Create a delivery
     let event = BrokkrEvent::new("deployment.applied", json!({"test": true}));
-    let new_delivery = NewWebhookDelivery::new(subscription.id, &event, None).unwrap();
+    let new_delivery =
+        NewWebhookDelivery::new(subscription.id, &event, Some(vec![Some(label)])).unwrap();
     fixture
         .dal
         .webhook_deliveries()
