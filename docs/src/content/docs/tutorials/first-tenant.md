@@ -310,7 +310,7 @@ curl -s -X DELETE "$BROKER/api/v1/generators/$TENANT_ID" \
 
 - The admin does three things once per tenant: create it, activate the agent, register the agent with it. The hand-off is the broker URL, the tenant PAK and the agent name.
 - The tenant does the rest with its own PAK: find its id, create a stack, target it, push manifests, delete the stack.
-- A tenant PAK lists only the agents registered with it, and it cannot read agent labels, agent events or stack health. Those are admin views, and the console shows them.
+- A tenant PAK lists the agents registered with it, with their labels, and reads the health, the events and the logs of its own stacks. The fleet and the agent events are admin views, and the console shows them.
 - The agent pulls. It starts inactive, and it applies only the stacks of tenants it is registered with.
 
 ## Troubleshooting
@@ -318,7 +318,7 @@ curl -s -X DELETE "$BROKER/api/v1/generators/$TENANT_ID" \
 - **`agent_not_registered` on the target.** The admin did not register this agent with this tenant (Step 3), or registered it with a different tenant.
 - **`no agent has the name or id` from a tenant command.** A tenant sees only the agents registered with it. Do Step 3 first.
 - **Nothing reaches the cluster.** The agent may still be `INACTIVE`. Its log says so on each poll. Run Step 2 again.
-- **`403` with `admin_required` from a tenant command.** The endpoint is an admin view: agents, agent events, stack health. Use the admin PAK, or the console.
+- **`403` with `admin_required` from a tenant command.** The endpoint is an admin view: the fleet, agent events, another tenant's stack. Use the admin PAK, or the console.
 - **`DEPLOY SUCCESS`, but `kubectl` finds nothing.** The agent is on a different cluster than your `kubectl`, or you checked before one poll cycle passed. If the resources appear and then vanish one poll cycle later, upgrade the agent: agents up to 0.9.2 deleted a stack's resources one poll after a successful apply.
 - **The tenant PAK is lost.** The admin rotates it: `POST /api/v1/generators/{id}/rotate-pak` with the admin PAK returns a new one, once.
 
