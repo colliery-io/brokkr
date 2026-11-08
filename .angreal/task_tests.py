@@ -422,3 +422,95 @@ def e2e_tests(skip_docker: bool = False, scenario: str = ""):
     # Return OUTSIDE the finally (BROKKR-T-0027): a `return` in `finally`
     # swallows exceptions from the try and masks them as exit 0.
     return rc
+
+
+BDD_FEATURES_DIR = "tests/bdd/features"
+
+
+def run_bdd_tests(feature: str = ""):
+    """Build and run the BDD suite (BROKKR-T-0385).
+
+    The Gherkin features in ``tests/bdd/features`` drive the real ``brokkr``
+    CLI, the real ``brokkr-agent`` binary and the broker API against the
+    compose stack. ``feature`` names one file without its extension (for
+    example ``tenant-onboarding``); empty runs them all.
+    """
+    import os
+
+    print("Building the BDD suite...")
+    build = subprocess.run(
+        ["cargo", "build", "--release", "--manifest-path", "tests/bdd/Cargo.toml"],
+        cwd=cwd,
+    )
+    if build.returncode != 0:
+        return build.returncode
+
+    print("Building the brokkr CLI and the agent for the BDD suite...")
+    bins = subprocess.run(
+        [
+            "cargo", "build",
+            "-p", "brokkr-cli", "--bin", "brokkr",
+            "-p", "brokkr-agent", "--bin", "brokkr-agent",
+        ],
+        cwd=cwd,
+    )
+    if bins.returncode != 0:
+        return bins.returncode
+
+    env = _sdk_contract_env()
+    env.setdefault("BROKKR_CLI", os.path.join(cwd, "target", "debug", "brokkr"))
+    env.setdefault("BROKKR_AGENT", os.path.join(cwd, "target", "debug", "brokkr-agent"))
+    # The agent the compose stack runs in its k3s cluster (init-agent service).
+    env.setdefault("BROKKR_CLUSTER_AGENT", "brokkr-integration-test-agent")
+
+    cmd = ["./tests/bdd/target/release/brokkr-bdd"]
+    if feature:
+        path = os.path.join(BDD_FEATURES_DIR, f"{feature}.feature")
+        if not os.path.exists(os.path.join(cwd, path)):
+            names = sorted(
+                f[: -len(".feature")]
+                for f in os.listdir(os.path.join(cwd, BDD_FEATURES_DIR))
+                if f.endswith(".feature")
+            )
+            print(f"no feature {feature!r}. The features are: {', '.join(names)}")
+            return 2
+        cmd += ["--input", path]
+        print(f"Running the BDD feature {feature}...")
+    else:
+        print("Running the BDD features...")
+    result = subprocess.run(cmd, cwd=cwd, env=env)
+    return result.returncode
+
+
+@test()
+@angreal.command(name="bdd", about="run the BDD features (Gherkin) against the compose stack")
+@angreal.argument(name="skip_docker", long="skip-docker", required=False, help="Skip docker compose up", takes_value=False, is_flag=True)
+@angreal.argument(name="feature", long="feature", required=False, help="Run one feature by its file name, e.g. tenant-onboarding. Omit for all.")
+def bdd_tests(skip_docker: bool = False, feature: str = ""):
+    """Run the BDD features: the onboarding flows as a person runs them.
+
+    Each feature in ``tests/bdd/features`` is one flow (tenant onboarding,
+    agent onboarding, the tenant after apply, the rules that keep tenants
+    apart). The steps run the real ``brokkr`` CLI and ``brokkr-agent`` binary
+    against the compose stack. See docs/src/content/docs/how-to/bdd-features.md.
+    """
+    if not skip_docker:
+        docker_clean()
+        docker_up()
+
+    print("Sleeping for 30 seconds, waiting for services to stabilize - get some coffee")
+    time.sleep(30)
+
+    rc = 0
+    try:
+        rc = run_bdd_tests(feature=feature)
+        # Only prompt when attached to a TTY (BROKKR-T-0027).
+        if not skip_docker and sys.stdin.isatty():
+            input("Press Enter to shutdown containers and clean up...")
+    finally:
+        if not skip_docker:
+            docker_down()
+            docker_clean()
+    # Return OUTSIDE the finally (BROKKR-T-0027): a `return` in `finally`
+    # swallows exceptions from the try and masks them as exit 0.
+    return rc
