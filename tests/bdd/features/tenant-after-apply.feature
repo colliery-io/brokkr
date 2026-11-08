@@ -58,14 +58,6 @@ Feature: The tenant after apply
     Then the command says each agent removes the stack's resources on its next poll
     And the tenant "team-robin" no longer finds the stack "payments"
 
-  # Known bug, 2026-11-08: the agent applies the stack, but its health
-  # report never reaches the broker. The agent rebuilds its health-tracking
-  # set from each poll's applied objects (crates/brokkr-agent/src/cli/
-  # commands.rs), and the target-state list is incremental, so the set is
-  # empty again ten seconds after the apply and the sixty-second health tick
-  # finds nothing. The status says "No agent has reported" for ever. The
-  # runner leaves @known-bug scenarios out unless BDD_KNOWN_BUGS=run.
-  @known-bug
   Scenario: The tenant sees where its stack went
     Given the cluster agent is registered with the tenant "team-robin" and active
     And the tenant "team-robin" has applied a folder as the stack "payments"
