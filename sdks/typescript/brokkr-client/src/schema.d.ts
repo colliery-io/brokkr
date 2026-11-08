@@ -1347,6 +1347,21 @@ export interface components {
             /** Format: date-time */
             registered_at: string;
         };
+        /** @description One agent's latest report on a deployment object. */
+        AgentHealthReport: {
+            /**
+             * Format: uuid
+             * @description The agent that reported.
+             */
+            agent_id: string;
+            /**
+             * Format: date-time
+             * @description When the agent checked.
+             */
+            checked_at: string;
+            /** @description healthy, degraded, failing or unknown. */
+            status: string;
+        };
         AgentK8sEvent: {
             /** Format: uuid */
             agent_id: string;
@@ -1775,6 +1790,11 @@ export interface components {
         };
         /** @description Summary of health for a deployment object within a stack. */
         DeploymentObjectHealthSummary: {
+            /**
+             * @description The report of each agent, by agent id (BROKKR-T-0379). This is how a
+             *     tenant learns which clusters have its stack.
+             */
+            agents?: components["schemas"]["AgentHealthReport"][];
             /** @description Number of agents reporting degraded. */
             degraded_agents: number;
             /** @description Number of agents reporting failing. */
@@ -5953,8 +5973,17 @@ export interface operations {
                     "application/json": components["schemas"]["StackHealthResponse"];
                 };
             };
-            /** @description Forbidden - PAK does not have required rights */
+            /** @description Forbidden - not an admin, and not the tenant that owns the stack */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Stack not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -37,10 +37,10 @@ use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 
 use crate::Client;
 use crate::types::{
-    Agent, AgentGeneratorRegistration, AgentRegistrationBody, CreateAgentRequest,
+    Agent, AgentGeneratorRegistration, AgentRegistrationBody, AuthResponse, CreateAgentRequest,
     CreateAgentResponse, CreateDeploymentObjectRequest, CreateGeneratorResponse, DeploymentObject,
     ErrorResponse, Generator, K8sEventHistoryResponse, NewAgentLabel, NewAgentTarget, NewGenerator,
-    NewStack, PodLogHistoryResponse, Stack, WsConnectionsResponse,
+    NewStack, PodLogHistoryResponse, Stack, StackHealthResponse, WsConnectionsResponse,
 };
 use chrono::{DateTime, Utc};
 use std::path::Path;
@@ -679,6 +679,104 @@ impl BrokkrClient {
             .send()
             .await?;
         Ok(resp.into_inner())
+    }
+
+    /// What this PAK is: admin, a tenant, or an agent (BROKKR-T-0381).
+    /// `POST /auth/pak`.
+    pub async fn whoami(&self) -> Result<AuthResponse, BrokkrError> {
+        Ok(self.inner.verify_pak().send().await?.into_inner())
+    }
+
+    /// One tenant by id. An admin, or the tenant itself.
+    pub async fn get_generator(&self, id: Uuid) -> Result<Generator, BrokkrError> {
+        Ok(self.inner.get_generator().id(id).send().await?.into_inner())
+    }
+
+    /// One agent by id. An admin, or the agent itself.
+    pub async fn get_agent(&self, id: Uuid) -> Result<Agent, BrokkrError> {
+        Ok(self.inner.get_agent().id(id).send().await?.into_inner())
+    }
+
+    /// Rotate a tenant's PAK (BROKKR-T-0381): an admin, or the tenant itself.
+    /// The response carries the new PAK once; the old one stops at once.
+    pub async fn rotate_generator_pak(
+        &self,
+        id: Uuid,
+    ) -> Result<CreateGeneratorResponse, BrokkrError> {
+        Ok(self
+            .inner
+            .rotate_generator_pak()
+            .id(id)
+            .send()
+            .await?
+            .into_inner())
+    }
+
+    /// Delete a stack, given by name or id (BROKKR-T-0381): an admin, or the
+    /// tenant that owns it. The broker records a deletion marker; each agent
+    /// that has the stack removes its resources on its next poll. Returns the
+    /// stack as it was.
+    pub async fn delete_stack(&self, stack: &str) -> Result<Stack, BrokkrError> {
+        let found = self.find_stack(stack).await?;
+        self.inner.delete_stack().id(found.id).send().await?;
+        Ok(found)
+    }
+
+    /// The health of a stack, with each agent's report per deployment object
+    /// (BROKKR-T-0379): an admin, or the tenant that owns the stack.
+    pub async fn stack_health(&self, stack_id: Uuid) -> Result<StackHealthResponse, BrokkrError> {
+        Ok(self
+            .inner
+            .get_stack_health()
+            .id(stack_id)
+            .send()
+            .await?
+            .into_inner())
+    }
+
+    /// The deployment objects of a stack, newest first: an admin, or the
+    /// tenant that owns the stack.
+    pub async fn list_deployment_objects(
+        &self,
+        stack_id: Uuid,
+    ) -> Result<Vec<DeploymentObject>, BrokkrError> {
+        let mut objects = self
+            .inner
+            .list_deployment_objects()
+            .id(stack_id)
+            .send()
+            .await?
+            .into_inner();
+        objects.sort_by_key(|o| std::cmp::Reverse(o.sequence_id));
+        Ok(objects)
+    }
+
+    /// The retained Kubernetes events of a stack (BROKKR-T-0379): an admin,
+    /// or the tenant that owns it. `limit` defaults to the broker's 500.
+    pub async fn stack_events(
+        &self,
+        stack_id: Uuid,
+        limit: Option<i64>,
+    ) -> Result<K8sEventHistoryResponse, BrokkrError> {
+        let mut req = self.inner.list_telemetry_events().id(stack_id);
+        if let Some(limit) = limit {
+            req = req.limit(limit);
+        }
+        Ok(req.send().await?.into_inner())
+    }
+
+    /// The retained pod log lines of a stack (BROKKR-T-0379): an admin, or
+    /// the tenant that owns it. `limit` defaults to the broker's 500.
+    pub async fn stack_logs(
+        &self,
+        stack_id: Uuid,
+        limit: Option<i64>,
+    ) -> Result<PodLogHistoryResponse, BrokkrError> {
+        let mut req = self.inner.list_telemetry_logs().id(stack_id);
+        if let Some(limit) = limit {
+            req = req.limit(limit);
+        }
+        Ok(req.send().await?.into_inner())
     }
 
     /// The base URL this client talks to, with the `/api/v1` suffix.

@@ -32,6 +32,20 @@ pub enum TenantCommand {
     /// Requires an admin PAK. The system generator is not a tenant and is
     /// not listed.
     List,
+
+    /// Rotate a tenant's PAK and print the new one, once.
+    ///
+    /// With a tenant PAK, rotates its own; give no tenant. With an admin
+    /// PAK, give the tenant by name or id. The current PAK stops at once.
+    Rotate(TenantRotateArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct TenantRotateArgs {
+    /// The name or the id of the tenant. Admin only; a tenant PAK rotates
+    /// its own.
+    #[arg(value_name = "NAME_OR_ID")]
+    tenant: Option<String>,
 }
 
 #[derive(Debug, Args)]
@@ -90,6 +104,66 @@ pub async fn tenant(client: &BrokkrClient, command: TenantCommand) -> Result<(),
                 rows,
             );
         }
+        TenantCommand::Rotate(args) => {
+            let id = match &args.tenant {
+                Some(tenant) => client
+                    .resolve_generator_id(tenant)
+                    .await
+                    .map_err(|e| e.to_string())?,
+                None => {
+                    let me = client.whoami().await.map_err(|e| e.to_string())?;
+                    match me.generator {
+                        Some(id) => uuid::Uuid::parse_str(&id).map_err(|e| e.to_string())?,
+                        None => {
+                            return Err(
+                                "this PAK is not a tenant PAK: give the tenant to rotate by name or id"
+                                    .to_string(),
+                            );
+                        }
+                    }
+                }
+            };
+            let rotated = client
+                .rotate_generator_pak(id)
+                .await
+                .map_err(|e| e.to_string())?;
+            println!(
+                "rotated the PAK of tenant \"{}\" ({})",
+                rotated.generator.name, rotated.generator.id
+            );
+            println!("PAK: {}", rotated.pak);
+            println!(
+                "The PAK is shown once. The previous PAK stopped: update every pipeline that uses it."
+            );
+        }
+    }
+    Ok(())
+}
+
+/// The text of `brokkr whoami` (BROKKR-T-0381).
+pub async fn whoami(client: &BrokkrClient) -> Result<(), String> {
+    let me = client.whoami().await.map_err(|e| e.to_string())?;
+    let url = client.base_url().trim_end_matches('/');
+    let url = url.strip_suffix("/api/v1").unwrap_or(url);
+    println!("broker: {url}");
+    if me.admin {
+        println!(
+            "PAK: admin{}",
+            if me.readonly { " (read-only)" } else { "" }
+        );
+    } else if let Some(id) = me.generator {
+        let id = uuid::Uuid::parse_str(&id).map_err(|e| e.to_string())?;
+        let tenant = client.get_generator(id).await.map_err(|e| e.to_string())?;
+        println!("PAK: tenant \"{}\" ({})", tenant.name, tenant.id);
+    } else if let Some(id) = me.agent {
+        let id = uuid::Uuid::parse_str(&id).map_err(|e| e.to_string())?;
+        let agent = client.get_agent(id).await.map_err(|e| e.to_string())?;
+        println!(
+            "PAK: agent \"{}\" ({}) in cluster \"{}\"",
+            agent.name, agent.id, agent.cluster_name
+        );
+    } else {
+        println!("PAK: unknown kind");
     }
     Ok(())
 }

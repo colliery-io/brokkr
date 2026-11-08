@@ -297,6 +297,18 @@ curl -X POST "http://localhost:3000/api/v1/stacks/$STACK_ID/deployment-objects/f
 
 The template's parameters are validated against its JSON Schema before rendering. If the template has labels, they must match the stack's labels for instantiation to succeed.
 
+## Seeing Where a Stack Is
+
+The tenant that owns a stack, or an admin, reads where it is and whether it is healthy:
+
+```bash
+brokkr stack status <stack>
+brokkr stack events <stack>
+brokkr stack logs <stack>
+```
+
+`status` prints the latest revision, then each agent that has the stack with its health report. `events` and `logs` print the broker's retained window of Kubernetes events and pod log lines. The same reads are `GET /api/v1/stacks/{id}/health`, `/events` and `/logs`, open to the owning tenant.
+
 ## Stack Lifecycle
 
 ### Updating Stacks
@@ -314,6 +326,8 @@ curl -s http://localhost:3000/api/v1/stacks/$STACK_ID \
 ```
 
 ### Deleting Stacks
+
+With the CLI, the owning tenant or an admin runs `brokkr stack delete <stack>`. Each agent that has the stack removes its resources on its next poll.
 
 Brokkr uses soft deletion for stacks. When you delete a stack, it's marked with a `deleted_at` timestamp rather than being removed from the database:
 

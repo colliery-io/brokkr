@@ -144,6 +144,8 @@ curl -s -X POST "$BROKER/api/v1/auth/pak" \
 
 The `generator` value is `TENANT_ID`. A tenant that only has its PAK gets its id this way.
 
+With the `brokkr` CLI: `brokkr --pak "$TENANT_PAK" whoami` prints the tenant's name and id.
+
 ### Step 5 (tenant): Create a stack
 
 A stack holds the manifests of one application. The tenant must name itself as the owner; any other `generator_id` is a `403`.
@@ -250,6 +252,14 @@ NAME                    READY   UP-TO-DATE   AVAILABLE   AGE
 deployment.apps/hello   1/1     1            1           20s
 ```
 
+The tenant sees the same from its own PAK, with no admin:
+
+```bash
+brokkr --pak "$TENANT_PAK" stack status tutorial-hello
+```
+
+The latest revision, the agent that has the stack and its health report. `brokkr stack events tutorial-hello` and `brokkr stack logs tutorial-hello` print what the cluster said.
+
 The tenant can also list what it pushed:
 
 ```bash
@@ -280,7 +290,7 @@ Edit `hello.yaml` to `replicas: 2` and push it again with the same command as St
 
 ## Part 3: Clean up
 
-The tenant deletes its stack. The broker records a deletion marker, and the agent removes the stack's resources on its next poll:
+The tenant deletes its stack. The broker records a deletion marker, and the agent removes the stack's resources on its next poll. With the CLI it is `brokkr --pak "$TENANT_PAK" stack delete tutorial-hello`; with `curl`:
 
 ```bash
 curl -s -X DELETE "$BROKER/api/v1/stacks/$STACK_ID" \

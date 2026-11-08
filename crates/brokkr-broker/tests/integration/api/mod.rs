@@ -21,6 +21,7 @@ mod paks;
 mod registration_consent;
 mod stacks;
 mod templates;
+mod tenant_reads;
 mod ui_pak;
 mod webhooks;
 mod work_orders;

@@ -405,3 +405,77 @@ fn agent_create_parses_then_needs_a_connection() {
         "expected a connection-config error, got: {stderr}"
     );
 }
+
+// BROKKR-T-0379, 0380, 0381: what a tenant does after `apply`: see where the
+// stack went, read its events and logs, delete it, rotate its PAK, and say
+// what its PAK is. The live path is in `scenario_tenant_flow_cli`.
+#[test]
+fn stack_help_lists_status_events_logs_and_delete() {
+    let mut cmd = brokkr();
+    cmd.args(["stack", "--help"]);
+    let (output, stdout, _) = run(cmd);
+    assert!(output.status.success());
+    for c in ["status", "events", "logs", "delete"] {
+        assert!(stdout.contains(c), "stack help is missing {c}: {stdout}");
+    }
+    for args in [
+        &["stack", "status", "--help"][..],
+        &["stack", "events", "--help"][..],
+        &["stack", "logs", "--help"][..],
+        &["stack", "delete", "--help"][..],
+    ] {
+        let mut cmd = brokkr();
+        cmd.args(args);
+        let (output, stdout, _) = run(cmd);
+        assert!(output.status.success());
+        assert!(stdout.contains("name or the id"), "{args:?}: {stdout}");
+    }
+    let mut cmd = brokkr();
+    cmd.args(["stack", "events", "--help"]);
+    let (_, stdout, _) = run(cmd);
+    assert!(stdout.contains("--limit"), "{stdout}");
+}
+
+#[test]
+fn tenant_rotate_and_whoami_have_help() {
+    let mut cmd = brokkr();
+    cmd.args(["tenant", "rotate", "--help"]);
+    let (output, stdout, _) = run(cmd);
+    assert!(output.status.success());
+    assert!(stdout.contains("once"), "{stdout}");
+    assert!(stdout.contains("NAME_OR_ID"), "{stdout}");
+    let mut cmd = brokkr();
+    cmd.args(["whoami", "--help"]);
+    let (output, stdout, _) = run(cmd);
+    assert!(output.status.success());
+    assert!(stdout.contains("tenant"), "{stdout}");
+    let mut cmd = brokkr();
+    cmd.arg("--help");
+    let (_, stdout, _) = run(cmd);
+    assert!(stdout.contains("whoami"), "top-level help: {stdout}");
+}
+
+#[test]
+fn tenant_flow_commands_parse_then_need_a_connection() {
+    for args in [
+        &["stack", "status", "payments"][..],
+        &["stack", "events", "payments", "--limit", "20"][..],
+        &["stack", "logs", "payments"][..],
+        &["stack", "delete", "payments"][..],
+        &["tenant", "rotate"][..],
+        &["tenant", "rotate", "team-acme"][..],
+        &["whoami"][..],
+    ] {
+        let cmd = sandboxed({
+            let mut c = brokkr();
+            c.args(args);
+            c
+        });
+        let (output, _, stderr) = run(cmd);
+        assert!(!output.status.success());
+        assert!(
+            stderr.contains("broker URL") || stderr.contains("PAK"),
+            "{args:?}: expected a connection-config error, got: {stderr}"
+        );
+    }
+}

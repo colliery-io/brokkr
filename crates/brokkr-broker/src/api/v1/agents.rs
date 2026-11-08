@@ -579,6 +579,33 @@ async fn create_event(
     Ok((StatusCode::CREATED, Json(event)))
 }
 
+/// An admin, the agent itself, or a tenant the agent is registered with
+/// (BROKKR-T-0380). A tenant that targets by label needs to see the labels of
+/// the agents it may reach; an agent it is not registered with is not one of
+/// them, and the answer is the same 403 as for any other tenant.
+fn require_admin_agent_or_registered_tenant(
+    auth: &AuthPayload,
+    dal: &DAL,
+    agent_id: Uuid,
+) -> Result<(), ApiError> {
+    if auth.admin || auth.agent == Some(agent_id) {
+        return Ok(());
+    }
+    if let Some(generator_id) = auth.generator {
+        let registered = dal
+            .agent_generator_registrations()
+            .is_registered(agent_id, generator_id)
+            .map_err(|e| ApiError::from_diesel(e, "failed to check the registration"))?;
+        if registered {
+            return Ok(());
+        }
+    }
+    Err(ApiError::forbidden(
+        "not_authorized",
+        "admin, the agent itself, or a tenant the agent is registered with",
+    ))
+}
+
 #[utoipa::path(
     get, path = "/agents/{id}/labels", tag = "agent-labels",
     params(("id" = Uuid, Path, description = "ID of the agent")),
@@ -587,7 +614,7 @@ async fn create_event(
         (status = 403, description = "Forbidden", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse),
     ),
-    security(("admin_pak" = []), ("agent_pak" = []))
+    security(("admin_pak" = []), ("agent_pak" = []), ("generator_pak" = []))
 ,
     operation_id = "agents_list_labels"
 )]
@@ -597,7 +624,7 @@ async fn list_labels(
     Path(id): Path<Uuid>,
 ) -> Result<Json<Vec<AgentLabel>>, ApiError> {
     info!("Handling request to list labels for agent with ID: {}", id);
-    require_admin_or_agent(&auth_payload, id)?;
+    require_admin_agent_or_registered_tenant(&auth_payload, &dal, id)?;
     let labels = dal.agent_labels().list_for_agent(id).map_err(|e| {
         error!("Failed to fetch labels for agent with ID {}: {:?}", id, e);
         ApiError::internal("failed to fetch agent labels")
@@ -699,7 +726,7 @@ async fn remove_label(
         (status = 403, description = "Forbidden", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse),
     ),
-    security(("admin_pak" = []), ("agent_pak" = []))
+    security(("admin_pak" = []), ("agent_pak" = []), ("generator_pak" = []))
 ,
     operation_id = "agents_list_annotations"
 )]
@@ -712,7 +739,7 @@ async fn list_annotations(
         "Handling request to list annotations for agent with ID: {}",
         id
     );
-    require_admin_or_agent(&auth_payload, id)?;
+    require_admin_agent_or_registered_tenant(&auth_payload, &dal, id)?;
     let annotations = dal.agent_annotations().list_for_agent(id).map_err(|e| {
         error!(
             "Failed to fetch annotations for agent with ID {}: {:?}",

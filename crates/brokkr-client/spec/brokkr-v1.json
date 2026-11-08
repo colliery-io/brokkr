@@ -244,6 +244,31 @@
         ],
         "type": "object"
       },
+      "AgentHealthReport": {
+        "description": "One agent's latest report on a deployment object.",
+        "properties": {
+          "agent_id": {
+            "description": "The agent that reported.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "checked_at": {
+            "description": "When the agent checked.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "status": {
+            "description": "healthy, degraded, failing or unknown.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent_id",
+          "status",
+          "checked_at"
+        ],
+        "type": "object"
+      },
       "AgentK8sEvent": {
         "properties": {
           "agent_id": {
@@ -1045,6 +1070,13 @@
       "DeploymentObjectHealthSummary": {
         "description": "Summary of health for a deployment object within a stack.",
         "properties": {
+          "agents": {
+            "description": "The report of each agent, by agent id (BROKKR-T-0379). This is how a\ntenant learns which clusters have its stack.",
+            "items": {
+              "$ref": "#/components/schemas/AgentHealthReport"
+            },
+            "type": "array"
+          },
           "degraded_agents": {
             "description": "Number of agents reporting degraded.",
             "minimum": 0,
@@ -4001,6 +4033,9 @@
           },
           {
             "agent_pak": []
+          },
+          {
+            "generator_pak": []
           }
         ],
         "tags": [
@@ -4579,6 +4614,9 @@
           },
           {
             "agent_pak": []
+          },
+          {
+            "generator_pak": []
           }
         ],
         "tags": [
@@ -7345,7 +7383,17 @@
                 }
               }
             },
-            "description": "Forbidden - PAK does not have required rights"
+            "description": "Forbidden - not an admin, and not the tenant that owns the stack"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Stack not found"
           },
           "500": {
             "content": {
@@ -7361,6 +7409,9 @@
         "security": [
           {
             "admin_pak": []
+          },
+          {
+            "generator_pak": []
           }
         ],
         "summary": "Gets health status for all deployment objects in a stack.",

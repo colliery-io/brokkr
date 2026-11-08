@@ -77,6 +77,51 @@ pub enum StackCommand {
     /// An admin PAK lists all stacks. A tenant PAK lists the stacks of its
     /// tenant.
     List,
+
+    /// Show where a stack is and whether it is healthy.
+    ///
+    /// The latest revision, then each agent that has the stack with its
+    /// health report. Requires an admin PAK or the PAK of the tenant that
+    /// owns the stack.
+    Status(StackRef),
+
+    /// Show the retained Kubernetes events of a stack.
+    ///
+    /// The agents that apply the stack report the events of the objects
+    /// they manage. The broker keeps a short window of them. Requires an
+    /// admin PAK or the PAK of the tenant that owns the stack.
+    Events(StackTelemetryArgs),
+
+    /// Show the retained pod log lines of a stack.
+    ///
+    /// Only pods whose template carries the stream-logs annotation are
+    /// streamed. The broker keeps a short window. Requires an admin PAK or
+    /// the PAK of the tenant that owns the stack.
+    Logs(StackTelemetryArgs),
+
+    /// Delete a stack.
+    ///
+    /// Each agent that has the stack removes its resources on its next poll.
+    /// Requires an admin PAK or the PAK of the tenant that owns the stack.
+    Delete(StackRef),
+}
+
+#[derive(Debug, Args)]
+pub struct StackRef {
+    /// The name or the id of the stack.
+    #[arg(value_name = "STACK")]
+    stack: String,
+}
+
+#[derive(Debug, Args)]
+pub struct StackTelemetryArgs {
+    /// The name or the id of the stack.
+    #[arg(value_name = "STACK")]
+    stack: String,
+
+    /// At most this many rows, newest first. The broker's default is 500.
+    #[arg(long, value_name = "N")]
+    limit: Option<i64>,
 }
 
 #[derive(Debug, Args)]
@@ -313,6 +358,22 @@ pub async fn stack(client: &BrokkrClient, command: StackCommand) -> Result<(), S
                     stack.name, args.label
                 );
             }
+            // Which agents the stack's labels reach now (BROKKR-T-0380). An
+            // admin sees every agent; a tenant sees the agents registered
+            // with it, which are the only ones a label can reach.
+            let stack_labels = client
+                .stack_labels(stack.id)
+                .await
+                .map_err(|e| e.to_string())?;
+            let agents = client.list_agents().await.map_err(|e| e.to_string())?;
+            let mut matching = Vec::new();
+            for a in agents {
+                let labels = client.agent_labels(a.id).await.map_err(|e| e.to_string())?;
+                if labels.iter().any(|l| stack_labels.contains(l)) {
+                    matching.push(a.name);
+                }
+            }
+            println!("{}", label_match_line(&stack.name, &matching));
         }
         StackCommand::Target(args) => {
             let (stack, agent, added) = client
@@ -344,8 +405,169 @@ pub async fn stack(client: &BrokkrClient, command: StackCommand) -> Result<(), S
             }
             print_table(&["NAME", "ID", "LABELS"], rows);
         }
+        StackCommand::Status(args) => {
+            let stack = client
+                .find_stack(&args.stack)
+                .await
+                .map_err(|e| e.to_string())?;
+            let objects = client
+                .list_deployment_objects(stack.id)
+                .await
+                .map_err(|e| e.to_string())?;
+            let health = client
+                .stack_health(stack.id)
+                .await
+                .map_err(|e| e.to_string())?;
+            let agents = client.list_agents().await.map_err(|e| e.to_string())?;
+            print!("{}", status_report(&stack, &objects, &health, &agents));
+        }
+        StackCommand::Events(args) => {
+            let stack = client
+                .find_stack(&args.stack)
+                .await
+                .map_err(|e| e.to_string())?;
+            let history = client
+                .stack_events(stack.id, args.limit)
+                .await
+                .map_err(|e| e.to_string())?;
+            if history.events.is_empty() {
+                println!(
+                    "no events for stack \"{}\" in the retained window",
+                    stack.name
+                );
+                return Ok(());
+            }
+            let rows = history
+                .events
+                .into_iter()
+                .map(|e| {
+                    let object = format!(
+                        "{}/{}",
+                        e.involved_object["kind"].as_str().unwrap_or("?"),
+                        e.involved_object["name"].as_str().unwrap_or("?")
+                    );
+                    vec![
+                        e.observed_at.to_rfc3339(),
+                        e.event_type,
+                        e.reason,
+                        object,
+                        e.message,
+                    ]
+                })
+                .collect();
+            print_table(&["OBSERVED", "TYPE", "REASON", "OBJECT", "MESSAGE"], rows);
+        }
+        StackCommand::Logs(args) => {
+            let stack = client
+                .find_stack(&args.stack)
+                .await
+                .map_err(|e| e.to_string())?;
+            let history = client
+                .stack_logs(stack.id, args.limit)
+                .await
+                .map_err(|e| e.to_string())?;
+            if history.lines.is_empty() {
+                println!(
+                    "no log lines for stack \"{}\" in the retained window. Only pods whose \
+                     template carries the brokkr.io/stream-logs annotation are streamed.",
+                    stack.name
+                );
+                return Ok(());
+            }
+            for l in history.lines {
+                println!(
+                    "{} {}/{}/{}: {}",
+                    l.ts.to_rfc3339(),
+                    l.namespace,
+                    l.pod,
+                    l.container,
+                    l.line
+                );
+            }
+        }
+        StackCommand::Delete(args) => {
+            let stack = client
+                .delete_stack(&args.stack)
+                .await
+                .map_err(|e| e.to_string())?;
+            println!(
+                "deleted stack \"{}\" ({}). Each agent that has it removes its resources on its next poll.",
+                stack.name, stack.id
+            );
+        }
     }
     Ok(())
+}
+
+/// The line after `stack label`: the agents the stack's labels reach now
+/// (BROKKR-T-0380).
+pub fn label_match_line(stack: &str, matching: &[String]) -> String {
+    if matching.is_empty() {
+        format!(
+            "no agent matches the labels of stack \"{stack}\". The stack reaches none until \
+             an agent that is registered with its tenant has one of its labels."
+        )
+    } else {
+        format!(
+            "the labels of stack \"{stack}\" match: {}",
+            matching.join(", ")
+        )
+    }
+}
+
+/// The text of `brokkr stack status` (BROKKR-T-0379).
+pub fn status_report(
+    stack: &brokkr_client::types::Stack,
+    objects: &[brokkr_client::types::DeploymentObject],
+    health: &brokkr_client::types::StackHealthResponse,
+    agents: &[brokkr_client::types::Agent],
+) -> String {
+    let mut out = format!("stack \"{}\" ({})\n", stack.name, stack.id);
+    match objects.first() {
+        None => out.push_str("no revision yet: nothing has been pushed to this stack\n"),
+        Some(o) => out.push_str(&format!(
+            "latest revision: sequence {}, submitted {}{}\n",
+            o.sequence_id,
+            o.submitted_at.to_rfc3339(),
+            if o.is_deletion_marker {
+                " (a deletion marker: the agents remove the stack's resources)"
+            } else {
+                ""
+            }
+        )),
+    }
+    out.push_str(&format!("health: {}\n", health.overall_status));
+    let name_of = |id: &uuid::Uuid| {
+        agents
+            .iter()
+            .find(|a| a.id == *id)
+            .map(|a| a.name.clone())
+            .unwrap_or_else(|| id.to_string())
+    };
+    let mut rows: Vec<Vec<String>> = Vec::new();
+    for object in &health.deployment_objects {
+        for report in &object.agents {
+            rows.push(vec![
+                name_of(&report.agent_id),
+                object.id.to_string(),
+                report.status.clone(),
+                report.checked_at.to_rfc3339(),
+            ]);
+        }
+    }
+    if rows.is_empty() {
+        out.push_str(
+            "No agent has reported on this stack yet. Target an agent or match a label, then \
+             wait one poll.\n",
+        );
+    } else {
+        rows.sort();
+        out.push_str(&format_table(
+            &["AGENT", "DEPLOYMENT OBJECT", "STATUS", "CHECKED"],
+            &rows,
+        ));
+    }
+    out
 }
 
 fn join_labels(mut labels: Vec<String>) -> String {
@@ -385,6 +607,22 @@ fn format_table(header: &[&str], rows: &[Vec<String>]) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn label_match_line_names_the_agents_or_says_none() {
+        let some =
+            super::label_match_line("payments", &["prod-1".to_string(), "prod-2".to_string()]);
+        assert_eq!(
+            some,
+            "the labels of stack \"payments\" match: prod-1, prod-2"
+        );
+        let none = super::label_match_line("payments", &[]);
+        assert!(
+            none.starts_with("no agent matches the labels of stack \"payments\"."),
+            "{none}"
+        );
+        assert!(none.contains("registered with its tenant"), "{none}");
+    }
+
     #[test]
     fn helm_command_fills_the_values_and_drops_the_api_suffix() {
         let id = uuid::Uuid::nil();

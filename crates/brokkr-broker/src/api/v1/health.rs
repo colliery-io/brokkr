@@ -90,6 +90,21 @@ pub struct DeploymentObjectHealthSummary {
     pub degraded_agents: usize,
     /// Number of agents reporting failing.
     pub failing_agents: usize,
+    /// The report of each agent, by agent id (BROKKR-T-0379). This is how a
+    /// tenant learns which clusters have its stack.
+    #[serde(default)]
+    pub agents: Vec<AgentHealthReport>,
+}
+
+/// One agent's latest report on a deployment object.
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+pub struct AgentHealthReport {
+    /// The agent that reported.
+    pub agent_id: Uuid,
+    /// healthy, degraded, failing or unknown.
+    pub status: String,
+    /// When the agent checked.
+    pub checked_at: DateTime<Utc>,
 }
 
 /// Updates health status for deployment objects from an agent.
@@ -243,10 +258,11 @@ async fn get_deployment_health(
     ),
     responses(
         (status = 200, description = "Successfully retrieved stack health", body = StackHealthResponse),
-        (status = 403, description = "Forbidden - PAK does not have required rights", body = ErrorResponse),
+        (status = 403, description = "Forbidden - not an admin, and not the tenant that owns the stack", body = ErrorResponse),
+        (status = 404, description = "Stack not found", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse),
     ),
-    security(("admin_pak" = []))
+    security(("admin_pak" = []), ("generator_pak" = []))
 )]
 async fn get_stack_health(
     State(dal): State<DAL>,
@@ -255,13 +271,9 @@ async fn get_stack_health(
 ) -> Result<Json<StackHealthResponse>, ApiError> {
     info!("Handling request to get health for stack {}", stack_id);
 
-    if !auth_payload.admin {
-        warn!("Unauthorized attempt to get stack health");
-        return Err(ApiError::forbidden(
-            "admin_required",
-            "admin access required",
-        ));
-    }
+    // An admin, or the tenant that owns the stack (BROKKR-T-0379): the same
+    // rule as the stack's events and logs.
+    crate::api::v1::stacks::fetch_owned_stack(&dal, &auth_payload, stack_id).await?;
 
     let health_records = dal
         .deployment_health()
@@ -297,12 +309,23 @@ async fn get_stack_health(
                 "unknown".to_string()
             };
 
+            let mut agents: Vec<AgentHealthReport> = records
+                .iter()
+                .map(|r| AgentHealthReport {
+                    agent_id: r.agent_id,
+                    status: r.status.clone(),
+                    checked_at: r.checked_at,
+                })
+                .collect();
+            agents.sort_by_key(|a| a.agent_id);
+
             DeploymentObjectHealthSummary {
                 id,
                 status,
                 healthy_agents,
                 degraded_agents,
                 failing_agents,
+                agents,
             }
         })
         .collect();
