@@ -125,12 +125,14 @@ pub struct AuthResponse {
 ///
 /// # Returns
 ///
-/// A `Result` containing either the response from the next middleware or an error status code.
+/// A `Result` containing either the response from the next middleware or an
+/// error. A refusal carries a JSON `ErrorResponse` body, so a client sees
+/// why and does not fail on an empty payload (BROKKR-T-0384).
 pub async fn auth_middleware<B>(
     State(dal): State<DAL>,
     mut request: Request<Body>,
     next: Next,
-) -> Result<Response, StatusCode> {
+) -> Result<Response, crate::api::v1::error::ApiError> {
     info!("Processing authentication middleware");
     let raw = match request
         .headers()
@@ -140,7 +142,7 @@ pub async fn auth_middleware<B>(
         Some(value) => value,
         None => {
             warn!("Authorization header missing or invalid");
-            return Err(StatusCode::UNAUTHORIZED);
+            return Err(refused_pak());
         }
     };
 
@@ -163,7 +165,10 @@ pub async fn auth_middleware<B>(
                     request.method(),
                     request.uri().path()
                 );
-                return Err(StatusCode::FORBIDDEN);
+                return Err(crate::api::v1::error::ApiError::forbidden(
+                    "readonly_credential",
+                    "this credential is read-only: the request changes state",
+                ));
             }
             request.extensions_mut().insert(auth_payload);
             Ok(next.run(request).await)
@@ -198,9 +203,23 @@ pub async fn auth_middleware<B>(
                     user_agent,
                 );
             }
-            Err(status)
+            Err(if status == StatusCode::UNAUTHORIZED {
+                refused_pak()
+            } else {
+                crate::api::v1::error::ApiError::internal("the broker could not verify the PAK")
+            })
         }
     }
+}
+
+/// The 401 the broker answers when the PAK is missing, malformed, rotated or
+/// revoked (BROKKR-T-0384). One body for every case: the broker does not say
+/// which, so a holder of a stale PAK learns nothing a holder of none would not.
+fn refused_pak() -> crate::api::v1::error::ApiError {
+    crate::api::v1::error::ApiError::unauthorized(
+        "unauthorized",
+        "the broker refused the PAK: it is missing, malformed, rotated or revoked",
+    )
 }
 
 /// Whether a request from a read-only credential may proceed.
