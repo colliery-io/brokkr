@@ -108,6 +108,7 @@ export default defineConfig({
 						page('how-to/multi-tenant-setup', 'Setting Up Multi-Tenant Operation'),
 						page('how-to/shipwright-builds', 'Container Builds with Shipwright'),
 						page('how-to/build-and-publish-images', 'Building & Publishing Images'),
+						page('how-to/bdd-features', 'Running and Writing the BDD Features'),
 					],
 				},
 				{

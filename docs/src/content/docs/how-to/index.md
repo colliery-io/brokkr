@@ -12,4 +12,6 @@ Practical guides for accomplishing specific tasks with Brokkr. These are goal-or
 
 **Observe & debug:** [Monitoring Your Agent Fleet](fleet-monitoring/) · [Monitoring Deployment Health](deployment-health/) · [Streaming Pod Logs & Live Tail](log-streaming/) · [Running On-Demand Diagnostics](diagnostics/) · [Troubleshooting Reconciliation](troubleshoot-reconciliation/) · [Querying Audit Logs](audit-logs/) · [Configuring Webhooks](webhooks/)
 
+**Develop:** [Running and Writing the BDD Features](bdd-features/)
+
 **Integrate:** [Using the SDKs](sdks/) — [Rust](sdks/rust/) · [Python](sdks/python/) · [TypeScript](sdks/typescript/) · [Regenerating SDKs](sdks/regeneration/)

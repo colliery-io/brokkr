@@ -1,0 +1,79 @@
+---
+name: BDD Features
+# Reusable. Runs the Gherkin features in tests/bdd/features against the
+# compose stack, one feature per runner (BROKKR-T-0385). The steps drive the
+# real `brokkr` CLI, the real `brokkr-agent` binary and the broker API.
+#
+# Caller: main.yml, on a PR or a push that changes the CLI, the agent, the
+# broker, the client, the features or this file. CI gate requires it.
+#
+# Each feature gets its own runner and its own compose stack: the
+# tenant-after-apply feature waits for the stack's agent to report, and the
+# features are faster side by side than in one row.
+on:
+  workflow_call:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  feature:
+    runs-on: ubuntu-latest
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+    strategy:
+      fail-fast: false
+      matrix:
+        feature: [tenant-onboarding, agent-onboarding, tenant-after-apply, tenants-apart]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Install angreal
+        run: |
+          python -m pip install --upgrade pip
+          pip install angreal
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@1.99
+
+      - name: Cache build
+        uses: actions/cache@v5
+        with:
+          path: |
+            target
+            tests/bdd/target
+          key: ${{ runner.os }}-bdd-build-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-bdd-build-
+
+      - name: Create required directories
+        run: |
+          mkdir -p /tmp/brokkr-keys
+          chmod 777 /tmp/brokkr-keys
+
+      - name: Log in to Docker Hub (raise base-image pull rate limit)
+        if: ${{ env.DOCKERHUB_USERNAME != '' }}
+        uses: docker/login-action@v4.2.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: docker compose up
+        uses: hoverkraft-tech/compose-action@v3.0.0
+        with:
+          compose-file: ".angreal/files/docker-compose.yaml"
+
+      - name: Run the feature ${{ matrix.feature }}
+        run: angreal tests bdd --skip-docker --feature ${{ matrix.feature }}
+
+      - name: Compose logs on failure
+        if: failure()
+        run: docker compose -f .angreal/files/docker-compose.yaml logs --no-color --tail 300 broker agent
