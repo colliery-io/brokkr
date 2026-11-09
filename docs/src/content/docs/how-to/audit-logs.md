@@ -176,7 +176,7 @@ curl -s "http://localhost:3000/api/v1/admin/audit-logs?action=stack.deleted" \
   | jq '.logs[] | {actor_type, actor_name, resource_id, timestamp}'
 ```
 
-### Who Granted This Agent Its Tenant Scopes?
+### Who Granted This Agent Its Generator Scopes?
 
 Registration is the consent boundary that decides which generators' stacks reach an agent, so its grants and revocations are audited:
 

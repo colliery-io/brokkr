@@ -22,10 +22,10 @@ curl -H "Authorization: Bearer <your-pak>" http://localhost:3000/api/v1/...
 There are four types of PAKs:
 - **Admin PAK**: Full access to all endpoints
 - **Agent PAK**: Access to agent-specific endpoints (target state, events, heartbeat)
-- **Generator PAK**: The tenant credential — creates and manages the generator's own stacks, deployment objects, and templates
+- **Generator PAK**: The credential of one generator — creates and manages the generator's own stacks, deployment objects, and templates
 - **Read-only console PAK**: An ephemeral credential the broker mints per process and embeds in the served operator console. It is a read-only admin: `GET`/`HEAD` requests pass, plus `POST /auth/pak` and `POST /deployment-objects/:id/diagnostics`; every other mutating request is rejected with `403`. It is never persisted and is not issued through the API
 
-All four share the same token format, and the token does not encode the role — the broker resolves the identity by hash lookup. `POST /auth/pak` reports which identity a PAK resolves to, returning `admin`, `agent`, `generator`, and `readonly`. The `generator` field is the caller's tenant ID; `readonly` is `true` only for the console PAK. See [Multi-Tenancy](../multi-tenancy/) for the tenant model.
+All four share the same token format, and the token does not encode the role — the broker resolves the identity by hash lookup. `POST /auth/pak` reports which identity a PAK resolves to, returning `admin`, `agent`, `generator`, and `readonly`. The `generator` field is the caller's generator ID; `readonly` is `true` only for the console PAK. See [Multi-Tenancy](../multi-tenancy/) for the generator model.
 
 ### Core Resources
 
@@ -34,7 +34,7 @@ Stacks are collections of Kubernetes resources managed as a unit.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/stacks` | List all stacks (admin: all, `?pak_id=` scopes to one tenant; generator: own only) |
+| GET | `/stacks` | List all stacks (admin: all, `?pak_id=` scopes to one generator; generator: own only) |
 | POST | `/stacks` | Create a new stack |
 | GET | `/stacks/:id` | Get stack by ID |
 | PUT | `/stacks/:id` | Update a stack |
@@ -83,7 +83,7 @@ Agents run in Kubernetes clusters and apply deployment objects.
 | GET | `/agents/:agent_id/webhooks/pending` | Pending webhook deliveries (auto-claims) |
 | GET | `/agents/` | Search agents by query string |
 
-Registration with a generator — Brokkr's tenant — is the agent's consent
+Registration with a generator is the agent's consent
 boundary, and it governs every path by which a stack reaches an agent. A stack
 target can only be added or removed when the agent is registered with the target
 stack's owning generator; otherwise the request returns `403`
@@ -91,7 +91,7 @@ stack's owning generator; otherwise the request returns `403`
 matches are filtered by the same rule at read time: a match associates a stack
 with an agent only when the agent is registered with that stack's owning
 generator, so an agent with no registrations receives nothing from matching, and
-two tenants may reuse the same label vocabulary without colliding. The served set
+two generators may reuse the same label vocabulary without colliding. The served set
 returned by `GET /agents/:id/target-state` is therefore the union of explicit
 targets (gated at creation) plus label and annotation matches within the agent's
 registered generators.
@@ -112,7 +112,7 @@ rollup is assembled with bounded grouped queries (no per-agent fan-out).
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/fleet` | Per-agent fleet records for all agents (rollup); `?pak_id=` scopes to agents registered with one tenant |
+| GET | `/fleet` | Per-agent fleet records for all agents (rollup); `?pak_id=` scopes to agents registered with one generator |
 | GET | `/agents/:id/fleet-status` | One agent's fleet record plus its 20 most recent events |
 
 Each fleet record carries: `agent_id`, `name`, `status`, `ws_connected`,
@@ -187,15 +187,15 @@ External systems that create deployment objects.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/agent-events` | List agent events (admin only); `?pak_id=` scopes to agents registered with one tenant |
+| GET | `/agent-events` | List agent events (admin only); `?pak_id=` scopes to agents registered with one generator |
 | GET | `/agent-events/:id` | Get agent event by ID |
 | GET | `/deployment-objects/:id` | Get deployment object by ID |
 | POST | `/auth/pak` | Verify a PAK; returns `admin`, `agent`, `generator`, `readonly` |
-| GET | `/paks` | List tenants (non-system generators) as `{id, name}` for a scope selector (admin only) |
+| GET | `/paks` | List the non-system generators as `{id, name}` for a scope selector (admin only) |
 
-#### Tenant Scoping
+#### Generator Scoping
 
-`GET /paks` returns the tenants a scope selector can offer. Despite its `auth`
+`GET /paks` returns the generators a scope selector can offer. Despite its `auth`
 OpenAPI tag, the path is `/api/v1/paks` — it is **not** under `/api/v1/auth/`.
 It is admin-gated; the read-only console PAK qualifies. The system generator is
 never listed.
@@ -208,7 +208,7 @@ UUID returns `400`.
 > `pak_id` is a **view filter, not an authorization boundary.** All three
 > endpoints already require admin (`/stacks` also serves generator PAKs, which
 > are self-scoped and unaffected by the parameter), and an admin who omits it
-> sees every tenant. Real isolation comes from the generator PAK's own scoping
+> sees every generator. Real isolation comes from the generator PAK's own scoping
 > and from agent registration — see
 > [Multi-Tenancy](../multi-tenancy/#scoped-views-the-pak_id-query-parameter).
 

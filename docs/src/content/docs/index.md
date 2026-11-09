@@ -10,7 +10,7 @@ While tools like FluxCD and ArgoCD excel at GitOps-based state management, Brokk
 
 ### On-Demand Application Provisioning
 
-A customer needs a new service spun up? A new tenant needs their own stack? Just create the deployment through Brokkr and it flows through the controller loop to your clusters. No manual kubectl, no CI round-trip. Brokkr's generators and templates let external systems — CI/CD pipelines, customer provisioning systems, or internal tools — programmatically create Kubernetes resources through an API, without touching git repos or manifest files.
+A customer needs a new service spun up? A new team needs its own stack? Just create the deployment through Brokkr and it flows through the controller loop to your clusters. No manual kubectl, no CI round-trip. Brokkr's generators and templates let external systems — CI/CD pipelines, customer provisioning systems, or internal tools — programmatically create Kubernetes resources through an API, without touching git repos or manifest files.
 
 ### Dynamic Service Management
 

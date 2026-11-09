@@ -86,7 +86,7 @@ Handler: `get_agent_fleet_status`. Path parameter `id` (`Uuid`) is the agent ID.
 
 ## Live Push: GET /api/v1/fleet/live
 
-A read-only, server → client WebSocket stream (`crates/brokkr-broker/src/ws/fleet_subscribe.rs`). The broker pushes a frame whenever an agent's fleet record changes (see [Update Triggers](#update-triggers)). Each frame carries one agent's full record, keyed by `agent_id`; frames are not deltas. The stream accepts no scope parameter — unlike `GET /fleet`, it is always fleet-wide. A consumer that wants a tenant-scoped live view filters frames client-side.
+A read-only, server → client WebSocket stream (`crates/brokkr-broker/src/ws/fleet_subscribe.rs`). The broker pushes a frame whenever an agent's fleet record changes (see [Update Triggers](#update-triggers)). Each frame carries one agent's full record, keyed by `agent_id`; frames are not deltas. The stream accepts no scope parameter — unlike `GET /fleet`, it is always fleet-wide. A consumer that wants a generator-scoped live view filters frames client-side.
 
 ### Authentication
 

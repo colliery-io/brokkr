@@ -8,7 +8,7 @@ This reference documents the API endpoints for managing generators in Brokkr.
 
 Generators are identity principals that enable external systems (CI/CD pipelines, automation tools) and teams to authenticate with Brokkr and manage resources. Each generator has its own Prefixed API Key (PAK) and can only access resources it created.
 
-**A generator is also Brokkr's tenant.** Onboarding a team or an application onto a shared broker means creating a generator and handing over its PAK: stacks carry the owning `generator_id`, templates are private to their generator unless they are system templates, and agents must register with a generator before its stacks reach them. Generators are what the operator console's tenant scope selector lists (`GET /api/v1/paks`) and what `?pak_id=` narrows a listing to. See [Multi-Tenancy](../multi-tenancy/) for the full tenant model.
+**A generator is the unit of isolation.** Onboarding a team or an application onto a shared broker means creating a generator and handing over its PAK: stacks carry the owning `generator_id`, templates are private to their generator unless they are system templates, and agents must register with a generator before its stacks reach them. Generators are what the operator console's scope selector lists (`GET /api/v1/paks`) and what `?pak_id=` narrows a listing to. See [Multi-Tenancy](../multi-tenancy/) for the full generator model.
 
 An agent must be registered with a generator before any stack owned by that generator is associated with the agent. Registration is the agent's opt-in consent boundary and applies to every association path — explicit targets, label matches, and annotation matches — and cannot be bypassed by admin. A singleton system generator (`is_system = true`, excluded from the `GET /generators` and `GET /paks` listings) is provisioned at broker startup and carries fleet/system stacks that reach all agents without per-agent registration. Agents are registered with it automatically: both agent-creation paths (`POST /api/v1/agents` and `brokkr-broker create agent`) register the new agent with it, and any agents that already existed when it was first provisioned are back-filled at that moment. For the concept, see [Generator Registration and Application Scopes](../../explanation/security-model/#generator-registration-and-application-scopes); for operational steps, see [Agent Registration](../../how-to/agent-registration/).
 
@@ -76,9 +76,9 @@ Authorization: Bearer <admin_pak>
 
 ---
 
-### List Tenants (Named PAKs)
+### List Generators (Named PAKs)
 
-List generators reduced to identity only, for a tenant scope selector. Requires admin access; the operator console's ephemeral read-only PAK is a read-only admin and qualifies.
+List generators reduced to identity only, for the console's scope selector. Requires admin access; the operator console's ephemeral read-only PAK is a read-only admin and qualifies.
 
 The path is `/api/v1/paks`. It is grouped under the `auth` tag in the OpenAPI document but is **not** nested under `/api/v1/auth/`.
 
@@ -493,7 +493,7 @@ Authorization: Bearer <admin_pak | agent_pak>
 
 ### PAK Format
 
-All PAKs — admin, agent, generator, and the console's ephemeral read-only PAK — share the same format: `<prefix>_<short-token>_<long-token>`, by default `brokkr_BR<8 chars>_<24 chars>` (configured by the `pak.*` settings; see [Environment Variables](../environment-variables/)). The token itself does not encode the role: the broker determines which identity a PAK belongs to by hash lookup. Use `POST /api/v1/auth/pak` to discover which identity a PAK resolves to; its `generator` field is the caller's tenant ID, and `readonly` is `true` only for the console PAK.
+All PAKs — admin, agent, generator, and the console's ephemeral read-only PAK — share the same format: `<prefix>_<short-token>_<long-token>`, by default `brokkr_BR<8 chars>_<24 chars>` (configured by the `pak.*` settings; see [Environment Variables](../environment-variables/)). The token itself does not encode the role: the broker determines which identity a PAK belongs to by hash lookup. Use `POST /api/v1/auth/pak` to discover which identity a PAK resolves to; its `generator` field is the caller's generator ID, and `readonly` is `true` only for the console PAK.
 
 ### Authorization Header
 
@@ -508,7 +508,7 @@ Authorization: Bearer brokkr_BRgen12ab_GeneratorLongTokenExample01
 | Operation | Admin PAK | Generator PAK (own) | Generator PAK (other) |
 |-----------|-----------|---------------------|----------------------|
 | List generators | Yes | No | No |
-| List tenants (`GET /paks`) | Yes | No | No |
+| List generators (`GET /paks`) | Yes | No | No |
 | Create generator | Yes | No | No |
 | Get generator | Yes | Yes | No |
 | Update generator | Yes | Yes | No |
@@ -537,13 +537,13 @@ Before any of a generator's stacks are associated with an agent, the agent must 
 
 An agent with no registrations therefore receives nothing from label or annotation matching, and two generators can safely reuse the same label and annotation vocabulary. The served set returned by `GET /agents/{id}/target-state` reflects this rule.
 
-Registration with the system generator is automatic, so system/fleet stacks reach all agents without per-agent registration: both `POST /api/v1/agents` and `brokkr-broker create agent` register the new agent with it, and pre-existing agents are back-filled when it is first provisioned. An agent created by the CLI while the system generator does not yet exist (a broker whose `serve` has never run) is the one case that is left unregistered; the CLI logs a warning, and the agent must then be registered explicitly. Every other generator is registered explicitly, via the registration endpoints above or at agent startup. See [Agent Registration](../../how-to/agent-registration/) for operations and [Multi-Tenancy](../multi-tenancy/) for the tenant model this enforces.
+Registration with the system generator is automatic, so system/fleet stacks reach all agents without per-agent registration: both `POST /api/v1/agents` and `brokkr-broker create agent` register the new agent with it, and pre-existing agents are back-filled when it is first provisioned. An agent created by the CLI while the system generator does not yet exist (a broker whose `serve` has never run) is the one case that is left unregistered; the CLI logs a warning, and the agent must then be registered explicitly. Every other generator is registered explicitly, via the registration endpoints above or at agent startup. See [Agent Registration](../../how-to/agent-registration/) for operations and [Multi-Tenancy](../multi-tenancy/) for the generator model this enforces.
 
 ### Templates
 
 Templates can be:
 - **Generator-scoped**: created by a generator, and readable, modifiable, and instantiable only by that generator
-- **System templates**: created by admin (`generator_id` is null), readable and instantiable by every generator — the sanctioned cross-tenant sharing mechanism
+- **System templates**: created by admin (`generator_id` is null), readable and instantiable by every generator — the sanctioned cross-generator sharing mechanism
 
 A generator that reads or instantiates another generator's template receives `403` with error code `template_not_accessible`. This applies to `GET /templates/{id}`, the template label and annotation reads, and `POST /stacks/{id}/deployment-objects/from-template`. Admin may access any template.
 
@@ -586,5 +586,5 @@ This allows reusing names after a generator is deleted.
 - [Agent Registration](../../how-to/agent-registration/) - Registering agents with generators for targeting
 - [Stack Templates](../../how-to/templates/) - Using templates with generators
 - [Security Model](../../explanation/security-model/#generator-registration-and-application-scopes) - Generator registration and the targeting authorization gate
-- [Multi-Tenancy](../multi-tenancy/) - The tenant model, tenant listing, and `pak_id` scoped views
-- [Multi-Tenant Setup](../../how-to/multi-tenant-setup/) - Onboarding teams onto a shared broker
+- [Multi-Tenancy](../multi-tenancy/) - The generator model, generator listing, and `pak_id` scoped views
+- [Multi-Generator Setup](../../how-to/multi-generator-setup/) - Onboarding teams onto a shared broker

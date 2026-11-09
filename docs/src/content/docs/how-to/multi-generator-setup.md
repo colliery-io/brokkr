@@ -1,10 +1,10 @@
 ---
-title: "How-To: Set Up Multi-Tenant Operation"
+title: "How-To: Set Up Multi-Generator Operation"
 ---
 
-This guide walks through onboarding multiple teams onto **one** Brokkr broker. Each team becomes a generator — Brokkr's tenant — with its own PAK, its own stacks, and its own set of agents that have explicitly consented to serve it.
+This guide walks through onboarding multiple teams onto **one** Brokkr broker. Each team becomes a generator, with its own PAK, its own stacks, and its own set of agents that have explicitly consented to serve it.
 
-If instead you need fully separate broker instances (for example one per environment, or when data must be separated at the storage layer), skip to [Running Separate Broker Instances](#running-separate-broker-instances-schema-separation) at the end of this guide. That is a deployment feature, not the tenant model, and the two are independent — a separate instance still has generators inside it.
+If instead you need fully separate broker instances (for example one per environment, or when data must be separated at the storage layer), skip to [Running Separate Broker Instances](#running-separate-broker-instances-schema-separation) at the end of this guide. That is a deployment feature, not the generator model, and the two are independent — a separate instance still has generators inside it.
 
 ## Goal
 
@@ -18,7 +18,7 @@ Onboard two teams, `acme` and `globex`, onto a single running broker. Each team 
 
 ## Step 1: Create a Generator Per Team
 
-Create one generator per tenant with the admin PAK, and keep the two values the response gives you: the tenant's id and its PAK.
+Create one generator per team with the admin PAK, and keep the two values the response gives you: the generator's id and its PAK.
 
 ```bash
 ACME=$(curl -s -X POST http://broker:3000/api/v1/generators \
@@ -29,7 +29,7 @@ ACME_GEN_ID=$(echo "$ACME" | jq -r '.generator.id')
 ACME_GENERATOR_PAK=$(echo "$ACME" | jq -r '.pak')
 ```
 
-The response carries the tenant's record and its PAK:
+The response carries the generator's record and its PAK:
 
 ```json
 {
@@ -50,7 +50,7 @@ The response carries the tenant's record and its PAK:
 
 The `pak` is returned **once**. Hand it to the team over a secure channel and have them store it in their secret manager; the only recovery path is `POST /api/v1/generators/{id}/rotate-pak`. Keep the generator `id` too — the team needs it as `generator_id` on every stack they create, and you need it for scoped views later.
 
-With the `brokkr` CLI, `brokkr --pak "$ADMIN_PAK" tenant create team-acme --description "Acme platform team"` does the same and prints the id and the PAK once.
+With the `brokkr` CLI, `brokkr --pak "$ADMIN_PAK" generator create team-acme --description "Acme platform team"` does the same and prints the id and the PAK once.
 
 Repeat for `team-globex`, into `GLOBEX_GEN_ID` and `GLOBEX_GENERATOR_PAK`.
 
@@ -82,7 +82,7 @@ The response contains the agent record and its one-time `initial_pak`:
 
 Every agent is also auto-registered with the system generator, so fleet-wide stacks still reach it. A `generator_ids` entry that does not exist is rejected with `400 invalid_generator_id`.
 
-With the `brokkr` CLI, `brokkr --pak "$ADMIN_PAK" agent create acme-prod --cluster us-east-1 --tenant team-acme` does the same, and prints the Helm command for step 3 with the values filled in.
+With the `brokkr` CLI, `brokkr --pak "$ADMIN_PAK" agent create acme-prod --cluster us-east-1 --generator team-acme` does the same, and prints the Helm command for step 3 with the values filled in.
 
 Repeat for `globex-prod` with `$GLOBEX_GEN_ID`, into `GLOBEX_AGENT_ID` and `GLOBEX_AGENT_PAK`.
 
@@ -100,7 +100,7 @@ helm install brokkr-agent-acme oci://ghcr.io/colliery-io/charts/brokkr-agent \
   --set broker.generatorIds="{$ACME_GEN_ID}"
 ```
 
-`broker.generatorIds` accepts a YAML list or a comma-separated string and renders to `BROKKR__AGENT__GENERATOR_IDS`. Registration is the agent's own opt-in: it is what makes the cluster operator, not the broker admin, the party that decides which tenants' work the cluster will run. See [Agent Registration](../agent-registration/) for the full registration workflow.
+`broker.generatorIds` accepts a YAML list or a comma-separated string and renders to `BROKKR__AGENT__GENERATOR_IDS`. Registration is the agent's own opt-in: it is what makes the cluster operator, not the broker admin, the party that decides which generators' work the cluster will run. See [Agent Registration](../agent-registration/) for the full registration workflow.
 
 Repeat for `globex`, pointing at the same broker URL with `$GLOBEX_GEN_ID`.
 
@@ -132,7 +132,7 @@ ACME_STACK_ID=$(curl -s -X POST http://broker:3000/api/v1/stacks \
   }' | jq -r '.id')
 ```
 
-A team member who needs their tenant ID can read it back from their PAK:
+A team member who needs their generator ID can read it back from their PAK:
 
 ```bash
 curl -s -X POST http://broker:3000/api/v1/auth/pak \
@@ -159,7 +159,7 @@ curl -s -X POST "http://broker:3000/api/v1/agents/$ACME_AGENT_ID/labels" \
   -d '{"agent_id": "'"$ACME_AGENT_ID"'", "label": "env:prod"}'
 ```
 
-The team can instead target its stack at the agent directly, with its own PAK. This works because the agent is registered with the team's generator; the admin has to tell the team the agent id, because a tenant cannot list agents:
+The team can instead target its stack at the agent directly, with its own PAK. This works because the agent is registered with the team's generator; the admin has to tell the team the agent id, because a generator cannot list agents:
 
 ```bash
 curl -s -X POST "http://broker:3000/api/v1/agents/$ACME_AGENT_ID/targets" \
@@ -172,9 +172,9 @@ Labels select **within** the generators an agent has registered with. `env:prod`
 
 Repeat for Globex with a stack named `globex-api`, into `GLOBEX_STACK_ID`.
 
-Templates behave the same way: a generator can instantiate its own templates and admin-owned system templates, but another tenant's template returns `403 template_not_accessible`.
+Templates behave the same way: a generator can instantiate its own templates and admin-owned system templates, but another generator's template returns `403 template_not_accessible`.
 
-## Step 5: Verify Tenant Separation
+## Step 5: Verify Generator Separation
 
 Each generator PAK sees only its own stacks:
 
@@ -195,7 +195,7 @@ curl -s "http://broker:3000/api/v1/agents/$ACME_AGENT_ID/registrations" \
   -H "Authorization: Bearer $ADMIN_PAK" | jq '.[].generator_id'
 ```
 
-And confirm an agent's served set contains only its own tenant's work:
+And confirm an agent's served set contains only its own generator's work:
 
 ```bash
 curl -s "http://broker:3000/api/v1/agents/$ACME_AGENT_ID/target-state" \
@@ -215,11 +215,11 @@ curl -s -o /dev/null -w '%{http_code}\n' \
 
 There is no force flag. To target across the boundary you must first register the agent with that generator, which is one explicit, audited call.
 
-## Step 6: Scope Operator Views to One Tenant
+## Step 6: Scope Operator Views to One Generator
 
-The broker serves an operator console with a tenant scope selector. It is backed by two pieces of API you can also drive yourself.
+The broker serves an operator console with a generator scope selector. It is backed by two pieces of API you can also drive yourself.
 
-List the tenants (admin credential required; the console's read-only PAK qualifies):
+List the generators (admin credential required; the console's read-only PAK qualifies):
 
 ```bash
 curl -s http://broker:3000/api/v1/paks \
@@ -235,7 +235,7 @@ curl -s http://broker:3000/api/v1/paks \
 
 The path is `/api/v1/paks`, not `/api/v1/auth/paks`. The system generator is never listed.
 
-Then narrow the admin listings to one tenant with `?pak_id=<generator id>`:
+Then narrow the admin listings to one generator with `?pak_id=<generator id>`:
 
 ```bash
 # Fleet records for agents registered with Acme
@@ -253,24 +253,24 @@ curl -s "http://broker:3000/api/v1/agent-events?pak_id=$ACME_GEN_ID" \
 
 An unknown but well-formed UUID returns an empty list; a malformed one returns `400`.
 
-> **Do not treat `pak_id` as an access control.** It is a display filter for an admin who could see everything anyway — dropping the parameter shows all tenants again. Never hand a team an admin PAK plus a `pak_id` and call it tenant access. A team's access boundary is its own generator PAK; an agent's boundary is its registrations.
+> **Do not treat `pak_id` as an access control.** It is a display filter for an admin who could see everything anyway — dropping the parameter shows all generators again. Never hand a team an admin PAK plus a `pak_id` and call it generator access. A team's access boundary is its own generator PAK; an agent's boundary is its registrations.
 
 ## What This Setup Does and Does Not Separate
 
-| | Separated per tenant |
+| | Separated per generator |
 |---|---|
 | Stacks, deployment objects, templates | Yes — by generator ownership |
-| Which agents receive a tenant's stacks | Yes — by agent registration, on targets, labels, and annotations |
+| Which agents receive a generator's stacks | Yes — by agent registration, on targets, labels, and annotations |
 | Credentials | Yes — each team holds only its own generator PAK |
-| Admin PAK | **No** — one admin governs all tenants on the broker |
+| Admin PAK | **No** — one admin governs all generators on the broker |
 | Database and broker process | **No** — one broker, one schema, shared resources |
-| Fleet and audit views | **No** — admin-only surfaces span all tenants |
+| Fleet and audit views | **No** — admin-only surfaces span all generators |
 
-If a tenant needs its own admin, its own database tables, or resource separation from other tenants, run it as a separate broker instance instead.
+If a generator needs its own admin, its own database tables, or resource separation from other generators, run it as a separate broker instance instead.
 
 ## Running Separate Broker Instances (Schema Separation)
 
-Setting a PostgreSQL schema per broker lets several fully independent broker instances share one PostgreSQL server. Use it for environment separation, or when data must be separated at the storage layer. Each instance has its own admin PAK, its own agents, and its own generators — the tenant model above still applies *inside* each one.
+Setting a PostgreSQL schema per broker lets several fully independent broker instances share one PostgreSQL server. Use it for environment separation, or when data must be separated at the storage layer. Each instance has its own admin PAK, its own agents, and its own generators — the generator model above still applies *inside* each one.
 
 The example below uses two instances, `staging` and `prod`.
 
@@ -436,7 +436,7 @@ Use a consistent pattern like `brokkr_{name}` (e.g. `brokkr_staging`). Brokkr re
 
 ## Related Documentation
 
-- [Multi-Tenancy Reference](../../reference/multi-tenancy/) — the tenant model, `GET /api/v1/paks`, and `pak_id` semantics
+- [Multi-Tenancy Reference](../../reference/multi-tenancy/) — the generator model, `GET /api/v1/paks`, and `pak_id` semantics
 - [Working with Generators](../generators/) — generator lifecycle, CI/CD integration, and PAK rotation
 - [Agent Registration](../agent-registration/) — registering and deregistering agents
 - [Configuration Guide](../configuration/) — database configuration
