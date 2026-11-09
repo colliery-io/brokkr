@@ -1805,8 +1805,13 @@ async fn test_legacy_stored_labels_filter_still_delivers() {
 // Broker-wide delivery feed (BROKKR-T-0264)
 // =============================================================================
 
+/// A subscription whose deliveries the compose broker's worker never attempts
+/// (BROKKR-T-0388): agent-targeted, with a label no agent has. The worker
+/// claims every pending broker-delivered row every few seconds, so a row
+/// seeded with no target labels was attempted before the test read it.
 fn feed_subscription(fixture: &TestFixture, name: &str) -> uuid::Uuid {
     use brokkr_models::models::webhooks::NewWebhookSubscription;
+    let label = format!("test-only-{}", uuid::Uuid::new_v4());
     fixture
         .dal
         .webhook_subscriptions()
@@ -1816,7 +1821,7 @@ fn feed_subscription(fixture: &TestFixture, name: &str) -> uuid::Uuid {
             auth_header_encrypted: Some(b"Bearer secret".to_vec()),
             event_types: vec![Some("deployment.applied".to_string())],
             filters: None,
-            target_labels: None,
+            target_labels: Some(vec![Some(label)]),
             enabled: true,
             max_retries: 5,
             timeout_seconds: 30,
@@ -1829,10 +1834,18 @@ fn feed_subscription(fixture: &TestFixture, name: &str) -> uuid::Uuid {
 fn feed_delivery(fixture: &TestFixture, subscription_id: uuid::Uuid) -> uuid::Uuid {
     use brokkr_models::models::webhooks::{BrokkrEvent, NewWebhookDelivery};
     let event = BrokkrEvent::new("deployment.applied", json!({"test": true}));
+    // The delivery carries the subscription's labels, so the worker leaves it.
+    let labels = fixture
+        .dal
+        .webhook_subscriptions()
+        .get(subscription_id)
+        .unwrap()
+        .expect("the subscription exists")
+        .target_labels;
     let delivery = fixture
         .dal
         .webhook_deliveries()
-        .create(&NewWebhookDelivery::new(subscription_id, &event, None).unwrap())
+        .create(&NewWebhookDelivery::new(subscription_id, &event, labels).unwrap())
         .unwrap();
     // created_at must differ so that the newest-first order is deterministic.
     std::thread::sleep(std::time::Duration::from_millis(5));
