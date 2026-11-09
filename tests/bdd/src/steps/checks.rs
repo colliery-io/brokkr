@@ -62,56 +62,56 @@ async fn output_names_next_step(w: &mut World) {
     w.expect_output("Next: brokkr register");
 }
 
-// Tenants
+// Generators
 
-#[then(expr = "the tenant {string} exists")]
-async fn tenant_exists(w: &mut World, name: String) {
-    let tenant = w.tenant(&name).clone();
+#[then(expr = "the generator {string} exists")]
+async fn generator_exists(w: &mut World, name: String) {
+    let generator = w.generator(&name).clone();
     let listed = w
         .api
         .list_generators(w.admin())
         .await
-        .expect("list the tenants");
-    let found = api::named(&listed, &tenant.name).and_then(api::id_of);
+        .expect("list the generators");
+    let found = api::named(&listed, &generator.name).and_then(api::id_of);
     assert_eq!(
         found,
-        Some(tenant.id),
-        "the broker does not list the tenant {:?} with the id the command printed",
-        tenant.name
+        Some(generator.id),
+        "the broker does not list the generator {:?} with the id the command printed",
+        generator.name
     );
 }
 
-#[then(expr = "there is one tenant {string}")]
-async fn one_tenant(w: &mut World, name: String) {
+#[then(expr = "there is one generator {string}")]
+async fn one_generator(w: &mut World, name: String) {
     let real = w.real(&name);
     let listed = w
         .api
         .list_generators(w.admin())
         .await
-        .expect("list the tenants");
+        .expect("list the generators");
     let count = listed
         .iter()
         .filter(|g| g.get("name").and_then(Value::as_str) == Some(real.as_str()))
         .count();
-    assert_eq!(count, 1, "{count} tenants have the name {real:?}");
+    assert_eq!(count, 1, "{count} generators have the name {real:?}");
 }
 
-#[then(expr = "there is no tenant {string}")]
-async fn no_tenant(w: &mut World, name: String) {
+#[then(expr = "there is no generator {string}")]
+async fn no_generator(w: &mut World, name: String) {
     let real = w.real(&name);
     let listed = w
         .api
         .list_generators(w.admin())
         .await
-        .expect("list the tenants");
+        .expect("list the generators");
     assert!(
         api::named(&listed, &real).is_none(),
-        "the broker lists a tenant {real:?}"
+        "the broker lists a generator {real:?}"
     );
 }
 
-#[then(expr = "the list has the tenant {string}")]
-async fn list_has_tenant(w: &mut World, name: String) {
+#[then(expr = "the list has the generator {string}")]
+async fn list_has_generator(w: &mut World, name: String) {
     let real = w.real(&name);
     w.expect_output(&real);
 }
@@ -130,32 +130,32 @@ async fn list_has_no_system_generator(w: &mut World) {
     );
 }
 
-#[then(expr = "the answer names the tenant {string}")]
-async fn answer_names_tenant(w: &mut World, name: String) {
-    let tenant = w.tenant(&name);
-    let line = format!("PAK: tenant \"{}\" ({})", tenant.name, tenant.id);
+#[then(expr = "the answer names the generator {string}")]
+async fn answer_names_generator(w: &mut World, name: String) {
+    let generator = w.generator(&name);
+    let line = format!("PAK: generator \"{}\" ({})", generator.name, generator.id);
     w.expect_output(&line);
 }
 
-#[then(expr = "the tenant {string} lists the agent {string}")]
-async fn tenant_lists_agent(w: &mut World, tenant: String, agent: String) {
-    let pak = w.tenant(&tenant).pak.clone();
+#[then(expr = "the generator {string} lists the agent {string}")]
+async fn generator_lists_agent(w: &mut World, generator: String, agent: String) {
+    let pak = w.generator(&generator).pak.clone();
     let agent = w.agent(&agent).name.clone();
     w.brokkr(&pak, &["agent", "list"]).await;
     w.expect_output(&agent);
 }
 
-#[then(expr = "the tenant {string} lists the stack {string}")]
-async fn tenant_lists_stack(w: &mut World, tenant: String, stack: String) {
-    let pak = w.tenant(&tenant).pak.clone();
+#[then(expr = "the generator {string} lists the stack {string}")]
+async fn generator_lists_stack(w: &mut World, generator: String, stack: String) {
+    let pak = w.generator(&generator).pak.clone();
     let stack = w.real(&w.stack(&stack).name);
     w.brokkr(&pak, &["stack", "list"]).await;
     w.expect_output(&stack);
 }
 
-#[then(expr = "the tenant {string} no longer finds the stack {string}")]
-async fn tenant_no_longer_finds_stack(w: &mut World, tenant: String, stack: String) {
-    let pak = w.tenant(&tenant).pak.clone();
+#[then(expr = "the generator {string} no longer finds the stack {string}")]
+async fn generator_no_longer_finds_stack(w: &mut World, generator: String, stack: String) {
+    let pak = w.generator(&generator).pak.clone();
     let stack = w.real(&w.stack(&stack).name);
     w.brokkr(&pak, &["stack", "status", &stack]).await;
     w.expect_error("no stack has the name or id");
@@ -168,24 +168,24 @@ async fn output_shows_rotated_pak(w: &mut World) {
     w.expect_output("previous PAK stopped");
 }
 
-#[then(expr = "the previous PAK of the tenant {string} is refused")]
-async fn previous_pak_refused(w: &mut World, tenant: String) {
+#[then(expr = "the previous PAK of the generator {string} is refused")]
+async fn previous_pak_refused(w: &mut World, generator: String) {
     let previous = w
-        .tenant(&tenant)
+        .generator(&generator)
         .previous_paks
         .last()
         .cloned()
-        .expect("the tenant has rotated its PAK");
+        .expect("the generator has rotated its PAK");
     w.brokkr(&previous, &["whoami"]).await;
     w.last_refused();
 }
 
-#[then(expr = "the new PAK of the tenant {string} names the tenant")]
-async fn new_pak_names_tenant(w: &mut World, tenant: String) {
-    let pak = w.tenant(&tenant).pak.clone();
-    let name = w.tenant(&tenant).name.clone();
+#[then(expr = "the new PAK of the generator {string} names the generator")]
+async fn new_pak_names_generator(w: &mut World, generator: String) {
+    let pak = w.generator(&generator).pak.clone();
+    let name = w.generator(&generator).name.clone();
     w.brokkr(&pak, &["whoami"]).await;
-    w.expect_output(&format!("PAK: tenant \"{name}\""));
+    w.expect_output(&format!("PAK: generator \"{name}\""));
 }
 
 // Agents
@@ -233,35 +233,35 @@ async fn registrations(w: &World, agent: &str) -> Vec<Uuid> {
         .collect()
 }
 
-#[then(expr = "the agent {string} is registered with the tenant {string}")]
-async fn agent_registered(w: &mut World, agent: String, tenant: String) {
-    let tenant_id = w.tenant(&tenant).id;
+#[then(expr = "the agent {string} is registered with the generator {string}")]
+async fn agent_registered(w: &mut World, agent: String, generator: String) {
+    let generator_id = w.generator(&generator).id;
     let regs = registrations(w, &agent).await;
     assert!(
-        regs.contains(&tenant_id),
-        "the agent {agent:?} is not registered with the tenant {tenant:?}: {regs:?}"
+        regs.contains(&generator_id),
+        "the agent {agent:?} is not registered with the generator {generator:?}: {regs:?}"
     );
 }
 
-#[then(expr = "the agent {string} is not registered with the tenant {string}")]
-async fn agent_not_registered(w: &mut World, agent: String, tenant: String) {
-    let tenant_id = w.tenant(&tenant).id;
+#[then(expr = "the agent {string} is not registered with the generator {string}")]
+async fn agent_not_registered(w: &mut World, agent: String, generator: String) {
+    let generator_id = w.generator(&generator).id;
     let regs = registrations(w, &agent).await;
     assert!(
-        !regs.contains(&tenant_id),
-        "the agent {agent:?} is registered with the tenant {tenant:?}"
+        !regs.contains(&generator_id),
+        "the agent {agent:?} is registered with the generator {generator:?}"
     );
 }
 
 /// Every agent is registered with the system generator at creation. It is
-/// the one registration that is with no tenant of this scenario.
+/// the one registration that is with no generator of this scenario.
 #[then(expr = "the agent {string} is registered with the system generator")]
 async fn agent_registered_with_system(w: &mut World, agent: String) {
-    let tenants: Vec<Uuid> = w.tenants.values().map(|t| t.id).collect();
+    let generators: Vec<Uuid> = w.generators.values().map(|t| t.id).collect();
     let regs = registrations(w, &agent).await;
     assert!(
-        regs.iter().any(|g| !tenants.contains(g)),
-        "the agent {agent:?} has no registration beyond the scenario's tenants: {regs:?}"
+        regs.iter().any(|g| !generators.contains(g)),
+        "the agent {agent:?} has no registration beyond the scenario's generators: {regs:?}"
     );
 }
 
@@ -281,15 +281,15 @@ async fn agent_has_status(w: &mut World, agent: String, status: String) {
 }
 
 #[then(
-    expr = "the output shows the Helm command for the agent {string} in cluster {string} with the tenant {string}"
+    expr = "the output shows the Helm command for the agent {string} in cluster {string} with the generator {string}"
 )]
-async fn output_shows_helm(w: &mut World, agent: String, cluster: String, tenant: String) {
+async fn output_shows_helm(w: &mut World, agent: String, cluster: String, generator: String) {
     let agent = w.agent(&agent).name.clone();
-    let tenant_id = w.tenant(&tenant).id;
+    let generator_id = w.generator(&generator).id;
     w.expect_output("helm install brokkr-agent");
     w.expect_output(&format!("--set broker.agentName={agent}"));
     w.expect_output(&format!("--set broker.clusterName={cluster}"));
-    w.expect_output(&format!("--set broker.generatorIds=\"{{{tenant_id}}}\""));
+    w.expect_output(&format!("--set broker.generatorIds=\"{{{generator_id}}}\""));
 }
 
 #[then("the output says the agent is inactive and how to activate it")]
@@ -476,13 +476,13 @@ async fn targeted_stack(w: &mut World, stack: String, agent: String) {
 }
 
 #[then(
-    expr = "the error says the agent {string} is not registered with the tenant that owns the stack {string}"
+    expr = "the error says the agent {string} is not registered with the generator that owns the stack {string}"
 )]
 async fn error_not_registered(w: &mut World, agent: String, stack: String) {
     let agent = w.agent(&agent).name.clone();
     let stack = w.real(&stack);
     w.expect_error(&format!(
-        "agent \"{agent}\" is not registered with the tenant that owns stack \"{stack}\""
+        "agent \"{agent}\" is not registered with the generator that owns stack \"{stack}\""
     ));
 }
 
@@ -491,12 +491,12 @@ async fn error_names_register(w: &mut World) {
     w.expect_error("brokkr register --agent");
 }
 
-/// Poll `brokkr stack status` as the tenant until the table names the
+/// Poll `brokkr stack status` as the generator until the table names the
 /// cluster agent, or the wait is over.
 #[then(expr = "the status of the stack {string} names the cluster agent within three minutes")]
 async fn status_names_cluster_agent(w: &mut World, stack: String) {
     let owner = w.stack(&stack).owner.clone();
-    let pak = w.tenant(&owner).pak.clone();
+    let pak = w.generator(&owner).pak.clone();
     let real = w.real(&stack);
     let agent = w.cluster_agent_name().to_string();
     let start = Instant::now();

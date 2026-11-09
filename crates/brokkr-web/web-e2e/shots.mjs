@@ -155,7 +155,7 @@ const LIVE_FRAMES = [
   liveLine(ago(0), "payments-api-7d9f4-q8m3", "image pulled, container started"),
   { type: "k8s_event", body: { reason: "Pulled" } },
 ];
-// Named PAKs (tenants) for the scope selector (BROKKR-I-0032). IDs line up
+// Named PAKs (generators) for the scope selector (BROKKR-I-0032). IDs line up
 // with STACKS.generator_id so scoped mocks stay coherent.
 const PAKS = [
   { id: "1b9d6bcd-bbfd", name: "team-payments" },
@@ -246,7 +246,7 @@ const DIAG_MOCKS = {
   "/deployment-objects/d1a2b3c4/diagnostics": DIAG_CREATED,
 };
 
-// Tenants view (BROKKR-T-0318). `GET /generators` lists tenants; the mint
+// Generators view (BROKKR-T-0318). `GET /generators` lists generators; the mint
 // dialog POSTs to the same path and gets back the created generator plus its
 // one-time PAK — hence the method-aware mock keys below.
 const GENERATORS = [
@@ -261,7 +261,7 @@ const GENERATORS = [
 // any real credential, so the persistence assertion below cannot pass by accident.
 const MINTED_PAK = "brokkr_MINTED9_Zx7QvT2mKp8sLd4NrB6yCw3EfH5jA1gU";
 const CREATED_GENERATOR = {
-  generator: { id: "f00dcafe-1234", name: "team-checkout", description: "new tenant",
+  generator: { id: "f00dcafe-1234", name: "team-checkout", description: "new generator",
     is_active: true, is_system: false, last_active_at: null },
   pak: MINTED_PAK,
 };
@@ -269,8 +269,8 @@ const CREATED_GENERATOR = {
 // after the mint scene.
 const TYPED_ADMIN_PAK = "brokkr_ADMINxx_TypedByOperatorNeverPersisted00";
 
-// Registrations (BROKKR-T-0368). The tenant drawer reads the agents registered
-// with the tenant; the Fleet drawer reads the tenants of the agent. The system
+// Registrations (BROKKR-T-0368). The generator drawer reads the agents registered
+// with the generator; the Fleet drawer reads the generators of the agent. The system
 // generator is in the agent's list and must not show.
 const SYSTEM_GENERATOR = { id: "00000000-system", name: "system", description: "fleet scope",
   is_active: true, is_system: true, last_active_at: null };
@@ -291,7 +291,7 @@ const CREATED_AGENT = {
 };
 // Rotation (BROKKR-T-0369): the new PAK, distinct from every other fixture.
 const ROTATED_PAK = "brokkr_ROTATED1_Qp3kLm9vXz2sWd7tRb4yNc6eFh8jAg5U";
-const TENANT_MOCKS = {
+const GENERATOR_MOCKS = {
   "/generators": GENERATORS,
   "POST /generators/1b9d6bcd-bbfd/rotate-pak": { generator: GENERATORS[0], pak: ROTATED_PAK },
   "/generators/1b9d6bcd-bbfd/registered-agents": REGS_PAYMENTS,
@@ -313,7 +313,7 @@ const PAUSE_MOCKS = {
 };
 
 // Every mock the Deployments view and its drawer read: the stacks, their
-// health, the tenants, and each agent's target state (BROKKR-T-0337).
+// health, the generators, and each agent's target state (BROKKR-T-0337).
 const DEPLOY_MOCKS = {
   "/stacks": STACKS, "/stacks/s1/health": S1_HEALTH, "/stacks/s2/health": S2_HEALTH,
   "/generators": GENERATORS, "/fleet": FLEET,
@@ -324,7 +324,7 @@ const DEPLOY_MOCKS = {
 const FLEET_A = [{ ...FLEET[0], agent_id: "a1" }, { ...FLEET[1], agent_id: "a2" }];
 
 // Day zero (BROKKR-T-0336): an agent record that no process has started yet,
-// and the tenant list with one minted tenant.
+// and the generator list with one minted generator.
 const NEW_AGENT = { agent_id: "5e7d2c11-9a0b-4c3d-8e2f-1a2b3c4d5e6f", name: "checkout-agent-01", cluster_name: "prod-us-east-1",
   status: "INACTIVE", ws_connected: false, last_heartbeat: null, heartbeat_age_seconds: null,
   health_failing: 0, health_degraded: 0, pending_object_count: 0, pending_work_orders: 0, claimed_work_orders: 0 };
@@ -427,10 +427,10 @@ const SCENES = [
     mocks: { ...DIAG_MOCKS, "/diagnostics/9f10ab22": DIAG_ERROR } },
   // Scope selector (BROKKR-I-0032): selector visible with named PAKs...
   { name: "scope-selector", nav: "Fleet", mocks: { "/paks": PAKS, "/fleet": FLEET } },
-  // ...and selecting a tenant narrows the fleet to its agents.
+  // ...and selecting a generator narrows the fleet to its agents.
   { name: "fleet-scoped", nav: "Fleet", select: "team-payments",
     mocks: { "/paks": PAKS, "/fleet": FLEET, "/fleet?pak_id=1b9d6bcd-bbfd": FLEET_PAYMENTS } },
-  // Tenants (BROKKR-T-0318): list, empty state, the mint dialog, and the
+  // Generators (BROKKR-T-0318): list, empty state, the mint dialog, and the
   // reveal-once panel. The last one is the whole point of the feature, so it is
   // driven end to end rather than screenshotted mid-form.
   // The agent modal's pause control, and the state after pausing.
@@ -439,61 +439,61 @@ const SCENES = [
     fill: [["brokkr_\u2026", TYPED_ADMIN_PAK]], then_click: "Pause",
     assert_no_stored: TYPED_ADMIN_PAK,
     mocks: PAUSE_MOCKS },
-  { name: "tenants", nav: "Tenants", mocks: { "/generators": GENERATORS } },
-  { name: "tenants-empty", nav: "Tenants", mocks: { "/generators": [] } },
+  { name: "generators", nav: "Generators", mocks: { "/generators": GENERATORS } },
+  { name: "generators-empty", nav: "Generators", mocks: { "/generators": [] } },
   // A wrong admin PAK: the dialog says so and keeps the form (BROKKR-T-0336).
-  { name: "tenants-rejected", nav: "Tenants", click: "+ New tenant",
-    fill: [["acme-payments", "team-checkout"], ["brokkr_\u2026", "brokkr_wrongpak"]], then_click: "Create tenant",
+  { name: "generators-rejected", nav: "Generators", click: "+ New generator",
+    fill: [["acme-payments", "team-checkout"], ["brokkr_\u2026", "brokkr_wrongpak"]], then_click: "Create generator",
     expect_http: [403],
     mocks: { "/generators": [], "POST /generators": { __status: 403, code: "forbidden", message: "admin required" } } },
-  { name: "tenants-new", nav: "Tenants", click: "+ New tenant",
+  { name: "generators-new", nav: "Generators", click: "+ New generator",
     mocks: { "/generators": GENERATORS } },
-  { name: "tenants-minted", nav: "Tenants", click: "+ New tenant",
+  { name: "generators-minted", nav: "Generators", click: "+ New generator",
     fill: [["acme-payments", "team-checkout"], ["brokkr_…", TYPED_ADMIN_PAK]],
-    then_click: "Create tenant",
+    then_click: "Create generator",
     // Asserts the credential-handling criterion a screenshot cannot: the typed
     // admin PAK must appear nowhere in browser storage afterwards.
     assert_no_stored: TYPED_ADMIN_PAK,
     // The reveal panel carries the id and the register control (BROKKR-T-0368).
-    assert_text: ["f00dcafe-1234"], assert_button: ["Copy tenant id", "Register", "Done"],
-    mocks: TENANT_MOCKS },
+    assert_text: ["f00dcafe-1234"], assert_button: ["Copy generator id", "Register", "Done"],
+    mocks: GENERATOR_MOCKS },
   // Escape while the one-time PAK is on screen must not close the dialog
   // (BROKKR-T-0367): the PAK and the Done button are still there after it.
-  { name: "tenants-minted-escape", nav: "Tenants", click: "+ New tenant",
+  { name: "generators-minted-escape", nav: "Generators", click: "+ New generator",
     fill: [["acme-payments", "team-checkout"], ["brokkr_…", TYPED_ADMIN_PAK]],
-    then_click: "Create tenant",
+    then_click: "Create generator",
     steps: [{ press: "Escape" }],
     assert_text: [MINTED_PAK, "Done"],
-    mocks: TENANT_MOCKS },
+    mocks: GENERATOR_MOCKS },
   // Onboarding finished in the dialog (BROKKR-T-0368): after the mint, the
   // admin registers an agent with the same typed PAK. The POST answers, the
   // toast says so, and the PAK is still not in storage.
-  { name: "tenants-minted-register", nav: "Tenants", click: "+ New tenant",
+  { name: "generators-minted-register", nav: "Generators", click: "+ New generator",
     fill: [["acme-payments", "team-checkout"], ["brokkr_…", TYPED_ADMIN_PAK]],
-    then_click: "Create tenant",
+    then_click: "Create generator",
     steps: [{ select: "staging-agent-01" }, { click: "Register" }],
     assert_text: ["Agent registered"],
     assert_no_stored: TYPED_ADMIN_PAK,
-    mocks: TENANT_MOCKS },
-  // The tenant drawer (BROKKR-T-0368): the id with its copy button, and the
-  // agents registered with the tenant, by name.
-  { name: "tenants-drawer", nav: "Tenants", click: "team-payments", settle: 800,
-    assert_text: ["prod-agent-01", "prod-agent-02"], assert_button: ["Copy tenant id", "Deregister"],
-    mocks: TENANT_MOCKS },
+    mocks: GENERATOR_MOCKS },
+  // The generator drawer (BROKKR-T-0368): the id with its copy button, and the
+  // agents registered with the generator, by name.
+  { name: "generators-drawer", nav: "Generators", click: "team-payments", settle: 800,
+    assert_text: ["prod-agent-01", "prod-agent-02"], assert_button: ["Copy generator id", "Deregister"],
+    mocks: GENERATOR_MOCKS },
   // Registering from the drawer: one admin PAK, one request, cleared after.
-  { name: "tenants-drawer-register", nav: "Tenants", click: "team-sandbox", settle: 800,
+  { name: "generators-drawer-register", nav: "Generators", click: "team-sandbox", settle: 800,
     steps: [{ fill: ["brokkr_…", TYPED_ADMIN_PAK] }, { select: "prod-agent-01" }, { click: "Register" }],
     assert_text: ["Agent registered"],
     assert_no_stored: TYPED_ADMIN_PAK,
-    mocks: TENANT_MOCKS },
+    mocks: GENERATOR_MOCKS },
   // Rotating from the drawer (BROKKR-T-0369): admin PAK, Rotate PAK, confirm;
   // the new PAK is on screen once, and the typed PAK is not in storage.
-  { name: "tenants-drawer-rotate", nav: "Tenants", click: "team-payments", settle: 800,
+  { name: "generators-drawer-rotate", nav: "Generators", click: "team-payments", settle: 800,
     steps: [{ fill: ["brokkr_…", TYPED_ADMIN_PAK] }, { click: "Rotate PAK" }, { click: "Rotate" }],
     assert_text: [ROTATED_PAK], assert_button: ["Done"],
     assert_no_stored: TYPED_ADMIN_PAK,
-    mocks: TENANT_MOCKS },
-  // New agent (BROKKR-T-0372): the dialog with the tenants to pick, and the
+    mocks: GENERATOR_MOCKS },
+  // New agent (BROKKR-T-0372): the dialog with the generators to pick, and the
   // reveal panel with the Helm command and the PAK; the typed admin PAK is
   // not in storage afterwards.
   { name: "fleet-new-agent-dialog", nav: "Fleet", click: "+ New agent", settle: 500,
@@ -505,8 +505,8 @@ const SCENES = [
     assert_text: [AGENT_PAK, "broker.agentName=prod-agent-03"], assert_button: ["Copy code", "Copy agent id", "Done"],
     assert_no_stored: TYPED_ADMIN_PAK,
     mocks: { "/fleet": FLEET, "/generators": GENERATORS, "POST /agents": CREATED_AGENT } },
-  // The Fleet drawer lists the agent's tenants, without the system generator.
-  { name: "fleet-tenants", hash: "#fleet/agent/1b9d6bcd", settle: 800,
+  // The Fleet drawer lists the agent's generators, without the system generator.
+  { name: "fleet-generators", hash: "#fleet/agent/1b9d6bcd", settle: 800,
     assert_text: ["team-payments"], assert_absent: ["system"],
     mocks: { "/fleet": FLEET, "/stacks": STACKS, "/agents/1b9d6bcd/target-state": TARGET_STATE,
       "/agents/1b9d6bcd/registrations": AGENT_REGS, "/generators": [...GENERATORS, SYSTEM_GENERATOR] } },
@@ -629,7 +629,7 @@ await page.route("**/api/v1/**", (route) => {
     (k) => k in MOCKS
   ) ?? suffix;
   // The scope selector fetches /paks on every scene; scenes that don't care
-  // get an empty tenant list (selector hidden) instead of 404 noise.
+  // get an empty generator list (selector hidden) instead of 404 noise.
   if (!(key in MOCKS) && suffix === "/paks") {
     return route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
   }
@@ -640,7 +640,7 @@ await page.route("**/api/v1/**", (route) => {
   // Fleet reads /stacks and Deployments reads /generators for names
   // (BROKKR-T-0337), so those get fixtures too.
   const SHELL = { "/fleet": FLEET, "/work-orders": ACTIVE_WOS, "/agent-events": EVENTS, "/stacks": STACKS, "/generators": GENERATORS };
-  // The Fleet drawer reads the agent's tenants and the tenant drawer reads the
+  // The Fleet drawer reads the agent's generators and the generator drawer reads the
   // registered agents (BROKKR-T-0368) on every open; scenes that don't mock
   // these get an empty list instead of 404 noise.
   if (!(key in MOCKS) && /^\/(agents\/[^/]+\/registrations|generators\/[^/]+\/registered-agents)$/.test(suffix)) {

@@ -1,5 +1,5 @@
 //! Deployments view — stacks from `GET /api/v1/stacks`, each card with its
-//! tenant and its overall health (`/stacks/:id/health`, one call per stack on
+//! generator and its overall health (`/stacks/:id/health`, one call per stack on
 //! load); click a stack for its deployment objects and the agents that have
 //! them (BROKKR-T-0337). The agents come from each agent's target state,
 //! fetched when the drawer opens, not on a poll.
@@ -14,7 +14,7 @@ use leptos::prelude::*;
 
 #[component]
 pub fn DeploymentsView() -> impl IntoView {
-    // Scope-reactive (BROKKR-I-0032): refetches when the tenant selection changes.
+    // Scope-reactive (BROKKR-I-0032): refetches when the generator selection changes.
     let scope = crate::app::use_scope();
     let data = LocalResource::new(move || api::stacks(scope.get()));
     let generators = LocalResource::new(api::generators);
@@ -87,8 +87,8 @@ pub fn DeploymentsView() -> impl IntoView {
             }
         }
     });
-    // The tenant's name for a generator id, or the first 8 characters of the id.
-    let tenant_name = move |gid: &str| -> String {
+    // The generator's name for a generator id, or the first 8 characters of the id.
+    let generator_name = move |gid: &str| -> String {
         generators
             .get()
             .and_then(|r| r.ok())
@@ -107,7 +107,7 @@ pub fn DeploymentsView() -> impl IntoView {
                 view! {
                     <Empty
                         message="No stacks yet."
-                        hint="A tenant creates a stack with its PAK. Then it pushes manifests to the stack."
+                        hint="A generator creates a stack with its PAK. Then it pushes manifests to the stack."
                         href=format!("{DOCS}/tutorials/first-deployment.html")
                         link="Deploy a first application"
                     />
@@ -117,7 +117,7 @@ pub fn DeploymentsView() -> impl IntoView {
                 let cards = stacks
                     .into_iter()
                     .map(|s| {
-                        let tenant = tenant_name(&s.generator_id);
+                        let generator = generator_name(&s.generator_id);
                         let desc = s.description.clone().unwrap_or_default();
                         let s_sel = s.clone();
                         let s_id = s.id.clone();
@@ -139,7 +139,7 @@ pub fn DeploymentsView() -> impl IntoView {
                                         {move || healths.get().and_then(|v| {
                                             v.into_iter().find(|(id, _)| *id == s_id).map(|(_, st)| st)
                                         }).map(|st| view! { <Pill color=sev(&st)>{st}</Pill> })}
-                                        <span class="brk-note">{format!("tenant · {tenant}")}</span>
+                                        <span class="brk-note">{format!("generator · {generator}")}</span>
                                     </Group>
                                 </Stack>
                             </Card>
@@ -158,7 +158,7 @@ pub fn DeploymentsView() -> impl IntoView {
                         <span class="brk-detail-title">{s.name.clone()}</span>
                         <DetailList mono=true>
                             <KeyValue label="stack id">{s.id.clone()}</KeyValue>
-                            <KeyValue label="tenant">{let gid = s.generator_id.clone(); move || tenant_name(&gid)}</KeyValue>
+                            <KeyValue label="generator">{let gid = s.generator_id.clone(); move || generator_name(&gid)}</KeyValue>
                             <KeyValue label="description">{s.description.clone().unwrap_or_else(|| "—".into())}</KeyValue>
                         </DetailList>
                         <SectionLabel label="deployment health" />

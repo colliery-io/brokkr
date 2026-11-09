@@ -1,15 +1,15 @@
 Feature: Agent onboarding
-  An admin creates an agent with its tenants and gets its PAK and the Helm
+  An admin creates an agent with its generators and gets its PAK and the Helm
   command once. The agent is inactive until the admin activates it. The
   agent's PAK is its identity: the agent finds its record by the PAK, and a
   configured name or cluster is a check.
 
   Scenario: The admin creates an agent and gets its PAK and the Helm command once
-    Given the admin has created the tenant "team-robin"
-    When the admin creates the agent "prod-1" in cluster "cluster-a" for the tenant "team-robin"
+    Given the admin has created the generator "team-robin"
+    When the admin creates the agent "prod-1" in cluster "cluster-a" for the generator "team-robin"
     Then the agent "prod-1" exists
     And the output shows the PAK once
-    And the output shows the Helm command for the agent "prod-1" in cluster "cluster-a" with the tenant "team-robin"
+    And the output shows the Helm command for the agent "prod-1" in cluster "cluster-a" with the generator "team-robin"
     And the output says the agent is inactive and how to activate it
 
   Scenario: A new agent is inactive until the admin activates it
@@ -18,10 +18,10 @@ Feature: Agent onboarding
     When the admin activates the agent "prod-1"
     Then the agent "prod-1" is ACTIVE
 
-  Scenario: A new agent is registered with its tenant and with the system generator
-    Given the admin has created the tenant "team-robin"
-    And the admin has created the agent "prod-1" in cluster "cluster-a" for the tenant "team-robin"
-    Then the agent "prod-1" is registered with the tenant "team-robin"
+  Scenario: A new agent is registered with its generator and with the system generator
+    Given the admin has created the generator "team-robin"
+    And the admin has created the agent "prod-1" in cluster "cluster-a" for the generator "team-robin"
+    Then the agent "prod-1" is registered with the generator "team-robin"
     And the agent "prod-1" is registered with the system generator
 
   Scenario: The agent's PAK names its record

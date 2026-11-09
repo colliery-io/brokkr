@@ -288,28 +288,31 @@ fn register_with_names_parses_then_needs_a_connection() {
     );
 }
 
-// BROKKR-T-0370: `brokkr tenant create|list`, so the admin's one-time steps
-// (create the tenant, activate the agent, register it) are one tool. The
-// live path is in `scenario_tenant_cli` of the SDK contract suite.
+// BROKKR-T-0370: `brokkr generator create|list`, so the admin's one-time steps
+// (create the generator, activate the agent, register it) are one tool. The
+// live path is in `scenario_generator_cli` of the SDK contract suite.
 #[test]
-fn tenant_help_lists_create_and_list() {
+fn generator_help_lists_create_and_list() {
     let mut cmd = brokkr();
-    cmd.args(["tenant", "--help"]);
+    cmd.args(["generator", "--help"]);
     let (output, stdout, _) = run(cmd);
     assert!(output.status.success());
     for c in ["create", "list"] {
-        assert!(stdout.contains(c), "tenant help is missing {c}: {stdout}");
+        assert!(
+            stdout.contains(c),
+            "generator help is missing {c}: {stdout}"
+        );
     }
     let mut cmd = brokkr();
     cmd.arg("--help");
     let (_, stdout, _) = run(cmd);
-    assert!(stdout.contains("tenant"), "top-level help: {stdout}");
+    assert!(stdout.contains("generator"), "top-level help: {stdout}");
 }
 
 #[test]
-fn tenant_create_help_says_the_pak_is_shown_once() {
+fn generator_create_help_says_the_pak_is_shown_once() {
     let mut cmd = brokkr();
-    cmd.args(["tenant", "create", "--help"]);
+    cmd.args(["generator", "create", "--help"]);
     let (output, stdout, _) = run(cmd);
     assert!(output.status.success());
     assert!(stdout.contains("--description"), "{stdout}");
@@ -318,9 +321,9 @@ fn tenant_create_help_says_the_pak_is_shown_once() {
 }
 
 #[test]
-fn tenant_create_needs_a_name() {
+fn generator_create_needs_a_name() {
     let mut cmd = brokkr();
-    cmd.args(["tenant", "create"]);
+    cmd.args(["generator", "create"]);
     let (output, _, stderr) = run(cmd);
     assert!(!output.status.success());
     assert!(
@@ -330,10 +333,10 @@ fn tenant_create_needs_a_name() {
 }
 
 #[test]
-fn tenant_commands_parse_then_need_a_connection() {
+fn generator_commands_parse_then_need_a_connection() {
     for args in [
-        &["tenant", "create", "team-acme", "--description", "Acme"][..],
-        &["tenant", "list"][..],
+        &["generator", "create", "team-acme", "--description", "Acme"][..],
+        &["generator", "list"][..],
     ] {
         let cmd = sandboxed({
             let mut c = brokkr();
@@ -359,7 +362,7 @@ fn agent_create_help_says_the_pak_is_shown_once_and_names_activate() {
     assert!(output.status.success());
     for needle in [
         "--cluster",
-        "--tenant",
+        "--generator",
         "shown once",
         "activate",
         "NAME_OR_ID",
@@ -393,7 +396,7 @@ fn agent_create_parses_then_needs_a_connection() {
             "prod-1",
             "--cluster",
             "us-east-1",
-            "--tenant",
+            "--generator",
             "acme",
         ]);
         c
@@ -406,9 +409,9 @@ fn agent_create_parses_then_needs_a_connection() {
     );
 }
 
-// BROKKR-T-0379, 0380, 0381: what a tenant does after `apply`: see where the
+// BROKKR-T-0379, 0380, 0381: what a generator does after `apply`: see where the
 // stack went, read its events and logs, delete it, rotate its PAK, and say
-// what its PAK is. The live path is in `scenario_tenant_flow_cli`.
+// what its PAK is. The live path is in `scenario_generator_flow_cli`.
 #[test]
 fn stack_help_lists_status_events_logs_and_delete() {
     let mut cmd = brokkr();
@@ -437,9 +440,9 @@ fn stack_help_lists_status_events_logs_and_delete() {
 }
 
 #[test]
-fn tenant_rotate_and_whoami_have_help() {
+fn generator_rotate_and_whoami_have_help() {
     let mut cmd = brokkr();
-    cmd.args(["tenant", "rotate", "--help"]);
+    cmd.args(["generator", "rotate", "--help"]);
     let (output, stdout, _) = run(cmd);
     assert!(output.status.success());
     assert!(stdout.contains("once"), "{stdout}");
@@ -448,7 +451,7 @@ fn tenant_rotate_and_whoami_have_help() {
     cmd.args(["whoami", "--help"]);
     let (output, stdout, _) = run(cmd);
     assert!(output.status.success());
-    assert!(stdout.contains("tenant"), "{stdout}");
+    assert!(stdout.contains("generator"), "{stdout}");
     let mut cmd = brokkr();
     cmd.arg("--help");
     let (_, stdout, _) = run(cmd);
@@ -456,14 +459,14 @@ fn tenant_rotate_and_whoami_have_help() {
 }
 
 #[test]
-fn tenant_flow_commands_parse_then_need_a_connection() {
+fn generator_flow_commands_parse_then_need_a_connection() {
     for args in [
         &["stack", "status", "payments"][..],
         &["stack", "events", "payments", "--limit", "20"][..],
         &["stack", "logs", "payments"][..],
         &["stack", "delete", "payments"][..],
-        &["tenant", "rotate"][..],
-        &["tenant", "rotate", "team-acme"][..],
+        &["generator", "rotate"][..],
+        &["generator", "rotate", "team-acme"][..],
         &["whoami"][..],
     ] {
         let cmd = sandboxed({
@@ -478,4 +481,42 @@ fn tenant_flow_commands_parse_then_need_a_connection() {
             "{args:?}: expected a connection-config error, got: {stderr}"
         );
     }
+}
+
+// BROKKR-T-0371: the word is generator. The old names stay as hidden aliases
+// for one release so pipelines do not break.
+#[test]
+fn the_old_tenant_names_still_parse() {
+    let mut cmd = brokkr();
+    cmd.args(["tenant", "--help"]);
+    let (output, stdout, _) = run(cmd);
+    assert!(output.status.success(), "{stdout}");
+    assert!(stdout.contains("create"), "{stdout}");
+    let mut cmd = brokkr();
+    cmd.args(["agent", "create", "--help"]);
+    let (_, stdout, _) = run(cmd);
+    assert!(stdout.contains("--generator"), "{stdout}");
+    assert!(
+        !stdout.contains("--tenant"),
+        "the alias is hidden: {stdout}"
+    );
+    let cmd = sandboxed({
+        let mut c = brokkr();
+        c.args([
+            "agent",
+            "create",
+            "prod-1",
+            "--cluster",
+            "us-east-1",
+            "--tenant",
+            "acme",
+        ]);
+        c
+    });
+    let (output, _, stderr) = run(cmd);
+    assert!(!output.status.success());
+    assert!(
+        stderr.contains("broker URL") || stderr.contains("PAK"),
+        "the old flag parses then needs a connection: {stderr}"
+    );
 }

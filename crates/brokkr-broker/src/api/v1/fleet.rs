@@ -356,7 +356,7 @@ pub async fn list_fleet(
 
     let mut records = build_all_fleet_records(&dal, &registry)?;
 
-    // Tenant scope (BROKKR-T-0270): keep only agents registered under the
+    // Generator scope (BROKKR-T-0270): keep only agents registered under the
     // requested generator. The aggregates are whole-fleet grouped queries
     // either way, so filtering the assembled records costs nothing extra.
     if let Some(pak_id) = scope.pak_id {
@@ -368,7 +368,7 @@ pub async fn list_fleet(
                     "Failed to fetch registrations for generator {}: {:?}",
                     pak_id, e
                 );
-                ApiError::internal("failed to fetch tenant registrations")
+                ApiError::internal("failed to fetch generator registrations")
             })?
             .into_iter()
             .map(|r| r.agent_id)

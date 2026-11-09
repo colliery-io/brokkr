@@ -129,16 +129,16 @@ async fn main() -> ExitCode {
         scenario_registration_by_name_cli(&base_url, &admin_pak)
     );
     run!(
-        "T-0370: tenant create and list via the wrapper and the brokkr CLI binary",
-        scenario_tenant_cli(&base_url, &admin_pak)
+        "T-0370: generator create and list via the wrapper and the brokkr CLI binary",
+        scenario_generator_cli(&base_url, &admin_pak)
     );
     run!(
-        "T-0373: agent create via the brokkr CLI binary, registered with a tenant",
+        "T-0373: agent create via the brokkr CLI binary, registered with a generator",
         scenario_agent_create_cli(&base_url, &admin_pak)
     );
     run!(
-        "T-0379/0380/0381: a tenant's flow after apply via the brokkr CLI binary",
-        scenario_tenant_flow_cli(&base_url, &admin_pak)
+        "T-0379/0380/0381: a generator's flow after apply via the brokkr CLI binary",
+        scenario_generator_flow_cli(&base_url, &admin_pak)
     );
 
     println!("══════════════════════════════════════════════════════════════════");
@@ -846,15 +846,15 @@ async fn scenario_manifest_apply(base_url: &str, admin_pak: &str) -> Result<()> 
         .apply_for_generator("no-such-generator", &admin_stack, dir.path(), &[])
         .await
     {
-        Err(e) if e.to_string().contains("no tenant named") => {}
+        Err(e) if e.to_string().contains("no generator named") => {}
         other => {
             return Err(anyhow!(
                 "expected an unknown-generator error, got {other:?}"
             ))
         }
     }
-    // A tenant cannot apply for another tenant; its own name is fine.
-    println!("  → [generator] apply_for_generator for another tenant (expect refusal)");
+    // A generator cannot apply for another generator; its own name is fine.
+    println!("  → [generator] apply_for_generator for another generator (expect refusal)");
     match gen
         .apply_for_generator("no-such-generator", &admin_stack, dir.path(), &[])
         .await
@@ -1215,7 +1215,7 @@ fn day_zero_cli_checks(
         return Err(anyhow!("the agent list row is wrong: {row:?}"));
     }
     // A generator PAK lists only the agents registered with it, with their
-    // labels (BROKKR-T-0380: a tenant reads the labels of its registered
+    // labels (BROKKR-T-0380: a generator reads the labels of its registered
     // agents).
     let (ok, out, _) = gen(&["agent", "list"])?;
     if !ok
@@ -1238,7 +1238,7 @@ fn day_zero_cli_checks(
 }
 
 /// BROKKR-T-0344: `brokkr register`, `registrations` and `deregister` take
-/// the agent and the tenant by name, run as the real binary. The stray agent
+/// the agent and the generator by name, run as the real binary. The stray agent
 /// of the fixture is registered by name, listed by name, and deregistered by
 /// name. A twin of the stray agent (same name, other cluster) makes the name
 /// ambiguous, and the command must stop and list both ids.
@@ -1265,21 +1265,21 @@ async fn registration_by_name_cli_checks(
 ) -> Result<()> {
     let admin = |args: &[&str]| brokkr_cli(cli, base_url, admin_pak, args);
     let stray = fx.stray_name.as_str();
-    let tenant = fx.generator_name.as_str();
+    let generator = fx.generator_name.as_str();
     let stray_id = fx.stray_id.to_string();
 
     // The SDK resolves a name to the same id that the fixture created.
     println!("  → resolve_agent_id / resolve_generator_id by name");
     if admin_client.resolve_agent_id(stray).await? != fx.stray_id
-        || admin_client.resolve_generator_id(tenant).await? != fx.generator_id
+        || admin_client.resolve_generator_id(generator).await? != fx.generator_id
     {
         return Err(anyhow!("a name resolved to the wrong id"));
     }
 
     expect_cli(
-        admin(&["register", "--agent", stray, "--generator", tenant])?,
+        admin(&["register", "--agent", stray, "--generator", generator])?,
         true,
-        &format!("registered agent \"{stray}\" ({stray_id}) with tenant \"{tenant}\""),
+        &format!("registered agent \"{stray}\" ({stray_id}) with generator \"{generator}\""),
     )?;
     let regs = admin_client.list_agent_registrations(fx.stray_id).await?;
     if !regs.iter().any(|r| r.generator_id == fx.generator_id) {
@@ -1288,10 +1288,10 @@ async fn registration_by_name_cli_checks(
     // A repeat register changes nothing and succeeds (BROKKR-T-0358).
     println!("  → brokkr register again: unchanged, exit 0");
     expect_cli(
-        admin(&["register", "--agent", stray, "--generator", tenant])?,
+        admin(&["register", "--agent", stray, "--generator", generator])?,
         true,
         &format!(
-            "unchanged: agent \"{stray}\" ({stray_id}) is registered with tenant \"{tenant}\""
+            "unchanged: agent \"{stray}\" ({stray_id}) is registered with generator \"{generator}\""
         ),
     )?;
     let again = admin_client.list_agent_registrations(fx.stray_id).await?;
@@ -1303,10 +1303,10 @@ async fn registration_by_name_cli_checks(
     expect_cli(
         admin(&["registrations", "--agent", stray])?,
         true,
-        &format!("tenant {}", fx.generator_id),
+        &format!("generator {}", fx.generator_id),
     )?;
     expect_cli(
-        admin(&["registrations", "--generator", tenant])?,
+        admin(&["registrations", "--generator", generator])?,
         true,
         &format!("agent {stray_id}"),
     )?;
@@ -1320,10 +1320,10 @@ async fn registration_by_name_cli_checks(
         admin(&[
             "registrations",
             "--generator",
-            "sdk-contract-no-such-tenant",
+            "sdk-contract-no-such-generator",
         ])?,
         false,
-        "no tenant named",
+        "no generator named",
     )?;
 
     // Two agents with the same name: the command stops and lists both ids.
@@ -1343,7 +1343,7 @@ async fn registration_by_name_cli_checks(
         .into_inner()
         .agent
         .id;
-    let ambiguous = admin(&["deregister", "--agent", stray, "--generator", tenant]);
+    let ambiguous = admin(&["deregister", "--agent", stray, "--generator", generator]);
     let _ = admin_client.api().delete_agent().id(twin).send().await;
     let (ok, out, err) = ambiguous?;
     if ok
@@ -1357,9 +1357,9 @@ async fn registration_by_name_cli_checks(
     }
 
     expect_cli(
-        admin(&["deregister", "--agent", stray, "--generator", tenant])?,
+        admin(&["deregister", "--agent", stray, "--generator", generator])?,
         true,
-        &format!("deregistered agent \"{stray}\" ({stray_id}) from tenant \"{tenant}\""),
+        &format!("deregistered agent \"{stray}\" ({stray_id}) from generator \"{generator}\""),
     )?;
     let regs = admin_client.list_agent_registrations(fx.stray_id).await?;
     if regs.iter().any(|r| r.generator_id == fx.generator_id) {
@@ -1370,10 +1370,10 @@ async fn registration_by_name_cli_checks(
     Ok(())
 }
 
-/// BROKKR-T-0370: `brokkr tenant create` prints the id and the PAK once, the
-/// PAK works as the tenant's own credential, and `brokkr tenant list` shows
-/// the tenant and not the system generator.
-async fn scenario_tenant_cli(base_url: &str, admin_pak: &str) -> Result<()> {
+/// BROKKR-T-0370: `brokkr generator create` prints the id and the PAK once, the
+/// PAK works as the generator's own credential, and `brokkr generator list` shows
+/// the generator and not the system generator.
+async fn scenario_generator_cli(base_url: &str, admin_pak: &str) -> Result<()> {
     let cli = env::var("BROKKR_CLI").map_err(|_| {
         anyhow!(
             "BROKKR_CLI is not set. Run `angreal tests sdk-contract rust`, \
@@ -1381,16 +1381,22 @@ async fn scenario_tenant_cli(base_url: &str, admin_pak: &str) -> Result<()> {
         )
     })?;
     let admin = client(base_url, admin_pak)?;
-    let name = unique("sdk-contract-rust-tenant");
+    let name = unique("sdk-contract-rust-generator");
     let run = |args: &[&str]| brokkr_cli(&cli, base_url, admin_pak, args);
 
-    let (ok, out, err) = run(&["tenant", "create", &name, "--description", "contract suite"])?;
+    let (ok, out, err) = run(&[
+        "generator",
+        "create",
+        &name,
+        "--description",
+        "contract suite",
+    ])?;
     if !ok {
-        return Err(anyhow!("tenant create failed: {err}"));
+        return Err(anyhow!("generator create failed: {err}"));
     }
     let id = out
         .lines()
-        .find_map(|l| l.strip_prefix(&format!("created tenant \"{name}\" (")))
+        .find_map(|l| l.strip_prefix(&format!("created generator \"{name}\" (")))
         .and_then(|rest| rest.strip_suffix(')'))
         .and_then(|id| Uuid::parse_str(id).ok())
         .ok_or_else(|| anyhow!("no created line with an id in {out:?}"))?;
@@ -1403,13 +1409,13 @@ async fn scenario_tenant_cli(base_url: &str, admin_pak: &str) -> Result<()> {
     if !out.contains("shown once") {
         return Err(anyhow!("the output does not say the PAK is shown once"));
     }
-    let result = tenant_cli_checks(&admin, &run, &name, id, &pak, base_url).await;
+    let result = generator_cli_checks(&admin, &run, &name, id, &pak, base_url).await;
     // Clean up whatever the checks did.
     let _ = admin.api().delete_generator().id(id).send().await;
     result
 }
 
-async fn tenant_cli_checks(
+async fn generator_cli_checks(
     admin: &BrokkrClient,
     run: &dyn Fn(&[&str]) -> Result<CliRun>,
     name: &str,
@@ -1423,17 +1429,17 @@ async fn tenant_cli_checks(
     let mine = listed
         .iter()
         .find(|g| g.name == name)
-        .ok_or_else(|| anyhow!("the new tenant is not in list_generators"))?;
+        .ok_or_else(|| anyhow!("the new generator is not in list_generators"))?;
     if mine.id != id || mine.description.as_deref() != Some("contract suite") {
-        return Err(anyhow!("the listed tenant does not match: {mine:?}"));
+        return Err(anyhow!("the listed generator does not match: {mine:?}"));
     }
     if admin.resolve_generator_id(name).await? != id {
         return Err(anyhow!("resolve_generator_id gave another id"));
     }
-    // The printed PAK is the tenant's credential: it reads its own record.
-    println!("  → the printed PAK authenticates as the tenant");
-    let tenant = client(base_url, pak)?;
-    let me = tenant
+    // The printed PAK is the generator's credential: it reads its own record.
+    println!("  → the printed PAK authenticates as the generator");
+    let generator = client(base_url, pak)?;
+    let me = generator
         .api()
         .get_generator()
         .id(id)
@@ -1441,11 +1447,11 @@ async fn tenant_cli_checks(
         .await?
         .into_inner();
     if me.id != id {
-        return Err(anyhow!("the tenant PAK read another generator"));
+        return Err(anyhow!("the generator PAK read another generator"));
     }
     // A repeat of the name is a 409, and creates nothing.
     println!("  → a second create with the same name is refused");
-    let (ok, _, err) = run(&["tenant", "create", name])?;
+    let (ok, _, err) = run(&["generator", "create", name])?;
     if ok || err.is_empty() {
         return Err(anyhow!("a duplicate name was accepted"));
     }
@@ -1459,21 +1465,23 @@ async fn tenant_cli_checks(
     {
         return Err(anyhow!("a duplicate create added a generator"));
     }
-    // The list shows the tenant and not the system generator.
-    expect_cli(run(&["tenant", "list"])?, true, name)?;
-    let (_, out, _) = run(&["tenant", "list"])?;
+    // The list shows the generator and not the system generator.
+    expect_cli(run(&["generator", "list"])?, true, name)?;
+    let (_, out, _) = run(&["generator", "list"])?;
     if out
         .lines()
         .any(|l| l.starts_with("system ") || l.starts_with("system\t"))
     {
-        return Err(anyhow!("tenant list shows the system generator: {out:?}"));
+        return Err(anyhow!(
+            "generator list shows the system generator: {out:?}"
+        ));
     }
     Ok(())
 }
 
 /// BROKKR-T-0373: `brokkr agent create` prints the id and the PAK once and the
 /// Helm command; the PAK works as the agent's own credential; the agent is
-/// registered with the named tenant and with the system generator.
+/// registered with the named generator and with the system generator.
 async fn scenario_agent_create_cli(base_url: &str, admin_pak: &str) -> Result<()> {
     let cli = env::var("BROKKR_CLI").map_err(|_| {
         anyhow!(
@@ -1482,8 +1490,8 @@ async fn scenario_agent_create_cli(base_url: &str, admin_pak: &str) -> Result<()
         )
     })?;
     let admin = client(base_url, admin_pak)?;
-    let tenant_name = unique("sdk-contract-rust-agent-tenant");
-    let tenant = admin.create_generator(&tenant_name, None).await?;
+    let generator_name = unique("sdk-contract-rust-agent-generator");
+    let generator = admin.create_generator(&generator_name, None).await?;
     let agent_name = unique("sdk-contract-rust-agent");
     let run = |args: &[&str]| brokkr_cli(&cli, base_url, admin_pak, args);
 
@@ -1493,8 +1501,8 @@ async fn scenario_agent_create_cli(base_url: &str, admin_pak: &str) -> Result<()
         &agent_name,
         "--cluster",
         "contract-suite",
-        "--tenant",
-        &tenant_name,
+        "--generator",
+        &generator_name,
     ])?;
     let result = async {
         if !ok {
@@ -1530,11 +1538,15 @@ async fn scenario_agent_create_cli(base_url: &str, admin_pak: &str) -> Result<()
                 "the agent PAK read another record, or the agent is not INACTIVE: {me:?}"
             ));
         }
-        println!("  → registered with the tenant and the system generator");
+        println!("  → registered with the generator and the system generator");
         let regs = admin.list_agent_registrations(id).await?;
-        if !regs.iter().any(|r| r.generator_id == tenant.generator.id) || regs.len() < 2 {
+        if !regs
+            .iter()
+            .any(|r| r.generator_id == generator.generator.id)
+            || regs.len() < 2
+        {
             return Err(anyhow!(
-                "registrations do not hold the tenant and the system generator: {regs:?}"
+                "registrations do not hold the generator and the system generator: {regs:?}"
             ));
         }
         Ok(id)
@@ -1546,18 +1558,18 @@ async fn scenario_agent_create_cli(base_url: &str, admin_pak: &str) -> Result<()
     let _ = admin
         .api()
         .delete_generator()
-        .id(tenant.generator.id)
+        .id(generator.generator.id)
         .send()
         .await;
     result.map(|_| ())
 }
 
-/// BROKKR-T-0379, 0380, 0381: with its own PAK, a tenant sees where its stack
+/// BROKKR-T-0379, 0380, 0381: with its own PAK, a generator sees where its stack
 /// is (`stack status`, `stack events`, `stack logs`), sees the labels of its
 /// registered agents and which ones a stack label reaches, says what its PAK
-/// is (`whoami`), rotates its PAK (`tenant rotate`) and deletes its stack
+/// is (`whoami`), rotates its PAK (`generator rotate`) and deletes its stack
 /// (`stack delete`). No admin PAK after the fixture.
-async fn scenario_tenant_flow_cli(base_url: &str, admin_pak: &str) -> Result<()> {
+async fn scenario_generator_flow_cli(base_url: &str, admin_pak: &str) -> Result<()> {
     let cli = env::var("BROKKR_CLI").map_err(|_| {
         anyhow!(
             "BROKKR_CLI is not set. Run `angreal tests sdk-contract rust`, \
@@ -1566,68 +1578,68 @@ async fn scenario_tenant_flow_cli(base_url: &str, admin_pak: &str) -> Result<()>
     })?;
     let admin = client(base_url, admin_pak)?;
     let fx = day_zero_fixture(&admin, "sdk-contract-rust-flow").await?;
-    let result = tenant_flow_cli_checks(&cli, &admin, base_url, &fx).await;
+    let result = generator_flow_cli_checks(&cli, &admin, base_url, &fx).await;
     day_zero_cleanup(&admin, &fx).await;
     result
 }
 
-async fn tenant_flow_cli_checks(
+async fn generator_flow_cli_checks(
     cli: &str,
     admin: &BrokkrClient,
     base_url: &str,
     fx: &DayZeroFixture,
 ) -> Result<()> {
-    let tenant = |args: &[&str]| brokkr_cli(cli, base_url, &fx.generator_pak, args);
+    let generator = |args: &[&str]| brokkr_cli(cli, base_url, &fx.generator_pak, args);
     let stack = fx.stack_name.as_str();
 
-    println!("  → whoami names the tenant");
+    println!("  → whoami names the generator");
     expect_cli(
-        tenant(&["whoami"])?,
+        generator(&["whoami"])?,
         true,
         &format!(
-            "PAK: tenant \"{}\" ({})",
+            "PAK: generator \"{}\" ({})",
             fx.generator_name, fx.generator_id
         ),
     )?;
 
     println!("  → stack status before any agent reports");
-    expect_cli(tenant(&["stack", "status", stack])?, true, "health:")?;
+    expect_cli(generator(&["stack", "status", stack])?, true, "health:")?;
     expect_cli(
-        tenant(&["stack", "status", stack])?,
+        generator(&["stack", "status", stack])?,
         true,
         "No agent has reported",
     )?;
 
     println!("  → stack events and logs read the retained window");
     expect_cli(
-        tenant(&["stack", "events", stack, "--limit", "5"])?,
+        generator(&["stack", "events", stack, "--limit", "5"])?,
         true,
         "",
     )?;
-    expect_cli(tenant(&["stack", "logs", stack])?, true, "")?;
+    expect_cli(generator(&["stack", "logs", stack])?, true, "")?;
 
-    println!("  → the tenant sees the labels of its registered agent");
+    println!("  → the generator sees the labels of its registered agent");
     admin
         .add_agent_label(&fx.agent_name, "flow:contract")
         .await?;
-    let (ok, out, err) = tenant(&["agent", "list"])?;
+    let (ok, out, err) = generator(&["agent", "list"])?;
     if !ok || !out.contains("LABELS") || !out.contains("flow:contract") {
         return Err(anyhow!(
-            "agent list as the tenant lacks the labels column: ok={ok} out={out:?} err={err:?}"
+            "agent list as the generator lacks the labels column: ok={ok} out={out:?} err={err:?}"
         ));
     }
 
     println!("  → stack label says which registered agents match");
     expect_cli(
-        tenant(&["stack", "label", stack, "flow:contract"])?,
+        generator(&["stack", "label", stack, "flow:contract"])?,
         true,
         &format!("match: {}", fx.agent_name),
     )?;
 
-    println!("  → the tenant rotates its own PAK; the old one stops");
-    let (ok, out, err) = tenant(&["tenant", "rotate"])?;
+    println!("  → the generator rotates its own PAK; the old one stops");
+    let (ok, out, err) = generator(&["generator", "rotate"])?;
     if !ok {
-        return Err(anyhow!("tenant rotate failed: {err}"));
+        return Err(anyhow!("generator rotate failed: {err}"));
     }
     let new_pak = out
         .lines()
@@ -1635,18 +1647,18 @@ async fn tenant_flow_cli_checks(
         .ok_or_else(|| anyhow!("no PAK line in {out:?}"))?
         .trim()
         .to_string();
-    let (ok, _, _) = tenant(&["whoami"])?;
+    let (ok, _, _) = generator(&["whoami"])?;
     if ok {
-        return Err(anyhow!("the old tenant PAK still works after rotation"));
+        return Err(anyhow!("the old generator PAK still works after rotation"));
     }
     let rotated = |args: &[&str]| brokkr_cli(cli, base_url, &new_pak, args);
     expect_cli(
         rotated(&["whoami"])?,
         true,
-        &format!("tenant \"{}\"", fx.generator_name),
+        &format!("generator \"{}\"", fx.generator_name),
     )?;
 
-    println!("  → the tenant deletes its stack");
+    println!("  → the generator deletes its stack");
     expect_cli(
         rotated(&["stack", "delete", stack])?,
         true,

@@ -6,6 +6,7 @@ import starlight from '@astrojs/starlight';
 import mermaid from 'astro-mermaid';
 import starlightAurora from 'starlight-aurora';
 import mdbookRedirects from 'starlight-aurora/mdbook-redirects';
+import pageRedirects from 'starlight-aurora/redirects';
 import { oldBookExtra } from './old-book-redirects.mjs';
 
 // The Pages workflow sets DOCS_SITE and DOCS_BASE. On a pull request and
@@ -38,6 +39,12 @@ export default defineConfig({
 		mermaid({ theme: 'dark', autoTheme: true }),
 		// The old mdBook addresses (how-to/x.html) go to the new pages.
 		mdbookRedirects({ extra: oldBookExtra() }),
+		// Pages renamed since the move (BROKKR-T-0371): the old Starlight
+		// addresses go to the new pages.
+		pageRedirects({
+			'tutorials/first-tenant/': 'tutorials/first-generator/',
+			'how-to/multi-tenant-setup/': 'how-to/multi-generator-setup/',
+		}),
 		starlight({
 			title: PROJECT,
 			description:
@@ -66,7 +73,7 @@ export default defineConfig({
 					label: 'Tutorials',
 					items: [
 						page('tutorials', 'Overview'),
-						page('tutorials/first-tenant', 'Your First Tenant, From a Fresh Broker to a Running Manifest'),
+						page('tutorials/first-generator', 'Your First Generator, From a Fresh Broker to a Running Manifest'),
 						page('tutorials/first-deployment', 'Deploy Your First Application'),
 						page('tutorials/multi-cluster-targeting', 'Multi-Cluster Targeting'),
 						page('tutorials/cicd-generators', 'CI/CD with Generators'),
@@ -105,7 +112,7 @@ export default defineConfig({
 						page('how-to/monitoring-setup', 'Setting Up Monitoring'),
 						page('how-to/network-configuration', 'Network Configuration'),
 						page('how-to/security-hardening', 'Security Hardening'),
-						page('how-to/multi-tenant-setup', 'Setting Up Multi-Tenant Operation'),
+						page('how-to/multi-generator-setup', 'Setting Up Multi-Generator Operation'),
 						page('how-to/shipwright-builds', 'Container Builds with Shipwright'),
 						page('how-to/build-and-publish-images', 'Building & Publishing Images'),
 						page('how-to/bdd-features', 'Running and Writing the BDD Features'),

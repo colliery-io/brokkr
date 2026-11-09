@@ -4,7 +4,7 @@
  * See LICENSE file in the project root for full license text.
  */
 
-//! The state of one scenario: the tenants, agents and stacks it created,
+//! The state of one scenario: the generators, agents and stacks it created,
 //! the last command it ran, and the last answer of the broker.
 //!
 //! A feature names things plainly (`team-robin`, `prod-1`, `payments`). The
@@ -82,19 +82,19 @@ pub fn masked(pak: &str) -> String {
     format!("…{tail}")
 }
 
-/// A tenant the scenario created. `pak` is its current PAK; a rotation moves
+/// A generator the scenario created. `pak` is its current PAK; a rotation moves
 /// the old one to `previous_paks`.
 #[derive(Clone)]
-pub struct Tenant {
+pub struct Generator {
     pub id: Uuid,
     pub name: String,
     pub pak: String,
     pub previous_paks: Vec<String>,
 }
 
-impl fmt::Debug for Tenant {
+impl fmt::Debug for Generator {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Tenant")
+        f.debug_struct("Generator")
             .field("id", &self.id)
             .field("name", &self.name)
             .field("pak", &masked(&self.pak))
@@ -123,11 +123,11 @@ impl fmt::Debug for AgentRecord {
     }
 }
 
-/// A stack a tenant of the scenario applied.
+/// A stack a generator of the scenario applied.
 #[derive(Debug, Clone)]
 pub struct Stack {
     pub name: String,
-    /// The tenant that owns it, by its feature name.
+    /// The generator that owns it, by its feature name.
     pub owner: String,
 }
 
@@ -139,16 +139,16 @@ pub struct World {
     /// The unique suffix of this scenario's names.
     pub run: String,
     /// By the name the feature uses.
-    pub tenants: BTreeMap<String, Tenant>,
+    pub generators: BTreeMap<String, Generator>,
     pub agents: BTreeMap<String, AgentRecord>,
     pub stacks: BTreeMap<String, Stack>,
-    /// The folder of manifests the tenant applies.
+    /// The folder of manifests the generator applies.
     pub bundle: Option<TempDir>,
     /// The last binary run: `brokkr` or `brokkr-agent`.
     pub last: Option<Run>,
     /// The last answer of the broker to a direct request.
     pub answer: Option<Answer>,
-    /// The cluster agent, once a step looked it up, and the tenants it was
+    /// The cluster agent, once a step looked it up, and the generators it was
     /// registered with, for the cleanup.
     pub cluster_agent_id: Option<Uuid>,
     pub cluster_registrations: Vec<Uuid>,
@@ -163,7 +163,7 @@ impl World {
             env,
             api,
             run,
-            tenants: BTreeMap::new(),
+            generators: BTreeMap::new(),
             agents: BTreeMap::new(),
             stacks: BTreeMap::new(),
             bundle: None,
@@ -183,16 +183,16 @@ impl World {
         &self.env.admin_pak
     }
 
-    pub fn tenant(&self, name: &str) -> &Tenant {
-        self.tenants
+    pub fn generator(&self, name: &str) -> &Generator {
+        self.generators
             .get(name)
-            .unwrap_or_else(|| panic!("the scenario has not created the tenant {name:?} yet"))
+            .unwrap_or_else(|| panic!("the scenario has not created the generator {name:?} yet"))
     }
 
-    pub fn tenant_mut(&mut self, name: &str) -> &mut Tenant {
-        self.tenants
+    pub fn generator_mut(&mut self, name: &str) -> &mut Generator {
+        self.generators
             .get_mut(name)
-            .unwrap_or_else(|| panic!("the scenario has not created the tenant {name:?} yet"))
+            .unwrap_or_else(|| panic!("the scenario has not created the generator {name:?} yet"))
     }
 
     pub fn agent(&self, name: &str) -> &AgentRecord {
@@ -203,7 +203,7 @@ impl World {
 
     pub fn stack(&self, name: &str) -> &Stack {
         self.stacks.get(name).unwrap_or_else(|| {
-            panic!("no tenant of the scenario has applied the stack {name:?} yet")
+            panic!("no generator of the scenario has applied the stack {name:?} yet")
         })
     }
 
@@ -358,7 +358,7 @@ impl World {
         path
     }
 
-    /// The folder the tenant applied before, for a second apply.
+    /// The folder the generator applied before, for a second apply.
     pub fn same_bundle(&self) -> PathBuf {
         self.bundle
             .as_ref()
@@ -380,7 +380,7 @@ impl World {
             Err(e) => println!("  cleanup: {what} failed: {e}"),
         };
 
-        // Stacks first: a stack of a deleted tenant has no owner to find it by.
+        // Stacks first: a stack of a deleted generator has no owner to find it by.
         if !self.stacks.is_empty()
             && let Ok(stacks) = api.list_stacks(&admin).await
         {
@@ -395,7 +395,7 @@ impl World {
             }
         }
         // The cluster agent stays: only its registrations with this
-        // scenario's tenants go, which also removes its targets for them.
+        // scenario's generators go, which also removes its targets for them.
         if let Some(agent_id) = self.cluster_agent_id {
             for generator in std::mem::take(&mut self.cluster_registrations) {
                 report(
@@ -410,10 +410,10 @@ impl World {
                 api.delete_agent(&admin, agent.id).await,
             );
         }
-        for tenant in self.tenants.values() {
+        for generator in self.generators.values() {
             report(
-                format!("delete tenant {}", tenant.name),
-                api.delete_generator(&admin, tenant.id).await,
+                format!("delete generator {}", generator.name),
+                api.delete_generator(&admin, generator.id).await,
             );
         }
     }

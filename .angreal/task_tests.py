@@ -433,7 +433,7 @@ def run_bdd_tests(feature: str = ""):
     The Gherkin features in ``tests/bdd/features`` drive the real ``brokkr``
     CLI, the real ``brokkr-agent`` binary and the broker API against the
     compose stack. ``feature`` names one file without its extension (for
-    example ``tenant-onboarding``); empty runs them all.
+    example ``generator-onboarding``); empty runs them all.
     """
     import os
 
@@ -485,12 +485,12 @@ def run_bdd_tests(feature: str = ""):
 @test()
 @angreal.command(name="bdd", about="run the BDD features (Gherkin) against the compose stack")
 @angreal.argument(name="skip_docker", long="skip-docker", required=False, help="Skip docker compose up", takes_value=False, is_flag=True)
-@angreal.argument(name="feature", long="feature", required=False, help="Run one feature by its file name, e.g. tenant-onboarding. Omit for all.")
+@angreal.argument(name="feature", long="feature", required=False, help="Run one feature by its file name, e.g. generator-onboarding. Omit for all.")
 def bdd_tests(skip_docker: bool = False, feature: str = ""):
     """Run the BDD features: the onboarding flows as a person runs them.
 
-    Each feature in ``tests/bdd/features`` is one flow (tenant onboarding,
-    agent onboarding, the tenant after apply, the rules that keep tenants
+    Each feature in ``tests/bdd/features`` is one flow (generator onboarding,
+    agent onboarding, the generator after apply, the rules that keep generators
     apart). The steps run the real ``brokkr`` CLI and ``brokkr-agent`` binary
     against the compose stack. See docs/src/content/docs/how-to/bdd-features.md.
     """

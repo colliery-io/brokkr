@@ -6,7 +6,7 @@
 //!
 //! That injected token is the console's **only** ambient credential, and it is
 //! read-only — so reaching the page grants visibility and nothing more. The one
-//! privileged action (minting a generator tenant) takes an admin PAK the
+//! privileged action (minting a generator) takes an admin PAK the
 //! operator supplies per request via [`post_json_with_token`]; it is never
 //! stored. There is deliberately no persistent credential store here
 //! (BROKKR-T-0320).
@@ -49,7 +49,7 @@ fn injected_token() -> Option<String> {
 /// lapsed. The e2e harness does not need it (its route mocks ignore auth
 /// headers), `trunk serve` cannot reach a real broker to authenticate to (no
 /// proxy is configured), and the "full-write operator use" it existed for is
-/// now served properly by the per-action admin PAK prompt in the tenants view,
+/// now served properly by the per-action admin PAK prompt in the generators view,
 /// which holds the credential in memory for one request instead of parking it
 /// in browser storage indefinitely.
 pub(crate) fn token() -> Option<String> {
@@ -200,7 +200,7 @@ async fn get_query<T: DeserializeOwned>(
 }
 
 /// GET `/api/v1{path}` and deserialize the JSON body. `scope` becomes a
-/// `?pak_id=` query param (tenant filter, BROKKR-I-0032).
+/// `?pak_id=` query param (generator filter, BROKKR-I-0032).
 pub async fn get_scoped<T: DeserializeOwned>(
     path: &str,
     scope: Option<String>,
@@ -217,12 +217,12 @@ pub async fn get<T: DeserializeOwned>(path: &str) -> Result<T, ApiError> {
 }
 
 /// `GET /api/v1/fleet` — the fleet rollup (flat list of agents), optionally
-/// scoped to a tenant.
+/// scoped to a generator.
 pub async fn fleet(scope: Option<String>) -> Result<Vec<FleetAgentRecord>, ApiError> {
     get_scoped("/fleet", scope).await
 }
 
-/// `GET /api/v1/paks` — named PAKs (tenants) for the scope selector.
+/// `GET /api/v1/paks` — named PAKs (generators) for the scope selector.
 pub async fn paks() -> Result<Vec<PakSummary>, ApiError> {
     get("/paks").await
 }
@@ -354,7 +354,7 @@ pub async fn work_order_log() -> Result<Vec<crate::models::WorkOrderLogEntry>, A
     get("/work-order-log").await
 }
 
-/// `GET /api/v1/stacks`, optionally scoped to a tenant.
+/// `GET /api/v1/stacks`, optionally scoped to a generator.
 pub async fn stacks(scope: Option<String>) -> Result<Vec<crate::models::Stack>, ApiError> {
     get_scoped("/stacks", scope).await
 }
@@ -371,7 +371,7 @@ pub async fn stack_logs(id: &str) -> Result<crate::models::PodLogHistory, ApiErr
     get(&format!("/stacks/{id}/logs")).await
 }
 
-/// `GET /api/v1/agent-events`, optionally scoped to a tenant.
+/// `GET /api/v1/agent-events`, optionally scoped to a generator.
 pub async fn agent_events(
     scope: Option<String>,
 ) -> Result<Vec<crate::models::AgentEventDto>, ApiError> {
@@ -486,10 +486,10 @@ pub async fn work_orders() -> Result<Vec<crate::models::WorkOrder>, ApiError> {
     get("/work-orders").await
 }
 
-/// `GET /api/v1/generators` — the tenant list. Admin-gated, so the injected
+/// `GET /api/v1/generators` — the generator list. Admin-gated, so the injected
 /// read-only UI token is admitted (it is a read-only *admin*). The broker
 /// excludes the system generator from this listing, so what comes back is
-/// exactly the set of real tenants.
+/// exactly the set of real generators.
 pub async fn generators() -> Result<Vec<crate::models::Generator>, ApiError> {
     get("/generators").await
 }
@@ -541,7 +541,7 @@ async fn post_json_with_token<B: Serialize, T: DeserializeOwned>(
     })
 }
 
-/// `POST /api/v1/generators` — mint a new generator tenant, authenticating with
+/// `POST /api/v1/generators` — mint a new generator, authenticating with
 /// the operator's admin PAK for this one request (BROKKR-T-0318).
 ///
 /// The console's own credential cannot do this and is deliberately not used:
@@ -668,7 +668,7 @@ async fn delete_json_with_token<B: Serialize>(
 }
 
 /// `GET /api/v1/generators/{id}/registered-agents` — the agents registered
-/// with one tenant (BROKKR-T-0368). Admin-readable, so the console's read-only
+/// with one generator (BROKKR-T-0368). Admin-readable, so the console's read-only
 /// token passes.
 pub async fn registered_agents(
     generator_id: &str,
@@ -676,7 +676,7 @@ pub async fn registered_agents(
     get(&format!("/generators/{generator_id}/registered-agents")).await
 }
 
-/// `GET /api/v1/agents/{id}/registrations` — the tenants one agent is
+/// `GET /api/v1/agents/{id}/registrations` — the generators one agent is
 /// registered with, the system generator included (BROKKR-T-0368).
 pub async fn agent_registrations(
     agent_id: &str,
@@ -686,7 +686,7 @@ pub async fn agent_registrations(
 
 /// `POST /api/v1/generators/{id}/register` with an admin PAK supplied for this
 /// request (BROKKR-T-0368). Registration is the agent's consent to receive the
-/// tenant's stacks; without it a target for the agent is refused. A `409`
+/// generator's stacks; without it a target for the agent is refused. A `409`
 /// (`already_registered`) means the agent was registered already.
 pub async fn register_agent(
     generator_id: &str,
@@ -703,7 +703,7 @@ pub async fn register_agent(
 
 /// `DELETE /api/v1/generators/{id}/register` with an admin PAK supplied for
 /// this request (BROKKR-T-0368). Destructive: the broker removes the agent's
-/// targets for this tenant's stacks and tells the agent, which prunes those
+/// targets for this generator's stacks and tells the agent, which prunes those
 /// resources from its cluster on its next reconcile.
 pub async fn deregister_agent(
     generator_id: &str,

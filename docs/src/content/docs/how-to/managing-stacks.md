@@ -60,7 +60,7 @@ Stack names must be non-empty strings up to 255 characters, and they are **uniqu
 
 The constraint only covers stacks that have not been deleted, so deleting a stack frees its name for reuse.
 
-Because the namespace is shared by every tenant on the broker, prefix names with the owning team or application (e.g. `payments-api-gateway-v2` rather than `api-gateway-v2`). Doing so avoids collisions with another generator's stacks — and avoids leaking that a name is already in use elsewhere.
+Because the namespace is shared by every generator on the broker, prefix names with the owning team or application (e.g. `payments-api-gateway-v2` rather than `api-gateway-v2`). Doing so avoids collisions with another generator's stacks — and avoids leaking that a name is already in use elsewhere.
 
 ## Configuring Labels and Annotations
 
@@ -299,7 +299,7 @@ The template's parameters are validated against its JSON Schema before rendering
 
 ## Seeing Where a Stack Is
 
-The tenant that owns a stack, or an admin, reads where it is and whether it is healthy:
+The generator that owns a stack, or an admin, reads where it is and whether it is healthy:
 
 ```bash
 brokkr stack status <stack>
@@ -307,7 +307,7 @@ brokkr stack events <stack>
 brokkr stack logs <stack>
 ```
 
-`status` prints the latest revision, then each agent that has the stack with its health report. `events` and `logs` print the broker's retained window of Kubernetes events and pod log lines. The same reads are `GET /api/v1/stacks/{id}/health`, `/events` and `/logs`, open to the owning tenant.
+`status` prints the latest revision, then each agent that has the stack with its health report. `events` and `logs` print the broker's retained window of Kubernetes events and pod log lines. The same reads are `GET /api/v1/stacks/{id}/health`, `/events` and `/logs`, open to the owning generator.
 
 ## Stack Lifecycle
 
@@ -327,7 +327,7 @@ curl -s http://localhost:3000/api/v1/stacks/$STACK_ID \
 
 ### Deleting Stacks
 
-With the CLI, the owning tenant or an admin runs `brokkr stack delete <stack>`. Each agent that has the stack removes its resources on its next poll.
+With the CLI, the owning generator or an admin runs `brokkr stack delete <stack>`. Each agent that has the stack removes its resources on its next poll.
 
 Brokkr uses soft deletion for stacks. When you delete a stack, it's marked with a `deleted_at` timestamp rather than being removed from the database:
 

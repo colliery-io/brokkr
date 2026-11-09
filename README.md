@@ -44,7 +44,7 @@ and pass its hash to the broker as `broker.pakHash`. The [installation guide](ht
 
 ### Your first deployment
 
-The shortest path from this empty broker to a manifest running on a cluster is the tutorial [Your First Tenant](https://colliery-io.github.io/brokkr/tutorials/first-tenant/). It creates a tenant with its own PAK, activates the agent, registers it with the tenant, pushes a manifest and shows it with `kubectl`, in about fifteen minutes. Start there.
+The shortest path from this empty broker to a manifest running on a cluster is the tutorial [Your First Generator](https://colliery-io.github.io/brokkr/tutorials/first-generator/). It creates a generator with its own PAK, activates the agent, registers it with the generator, pushes a manifest and shows it with `kubectl`, in about fifteen minutes. Start there.
 
 To check what the broker knows right now:
 

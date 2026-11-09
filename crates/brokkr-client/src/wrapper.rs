@@ -398,8 +398,8 @@ impl BrokkrClient {
     /// the id of the generator that owns the stack.
     ///
     /// This is the admin form: an admin PAK can apply for any generator. With
-    /// a generator PAK, `generator` must be that PAK's own generator; a tenant
-    /// cannot apply for another tenant.
+    /// a generator PAK, `generator` must be that PAK's own generator; a generator
+    /// cannot apply for another generator.
     pub async fn apply_for_generator(
         &self,
         generator: &str,
@@ -469,7 +469,7 @@ impl BrokkrClient {
                     let err = BrokkrError::from(e);
                     if err.status() == Some(reqwest::StatusCode::NOT_FOUND) {
                         Err(BrokkrError::InvalidRequest(format!(
-                            "no tenant with id {id}"
+                            "no generator with id {id}"
                         )))
                     } else {
                         Err(err)
@@ -485,10 +485,10 @@ impl BrokkrClient {
             .collect();
         match ids.as_slice() {
             [] => Err(BrokkrError::InvalidRequest(format!(
-                "no tenant named \"{wanted}\""
+                "no generator named \"{wanted}\""
             ))),
             [id] => Ok(*id),
-            _ => Err(ambiguous_name("tenant", wanted, &ids)),
+            _ => Err(ambiguous_name("generator", wanted, &ids)),
         }
     }
 
@@ -643,7 +643,7 @@ impl BrokkrClient {
         }
     }
 
-    /// The id of a generator (a tenant), given by name or id. A UUID is used
+    /// The id of a generator, given by name or id. A UUID is used
     /// as it is, with no lookup. A name is looked up in the generator list,
     /// which only an admin PAK can read.
     pub async fn resolve_generator_id(&self, generator: &str) -> Result<Uuid, BrokkrError> {
@@ -681,13 +681,13 @@ impl BrokkrClient {
         Ok(resp.into_inner())
     }
 
-    /// What this PAK is: admin, a tenant, or an agent (BROKKR-T-0381).
+    /// What this PAK is: admin, a generator, or an agent (BROKKR-T-0381).
     /// `POST /auth/pak`.
     pub async fn whoami(&self) -> Result<AuthResponse, BrokkrError> {
         Ok(self.inner.verify_pak().send().await?.into_inner())
     }
 
-    /// One tenant by id. An admin, or the tenant itself.
+    /// One generator by id. An admin, or the generator itself.
     pub async fn get_generator(&self, id: Uuid) -> Result<Generator, BrokkrError> {
         Ok(self.inner.get_generator().id(id).send().await?.into_inner())
     }
@@ -697,7 +697,7 @@ impl BrokkrClient {
         Ok(self.inner.get_agent().id(id).send().await?.into_inner())
     }
 
-    /// Rotate a tenant's PAK (BROKKR-T-0381): an admin, or the tenant itself.
+    /// Rotate a generator's PAK (BROKKR-T-0381): an admin, or the generator itself.
     /// The response carries the new PAK once; the old one stops at once.
     pub async fn rotate_generator_pak(
         &self,
@@ -713,7 +713,7 @@ impl BrokkrClient {
     }
 
     /// Delete a stack, given by name or id (BROKKR-T-0381): an admin, or the
-    /// tenant that owns it. The broker records a deletion marker; each agent
+    /// generator that owns it. The broker records a deletion marker; each agent
     /// that has the stack removes its resources on its next poll. Returns the
     /// stack as it was.
     pub async fn delete_stack(&self, stack: &str) -> Result<Stack, BrokkrError> {
@@ -723,7 +723,7 @@ impl BrokkrClient {
     }
 
     /// The health of a stack, with each agent's report per deployment object
-    /// (BROKKR-T-0379): an admin, or the tenant that owns the stack.
+    /// (BROKKR-T-0379): an admin, or the generator that owns the stack.
     pub async fn stack_health(&self, stack_id: Uuid) -> Result<StackHealthResponse, BrokkrError> {
         Ok(self
             .inner
@@ -735,7 +735,7 @@ impl BrokkrClient {
     }
 
     /// The deployment objects of a stack, newest first: an admin, or the
-    /// tenant that owns the stack.
+    /// generator that owns the stack.
     pub async fn list_deployment_objects(
         &self,
         stack_id: Uuid,
@@ -752,7 +752,7 @@ impl BrokkrClient {
     }
 
     /// The retained Kubernetes events of a stack (BROKKR-T-0379): an admin,
-    /// or the tenant that owns it. `limit` defaults to the broker's 500.
+    /// or the generator that owns it. `limit` defaults to the broker's 500.
     pub async fn stack_events(
         &self,
         stack_id: Uuid,
@@ -766,7 +766,7 @@ impl BrokkrClient {
     }
 
     /// The retained pod log lines of a stack (BROKKR-T-0379): an admin, or
-    /// the tenant that owns it. `limit` defaults to the broker's 500.
+    /// the generator that owns it. `limit` defaults to the broker's 500.
     pub async fn stack_logs(
         &self,
         stack_id: Uuid,
@@ -807,8 +807,8 @@ impl BrokkrClient {
         Ok(resp.into_inner())
     }
 
-    /// Create a tenant (a generator in the API) with the admin PAK
-    /// (BROKKR-T-0370). The response carries the tenant and its PAK, which
+    /// Create a generator with the admin PAK
+    /// (BROKKR-T-0370). The response carries the generator and its PAK, which
     /// the broker returns once: it keeps only a hash, so a lost PAK needs a
     /// rotation. A `409` means the name is taken.
     pub async fn create_generator(
@@ -1004,7 +1004,7 @@ impl BrokkrClient {
                 }
                 err if err.code() == Some("agent_not_registered") => {
                     Err(BrokkrError::InvalidRequest(format!(
-                        "agent \"{}\" is not registered with the tenant that owns stack \"{}\". \
+                        "agent \"{}\" is not registered with the generator that owns stack \"{}\". \
                          Register it first: brokkr register --agent {} --generator {}",
                         agent.name, stack.name, agent.id, stack.generator_id
                     )))
@@ -1486,12 +1486,12 @@ mod tests {
     }
 
     #[test]
-    fn ambiguous_tenant_name_says_tenants() {
+    fn ambiguous_generator_name_says_generators() {
         let ids = [Uuid::from_u128(1), Uuid::from_u128(2)];
-        let msg = ambiguous_name("tenant", "acme", &ids).to_string();
+        let msg = ambiguous_name("generator", "acme", &ids).to_string();
         assert!(
             msg.contains(&format!(
-                "2 tenants have the name \"acme\". Give the id instead: {}, {}",
+                "2 generators have the name \"acme\". Give the id instead: {}, {}",
                 ids[0], ids[1]
             )),
             "{msg}"

@@ -91,7 +91,7 @@ pub struct DeploymentObjectHealthSummary {
     /// Number of agents reporting failing.
     pub failing_agents: usize,
     /// The report of each agent, by agent id (BROKKR-T-0379). This is how a
-    /// tenant learns which clusters have its stack.
+    /// generator learns which clusters have its stack.
     #[serde(default)]
     pub agents: Vec<AgentHealthReport>,
 }
@@ -258,7 +258,7 @@ async fn get_deployment_health(
     ),
     responses(
         (status = 200, description = "Successfully retrieved stack health", body = StackHealthResponse),
-        (status = 403, description = "Forbidden - not an admin, and not the tenant that owns the stack", body = ErrorResponse),
+        (status = 403, description = "Forbidden - not an admin, and not the generator that owns the stack", body = ErrorResponse),
         (status = 404, description = "Stack not found", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse),
     ),
@@ -271,7 +271,7 @@ async fn get_stack_health(
 ) -> Result<Json<StackHealthResponse>, ApiError> {
     info!("Handling request to get health for stack {}", stack_id);
 
-    // An admin, or the tenant that owns the stack (BROKKR-T-0379): the same
+    // An admin, or the generator that owns the stack (BROKKR-T-0379): the same
     // rule as the stack's events and logs.
     crate::api::v1::stacks::fetch_owned_stack(&dal, &auth_payload, stack_id).await?;
 

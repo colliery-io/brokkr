@@ -64,7 +64,7 @@ pub fn routes() -> Router<DAL> {
 }
 
 /// Fetch a stack or return 404; also enforces admin-or-generator-owner access.
-/// The stack, if the caller may read it: an admin, or the tenant that owns
+/// The stack, if the caller may read it: an admin, or the generator that owns
 /// it. Shared with the health module (BROKKR-T-0379).
 pub(crate) async fn fetch_owned_stack(
     dal: &DAL,
@@ -111,7 +111,7 @@ async fn list_stacks(
     info!("Handling request to list stacks");
 
     let stacks = if auth_payload.admin {
-        // Tenant scope (BROKKR-T-0270): a view filter for the console, only
+        // Generator scope (BROKKR-T-0270): a view filter for the console, only
         // meaningful on the admin path (a generator already sees only its own).
         match scope.pak_id {
             Some(pak_id) => dal.stacks().list_for_generator(pak_id),
@@ -767,7 +767,7 @@ async fn instantiate_template(
         .ok_or_else(|| ApiError::not_found("template_not_found", "template not found"))?;
 
     // BROKKR-T-0290: instantiate used to be the only template path that skipped
-    // the read-access check, letting any generator render another tenant's
+    // the read-access check, letting any generator render another generator's
     // template body into its own stack. System templates (generator_id = NULL)
     // remain instantiable by anyone — that is the sanctioned sharing mechanism.
     crate::api::v1::templates::check_read_access(&auth_payload, &template)?;
