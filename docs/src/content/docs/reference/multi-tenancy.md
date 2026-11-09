@@ -2,30 +2,30 @@
 title: Multi-Tenancy Reference
 ---
 
-In Brokkr, **a tenant is a generator**. A generator is both an identity principal (it holds its own PAK) and a tenancy boundary: every stack it creates carries its `generator_id`, every agent that serves it must be registered with it, and every template it owns is private to it unless it is a system template. Multiple teams therefore share one broker, one database, and one admin, while remaining separated from each other at the application layer.
+In Brokkr, **a generator is the unit of isolation**. One generator is one PAK and one scope: a second credential for a team is a second generator and a second scope. A generator is both an identity principal (it holds its own PAK) and a tenancy boundary: every stack it creates carries its `generator_id`, every agent that serves it must be registered with it, and every template it owns is private to it unless it is a system template. Multiple teams therefore share one broker, one database, and one admin, while remaining separated from each other at the application layer.
 
-A second, unrelated feature is sometimes mistaken for the tenant model: the `database.schema` setting, which places a broker's tables in a named PostgreSQL schema. That is a **deployment and configuration** feature for running fully separate broker instances against one PostgreSQL server — useful for environment separation or hard data separation, but it is not how a team is onboarded onto a shared control plane. It is documented under [Running Separate Broker Instances](#running-separate-broker-instances-schema-separation).
+A second, unrelated feature is sometimes mistaken for the generator model: the `database.schema` setting, which places a broker's tables in a named PostgreSQL schema. That is a **deployment and configuration** feature for running fully separate broker instances against one PostgreSQL server — useful for environment separation or hard data separation, but it is not how a team is onboarded onto a shared control plane. It is documented under [Running Separate Broker Instances](#running-separate-broker-instances-schema-separation).
 
 | | Tenancy model | Schema separation |
 |---|---|---|
 | Unit | A generator | A broker instance |
 | Boundary | Generator ownership + agent registration | Separate PostgreSQL schema |
 | Brokers | One, shared | One per schema |
-| Admin PAK | One, shared across tenants | One per instance |
+| Admin PAK | One, shared across generators | One per instance |
 | Onboarding a team | Create a generator, hand over its PAK | Deploy another broker |
 | Typical use | Multiple teams or applications on one control plane | Environments (dev/staging/prod), hard data separation |
 
-## The Tenant Model
+## The Generator Model
 
-### Tenant Identity
+### Generator Identity
 
 | Aspect | Behavior |
 |--------|----------|
-| Tenant record | A generator (`GET /api/v1/generators`), created by admin via `POST /api/v1/generators` |
-| Tenant credential | The generator's PAK, returned once at creation and again on rotation |
-| Tenant name | The generator's `name` (unique among non-deleted generators) |
-| Tenant ID | The generator's `id` — the value used as `generator_id` on stacks and as `?pak_id=` in scoped listings |
-| Lifecycle | Soft-delete cascades to the tenant's stacks and their deployment objects |
+| Generator record | A generator (`GET /api/v1/generators`), created by admin via `POST /api/v1/generators` |
+| Generator credential | The generator's PAK, returned once at creation and again on rotation |
+| Generator name | The generator's `name` (unique among non-deleted generators) |
+| Generator ID | The generator's `id` — the value used as `generator_id` on stacks and as `?pak_id=` in scoped listings |
+| Lifecycle | Soft-delete cascades to the generator's stacks and their deployment objects |
 
 Creating, listing, and deleting generators is admin-only. A generator PAK can read and update its own generator record, rotate its own PAK, and **list the agents registered with it** (`GET /agents`, scoped; `GET /generators/{id}/registered-agents` for the raw registration records) — but it cannot create other generators or manage agents. See [Generators Reference](../generators/) for the full endpoint and permission matrix.
 
@@ -54,7 +54,7 @@ This applies to every association path:
 Consequences:
 
 - An agent with **no registrations** receives nothing from label or annotation matching.
-- Two tenants may use identical label or annotation values without colliding. A label match against another tenant's stack does not deliver that stack.
+- Two generators may use identical label or annotation values without colliding. A label match against another generator's stack does not deliver that stack.
 - The served set returned by `GET /agents/{id}/target-state` — and the broker-computed pending-object counts that back the fleet rollup — obey the same rule.
 - There is **no admin override**. Admin cannot force-target an unregistered agent; the escape hatch is to register the agent first, which is one audited call.
 
@@ -67,13 +67,13 @@ For the rationale, see [Security Model](../../explanation/security-model/#genera
 | Name | `__system__` (`is_system = true`) |
 | Provisioned | At broker startup |
 | Auto-registration | Every agent created through `POST /agents` is registered with it |
-| Purpose | Carries fleet/system stacks that reach all agents without per-tenant registration |
+| Purpose | Carries fleet/system stacks that reach all agents without per-generator registration |
 | Listing | Excluded from `GET /generators` and from `GET /paks` |
-| Tenant-scoped reads | Refused with `system_generator_not_a_tenant` (403) for non-admin callers |
+| Generator-scoped reads | Refused with `system_generator_not_a_tenant` (403) for non-admin callers |
 
 The system generator is **not** the admin generator. The admin generator is a separate entity tied to the admin role/PAK; agents are not auto-registered with it.
 
-It is also **not a tenant**, which is why it is excluded from every tenant-facing surface: the generator and PAK listings, the console's scope selector, and the tenant-scoped agent reads. Because every agent is auto-registered with it, treating it as a tenant would quietly turn any scoped query into a fleet-wide one. The broker provisions it without a PAK, so nothing can authenticate as it; the 403 is defense in depth rather than a reachable path today.
+It is also **not an application scope**, which is why it is excluded from every scoped surface: the generator and PAK listings, the console's scope selector, and the generator-scoped agent reads. Because every agent is auto-registered with it, treating it as a scope would quietly turn any scoped query into a fleet-wide one. The broker provisions it without a PAK, so nothing can authenticate as it; the 403 is defense in depth rather than a reachable path today.
 
 ### Agent Self-Registration at Startup
 
@@ -87,11 +87,11 @@ Values are comma-separated UUIDs; malformed entries are skipped with a warning; 
 
 Registration can also be managed out of band: pass optional `generator_ids` to `POST /agents`, use the `register`/`deregister`/`registrations` `brokkr` CLI commands (see [CLI Reference](../cli/)), or call the registration endpoints documented in the [API Reference](../rest-api/).
 
-## Listing Tenants
+## Listing Generators
 
 ### `GET /api/v1/paks`
 
-Lists tenants as named PAK owners, reduced to identity only. The path is `/api/v1/paks`; it is grouped under the `auth` tag in the OpenAPI document, but it is **not** under `/api/v1/auth/`.
+Lists generators as named PAK owners, reduced to identity only. The path is `/api/v1/paks`; it is grouped under the `auth` tag in the OpenAPI document, but it is **not** under `/api/v1/auth/`.
 
 | Aspect | Value |
 |--------|-------|
@@ -112,7 +112,7 @@ This endpoint exists so a scope selector can be populated without fetching the f
 
 ## Scoped Views: the `pak_id` Query Parameter
 
-Three admin listing endpoints accept `?pak_id=<generator uuid>` to narrow the result to one tenant:
+Three admin listing endpoints accept `?pak_id=<generator uuid>` to narrow the result to one generator:
 
 | Endpoint | Effect of `?pak_id=` |
 |----------|---------------------|
@@ -122,8 +122,8 @@ Three admin listing endpoints accept `?pak_id=<generator uuid>` to narrow the re
 
 | Input | Result |
 |-------|--------|
-| Omitted | Unscoped listing (all tenants) |
-| A known generator ID | The listing narrowed to that tenant |
+| Omitted | Unscoped listing (all generators) |
+| A known generator ID | The listing narrowed to that generator |
 | An unknown but well-formed UUID | `200` with an empty list |
 | A malformed UUID | `400` |
 
@@ -142,12 +142,12 @@ Real isolation comes from two places:
 |-------|------|---------|
 | `admin` | boolean | The PAK carries the admin role |
 | `agent` | string \| null | The agent's UUID, when the PAK is an agent PAK |
-| `generator` | string \| null | The generator (tenant) UUID, when the PAK is a generator PAK |
+| `generator` | string \| null | The generator UUID, when the PAK is a generator PAK |
 | `readonly` | boolean | The credential may not mutate state |
 
 `readonly` is `true` only for the operator console's ephemeral read-only PAK, which the broker mints per process, holds in memory, and never persists. A read-only credential passes every `GET`/`HEAD` request plus two allowlisted `POST` routes (`/auth/pak` and deployment-object diagnostics); anything else is rejected with `403`. Every other PAK — admin, agent, generator — reports `readonly: false`.
 
-A generator can use this endpoint to discover its own tenant ID:
+A generator can use this endpoint to discover its own ID:
 
 ```bash
 curl -s -X POST http://broker:3000/api/v1/auth/pak \
@@ -156,7 +156,7 @@ curl -s -X POST http://broker:3000/api/v1/auth/pak \
 
 ## Running Separate Broker Instances (Schema Separation)
 
-Setting `database.schema` places one broker's tables in a named PostgreSQL schema, so several independent broker instances can share a single PostgreSQL server without seeing each other's data. This is a deployment/configuration feature, independent of the tenant model above. Use it for environment separation (dev/staging/prod on one database server) or when data must be separated at the storage layer rather than the application layer. Each instance still has its own tenants (generators) inside it.
+Setting `database.schema` places one broker's tables in a named PostgreSQL schema, so several independent broker instances can share a single PostgreSQL server without seeing each other's data. This is a deployment/configuration feature, independent of the generator model above. Use it for environment separation (dev/staging/prod on one database server) or when data must be separated at the storage layer rather than the application layer. Each instance still has its own generators inside it.
 
 ### Behavior
 
@@ -267,17 +267,17 @@ Each schema has its own `app_initialization` table. Different instances can be a
 ### Limitations
 
 - **No cross-instance queries**: a broker can only see data in its configured schema
-- **No API across instances**: an instance is created by configuring and deploying another broker; there is no endpoint that enumerates or manages other instances. (Tenants *within* an instance do have an API — see [Listing Tenants](#listing-tenants))
+- **No API across instances**: an instance is created by configuring and deploying another broker; there is no endpoint that enumerates or manages other instances. (Generators *within* an instance do have an API — see [Listing Generators](#listing-generators))
 - **Shared database resources**: high load on one instance can affect others on the same database server
 - **Schema name is static**: changing an instance's schema name requires data migration
 
 ### Kubernetes Deployment
 
-For the Helm-based per-instance walkthrough, see [Running Separate Broker Instances](../../how-to/multi-tenant-setup/#running-separate-broker-instances-schema-separation) in the multi-tenant setup guide.
+For the Helm-based per-instance walkthrough, see [Running Separate Broker Instances](../../how-to/multi-generator-setup/#running-separate-broker-instances-schema-separation) in the multi-generator setup guide.
 
 ## Related Documentation
 
-- [Multi-Tenant Setup](../../how-to/multi-tenant-setup/) — onboarding teams onto a shared broker, and the separate-instance walkthrough
+- [Multi-Generator Setup](../../how-to/multi-generator-setup/) — onboarding teams onto a shared broker, and the separate-instance walkthrough
 - [Generators Reference](../generators/) — full generator API, permissions, and resource scoping
 - [Agent Registration](../../how-to/agent-registration/) — registering agents with generators
 - [Configuration Guide](../../how-to/configuration/) — database configuration options

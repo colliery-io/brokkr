@@ -8,12 +8,12 @@ There is one feature per flow:
 
 | Feature | What it covers |
 |---------|----------------|
-| `tenant-onboarding` | An admin creates a tenant, gets its PAK once, registers an agent with it; a repeat name is refused; the tenant's PAK reads its own record and nothing else. |
-| `agent-onboarding` | An admin creates an agent with its tenants and gets its PAK and the Helm command once; the agent is inactive until activated; the agent finds its record by its PAK, and a wrong configured name or cluster stops it with a precise error. |
-| `tenant-after-apply` | With its own PAK, a tenant applies a folder, sees its stack's status, events and logs, sees the labels of its agents and which agents a stack label reaches, rotates its PAK, deletes its stack, and sees where its stack went. |
-| `tenants-apart` | A tenant cannot create tenants or agents, cannot register agents, cannot read another tenant's stack; a target for an unregistered agent is refused, even for the admin. |
+| `generator-onboarding` | An admin creates a generator, gets its PAK once, registers an agent with it; a repeat name is refused; the generator's PAK reads its own record and nothing else. |
+| `agent-onboarding` | An admin creates an agent with its generators and gets its PAK and the Helm command once; the agent is inactive until activated; the agent finds its record by its PAK, and a wrong configured name or cluster stops it with a precise error. |
+| `generator-after-apply` | With its own PAK, a generator applies a folder, sees its stack's status, events and logs, sees the labels of its agents and which agents a stack label reaches, rotates its PAK, deletes its stack, and sees where its stack went. |
+| `generators-apart` | A generator cannot create generators or agents, cannot register agents, cannot read another generator's stack; a target for an unregistered agent is refused, even for the admin. |
 
-Each scenario creates its own tenants, agents and stacks under unique names and removes them when it ends, so scenarios run in any order, side by side, and the suite runs twice against the same broker.
+Each scenario creates its own generators, agents and stacks under unique names and removes them when it ends, so scenarios run in any order, side by side, and the suite runs twice against the same broker.
 
 ## Run the suite
 
@@ -26,7 +26,7 @@ angreal tests bdd
 To run one feature, name its file without the extension. With `--skip-docker` the task uses a stack that is up already (for example after `angreal local up`):
 
 ```bash
-angreal tests bdd --skip-docker --feature tenant-onboarding
+angreal tests bdd --skip-docker --feature generator-onboarding
 ```
 
 The suites share one compose project, so run one at a time.
@@ -38,7 +38,7 @@ cargo build -p brokkr-cli --bin brokkr -p brokkr-agent --bin brokkr-agent
 cargo build --release --manifest-path tests/bdd/Cargo.toml
 BROKKR_CLI=target/debug/brokkr BROKKR_AGENT=target/debug/brokkr-agent \
 BROKKR_CLUSTER_AGENT=brokkr-integration-test-agent \
-  tests/bdd/target/release/brokkr-bdd --input tests/bdd/features/tenants-apart.feature
+  tests/bdd/target/release/brokkr-bdd --input tests/bdd/features/generators-apart.feature
 ```
 
 `--input` takes a glob; without it the binary runs every feature in `tests/bdd/features`. `--name <regex>` runs the scenarios whose name matches; `--concurrency <n>` sets how many run at once (the default is 4); `-vv` prints the scenario's state after a failed step. Run with `--help` for the rest.
@@ -53,14 +53,14 @@ The workflow `bdd.yml` runs one feature per runner, each with its own compose st
 
 ## Add a scenario
 
-A scenario is one behaviour. Write it in the words of the console: tenant, agent, stack, PAK. Say what a person does and sees, never how the broker does it: "the tenant applies the folder", not "POST /stacks". Keep each line short and in the present tense.
+A scenario is one behaviour. Write it in the words of the console: generator, agent, stack, PAK. Say what a person does and sees, never how the broker does it: "the generator applies the folder", not "POST /stacks". Keep each line short and in the present tense.
 
 ```gherkin
   Scenario: A repeat name is refused
-    Given the admin has created the tenant "team-robin"
-    When the admin creates the tenant "team-robin" again
+    Given the admin has created the generator "team-robin"
+    When the admin creates the generator "team-robin" again
     Then the command is refused
-    And there is one tenant "team-robin"
+    And there is one generator "team-robin"
 ```
 
 Names in a feature are plain (`team-robin`, `prod-1`, `payments`). The runner gives each a unique real name for the scenario, so two scenarios that both say `team-robin` never collide. Use the steps that exist where you can: read the `#[given]`, `#[when]` and `#[then]` attributes in `tests/bdd/src/steps`, or run a feature with a line that has no step yet; the suite fails on it and names the line.
@@ -70,7 +70,7 @@ Names in a feature are plain (`team-robin`, `prod-1`, `payments`). The runner gi
 A step is an `async fn` on the `World` with a `#[given]`, `#[when]` or `#[then]` attribute and a [Cucumber expression](https://github.com/cucumber/cucumber-expressions#readme); `{string}` takes a quoted value, `{word}` one word. The modules are by who acts: `steps/admin.rs` and `steps/tenant.rs` and `steps/agent.rs` hold what each does (Given and When), `steps/checks.rs` holds what they see (Then).
 
 ```rust
-#[when(expr = "the tenant {string} deletes the stack {string}")]
+#[when(expr = "the generator {string} deletes the stack {string}")]
 async fn deletes_stack(w: &mut World, tenant: String, stack: String) {
     let pak = w.tenant(&tenant).pak.clone();
     let stack = w.real(&w.stack(&stack).name);
@@ -78,7 +78,7 @@ async fn deletes_stack(w: &mut World, tenant: String, stack: String) {
 }
 ```
 
-The `World` (`tests/bdd/src/world.rs`) holds the scenario's tenants, agents and stacks by their feature names, the last command that ran and the last answer of the broker. Its helpers do the common work: `w.real(name)` gives the unique real name; `w.brokkr(pak, args)` runs the CLI and keeps the run; `w.brokkr_agent(pak, name, cluster)` starts the agent binary; `w.expect_output(text)` and `w.expect_error(text)` check the last run and, when the check fails, show the whole command and its output; `w.api` reaches the broker for a read no command makes. Keep a Then step to one check, so a failure names the one thing that went wrong.
+The `World` (`tests/bdd/src/world.rs`) holds the scenario's generators, agents and stacks by their feature names, the last command that ran and the last answer of the broker. Its helpers do the common work: `w.real(name)` gives the unique real name; `w.brokkr(pak, args)` runs the CLI and keeps the run; `w.brokkr_agent(pak, name, cluster)` starts the agent binary; `w.expect_output(text)` and `w.expect_error(text)` check the last run and, when the check fails, show the whole command and its output; `w.api` reaches the broker for a read no command makes. Keep a Then step to one check, so a failure names the one thing that went wrong.
 
 A step that creates something records it on the `World` (`w.tenants`, `w.agents`, `w.stacks`), and the `after` hook in `main.rs` deletes everything recorded there as the admin. A step that creates a new kind of thing adds it to that hook too.
 

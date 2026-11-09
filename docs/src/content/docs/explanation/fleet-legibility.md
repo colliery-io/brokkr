@@ -211,11 +211,11 @@ to see their own resources, and the reason is structural rather than
 cautious.
 
 A fleet record is inherently **cross-cutting.** It spans every agent, and
-agents span tenants; the rollup is a view of the entire deployment at
+agents span generators; the rollup is a view of the entire deployment at
 once. There is no coherent way to scope a fleet record "to its owner,"
 because it has no single owner — it is, by construction, everyone's. A
 per-agent record also folds together backpressure, health, and
-connectivity that cross tenant boundaries. The only principal for whom the
+connectivity that cross generator boundaries. The only principal for whom the
 fleet view is meaningful and appropriate is one with deployment-wide
 authority, so the broker gates both the `GET /fleet` rollup and the
 `/fleet/live` subscription on the admin check, with no per-owner path. The
@@ -230,9 +230,9 @@ it means the practical boundary on the fleet view is **who can reach the
 broker's port**, not who holds a key. Treat exposing that port as
 exposing the whole fleet view, read-only.
 
-### Tenant filtering is a view, not a boundary
+### Generator filtering is a view, not a boundary
 
-Against that admin-only backdrop, the pull surface does accept a tenant
+Against that admin-only backdrop, the pull surface does accept a generator
 filter: `GET /fleet` takes a generator identifier and narrows the returned
 records to the agents registered under that generator. This exists so a
 console or dashboard can offer a scope selector and let an operator look
@@ -245,7 +245,7 @@ admin before the filter ran; the filter narrows what is *shown*, not what
 is *permitted*. Anyone who can pass the filter can equally omit it and see
 everything, and an unrecognised identifier simply yields an empty list
 rather than an error. Nothing about it makes the fleet surface safe to
-hand to a tenant. The principle from the top of this page holds here too:
+hand to a generator. The principle from the top of this page holds here too:
 the broker supplies the raw view and leaves the framing to the consumer —
 but framing is all it is.
 

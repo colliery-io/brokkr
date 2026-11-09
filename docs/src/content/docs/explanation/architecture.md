@@ -72,7 +72,7 @@ The broker is implemented as an asynchronous Rust service built on the Axum web 
 
 The broker follows an ordered startup sequence so every dependency is ready before it accepts requests. Configuration is loaded first from environment variables and files, establishing database connection parameters, authentication settings, and operational parameters like polling intervals.
 
-A PostgreSQL connection pool is then established via the r2d2 connection manager with Diesel as the ORM, defaulting to 50 connections to cover background tasks, middleware, and concurrent requests. In multi-tenant mode, the broker sets up the appropriate PostgreSQL schema to isolate tenant data.
+A PostgreSQL connection pool is then established via the r2d2 connection manager with Diesel as the ORM, defaulting to 50 connections to cover background tasks, middleware, and concurrent requests. In multi-tenant mode, the broker sets up the appropriate PostgreSQL schema to isolate that instance's data.
 
 Diesel migrations then run automatically to bring the schema up to date, and the broker checks the `app_initialization` table for a first-time startup. On first run it creates the admin role and an associated admin generator, writing the initial admin PAK (Prefixed API Key) to a temporary file for retrieval.
 
@@ -357,8 +357,8 @@ The Helm charts ship conservative CPU and memory defaults suitable for small to 
 
 ## Multi-Tenancy
 
-The broker supports multi-tenant deployments through PostgreSQL schema isolation. When configured with a schema name, the broker creates a dedicated schema and sets the connection's `search_path` to use it for all queries. This provides data isolation between tenants sharing a PostgreSQL instance without requiring separate databases.
+The broker supports multi-tenant deployments through PostgreSQL schema isolation. When configured with a schema name, the broker creates a dedicated schema and sets the connection's `search_path` to use it for all queries. This provides data isolation between broker instances sharing a PostgreSQL server without requiring separate databases.
 
 Schema names are validated to prevent SQL injection, accepting only alphanumeric characters and underscores, and requiring the name to start with a letter.
 
-Schema-per-tenant is a deployment-level isolation mechanism and is distinct from generator registration, which provides application-level isolation *within* a single broker. Schema isolation separates tenants that each share nothing in the database; generator registration lets multiple applications share one broker while agents opt into the application scopes they serve, preventing accidental cross-application targeting. The two are complementary, not alternatives — see [Generator Registration and Application Scopes](../security-model/#generator-registration-and-application-scopes) and the [multi-tenancy reference](../../reference/multi-tenancy/).
+Schema-per-generator is a deployment-level isolation mechanism and is distinct from generator registration, which provides application-level isolation *within* a single broker. Schema isolation separates broker instances that share nothing in the database; generator registration lets multiple applications share one broker while agents opt into the application scopes they serve, preventing accidental cross-application targeting. The two are complementary, not alternatives — see [Generator Registration and Application Scopes](../security-model/#generator-registration-and-application-scopes) and the [multi-tenancy reference](../../reference/multi-tenancy/).

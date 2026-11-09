@@ -76,7 +76,7 @@ You can run `brokkr register` again. For a pair that is registered already, the 
 
 ### Register via the operator console
 
-Under **Tenants**, open the tenant's drawer, paste an admin PAK, pick the agent and choose **Register**. The New tenant dialog offers the same right after a mint. Deregister is next to each registered agent, behind a confirmation. See [Using the Operator Console](../operator-console/#tenant-detail).
+Under **Generators**, open the generator's drawer, paste an admin PAK, pick the agent and choose **Register**. The New generator dialog offers the same right after a mint. Deregister is next to each registered agent, behind a confirmation. See [Using the Operator Console](../operator-console/#generator-detail).
 
 ### Register via the REST API
 
@@ -179,13 +179,13 @@ brokkr-broker create agent \
 
 Every UUID is validated before anything is written, so a typo fails the command rather than leaving a half-registered agent behind.
 
-The `brokkr` client CLI takes tenants by name or id, and prints the Helm command with `broker.generatorIds` filled in:
+The `brokkr` client CLI takes generators by name or id, and prints the Helm command with `broker.generatorIds` filled in:
 
 ```bash
-brokkr agent create prod-1 --cluster us-east-1 --tenant team-acme --tenant team-globex
+brokkr agent create prod-1 --cluster us-east-1 --generator team-acme --generator team-globex
 ```
 
-The operator console does the same from **Fleet → + New agent**, where the tenants are a list to pick from.
+The operator console does the same from **Fleet → + New agent**, where the generators are a list to pick from.
 
 ## System Generator Scope
 

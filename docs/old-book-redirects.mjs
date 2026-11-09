@@ -16,6 +16,9 @@ const MOVED = {
 	'reference/api/index': 'reference/rest-api',
 	'api/index': 'reference/rust-api',
 	'api/sdks': 'reference/client-sdks',
+	// Pages renamed after the move (BROKKR-T-0371).
+	'tutorials/first-tenant': 'tutorials/first-generator',
+	'how-to/multi-tenant-setup': 'how-to/multi-generator-setup',
 	// mdBook wrote each README.md as index.html, but the links of the old book
 	// went to README.html (BROKKR-T-0311). Send those to the page too.
 	README: '',

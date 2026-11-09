@@ -258,7 +258,7 @@ See the [Configuration Guide](../../how-to/configuration/) for all available set
 
 ## brokkr
 
-`brokkr` is the control-plane client. It submits a folder of Kubernetes manifests as a stack's desired state. It wraps the Rust SDK's `apply` operation. It also does the admin's one-time steps: it creates and lists tenants (see [`brokkr tenant`](#brokkr-tenant)), registers agents with them, and does the day-zero steps: it activates, labels and lists agents, and labels, targets and lists stacks (see [Day-zero commands](#day-zero-commands-brokkr-agent-and-brokkr-stack)).
+`brokkr` is the control-plane client. It submits a folder of Kubernetes manifests as a stack's desired state. It wraps the Rust SDK's `apply` operation. It also does the admin's one-time steps: it creates and lists generators (see [`brokkr generator`](#brokkr-generator)), registers agents with them, and does the day-zero steps: it activates, labels and lists agents, and labels, targets and lists stacks (see [Day-zero commands](#day-zero-commands-brokkr-agent-and-brokkr-stack)).
 
 ### Connection settings
 
@@ -294,9 +294,9 @@ brokkr apply -f ./manifests --stack payments --target-label env:prod
 | `-f`, `--filename <PATH>` | yes | Folder of manifests (top-level `*.yaml`/`*.yml`, sorted) or a single file. |
 | `--stack <NAME>` | yes | Stack name; created if absent. |
 | `--target-label <LABEL>` | no | Targeting label for agent fan-out (e.g. `env:prod`). Repeatable. |
-| `--generator <NAME_OR_ID>` | with an admin PAK | The tenant that owns the stack, by name or id (the API calls a tenant a generator). Required with an admin PAK. Optional with a tenant PAK, where it must name the tenant of that PAK. |
+| `--generator <NAME_OR_ID>` | with an admin PAK | The generator that owns the stack, by name or id. Required with an admin PAK. Optional with a generator PAK, where it must name the generator of that PAK. |
 
-With a **tenant** PAK, the tenant of that PAK owns the stack. With an **admin** PAK, the tenant named in `--generator` owns the stack; without it, the command exits `1` with an error that names the flag. It prints one of three lines and exits `0`:
+With a **generator** PAK, the generator of that PAK owns the stack. With an **admin** PAK, the generator named in `--generator` owns the stack; without it, the command exits `1` with an error that names the flag. It prints one of three lines and exits `0`:
 
 | Output | Meaning |
 |--------|---------|
@@ -306,48 +306,48 @@ With a **tenant** PAK, the tenant of that PAK owns the stack. With an **admin** 
 
 On any error (no connection settings, malformed config, unreadable bundle, broker rejection) the command prints `error: <message>` to stderr and exits `1`.
 
-### `brokkr tenant`
+### `brokkr generator`
 
-Creates and lists tenants (the API calls a tenant a generator). With `brokkr register` and `brokkr agent activate`, the admin's one-time steps for a new tenant are one tool. Both commands require an admin PAK.
+Creates and lists generators. With `brokkr register` and `brokkr agent activate`, the admin's one-time steps for a new generator are one tool. Both commands require an admin PAK. For one release, `brokkr tenant` is a hidden alias of `brokkr generator`, and `--tenant` of `brokkr agent create` is a hidden alias of `--generator`.
 
-#### `brokkr tenant create`
+#### `brokkr generator create`
 
 ```bash
-brokkr tenant create <NAME> [--description <TEXT>]
+brokkr generator create <NAME> [--description <TEXT>]
 ```
 
 ```
-created tenant "team-acme" (a1b2c3d4-e5f6-7890-abcd-ef1234567890)
+created generator "team-acme" (a1b2c3d4-e5f6-7890-abcd-ef1234567890)
 PAK: brokkr_BRgen12ab_GeneratorLongTokenExample01
-The PAK is shown once. Store it where the tenant's CI reads it; the only way back is a rotation. Next: brokkr register --agent <AGENT> --generator team-acme
+The PAK is shown once. Store it where the generator's CI reads it; the only way back is a rotation. Next: brokkr register --agent <AGENT> --generator team-acme
 ```
 
 The PAK is printed once: the broker keeps only a hash. A name that exists already is a `409`; the command prints `error: <message>` to stderr and exits `1`. This is the same as `POST /api/v1/generators`.
 
-#### `brokkr tenant rotate`
+#### `brokkr generator rotate`
 
-Rotates a tenant's PAK and prints the new one once. With a tenant PAK, it rotates its own: give no tenant. With an admin PAK, name the tenant. The current PAK stops at once.
+Rotates a generator's PAK and prints the new one once. With a generator PAK, it rotates its own: give no generator. With an admin PAK, name the generator. The current PAK stops at once.
 
 ```bash
-brokkr tenant rotate            # as the tenant
-brokkr tenant rotate team-acme  # as an admin
+brokkr generator rotate            # as the generator
+brokkr generator rotate team-acme  # as an admin
 ```
 
 ```
-rotated the PAK of tenant "team-acme" (a1b2c3d4-...)
+rotated the PAK of generator "team-acme" (a1b2c3d4-...)
 PAK: brokkr_BRnew34cd_GeneratorLongTokenExample02
 The PAK is shown once. The previous PAK stopped: update every pipeline that uses it.
 ```
 
 This is `POST /api/v1/generators/{id}/rotate-pak`.
 
-#### `brokkr tenant list`
+#### `brokkr generator list`
 
 ```bash
-brokkr tenant list
+brokkr generator list
 ```
 
-Prints a table with `NAME`, `ID`, `STATUS`, `LAST ACTIVE` and `DESCRIPTION`. The system generator is not a tenant and is not listed. This is the same as `GET /api/v1/generators`.
+Prints a table with `NAME`, `ID`, `STATUS`, `LAST ACTIVE` and `DESCRIPTION`. The system generator is not listed. This is the same as `GET /api/v1/generators`.
 
 ### `brokkr whoami`
 
@@ -359,14 +359,14 @@ brokkr whoami
 
 ```
 broker: https://broker.example.com
-PAK: tenant "team-acme" (a1b2c3d4-...)
+PAK: generator "team-acme" (a1b2c3d4-...)
 ```
 
 An admin PAK prints `PAK: admin`; an agent PAK prints the agent's name, id and cluster. This is `POST /api/v1/auth/pak`.
 
 ### `brokkr register`
 
-Registers an agent with a tenant for the agent. An agent must be registered with a tenant before any of the stacks of that tenant can target it. Agents normally self-register on startup (see [`brokkr-agent start`](#brokkr-agent-start)); use this to register an agent before it is live, or to add a tenant. Requires an admin PAK. You can run this command again: if the agent is registered with the tenant already, the command changes nothing and exits `0`, the same as [`brokkr agent label`](#day-zero-commands-brokkr-agent-and-brokkr-stack). The API still returns `409 already_registered` for a repeat; the CLI shows it as `unchanged:`.
+Registers an agent with a generator for the agent. An agent must be registered with a generator before any of the stacks of that generator can target it. Agents normally self-register on startup (see [`brokkr-agent start`](#brokkr-agent-start)); use this to register an agent before it is live, or to add a generator. Requires an admin PAK. You can run this command again: if the agent is registered with the generator already, the command changes nothing and exits `0`, the same as [`brokkr agent label`](#day-zero-commands-brokkr-agent-and-brokkr-stack). The API still returns `409 already_registered` for a repeat; the CLI shows it as `unchanged:`.
 
 ```bash
 brokkr register --agent <NAME_OR_ID> --generator <NAME_OR_ID>
@@ -377,24 +377,24 @@ brokkr register --agent <NAME_OR_ID> --generator <NAME_OR_ID>
 | Flag | Required | Description |
 |------|----------|-------------|
 | `--agent <NAME_OR_ID>` | yes | The agent to register, by name or id. |
-| `--generator <NAME_OR_ID>` | yes | The tenant to register it with, by name or id (the API calls a tenant a generator). |
+| `--generator <NAME_OR_ID>` | yes | The generator to register it with, by name or id. |
 
-The CLI finds each name or id in the same way as `brokkr agent` and `brokkr stack`. An id is used as it is. A name is looked up in the agent list or the tenant list. If two agents have the same name (in different clusters), the command stops and lists their ids; give the id instead. For example:
+The CLI finds each name or id in the same way as `brokkr agent` and `brokkr stack`. An id is used as it is. A name is looked up in the agent list or the generator list. If two agents have the same name (in different clusters), the command stops and lists their ids; give the id instead. For example:
 
 ```bash
 brokkr register --agent prod-1 --generator payments-team
 ```
 
 ```
-registered agent "prod-1" (6b1f...) with tenant "payments-team" (e5fe...) (registration 0c7d...)
+registered agent "prod-1" (6b1f...) with generator "payments-team" (e5fe...) (registration 0c7d...)
 ```
 
 It prints one of two lines and exits `0`:
 
 | Output | Meaning |
 |--------|---------|
-| `registered agent <agent> with tenant <tenant> (registration <id>)` | The broker added the registration. |
-| `unchanged: agent <agent> is registered with tenant <tenant> already` | The registration exists already. The broker changed nothing. |
+| `registered agent <agent> with generator <generator> (registration <id>)` | The broker added the registration. |
+| `unchanged: agent <agent> is registered with generator <generator> already` | The registration exists already. The broker changed nothing. |
 
 On an error, the command prints `error: <message>` to stderr and exits `1`.
 
@@ -402,7 +402,7 @@ See [Generator Registration](../../explanation/security-model/#generator-registr
 
 ### `brokkr deregister`
 
-Removes an agent's registration from a tenant. Requires an admin PAK.
+Removes an agent's registration from a generator. Requires an admin PAK.
 
 ```bash
 brokkr deregister --agent <NAME_OR_ID> --generator <NAME_OR_ID>
@@ -413,23 +413,23 @@ brokkr deregister --agent <NAME_OR_ID> --generator <NAME_OR_ID>
 | Flag | Required | Description |
 |------|----------|-------------|
 | `--agent <NAME_OR_ID>` | yes | The agent to deregister, by name or id. |
-| `--generator <NAME_OR_ID>` | yes | The tenant to remove the agent from, by name or id. |
+| `--generator <NAME_OR_ID>` | yes | The generator to remove the agent from, by name or id. |
 
 The lookup is the same as for [`brokkr register`](#brokkr-register).
 
-Destructive: the broker also removes the agent's `agent_targets` for the stacks of that tenant and pushes a target-changed frame to the agent, which prunes the corresponding Kubernetes resources on its next reconcile.
+Destructive: the broker also removes the agent's `agent_targets` for the stacks of that generator and pushes a target-changed frame to the agent, which prunes the corresponding Kubernetes resources on its next reconcile.
 
-If the agent is not registered with the tenant, the broker removes nothing and returns success. The command prints the same `deregistered` line and exits `0`.
+If the agent is not registered with the generator, the broker removes nothing and returns success. The command prints the same `deregistered` line and exits `0`.
 
 ### `brokkr registrations`
 
-Lists the tenants that one agent is registered with, or the agents registered with one tenant. Exactly one of `--agent` or `--generator` is required. Cross-entity queries require an admin PAK.
+Lists the generators that one agent is registered with, or the agents registered with one generator. Exactly one of `--agent` or `--generator` is required. Cross-entity queries require an admin PAK.
 
 ```bash
-# Tenants an agent is registered with
+# Generators an agent is registered with
 brokkr registrations --agent <NAME_OR_ID>
 
-# Agents registered with a tenant
+# Agents registered with a generator
 brokkr registrations --generator <NAME_OR_ID>
 ```
 
@@ -437,12 +437,12 @@ brokkr registrations --generator <NAME_OR_ID>
 
 | Flag | Required | Description |
 |------|----------|-------------|
-| `--agent <NAME_OR_ID>` | one of¹ | List the tenant registrations of the agent, given by name or id. |
-| `--generator <NAME_OR_ID>` | one of¹ | List the registered agents of the tenant, given by name or id. |
+| `--agent <NAME_OR_ID>` | one of¹ | List the generator registrations of the agent, given by name or id. |
+| `--generator <NAME_OR_ID>` | one of¹ | List the registered agents of the generator, given by name or id. |
 
 ¹ Exactly one of `--agent` or `--generator` must be given (mutually exclusive).
 
-A name lookup reads the agent list or the tenant list. Only an admin PAK can read the tenant list. With an agent PAK or a tenant PAK, give the id. An id is used as it is, with no lookup.
+A name lookup reads the agent list or the generator list. Only an admin PAK can read the generator list. With an agent PAK or a generator PAK, give the id. An id is used as it is, with no lookup.
 
 ### Day-zero commands: `brokkr agent` and `brokkr stack`
 
@@ -452,25 +452,25 @@ Every command that adds something is safe to run again. If the label or the targ
 
 | Command | PAK | What it does |
 |---------|-----|--------------|
-| `brokkr agent create <NAME> --cluster <CLUSTER> [--tenant <NAME_OR_ID>]...` | admin | Creates the agent record and prints its PAK once, with the Helm command. |
+| `brokkr agent create <NAME> --cluster <CLUSTER> [--generator <NAME_OR_ID>]...` | admin | Creates the agent record and prints its PAK once, with the Helm command. |
 | `brokkr agent activate <AGENT>` | admin | Sets the agent status to `ACTIVE`. |
 | `brokkr agent pause <AGENT>` | admin | Sets the agent status to `INACTIVE`. |
 | `brokkr agent label <AGENT> <LABEL>` | admin | Adds a label to the agent. |
-| `brokkr agent list` | admin or tenant | Lists the agents. |
-| `brokkr stack label <STACK> <LABEL>` | admin or owning tenant | Adds a label to the stack. |
-| `brokkr stack target <STACK> <AGENT>` | admin or owning tenant | Sends the stack to the agent. |
-| `brokkr stack list` | admin or tenant | Lists the stacks. |
-| `brokkr stack status <STACK>` | admin or owning tenant | The latest revision, the agents that have the stack with their health, and the stack's health. |
-| `brokkr stack events <STACK> [--limit N]` | admin or owning tenant | The retained Kubernetes events of the stack. |
-| `brokkr stack logs <STACK> [--limit N]` | admin or owning tenant | The retained pod log lines of the stack. |
-| `brokkr stack delete <STACK>` | admin or owning tenant | Deletes the stack; each agent that has it removes its resources on its next poll. |
+| `brokkr agent list` | admin or generator | Lists the agents. |
+| `brokkr stack label <STACK> <LABEL>` | admin or owning generator | Adds a label to the stack. |
+| `brokkr stack target <STACK> <AGENT>` | admin or owning generator | Sends the stack to the agent. |
+| `brokkr stack list` | admin or generator | Lists the stacks. |
+| `brokkr stack status <STACK>` | admin or owning generator | The latest revision, the agents that have the stack with their health, and the stack's health. |
+| `brokkr stack events <STACK> [--limit N]` | admin or owning generator | The retained Kubernetes events of the stack. |
+| `brokkr stack logs <STACK> [--limit N]` | admin or owning generator | The retained pod log lines of the stack. |
+| `brokkr stack delete <STACK>` | admin or owning generator | Deletes the stack; each agent that has it removes its resources on its next poll. |
 
 #### `brokkr agent create`
 
-Creates the agent record and prints its PAK once, the Helm command that installs the agent with these values, and the next step. Each `--tenant` registers the agent with that tenant; every agent is also registered with the system generator.
+Creates the agent record and prints its PAK once, the Helm command that installs the agent with these values, and the next step. Each `--generator` registers the agent with that generator; every agent is also registered with the system generator.
 
 ```bash
-brokkr agent create prod-1 --cluster us-east-1 --tenant team-acme
+brokkr agent create prod-1 --cluster us-east-1 --generator team-acme
 ```
 
 ```
@@ -535,7 +535,7 @@ The API form is `POST /api/v1/agents/{id}/labels` with `{"agent_id": "<id>", "la
 
 #### `brokkr agent list`
 
-Lists the agents with their name, id, status, cluster and labels. An admin PAK lists all agents. A tenant PAK lists only the agents that are registered with its tenant. The broker does not show agent labels to a tenant PAK, so that list has no `LABELS` column.
+Lists the agents with their name, id, status, cluster and labels. An admin PAK lists all agents. A generator PAK lists only the agents that are registered with its generator. The broker does not show agent labels to a generator PAK, so that list has no `LABELS` column.
 
 ```bash
 brokkr agent list
@@ -561,7 +561,7 @@ added label "env:prod" to stack "payments"
 
 `brokkr apply --target-label env:prod` adds the same label when it applies a folder.
 
-After the label line, `brokkr stack label` says which agents the stack's labels reach now: the agents the PAK can see (every agent for an admin; the registered agents for a tenant) that carry one of the stack's labels. When none does, it says so, and that the stack reaches no agent until one that is registered with its tenant has one of its labels.
+After the label line, `brokkr stack label` says which agents the stack's labels reach now: the agents the PAK can see (every agent for an admin; the registered agents for a generator) that carry one of the stack's labels. When none does, it says so, and that the stack reaches no agent until one that is registered with its generator has one of its labels.
 
 #### `brokkr stack target`
 
@@ -575,10 +575,10 @@ brokkr stack target payments prod-1
 targeted stack "payments" at agent "prod-1"
 ```
 
-The agent must be registered with the tenant that owns the stack. If it is not, the broker refuses the target, and the error gives the command that registers it:
+The agent must be registered with the generator that owns the stack. If it is not, the broker refuses the target, and the error gives the command that registers it:
 
 ```
-error: invalid request: agent "prod-1" is not registered with the tenant that owns stack "payments". Register it first: brokkr register --agent <agent-id> --generator <generator-id>
+error: invalid request: agent "prod-1" is not registered with the generator that owns stack "payments". Register it first: brokkr register --agent <agent-id> --generator <generator-id>
 ```
 
 The API form is `POST /api/v1/agents/{id}/targets` with `{"agent_id": "<id>", "stack_id": "<id>"}`. The body repeats the agent id.
@@ -599,7 +599,7 @@ AGENT   DEPLOYMENT OBJECT  STATUS   CHECKED
 prod-1  d1a2b3c4-...       healthy  2026-11-07T15:00:30+00:00
 ```
 
-Before any agent has reported, the table is replaced by one line that says so. This is `GET /api/v1/stacks/{id}/deployment-objects` and `GET /api/v1/stacks/{id}/health`; the tenant that owns the stack may read both.
+Before any agent has reported, the table is replaced by one line that says so. This is `GET /api/v1/stacks/{id}/deployment-objects` and `GET /api/v1/stacks/{id}/health`; the generator that owns the stack may read both.
 
 #### `brokkr stack events` and `brokkr stack logs`
 
@@ -614,7 +614,7 @@ These are `GET /api/v1/stacks/{id}/events` and `GET /api/v1/stacks/{id}/logs`.
 
 #### `brokkr stack delete`
 
-Deletes a stack. The broker records a deletion marker, and each agent that has the stack removes its resources on its next poll. Requires an admin PAK or the PAK of the tenant that owns the stack.
+Deletes a stack. The broker records a deletion marker, and each agent that has the stack removes its resources on its next poll. Requires an admin PAK or the PAK of the generator that owns the stack.
 
 ```bash
 brokkr stack delete payments
@@ -622,7 +622,7 @@ brokkr stack delete payments
 
 #### `brokkr stack list`
 
-Lists the stacks with their name, id and labels. An admin PAK lists all stacks. A tenant PAK lists the stacks of its tenant.
+Lists the stacks with their name, id and labels. An admin PAK lists all stacks. A generator PAK lists the stacks of its generator.
 
 ```bash
 brokkr stack list

@@ -4,7 +4,7 @@ title: Using the Operator Console
 
 The Operator Console is the read-only web view of a Brokkr deployment. It is served by the broker itself, at the broker's own root URL, and it needs no credential from you — open the address in a browser and you are looking at the fleet.
 
-That convenience is also the thing to understand before you expose it. **The page hands every visitor a working read-only administrative credential.** Whoever can reach the broker's port can read the whole deployment. This guide covers how to open the console, what each view shows, how to scope it to one tenant, and — first — what its authentication model means for you.
+That convenience is also the thing to understand before you expose it. **The page hands every visitor a working read-only administrative credential.** Whoever can reach the broker's port can read the whole deployment. This guide covers how to open the console, what each view shows, how to scope it to one generator, and — first — what its authentication model means for you.
 
 ## Before You Start
 
@@ -41,13 +41,13 @@ Each time a broker process starts, it mints one random read-only credential and 
 The consequences follow directly:
 
 - **Network reachability of the broker URL is the console's entire authentication boundary.** Anyone who can fetch the page holds a working read-only admin credential. There is no second factor, no login, and no per-user identity.
-- **That credential sees everything readable, not just what the console draws.** It satisfies admin-level read checks across all tenants — the fleet rollup, every tenant's stacks, telemetry, work orders, and the [audit log](../../reference/audit-logs/), which the console itself has no screen for. Someone who copies the token out of the page can query any of it directly.
+- **That credential sees everything readable, not just what the console draws.** It satisfies admin-level read checks across all generators — the fleet rollup, every generator's stacks, telemetry, work orders, and the [audit log](../../reference/audit-logs/), which the console itself has no screen for. Someone who copies the token out of the page can query any of it directly.
 - **It cannot change anything.** Reads (`GET`/`HEAD`) are allowed anywhere. Exactly two `POST` routes are allowlisted because they do not alter desired state: credential introspection, and requesting a diagnostic for a deployment object. Every other mutation is refused with `403 Forbidden`. If you see a 403 from the console, that is the design working, not a bug.
 - **Builds without the embedded console carry no such credential at all** — the placeholder page has nothing to hand out.
 
 **Mitigate this at the network layer.** Restrict who can reach port `3000` with a NetworkPolicy or firewall rules; if the console must be available beyond the cluster, put authentication in front of it at the ingress (OIDC or basic auth on the ingress controller, for example). Treat the broker port as sensitive for read access, the same way you would treat `/metrics`. The [Security Hardening](../security-hardening/) checklist carries this item, and the [Security Model](../../explanation/security-model/#read-only-console-authentication-the-ui-pak) explains the credential class and the threat model behind the decision.
 
-> **The embedded read-only credential is the only identity a console session has.** Earlier versions also honoured a write-capable PAK placed in the browser's local storage under `brokkr_pak`, and preferred it over the embedded one — so setting it silently made the whole console write-capable. That override was removed in 0.9.0. The one action that needs more than read access, [creating a tenant](#step-6-create-a-tenant), asks for an admin PAK at the moment you use it and does not keep it.
+> **The embedded read-only credential is the only identity a console session has.** Earlier versions also honoured a write-capable PAK placed in the browser's local storage under `brokkr_pak`, and preferred it over the embedded one — so setting it silently made the whole console write-capable. That override was removed in 0.9.0. The one action that needs more than read access, [creating a generator](#step-6-create-a-generator-and-register-its-agents), asks for an admin PAK at the moment you use it and does not keep it.
 
 ## Step 3: Find Your Way Around
 
@@ -127,13 +127,13 @@ A line with a **gap** label tells you that lines are missing at that position, a
 
 The console does not use the stream to find out if its token is valid. If the broker refuses the stream, the tab shows **reconnecting**, and the REST reads show the session state as usual.
 
-## Step 4: Scope the View to One Tenant
+## Step 4: Scope the View to One Generator
 
-On a broker shared between tenants, the sidebar shows a **Tenant** selector below the navigation. It lists the tenants that the broker knows about, plus **All**. Choosing one narrows the Overview, Fleet, Deployments, and Telemetry views to that tenant's resources; the choice is remembered in your browser between visits, and falls back to **All** if the tenant it named has since been removed.
+On a broker shared between generators, the sidebar shows a **Generator** selector below the navigation. It lists the generators that the broker knows about, plus **All**. Choosing one narrows the Overview, Fleet, Deployments, and Telemetry views to that generator's resources; the choice is remembered in your browser between visits, and falls back to **All** if the generator it named has since been removed.
 
-On a single-tenant install there is nothing to choose, so the selector is hidden entirely. It is also hidden if the tenant listing cannot be read — the views still work, unscoped.
+On a single-generator install there is nothing to choose, so the selector is hidden entirely. It is also hidden if the generator listing cannot be read — the views still work, unscoped.
 
-**The tenant selector is a view filter, not an authorization boundary.** It trims what the console displays; it does not restrict what the console's credential is permitted to read, and switching back to **All** is a click away for anyone using the page. Real isolation comes from tenant ownership, described in [Setting Up Multi-Tenant Operation](../multi-tenant-setup/) and the [Multi-Tenancy reference](../../reference/multi-tenancy/). Never treat the selector as a way to show one tenant's operators only their own data.
+**The generator selector is a view filter, not an authorization boundary.** It trims what the console displays; it does not restrict what the console's credential is permitted to read, and switching back to **All** is a click away for anyone using the page. Real isolation comes from generator ownership, described in [Setting Up Multi-Generator Operation](../multi-generator-setup/) and the [Multi-Tenancy reference](../../reference/multi-tenancy/). Never treat the selector as a way to show one generator's operators only their own data.
 
 ## Step 5: Run a Diagnostic on an Agent
 
@@ -150,7 +150,7 @@ For the request lifecycle, retention, and how to drive the same capability from 
 
 ## Create an Agent
 
-Open **Fleet** and choose **+ New agent**. Give the agent a name and its cluster, switch on the tenants it serves, and paste an admin PAK. The panel that follows shows the agent id, the Helm command that installs the agent with these values, and the PAK, each with a **Copy** button. The PAK is shown once: copy it before you choose **Done**. Escape and × do nothing while it is on screen.
+Open **Fleet** and choose **+ New agent**. Give the agent a name and its cluster, switch on the generators it serves, and paste an admin PAK. The panel that follows shows the agent id, the Helm command that installs the agent with these values, and the PAK, each with a **Copy** button. The PAK is shown once: copy it before you choose **Done**. Escape and × do nothing while it is on screen.
 
 The Helm command uses the address of this page as the broker URL. If the cluster reaches the broker by another address, change `broker.url` before you run it.
 
@@ -160,7 +160,7 @@ The equivalents outside the console are `brokkr agent create` and `POST /api/v1/
 
 ## Pause or Resume an Agent
 
-Open **Fleet**, click the agent, and use the control under **Agent state**. Like tenant creation, it asks for an admin PAK for that one request — the console's own credential is read-only and cannot change agent state.
+Open **Fleet**, click the agent, and use the control under **Agent state**. Like generator creation, it asks for an admin PAK for that one request — the console's own credential is read-only and cannot change agent state.
 
 **What pausing does:** the agent stops fetching deployment objects and stops picking up work orders. It also stops health checks, diagnostics and webhook deliveries, so a diagnostic that you request for a paused agent stays pending. It keeps heartbeating, so it stays visible and healthy in the console rather than looking offline.
 
@@ -172,50 +172,50 @@ The change takes effect within a poll cycle — the agent re-reads its own recor
 
 The equivalent outside the console is `PUT /api/v1/agents/{id}` with `{"status": "INACTIVE"}`. A newly created agent starts paused (`INACTIVE`) and must be activated before it applies anything — the same control does that.
 
-## Step 6: Create a Tenant and Register Its Agents
+## Step 6: Create a Generator and Register Its Agents
 
-**Tenants** lists the tenants on this broker, and is where the console writes. Because a tenant's PAK is a credential, and a registration decides which clusters run a tenant's stacks, the console will not do either on the strength of the read-only identity it carries — you supply an admin PAK.
+**Generators** lists the generators on this broker, and is where the console writes. Because a generator's PAK is a credential, and a registration decides which clusters run a generator's stacks, the console will not do either on the strength of the read-only identity it carries — you supply an admin PAK.
 
-The admin does three things once per tenant: create it, activate its agent, and register the agent with it. The first and the third happen in this one dialog; the second is the **Activate** control in the agent's drawer under **Fleet**.
+The admin does three things once per generator: create it, activate its agent, and register the agent with it. The first and the third happen in this one dialog; the second is the **Activate** control in the agent's drawer under **Fleet**.
 
-1. Open **Tenants** in the sidebar and choose **+ New tenant**.
-2. Give the tenant a name, and a description if it helps whoever inherits it.
+1. Open **Generators** in the sidebar and choose **+ New generator**.
+2. Give the generator a name, and a description if it helps whoever inherits it.
 3. Paste an **admin PAK**. The console holds it in memory while the dialog is open, for this step and the next.
-4. Choose **Create tenant**.
+4. Choose **Create generator**.
 
-The new tenant's **id** and its **PAK** are then shown, each with a **Copy** button. The id is what a stack names as its owner and what an agent lists under `broker.generatorIds`; the PAK is shown once.
+The new generator's **id** and its **PAK** are then shown, each with a **Copy** button. The id is what a stack names as its owner and what an agent lists under `broker.generatorIds`; the PAK is shown once.
 
 > **Copy the PAK before you choose Done.** The broker stores only a hash, so a PAK that is not captured cannot be recovered — the only remedy is [rotating it](../pak-management/#rotating-generator-paks). While the PAK is on screen, Escape and the × button do nothing: only **Done** closes the dialog. This is the same one-shot behaviour as `brokkr-broker create generator`.
 
-5. Under **registered agents**, pick an agent and choose **Register**. Repeat for each cluster that should run this tenant's stacks. Registration is the agent's consent to receive the tenant's stacks: until an agent is registered, the tenant cannot target it and a label match is ignored.
+5. Under **registered agents**, pick an agent and choose **Register**. Repeat for each cluster that should run this generator's stacks. Registration is the agent's consent to receive the generator's stacks: until an agent is registered, the generator cannot target it and a label match is ignored.
 6. Choose **Done**. The dialog clears the PAKs it held.
 
-The admin PAK you pasted is held in memory for that dialog and cleared as soon as it closes, whether the mint succeeded or not. It is never written to browser storage and never logged, so creating a second tenant asks for it again — deliberately, so that a browser left open is not a standing admin credential.
+The admin PAK you pasted is held in memory for that dialog and cleared as soon as it closes, whether the mint succeeded or not. It is never written to browser storage and never logged, so creating a second generator asks for it again — deliberately, so that a browser left open is not a standing admin credential.
 
 If the PAK is rejected, the dialog says whether it was not an admin credential (403) or the name was already taken (409). Nothing is created in either case.
 
-Outside the console, use `POST /api/v1/generators` or `brokkr-broker create generator` (the API calls a tenant a generator); see [Generators](../../reference/generators/). Agents are created from **Fleet**; see [Create an Agent](#create-an-agent).
+Outside the console, use `POST /api/v1/generators` or `brokkr-broker create generator`; see [Generators](../../reference/generators/). Agents are created from **Fleet**; see [Create an Agent](#create-an-agent).
 
-## Tenant Detail
+## Generator Detail
 
-Click a tenant in the **Tenants** list for its drawer: the id with a **Copy** button, the description, when it was last active, **registered agents** — the agents that serve it, each a link to its Fleet drawer — and its **credential**. One **Admin PAK** field serves the writes below it; each request clears it.
+Click a generator in the **Generators** list for its drawer: the id with a **Copy** button, the description, when it was last active, **registered agents** — the agents that serve it, each a link to its Fleet drawer — and its **credential**. One **Admin PAK** field serves the writes below it; each request clears it.
 
 - **Register** an agent: paste an admin PAK, pick an agent that is not registered yet, and choose **Register**. The PAK is used for that one request and cleared.
-- **Deregister** an agent: paste an admin PAK and choose **Deregister** next to the agent. A confirmation says what follows, because this is destructive: the broker removes the agent's targets for this tenant's stacks and tells the agent, which prunes those resources from its cluster on its next reconcile.
+- **Deregister** an agent: paste an admin PAK and choose **Deregister** next to the agent. A confirmation says what follows, because this is destructive: the broker removes the agent's targets for this generator's stacks and tells the agent, which prunes those resources from its cluster on its next reconcile.
 
 - **Rotate PAK**: paste an admin PAK and choose **Rotate PAK**. A confirmation says what follows: the current PAK stops working at once, and every pipeline that uses it fails until it has the new one. The new PAK is then shown once, in a dialog that only **Done** closes, the same as a mint. See [Rotating Generator PAKs](../pak-management/#rotating-generator-paks).
 
 The system generator has no registration or rotation controls: every agent is registered with it, so fleet-wide stacks reach them all.
 
-The equivalents outside the console are `brokkr register`, `brokkr deregister` and `brokkr registrations --generator <tenant>`; see [Agent Registration](../agent-registration/).
+The equivalents outside the console are `brokkr register`, `brokkr deregister` and `brokkr registrations --generator <generator>`; see [Agent Registration](../agent-registration/).
 
-The agent's drawer under **Fleet** shows the other side: the tenants that agent is registered with, without the system generator.
+The agent's drawer under **Fleet** shows the other side: the generators that agent is registered with, without the system generator.
 
 ## Running More Than One Broker Replica
 
 Each broker process mints its own console credential, and a credential minted by one replica is rejected by the others. A browser served the console page by replica A and then load-balanced onto replica B will find its API calls refused.
 
-**Enable session affinity (sticky sessions) on whatever fronts your brokers** whenever more than one replica serves console traffic, so a browser keeps talking to the replica that served it the page. Reloading the page also fixes an individual session, since the reload picks up the current replica's credential — but affinity is what makes the console usable rather than intermittent. Agent, tenant, and admin PAK authentication is unaffected; those credentials verify identically on every replica. See [Horizontal Broker Scaling](../../explanation/architecture/#horizontal-broker-scaling).
+**Enable session affinity (sticky sessions) on whatever fronts your brokers** whenever more than one replica serves console traffic, so a browser keeps talking to the replica that served it the page. Reloading the page also fixes an individual session, since the reload picks up the current replica's credential — but affinity is what makes the console usable rather than intermittent. Agent, generator, and admin PAK authentication is unaffected; those credentials verify identically on every replica. See [Horizontal Broker Scaling](../../explanation/architecture/#horizontal-broker-scaling).
 
 ## The Console Is Not `examples/ui-slim`
 

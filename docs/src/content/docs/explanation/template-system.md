@@ -59,7 +59,7 @@ Templates can have labels and annotations that restrict which stacks they can be
 
 The matching is strict AND logic: the stack must have **every** label and annotation the template requires. Extra labels on the stack are ignored — it only matters that the required ones are present.
 
-The important default: a template carrying **no** labels and no annotations matches every stack unconditionally. Templates are "go anywhere" until somebody constrains them. That default is deliberate — most templates are meant to be broadly usable, and requiring ceremony to make a template work would push people back toward hand-written YAML. It also means matching is a guardrail, not a boundary: the thing that keeps a template out of another tenant's hands is ownership (Step 1), not labels.
+The important default: a template carrying **no** labels and no annotations matches every stack unconditionally. Templates are "go anywhere" until somebody constrains them. That default is deliberate — most templates are meant to be broadly usable, and requiring ceremony to make a template work would push people back toward hand-written YAML. It also means matching is a guardrail, not a boundary: the thing that keeps a template out of another generator's hands is ownership (Step 1), not labels.
 
 For the complete matching rules table with examples, see the [Templates Reference](../../reference/templates/#matching-rules).
 
@@ -163,7 +163,7 @@ This separation allows centralized governance (admin-managed standards) while st
 
 Ownership travels with instantiation, not just with reads. A generator that supplies another generator's template identifier is refused, whether or not it owns the target stack and whether or not the labels would have matched — knowing an identifier grants nothing. Templates are not a shared pool addressed by UUID.
 
-That leaves system templates as the one sanctioned way to share a template across tenants: promote it to a system template and every generator can use it. There is no per-generator grant, and no way to share one template with some tenants but not others — sharing is all-or-nothing by design, which keeps the ownership rule simple enough to reason about.
+That leaves system templates as the one sanctioned way to share a template across generators: promote it to a system template and every generator can use it. There is no per-generator grant, and no way to share one template with some generators but not others — sharing is all-or-nothing by design, which keeps the ownership rule simple enough to reason about.
 
 ## Why Tera?
 
