@@ -189,7 +189,7 @@ struct CreatedReveal {
     name: String,
     cluster: String,
     pak: String,
-    tenant_ids: Vec<String>,
+    generator_ids: Vec<String>,
 }
 
 /// The origin of this page: the broker that serves the console. The agent
@@ -207,7 +207,7 @@ fn helm_install_command(
     pak: &str,
     name: &str,
     cluster: &str,
-    tenant_ids: &[String],
+    generator_ids: &[String],
 ) -> String {
     let mut lines = vec![
         "helm install brokkr-agent oci://ghcr.io/colliery-io/charts/brokkr-agent \\".to_string(),
@@ -216,12 +216,12 @@ fn helm_install_command(
         format!("  --set broker.agentName={name} \\"),
         format!("  --set broker.clusterName={cluster}"),
     ];
-    if !tenant_ids.is_empty() {
+    if !generator_ids.is_empty() {
         let last = lines.len() - 1;
         lines[last].push_str(" \\");
         lines.push(format!(
             "  --set broker.generatorIds=\"{{{}}}\"",
-            tenant_ids.join(",")
+            generator_ids.join(",")
         ));
     }
     lines.join("\n")
@@ -230,7 +230,7 @@ fn helm_install_command(
 #[component]
 pub fn FleetView() -> impl IntoView {
     // Scope-reactive (BROKKR-I-0032): reading the scope signal inside the
-    // fetcher makes the resource refetch when the tenant selection changes.
+    // fetcher makes the resource refetch when the generator selection changes.
     let scope = crate::app::use_scope();
     let data = LocalResource::new(move || api::fleet(scope.get()));
     crate::components::poll(move || data.refetch(), std::time::Duration::from_secs(5));
@@ -239,8 +239,8 @@ pub fn FleetView() -> impl IntoView {
     let toaster = use_toaster();
     // Stack names for the drawer's links (BROKKR-T-0337).
     let stacks = LocalResource::new(move || api::stacks(scope.get()));
-    // The tenants the selected agent is registered with (BROKKR-T-0368), and
-    // the tenant list for their names. The system generator is left out: every
+    // The generators the selected agent is registered with (BROKKR-T-0368), and
+    // the generator list for their names. The system generator is left out: every
     // agent is registered with it, so it says nothing about this one.
     let generators = LocalResource::new(api::generators);
     let registrations = LocalResource::new(move || {
@@ -290,7 +290,7 @@ pub fn FleetView() -> impl IntoView {
 
     // Pause/resume (BROKKR-T-0322). Changing an agent's status is a privileged
     // write, so it takes an admin PAK supplied for that one request — the same
-    // shape as tenant minting. Memory only, cleared as soon as the request
+    // shape as generator minting. Memory only, cleared as soon as the request
     // resolves on either path.
     let pause_pak = RwSignal::new(String::new());
     let pause_busy = RwSignal::new(false);
@@ -343,7 +343,7 @@ pub fn FleetView() -> impl IntoView {
         std::time::Duration::from_millis(POLL_EVERY_MS),
     );
     // ---- New agent (BROKKR-T-0372) ---------------------------------------
-    // The shape of New tenant: name, cluster, the tenants to register with,
+    // The shape of New generator: name, cluster, the generators to register with,
     // an admin PAK held while the dialog is open. The reveal panel shows the
     // PAK once and the Helm command with the values filled in.
     let new_open = RwSignal::new(false);
@@ -352,8 +352,8 @@ pub fn FleetView() -> impl IntoView {
     let new_pak = RwSignal::new(String::new());
     let new_busy = RwSignal::new(false);
     let new_error = RwSignal::new(None::<String>);
-    // The tenants to pick from: `(id, name, picked)`, set when the dialog opens.
-    let new_tenants = RwSignal::new(Vec::<(String, String, RwSignal<bool>)>::new());
+    // The generators to pick from: `(id, name, picked)`, set when the dialog opens.
+    let new_generators = RwSignal::new(Vec::<(String, String, RwSignal<bool>)>::new());
     let created = RwSignal::new(None::<CreatedReveal>);
     let new_locked = Signal::derive(move || new_busy.get() || created.get().is_some());
     let reset_new = move || {
@@ -361,7 +361,7 @@ pub fn FleetView() -> impl IntoView {
         new_cluster.set(String::new());
         new_pak.set(String::new());
         new_error.set(None);
-        new_tenants.set(Vec::new());
+        new_generators.set(Vec::new());
         created.set(None);
     };
     let submit_new = move || {
@@ -376,7 +376,7 @@ pub fn FleetView() -> impl IntoView {
             new_error.set(Some("Enter an admin PAK to create an agent.".into()));
             return;
         }
-        let ids: Vec<String> = new_tenants
+        let ids: Vec<String> = new_generators
             .get()
             .into_iter()
             .filter(|(_, _, on)| on.get())
@@ -396,7 +396,7 @@ pub fn FleetView() -> impl IntoView {
                         name: resp.agent.name,
                         cluster: resp.agent.cluster_name,
                         pak: resp.initial_pak,
-                        tenant_ids: ids,
+                        generator_ids: ids,
                     }));
                     data.refetch();
                 }
@@ -419,7 +419,7 @@ pub fn FleetView() -> impl IntoView {
         <Group justify="end">
             <Button on_click=Callback::new(move |_| {
                 reset_new();
-                let tenants = generators
+                let generators = generators
                     .get()
                     .and_then(|r| r.ok())
                     .unwrap_or_default()
@@ -427,7 +427,7 @@ pub fn FleetView() -> impl IntoView {
                     .filter(|g| !g.is_system)
                     .map(|g| (g.id, g.name, RwSignal::new(false)))
                     .collect();
-                new_tenants.set(tenants);
+                new_generators.set(generators);
                 new_open.set(true);
             })>"+ New agent"</Button>
         </Group>
@@ -554,7 +554,7 @@ pub fn FleetView() -> impl IntoView {
                         &c.pak,
                         &c.name,
                         &c.cluster,
-                        &c.tenant_ids,
+                        &c.generator_ids,
                     );
                     view! {
                         <Stack gap="md">
@@ -590,15 +590,15 @@ pub fn FleetView() -> impl IntoView {
                         <TextInput label="Name" placeholder="prod-1" value=new_name />
                         <TextInput label="Cluster" placeholder="us-east-1" value=new_cluster />
                         {move || {
-                            let tenants = new_tenants.get();
-                            if tenants.is_empty() {
+                            let generators = new_generators.get();
+                            if generators.is_empty() {
                                 return ().into_any();
                             }
-                            let rows = tenants.into_iter().map(|(_, name, on)| view! {
+                            let rows = generators.into_iter().map(|(_, name, on)| view! {
                                 <Switch checked=on label=name />
                             }).collect_view();
                             view! {
-                                <SectionLabel label="tenants" />
+                                <SectionLabel label="generators" />
                                 <Stack gap="xs">{rows}</Stack>
                             }.into_any()
                         }}
@@ -788,11 +788,11 @@ pub fn FleetView() -> impl IntoView {
                                 }
                             }}
                             <Anchor href=agent_events_href(&a_id_links)>"Events of this agent"</Anchor>
-                            // ---- the tenants this agent serves (BROKKR-T-0368) ----
-                            <SectionLabel label="tenants" />
+                            // ---- the generators this agent serves (BROKKR-T-0368) ----
+                            <SectionLabel label="generators" />
                             {move || match registrations.get() {
-                                None | Some(None) => view! { <Loading label="loading tenants" /> }.into_any(),
-                                Some(Some(Err(_))) => view! { <span class="brk-note">"tenants unavailable"</span> }.into_any(),
+                                None | Some(None) => view! { <Loading label="loading generators" /> }.into_any(),
+                                Some(Some(Err(_))) => view! { <span class="brk-note">"generators unavailable"</span> }.into_any(),
                                 Some(Some(Ok(regs))) => {
                                     let gens = generators.get().and_then(|r| r.ok()).unwrap_or_default();
                                     let names: Vec<String> = regs
@@ -803,7 +803,7 @@ pub fn FleetView() -> impl IntoView {
                                     if names.is_empty() {
                                         return view! {
                                             <span class="brk-note">
-                                                "No tenant has registered this agent. Only fleet-wide stacks reach it. To register it, open the tenant under Tenants."
+                                                "No generator has registered this agent. Only fleet-wide stacks reach it. To register it, open the generator under Generators."
                                             </span>
                                         }.into_any();
                                     }

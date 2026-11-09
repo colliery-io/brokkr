@@ -4,7 +4,7 @@ title: Working with Generators
 
 A generator is an identity principal — a CI/CD pipeline, automation tool, service, or team — that creates and manages Brokkr resources. Each generator receives a Prefixed API Key (PAK) scoped to itself: it can create stacks, templates, and deployment objects, but can only access resources it created. Unlike the admin PAK, a generator PAK cannot perform administrative operations such as creating other generators or managing agents.
 
-**The generator is also Brokkr's tenant.** Creating a generator and handing over its PAK is how you onboard a team or an application onto a shared broker: its stacks are its own, its templates are private to it, and an agent only receives its stacks after registering with it. Generators are what the operator console's tenant scope selector lists, and what `?pak_id=` narrows admin listings to. If you are standing up a multi-team install, start from [Multi-Tenant Setup](../multi-tenant-setup/), which uses the steps below as its onboarding path; for the tenancy rules themselves see [Multi-Tenancy](../../reference/multi-tenancy/).
+**A generator is the unit of isolation.** Creating a generator and handing over its PAK is how you onboard a team or an application onto a shared broker: its stacks are its own, its templates are private to it, and an agent only receives its stacks after registering with it. Generators are what the operator console's scope selector lists, and what `?pak_id=` narrows admin listings to. If you are standing up a multi-team install, start from [Multi-Generator Setup](../multi-generator-setup/), which uses the steps below as its onboarding path; for the tenancy rules themselves see [Multi-Tenancy](../../reference/multi-tenancy/).
 
 This guide covers creating generators, integrating them with CI/CD systems, registering agents, and managing their lifecycle.
 
@@ -52,7 +52,7 @@ The response includes the generator details and its PAK:
 With the `brokkr` CLI, the same step is one command with the admin PAK; it prints the id and the PAK once:
 
 ```bash
-brokkr --pak "$ADMIN_PAK" tenant create github-actions-prod --description "Production deployment pipeline"
+brokkr --pak "$ADMIN_PAK" generator create github-actions-prod --description "Production deployment pipeline"
 ```
 
 ### Step 2: Store the PAK Securely
@@ -66,16 +66,16 @@ The PAK is only returned once at creation time, and the generator's UUID is what
 
 If you lose the PAK, you'll need to rotate it (see PAK Rotation below).
 
-If you have the PAK but not the ID, read it back from the credential itself — the `generator` field is the tenant ID:
+If you have the PAK but not the ID, read it back from the credential itself — the `generator` field is the generator ID:
 
 ```bash
 curl -s -X POST "http://broker:3000/api/v1/auth/pak" \
   -H "Authorization: Bearer $GENERATOR_PAK" | jq -r '.generator'
 ```
 
-### Step 3: Confirm It Appears as a Tenant
+### Step 3: Confirm It Appears in the List
 
-A new generator is immediately a tenant. Confirm it shows up in the tenant list that backs the operator console's scope selector (admin credential required):
+A new generator is a scope at once. Confirm it shows up in the generator list that backs the operator console's scope selector (admin credential required):
 
 ```bash
 curl -s "http://broker:3000/api/v1/paks" \
@@ -187,7 +187,7 @@ An agent must be registered with a generator before any of that generator's stac
 
 Registration is performed by an admin or by the agent itself — a generator PAK cannot register agents on its own behalf. This section covers registration from the admin's side; for the full operational workflow (including agent self-registration at startup) see [Agent Registration](../agent-registration/).
 
-In the operator console, the same happens under **Tenants**: the New tenant dialog registers agents right after the mint, and a tenant's drawer registers and deregisters later. Each asks for an admin PAK. See [Using the Operator Console](../operator-console/#step-6-create-a-tenant-and-register-its-agents).
+In the operator console, the same happens under **Generators**: the New generator dialog registers agents right after the mint, and a generator's drawer registers and deregisters later. Each asks for an admin PAK. See [Using the Operator Console](../operator-console/#step-6-create-a-generator-and-register-its-agents).
 
 ### Step 1: Register an Agent
 
@@ -252,13 +252,13 @@ brokkr deregister --agent <agent-id> --generator <generator-id>
 # List registrations by agent or by generator
 brokkr registrations --generator <generator-id>
 
-# Create a tenant (prints its id and its PAK, once) and list the tenants
-brokkr tenant create <name> --description <text>
-brokkr tenant list
+# Create a generator (prints its id and its PAK, once) and list the generators
+brokkr generator create <name> --description <text>
+brokkr generator list
 
-# As the tenant: what this PAK is, rotate it, see where a stack is
+# As the generator: what this PAK is, rotate it, see where a stack is
 brokkr whoami
-brokkr tenant rotate
+brokkr generator rotate
 brokkr stack status <stack>
 ```
 
@@ -303,9 +303,9 @@ Generators operate under a scoped permission model: a generator PAK can manage t
 
 ## Best Practices
 
-### One Generator Per Pipeline or Team
+### One Generator Per Scope
 
-Create a separate generator for each deployment pipeline or team. Because the generator is the tenant, this is what gives you clear resource ownership, independent PAK rotation, per-team separation, scoped operator views, and easier auditing. Sharing one generator across two teams merges them into one tenant.
+Create one generator per scope you want kept apart. A generator per pipeline means each pipeline is its own scope, with its own stacks and its own agent registrations. Each scope then has its own PAK to rotate, its own view in the console, and its own trail in the audit log.
 
 ### Naming Conventions
 
@@ -351,8 +351,8 @@ If you've lost a generator's PAK:
 ## Related Documentation
 
 - [Generators API Reference](../../reference/generators/) - Complete API documentation
-- [Multi-Tenancy](../../reference/multi-tenancy/) - The tenant model, tenant listing, and `pak_id` scoped views
-- [Multi-Tenant Setup](../multi-tenant-setup/) - Onboarding multiple teams onto one broker
-- [Agent Registration](../agent-registration/) - Registering agents with generators (tenant consent)
+- [Multi-Tenancy](../../reference/multi-tenancy/) - The generator model, generator listing, and `pak_id` scoped views
+- [Multi-Generator Setup](../multi-generator-setup/) - Onboarding multiple teams onto one broker
+- [Agent Registration](../agent-registration/) - Registering agents with generators (the agent's consent)
 - [Stack Templates](../templates/) - Using templates with generators
 - [Authentication](../../explanation/security-model/) - Understanding Brokkr authentication

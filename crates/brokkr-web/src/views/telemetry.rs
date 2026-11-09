@@ -45,7 +45,7 @@ fn Retention(info: RetentionInfo) -> impl IntoView {
 #[component]
 pub fn TelemetryView() -> impl IntoView {
     let tab = RwSignal::new(String::from("agent"));
-    // Scope-reactive (BROKKR-I-0032): refetches when the tenant selection changes.
+    // Scope-reactive (BROKKR-I-0032): refetches when the generator selection changes.
     let scope = crate::app::use_scope();
     let events = LocalResource::new(move || api::agent_events(scope.get()));
     let stacks = LocalResource::new(move || api::stacks(scope.get()));

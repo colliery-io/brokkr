@@ -19,12 +19,12 @@ Look-up material for Brokkr: endpoints, flags, fields, codes, and defaults. Each
 
 ## Resources
 
-- [Generators](generators/) — the generator (tenant) resource, its registration surface, and the system generator
+- [Generators](generators/) — the generator resource, its registration surface, and the system generator
 - [Templates](templates/) — stack template fields, parameter schemas, and matching rules
 - [Work Orders](work-orders/) — the work-order lifecycle, states, and claim semantics
 - [Webhooks](webhooks/) — subscription fields, event payloads, filters, and delivery behavior
 - [Agent Annotations & Labels](agent-annotations/) — reserved keys and validation rules
-- [Multi-Tenancy](multi-tenancy/) — how tenant scope is expressed and enforced across resources
+- [Multi-Tenancy](multi-tenancy/) — how generator scope is expressed and enforced across resources
 - [Soft Deletion](soft-deletion/) — which resources soft-delete, and what that implies for names and queries
 
 ## Observability

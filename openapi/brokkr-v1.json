@@ -1071,7 +1071,7 @@
         "description": "Summary of health for a deployment object within a stack.",
         "properties": {
           "agents": {
-            "description": "The report of each agent, by agent id (BROKKR-T-0379). This is how a\ntenant learns which clusters have its stack.",
+            "description": "The report of each agent, by agent id (BROKKR-T-0379). This is how a\ngenerator learns which clusters have its stack.",
             "items": {
               "$ref": "#/components/schemas/AgentHealthReport"
             },
@@ -1876,15 +1876,15 @@
         "type": "object"
       },
       "PakSummary": {
-        "description": "One tenant entry for the console scope selector: a named PAK owner\n(generator) reduced to its identity.",
+        "description": "One generator entry for the console scope selector: a named PAK owner\n(generator) reduced to its identity.",
         "properties": {
           "id": {
-            "description": "The tenant's generator ID (used as `?pak_id=` in scoped queries).",
+            "description": "The generator's generator ID (used as `?pak_id=` in scoped queries).",
             "format": "uuid",
             "type": "string"
           },
           "name": {
-            "description": "Human-readable tenant name (the generator name).",
+            "description": "Human-readable generator name (the generator name).",
             "type": "string"
           }
         },
@@ -3333,7 +3333,7 @@
         "operationId": "list_agent_events",
         "parameters": [
           {
-            "description": "Tenant (generator) ID to scope the listing to.",
+            "description": "Generator (generator) ID to scope the listing to.",
             "in": "query",
             "name": "pak_id",
             "required": false,
@@ -5771,7 +5771,7 @@
         "operationId": "list_fleet",
         "parameters": [
           {
-            "description": "Tenant (generator) ID to scope the listing to.",
+            "description": "Generator (generator) ID to scope the listing to.",
             "in": "query",
             "name": "pak_id",
             "required": false,
@@ -6476,7 +6476,7 @@
                 }
               }
             },
-            "description": "List of named PAKs (tenants)"
+            "description": "List of named PAKs (generators)"
           },
           "403": {
             "content": {
@@ -6504,7 +6504,7 @@
             "admin_pak": []
           }
         ],
-        "summary": "Lists named PAKs (tenants) for scope selection.",
+        "summary": "Lists named PAKs (generators) for scope selection.",
         "tags": [
           "auth"
         ]
@@ -6515,7 +6515,7 @@
         "operationId": "list_stacks",
         "parameters": [
           {
-            "description": "Tenant (generator) ID to scope the listing to.",
+            "description": "Generator (generator) ID to scope the listing to.",
             "in": "query",
             "name": "pak_id",
             "required": false,
@@ -7383,7 +7383,7 @@
                 }
               }
             },
-            "description": "Forbidden - not an admin, and not the tenant that owns the stack"
+            "description": "Forbidden - not an admin, and not the generator that owns the stack"
           },
           "404": {
             "content": {

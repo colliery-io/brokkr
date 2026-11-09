@@ -8,7 +8,7 @@ name: BDD Features
 # broker, the client, the features or this file. CI gate requires it.
 #
 # Each feature gets its own runner and its own compose stack: the
-# tenant-after-apply feature waits for the stack's agent to report, and the
+# generator-after-apply feature waits for the stack's agent to report, and the
 # features are faster side by side than in one row.
 on:
   workflow_call:
@@ -24,7 +24,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        feature: [tenant-onboarding, agent-onboarding, tenant-after-apply, tenants-apart]
+        feature: [generator-onboarding, agent-onboarding, generator-after-apply, generators-apart]
     steps:
       - uses: actions/checkout@v6
         with:

@@ -50,8 +50,8 @@ pub enum AgentCommand {
 
     /// List the agents with their name, id, status, cluster and labels.
     ///
-    /// An admin PAK lists all agents. A tenant PAK lists the agents that are
-    /// registered with its tenant.
+    /// An admin PAK lists all agents. A generator PAK lists the agents that are
+    /// registered with its generator.
     List,
 }
 
@@ -62,26 +62,26 @@ pub enum StackCommand {
     /// The stack goes to each agent that has the same label. The label has
     /// the form key:value, for example env:prod. If the stack has the label
     /// already, the command changes nothing. Requires an admin PAK or the PAK
-    /// of the tenant that owns the stack.
+    /// of the generator that owns the stack.
     Label(StackLabelArgs),
 
     /// Send a stack to one agent, whatever the labels of the agent are.
     ///
-    /// The agent must be registered with the tenant that owns the stack. If
+    /// The agent must be registered with the generator that owns the stack. If
     /// the target exists already, the command changes nothing. Requires an
-    /// admin PAK or the PAK of the tenant that owns the stack.
+    /// admin PAK or the PAK of the generator that owns the stack.
     Target(StackTargetArgs),
 
     /// List the stacks with their name, id and labels.
     ///
-    /// An admin PAK lists all stacks. A tenant PAK lists the stacks of its
-    /// tenant.
+    /// An admin PAK lists all stacks. A generator PAK lists the stacks of its
+    /// generator.
     List,
 
     /// Show where a stack is and whether it is healthy.
     ///
     /// The latest revision, then each agent that has the stack with its
-    /// health report. Requires an admin PAK or the PAK of the tenant that
+    /// health report. Requires an admin PAK or the PAK of the generator that
     /// owns the stack.
     Status(StackRef),
 
@@ -89,20 +89,20 @@ pub enum StackCommand {
     ///
     /// The agents that apply the stack report the events of the objects
     /// they manage. The broker keeps a short window of them. Requires an
-    /// admin PAK or the PAK of the tenant that owns the stack.
+    /// admin PAK or the PAK of the generator that owns the stack.
     Events(StackTelemetryArgs),
 
     /// Show the retained pod log lines of a stack.
     ///
     /// Only pods whose template carries the stream-logs annotation are
     /// streamed. The broker keeps a short window. Requires an admin PAK or
-    /// the PAK of the tenant that owns the stack.
+    /// the PAK of the generator that owns the stack.
     Logs(StackTelemetryArgs),
 
     /// Delete a stack.
     ///
     /// Each agent that has the stack removes its resources on its next poll.
-    /// Requires an admin PAK or the PAK of the tenant that owns the stack.
+    /// Requires an admin PAK or the PAK of the generator that owns the stack.
     Delete(StackRef),
 }
 
@@ -134,11 +134,11 @@ pub struct AgentCreateArgs {
     #[arg(long, value_name = "CLUSTER")]
     cluster: String,
 
-    /// A tenant to register the agent with, by name or id. Repeatable. The
-    /// API calls a tenant a generator. Every agent is also registered with
+    /// A generator to register the agent with, by name or id. Repeatable.
+    /// Every agent is also registered with
     /// the system generator.
-    #[arg(long = "tenant", value_name = "NAME_OR_ID")]
-    tenants: Vec<String>,
+    #[arg(long = "generator", alias = "tenant", value_name = "NAME_OR_ID")]
+    generators: Vec<String>,
 }
 
 #[derive(Debug, Args)]
@@ -235,11 +235,11 @@ pub fn parse_label(raw: &str) -> Result<String, String> {
 pub async fn agent(client: &BrokkrClient, command: AgentCommand) -> Result<(), String> {
     match command {
         AgentCommand::Create(args) => {
-            let mut ids = Vec::with_capacity(args.tenants.len());
-            for tenant in &args.tenants {
+            let mut ids = Vec::with_capacity(args.generators.len());
+            for generator in &args.generators {
                 ids.push(
                     client
-                        .resolve_generator_id(tenant)
+                        .resolve_generator_id(generator)
                         .await
                         .map_err(|e| e.to_string())?,
                 );
@@ -359,7 +359,7 @@ pub async fn stack(client: &BrokkrClient, command: StackCommand) -> Result<(), S
                 );
             }
             // Which agents the stack's labels reach now (BROKKR-T-0380). An
-            // admin sees every agent; a tenant sees the agents registered
+            // admin sees every agent; a generator sees the agents registered
             // with it, which are the only ones a label can reach.
             let stack_labels = client
                 .stack_labels(stack.id)
@@ -505,7 +505,7 @@ pub fn label_match_line(stack: &str, matching: &[String]) -> String {
     if matching.is_empty() {
         format!(
             "no agent matches the labels of stack \"{stack}\". The stack reaches none until \
-             an agent that is registered with its tenant has one of its labels."
+             an agent that is registered with its generator has one of its labels."
         )
     } else {
         format!(
@@ -620,7 +620,7 @@ mod tests {
             none.starts_with("no agent matches the labels of stack \"payments\"."),
             "{none}"
         );
-        assert!(none.contains("registered with its tenant"), "{none}");
+        assert!(none.contains("registered with its generator"), "{none}");
     }
 
     #[test]

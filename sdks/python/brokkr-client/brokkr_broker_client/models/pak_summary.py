@@ -12,12 +12,12 @@ T = TypeVar("T", bound="PakSummary")
 
 @_attrs_define
 class PakSummary:
-    """One tenant entry for the console scope selector: a named PAK owner
+    """One generator entry for the console scope selector: a named PAK owner
     (generator) reduced to its identity.
 
         Attributes:
-            id (UUID): The tenant's generator ID (used as `?pak_id=` in scoped queries).
-            name (str): Human-readable tenant name (the generator name).
+            id (UUID): The generator's generator ID (used as `?pak_id=` in scoped queries).
+            name (str): Human-readable generator name (the generator name).
     """
 
     id: UUID

@@ -56,7 +56,7 @@ async fn list_agent_events(
         ));
     }
     let events = match scope.pak_id {
-        // Tenant scope (BROKKR-T-0270): only events from agents registered
+        // Generator scope (BROKKR-T-0270): only events from agents registered
         // under this generator.
         Some(pak_id) => dal.agent_events().list_for_generator(pak_id),
         None => dal.agent_events().list(),

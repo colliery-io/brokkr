@@ -5,7 +5,7 @@
  */
 
 //! The broker API, for the steps that have no CLI command (a record read
-//! with another tenant's PAK, a health read by id) and for the fixtures and
+//! with another generator's PAK, a health read by id) and for the fixtures and
 //! the cleanup that the `after` hook runs as the admin.
 
 use std::time::{Duration, Instant};

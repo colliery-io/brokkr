@@ -1,14 +1,14 @@
 ---
-title: "Tutorial: Your First Tenant, From a Fresh Broker to a Running Manifest"
+title: "Tutorial: Your First Generator, From a Fresh Broker to a Running Manifest"
 ---
 
-In this tutorial you take a broker that has nothing in it and get a manifest running on a cluster under a tenant's own credential. Two people take part. The **admin** runs the broker and holds the admin PAK. The **tenant** is a team or a CI pipeline; it gets its own PAK and never sees the admin's. Each command below says which of the two runs it.
+In this tutorial you take a broker that has nothing in it and get a manifest running on a cluster under a generator's own credential. Two people take part. The **admin** runs the broker and holds the admin PAK. The **generator** is a team or a CI pipeline; it gets its own PAK and never sees the admin's. Each command below says which of the two runs it.
 
 **What you'll learn:**
 
-- What the admin does once per tenant, and what the tenant does on its own after that
+- What the admin does once per generator, and what the generator does on its own after that
 - Which credential each step needs, and what each credential cannot do
-- How a tenant checks that its manifest reached the cluster
+- How a generator checks that its manifest reached the cluster
 
 **Time to complete:** 15 minutes.
 
@@ -31,34 +31,34 @@ Each `brokkr` command below gives its PAK with `--pak`, so you can see which of 
 
 > The development PAK is publicly known. It opens only a broker that still runs the embedded default hash. Never use it in production.
 
-## Part 1: The admin sets the tenant up
+## Part 1: The admin sets the generator up
 
-The admin does three things, once. After this part the tenant works alone.
+The admin does three things, once. After this part the generator works alone.
 
-### Step 1 (admin): Create the tenant
+### Step 1 (admin): Create the generator
 
-A tenant is a **generator** in the API. Creating one returns its PAK once; the broker keeps only a hash.
+Creating a generator returns its PAK once; the broker keeps only a hash.
 
 ```bash
-TENANT=$(curl -s -X POST "$BROKER/api/v1/generators" \
+GENERATOR=$(curl -s -X POST "$BROKER/api/v1/generators" \
   -H "Authorization: Bearer $ADMIN_PAK" \
   -H "Content-Type: application/json" \
-  -d '{"name": "team-tutorial", "description": "Tutorial tenant"}')
+  -d '{"name": "team-tutorial", "description": "Tutorial generator"}')
 
-TENANT_ID=$(echo "$TENANT" | jq -r '.generator.id')
-TENANT_PAK=$(echo "$TENANT" | jq -r '.pak')
-echo "Tenant id: $TENANT_ID"
+GENERATOR_ID=$(echo "$GENERATOR" | jq -r '.generator.id')
+GENERATOR_PAK=$(echo "$GENERATOR" | jq -r '.pak')
+echo "Generator id: $GENERATOR_ID"
 ```
 
-Store `TENANT_PAK` where the tenant's CI will read it. It cannot be shown again; the only way back is `POST /api/v1/generators/{id}/rotate-pak`, which the admin runs.
+Store `GENERATOR_PAK` where the generator's CI will read it. It cannot be shown again; the only way back is `POST /api/v1/generators/{id}/rotate-pak`, which the admin runs.
 
 With the `brokkr` CLI, the same step is one command. It prints the id and the PAK once:
 
 ```bash
-brokkr --pak "$ADMIN_PAK" tenant create team-tutorial --description "Tutorial tenant"
+brokkr --pak "$ADMIN_PAK" generator create team-tutorial --description "Tutorial generator"
 ```
 
-The operator console does the same from **Tenants → New tenant**, with the admin PAK typed into the form. Its reveal panel shows the id with a copy button, and registers the agent (Step 3) in the same dialog.
+The operator console does the same from **Generators → New generator**, with the admin PAK typed into the form. Its reveal panel shows the id with a copy button, and registers the agent (Step 3) in the same dialog.
 
 ### Step 2 (admin): Activate the agent
 
@@ -90,27 +90,27 @@ curl -s -X PUT "$BROKER/api/v1/agents/$AGENT_ID" \
 
 </details>
 
-### Step 3 (admin): Register the agent with the tenant
+### Step 3 (admin): Register the agent with the generator
 
-Registration is the agent's consent to receive stacks from this tenant. Without it, the tenant's target in Step 6 fails with `agent_not_registered`. Give the agent and the tenant by name:
+Registration is the agent's consent to receive stacks from this generator. Without it, the generator's target in Step 6 fails with `agent_not_registered`. Give the agent and the generator by name:
 
 ```bash
 brokkr --pak "$ADMIN_PAK" register --agent "$AGENT_NAME" --generator team-tutorial
 ```
 
 ```
-registered agent "brokkr-integration-test-agent" (6b1f...) with tenant "team-tutorial" (e5fe...) (registration 0c7d...)
+registered agent "brokkr-integration-test-agent" (6b1f...) with generator "team-tutorial" (e5fe...) (registration 0c7d...)
 ```
 
-`brokkr --pak "$ADMIN_PAK" registrations --agent "$AGENT_NAME"` lists the tenants of the agent.
+`brokkr --pak "$ADMIN_PAK" registrations --agent "$AGENT_NAME"` lists the generators of the agent.
 
-In the console, the same registration is in the New tenant dialog right after the mint, and later in the tenant's drawer under **Tenants**, with the admin PAK typed into the form.
+In the console, the same registration is in the New generator dialog right after the mint, and later in the generator's drawer under **Generators**, with the admin PAK typed into the form.
 
 <details>
 <summary>The same step with <code>curl</code></summary>
 
 ```bash
-curl -s -X POST "$BROKER/api/v1/generators/$TENANT_ID/register" \
+curl -s -X POST "$BROKER/api/v1/generators/$GENERATOR_ID/register" \
   -H "Authorization: Bearer $ADMIN_PAK" \
   -H "Content-Type: application/json" \
   -d "{\"agent_id\": \"$AGENT_ID\"}" | jq '{agent_id, generator_id}'
@@ -120,17 +120,17 @@ curl -s -X POST "$BROKER/api/v1/generators/$TENANT_ID/register" \
 
 ### The hand-off
 
-The admin gives the tenant three values: the broker URL, `TENANT_PAK`, and the agent name, `AGENT_NAME`. A tenant PAK lists only the agents that are registered with its tenant, so after Step 3 the tenant finds the agent by name. That is the whole hand-off. Everything after this is the tenant's.
+The admin gives the generator three values: the broker URL, `GENERATOR_PAK`, and the agent name, `AGENT_NAME`. A generator PAK lists only the agents that are registered with its generator, so after Step 3 the generator finds the agent by name. That is the whole hand-off. Everything after this is the generator's.
 
-## Part 2: The tenant deploys
+## Part 2: The generator deploys
 
-### Step 4 (tenant): Confirm the credential
+### Step 4 (generator): Confirm the credential
 
-The tenant can ask the broker what its PAK is:
+The generator can ask the broker what its PAK is:
 
 ```bash
 curl -s -X POST "$BROKER/api/v1/auth/pak" \
-  -H "Authorization: Bearer $TENANT_PAK" | jq .
+  -H "Authorization: Bearer $GENERATOR_PAK" | jq .
 ```
 
 ```json
@@ -142,56 +142,56 @@ curl -s -X POST "$BROKER/api/v1/auth/pak" \
 }
 ```
 
-The `generator` value is `TENANT_ID`. A tenant that only has its PAK gets its id this way.
+The `generator` value is `GENERATOR_ID`. A generator that only has its PAK gets its id this way.
 
-With the `brokkr` CLI: `brokkr --pak "$TENANT_PAK" whoami` prints the tenant's name and id.
+With the `brokkr` CLI: `brokkr --pak "$GENERATOR_PAK" whoami` prints the generator's name and id.
 
-### Step 5 (tenant): Create a stack
+### Step 5 (generator): Create a stack
 
-A stack holds the manifests of one application. The tenant must name itself as the owner; any other `generator_id` is a `403`.
+A stack holds the manifests of one application. The generator must name itself as the owner; any other `generator_id` is a `403`.
 
 ```bash
 STACK_ID=$(curl -s -X POST "$BROKER/api/v1/stacks" \
-  -H "Authorization: Bearer $TENANT_PAK" \
+  -H "Authorization: Bearer $GENERATOR_PAK" \
   -H "Content-Type: application/json" \
-  -d "{\"name\": \"tutorial-hello\", \"description\": \"Tutorial: hello from a tenant\", \"generator_id\": \"$TENANT_ID\"}" \
+  -d "{\"name\": \"tutorial-hello\", \"description\": \"Tutorial: hello from a generator\", \"generator_id\": \"$GENERATOR_ID\"}" \
   | jq -r '.id')
 echo "Stack id: $STACK_ID"
 ```
 
-### Step 6 (tenant): Target the stack to the agent
+### Step 6 (generator): Target the stack to the agent
 
-The tenant connects its stack to the agent the admin registered, by name:
+The generator connects its stack to the agent the admin registered, by name:
 
 ```bash
-brokkr --pak "$TENANT_PAK" stack target tutorial-hello "$AGENT_NAME"
+brokkr --pak "$GENERATOR_PAK" stack target tutorial-hello "$AGENT_NAME"
 ```
 
 ```
 targeted stack "tutorial-hello" at agent "brokkr-integration-test-agent"
 ```
 
-An error that says the agent `is not registered with the tenant that owns stack` means Step 3 did not happen for this tenant. A line that starts with `unchanged:` means the target exists already; that is fine.
+An error that says the agent `is not registered with the generator that owns stack` means Step 3 did not happen for this generator. A line that starts with `unchanged:` means the target exists already; that is fine.
 
 <details>
 <summary>The same step with <code>curl</code></summary>
 
-The tenant gets the agent id from `GET /api/v1/agents`, which lists the agents registered with it. The body repeats the agent id; the broker requires both fields. A `403 agent_not_registered` means Step 3 did not happen; a `409 unique_violation` means the target exists already.
+The generator gets the agent id from `GET /api/v1/agents`, which lists the agents registered with it. The body repeats the agent id; the broker requires both fields. A `403 agent_not_registered` means Step 3 did not happen; a `409 unique_violation` means the target exists already.
 
 ```bash
 AGENT_ID=$(curl -s "$BROKER/api/v1/agents" \
-  -H "Authorization: Bearer $TENANT_PAK" \
+  -H "Authorization: Bearer $GENERATOR_PAK" \
   | jq -r --arg name "$AGENT_NAME" '.[] | select(.name==$name) | .id')
 
 curl -s -X POST "$BROKER/api/v1/agents/$AGENT_ID/targets" \
-  -H "Authorization: Bearer $TENANT_PAK" \
+  -H "Authorization: Bearer $GENERATOR_PAK" \
   -H "Content-Type: application/json" \
   -d "{\"agent_id\": \"$AGENT_ID\", \"stack_id\": \"$STACK_ID\"}" | jq '{agent_id, stack_id}'
 ```
 
 </details>
 
-### Step 7 (tenant): Push the manifest
+### Step 7 (generator): Push the manifest
 
 Write the manifest to a file and send it as YAML. No JSON escaping is needed.
 
@@ -227,14 +227,14 @@ spec:
 YAML
 
 curl -s -X POST "$BROKER/api/v1/stacks/$STACK_ID/deployment-objects" \
-  -H "Authorization: Bearer $TENANT_PAK" \
+  -H "Authorization: Bearer $GENERATOR_PAK" \
   -H "Content-Type: application/yaml" \
   --data-binary @hello.yaml | jq '{id, sequence_id}'
 ```
 
 The response has a `sequence_id`. It is a broker-wide counter, so the first push of a new stack is not always 1; each push to the stack gets a higher one, and the agent applies the newest.
 
-With the `brokkr` CLI, the same step is `brokkr apply -f ./manifests --stack tutorial-hello` with `BROKKR_PAK=$TENANT_PAK`; see [Submitting a Folder of Manifests](../../how-to/cli-apply/). With the admin PAK, add `--generator team-tutorial` to say which tenant owns the stack.
+With the `brokkr` CLI, the same step is `brokkr apply -f ./manifests --stack tutorial-hello` with `BROKKR_PAK=$GENERATOR_PAK`; see [Submitting a Folder of Manifests](../../how-to/cli-apply/). With the admin PAK, add `--generator team-tutorial` to say which generator owns the stack.
 
 ### Step 8: See it on the cluster
 
@@ -252,19 +252,19 @@ NAME                    READY   UP-TO-DATE   AVAILABLE   AGE
 deployment.apps/hello   1/1     1            1           20s
 ```
 
-The tenant sees the same from its own PAK, with no admin:
+The generator sees the same from its own PAK, with no admin:
 
 ```bash
-brokkr --pak "$TENANT_PAK" stack status tutorial-hello
+brokkr --pak "$GENERATOR_PAK" stack status tutorial-hello
 ```
 
 The latest revision, the agent that has the stack and its health report. `brokkr stack events tutorial-hello` and `brokkr stack logs tutorial-hello` print what the cluster said.
 
-The tenant can also list what it pushed:
+The generator can also list what it pushed:
 
 ```bash
 curl -s "$BROKER/api/v1/stacks/$STACK_ID/deployment-objects" \
-  -H "Authorization: Bearer $TENANT_PAK" | jq '.[] | {sequence_id, created_at}'
+  -H "Authorization: Bearer $GENERATOR_PAK" | jq '.[] | {sequence_id, created_at}'
 ```
 
 The agent's events and the stack's health are admin views. The admin sees them with:
@@ -282,49 +282,49 @@ curl -s "$BROKER/api/v1/agents/$AGENT_ID/events" \
 { "event_type": "DEPLOY", "status": "SUCCESS" }
 ```
 
-In the operator console, **Deployments** shows the stack with its tenant and its health, and the stack's drawer lists the agents that have it.
+In the operator console, **Deployments** shows the stack with its generator and its health, and the stack's drawer lists the agents that have it.
 
-### Step 9 (tenant): Change it
+### Step 9 (generator): Change it
 
 Edit `hello.yaml` to `replicas: 2` and push it again with the same command as Step 7. The response has a higher `sequence_id`. After one poll cycle, `kubectl get deployment hello -n tutorial-hello` shows `2/2`.
 
 ## Part 3: Clean up
 
-The tenant deletes its stack. The broker records a deletion marker, and the agent removes the stack's resources on its next poll. With the CLI it is `brokkr --pak "$TENANT_PAK" stack delete tutorial-hello`; with `curl`:
+The generator deletes its stack. The broker records a deletion marker, and the agent removes the stack's resources on its next poll. With the CLI it is `brokkr --pak "$GENERATOR_PAK" stack delete tutorial-hello`; with `curl`:
 
 ```bash
 curl -s -X DELETE "$BROKER/api/v1/stacks/$STACK_ID" \
-  -H "Authorization: Bearer $TENANT_PAK"
+  -H "Authorization: Bearer $GENERATOR_PAK"
 ```
 
 After one poll cycle, `kubectl get namespace tutorial-hello` says not found.
 
-The admin removes the tenant:
+The admin removes the generator:
 
 ```bash
-curl -s -X DELETE "$BROKER/api/v1/generators/$TENANT_ID" \
+curl -s -X DELETE "$BROKER/api/v1/generators/$GENERATOR_ID" \
   -H "Authorization: Bearer $ADMIN_PAK"
 ```
 
 ## What you've learned
 
-- The admin does three things once per tenant: create it, activate the agent, register the agent with it. The hand-off is the broker URL, the tenant PAK and the agent name.
-- The tenant does the rest with its own PAK: find its id, create a stack, target it, push manifests, delete the stack.
-- A tenant PAK lists the agents registered with it, with their labels, and reads the health, the events and the logs of its own stacks. The fleet and the agent events are admin views, and the console shows them.
-- The agent pulls. It starts inactive, and it applies only the stacks of tenants it is registered with.
+- The admin does three things once per generator: create it, activate the agent, register the agent with it. The hand-off is the broker URL, the generator PAK and the agent name.
+- The generator does the rest with its own PAK: find its id, create a stack, target it, push manifests, delete the stack.
+- A generator PAK lists the agents registered with it, with their labels, and reads the health, the events and the logs of its own stacks. The fleet and the agent events are admin views, and the console shows them.
+- The agent pulls. It starts inactive, and it applies only the stacks of generators it is registered with.
 
 ## Troubleshooting
 
-- **`agent_not_registered` on the target.** The admin did not register this agent with this tenant (Step 3), or registered it with a different tenant.
-- **`no agent has the name or id` from a tenant command.** A tenant sees only the agents registered with it. Do Step 3 first.
+- **`agent_not_registered` on the target.** The admin did not register this agent with this generator (Step 3), or registered it with a different generator.
+- **`no agent has the name or id` from a generator command.** A generator sees only the agents registered with it. Do Step 3 first.
 - **Nothing reaches the cluster.** The agent may still be `INACTIVE`. Its log says so on each poll. Run Step 2 again.
-- **`403` with `admin_required` from a tenant command.** The endpoint is an admin view: the fleet, agent events, another tenant's stack. Use the admin PAK, or the console.
+- **`403` with `admin_required` from a generator command.** The endpoint is an admin view: the fleet, agent events, another generator's stack. Use the admin PAK, or the console.
 - **`DEPLOY SUCCESS`, but `kubectl` finds nothing.** The agent is on a different cluster than your `kubectl`, or you checked before one poll cycle passed. If the resources appear and then vanish one poll cycle later, upgrade the agent: agents up to 0.9.2 deleted a stack's resources one poll after a successful apply.
-- **The tenant PAK is lost.** The admin rotates it: `POST /api/v1/generators/{id}/rotate-pak` with the admin PAK returns a new one, once.
+- **The generator PAK is lost.** The admin rotates it: `POST /api/v1/generators/{id}/rotate-pak` with the admin PAK returns a new one, once.
 
 ## Next steps
 
-- [CI/CD with Generators](../cicd-generators/): the same tenant PAK in a pipeline, and PAK rotation
+- [CI/CD with Generators](../cicd-generators/): the same generator PAK in a pipeline, and PAK rotation
 - [Multi-Cluster Targeting](../multi-cluster-targeting/): labels instead of one target per agent
 - [Submitting a Folder of Manifests (CLI)](../../how-to/cli-apply/): `brokkr apply` instead of `curl`
 - [Using the Operator Console](../../how-to/operator-console/): what the admin sees

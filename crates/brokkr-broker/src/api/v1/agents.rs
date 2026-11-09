@@ -7,7 +7,7 @@
 //! Agent management API endpoints.
 
 use crate::api::v1::error::{ApiError, ErrorResponse};
-use crate::api::v1::middleware::{AuthPayload, require_tenant_generator};
+use crate::api::v1::middleware::{AuthPayload, require_generator_generator};
 use crate::dal::DAL;
 use crate::metrics;
 use crate::utils::{audit, event_bus, pak};
@@ -109,7 +109,7 @@ async fn list_agents(
 ) -> Result<Json<Vec<Agent>>, ApiError> {
     info!("Handling request to list agents");
 
-    // Admin sees the fleet; a tenant generator sees only the agents that have
+    // Admin sees the fleet; a generator generator sees only the agents that have
     // registered with it (BROKKR-T-0315). Mirrors `list_stacks`.
     let agents = if auth_payload.admin {
         dal.agents().list().map_err(|e| {
@@ -117,7 +117,7 @@ async fn list_agents(
             ApiError::internal("failed to fetch agents")
         })?
     } else {
-        let generator_id = require_tenant_generator(&auth_payload, &dal)?;
+        let generator_id = require_generator_generator(&auth_payload, &dal)?;
         dal.agents().list_for_generator(generator_id).map_err(|e| {
             error!(
                 "Failed to fetch agents for generator {}: {:?}",
@@ -130,8 +130,8 @@ async fn list_agents(
     info!("Successfully retrieved {} agents", agents.len());
 
     // Metrics are fleet-wide gauges, so only the admin listing may write them.
-    // A tenant-scoped listing observes a subset; publishing that would make
-    // `brokkr_active_agents` report whichever tenant polled most recently.
+    // A generator-scoped listing observes a subset; publishing that would make
+    // `brokkr_active_agents` report whichever generator polled most recently.
     if auth_payload.admin {
         let active_count = agents.iter().filter(|a| a.status == "ACTIVE").count();
         metrics::set_active_agents(active_count as i64);
@@ -579,11 +579,11 @@ async fn create_event(
     Ok((StatusCode::CREATED, Json(event)))
 }
 
-/// An admin, the agent itself, or a tenant the agent is registered with
-/// (BROKKR-T-0380). A tenant that targets by label needs to see the labels of
+/// An admin, the agent itself, or a generator the agent is registered with
+/// (BROKKR-T-0380). A generator that targets by label needs to see the labels of
 /// the agents it may reach; an agent it is not registered with is not one of
-/// them, and the answer is the same 403 as for any other tenant.
-fn require_admin_agent_or_registered_tenant(
+/// them, and the answer is the same 403 as for any other generator.
+fn require_admin_agent_or_registered_generator(
     auth: &AuthPayload,
     dal: &DAL,
     agent_id: Uuid,
@@ -602,7 +602,7 @@ fn require_admin_agent_or_registered_tenant(
     }
     Err(ApiError::forbidden(
         "not_authorized",
-        "admin, the agent itself, or a tenant the agent is registered with",
+        "admin, the agent itself, or a generator the agent is registered with",
     ))
 }
 
@@ -624,7 +624,7 @@ async fn list_labels(
     Path(id): Path<Uuid>,
 ) -> Result<Json<Vec<AgentLabel>>, ApiError> {
     info!("Handling request to list labels for agent with ID: {}", id);
-    require_admin_agent_or_registered_tenant(&auth_payload, &dal, id)?;
+    require_admin_agent_or_registered_generator(&auth_payload, &dal, id)?;
     let labels = dal.agent_labels().list_for_agent(id).map_err(|e| {
         error!("Failed to fetch labels for agent with ID {}: {:?}", id, e);
         ApiError::internal("failed to fetch agent labels")
@@ -739,7 +739,7 @@ async fn list_annotations(
         "Handling request to list annotations for agent with ID: {}",
         id
     );
-    require_admin_agent_or_registered_tenant(&auth_payload, &dal, id)?;
+    require_admin_agent_or_registered_generator(&auth_payload, &dal, id)?;
     let annotations = dal.agent_annotations().list_for_agent(id).map_err(|e| {
         error!(
             "Failed to fetch annotations for agent with ID {}: {:?}",

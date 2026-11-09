@@ -64,9 +64,9 @@ Scan each record for the signals that tell you an agent is in trouble:
 
 For exact types, nullability, and how each is derived, see the [Fleet Reference](../../reference/fleet/).
 
-### Narrow the rollup to one tenant
+### Narrow the rollup to one generator
 
-On a shared broker, `?pak_id=<generator-uuid>` trims the response to the agents registered with that generator — the same scoping the Operator Console's tenant selector applies:
+On a shared broker, `?pak_id=<generator-uuid>` trims the response to the agents registered with that generator — the same scoping the Operator Console's generator selector applies:
 
 ```bash
 curl "$BROKER/api/v1/fleet?pak_id=$GENERATOR_ID" \
