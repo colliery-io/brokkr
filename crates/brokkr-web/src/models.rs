@@ -293,7 +293,7 @@ impl DiagnosticResponse {
     }
 }
 
-/// One named PAK (tenant) in `GET /api/v1/paks` — powers the scope selector
+/// One named PAK (generator) in `GET /api/v1/paks` — powers the scope selector
 /// (BROKKR-I-0032). `id` is the generator id used as `?pak_id=`.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct PakSummary {
@@ -466,7 +466,7 @@ impl WorkOrder {
     }
 }
 
-/// One generator (tenant) from `GET /api/v1/generators`.
+/// One generator (generator) from `GET /api/v1/generators`.
 ///
 /// The broker never serializes `pak_hash` (`#[serde(skip_serializing)]`), so no
 /// credential material reaches the console on this path — only the minting
@@ -498,9 +498,9 @@ pub struct CreateGeneratorResponse {
     pub pak: String,
 }
 
-/// One agent-tenant registration, from `GET /api/v1/generators/{id}/registered-agents`
+/// One agent-generator registration, from `GET /api/v1/generators/{id}/registered-agents`
 /// and `GET /api/v1/agents/{id}/registrations` (BROKKR-T-0368). The ids are
-/// what the console joins against the fleet and the tenant list for names.
+/// what the console joins against the fleet and the generator list for names.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct Registration {
     pub id: String,

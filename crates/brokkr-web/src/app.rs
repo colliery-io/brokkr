@@ -1,6 +1,6 @@
 //! Operator-console app shell: Aurora `AppShell` with a top bar (brand, broker
 //! live state, clock, theme toggle) and a `SideNav` sidebar (groups, counts,
-//! tenant scope). Styled only via Aurora components and tokens, plus the few
+//! generator scope). Styled only via Aurora components and tokens, plus the few
 //! `brk-` classes in `style/brokkr.css`.
 //!
 //! The header once carried a Live/Paused `SegmentedControl`. It drove nothing —
@@ -37,7 +37,7 @@ const NAV: &[(&str, &[(&str, &str)])] = &[
     ),
     (
         "System",
-        &[("system", "Broker health"), ("tenants", "Tenants")],
+        &[("system", "Broker health"), ("generators", "Generators")],
     ),
 ];
 
@@ -51,7 +51,7 @@ fn meta(id: &str) -> (&'static str, &'static str) {
         "jobs" => ("Work orders", "active · history"),
         "webhooks" => ("Webhooks", "subscriptions · deliveries"),
         "system" => ("Broker health", "metrics · connections"),
-        "tenants" => ("Tenants", "tenants · registered agents · PAKs"),
+        "generators" => ("Generators", "generators · registered agents · PAKs"),
         _ => ("Brokkr", ""),
     }
 }
@@ -118,7 +118,7 @@ fn now_hms() -> String {
     )
 }
 
-/// The selected tenant scope (BROKKR-I-0032): `None` = all tenants, `Some(id)`
+/// The selected generator scope (BROKKR-I-0032): `None` = all generators, `Some(id)`
 /// = only resources under that named PAK (generator). Provided as context at
 /// the app root; data views read it and pass it to the scoped API fetches.
 pub type ScopeSignal = RwSignal<Option<String>>;
@@ -177,7 +177,7 @@ pub fn App() -> impl IntoView {
         std::time::Duration::from_secs(1),
     );
 
-    // Tenant scope (BROKKR-I-0032): restored from localStorage, persisted on
+    // Generator scope (BROKKR-I-0032): restored from localStorage, persisted on
     // change, available to every data view via context.
     let scope: ScopeSignal = RwSignal::new(load_scope());
     provide_context(scope);
@@ -374,10 +374,10 @@ fn Sidebar(route: RwSignal<&'static str>, counts: NavCounts) -> impl IntoView {
     view! {
         <SideNav footer=Box::new(|| view! {
             <div class="brk-sidefoot">
-                // Tenant scope selector (BROKKR-I-0032)
+                // Generator scope selector (BROKKR-I-0032)
                 <ScopeSelector />
                 <div class="brk-sidefoot__line">
-                    <span>"tenant · public"</span>
+                    <span>"generator · public"</span>
                     <span>"wasm"</span>
                 </div>
             </div>
@@ -387,11 +387,11 @@ fn Sidebar(route: RwSignal<&'static str>, counts: NavCounts) -> impl IntoView {
     }
 }
 
-/// Tenant scope selector (BROKKR-I-0032): "All" + one entry per named PAK from
-/// `GET /api/v1/paks`. Hidden entirely on single-tenant installs (empty list)
+/// Generator scope selector (BROKKR-I-0032): "All" + one entry per named PAK from
+/// `GET /api/v1/paks`. Hidden entirely on single-generator installs (empty list)
 /// or when the listing fails (the views still work unscoped). A `Select`
 /// rather than a `SegmentedControl`: the sidebar can't fit segments for
-/// arbitrary tenant names, and `value=id` keeps duplicate names unambiguous.
+/// arbitrary generator names, and `value=id` keeps duplicate names unambiguous.
 #[component]
 fn ScopeSelector() -> impl IntoView {
     let scope = use_scope();
@@ -403,7 +403,7 @@ fn ScopeSelector() -> impl IntoView {
     view! {
         {move || match paks.get() {
             Some(Ok(list)) if !list.is_empty() => {
-                // A stored scope whose tenant no longer exists falls back to All.
+                // A stored scope whose generator no longer exists falls back to All.
                 if let Some(current) = scope.get_untracked() {
                     if !list.iter().any(|p| p.id == current) {
                         scope.set(None);
@@ -414,7 +414,7 @@ fn ScopeSelector() -> impl IntoView {
                     .collect::<Vec<_>>();
                 view! {
                     <Select
-                        label="Tenant"
+                        label="Generator"
                         option_pairs=pairs
                         value=choice
                         on_change=Callback::new(move |v: String| {
@@ -445,7 +445,7 @@ fn Main(route: RwSignal<&'static str>) -> impl IntoView {
                 "webhooks" => view! { <crate::views::webhooks::WebhooksView /> }.into_any(),
                 "deployments" => view! { <crate::views::deployments::DeploymentsView /> }.into_any(),
                 "telemetry" => view! { <crate::views::telemetry::TelemetryView /> }.into_any(),
-                "tenants" => view! { <crate::views::tenants::TenantsView /> }.into_any(),
+                "generators" => view! { <crate::views::generators::GeneratorsView /> }.into_any(),
                 other => {
                     let (title, _) = meta(other);
                     view! {

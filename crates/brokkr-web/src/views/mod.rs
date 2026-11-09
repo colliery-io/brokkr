@@ -3,10 +3,10 @@
 
 pub mod deployments;
 pub mod fleet;
+pub mod generators;
 pub mod health;
 pub mod overview;
 pub mod telemetry;
-pub mod tenants;
 pub mod webhooks;
 pub mod work_orders;
 

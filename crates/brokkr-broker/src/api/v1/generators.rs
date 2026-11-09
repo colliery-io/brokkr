@@ -617,15 +617,15 @@ async fn list_generator_registered_agents(
         .map_err(|e| ApiError::from_diesel(e, "failed to look up generator"))?
         .ok_or_else(|| ApiError::not_found("generator_not_found", "generator not found"))?;
 
-    // Same rule as the tenant-scoped `GET /agents` (BROKKR-T-0315): a system
-    // generator is not a tenant. Every agent is auto-registered with it, so a
+    // Same rule as the generator-scoped `GET /agents` (BROKKR-T-0315): a system
+    // generator is not a generator. Every agent is auto-registered with it, so a
     // non-admin caller scoping to it would enumerate the entire fleet. Admin is
     // unaffected — it already sees everything. Reuses the lookup above rather
-    // than calling `require_tenant_generator`, which would re-query.
+    // than calling `require_generator_generator`, which would re-query.
     if !is_admin && generator.is_system {
         return Err(ApiError::forbidden(
             "system_generator_not_a_tenant",
-            "the system generator is not a tenant and has no tenant-scoped view",
+            "the system generator is fleet scope and has no scoped view of its own",
         ));
     }
 

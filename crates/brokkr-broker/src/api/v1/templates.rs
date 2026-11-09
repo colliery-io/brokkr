@@ -82,7 +82,7 @@ fn can_modify_template(auth: &AuthPayload, template: &StackTemplate) -> bool {
 /// Read-access gate for a single template.
 ///
 /// Admins see everything; a generator sees its own templates plus system
-/// templates (`generator_id = NULL`), which are the sanctioned cross-tenant
+/// templates (`generator_id = NULL`), which are the sanctioned cross-generator
 /// sharing mechanism. Any other combination is denied.
 ///
 /// `pub(crate)` because `stacks::instantiate_template` must enforce the same

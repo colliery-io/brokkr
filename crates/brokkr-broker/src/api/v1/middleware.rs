@@ -43,15 +43,15 @@ pub struct AuthPayload {
     pub readonly: bool,
 }
 
-/// Resolves the caller's generator identity as a **tenant**, rejecting the
+/// Resolves the caller's generator identity as a **generator**, rejecting the
 /// system generator (BROKKR-T-0315).
 ///
-/// Tenant-scoped read paths use this instead of reading
+/// Generator-scoped read paths use this instead of reading
 /// [`AuthPayload::generator`] directly, because not every generator is a
-/// tenant. `__system__` (`is_system = true`) is internal delivery
+/// generator. `__system__` (`is_system = true`) is internal delivery
 /// infrastructure that *every* agent is auto-registered with, so scoping a
 /// query to it silently widens that query to the entire fleet. It is already
-/// excluded from `GET /generators` and from the console's tenant selector on
+/// excluded from `GET /generators` and from the console's generator selector on
 /// the same reasoning.
 ///
 /// This checks `is_system` explicitly rather than relying on the fact that
@@ -66,7 +66,7 @@ pub struct AuthPayload {
 /// Returns the generator's id on success. Errors are 403 and distinguish the
 /// three failure modes: not a generator at all, a system generator, or a
 /// generator id that no longer resolves.
-pub fn require_tenant_generator(
+pub fn require_generator_generator(
     auth: &AuthPayload,
     dal: &DAL,
 ) -> Result<Uuid, crate::api::v1::error::ApiError> {
@@ -92,7 +92,7 @@ pub fn require_tenant_generator(
     if generator.is_system {
         return Err(ApiError::forbidden(
             "system_generator_not_a_tenant",
-            "the system generator is not a tenant and has no tenant-scoped view",
+            "the system generator is fleet scope and has no scoped view of its own",
         ));
     }
 

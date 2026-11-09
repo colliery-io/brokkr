@@ -133,7 +133,7 @@ pub fn agent_name(fleet: &[crate::models::FleetAgentRecord], id: &str) -> String
         .unwrap_or_else(|| id.chars().take(8).collect())
 }
 
-/// The tenant's name from the tenant list, or the first 8 characters of its id.
+/// The generator's name from the generator list, or the first 8 characters of its id.
 pub fn generator_name(gens: &[crate::models::Generator], id: &str) -> String {
     gens.iter()
         .find(|g| g.id == id)
@@ -142,7 +142,7 @@ pub fn generator_name(gens: &[crate::models::Generator], id: &str) -> String {
 }
 
 /// The message the console shows when a write made with an operator-supplied
-/// admin PAK fails (BROKKR-T-0368). Shared by tenant minting, registration and
+/// admin PAK fails (BROKKR-T-0368). Shared by generator minting, registration and
 /// agent state changes, so the wording is one.
 ///
 /// A 400, 404 or 409 shows the broker's own message: `ErrorResponse` never

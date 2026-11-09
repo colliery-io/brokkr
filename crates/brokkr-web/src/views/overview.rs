@@ -161,7 +161,7 @@ pub fn event_at(created_at: Option<&str>) -> Option<f64> {
 
 #[component]
 pub fn OverviewView() -> impl IntoView {
-    // Scope-reactive (BROKKR-I-0032): refetches when the tenant selection changes.
+    // Scope-reactive (BROKKR-I-0032): refetches when the generator selection changes.
     let scope = crate::app::use_scope();
     let fleet = LocalResource::new(move || api::fleet(scope.get()));
     let metrics = LocalResource::new(api::metrics_text);
@@ -334,7 +334,7 @@ pub fn OverviewView() -> impl IntoView {
                                     return view! {
                                         <Empty
                                             message="No active work orders."
-                                            hint="A work order appears when a tenant requests an image build."
+                                            hint="A work order appears when a generator requests an image build."
                                             href=format!("{DOCS}/reference/work-orders.html")
                                             link="What a work order is"
                                         />

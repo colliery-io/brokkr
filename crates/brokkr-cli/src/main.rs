@@ -15,7 +15,7 @@
 
 mod config;
 mod fleet;
-mod tenant;
+mod generator;
 
 use brokkr_client::types::AgentGeneratorRegistration;
 use brokkr_client::{ApplyOutcome, BrokkrClient, BrokkrError};
@@ -58,28 +58,28 @@ enum Command {
     /// Make a folder of manifests the desired state of a stack (idempotent).
     Apply(ApplyArgs),
 
-    /// Register an agent with a tenant (admin bootstrap).
+    /// Register an agent with a generator (admin bootstrap).
     ///
     /// Agents usually register themselves when they start. Use this command to
     /// register an agent for it: for example, before the agent is live, or to
-    /// add a tenant. Give the agent and the tenant by name or id. Requires an
+    /// add a generator. Give the agent and the generator by name or id. Requires an
     /// admin PAK. You can run this command again: if the agent is registered
-    /// with the tenant already, the command changes nothing, prints a line
+    /// with the generator already, the command changes nothing, prints a line
     /// that starts with `unchanged:`, and exits with status 0.
     Register(RegisterArgs),
 
-    /// Remove an agent's registration from a tenant (admin).
+    /// Remove an agent's registration from a generator (admin).
     ///
     /// DESTRUCTIVE: the broker also removes the agent's targets for that
-    /// tenant and notifies the agent, which then prunes the corresponding
+    /// generator and notifies the agent, which then prunes the corresponding
     /// Kubernetes resources on its next reconcile. Give the agent and the
-    /// tenant by name or id. Requires an admin PAK.
+    /// generator by name or id. Requires an admin PAK.
     Deregister(RegisterArgs),
 
-    /// List tenant registrations: for one agent or for one tenant.
+    /// List generator registrations: for one agent or for one generator.
     ///
-    /// Give the agent or the tenant by name or id. A name lookup needs an
-    /// admin PAK. With an agent PAK or a tenant PAK, give the id.
+    /// Give the agent or the generator by name or id. A name lookup needs an
+    /// admin PAK. With an agent PAK or a generator PAK, give the id.
     Registrations(RegistrationsArgs),
 
     /// Activate, pause, label and list agents. Give each agent by name or id.
@@ -90,11 +90,11 @@ enum Command {
     #[command(subcommand)]
     Stack(fleet::StackCommand),
 
-    /// Create, list and rotate tenants. The API calls a tenant a generator.
-    #[command(subcommand)]
-    Tenant(tenant::TenantCommand),
+    /// Create, list and rotate generators.
+    #[command(subcommand, alias = "tenant")]
+    Generator(generator::GeneratorCommand),
 
-    /// Say what this PAK is: admin, a tenant, or an agent, and the broker.
+    /// Say what this PAK is: admin, a generator, or an agent, and the broker.
     Whoami,
 }
 
@@ -104,7 +104,7 @@ struct RegisterArgs {
     #[arg(long, value_name = "NAME_OR_ID")]
     agent: String,
 
-    /// The name or the id of the tenant. The API calls a tenant a generator.
+    /// The name or the id of the generator.
     #[arg(long, value_name = "NAME_OR_ID")]
     generator: String,
 }
@@ -112,13 +112,13 @@ struct RegisterArgs {
 #[derive(Debug, Args)]
 #[command(group(ArgGroup::new("subject").required(true).args(["agent", "generator"])))]
 struct RegistrationsArgs {
-    /// List the tenants this agent is registered with. Give the name or the
+    /// List the generators this agent is registered with. Give the name or the
     /// id of the agent.
     #[arg(long, value_name = "NAME_OR_ID")]
     agent: Option<String>,
 
-    /// List the agents registered with this tenant. Give the name or the id
-    /// of the tenant. The API calls a tenant a generator.
+    /// List the agents registered with this generator. Give the name or the id
+    /// of the generator.
     #[arg(long, value_name = "NAME_OR_ID")]
     generator: Option<String>,
 }
@@ -137,9 +137,8 @@ struct ApplyArgs {
     #[arg(long = "target-label", value_name = "LABEL")]
     target_label: Vec<String>,
 
-    /// Tenant that owns the stack, by name or id. The API calls a tenant a
-    /// generator. Required with an admin PAK. With a tenant PAK, you can omit
-    /// it; if you give it, it must name the tenant of that PAK.
+    /// Generator that owns the stack, by name or id. Required with an admin PAK. With a generator PAK, you can omit
+    /// it; if you give it, it must name the generator of that PAK.
     #[arg(long, value_name = "NAME_OR_ID")]
     generator: Option<String>,
 }
@@ -170,8 +169,8 @@ async fn run(cli: Cli) -> Result<(), String> {
         Command::Registrations(args) => registrations(&client, args).await,
         Command::Agent(command) => fleet::agent(&client, command).await,
         Command::Stack(command) => fleet::stack(&client, command).await,
-        Command::Tenant(command) => tenant::tenant(&client, command).await,
-        Command::Whoami => tenant::whoami(&client).await,
+        Command::Generator(command) => generator::generator(&client, command).await,
+        Command::Whoami => generator::whoami(&client).await,
     }
 }
 
@@ -220,7 +219,7 @@ async fn apply(client: &BrokkrClient, args: ApplyArgs) -> Result<(), String> {
     Ok(())
 }
 
-/// Find the ids of the agent and the tenant of a register or deregister
+/// Find the ids of the agent and the generator of a register or deregister
 /// command. Each one is a name or an id.
 async fn resolve_pair(client: &BrokkrClient, args: &RegisterArgs) -> Result<(Uuid, Uuid), String> {
     let agent = client
@@ -263,7 +262,7 @@ fn register_message(
 ) -> Result<String, String> {
     match result {
         Ok(reg) => Ok(format!(
-            "registered agent {} with tenant {} (registration {})",
+            "registered agent {} with generator {} (registration {})",
             shown(&args.agent, reg.agent_id),
             shown(&args.generator, reg.generator_id),
             reg.id
@@ -273,7 +272,7 @@ fn register_message(
                 && e.code() == Some("already_registered") =>
         {
             Ok(format!(
-                "unchanged: agent {} is registered with tenant {} already",
+                "unchanged: agent {} is registered with generator {} already",
                 shown(&args.agent, agent),
                 shown(&args.generator, generator)
             ))
@@ -289,12 +288,12 @@ async fn deregister(client: &BrokkrClient, args: RegisterArgs) -> Result<(), Str
         .await
         .map_err(|e| e.to_string())?;
     println!(
-        "deregistered agent {} from tenant {}",
+        "deregistered agent {} from generator {}",
         shown(&args.agent, agent),
         shown(&args.generator, generator)
     );
     println!(
-        "note: the agent's targets for this tenant were removed; it will prune \
+        "note: the agent's targets for this generator were removed; it will prune \
          those resources on its next reconcile"
     );
     Ok(())
@@ -313,12 +312,15 @@ async fn registrations(client: &BrokkrClient, args: RegistrationsArgs) -> Result
             .await
             .map_err(|e| e.to_string())?;
         if regs.is_empty() {
-            println!("agent {agent} has no tenant registrations");
+            println!("agent {agent} has no generator registrations");
         } else {
-            println!("agent {agent} is registered with {} tenant(s):", regs.len());
+            println!(
+                "agent {agent} is registered with {} generator(s):",
+                regs.len()
+            );
             for r in regs {
                 println!(
-                    "  tenant {}  (registered {})",
+                    "  generator {}  (registered {})",
                     r.generator_id, r.registered_at
                 );
             }
@@ -334,9 +336,12 @@ async fn registrations(client: &BrokkrClient, args: RegistrationsArgs) -> Result
             .await
             .map_err(|e| e.to_string())?;
         if regs.is_empty() {
-            println!("tenant {generator} has no registered agents");
+            println!("generator {generator} has no registered agents");
         } else {
-            println!("tenant {generator} has {} registered agent(s):", regs.len());
+            println!(
+                "generator {generator} has {} registered agent(s):",
+                regs.len()
+            );
             for r in regs {
                 println!("  agent {}  (registered {})", r.agent_id, r.registered_at);
             }
@@ -388,21 +393,21 @@ mod tests {
 
     #[test]
     fn registration_flags_take_a_name_or_an_id() {
-        for (command, tenant) in [("register", "acme"), ("deregister", NIL)] {
+        for (command, generator) in [("register", "acme"), ("deregister", NIL)] {
             let args = [
                 "brokkr",
                 command,
                 "--agent",
                 "edge-1",
                 "--generator",
-                tenant,
+                generator,
             ];
             let cli = Cli::try_parse_from(args).unwrap();
             let (Command::Register(a) | Command::Deregister(a)) = cli.command else {
                 panic!("expected register or deregister");
             };
             assert_eq!(a.agent, "edge-1");
-            assert_eq!(a.generator, tenant);
+            assert_eq!(a.generator, generator);
         }
         assert!(Cli::try_parse_from(["brokkr", "registrations", "--agent", "edge-1"]).is_ok());
         assert!(Cli::try_parse_from(["brokkr", "registrations", "--generator", "acme"]).is_ok());
@@ -435,7 +440,7 @@ mod tests {
         assert_eq!(
             message,
             Ok(format!(
-                "unchanged: agent \"edge-1\" ({agent}) is registered with tenant \"acme\" ({generator}) already"
+                "unchanged: agent \"edge-1\" ({agent}) is registered with generator \"acme\" ({generator}) already"
             ))
         );
         // A different conflict, or another error, still fails.

@@ -7,13 +7,13 @@
 //! Brokkr BDD suite (BROKKR-T-0385).
 //!
 //! The Gherkin features in `features/` describe the onboarding flows as a
-//! person runs them: tenant onboarding, agent onboarding, the tenant after
-//! apply, and the rules that keep tenants apart. The steps drive the real
+//! person runs them: generator onboarding, agent onboarding, the generator after
+//! apply, and the rules that keep generators apart. The steps drive the real
 //! `brokkr` CLI (`BROKKR_CLI`), the real `brokkr-agent` binary
 //! (`BROKKR_AGENT`) and, where no command exists, the broker API, against a
 //! running broker (`BROKER_URL`, `ADMIN_PAK`).
 //!
-//! Each scenario creates its own tenants, agents and stacks under unique
+//! Each scenario creates its own generators, agents and stacks under unique
 //! names and removes them in the `after` hook, so scenarios run in any order
 //! and the suite runs twice against the same broker.
 //!
