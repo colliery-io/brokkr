@@ -67,12 +67,12 @@ Names in a feature are plain (`team-robin`, `prod-1`, `payments`). The runner gi
 
 ## Add a step
 
-A step is an `async fn` on the `World` with a `#[given]`, `#[when]` or `#[then]` attribute and a [Cucumber expression](https://github.com/cucumber/cucumber-expressions#readme); `{string}` takes a quoted value, `{word}` one word. The modules are by who acts: `steps/admin.rs` and `steps/tenant.rs` and `steps/agent.rs` hold what each does (Given and When), `steps/checks.rs` holds what they see (Then).
+A step is an `async fn` on the `World` with a `#[given]`, `#[when]` or `#[then]` attribute and a [Cucumber expression](https://github.com/cucumber/cucumber-expressions#readme); `{string}` takes a quoted value, `{word}` one word. The modules are by who acts: `steps/admin.rs` and `steps/generator.rs` and `steps/agent.rs` hold what each does (Given and When), `steps/checks.rs` holds what they see (Then).
 
 ```rust
 #[when(expr = "the generator {string} deletes the stack {string}")]
-async fn deletes_stack(w: &mut World, tenant: String, stack: String) {
-    let pak = w.tenant(&tenant).pak.clone();
+async fn deletes_stack(w: &mut World, generator: String, stack: String) {
+    let pak = w.generator(&generator).pak.clone();
     let stack = w.real(&w.stack(&stack).name);
     w.brokkr(&pak, &["stack", "delete", &stack]).await;
 }
@@ -80,7 +80,7 @@ async fn deletes_stack(w: &mut World, tenant: String, stack: String) {
 
 The `World` (`tests/bdd/src/world.rs`) holds the scenario's generators, agents and stacks by their feature names, the last command that ran and the last answer of the broker. Its helpers do the common work: `w.real(name)` gives the unique real name; `w.brokkr(pak, args)` runs the CLI and keeps the run; `w.brokkr_agent(pak, name, cluster)` starts the agent binary; `w.expect_output(text)` and `w.expect_error(text)` check the last run and, when the check fails, show the whole command and its output; `w.api` reaches the broker for a read no command makes. Keep a Then step to one check, so a failure names the one thing that went wrong.
 
-A step that creates something records it on the `World` (`w.tenants`, `w.agents`, `w.stacks`), and the `after` hook in `main.rs` deletes everything recorded there as the admin. A step that creates a new kind of thing adds it to that hook too.
+A step that creates something records it on the `World` (`w.generators`, `w.agents`, `w.stacks`), and the `after` hook in `main.rs` deletes everything recorded there as the admin. A step that creates a new kind of thing adds it to that hook too.
 
 Before you commit, run `cargo fmt` and `cargo clippy --all-targets -- -D warnings` in `tests/bdd`, and run the feature you changed against the stack.
 
