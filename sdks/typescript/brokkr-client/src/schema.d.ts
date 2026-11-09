@@ -686,7 +686,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Lists named PAKs (tenants) for scope selection. */
+        /** Lists named PAKs (generators) for scope selection. */
         get: operations["list_paks"];
         put?: never;
         post?: never;
@@ -1792,7 +1792,7 @@ export interface components {
         DeploymentObjectHealthSummary: {
             /**
              * @description The report of each agent, by agent id (BROKKR-T-0379). This is how a
-             *     tenant learns which clusters have its stack.
+             *     generator learns which clusters have its stack.
              */
             agents?: components["schemas"]["AgentHealthReport"][];
             /** @description Number of agents reporting degraded. */
@@ -2250,16 +2250,16 @@ export interface components {
             template_id: string;
         };
         /**
-         * @description One tenant entry for the console scope selector: a named PAK owner
+         * @description One generator entry for the console scope selector: a named PAK owner
          *     (generator) reduced to its identity.
          */
         PakSummary: {
             /**
              * Format: uuid
-             * @description The tenant's generator ID (used as `?pak_id=` in scoped queries).
+             * @description The generator's generator ID (used as `?pak_id=` in scoped queries).
              */
             id: string;
-            /** @description Human-readable tenant name (the generator name). */
+            /** @description Human-readable generator name (the generator name). */
             name: string;
         };
         PendingWebhookDelivery: {
@@ -3127,7 +3127,7 @@ export interface operations {
     list_agent_events: {
         parameters: {
             query?: {
-                /** @description Tenant (generator) ID to scope the listing to. */
+                /** @description Generator (generator) ID to scope the listing to. */
                 pak_id?: string | null;
             };
             header?: never;
@@ -4826,7 +4826,7 @@ export interface operations {
     list_fleet: {
         parameters: {
             query?: {
-                /** @description Tenant (generator) ID to scope the listing to. */
+                /** @description Generator (generator) ID to scope the listing to. */
                 pak_id?: string | null;
             };
             header?: never;
@@ -5338,7 +5338,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description List of named PAKs (tenants) */
+            /** @description List of named PAKs (generators) */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5370,7 +5370,7 @@ export interface operations {
     list_stacks: {
         parameters: {
             query?: {
-                /** @description Tenant (generator) ID to scope the listing to. */
+                /** @description Generator (generator) ID to scope the listing to. */
                 pak_id?: string | null;
             };
             header?: never;
@@ -5973,7 +5973,7 @@ export interface operations {
                     "application/json": components["schemas"]["StackHealthResponse"];
                 };
             };
-            /** @description Forbidden - not an admin, and not the tenant that owns the stack */
+            /** @description Forbidden - not an admin, and not the generator that owns the stack */
             403: {
                 headers: {
                     [name: string]: unknown;

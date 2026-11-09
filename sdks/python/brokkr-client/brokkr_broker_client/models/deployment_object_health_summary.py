@@ -27,7 +27,7 @@ class DeploymentObjectHealthSummary:
         id (UUID): The deployment object ID.
         status (str): Overall status for this deployment object.
         agents (list[AgentHealthReport] | Unset): The report of each agent, by agent id (BROKKR-T-0379). This is how a
-            tenant learns which clusters have its stack.
+            generator learns which clusters have its stack.
     """
 
     degraded_agents: int
