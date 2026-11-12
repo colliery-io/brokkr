@@ -50,7 +50,7 @@ Variant names are `snake_case`.
 |--------|------|---------|
 | `work_order` | `WorkOrder` (same shape as REST) | A work order this agent may claim was created |
 | `target_changed` | `AgentTarget` | Targets changed — re-poll. Sent when a stack target is added for this agent, and also as a synthetic nudge when the agent is deregistered from a generator |
-| `stack_changed` | `Stack` | A targeted stack's metadata or deployment objects changed |
+| `stack_changed` | `Stack` | A stack that the agent serves (by a target, a label or an annotation) got a new deployment object |
 
 Control pushes are hints: they are fire-and-forget, sent after the database commit, and the agent's REST polling remains the source of truth (see [ADR-0008](https://github.com/colliery-io/brokkr/blob/main/.metis/adrs/BROKKR-A-0008.md)).
 

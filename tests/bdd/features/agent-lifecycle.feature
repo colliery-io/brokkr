@@ -50,10 +50,6 @@ Feature: Agent lifecycle
     When the admin deletes the agent "prod-1"
     Then the registrations of the generator "team-robin" do not name the agent "prod-1"
 
-  # BROKKR-T-0395: the read of one deployment object lets an agent in by its
-  # targets only. An agent that has the stack by a label is refused, and the
-  # agent's diagnostics loop makes this read.
-  @known-bug
   Scenario: An agent that serves a stack by a label alone reads its deployment object
     Given the admin has labelled the agent "prod-1" with "env:lifecycle"
     And the generator "team-robin" has applied a folder as the stack "payments"

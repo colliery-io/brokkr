@@ -107,7 +107,7 @@ These come from the database classifier (`ApiError::from_diesel`) on create/upda
 |------|--------|---------|
 | `deployment_object_not_found` | 404 | No deployment object with the given ID. |
 | `invalid_deployment_object` | 400 | Deployment object payload rejected (e.g. empty or invalid YAML content; also raised when a rendered template produces an invalid object). |
-| `agent_not_associated` | 403 | Agent is not targeted by the stack owning this deployment object. |
+| `agent_not_associated` | 403 | Agent does not serve the stack owning this deployment object: it has no target for it, and no shared label or annotation with it within the generators the agent is registered with. |
 | `generator_not_associated` | 403 | Generator does not own the stack owning this deployment object. |
 
 ## Templates

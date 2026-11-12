@@ -494,3 +494,84 @@ async fn test_create_deployment_object_with_bad_pak() {
 
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
+
+// ---------------------------------------------------------------------------
+// BROKKR-T-0395: an agent reads the objects of each stack it serves, by a
+// target, a label or an annotation. The agent's diagnostics loop makes this
+// read.
+// ---------------------------------------------------------------------------
+
+/// `GET /deployment-objects/{id}` as the bearer of `pak`.
+async fn read_object_status(fixture: &TestFixture, pak: &str, object: Uuid) -> StatusCode {
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+    app.oneshot(
+        Request::builder()
+            .method("GET")
+            .uri(format!("/api/v1/deployment-objects/{object}"))
+            .header("Authorization", format!("Bearer {pak}"))
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await
+    .unwrap()
+    .status()
+}
+
+#[tokio::test]
+async fn test_get_deployment_object_agent_by_label_alone() {
+    let fixture = TestFixture::new();
+    let (agent, pak) =
+        fixture.create_test_agent_with_pak("t0395-label".to_string(), "c".to_string());
+    let stack =
+        fixture.create_test_stack("t0395-label".to_string(), None, fixture.admin_generator.id);
+    let object = fixture.create_test_deployment_object(stack.id, "test yaml".to_string(), false);
+    fixture.create_test_agent_label(agent.id, "t0395-team".to_string());
+    fixture.create_test_stack_label(stack.id, "t0395-team".to_string());
+
+    assert_eq!(
+        read_object_status(&fixture, &pak, object.id).await,
+        StatusCode::OK,
+        "an agent that has the stack by a label reads its object"
+    );
+}
+
+#[tokio::test]
+async fn test_get_deployment_object_agent_by_annotation_alone() {
+    let fixture = TestFixture::new();
+    let (agent, pak) =
+        fixture.create_test_agent_with_pak("t0395-annot".to_string(), "c".to_string());
+    let stack =
+        fixture.create_test_stack("t0395-annot".to_string(), None, fixture.admin_generator.id);
+    let object = fixture.create_test_deployment_object(stack.id, "test yaml".to_string(), false);
+    fixture.create_test_agent_annotation(agent.id, "t0395-tier".to_string(), "gold".to_string());
+    fixture.create_test_stack_annotation(stack.id, "t0395-tier", "gold");
+
+    assert_eq!(
+        read_object_status(&fixture, &pak, object.id).await,
+        StatusCode::OK,
+        "an agent that has the stack by an annotation reads its object"
+    );
+}
+
+/// Registration is the consent boundary (BROKKR-T-0287): a shared label with
+/// a stack of a generator the agent is not registered with gives no read.
+#[tokio::test]
+async fn test_get_deployment_object_agent_label_without_registration_forbidden() {
+    let fixture = TestFixture::new();
+    let (agent, pak) =
+        fixture.create_test_agent_with_pak("t0395-noreg".to_string(), "c".to_string());
+    let other = fixture.create_test_generator(
+        "t0395-other".to_string(),
+        None,
+        "t0395-other-hash".to_string(),
+    );
+    let stack = fixture.create_test_stack("t0395-noreg".to_string(), None, other.id);
+    let object = fixture.create_test_deployment_object(stack.id, "test yaml".to_string(), false);
+    fixture.create_test_agent_label(agent.id, "t0395-shared".to_string());
+    fixture.create_test_stack_label(stack.id, "t0395-shared".to_string());
+
+    assert_eq!(
+        read_object_status(&fixture, &pak, object.id).await,
+        StatusCode::FORBIDDEN
+    );
+}

@@ -16,10 +16,7 @@ use brokkr_models::models::deployment_objects::{DeploymentObject, NewDeploymentO
 use brokkr_models::models::webhooks::{
     BrokkrEvent, EVENT_DEPLOYMENT_CREATED, EVENT_DEPLOYMENT_DELETED,
 };
-use brokkr_models::schema::{
-    agent_annotations, agent_events, agent_generator_registrations, agent_labels, agent_targets,
-    deployment_objects, stack_annotations, stack_labels, stacks,
-};
+use brokkr_models::schema::{agent_events, agent_targets, deployment_objects};
 use chrono::Utc;
 use diesel::prelude::*;
 use std::collections::{HashMap, HashSet};
@@ -278,68 +275,17 @@ impl DeploymentObjectsDAL<'_> {
     /// decide which objects it reports health on. It is computed for the whole
     /// fleet with a handful of bounded set-based queries.
     ///
-    /// Agent→stack responsibility mirrors `stacks::get_associated_stacks`: the
-    /// UNION of hard targets (`agent_targets`), stacks sharing any label with the
-    /// agent, and stacks sharing any `(key, value)` annotation with the agent.
-    /// Only non-deleted stacks participate. Per BROKKR-T-0287, the label and
-    /// annotation legs are additionally restricted to stacks whose owning
-    /// generator the agent is registered with (registration is the consent
-    /// boundary); hard targets are exempt, being gated at creation time.
+    /// Agent→stack responsibility is the rule of `StacksDAL::associations`.
     ///
     /// # Returns
     ///
     /// Returns the set of `(agent_id, deployment_object_id)` pairs, or a
     /// diesel::result::Error on failure.
     pub fn served_pairs(&self) -> Result<HashSet<(Uuid, Uuid)>, diesel::result::Error> {
+        let associations = self.dal.stacks().associations(None, None)?;
         let conn = &mut self.dal.conn()?;
 
-        // (a) Build the distinct set of (agent_id, stack_id) responsibilities
-        // from the three association sources, over non-deleted stacks only.
-        let mut associations: HashSet<(Uuid, Uuid)> = HashSet::new();
-
-        // Hard targets.
-        let target_pairs: Vec<(Uuid, Uuid)> = agent_targets::table
-            .inner_join(stacks::table.on(stacks::id.eq(agent_targets::stack_id)))
-            .filter(stacks::deleted_at.is_null())
-            .select((agent_targets::agent_id, agent_targets::stack_id))
-            .load::<(Uuid, Uuid)>(conn)?;
-        associations.extend(target_pairs);
-
-        // Shared label: agent_labels.label == stack_labels.label, and the agent
-        // is registered with the stack's owning generator.
-        let label_pairs: Vec<(Uuid, Uuid)> = agent_labels::table
-            .inner_join(stack_labels::table.on(stack_labels::label.eq(agent_labels::label)))
-            .inner_join(stacks::table.on(stacks::id.eq(stack_labels::stack_id)))
-            .inner_join(
-                agent_generator_registrations::table.on(agent_generator_registrations::agent_id
-                    .eq(agent_labels::agent_id)
-                    .and(agent_generator_registrations::generator_id.eq(stacks::generator_id))),
-            )
-            .filter(stacks::deleted_at.is_null())
-            .select((agent_labels::agent_id, stack_labels::stack_id))
-            .load::<(Uuid, Uuid)>(conn)?;
-        associations.extend(label_pairs);
-
-        // Shared annotation: agent_annotations.(key,value) == stack_annotations.(key,value),
-        // and the agent is registered with the stack's owning generator.
-        let annotation_pairs: Vec<(Uuid, Uuid)> = agent_annotations::table
-            .inner_join(
-                stack_annotations::table.on(stack_annotations::key
-                    .eq(agent_annotations::key)
-                    .and(stack_annotations::value.eq(agent_annotations::value))),
-            )
-            .inner_join(stacks::table.on(stacks::id.eq(stack_annotations::stack_id)))
-            .inner_join(
-                agent_generator_registrations::table.on(agent_generator_registrations::agent_id
-                    .eq(agent_annotations::agent_id)
-                    .and(agent_generator_registrations::generator_id.eq(stacks::generator_id))),
-            )
-            .filter(stacks::deleted_at.is_null())
-            .select((agent_annotations::agent_id, stack_annotations::stack_id))
-            .load::<(Uuid, Uuid)>(conn)?;
-        associations.extend(annotation_pairs);
-
-        // (b) Latest non-deleted deployment object per stack (max sequence_id),
+        // Latest non-deleted deployment object per stack (max sequence_id),
         // mirroring `get_latest_for_stack`. We load all (stack_id, id,
         // sequence_id) for non-deleted objects and reduce in memory.
         let object_rows: Vec<(Uuid, Uuid, i64)> = deployment_objects::table
