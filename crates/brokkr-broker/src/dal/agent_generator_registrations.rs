@@ -8,7 +8,7 @@ use crate::dal::DAL;
 use brokkr_models::models::agent_generator_registrations::{
     AgentGeneratorRegistration, NewAgentGeneratorRegistration,
 };
-use brokkr_models::schema::{agent_generator_registrations, agent_targets, agents, stacks};
+use brokkr_models::schema::{agent_generator_registrations, agent_targets, stacks};
 use diesel::dsl::exists;
 use diesel::prelude::*;
 use uuid::Uuid;
@@ -61,19 +61,14 @@ impl AgentGeneratorRegistrationsDAL<'_> {
             .load::<AgentGeneratorRegistration>(conn)
     }
 
-    /// All agents registered with a generator. An agent delete is soft and
-    /// keeps its registrations, so deleted agents are left out here
-    /// (BROKKR-T-0394).
+    /// All agents registered with a generator.
     pub fn list_for_generator(
         &self,
         generator_id: Uuid,
     ) -> Result<Vec<AgentGeneratorRegistration>, diesel::result::Error> {
         let conn = &mut self.dal.conn()?;
         agent_generator_registrations::table
-            .inner_join(agents::table.on(agents::id.eq(agent_generator_registrations::agent_id)))
             .filter(agent_generator_registrations::generator_id.eq(generator_id))
-            .filter(agents::deleted_at.is_null())
-            .select(agent_generator_registrations::all_columns)
             .load::<AgentGeneratorRegistration>(conn)
     }
 

@@ -577,7 +577,8 @@ fn test_health_drops_an_agent_that_stopped_serving() {
 }
 
 // ---------------------------------------------------------------------------
-// BROKKR-T-0394: a soft delete leaves child rows; readers and writers check.
+// BROKKR-T-0394: a soft delete cleans the child rows (migration 24), and a
+// health report is checked before it is stored.
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -617,7 +618,7 @@ fn test_retain_served_drops_reports_an_agent_may_not_write() {
 }
 
 #[test]
-fn test_live_targets_and_registrations_leave_out_deleted_parents() {
+fn test_a_soft_delete_removes_targets_registrations_and_health() {
     let fixture = TestFixture::new();
     let gen_id = fixture.admin_generator.id;
     let agent = fixture.create_test_agent("t0394-lists".to_string(), "c".to_string());
@@ -630,12 +631,29 @@ fn test_live_targets_and_registrations_leave_out_deleted_parents() {
     let targets: Vec<uuid::Uuid> = fixture
         .dal
         .agent_targets()
-        .list_live_for_agent(agent.id)
-        .expect("list_live_for_agent failed")
+        .list_for_agent(agent.id)
+        .expect("list_for_agent failed")
         .iter()
         .map(|t| t.stack_id)
         .collect();
-    assert_eq!(targets, vec![live.id], "the deleted stack is left out");
+    assert_eq!(
+        targets,
+        vec![live.id],
+        "the target of the deleted stack is gone"
+    );
+
+    // The health of the deleted stack went with it; the live one stays.
+    let o_live = fixture.create_test_deployment_object(live.id, "l".to_string(), false);
+    report(&fixture, agent.id, o_live.id, "failing");
+    let health_rows = |fixture: &TestFixture| {
+        fixture
+            .dal
+            .deployment_health()
+            .list_by_agent(agent.id)
+            .expect("list_by_agent failed")
+            .len()
+    };
+    assert_eq!(health_rows(&fixture), 1);
 
     let registered = |fixture: &TestFixture| -> bool {
         fixture
@@ -650,7 +668,21 @@ fn test_live_targets_and_registrations_leave_out_deleted_parents() {
     fixture.dal.agents().soft_delete(agent.id).unwrap();
     assert!(
         !registered(&fixture),
-        "the registration of a deleted agent is left out"
+        "the registration of a deleted agent is gone"
+    );
+    assert_eq!(
+        health_rows(&fixture),
+        0,
+        "the health records of a deleted agent are gone"
+    );
+    assert!(
+        fixture
+            .dal
+            .agent_targets()
+            .list_for_agent(agent.id)
+            .expect("list_for_agent failed")
+            .is_empty(),
+        "the targets of a deleted agent are gone"
     );
 }
 

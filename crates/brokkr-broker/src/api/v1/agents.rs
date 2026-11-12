@@ -852,8 +852,7 @@ async fn list_targets(
 ) -> Result<Json<Vec<AgentTarget>>, ApiError> {
     info!("Handling request to list targets for agent with ID: {}", id);
     require_admin_or_agent(&auth_payload, id)?;
-    // Live stacks only: a deleted stack keeps its target rows (BROKKR-T-0394).
-    let targets = dal.agent_targets().list_live_for_agent(id).map_err(|e| {
+    let targets = dal.agent_targets().list_for_agent(id).map_err(|e| {
         error!("Failed to fetch targets for agent with ID {}: {:?}", id, e);
         ApiError::internal("failed to fetch agent targets")
     })?;

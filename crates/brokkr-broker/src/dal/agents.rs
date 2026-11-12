@@ -231,17 +231,6 @@ impl AgentsDAL<'_> {
                 self.dal,
                 &BrokkrEvent::new(EVENT_AGENT_DEREGISTERED, event_data),
             );
-
-            // The delete is soft, so no foreign key takes the agent out of
-            // the work order queue (BROKKR-T-0394). The agent is deleted
-            // either way: a failure here is logged, not returned.
-            if let Err(e) = self.dal.work_orders().release_agent(agent_uuid) {
-                tracing::error!(
-                    "Failed to release the work orders of deleted agent {}: {:?}",
-                    agent_uuid,
-                    e
-                );
-            }
         }
 
         Ok(rows)
