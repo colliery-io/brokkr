@@ -93,6 +93,52 @@ impl DeploymentHealthDAL<'_> {
             .execute(conn)
     }
 
+    /// Keeps the records an agent may write: the deployment object is not
+    /// deleted, and the agent serves its stack (`StacksDAL::associations`).
+    ///
+    /// An agent can send a report after its stack is deleted or after it lost
+    /// the stack. Such a report is dropped, not refused: the rest of the batch
+    /// is good, and the agent stops by itself on its next read of what it
+    /// serves (BROKKR-T-0394).
+    pub fn retain_served(
+        &self,
+        records: Vec<NewDeploymentHealth>,
+    ) -> Result<Vec<NewDeploymentHealth>, diesel::result::Error> {
+        if records.is_empty() {
+            return Ok(records);
+        }
+        let object_ids: Vec<Uuid> = records.iter().map(|r| r.deployment_object_id).collect();
+        let stack_of: HashMap<Uuid, Uuid> = {
+            let conn = &mut self.dal.conn()?;
+            deployment_objects::table
+                .filter(deployment_objects::id.eq_any(&object_ids))
+                .filter(deployment_objects::deleted_at.is_null())
+                .select((deployment_objects::id, deployment_objects::stack_id))
+                .load::<(Uuid, Uuid)>(conn)?
+                .into_iter()
+                .collect()
+        };
+        let mut served: HashMap<Uuid, std::collections::HashSet<(Uuid, Uuid)>> = HashMap::new();
+        let mut kept = Vec::with_capacity(records.len());
+        for record in records {
+            let Some(stack_id) = stack_of.get(&record.deployment_object_id) else {
+                continue;
+            };
+            let pairs = match served.entry(record.agent_id) {
+                std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
+                std::collections::hash_map::Entry::Vacant(entry) => entry.insert(
+                    self.dal
+                        .stacks()
+                        .associations(Some(record.agent_id), None)?,
+                ),
+            };
+            if pairs.contains(&(record.agent_id, *stack_id)) {
+                kept.push(record);
+            }
+        }
+        Ok(kept)
+    }
+
     /// Gets the health record for a specific agent and deployment object.
     ///
     /// # Arguments

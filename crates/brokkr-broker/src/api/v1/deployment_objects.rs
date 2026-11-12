@@ -122,7 +122,23 @@ async fn get_deployment_object(
             ApiError::internal("failed to fetch agent targets")
         })?;
 
-        if targets.iter().any(|t| t.stack_id == object.stack_id) {
+        // A target gives the read as before, also for a stack that is now
+        // deleted. Else the agent must serve the stack by the one rule
+        // (a label or an annotation within its registrations, BROKKR-T-0395):
+        // the agent's diagnostics loop reads the objects of each stack it has.
+        let serves = targets.iter().any(|t| t.stack_id == object.stack_id)
+            || dal
+                .stacks()
+                .agent_serves(agent_id, object.stack_id)
+                .map_err(|e| {
+                    error!(
+                        "Failed to check if agent {} serves stack {}: {:?}",
+                        agent_id, object.stack_id, e
+                    );
+                    ApiError::internal("failed to check agent association")
+                })?;
+
+        if serves {
             info!(
                 "Agent {} accessed deployment object with ID: {}",
                 agent_id, id

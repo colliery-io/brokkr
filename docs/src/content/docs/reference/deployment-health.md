@@ -103,7 +103,11 @@ PATCH /api/v1/agents/{id}/health-status      # agent-side reporting endpoint
 
 The stack endpoint and the fleet counts (`health_failing`, `health_degraded`) use current records only. A record is current while the agent serves its deployment object: the latest object of a stack that is not deleted and that the agent has by target, label or annotation. An agent reports on those objects only.
 
-The record of a replaced object, of a deleted stack, or of a stack the agent no longer serves stays in the table. `GET /api/v1/deployment-objects/{id}/health` still returns it.
+The record of a replaced object, or of a stack the agent no longer serves, stays in the table, and `GET /api/v1/deployment-objects/{id}/health` still returns it.
+
+The delete of a stack removes the health records of its objects, and the delete of an agent removes the health records of the agent. `GET /api/v1/deployment-objects/{id}/health` answers `404 deployment_object_not_found` for an object of a deleted stack.
+
+A report is stored only for an object that is not deleted, in a stack the agent serves. A report that fails this check is dropped: the request still succeeds, and the other reports of the same request are stored.
 
 ## Related Documentation
 

@@ -522,6 +522,8 @@ async fn ws_uplink_persists_heartbeat_event_and_health() {
     )
     .unwrap();
     let object = fixture.dal.deployment_objects().create(&new_obj).unwrap();
+    // A health report is kept only for a stack the agent serves (BROKKR-T-0394).
+    fixture.create_test_agent_target(agent.id, stack.id);
 
     let now = chrono::Utc::now();
 

@@ -339,3 +339,142 @@ pub fn now_rfc3339() -> String {
         rem % 60
     )
 }
+
+// The stack lifecycle (BROKKR-T-0398)
+
+impl Api {
+    /// The deployment objects of a stack that are not deleted.
+    pub async fn revisions(&self, pak: &str, stack: Uuid) -> Result<Vec<Value>> {
+        as_list(
+            self.expect(
+                pak,
+                Method::GET,
+                &format!("/stacks/{stack}/deployment-objects"),
+                None,
+            )
+            .await?,
+        )
+    }
+
+    pub async fn agent_targets(&self, admin: &str, agent: Uuid) -> Result<Vec<Value>> {
+        as_list(
+            self.expect(
+                admin,
+                Method::GET,
+                &format!("/agents/{agent}/targets"),
+                None,
+            )
+            .await?,
+        )
+    }
+
+    /// The health of one deployment object, from each agent that reported.
+    pub async fn object_health(&self, admin: &str, object: Uuid) -> Result<Answer> {
+        self.call(
+            admin,
+            Method::GET,
+            &format!("/deployment-objects/{object}/health"),
+            None,
+        )
+        .await
+    }
+
+    /// Like [`Self::report_health`], but a refusal is an answer, not an error.
+    pub async fn try_report_health(
+        &self,
+        agent_pak: &str,
+        agent: Uuid,
+        object: Uuid,
+        status: &str,
+    ) -> Result<Answer> {
+        self.call(
+            agent_pak,
+            Method::PATCH,
+            &format!("/agents/{agent}/health-status"),
+            Some(json!({
+                "deployment_objects": [{
+                    "id": object,
+                    "status": status,
+                    "summary": null,
+                    "checked_at": now_rfc3339(),
+                }]
+            })),
+        )
+        .await
+    }
+}
+
+/// The id of the deployment object with the highest `sequence_id`.
+pub fn latest(revisions: &[Value]) -> Option<Uuid> {
+    revisions
+        .iter()
+        .max_by_key(|r| r.get("sequence_id").and_then(Value::as_i64))
+        .and_then(id_of)
+}
+
+// Work orders (BROKKR-T-0399)
+
+impl Api {
+    /// `POST /work-orders` as the admin. The answer is kept whole: a refusal
+    /// is something a scenario checks.
+    pub async fn create_work_order(&self, admin: &str, body: Value) -> Result<Answer> {
+        self.call(admin, Method::POST, "/work-orders", Some(body))
+            .await
+    }
+
+    /// A work order by its id. One that ended comes from the log, with the
+    /// status `COMPLETED` or `FAILED`.
+    pub async fn get_work_order(&self, admin: &str, id: Uuid) -> Result<Answer> {
+        self.call(admin, Method::GET, &format!("/work-orders/{id}"), None)
+            .await
+    }
+
+    pub async fn work_order_log(&self, admin: &str, id: Uuid) -> Result<Answer> {
+        self.call(admin, Method::GET, &format!("/work-order-log/{id}"), None)
+            .await
+    }
+
+    pub async fn delete_work_order(&self, admin: &str, id: Uuid) -> Result<Answer> {
+        self.call(admin, Method::DELETE, &format!("/work-orders/{id}"), None)
+            .await
+    }
+
+    /// The pending work orders that reach an agent, as the agent reads them.
+    pub async fn pending_work_orders(&self, agent_pak: &str, agent: Uuid) -> Result<Vec<Value>> {
+        as_list(
+            self.expect(
+                agent_pak,
+                Method::GET,
+                &format!("/agents/{agent}/work-orders/pending"),
+                None,
+            )
+            .await?,
+        )
+    }
+
+    pub async fn claim_work_order(&self, agent_pak: &str, agent: Uuid, id: Uuid) -> Result<Answer> {
+        self.call(
+            agent_pak,
+            Method::POST,
+            &format!("/work-orders/{id}/claim"),
+            Some(json!({ "agent_id": agent })),
+        )
+        .await
+    }
+
+    pub async fn complete_work_order(
+        &self,
+        agent_pak: &str,
+        id: Uuid,
+        success: bool,
+        message: &str,
+    ) -> Result<Answer> {
+        self.call(
+            agent_pak,
+            Method::POST,
+            &format!("/work-orders/{id}/complete"),
+            Some(json!({ "success": success, "message": message, "retryable": true })),
+        )
+        .await
+    }
+}

@@ -38,6 +38,12 @@ Work orders are routed to agents using the same targeting mechanisms as stacks:
 
 An agent can claim a work order if it matches ANY of the specified targeting criteria.
 
+### When a Target Agent Is Deleted
+
+A work order cannot name a deleted agent as a target: the create request answers `404 agent_not_found`.
+
+When an agent is deleted, the broker removes it from the targets of each work order and gives back the work orders it had claimed. A waiting work order that then has no target agent, no label and no annotation can be claimed by no agent. The delete of the agent deletes that work order too. It gets no entry in the work order log.
+
 ## Work Types
 
 `work_type` accepts exactly two values. Any other value fails the work order with `Unknown work type`.

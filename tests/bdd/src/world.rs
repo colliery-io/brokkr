@@ -142,6 +142,8 @@ pub struct World {
     pub generators: BTreeMap<String, Generator>,
     pub agents: BTreeMap<String, AgentRecord>,
     pub stacks: BTreeMap<String, Stack>,
+    /// The work orders the admin created, by the name the feature uses.
+    pub work_orders: BTreeMap<String, Uuid>,
     /// The folder of manifests the generator applies.
     pub bundle: Option<TempDir>,
     /// The last binary run: `brokkr` or `brokkr-agent`.
@@ -152,6 +154,8 @@ pub struct World {
     /// registered with, for the cleanup.
     pub cluster_agent_id: Option<Uuid>,
     pub cluster_registrations: Vec<Uuid>,
+    /// The stacks a step noted before their delete, by their feature name.
+    pub noted_stacks: BTreeMap<String, NotedStack>,
 }
 
 impl World {
@@ -166,11 +170,13 @@ impl World {
             generators: BTreeMap::new(),
             agents: BTreeMap::new(),
             stacks: BTreeMap::new(),
+            work_orders: BTreeMap::new(),
             bundle: None,
             last: None,
             answer: None,
             cluster_agent_id: None,
             cluster_registrations: Vec::new(),
+            noted_stacks: BTreeMap::new(),
         }
     }
 
@@ -393,6 +399,13 @@ impl World {
             Err(e) => println!("  cleanup: {what} failed: {e}"),
         };
 
+        // A work order that ended is in the log and answers 404 here.
+        for (name, id) in &self.work_orders {
+            report(
+                format!("delete work order {name}"),
+                api.delete_work_order(&admin, *id).await,
+            );
+        }
         // Stacks first: a stack of a deleted generator has no owner to find it by.
         if !self.stacks.is_empty()
             && let Ok(stacks) = api.list_stacks(&admin).await
@@ -429,5 +442,53 @@ impl World {
                 api.delete_generator(&admin, generator.id).await,
             );
         }
+    }
+}
+
+// The stack lifecycle (BROKKR-T-0398)
+
+/// What a scenario knows of a stack after its delete: the admin no longer
+/// finds the stack by its name, so the ids are read before.
+#[derive(Debug, Clone, Copy)]
+pub struct NotedStack {
+    pub id: Uuid,
+    /// The latest deployment object of the stack before the delete.
+    pub last_revision: Option<Uuid>,
+}
+
+impl World {
+    /// Read the id and the latest revision of a stack, and keep them for the
+    /// steps after its delete. Best effort: a failed read notes nothing, and
+    /// only a step that needs the note fails.
+    pub async fn note_stack(&mut self, name: &str) {
+        let real = self.real(&self.stack(name).name);
+        let Ok(stacks) = self.api.list_stacks(self.admin()).await else {
+            return;
+        };
+        let Some(id) = api::named(&stacks, &real).and_then(api::id_of) else {
+            return;
+        };
+        let last_revision = self
+            .api
+            .revisions(self.admin(), id)
+            .await
+            .ok()
+            .and_then(|revisions| api::latest(&revisions));
+        self.noted_stacks
+            .insert(name.to_string(), NotedStack { id, last_revision });
+    }
+
+    /// The note of a deleted stack.
+    pub fn noted(&self, name: &str) -> NotedStack {
+        *self.noted_stacks.get(name).unwrap_or_else(|| {
+            panic!("the scenario did not read the stack {name:?} before its delete")
+        })
+    }
+
+    /// The last revision of a deleted stack.
+    pub fn noted_revision(&self, name: &str) -> Uuid {
+        self.noted(name)
+            .last_revision
+            .unwrap_or_else(|| panic!("the stack {name:?} had no revision before its delete"))
     }
 }

@@ -278,8 +278,12 @@ impl GeneratorsDAL<'_> {
             .returning(generators::id)
             .get_result(conn)?;
 
-        // Register every existing agent with the new system generator.
-        let agent_ids: Vec<Uuid> = agents::table.select(agents::id).load(conn)?;
+        // Register every live agent with the new system generator. A deleted
+        // agent has no registrations (BROKKR-T-0394).
+        let agent_ids: Vec<Uuid> = agents::table
+            .filter(agents::deleted_at.is_null())
+            .select(agents::id)
+            .load(conn)?;
         let registrations: Vec<NewAgentGeneratorRegistration> = agent_ids
             .into_iter()
             .map(|agent_id| NewAgentGeneratorRegistration {

@@ -284,8 +284,19 @@ fn dispatch_uplink(msg: WsMessage, agent_id: uuid::Uuid, dal: &DAL, broadcaster:
                 summary: h.summary,
                 checked_at: h.checked_at,
             };
-            if let Err(e) = dal.deployment_health().upsert(&new_health) {
-                warn!(%agent_id, error = %e, "failed to upsert WS DeploymentHealth");
+            // The same rule as the REST report: only for an object the agent
+            // serves (BROKKR-T-0394).
+            match dal.deployment_health().retain_served(vec![new_health]) {
+                Ok(kept) => {
+                    for record in &kept {
+                        if let Err(e) = dal.deployment_health().upsert(record) {
+                            warn!(%agent_id, error = %e, "failed to upsert WS DeploymentHealth");
+                        }
+                    }
+                }
+                Err(e) => {
+                    warn!(%agent_id, error = %e, "failed to check WS DeploymentHealth");
+                }
             }
         }
         WsMessage::K8sEvent(ev) => {

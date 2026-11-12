@@ -683,3 +683,311 @@ async fn target_state_has_stack(w: &mut World, agent: String, stack: String) {
         "the target state of the agent {agent:?} does not have the stack {stack:?}"
     );
 }
+
+// The stack lifecycle (BROKKR-T-0398)
+
+#[then(expr = "the stack {string} has {int} revision(s)")]
+async fn stack_has_revisions(w: &mut World, stack: String, count: usize) {
+    let id = w.stack_id(&stack).await;
+    let revisions = w
+        .api
+        .revisions(w.admin(), id)
+        .await
+        .expect("list the revisions of the stack");
+    assert_eq!(
+        revisions.len(),
+        count,
+        "the stack {stack:?} does not have {count} revisions: {revisions:?}"
+    );
+}
+
+#[then(expr = "the agent {string} serves the latest revision of the stack {string}")]
+async fn agent_serves_latest(w: &mut World, agent: String, stack: String) {
+    let id = w.stack_id(&stack).await;
+    let revisions = w
+        .api
+        .revisions(w.admin(), id)
+        .await
+        .expect("list the revisions of the stack");
+    let latest =
+        api::latest(&revisions).unwrap_or_else(|| panic!("the stack {stack:?} has no revision"));
+    let served = crate::steps::agent::served_object(w, &agent, &stack).await;
+    assert_eq!(
+        served,
+        Some(latest),
+        "the agent {agent:?} does not serve the latest revision of the stack {stack:?}"
+    );
+}
+
+#[then(expr = "the health of the stack {string} is {word}")]
+async fn stack_health_is(w: &mut World, stack: String, status: String) {
+    let id = w.stack_id(&stack).await;
+    let answer = w
+        .api
+        .stack_health(w.admin(), id)
+        .await
+        .expect("ask the broker for the health");
+    assert_eq!(
+        answer.body.get("overall_status").and_then(Value::as_str),
+        Some(status.as_str()),
+        "the stack {stack:?} is not {status}: {} {}",
+        answer.status,
+        answer.body
+    );
+}
+
+#[then(expr = "the fleet record of the agent {string} counts {int} degraded record(s)")]
+async fn fleet_record_degraded(w: &mut World, agent: String, count: i64) {
+    let record = fleet_record(w, &agent).await;
+    assert_eq!(
+        record.get("health_degraded").and_then(Value::as_i64),
+        Some(count),
+        "the agent {agent:?} does not count {count} degraded: {record}"
+    );
+}
+
+/// A deleted stack has no health: the broker does not find it, or it finds
+/// no deployment object with a report.
+#[then(expr = "the deleted stack {string} has no health")]
+async fn deleted_stack_has_no_health(w: &mut World, stack: String) {
+    let id = w.noted(&stack).id;
+    let answer = w
+        .api
+        .stack_health(w.admin(), id)
+        .await
+        .expect("ask the broker for the health");
+    let objects = answer
+        .body
+        .get("deployment_objects")
+        .and_then(Value::as_array)
+        .map_or(0, Vec::len);
+    assert!(
+        !answer.ok() || objects == 0,
+        "the deleted stack {stack:?} still has health: {}",
+        answer.body
+    );
+}
+
+#[then(expr = "the targets of the agent {string} do not name the deleted stack {string}")]
+async fn targets_omit_deleted_stack(w: &mut World, agent: String, stack: String) {
+    let id = w.noted(&stack).id.to_string();
+    let targets = w
+        .api
+        .agent_targets(w.admin(), w.agent(&agent).id)
+        .await
+        .expect("list the targets of the agent");
+    assert!(
+        !targets
+            .iter()
+            .any(|t| t.get("stack_id").and_then(Value::as_str) == Some(id.as_str())),
+        "the agent {agent:?} still has a target for the deleted stack {stack:?} ({id})"
+    );
+}
+
+/// The health records of the last revision of a deleted stack. A refusal of
+/// the broker is no record.
+async fn deleted_revision_records(w: &World, stack: &str) -> Vec<Value> {
+    let object = w.noted_revision(stack);
+    let answer = w
+        .api
+        .object_health(w.admin(), object)
+        .await
+        .expect("ask the broker for the health of the deployment object");
+    if !answer.ok() {
+        return Vec::new();
+    }
+    answer
+        .body
+        .get("health_records")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default()
+}
+
+#[then(expr = "the last revision of the deleted stack {string} has no health records")]
+async fn deleted_revision_has_no_records(w: &mut World, stack: String) {
+    let records = deleted_revision_records(w, &stack).await;
+    assert!(
+        records.is_empty(),
+        "the broker still returns the health of a revision of the deleted stack {stack:?}: {records:?}"
+    );
+}
+
+#[then(expr = "the last revision of the deleted stack {string} has no {word} record")]
+async fn deleted_revision_has_no_status(w: &mut World, stack: String, status: String) {
+    let records = deleted_revision_records(w, &stack).await;
+    assert!(
+        !records
+            .iter()
+            .any(|r| r.get("status").and_then(Value::as_str) == Some(status.as_str())),
+        "the broker kept a {status} report on a revision of the deleted stack {stack:?}: {records:?}"
+    );
+}
+
+// Work orders (BROKKR-T-0399)
+
+/// The status of a work order as the admin reads it: `PENDING`, `CLAIMED` or
+/// `RETRY_PENDING` while it is open, `COMPLETED` or `FAILED` from the log,
+/// and `None` when the broker no longer has it.
+async fn work_order_status(w: &World, name: &str) -> Option<String> {
+    let id = *w
+        .work_orders
+        .get(name)
+        .unwrap_or_else(|| panic!("the scenario has not created the work order {name:?} yet"));
+    let answer = w
+        .api
+        .get_work_order(w.admin(), id)
+        .await
+        .expect("read the work order");
+    if answer.status == StatusCode::NOT_FOUND {
+        return None;
+    }
+    assert!(
+        answer.ok(),
+        "the broker did not give the work order {name:?}: {} {}",
+        answer.status,
+        answer.body
+    );
+    answer
+        .body
+        .get("status")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+}
+
+#[then(expr = "the work order {string} is {word}")]
+async fn work_order_is(w: &mut World, name: String, status: String) {
+    assert_eq!(
+        work_order_status(w, &name).await.as_deref(),
+        Some(status.as_str()),
+        "the work order {name:?} is not {status}"
+    );
+}
+
+/// Poll until the work order has the status: the maintenance task of the
+/// broker moves it, each 10 seconds.
+#[then(expr = "the work order {string} is {word} within {int} seconds")]
+async fn work_order_is_within(w: &mut World, name: String, status: String, seconds: u64) {
+    let start = Instant::now();
+    loop {
+        let now = work_order_status(w, &name).await;
+        if now.as_deref() == Some(status.as_str()) {
+            return;
+        }
+        assert!(
+            start.elapsed() < Duration::from_secs(seconds),
+            "the work order {name:?} is {now:?}, not {status}, after {seconds} s"
+        );
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+}
+
+/// Poll until the work order is no longer pending: it ended, it is flagged,
+/// or it is gone. The scenario does not say which.
+#[then(expr = "the work order {string} is not left PENDING within {int} seconds")]
+async fn work_order_not_left_pending(w: &mut World, name: String, seconds: u64) {
+    let start = Instant::now();
+    loop {
+        let now = work_order_status(w, &name).await;
+        if now.as_deref() != Some("PENDING") {
+            return;
+        }
+        assert!(
+            start.elapsed() < Duration::from_secs(seconds),
+            "the work order {name:?} is still PENDING {seconds} s after its only agent was deleted"
+        );
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+}
+
+#[then(expr = "the agent {string} has the work order {string} pending")]
+async fn agent_has_pending(w: &mut World, agent: String, work_order: String) {
+    assert!(
+        crate::steps::agent::has_pending(w, &agent, &work_order).await,
+        "the agent {agent:?} does not see the work order {work_order:?} pending"
+    );
+}
+
+#[then(expr = "the agent {string} does not have the work order {string} pending")]
+async fn agent_has_not_pending(w: &mut World, agent: String, work_order: String) {
+    assert!(
+        !crate::steps::agent::has_pending(w, &agent, &work_order).await,
+        "the agent {agent:?} still sees the work order {work_order:?} pending"
+    );
+}
+
+#[then(
+    expr = "the fleet record of the agent {string} counts {int} pending and {int} claimed work order(s)"
+)]
+async fn fleet_record_work_orders(w: &mut World, agent: String, pending: i64, claimed: i64) {
+    let record = fleet_record(w, &agent).await;
+    assert_eq!(
+        (
+            record.get("pending_work_orders").and_then(Value::as_i64),
+            record.get("claimed_work_orders").and_then(Value::as_i64),
+        ),
+        (Some(pending), Some(claimed)),
+        "the agent {agent:?} does not count {pending} pending and {claimed} claimed: {record}"
+    );
+}
+
+/// The log entry of a work order that ended, which must be there.
+async fn work_order_log_success(w: &World, name: &str) -> Option<bool> {
+    let id = *w
+        .work_orders
+        .get(name)
+        .unwrap_or_else(|| panic!("the scenario has not created the work order {name:?} yet"));
+    let answer = w
+        .api
+        .work_order_log(w.admin(), id)
+        .await
+        .expect("read the work order log");
+    assert!(
+        answer.ok(),
+        "the log does not have the work order {name:?}: {} {}",
+        answer.status,
+        answer.body
+    );
+    answer.body.get("success").and_then(Value::as_bool)
+}
+
+#[then(expr = "the log has the work order {string} as a success")]
+async fn log_has_success(w: &mut World, name: String) {
+    assert_eq!(
+        work_order_log_success(w, &name).await,
+        Some(true),
+        "the log does not have the work order {name:?} as a success"
+    );
+}
+
+#[then(expr = "the log has the work order {string} as a failure")]
+async fn log_has_failure(w: &mut World, name: String) {
+    assert_eq!(
+        work_order_log_success(w, &name).await,
+        Some(false),
+        "the log does not have the work order {name:?} as a failure"
+    );
+}
+
+#[then("the broker says the work order is not claimable")]
+async fn broker_says_not_claimable(w: &mut World) {
+    let answer = w.answer();
+    assert_eq!(
+        (answer.status, answer.code()),
+        (StatusCode::NOT_FOUND, Some("work_order_not_claimable")),
+        "the broker answered {} with {}",
+        answer.status,
+        answer.body
+    );
+}
+
+#[then("the broker does not accept the work order")]
+async fn broker_does_not_accept_work_order(w: &mut World) {
+    let answer = w.answer();
+    assert!(
+        !answer.ok(),
+        "the broker created a work order for a deleted agent: {} {}",
+        answer.status,
+        answer.body
+    );
+}
