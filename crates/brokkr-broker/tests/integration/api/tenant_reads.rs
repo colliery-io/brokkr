@@ -47,6 +47,8 @@ async fn the_owner_reads_its_stack_health_with_each_agent_report() {
         fixture.create_bare_agent_with_pak("owner-agent".to_string(), "cluster-a".to_string());
     fixture.register_agent_with_generator(agent.id, owner.id);
     let stack = fixture.create_test_stack("owner-stack".to_string(), None, owner.id);
+    // Health counts only for an agent that serves the stack (BROKKR-T-0393).
+    fixture.create_test_agent_target(agent.id, stack.id);
     let object = fixture.create_test_deployment_object(
         stack.id,
         "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: owner".to_string(),

@@ -269,15 +269,14 @@ impl DeploymentObjectsDAL<'_> {
         Ok(sorted_objects)
     }
 
-    /// Returns, per agent, the number of pending deployment objects — computed
-    /// with a handful of bounded set-based queries rather than calling
-    /// [`get_target_state_for_agent`] once per agent.
+    /// Returns the `(agent_id, deployment_object_id)` pairs that each agent
+    /// serves now: for each stack the agent is responsible for, the latest
+    /// non-deleted deployment object of that stack (max `sequence_id`).
     ///
-    /// The result exactly mirrors
-    /// `get_target_state_for_agent(agent_id, false).len()` (the per-agent ground
-    /// truth): for each stack the agent is responsible for, take that stack's
-    /// latest non-deleted deployment object (max `sequence_id`), then drop any
-    /// object for which the agent already has a (non-deleted) `agent_event`.
+    /// For one agent this is the id set of
+    /// `get_target_state_for_agent(agent_id, true)`, the list an agent reads to
+    /// decide which objects it reports health on. It is computed for the whole
+    /// fleet with a handful of bounded set-based queries.
     ///
     /// Agent→stack responsibility mirrors `stacks::get_associated_stacks`: the
     /// UNION of hard targets (`agent_targets`), stacks sharing any label with the
@@ -289,9 +288,9 @@ impl DeploymentObjectsDAL<'_> {
     ///
     /// # Returns
     ///
-    /// Returns a Vec of `(agent_id, pending_count)` pairs, or a
+    /// Returns the set of `(agent_id, deployment_object_id)` pairs, or a
     /// diesel::result::Error on failure.
-    pub fn pending_counts_by_agent(&self) -> Result<Vec<(Uuid, i64)>, diesel::result::Error> {
+    pub fn served_pairs(&self) -> Result<HashSet<(Uuid, Uuid)>, diesel::result::Error> {
         let conn = &mut self.dal.conn()?;
 
         // (a) Build the distinct set of (agent_id, stack_id) responsibilities
@@ -364,7 +363,34 @@ impl DeploymentObjectsDAL<'_> {
                 .or_insert((object_id, sequence_id));
         }
 
-        // (c) Set of (agent_id, deployment_object_id) acknowledged via a
+        Ok(associations
+            .into_iter()
+            .filter_map(|(agent_id, stack_id)| {
+                latest_by_stack
+                    .get(&stack_id)
+                    .map(|(object_id, _seq)| (agent_id, *object_id))
+            })
+            .collect())
+    }
+
+    /// Returns, per agent, the number of pending deployment objects — computed
+    /// with a handful of bounded set-based queries rather than calling
+    /// [`get_target_state_for_agent`] once per agent.
+    ///
+    /// The result exactly mirrors
+    /// `get_target_state_for_agent(agent_id, false).len()` (the per-agent ground
+    /// truth): the objects the agent serves ([`served_pairs`]), less any object
+    /// for which the agent already has a (non-deleted) `agent_event`.
+    ///
+    /// # Returns
+    ///
+    /// Returns a Vec of `(agent_id, pending_count)` pairs, or a
+    /// diesel::result::Error on failure.
+    pub fn pending_counts_by_agent(&self) -> Result<Vec<(Uuid, i64)>, diesel::result::Error> {
+        let served = self.served_pairs()?;
+        let conn = &mut self.dal.conn()?;
+
+        // Set of (agent_id, deployment_object_id) acknowledged via a
         // non-deleted agent_event.
         let event_pairs: Vec<(Uuid, Uuid)> = agent_events::table
             .filter(agent_events::deleted_at.is_null())
@@ -372,13 +398,10 @@ impl DeploymentObjectsDAL<'_> {
             .load::<(Uuid, Uuid)>(conn)?;
         let acknowledged: HashSet<(Uuid, Uuid)> = event_pairs.into_iter().collect();
 
-        // Aggregate: for each (agent, stack), look up the stack's latest object;
-        // if the agent has no event for it, count it as pending.
+        // A served object with no event from its agent is pending.
         let mut counts: HashMap<Uuid, i64> = HashMap::new();
-        for (agent_id, stack_id) in associations {
-            if let Some((object_id, _seq)) = latest_by_stack.get(&stack_id)
-                && !acknowledged.contains(&(agent_id, *object_id))
-            {
+        for (agent_id, object_id) in served {
+            if !acknowledged.contains(&(agent_id, object_id)) {
                 *counts.entry(agent_id).or_insert(0) += 1;
             }
         }
