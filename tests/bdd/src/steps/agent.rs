@@ -100,3 +100,26 @@ async fn reads_object_by_id(w: &mut World, agent: String, stack: String) {
         .expect("ask the broker for the deployment object");
     w.answer = Some(answer);
 }
+
+// The stack lifecycle (BROKKR-T-0398)
+
+#[when(expr = "the agent {string} reports the stack {string} as {word}")]
+async fn reports(w: &mut World, agent: String, stack: String, status: String) {
+    has_reported(w, agent, stack, status).await;
+}
+
+/// A report that comes after the delete of the stack. The broker's answer is
+/// kept and not checked: the Then step says what must be true after it.
+#[when(
+    expr = "the agent {string} reports the last revision of the deleted stack {string} as {word}"
+)]
+async fn reports_deleted(w: &mut World, agent: String, stack: String, status: String) {
+    let object = w.noted_revision(&stack);
+    let record = w.agent(&agent);
+    let answer = w
+        .api
+        .try_report_health(&record.pak, record.id, object, &status)
+        .await
+        .expect("the agent sends the report");
+    w.answer = Some(answer);
+}

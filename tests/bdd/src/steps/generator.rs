@@ -146,6 +146,7 @@ async fn rotates_pak(w: &mut World, generator: String) {
 
 #[when(expr = "the generator {string} deletes the stack {string}")]
 async fn deletes_stack(w: &mut World, generator: String, stack: String) {
+    w.note_stack(&stack).await;
     let pak = w.generator(&generator).pak.clone();
     let stack = w.real(&w.stack(&stack).name);
     w.brokkr(&pak, &["stack", "delete", &stack]).await;
@@ -234,4 +235,19 @@ async fn reads_agent_labels(w: &mut World, generator: String, agent: String) {
         .await
         .expect("ask the broker for the labels");
     w.answer = Some(answer);
+}
+
+// The stack lifecycle (BROKKR-T-0398)
+
+/// A second apply of the scenario's folder with a changed manifest, so the
+/// stack gets a new revision.
+#[given(expr = "the generator {string} has applied a changed folder as the stack {string}")]
+#[when(expr = "the generator {string} applies a changed folder as the stack {string}")]
+async fn applies_changed_folder(w: &mut World, generator: String, stack: String) {
+    let bundle = w.same_bundle();
+    let manifest = bundle.join("configmap.yaml");
+    let yaml = std::fs::read_to_string(&manifest).expect("read the manifest");
+    std::fs::write(&manifest, format!("{yaml}  changed: \"{}\"\n", yaml.len()))
+        .expect("write the changed manifest");
+    apply(w, &generator, &stack, bundle).await;
 }

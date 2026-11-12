@@ -683,3 +683,143 @@ async fn target_state_has_stack(w: &mut World, agent: String, stack: String) {
         "the target state of the agent {agent:?} does not have the stack {stack:?}"
     );
 }
+
+// The stack lifecycle (BROKKR-T-0398)
+
+#[then(expr = "the stack {string} has {int} revision(s)")]
+async fn stack_has_revisions(w: &mut World, stack: String, count: usize) {
+    let id = w.stack_id(&stack).await;
+    let revisions = w
+        .api
+        .revisions(w.admin(), id)
+        .await
+        .expect("list the revisions of the stack");
+    assert_eq!(
+        revisions.len(),
+        count,
+        "the stack {stack:?} does not have {count} revisions: {revisions:?}"
+    );
+}
+
+#[then(expr = "the agent {string} serves the latest revision of the stack {string}")]
+async fn agent_serves_latest(w: &mut World, agent: String, stack: String) {
+    let id = w.stack_id(&stack).await;
+    let revisions = w
+        .api
+        .revisions(w.admin(), id)
+        .await
+        .expect("list the revisions of the stack");
+    let latest =
+        api::latest(&revisions).unwrap_or_else(|| panic!("the stack {stack:?} has no revision"));
+    let served = crate::steps::agent::served_object(w, &agent, &stack).await;
+    assert_eq!(
+        served,
+        Some(latest),
+        "the agent {agent:?} does not serve the latest revision of the stack {stack:?}"
+    );
+}
+
+#[then(expr = "the health of the stack {string} is {word}")]
+async fn stack_health_is(w: &mut World, stack: String, status: String) {
+    let id = w.stack_id(&stack).await;
+    let answer = w
+        .api
+        .stack_health(w.admin(), id)
+        .await
+        .expect("ask the broker for the health");
+    assert_eq!(
+        answer.body.get("overall_status").and_then(Value::as_str),
+        Some(status.as_str()),
+        "the stack {stack:?} is not {status}: {} {}",
+        answer.status,
+        answer.body
+    );
+}
+
+#[then(expr = "the fleet record of the agent {string} counts {int} degraded record(s)")]
+async fn fleet_record_degraded(w: &mut World, agent: String, count: i64) {
+    let record = fleet_record(w, &agent).await;
+    assert_eq!(
+        record.get("health_degraded").and_then(Value::as_i64),
+        Some(count),
+        "the agent {agent:?} does not count {count} degraded: {record}"
+    );
+}
+
+/// A deleted stack has no health: the broker does not find it, or it finds
+/// no deployment object with a report.
+#[then(expr = "the deleted stack {string} has no health")]
+async fn deleted_stack_has_no_health(w: &mut World, stack: String) {
+    let id = w.noted(&stack).id;
+    let answer = w
+        .api
+        .stack_health(w.admin(), id)
+        .await
+        .expect("ask the broker for the health");
+    let objects = answer
+        .body
+        .get("deployment_objects")
+        .and_then(Value::as_array)
+        .map_or(0, Vec::len);
+    assert!(
+        !answer.ok() || objects == 0,
+        "the deleted stack {stack:?} still has health: {}",
+        answer.body
+    );
+}
+
+#[then(expr = "the targets of the agent {string} do not name the deleted stack {string}")]
+async fn targets_omit_deleted_stack(w: &mut World, agent: String, stack: String) {
+    let id = w.noted(&stack).id.to_string();
+    let targets = w
+        .api
+        .agent_targets(w.admin(), w.agent(&agent).id)
+        .await
+        .expect("list the targets of the agent");
+    assert!(
+        !targets
+            .iter()
+            .any(|t| t.get("stack_id").and_then(Value::as_str) == Some(id.as_str())),
+        "the agent {agent:?} still has a target for the deleted stack {stack:?} ({id})"
+    );
+}
+
+/// The health records of the last revision of a deleted stack. A refusal of
+/// the broker is no record.
+async fn deleted_revision_records(w: &World, stack: &str) -> Vec<Value> {
+    let object = w.noted_revision(stack);
+    let answer = w
+        .api
+        .object_health(w.admin(), object)
+        .await
+        .expect("ask the broker for the health of the deployment object");
+    if !answer.ok() {
+        return Vec::new();
+    }
+    answer
+        .body
+        .get("health_records")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default()
+}
+
+#[then(expr = "the last revision of the deleted stack {string} has no health records")]
+async fn deleted_revision_has_no_records(w: &mut World, stack: String) {
+    let records = deleted_revision_records(w, &stack).await;
+    assert!(
+        records.is_empty(),
+        "the broker still returns the health of a revision of the deleted stack {stack:?}: {records:?}"
+    );
+}
+
+#[then(expr = "the last revision of the deleted stack {string} has no {word} record")]
+async fn deleted_revision_has_no_status(w: &mut World, stack: String, status: String) {
+    let records = deleted_revision_records(w, &stack).await;
+    assert!(
+        !records
+            .iter()
+            .any(|r| r.get("status").and_then(Value::as_str) == Some(status.as_str())),
+        "the broker kept a {status} report on a revision of the deleted stack {stack:?}: {records:?}"
+    );
+}
