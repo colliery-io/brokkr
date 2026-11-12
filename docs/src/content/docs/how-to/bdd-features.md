@@ -12,6 +12,7 @@ There is one feature per flow:
 | `agent-onboarding` | An admin creates an agent with its generators and gets its PAK and the Helm command once; the agent is inactive until activated; the agent finds its record by its PAK, and a wrong configured name or cluster stops it with a precise error. |
 | `generator-after-apply` | With its own PAK, a generator applies a folder, sees its stack's status, events and logs, sees the labels of its agents and which agents a stack label reaches, rotates its PAK, deletes its stack, and sees where its stack went. |
 | `generators-apart` | A generator cannot create generators or agents, cannot register agents, cannot read another generator's stack; a target for an unregistered agent is refused, even for the admin. |
+| `agent-lifecycle` | After onboarding: an agent's heartbeat in the fleet record, a silent agent, a paused agent, an agent that loses a stack and no longer counts its health, a deleted agent. The scenario plays the agent with the agent's PAK. |
 
 Each scenario creates its own generators, agents and stacks under unique names and removes them when it ends, so scenarios run in any order, side by side, and the suite runs twice against the same broker.
 

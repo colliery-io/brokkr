@@ -51,6 +51,18 @@ async fn broker_refuses(w: &mut World) {
     );
 }
 
+#[then("the broker answers")]
+async fn broker_answers(w: &mut World) {
+    let answer = w.answer();
+    assert!(
+        answer.ok(),
+        "the broker answered {} ({}) with {}",
+        answer.status,
+        answer.code().unwrap_or("no code"),
+        answer.body
+    );
+}
+
 #[then("the output shows the PAK once")]
 async fn output_shows_pak_once(w: &mut World) {
     w.printed_pak();
@@ -517,4 +529,157 @@ async fn status_names_cluster_agent(w: &mut World, stack: String) {
         );
         tokio::time::sleep(Duration::from_secs(5)).await;
     }
+}
+
+// The agent's lifecycle: the fleet record, the stack health, the registrations
+
+/// The fleet record of an agent of the scenario, as the admin reads it.
+async fn fleet_record(w: &World, agent: &str) -> Value {
+    w.api
+        .fleet_record(w.admin(), w.agent(agent).id)
+        .await
+        .unwrap_or_else(|e| panic!("read the fleet record of the agent {agent:?}: {e}"))
+}
+
+#[then(expr = "the fleet record of the agent {string} is {word}")]
+async fn fleet_record_status(w: &mut World, agent: String, status: String) {
+    let record = fleet_record(w, &agent).await;
+    assert_eq!(
+        record.get("status").and_then(Value::as_str),
+        Some(status.as_str()),
+        "the fleet record of the agent {agent:?} is not {status}: {record}"
+    );
+}
+
+#[then(expr = "the fleet record of the agent {string} has a heartbeat under {int} seconds old")]
+async fn fleet_record_fresh(w: &mut World, agent: String, seconds: i64) {
+    let record = fleet_record(w, &agent).await;
+    let age = record.get("heartbeat_age_seconds").and_then(Value::as_i64);
+    assert!(
+        age.is_some_and(|a| a < seconds),
+        "the heartbeat of the agent {agent:?} is not under {seconds} s old: {record}"
+    );
+}
+
+#[then(expr = "the fleet record of the agent {string} has a heartbeat at least {int} seconds old")]
+async fn fleet_record_aged(w: &mut World, agent: String, seconds: i64) {
+    let record = fleet_record(w, &agent).await;
+    let age = record.get("heartbeat_age_seconds").and_then(Value::as_i64);
+    assert!(
+        age.is_some_and(|a| a >= seconds),
+        "the heartbeat of the agent {agent:?} is not at least {seconds} s old: {record}"
+    );
+}
+
+#[then(expr = "the fleet record of the agent {string} has no open connection")]
+async fn fleet_record_not_connected(w: &mut World, agent: String) {
+    let record = fleet_record(w, &agent).await;
+    assert_eq!(
+        record.get("ws_connected").and_then(Value::as_bool),
+        Some(false),
+        "the fleet record of the agent {agent:?} shows an open connection: {record}"
+    );
+}
+
+#[then(expr = "the fleet record of the agent {string} counts {int} failing record(s)")]
+async fn fleet_record_failing(w: &mut World, agent: String, count: i64) {
+    let record = fleet_record(w, &agent).await;
+    assert_eq!(
+        record.get("health_failing").and_then(Value::as_i64),
+        Some(count),
+        "the agent {agent:?} does not count {count} failing: {record}"
+    );
+}
+
+#[then(expr = "the fleet does not list the agent {string}")]
+async fn fleet_has_no_agent(w: &mut World, agent: String) {
+    let id = w.agent(&agent).id.to_string();
+    let fleet = w.api.fleet(w.admin()).await.expect("read the fleet");
+    assert!(
+        !fleet
+            .iter()
+            .any(|r| r.get("agent_id").and_then(Value::as_str) == Some(id.as_str())),
+        "the fleet still lists the agent {agent:?} ({id})"
+    );
+}
+
+#[then(expr = "the PAK of the agent {string} is refused")]
+async fn agent_pak_refused(w: &mut World, agent: String) {
+    let pak = w.agent(&agent).pak.clone();
+    w.brokkr(&pak, &["whoami"]).await;
+    w.last_refused();
+}
+
+/// The agents that the health of a stack lists, over each of its objects.
+async fn stack_health_agents(w: &World, stack: &str) -> Vec<String> {
+    let id = w.stack_id(stack).await;
+    let answer = w
+        .api
+        .stack_health(w.admin(), id)
+        .await
+        .expect("ask the broker for the health");
+    assert!(
+        answer.ok(),
+        "the broker did not give the health of the stack {stack:?}: {} {}",
+        answer.status,
+        answer.body
+    );
+    answer
+        .body
+        .get("deployment_objects")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|o| o.get("agents").and_then(Value::as_array))
+        .flatten()
+        .filter_map(|a| a.get("agent_id").and_then(Value::as_str))
+        .map(str::to_string)
+        .collect()
+}
+
+#[then(expr = "the health of the stack {string} lists the agent {string}")]
+async fn stack_health_lists(w: &mut World, stack: String, agent: String) {
+    let id = w.agent(&agent).id.to_string();
+    let agents = stack_health_agents(w, &stack).await;
+    assert!(
+        agents.contains(&id),
+        "the health of the stack {stack:?} does not list the agent {agent:?}: {agents:?}"
+    );
+}
+
+#[then(expr = "the health of the stack {string} does not list the agent {string}")]
+async fn stack_health_omits(w: &mut World, stack: String, agent: String) {
+    let id = w.agent(&agent).id.to_string();
+    let agents = stack_health_agents(w, &stack).await;
+    assert!(
+        !agents.contains(&id),
+        "the health of the stack {stack:?} still lists the agent {agent:?}"
+    );
+}
+
+#[then(expr = "the registrations of the generator {string} do not name the agent {string}")]
+async fn registrations_omit(w: &mut World, generator: String, agent: String) {
+    let id = w.agent(&agent).id.to_string();
+    let generator_id = w.generator(&generator).id;
+    let registered = w
+        .api
+        .registered_agents(w.admin(), generator_id)
+        .await
+        .expect("list the registrations of the generator");
+    assert!(
+        !registered
+            .iter()
+            .any(|r| r.get("agent_id").and_then(Value::as_str) == Some(id.as_str())),
+        "the generator {generator:?} still has a registration of the deleted agent {agent:?} ({id})"
+    );
+}
+
+#[then(expr = "the target state of the agent {string} has the stack {string}")]
+async fn target_state_has_stack(w: &mut World, agent: String, stack: String) {
+    assert!(
+        crate::steps::agent::served_object(w, &agent, &stack)
+            .await
+            .is_some(),
+        "the target state of the agent {agent:?} does not have the stack {stack:?}"
+    );
 }

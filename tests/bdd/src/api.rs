@@ -165,6 +165,106 @@ impl Api {
             .await
     }
 
+    /// The fleet record of one agent: `GET /agents/{id}/fleet-status`.
+    pub async fn fleet_record(&self, admin: &str, id: Uuid) -> Result<Value> {
+        let body = self
+            .expect(
+                admin,
+                Method::GET,
+                &format!("/agents/{id}/fleet-status"),
+                None,
+            )
+            .await?;
+        body.get("record")
+            .cloned()
+            .ok_or_else(|| anyhow!("no `record` in the fleet status: {body}"))
+    }
+
+    pub async fn fleet(&self, admin: &str) -> Result<Vec<Value>> {
+        as_list(self.expect(admin, Method::GET, "/fleet", None).await?)
+    }
+
+    /// The agents registered with a generator: one `{agent_id, generator_id}`
+    /// record each.
+    pub async fn registered_agents(&self, pak: &str, generator: Uuid) -> Result<Vec<Value>> {
+        as_list(
+            self.expect(
+                pak,
+                Method::GET,
+                &format!("/generators/{generator}/registered-agents"),
+                None,
+            )
+            .await?,
+        )
+    }
+
+    /// The full target state of an agent, as the agent reads it for its
+    /// health tick: the latest object of each stack it serves.
+    pub async fn target_state(&self, agent_pak: &str, agent: Uuid) -> Result<Vec<Value>> {
+        as_list(
+            self.expect(
+                agent_pak,
+                Method::GET,
+                &format!("/agents/{agent}/target-state?mode=full"),
+                None,
+            )
+            .await?,
+        )
+    }
+
+    pub async fn deployment_object(&self, pak: &str, id: Uuid) -> Result<Answer> {
+        self.call(pak, Method::GET, &format!("/deployment-objects/{id}"), None)
+            .await
+    }
+
+    // What an agent sends
+
+    pub async fn heartbeat(&self, agent_pak: &str, agent: Uuid) -> Result<Value> {
+        self.expect(
+            agent_pak,
+            Method::POST,
+            &format!("/agents/{agent}/heartbeat"),
+            Some(json!({})),
+        )
+        .await
+    }
+
+    /// One health report of an agent on one deployment object.
+    pub async fn report_health(
+        &self,
+        agent_pak: &str,
+        agent: Uuid,
+        object: Uuid,
+        status: &str,
+    ) -> Result<Value> {
+        self.expect(
+            agent_pak,
+            Method::PATCH,
+            &format!("/agents/{agent}/health-status"),
+            Some(json!({
+                "deployment_objects": [{
+                    "id": object,
+                    "status": status,
+                    "summary": null,
+                    "checked_at": now_rfc3339(),
+                }]
+            })),
+        )
+        .await
+    }
+
+    // Writes with no command
+
+    pub async fn remove_target(&self, admin: &str, agent: Uuid, stack: Uuid) -> Result<Value> {
+        self.expect(
+            admin,
+            Method::DELETE,
+            &format!("/agents/{agent}/targets/{stack}"),
+            None,
+        )
+        .await
+    }
+
     // Writes the cleanup needs
 
     pub async fn deregister(&self, admin: &str, generator: Uuid, agent: Uuid) -> Result<Answer> {
@@ -213,4 +313,29 @@ pub fn named<'a>(records: &'a [Value], name: &str) -> Option<&'a Value> {
     records
         .iter()
         .find(|r| r.get("name").and_then(Value::as_str) == Some(name))
+}
+
+/// Now, in UTC, as RFC 3339 to the second (`2026-11-12T01:02:03Z`).
+pub fn now_rfc3339() -> String {
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("the clock is after 1970")
+        .as_secs() as i64;
+    let (days, rem) = (secs.div_euclid(86_400), secs.rem_euclid(86_400));
+    // Days since 1970-01-01 to a civil date (Howard Hinnant's algorithm).
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = yoe + era * 400 + i64::from(month <= 2);
+    format!(
+        "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}Z",
+        rem / 3_600,
+        rem % 3_600 / 60,
+        rem % 60
+    )
 }

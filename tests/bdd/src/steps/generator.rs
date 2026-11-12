@@ -101,6 +101,12 @@ async fn labels_stack(w: &mut World, generator: String, stack: String, label: St
     w.brokkr(&pak, &["stack", "label", &stack, &label]).await;
 }
 
+#[given(expr = "the generator {string} has labelled the stack {string} with {string}")]
+async fn has_labelled_stack(w: &mut World, generator: String, stack: String, label: String) {
+    labels_stack(w, generator, stack, label).await;
+    w.last_ok();
+}
+
 #[when(expr = "the generator {string} sends the stack {string} to the agent {string}")]
 async fn sends_stack(w: &mut World, generator: String, stack: String, agent: String) {
     let pak = w.generator(&generator).pak.clone();

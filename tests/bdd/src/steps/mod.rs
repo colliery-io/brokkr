@@ -8,6 +8,6 @@
 //! person does (Given and When); `checks` holds what they see (Then).
 
 mod admin;
-mod agent;
+pub mod agent;
 mod checks;
 mod generator;
