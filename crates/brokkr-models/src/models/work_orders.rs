@@ -119,6 +119,11 @@ pub struct WorkOrder {
     /// Timestamp of the most recent failure.
     #[schema(example = "null")]
     pub last_error_at: Option<DateTime<Utc>>,
+    /// The generator that owns this work order: the one that created it.
+    /// No value means an admin owns it (BROKKR-A-0013).
+    #[serde(default)]
+    #[schema(example = "null")]
+    pub owner_generator_id: Option<Uuid>,
 }
 
 /// Represents a new work order to be inserted into the database.
@@ -145,6 +150,9 @@ pub struct NewWorkOrder {
     /// Seconds before a claimed work order is considered stale.
     #[serde(default = "default_claim_timeout_seconds")]
     pub claim_timeout_seconds: i32,
+    /// The generator that owns the work order. `None`: an admin owns it.
+    #[serde(default)]
+    pub owner_generator_id: Option<Uuid>,
 }
 
 fn default_max_retries() -> i32 {
@@ -212,7 +220,15 @@ impl NewWorkOrder {
             max_retries,
             backoff_seconds,
             claim_timeout_seconds,
+            owner_generator_id: None,
         })
+    }
+
+    /// Sets the owner: the generator that creates the work order, or `None`
+    /// for an admin.
+    pub fn owned_by(mut self, generator_id: Option<Uuid>) -> Self {
+        self.owner_generator_id = generator_id;
+        self
     }
 }
 
@@ -275,6 +291,11 @@ pub struct WorkOrderLog {
     /// Original YAML content for debugging/reconstruction.
     #[schema(example = "apiVersion: shipwright.io/v1beta1\nkind: Build\n...")]
     pub yaml_content: String,
+    /// The generator that owned the work order.
+    /// No value means an admin owns it (BROKKR-A-0013).
+    #[serde(default)]
+    #[schema(example = "null")]
+    pub owner_generator_id: Option<Uuid>,
 }
 
 /// Represents a new work order log entry to be inserted.
@@ -299,6 +320,7 @@ pub struct NewWorkOrderLog {
     pub result_message: Option<String>,
     /// Original YAML content.
     pub yaml_content: String,
+    pub owner_generator_id: Option<Uuid>,
 }
 
 impl NewWorkOrderLog {
@@ -318,6 +340,7 @@ impl NewWorkOrderLog {
             retries_attempted: work_order.retry_count,
             result_message,
             yaml_content: work_order.yaml_content.clone(),
+            owner_generator_id: work_order.owner_generator_id,
         }
     }
 }

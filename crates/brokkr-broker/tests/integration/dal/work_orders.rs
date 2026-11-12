@@ -7,7 +7,7 @@
 use crate::fixtures::TestFixture;
 use brokkr_models::models::work_orders::{
     NewWorkOrder, WORK_ORDER_STATUS_CLAIMED, WORK_ORDER_STATUS_PENDING,
-    WORK_ORDER_STATUS_RETRY_PENDING, WORK_TYPE_BUILD,
+    WORK_ORDER_STATUS_RETRY_PENDING, WORK_TYPE_BUILD, WorkOrder,
 };
 use uuid::Uuid;
 
@@ -1270,4 +1270,140 @@ fn test_labels_deleted_on_work_order_delete() {
         .get(wo.id)
         .expect("Failed to query work order");
     assert!(result.is_none());
+}
+
+// ---------------------------------------------------------------------------
+// BROKKR-T-0402: a work order has an owner (BROKKR-A-0013).
+// ---------------------------------------------------------------------------
+
+/// A pending work order owned by `owner` (a generator, or `None` for an admin).
+fn owned_work_order(fixture: &TestFixture, owner: Option<Uuid>) -> WorkOrder {
+    let new_work_order =
+        NewWorkOrder::new("custom".to_string(), "a: 1".to_string(), None, None, None)
+            .expect("NewWorkOrder")
+            .owned_by(owner);
+    fixture
+        .dal
+        .work_orders()
+        .create(&new_work_order)
+        .expect("Failed to create work order")
+}
+
+#[test]
+fn test_a_work_order_keeps_the_owner_of_its_creator() {
+    let fixture = TestFixture::new();
+    let (generator, _pak) = fixture.create_test_generator_with_pak("t0402-owner".to_string(), None);
+
+    let owned = owned_work_order(&fixture, Some(generator.id));
+    assert_eq!(owned.owner_generator_id, Some(generator.id));
+    let read = fixture.dal.work_orders().get(owned.id).unwrap().unwrap();
+    assert_eq!(read.owner_generator_id, Some(generator.id));
+
+    // A work order with no owner is an admin's: the shape of each row from
+    // before the migration.
+    let admin_owned = owned_work_order(&fixture, None);
+    assert_eq!(admin_owned.owner_generator_id, None);
+    let plain = fixture.create_test_work_order("custom", "a: 2");
+    assert_eq!(plain.owner_generator_id, None);
+}
+
+#[test]
+fn test_the_log_entry_keeps_the_owner() {
+    let fixture = TestFixture::new();
+    let (generator, _pak) = fixture.create_test_generator_with_pak("t0402-log".to_string(), None);
+    let agent = fixture.create_test_agent("t0402-log-agent".to_string(), "c".to_string());
+
+    // One ends well, one fails with no retry: both paths write the log.
+    for success in [true, false] {
+        let work_order = owned_work_order(&fixture, Some(generator.id));
+        fixture.create_test_work_order_target(work_order.id, agent.id);
+        fixture
+            .dal
+            .work_orders()
+            .claim(work_order.id, agent.id)
+            .expect("claim failed");
+        if success {
+            fixture
+                .dal
+                .work_orders()
+                .complete_success(work_order.id, Some("ok".to_string()))
+                .expect("complete_success failed");
+        } else {
+            fixture
+                .dal
+                .work_orders()
+                .complete_failure(work_order.id, "no".to_string(), false)
+                .expect("complete_failure failed");
+        }
+
+        assert!(
+            fixture
+                .dal
+                .work_orders()
+                .get(work_order.id)
+                .unwrap()
+                .is_none()
+        );
+        let log = fixture
+            .dal
+            .work_orders()
+            .get_log(work_order.id)
+            .unwrap()
+            .expect("the work order is in the log");
+        assert_eq!(log.success, success);
+        assert_eq!(log.owner_generator_id, Some(generator.id));
+    }
+}
+
+#[test]
+fn test_a_deleted_generator_takes_its_waiting_work_orders() {
+    let fixture = TestFixture::new();
+    let (generator, _pak) =
+        fixture.create_test_generator_with_pak("t0402-delete".to_string(), None);
+    let agent = fixture.create_test_agent("t0402-delete-agent".to_string(), "c".to_string());
+
+    let waiting = owned_work_order(&fixture, Some(generator.id));
+    let claimed = owned_work_order(&fixture, Some(generator.id));
+    fixture.create_test_work_order_target(claimed.id, agent.id);
+    fixture
+        .dal
+        .work_orders()
+        .claim(claimed.id, agent.id)
+        .expect("claim failed");
+    let ended = owned_work_order(&fixture, Some(generator.id));
+    fixture.create_test_work_order_target(ended.id, agent.id);
+    fixture
+        .dal
+        .work_orders()
+        .claim(ended.id, agent.id)
+        .expect("claim failed");
+    fixture
+        .dal
+        .work_orders()
+        .complete_success(ended.id, None)
+        .expect("complete_success failed");
+    let of_an_admin = owned_work_order(&fixture, None);
+
+    fixture
+        .dal
+        .generators()
+        .soft_delete(generator.id)
+        .expect("soft_delete failed");
+
+    let get = |id| fixture.dal.work_orders().get(id).expect("get failed");
+    assert!(get(waiting.id).is_none(), "a waiting work order is deleted");
+    assert!(
+        get(claimed.id).is_some(),
+        "a claimed work order is left to end"
+    );
+    assert!(get(of_an_admin.id).is_some(), "an admin's work order stays");
+    assert!(
+        fixture
+            .dal
+            .work_orders()
+            .get_log(ended.id)
+            .unwrap()
+            .is_some(),
+        "the log entry stays"
+    );
 }

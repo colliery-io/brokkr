@@ -2827,6 +2827,13 @@
             "nullable": true,
             "type": "string"
           },
+          "owner_generator_id": {
+            "description": "The generator that owns this work order: the one that created it.\nNo value means an admin owns it (BROKKR-A-0013).",
+            "example": "null",
+            "format": "uuid",
+            "nullable": true,
+            "type": "string"
+          },
           "retry_count": {
             "description": "Current retry count.",
             "example": 0,
@@ -2914,6 +2921,13 @@
             "description": "Original work order ID.",
             "example": "123e4567-e89b-12d3-a456-426614174000",
             "format": "uuid",
+            "type": "string"
+          },
+          "owner_generator_id": {
+            "description": "The generator that owned the work order.\nNo value means an admin owns it (BROKKR-A-0013).",
+            "example": "null",
+            "format": "uuid",
+            "nullable": true,
             "type": "string"
           },
           "result_message": {

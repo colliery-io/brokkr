@@ -39,6 +39,8 @@ class WorkOrderLog:
             2023-01-01T00:01:00Z.
         claimed_by (None | Unset | UUID): ID of the agent that executed this work order. Example:
             123e4567-e89b-12d3-a456-426614174001.
+        owner_generator_id (None | Unset | UUID): The generator that owned the work order.
+            No value means an admin owns it (BROKKR-A-0013). Example: null.
         result_message (None | str | Unset): Result message (image digest on success, error details on failure).
             Example: sha256:abc123....
     """
@@ -52,6 +54,7 @@ class WorkOrderLog:
     yaml_content: str
     claimed_at: datetime.datetime | None | Unset = UNSET
     claimed_by: None | Unset | UUID = UNSET
+    owner_generator_id: None | Unset | UUID = UNSET
     result_message: None | str | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
@@ -86,6 +89,14 @@ class WorkOrderLog:
         else:
             claimed_by = self.claimed_by
 
+        owner_generator_id: None | str | Unset
+        if isinstance(self.owner_generator_id, Unset):
+            owner_generator_id = UNSET
+        elif isinstance(self.owner_generator_id, UUID):
+            owner_generator_id = str(self.owner_generator_id)
+        else:
+            owner_generator_id = self.owner_generator_id
+
         result_message: None | str | Unset
         if isinstance(self.result_message, Unset):
             result_message = UNSET
@@ -109,6 +120,8 @@ class WorkOrderLog:
             field_dict["claimed_at"] = claimed_at
         if claimed_by is not UNSET:
             field_dict["claimed_by"] = claimed_by
+        if owner_generator_id is not UNSET:
+            field_dict["owner_generator_id"] = owner_generator_id
         if result_message is not UNSET:
             field_dict["result_message"] = result_message
 
@@ -165,6 +178,23 @@ class WorkOrderLog:
 
         claimed_by = _parse_claimed_by(d.pop("claimed_by", UNSET))
 
+        def _parse_owner_generator_id(data: object) -> None | Unset | UUID:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            try:
+                if not isinstance(data, str):
+                    raise TypeError()
+                owner_generator_id_type_0 = UUID(data)
+
+                return owner_generator_id_type_0
+            except (TypeError, ValueError, AttributeError, KeyError):
+                pass
+            return cast(None | Unset | UUID, data)
+
+        owner_generator_id = _parse_owner_generator_id(d.pop("owner_generator_id", UNSET))
+
         def _parse_result_message(data: object) -> None | str | Unset:
             if data is None:
                 return data
@@ -184,6 +214,7 @@ class WorkOrderLog:
             yaml_content=yaml_content,
             claimed_at=claimed_at,
             claimed_by=claimed_by,
+            owner_generator_id=owner_generator_id,
             result_message=result_message,
         )
 

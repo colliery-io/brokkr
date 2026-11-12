@@ -380,6 +380,7 @@ diesel::table! {
         retries_attempted -> Int4,
         result_message -> Nullable<Text>,
         yaml_content -> Text,
+        owner_generator_id -> Nullable<Uuid>,
     }
 }
 
@@ -411,6 +412,7 @@ diesel::table! {
         next_retry_after -> Nullable<Timestamptz>,
         last_error -> Nullable<Text>,
         last_error_at -> Nullable<Timestamptz>,
+        owner_generator_id -> Nullable<Uuid>,
     }
 }
 
@@ -447,9 +449,11 @@ diesel::joinable!(webhook_deliveries -> webhook_subscriptions (subscription_id))
 diesel::joinable!(work_order_annotations -> work_orders (work_order_id));
 diesel::joinable!(work_order_labels -> work_orders (work_order_id));
 diesel::joinable!(work_order_log -> agents (claimed_by));
+diesel::joinable!(work_order_log -> generators (owner_generator_id));
 diesel::joinable!(work_order_targets -> agents (agent_id));
 diesel::joinable!(work_order_targets -> work_orders (work_order_id));
 diesel::joinable!(work_orders -> agents (claimed_by));
+diesel::joinable!(work_orders -> generators (owner_generator_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
     admin_role,

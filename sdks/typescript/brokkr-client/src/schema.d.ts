@@ -2822,6 +2822,13 @@ export interface components {
              */
             next_retry_after?: string | null;
             /**
+             * Format: uuid
+             * @description The generator that owns this work order: the one that created it.
+             *     No value means an admin owns it (BROKKR-A-0013).
+             * @example null
+             */
+            owner_generator_id?: string | null;
+            /**
              * Format: int32
              * @description Current retry count.
              * @example 0
@@ -2897,6 +2904,13 @@ export interface components {
              * @example 123e4567-e89b-12d3-a456-426614174000
              */
             id: string;
+            /**
+             * Format: uuid
+             * @description The generator that owned the work order.
+             *     No value means an admin owns it (BROKKR-A-0013).
+             * @example null
+             */
+            owner_generator_id?: string | null;
             /**
              * @description Result message (image digest on success, error details on failure).
              * @example sha256:abc123...

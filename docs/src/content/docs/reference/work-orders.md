@@ -38,6 +38,12 @@ Work orders are routed to agents using the same targeting mechanisms as stacks:
 
 An agent can claim a work order if it matches ANY of the specified targeting criteria.
 
+### Owner
+
+Each work order has an owner: who created it. `owner_generator_id` names the generator. No value means an admin owns it. The owner is set at creation and does not change, and the work order log entry keeps it.
+
+When a generator is deleted, the work orders it owns that still wait are deleted with it. A claimed work order runs to its end, and the log entries stay.
+
 ### When a Target Agent Is Deleted
 
 A work order cannot name a deleted agent as a target: the create request answers `404 agent_not_found`.
