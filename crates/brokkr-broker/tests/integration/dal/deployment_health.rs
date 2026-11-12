@@ -575,3 +575,142 @@ fn test_health_drops_an_agent_that_stopped_serving() {
             .is_empty()
     );
 }
+
+// ---------------------------------------------------------------------------
+// BROKKR-T-0394: a soft delete leaves child rows; readers and writers check.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_retain_served_drops_reports_an_agent_may_not_write() {
+    let fixture = TestFixture::new();
+    let gen_id = fixture.admin_generator.id;
+    let agent = fixture.create_test_agent("t0394-write".to_string(), "c".to_string());
+    let served = fixture.create_test_stack("t0394-served".to_string(), None, gen_id);
+    let other = fixture.create_test_stack("t0394-other".to_string(), None, gen_id);
+    let gone = fixture.create_test_stack("t0394-gone".to_string(), None, gen_id);
+    fixture.create_test_agent_target(agent.id, served.id);
+    fixture.create_test_agent_target(agent.id, gone.id);
+    let o_served = fixture.create_test_deployment_object(served.id, "s".to_string(), false);
+    let o_other = fixture.create_test_deployment_object(other.id, "o".to_string(), false);
+    let o_gone = fixture.create_test_deployment_object(gone.id, "g".to_string(), false);
+    fixture.dal.stacks().soft_delete(gone.id).unwrap();
+
+    let records = [o_served.id, o_other.id, o_gone.id]
+        .into_iter()
+        .map(|object| {
+            NewDeploymentHealth::new(agent.id, object, "failing".to_string(), None, Utc::now())
+                .unwrap()
+        })
+        .collect();
+    let kept = fixture
+        .dal
+        .deployment_health()
+        .retain_served(records)
+        .expect("retain_served failed");
+
+    let kept: Vec<uuid::Uuid> = kept.iter().map(|r| r.deployment_object_id).collect();
+    assert_eq!(
+        kept,
+        vec![o_served.id],
+        "only the report on the served, live object is kept"
+    );
+}
+
+#[test]
+fn test_live_targets_and_registrations_leave_out_deleted_parents() {
+    let fixture = TestFixture::new();
+    let gen_id = fixture.admin_generator.id;
+    let agent = fixture.create_test_agent("t0394-lists".to_string(), "c".to_string());
+    let live = fixture.create_test_stack("t0394-live".to_string(), None, gen_id);
+    let gone = fixture.create_test_stack("t0394-deleted".to_string(), None, gen_id);
+    fixture.create_test_agent_target(agent.id, live.id);
+    fixture.create_test_agent_target(agent.id, gone.id);
+    fixture.dal.stacks().soft_delete(gone.id).unwrap();
+
+    let targets: Vec<uuid::Uuid> = fixture
+        .dal
+        .agent_targets()
+        .list_live_for_agent(agent.id)
+        .expect("list_live_for_agent failed")
+        .iter()
+        .map(|t| t.stack_id)
+        .collect();
+    assert_eq!(targets, vec![live.id], "the deleted stack is left out");
+
+    let registered = |fixture: &TestFixture| -> bool {
+        fixture
+            .dal
+            .agent_generator_registrations()
+            .list_for_generator(gen_id)
+            .expect("list_for_generator failed")
+            .iter()
+            .any(|r| r.agent_id == agent.id)
+    };
+    assert!(registered(&fixture));
+    fixture.dal.agents().soft_delete(agent.id).unwrap();
+    assert!(
+        !registered(&fixture),
+        "the registration of a deleted agent is left out"
+    );
+}
+
+#[test]
+fn test_a_deleted_agent_leaves_the_work_order_queue() {
+    let fixture = TestFixture::new();
+    let agent = fixture.create_test_agent("t0394-wo".to_string(), "c".to_string());
+    let other = fixture.create_test_agent("t0394-wo-other".to_string(), "c".to_string());
+
+    // Only this agent can claim it: the delete cascades to it.
+    let alone = fixture.create_test_work_order("backup", "a: 1");
+    fixture.create_test_work_order_target(alone.id, agent.id);
+    // A second agent can still claim it: it stays.
+    let shared = fixture.create_test_work_order("backup", "a: 2");
+    fixture.create_test_work_order_target(shared.id, agent.id);
+    fixture.create_test_work_order_target(shared.id, other.id);
+    // A label can still match it: it stays, and the claim is given back.
+    let labelled = fixture.create_test_work_order("backup", "a: 3");
+    fixture.create_test_work_order_target(labelled.id, agent.id);
+    fixture.create_test_work_order_label(labelled.id, "team-a");
+    fixture
+        .dal
+        .work_orders()
+        .claim(labelled.id, agent.id)
+        .expect("claim failed");
+
+    let log_len = |fixture: &TestFixture| {
+        fixture
+            .dal
+            .work_orders()
+            .list_log(None, None, None, None)
+            .expect("list_log failed")
+            .len()
+    };
+    let logged_before = log_len(&fixture);
+
+    fixture.dal.agents().soft_delete(agent.id).unwrap();
+
+    let get = |id| fixture.dal.work_orders().get(id).expect("get failed");
+    assert!(
+        get(alone.id).is_none(),
+        "no agent can claim it: it is deleted"
+    );
+    assert_eq!(
+        log_len(&fixture),
+        logged_before,
+        "a cascade delete writes no log entry"
+    );
+    assert_eq!(get(shared.id).expect("still queued").status, "PENDING");
+    let labelled_now = get(labelled.id).expect("still queued");
+    assert_eq!(labelled_now.status, "PENDING");
+    assert!(labelled_now.claimed_by.is_none());
+    assert!(
+        fixture
+            .dal
+            .work_orders()
+            .list_targets(shared.id)
+            .expect("list_targets failed")
+            .iter()
+            .all(|t| t.agent_id != agent.id),
+        "the deleted agent is not a target any more"
+    );
+}

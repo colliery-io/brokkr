@@ -11,7 +11,7 @@
 
 use crate::dal::DAL;
 use brokkr_models::models::agent_targets::{AgentTarget, NewAgentTarget};
-use brokkr_models::schema::agent_targets;
+use brokkr_models::schema::{agent_targets, stacks};
 use diesel::prelude::*;
 use uuid::Uuid;
 
@@ -84,6 +84,28 @@ impl AgentTargetsDAL<'_> {
         let conn = &mut self.dal.conn()?;
         agent_targets::table
             .filter(agent_targets::agent_id.eq(agent_id))
+            .load::<AgentTarget>(conn)
+    }
+
+    /// Lists the agent targets of an agent whose stack is not deleted.
+    ///
+    /// A stack delete is soft and keeps the `agent_targets` rows, so
+    /// [`Self::list_for_agent`] also gives the targets of deleted stacks
+    /// (BROKKR-T-0394).
+    ///
+    /// # Returns
+    ///
+    /// A `Vec<AgentTarget>` for the specified agent, or a `diesel::result::Error` on failure.
+    pub fn list_live_for_agent(
+        &self,
+        agent_id: Uuid,
+    ) -> Result<Vec<AgentTarget>, diesel::result::Error> {
+        let conn = &mut self.dal.conn()?;
+        agent_targets::table
+            .inner_join(stacks::table.on(stacks::id.eq(agent_targets::stack_id)))
+            .filter(agent_targets::agent_id.eq(agent_id))
+            .filter(stacks::deleted_at.is_null())
+            .select(agent_targets::all_columns)
             .load::<AgentTarget>(conn)
     }
 

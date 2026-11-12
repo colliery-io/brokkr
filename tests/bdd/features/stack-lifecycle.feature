@@ -39,24 +39,15 @@ Feature: Stack lifecycle
     And the fleet record of the agent "prod-1" counts 0 degraded records
     And the deleted stack "payments" has no health
 
-  # BROKKR-T-0394: a stack delete is soft and leaves the rows of
-  # agent_targets, and the list of an agent's targets does not filter them.
-  @known-bug
   Scenario: A deleted stack is not in the targets of its agent
     When the generator "team-robin" deletes the stack "payments"
     Then the targets of the agent "prod-1" do not name the deleted stack "payments"
 
-  # BROKKR-T-0394: the health of one deployment object is read with no check
-  # that the object is live, so the records of a deleted stack come back.
-  @known-bug
   Scenario: The health of a revision of a deleted stack is not returned
     Given the agent "prod-1" has reported the stack "payments" as failing
     When the generator "team-robin" deletes the stack "payments"
     Then the last revision of the deleted stack "payments" has no health records
 
-  # BROKKR-T-0394: a health report is stored for any agent and object, so a
-  # late report after the delete writes the record again.
-  @known-bug
   Scenario: A late health report on a deleted stack is not kept
     Given the agent "prod-1" has reported the stack "payments" as failing
     When the generator "team-robin" deletes the stack "payments"

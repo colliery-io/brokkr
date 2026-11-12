@@ -43,9 +43,6 @@ Feature: Agent lifecycle
     Then the fleet does not list the agent "prod-1"
     And the PAK of the agent "prod-1" is refused
 
-  # BROKKR-T-0394: the registrations list of a generator has no join to the
-  # agents, so it keeps the registration of a deleted agent.
-  @known-bug
   Scenario: A deleted agent is not in the registrations of its generator
     When the admin deletes the agent "prod-1"
     Then the registrations of the generator "team-robin" do not name the agent "prod-1"

@@ -219,6 +219,23 @@ async fn create_work_order(
     )
     .map_err(|e| ApiError::bad_request("invalid_work_order", e))?;
 
+    // A deleted agent still has its row, so the foreign key does not refuse
+    // it; it could never claim the work order (BROKKR-T-0394).
+    for agent_id in &agent_ids {
+        dal.agents()
+            .get(*agent_id)
+            .map_err(|e| {
+                error!("Failed to fetch target agent {}: {:?}", agent_id, e);
+                ApiError::internal("failed to fetch target agent")
+            })?
+            .ok_or_else(|| {
+                ApiError::not_found(
+                    "agent_not_found",
+                    format!("target agent {agent_id} not found"),
+                )
+            })?;
+    }
+
     let work_order = dal.work_orders().create(&new_work_order).map_err(|e| {
         error!("Failed to create work order: {:?}", e);
         ApiError::internal("failed to create work order")

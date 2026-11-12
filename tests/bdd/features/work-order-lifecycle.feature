@@ -49,19 +49,11 @@ Feature: Work order lifecycle
     When the agent "prod-2" tries to claim the work order "backup"
     Then the broker says the work order is not claimable
 
-  # BROKKR-T-0394: the broker adds the targets of a new work order with no
-  # read of the agents, so the id of a deleted agent is accepted.
-  @known-bug
   Scenario: A work order for a deleted agent is refused
     Given the admin has deleted the agent "prod-1"
     When the admin creates the work order "backup" for the agent "prod-1"
     Then the broker does not accept the work order
 
-  # BROKKR-T-0394: a deleted agent keeps its work order targets, a pending
-  # work order has no expiry, and the deleted agent cannot claim. BROKKR-T-0394
-  # decides the right end (fail it, flag it or delete it); this scenario says
-  # only that the work order is not left pending.
-  @known-bug
   Scenario: A pending work order does not stay pending when its only agent is deleted
     Given the admin has created the work order "backup" for the agent "prod-1"
     When the admin deletes the agent "prod-1"

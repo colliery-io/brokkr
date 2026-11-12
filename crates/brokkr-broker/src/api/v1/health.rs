@@ -168,6 +168,26 @@ async fn update_health_status(
         })
         .collect::<Result<Vec<_>, _>>()?;
 
+    // A report on an object the agent does not serve, or on a deleted object,
+    // is dropped (BROKKR-T-0394).
+    let sent = health_records.len();
+    let health_records = dal
+        .deployment_health()
+        .retain_served(health_records)
+        .map_err(|e| {
+            ApiError::from_diesel(
+                e,
+                format!("failed to check health status for agent {agent_id}"),
+            )
+        })?;
+    if health_records.len() < sent {
+        info!(
+            "Dropped {} health records of agent {} for objects it does not serve",
+            sent - health_records.len(),
+            agent_id
+        );
+    }
+
     if health_records.is_empty() {
         return Ok(StatusCode::OK);
     }
@@ -224,6 +244,21 @@ async fn get_deployment_health(
             "admin access required",
         ));
     }
+
+    // A deleted object has no health to read: its records stay in the table
+    // (BROKKR-T-0394).
+    dal.deployment_objects()
+        .get(deployment_object_id)
+        .map_err(|e| {
+            error!(
+                "Failed to fetch deployment object {}: {:?}",
+                deployment_object_id, e
+            );
+            ApiError::internal("failed to fetch deployment object")
+        })?
+        .ok_or_else(|| {
+            ApiError::not_found("deployment_object_not_found", "deployment object not found")
+        })?;
 
     let health_records = dal
         .deployment_health()
