@@ -123,3 +123,82 @@ async fn reports_deleted(w: &mut World, agent: String, stack: String, status: St
         .expect("the agent sends the report");
     w.answer = Some(answer);
 }
+
+// Work orders (BROKKR-T-0399)
+
+/// The id of a work order of the scenario.
+fn work_order_id(w: &World, name: &str) -> Uuid {
+    *w.work_orders
+        .get(name)
+        .unwrap_or_else(|| panic!("the scenario has not created the work order {name:?} yet"))
+}
+
+/// Whether the work order is in the pending list the agent reads.
+pub async fn has_pending(w: &World, agent: &str, work_order: &str) -> bool {
+    let id = work_order_id(w, work_order);
+    let record = w.agent(agent);
+    w.api
+        .pending_work_orders(&record.pak, record.id)
+        .await
+        .expect("the agent reads its pending work orders")
+        .iter()
+        .any(|wo| api::id_of(wo) == Some(id))
+}
+
+/// The claim, with the answer kept for the checks.
+async fn claim(w: &mut World, agent: &str, work_order: &str) {
+    let id = work_order_id(w, work_order);
+    let record = w.agent(agent).clone();
+    let answer = w
+        .api
+        .claim_work_order(&record.pak, record.id, id)
+        .await
+        .expect("ask the broker for the claim");
+    w.answer = Some(answer);
+}
+
+#[when(expr = "the agent {string} claims the work order {string}")]
+async fn claims_work_order(w: &mut World, agent: String, work_order: String) {
+    claim(w, &agent, &work_order).await;
+    let answer = w.answer();
+    assert!(
+        answer.ok(),
+        "the agent {agent:?} did not get the claim: {} {}",
+        answer.status,
+        answer.body
+    );
+}
+
+#[when(expr = "the agent {string} tries to claim the work order {string}")]
+async fn tries_to_claim_work_order(w: &mut World, agent: String, work_order: String) {
+    claim(w, &agent, &work_order).await;
+}
+
+/// The end of a claimed work order, as the agent reports it.
+async fn complete(w: &mut World, agent: &str, work_order: &str, success: bool) {
+    let id = work_order_id(w, work_order);
+    let pak = w.agent(agent).pak.clone();
+    let message = if success { "done" } else { "it broke" };
+    let answer = w
+        .api
+        .complete_work_order(&pak, id, success, message)
+        .await
+        .expect("tell the broker the end of the work order");
+    assert!(
+        answer.ok(),
+        "the broker did not take the end of the work order {work_order:?}: {} {}",
+        answer.status,
+        answer.body
+    );
+    w.answer = Some(answer);
+}
+
+#[when(expr = "the agent {string} completes the work order {string}")]
+async fn completes_work_order(w: &mut World, agent: String, work_order: String) {
+    complete(w, &agent, &work_order, true).await;
+}
+
+#[when(expr = "the agent {string} fails the work order {string}")]
+async fn fails_work_order(w: &mut World, agent: String, work_order: String) {
+    complete(w, &agent, &work_order, false).await;
+}

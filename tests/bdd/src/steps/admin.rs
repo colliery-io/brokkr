@@ -224,3 +224,145 @@ async fn cluster_agent_registered(w: &mut World, generator: String) {
     w.brokkr(&admin, &["agent", "activate", &name]).await;
     w.last_ok();
 }
+
+// Work orders (BROKKR-T-0399). No command makes a work order: the admin asks
+// the broker.
+
+/// The label a scenario gives its agents and its work order, in the form
+/// key:value that the CLI asks for. It is unique to the scenario, so a work
+/// order for it reaches no agent of another scenario.
+pub fn scenario_label(w: &World, label: &str) -> String {
+    format!("{label}:{}", w.run)
+}
+
+/// `POST /work-orders` with `extra` over a small default body. A created work
+/// order is kept on the `World`; the answer is kept for the checks.
+async fn create_work_order(w: &mut World, name: &str, extra: serde_json::Value) {
+    let mut body = serde_json::json!({
+        "work_type": "bdd",
+        "yaml_content": format!("# bdd work order {}\n", w.real(name)),
+    });
+    for (key, value) in extra.as_object().expect("an object").clone() {
+        body[key] = value;
+    }
+    let answer = w
+        .api
+        .create_work_order(w.admin(), body)
+        .await
+        .expect("ask the broker for a work order");
+    if answer.ok() {
+        let id = api::id_of(&answer.body)
+            .unwrap_or_else(|| panic!("no id in the new work order: {}", answer.body));
+        w.work_orders.insert(name.to_string(), id);
+    }
+    w.answer = Some(answer);
+}
+
+/// The last answer, which must be a created work order.
+fn work_order_created(w: &World) {
+    let answer = w.answer();
+    assert!(
+        answer.ok(),
+        "the broker did not create the work order: {} {}",
+        answer.status,
+        answer.body
+    );
+}
+
+#[given(expr = "the admin has created the work order {string} for the agent {string}")]
+async fn has_created_work_order(w: &mut World, name: String, agent: String) {
+    let agent_id = w.agent(&agent).id;
+    create_work_order(
+        w,
+        &name,
+        serde_json::json!({ "targeting": { "agent_ids": [agent_id] } }),
+    )
+    .await;
+    work_order_created(w);
+}
+
+#[when(expr = "the admin creates the work order {string} for the agent {string}")]
+async fn creates_work_order(w: &mut World, name: String, agent: String) {
+    let agent_id = w.agent(&agent).id;
+    create_work_order(
+        w,
+        &name,
+        serde_json::json!({ "targeting": { "agent_ids": [agent_id] } }),
+    )
+    .await;
+}
+
+/// The backoff is 1 second, so the first failure waits 2 seconds, and the
+/// maintenance task of the broker (each 10 seconds) brings the work order back.
+#[given(
+    expr = "the admin has created the work order {string} for the agent {string} with {int} retry"
+)]
+async fn has_created_work_order_with_retries(
+    w: &mut World,
+    name: String,
+    agent: String,
+    retries: i32,
+) {
+    let agent_id = w.agent(&agent).id;
+    create_work_order(
+        w,
+        &name,
+        serde_json::json!({
+            "targeting": { "agent_ids": [agent_id] },
+            "max_retries": retries,
+            "backoff_seconds": 1,
+        }),
+    )
+    .await;
+    work_order_created(w);
+}
+
+#[given(
+    expr = "the admin has created the work order {string} for the agent {string} with a claim timeout of {int} second"
+)]
+async fn has_created_work_order_with_timeout(
+    w: &mut World,
+    name: String,
+    agent: String,
+    seconds: i32,
+) {
+    let agent_id = w.agent(&agent).id;
+    create_work_order(
+        w,
+        &name,
+        serde_json::json!({
+            "targeting": { "agent_ids": [agent_id] },
+            "claim_timeout_seconds": seconds,
+        }),
+    )
+    .await;
+    work_order_created(w);
+}
+
+#[given(
+    expr = "the admin has created the work order {string} for the label {string} of this scenario"
+)]
+async fn has_created_work_order_for_label(w: &mut World, name: String, label: String) {
+    let label = scenario_label(w, &label);
+    create_work_order(
+        w,
+        &name,
+        serde_json::json!({ "targeting": { "labels": [label] } }),
+    )
+    .await;
+    work_order_created(w);
+}
+
+#[given(expr = "the admin has given the agent {string} the label {string} of this scenario")]
+async fn has_given_scenario_label(w: &mut World, agent: String, label: String) {
+    let agent = w.agent(&agent).name.clone();
+    let label = scenario_label(w, &label);
+    let admin = w.admin().to_string();
+    w.brokkr(&admin, &["agent", "label", &agent, &label]).await;
+    w.last_ok();
+}
+
+#[given(expr = "the admin has deleted the agent {string}")]
+async fn has_deleted_agent(w: &mut World, agent: String) {
+    deletes_agent(w, agent).await;
+}

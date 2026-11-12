@@ -142,6 +142,8 @@ pub struct World {
     pub generators: BTreeMap<String, Generator>,
     pub agents: BTreeMap<String, AgentRecord>,
     pub stacks: BTreeMap<String, Stack>,
+    /// The work orders the admin created, by the name the feature uses.
+    pub work_orders: BTreeMap<String, Uuid>,
     /// The folder of manifests the generator applies.
     pub bundle: Option<TempDir>,
     /// The last binary run: `brokkr` or `brokkr-agent`.
@@ -168,6 +170,7 @@ impl World {
             generators: BTreeMap::new(),
             agents: BTreeMap::new(),
             stacks: BTreeMap::new(),
+            work_orders: BTreeMap::new(),
             bundle: None,
             last: None,
             answer: None,
@@ -396,6 +399,13 @@ impl World {
             Err(e) => println!("  cleanup: {what} failed: {e}"),
         };
 
+        // A work order that ended is in the log and answers 404 here.
+        for (name, id) in &self.work_orders {
+            report(
+                format!("delete work order {name}"),
+                api.delete_work_order(&admin, *id).await,
+            );
+        }
         // Stacks first: a stack of a deleted generator has no owner to find it by.
         if !self.stacks.is_empty()
             && let Ok(stacks) = api.list_stacks(&admin).await

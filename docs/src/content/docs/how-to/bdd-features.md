@@ -14,6 +14,7 @@ There is one feature per flow:
 | `generators-apart` | A generator cannot create generators or agents, cannot register agents, cannot read another generator's stack; a target for an unregistered agent is refused, even for the admin. |
 | `agent-lifecycle` | After onboarding: an agent's heartbeat in the fleet record, a silent agent, a paused agent, an agent that loses a stack and no longer counts its health, a deleted agent. The scenario plays the agent with the agent's PAK. |
 | `stack-lifecycle` | After the first apply: a changed folder gives a new revision that the agent serves, a failing revision makes the stack read failing, a new revision that fixes it makes it read healthy, a deleted stack leaves no failing and no degraded record. The scenario plays the agent with the agent's PAK. |
+| `work-order-lifecycle` | A work order from create to its end: pending, claimed, completed and in the log; a failure that waits and comes back until its retries are spent; a claim that passes its timeout; a work order for a label that one of two agents claims; the pending and claimed counts of the fleet record. The scenario plays the agent with the agent's PAK. |
 
 Each scenario creates its own generators, agents and stacks under unique names and removes them when it ends, so scenarios run in any order, side by side, and the suite runs twice against the same broker.
 
