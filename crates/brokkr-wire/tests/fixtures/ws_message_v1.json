@@ -16,7 +16,8 @@
       "backoff_seconds": 60,
       "next_retry_after": null,
       "last_error": null,
-      "last_error_at": null
+      "last_error_at": null,
+      "owner_generator_id": null
     }
   },
   {

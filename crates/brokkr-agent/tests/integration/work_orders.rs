@@ -99,6 +99,7 @@ fn custom_work_order(yaml_content: &str) -> WorkOrder {
         next_retry_after: None,
         last_error: None,
         last_error_at: None,
+        owner_generator_id: None,
     }
 }
 

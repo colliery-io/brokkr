@@ -217,7 +217,9 @@ async fn create_work_order(
         request.backoff_seconds,
         request.claim_timeout_seconds,
     )
-    .map_err(|e| ApiError::bad_request("invalid_work_order", e))?;
+    .map_err(|e| ApiError::bad_request("invalid_work_order", e))?
+    // The owner is the caller: a generator, or an admin (no generator id).
+    .owned_by(auth_payload.generator);
 
     // A deleted agent still has its row, so the foreign key does not refuse
     // it; it could never claim the work order (BROKKR-T-0394).
@@ -376,6 +378,7 @@ async fn get_work_order(
         claim_timeout_seconds: 0,
         last_error,
         last_error_at,
+        owner_generator_id: log_entry.owner_generator_id,
     }))
 }
 

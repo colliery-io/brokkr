@@ -45,6 +45,8 @@ class WorkOrder:
         last_error_at (datetime.datetime | None | Unset): Timestamp of the most recent failure. Example: null.
         next_retry_after (datetime.datetime | None | Unset): Timestamp when RETRY_PENDING work order becomes PENDING
             again. Example: null.
+        owner_generator_id (None | Unset | UUID): The generator that owns this work order: the one that created it.
+            No value means an admin owns it (BROKKR-A-0013). Example: null.
     """
 
     backoff_seconds: int
@@ -62,6 +64,7 @@ class WorkOrder:
     last_error: None | str | Unset = UNSET
     last_error_at: datetime.datetime | None | Unset = UNSET
     next_retry_after: datetime.datetime | None | Unset = UNSET
+    owner_generator_id: None | Unset | UUID = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -123,6 +126,14 @@ class WorkOrder:
         else:
             next_retry_after = self.next_retry_after
 
+        owner_generator_id: None | str | Unset
+        if isinstance(self.owner_generator_id, Unset):
+            owner_generator_id = UNSET
+        elif isinstance(self.owner_generator_id, UUID):
+            owner_generator_id = str(self.owner_generator_id)
+        else:
+            owner_generator_id = self.owner_generator_id
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update(
@@ -149,6 +160,8 @@ class WorkOrder:
             field_dict["last_error_at"] = last_error_at
         if next_retry_after is not UNSET:
             field_dict["next_retry_after"] = next_retry_after
+        if owner_generator_id is not UNSET:
+            field_dict["owner_generator_id"] = owner_generator_id
 
         return field_dict
 
@@ -252,6 +265,23 @@ class WorkOrder:
 
         next_retry_after = _parse_next_retry_after(d.pop("next_retry_after", UNSET))
 
+        def _parse_owner_generator_id(data: object) -> None | Unset | UUID:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            try:
+                if not isinstance(data, str):
+                    raise TypeError()
+                owner_generator_id_type_0 = UUID(data)
+
+                return owner_generator_id_type_0
+            except (TypeError, ValueError, AttributeError, KeyError):
+                pass
+            return cast(None | Unset | UUID, data)
+
+        owner_generator_id = _parse_owner_generator_id(d.pop("owner_generator_id", UNSET))
+
         work_order = cls(
             backoff_seconds=backoff_seconds,
             claim_timeout_seconds=claim_timeout_seconds,
@@ -268,6 +298,7 @@ class WorkOrder:
             last_error=last_error,
             last_error_at=last_error_at,
             next_retry_after=next_retry_after,
+            owner_generator_id=owner_generator_id,
         )
 
         work_order.additional_properties = d

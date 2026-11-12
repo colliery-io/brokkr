@@ -46,6 +46,7 @@ fn sample_messages() -> Vec<WsMessage> {
             next_retry_after: None,
             last_error: None,
             last_error_at: None,
+            owner_generator_id: None,
         }),
         WsMessage::TargetChanged(AgentTarget {
             id: target_id,
@@ -211,4 +212,29 @@ fn wire_version_is_pinned() {
     // ever hardcodes it, this catches the divergence.
     assert_eq!(WIRE_VERSION, env!("CARGO_PKG_VERSION"));
     assert!(!WIRE_VERSION.is_empty());
+}
+
+/// A broker from before 0.12.0 sends a work order with no owner field
+/// (BROKKR-T-0402). It still parses: the owner reads as an admin's.
+#[test]
+fn a_work_order_with_no_owner_field_still_parses() {
+    let old = serde_json::json!({
+        "id": "33333333-3333-3333-3333-333333333333",
+        "created_at": "2026-01-01T00:00:00Z",
+        "updated_at": "2026-01-01T00:00:00Z",
+        "work_type": "build",
+        "yaml_content": "kind: Build\n",
+        "status": "PENDING",
+        "claimed_by": null,
+        "claimed_at": null,
+        "claim_timeout_seconds": 3600,
+        "max_retries": 3,
+        "retry_count": 0,
+        "backoff_seconds": 60,
+        "next_retry_after": null,
+        "last_error": null,
+        "last_error_at": null
+    });
+    let work_order: WorkOrder = serde_json::from_value(old).expect("the old shape parses");
+    assert_eq!(work_order.owner_generator_id, None);
 }

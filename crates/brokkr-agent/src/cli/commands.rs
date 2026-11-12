@@ -794,6 +794,7 @@ mod tests {
             next_retry_after: None,
             last_error: None,
             last_error_at: None,
+            owner_generator_id: None,
         }
     }
 
