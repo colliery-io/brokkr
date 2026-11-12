@@ -1312,6 +1312,8 @@ fn test_the_log_entry_keeps_the_owner() {
     let fixture = TestFixture::new();
     let (generator, _pak) = fixture.create_test_generator_with_pak("t0402-log".to_string(), None);
     let agent = fixture.create_test_agent("t0402-log-agent".to_string(), "c".to_string());
+    // The agent must be registered with the owner to claim (BROKKR-T-0403).
+    fixture.register_agent_with_generator(agent.id, generator.id);
 
     // One ends well, one fails with no retry: both paths write the log.
     for success in [true, false] {
@@ -1361,6 +1363,8 @@ fn test_a_deleted_generator_takes_its_waiting_work_orders() {
     let (generator, _pak) =
         fixture.create_test_generator_with_pak("t0402-delete".to_string(), None);
     let agent = fixture.create_test_agent("t0402-delete-agent".to_string(), "c".to_string());
+    // The agent must be registered with the owner to claim (BROKKR-T-0403).
+    fixture.register_agent_with_generator(agent.id, generator.id);
 
     let waiting = owned_work_order(&fixture, Some(generator.id));
     let claimed = owned_work_order(&fixture, Some(generator.id));
@@ -1406,4 +1410,181 @@ fn test_a_deleted_generator_takes_its_waiting_work_orders() {
             .is_some(),
         "the log entry stays"
     );
+}
+
+// ---------------------------------------------------------------------------
+// BROKKR-T-0403: a generator's work order reaches only the agents registered
+// with that generator (BROKKR-A-0013).
+// ---------------------------------------------------------------------------
+
+/// The ids of the pending work orders an agent can have, sorted.
+fn pending_ids(fixture: &TestFixture, agent: Uuid) -> Vec<Uuid> {
+    let mut ids: Vec<Uuid> = fixture
+        .dal
+        .work_orders()
+        .list_pending_for_agent(agent, None)
+        .expect("list_pending_for_agent failed")
+        .into_iter()
+        .map(|w| w.id)
+        .collect();
+    ids.sort();
+    ids
+}
+
+/// The fleet's pending count for one agent.
+fn pending_count(fixture: &TestFixture, agent: Uuid) -> i64 {
+    fixture
+        .dal
+        .work_orders()
+        .pending_counts_by_agent()
+        .expect("pending_counts_by_agent failed")
+        .into_iter()
+        .find(|(a, _)| *a == agent)
+        .map(|(_, n)| n)
+        .unwrap_or(0)
+}
+
+#[test]
+fn test_a_generator_owned_work_order_reaches_registered_agents_only() {
+    let fixture = TestFixture::new();
+    let (generator, _pak) = fixture.create_test_generator_with_pak("t0403-owner".to_string(), None);
+
+    // Both agents carry the same label and annotation. Only `inside` is
+    // registered with the generator.
+    let inside = fixture.create_test_agent("t0403-inside".to_string(), "c".to_string());
+    let outside = fixture.create_test_agent("t0403-outside".to_string(), "c".to_string());
+    fixture.register_agent_with_generator(inside.id, generator.id);
+    for agent in [&inside, &outside] {
+        fixture.create_test_agent_label(agent.id, "t0403-team".to_string());
+        fixture.create_test_agent_annotation(
+            agent.id,
+            "t0403-tier".to_string(),
+            "gold".to_string(),
+        );
+    }
+
+    // Three work orders of the generator: by id, by label, by annotation. The
+    // target rows name both agents: the DAL writes them with no check, as a
+    // row from before a deregistration would be.
+    let by_id = owned_work_order(&fixture, Some(generator.id));
+    fixture.create_test_work_order_target(by_id.id, inside.id);
+    fixture.create_test_work_order_target(by_id.id, outside.id);
+    let by_label = owned_work_order(&fixture, Some(generator.id));
+    fixture.create_test_work_order_label(by_label.id, "t0403-team");
+    let by_annotation = owned_work_order(&fixture, Some(generator.id));
+    fixture.create_test_work_order_annotation(by_annotation.id, "t0403-tier", "gold");
+
+    // An admin's work order by the same label reaches both, as before.
+    let of_an_admin = owned_work_order(&fixture, None);
+    fixture.create_test_work_order_label(of_an_admin.id, "t0403-team");
+
+    let mut all = vec![by_id.id, by_label.id, by_annotation.id, of_an_admin.id];
+    all.sort();
+    assert_eq!(
+        pending_ids(&fixture, inside.id),
+        all,
+        "the registered agent has each work order"
+    );
+    assert_eq!(
+        pending_ids(&fixture, outside.id),
+        vec![of_an_admin.id],
+        "the agent that is not registered has only the admin's work order"
+    );
+
+    // The fleet's count is the length of the pending list, for each agent.
+    for agent in [&inside, &outside] {
+        assert_eq!(
+            pending_count(&fixture, agent.id),
+            pending_ids(&fixture, agent.id).len() as i64,
+            "pending count mismatch for agent {}",
+            agent.name
+        );
+    }
+
+    // The claim follows the same rule.
+    for work_order in [&by_id, &by_label, &by_annotation] {
+        assert!(
+            matches!(
+                fixture.dal.work_orders().claim(work_order.id, outside.id),
+                Err(diesel::result::Error::NotFound)
+            ),
+            "the agent that is not registered cannot claim"
+        );
+        let claimed = fixture
+            .dal
+            .work_orders()
+            .claim(work_order.id, inside.id)
+            .expect("the registered agent claims");
+        assert_eq!(claimed.claimed_by, Some(inside.id));
+    }
+    fixture
+        .dal
+        .work_orders()
+        .claim(of_an_admin.id, outside.id)
+        .expect("an admin's work order is claimed as before");
+}
+
+#[test]
+fn test_a_deregistered_agent_loses_the_generator_work_orders() {
+    let fixture = TestFixture::new();
+    let (generator, _pak) = fixture.create_test_generator_with_pak("t0403-dereg".to_string(), None);
+    let agent = fixture.create_test_agent("t0403-dereg-agent".to_string(), "c".to_string());
+    fixture.register_agent_with_generator(agent.id, generator.id);
+    let work_order = owned_work_order(&fixture, Some(generator.id));
+    fixture.create_test_work_order_target(work_order.id, agent.id);
+    assert_eq!(pending_ids(&fixture, agent.id), vec![work_order.id]);
+
+    fixture
+        .dal
+        .agent_generator_registrations()
+        .delete(agent.id, generator.id)
+        .expect("deregister failed");
+
+    assert!(
+        pending_ids(&fixture, agent.id).is_empty(),
+        "the target row is still there, but the agent is outside the registrations"
+    );
+    assert_eq!(pending_count(&fixture, agent.id), 0);
+    assert!(
+        fixture
+            .dal
+            .work_orders()
+            .claim(work_order.id, agent.id)
+            .is_err()
+    );
+}
+
+#[test]
+fn test_a_target_outside_the_registrations_is_refused_before_the_insert() {
+    use brokkr_broker::api::v1::work_orders::refuse_unregistered_targets;
+
+    let fixture = TestFixture::new();
+    let (generator, _pak) =
+        fixture.create_test_generator_with_pak("t0403-create".to_string(), None);
+    let inside = fixture.create_test_agent("t0403-create-in".to_string(), "c".to_string());
+    let outside = fixture.create_test_agent("t0403-create-out".to_string(), "c".to_string());
+    fixture.register_agent_with_generator(inside.id, generator.id);
+
+    assert_eq!(
+        fixture
+            .dal
+            .work_orders()
+            .unregistered_targets(generator.id, &[inside.id, outside.id])
+            .expect("unregistered_targets failed"),
+        vec![outside.id]
+    );
+
+    // The check of the create route: it runs before the insert, so a refusal
+    // leaves the queue as it was.
+    let queued = |fixture: &TestFixture| fixture.dal.work_orders().list().expect("list").len();
+    let before = queued(&fixture);
+    let refusal = refuse_unregistered_targets(&fixture.dal, generator.id, &[inside.id, outside.id])
+        .expect_err("a target outside the registrations is refused");
+    assert_eq!(refusal.status, axum::http::StatusCode::FORBIDDEN);
+    assert_eq!(refusal.code, "agent_not_registered");
+    assert!(refusal.message.contains(&outside.id.to_string()));
+    assert_eq!(queued(&fixture), before, "no work order row is left");
+
+    assert!(refuse_unregistered_targets(&fixture.dal, generator.id, &[inside.id]).is_ok());
+    assert!(refuse_unregistered_targets(&fixture.dal, generator.id, &[]).is_ok());
 }

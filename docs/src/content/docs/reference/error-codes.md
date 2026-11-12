@@ -66,7 +66,7 @@ These come from the database classifier (`ApiError::from_diesel`) on create/upda
 | `agent_annotation_not_found` | 404 | The named annotation does not exist on the agent. |
 | `agent_event_not_found` | 404 | No agent event with the given ID. |
 | `agent_target_not_found` | 404 | No agent target for the given agent/stack pair. |
-| `agent_not_registered` | 403 | Agent is not registered with the stack's owning generator; targets cannot be added or removed until it is. Admin cannot bypass. |
+| `agent_not_registered` | 403 | Agent is not registered with the stack's owning generator; targets cannot be added or removed until it is. Admin cannot bypass. Also: a work order that a generator owns names a target agent that is not registered with that generator. |
 | `invalid_generator_id` | 400 | A `generator_ids` entry supplied to `POST /agents` does not name an existing generator. |
 | `target_generator_mismatch` | 403 | A generator can only target its own stacks. |
 | `target_create_denied` | 403 | Creating an agent target requires admin or the owning generator. |
