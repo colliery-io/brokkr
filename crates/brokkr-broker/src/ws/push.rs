@@ -61,30 +61,31 @@ pub fn push_target_changed(registry: &Arc<ConnectionRegistry>, target: &AgentTar
     );
 }
 
-/// Push a [`Stack`] change to every agent currently targeting it. This is
-/// the v1 mechanism for "your stack just got a new deployment object,
+/// Push a [`Stack`] change to every agent that serves it: by a target, a
+/// label or an annotation (`StacksDAL::agents_serving`, BROKKR-T-0395). This
+/// is the v1 mechanism for "your stack just got a new deployment object,
 /// reconcile now" — handlers should call it after committing the change
 /// that the agent cares about (new deployment object, label/annotation
 /// edit, stack metadata update).
 ///
-/// Errors fetching the target list are logged and swallowed; the REST
+/// Errors fetching the agent list are logged and swallowed; the REST
 /// polling fallback will catch up the affected agents.
 pub fn push_stack_changed_to_targets(registry: &Arc<ConnectionRegistry>, dal: &DAL, stack: &Stack) {
-    let targets = match dal.agent_targets().list_for_stack(stack.id) {
-        Ok(targets) => targets,
+    let agents = match dal.stacks().agents_serving(stack.id) {
+        Ok(agents) => agents,
         Err(e) => {
-            warn!(stack_id = %stack.id, error = %e, "failed to fetch targets for stack push; relying on REST fallback");
+            warn!(stack_id = %stack.id, error = %e, "failed to fetch the agents of the stack for the push; relying on REST fallback");
             return;
         }
     };
-    if targets.is_empty() {
-        debug!(stack_id = %stack.id, "no agents target this stack; nothing to push");
+    if agents.is_empty() {
+        debug!(stack_id = %stack.id, "no agent serves this stack; nothing to push");
         return;
     }
-    for target in targets {
+    for agent_id in agents {
         deliver(
             registry,
-            target.agent_id,
+            agent_id,
             WsMessage::StackChanged(stack.clone()),
             "stack_changed",
         );

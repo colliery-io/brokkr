@@ -306,18 +306,123 @@ impl StacksDAL<'_> {
         }
     }
 
-    /// Retrieves all stacks associated with a specific agent based on its labels, annotations, and targets.
+    /// The pairs `(agent_id, stack_id)` where the agent serves the stack. This
+    /// is the one rule for "does this agent serve this stack"; each reader of
+    /// that question calls it (BROKKR-T-0395).
     ///
-    /// This method uses OR logic when matching labels and annotations, meaning a stack will be included
-    /// if it matches any of the agent's labels or annotations.
+    /// An agent serves a stack when one of these holds:
     ///
-    /// Registration is the consent boundary (BROKKR-T-0287): label and annotation
-    /// matches only associate stacks whose owning generator the agent is
-    /// registered with. A generator declares which labels it pushes to; an
-    /// agent's registrations declare which generators it accepts stacks from, so
-    /// matching selects *within* consented generators rather than creating
-    /// responsibility across them. Explicit targets are exempt — they are
-    /// already gated at creation time (403 `agent_not_registered`).
+    /// * it has a target for the stack (`agent_targets`);
+    /// * it shares a label with the stack;
+    /// * it shares a `(key, value)` annotation with the stack.
+    ///
+    /// Registration is the consent boundary (BROKKR-T-0287): a label or an
+    /// annotation match counts only for a stack whose owning generator the
+    /// agent is registered with. A generator declares which labels it pushes
+    /// to; an agent's registrations declare which generators it accepts stacks
+    /// from. Targets are exempt: they are gated at creation time (403
+    /// `agent_not_registered`). Only non-deleted stacks count.
+    ///
+    /// # Arguments
+    ///
+    /// * `agent` - Only the pairs of this agent, or of every agent.
+    /// * `stack` - Only the pairs of this stack, or of every stack.
+    pub fn associations(
+        &self,
+        agent: Option<Uuid>,
+        stack: Option<Uuid>,
+    ) -> Result<HashSet<(Uuid, Uuid)>, diesel::result::Error> {
+        let conn = &mut self.dal.conn()?;
+        let mut pairs: HashSet<(Uuid, Uuid)> = HashSet::new();
+
+        // Targets.
+        let mut by_target = agent_targets::table
+            .inner_join(stacks::table.on(stacks::id.eq(agent_targets::stack_id)))
+            .filter(stacks::deleted_at.is_null())
+            .select((agent_targets::agent_id, agent_targets::stack_id))
+            .into_boxed();
+        if let Some(agent_id) = agent {
+            by_target = by_target.filter(agent_targets::agent_id.eq(agent_id));
+        }
+        if let Some(stack_id) = stack {
+            by_target = by_target.filter(agent_targets::stack_id.eq(stack_id));
+        }
+        pairs.extend(by_target.load::<(Uuid, Uuid)>(conn)?);
+
+        // A shared label, with a stack of a generator the agent is registered with.
+        let mut by_label = agent_labels::table
+            .inner_join(stack_labels::table.on(stack_labels::label.eq(agent_labels::label)))
+            .inner_join(stacks::table.on(stacks::id.eq(stack_labels::stack_id)))
+            .inner_join(
+                agent_generator_registrations::table.on(agent_generator_registrations::agent_id
+                    .eq(agent_labels::agent_id)
+                    .and(agent_generator_registrations::generator_id.eq(stacks::generator_id))),
+            )
+            .filter(stacks::deleted_at.is_null())
+            .select((agent_labels::agent_id, stack_labels::stack_id))
+            .into_boxed();
+        if let Some(agent_id) = agent {
+            by_label = by_label.filter(agent_labels::agent_id.eq(agent_id));
+        }
+        if let Some(stack_id) = stack {
+            by_label = by_label.filter(stack_labels::stack_id.eq(stack_id));
+        }
+        pairs.extend(by_label.load::<(Uuid, Uuid)>(conn)?);
+
+        // A shared annotation, with a stack of a generator the agent is
+        // registered with.
+        let mut by_annotation = agent_annotations::table
+            .inner_join(
+                stack_annotations::table.on(stack_annotations::key
+                    .eq(agent_annotations::key)
+                    .and(stack_annotations::value.eq(agent_annotations::value))),
+            )
+            .inner_join(stacks::table.on(stacks::id.eq(stack_annotations::stack_id)))
+            .inner_join(
+                agent_generator_registrations::table.on(agent_generator_registrations::agent_id
+                    .eq(agent_annotations::agent_id)
+                    .and(agent_generator_registrations::generator_id.eq(stacks::generator_id))),
+            )
+            .filter(stacks::deleted_at.is_null())
+            .select((agent_annotations::agent_id, stack_annotations::stack_id))
+            .into_boxed();
+        if let Some(agent_id) = agent {
+            by_annotation = by_annotation.filter(agent_annotations::agent_id.eq(agent_id));
+        }
+        if let Some(stack_id) = stack {
+            by_annotation = by_annotation.filter(stack_annotations::stack_id.eq(stack_id));
+        }
+        pairs.extend(by_annotation.load::<(Uuid, Uuid)>(conn)?);
+
+        Ok(pairs)
+    }
+
+    /// Whether the agent serves the stack, by the rule of [`Self::associations`].
+    pub fn agent_serves(
+        &self,
+        agent_id: Uuid,
+        stack_id: Uuid,
+    ) -> Result<bool, diesel::result::Error> {
+        Ok(!self
+            .associations(Some(agent_id), Some(stack_id))?
+            .is_empty())
+    }
+
+    /// The agents that serve the stack, by the rule of [`Self::associations`],
+    /// sorted by id.
+    pub fn agents_serving(&self, stack_id: Uuid) -> Result<Vec<Uuid>, diesel::result::Error> {
+        let mut agents: Vec<Uuid> = self
+            .associations(None, Some(stack_id))?
+            .into_iter()
+            .map(|(agent_id, _)| agent_id)
+            .collect();
+        agents.sort();
+        Ok(agents)
+    }
+
+    /// Retrieves the stacks that an agent serves, by the rule of
+    /// [`Self::associations`]: its targets, and the stacks that share a label or
+    /// an annotation with it, within the generators it is registered with.
     ///
     /// # Arguments
     ///
@@ -325,75 +430,26 @@ impl StacksDAL<'_> {
     ///
     /// # Returns
     ///
-    /// Returns a Result containing a Vec of associated Stacks on success, or a diesel::result::Error on failure.
+    /// Returns a Result containing a Vec of associated Stacks, sorted by id, on
+    /// success, or a diesel::result::Error on failure.
     pub fn get_associated_stacks(
         &self,
         agent_id: Uuid,
     ) -> Result<Vec<Stack>, diesel::result::Error> {
-        let conn = &mut self.dal.conn()?;
-
-        // Get agent labels
-        let labels: Vec<String> = agent_labels::table
-            .filter(agent_labels::agent_id.eq(agent_id))
-            .select(agent_labels::label)
-            .load::<String>(conn)?;
-
-        // Get agent annotations
-        let annotations: Vec<(String, String)> = agent_annotations::table
-            .filter(agent_annotations::agent_id.eq(agent_id))
-            .select((agent_annotations::key, agent_annotations::value))
-            .load::<(String, String)>(conn)?;
-
-        // Get agent targets
-        let targets: Vec<Uuid> = agent_targets::table
-            .filter(agent_targets::agent_id.eq(agent_id))
-            .select(agent_targets::stack_id)
-            .load::<Uuid>(conn)?;
-
-        // Generators this agent has consented to receive stacks from.
-        let registered_generators: HashSet<Uuid> = agent_generator_registrations::table
-            .filter(agent_generator_registrations::agent_id.eq(agent_id))
-            .select(agent_generator_registrations::generator_id)
-            .load::<Uuid>(conn)?
+        let stack_ids: Vec<Uuid> = self
+            .associations(Some(agent_id), None)?
             .into_iter()
+            .map(|(_, stack_id)| stack_id)
             .collect();
-
-        let mut associated_stacks = HashSet::new();
-
-        // Get stacks matching labels, restricted to consented generators.
-        if !labels.is_empty() && !registered_generators.is_empty() {
-            let label_stacks = self.filter_by_labels(labels, FilterType::Or)?;
-
-            associated_stacks.extend(
-                label_stacks
-                    .into_iter()
-                    .filter(|s| registered_generators.contains(&s.generator_id)),
-            );
+        if stack_ids.is_empty() {
+            return Ok(Vec::new());
         }
 
-        // Get stacks matching annotations, restricted to consented generators.
-        if !annotations.is_empty() && !registered_generators.is_empty() {
-            let annotation_stacks = self.filter_by_annotations(annotations, FilterType::Or)?;
-
-            associated_stacks.extend(
-                annotation_stacks
-                    .into_iter()
-                    .filter(|s| registered_generators.contains(&s.generator_id)),
-            );
-        }
-
-        // Get stacks matching targets
-        if !targets.is_empty() {
-            let target_stacks: Vec<Stack> = stacks::table
-                .filter(stacks::id.eq_any(targets))
-                .filter(stacks::deleted_at.is_null())
-                .load::<Stack>(conn)?;
-
-            associated_stacks.extend(target_stacks);
-        }
-
-        // Convert HashSet to Vec, sort, and return
-        let mut result: Vec<Stack> = associated_stacks.into_iter().collect();
+        let conn = &mut self.dal.conn()?;
+        let mut result: Vec<Stack> = stacks::table
+            .filter(stacks::id.eq_any(stack_ids))
+            .filter(stacks::deleted_at.is_null())
+            .load::<Stack>(conn)?;
         result.sort_by_key(|a| a.id);
 
         Ok(result)

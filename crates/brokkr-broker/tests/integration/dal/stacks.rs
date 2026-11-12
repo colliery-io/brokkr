@@ -642,3 +642,129 @@ fn test_recreate_stack_after_soft_delete() {
         .expect("Failed to list all stacks");
     assert_eq!(all_stacks.len(), 2);
 }
+
+// ---------------------------------------------------------------------------
+// BROKKR-T-0395: one rule for "the agent serves the stack".
+// ---------------------------------------------------------------------------
+
+/// The agents a stack push reaches: each agent that serves the stack by a
+/// target, a label or an annotation, and no other.
+#[test]
+fn test_agents_serving_a_stack() {
+    let fixture = TestFixture::new();
+    let gen_id = fixture.admin_generator.id;
+    let stack = fixture.create_test_stack("t0395-serving".to_string(), None, gen_id);
+    fixture.create_test_stack_label(stack.id, "t0395-serving-team".to_string());
+    fixture.create_test_stack_annotation(stack.id, "t0395-serving-tier", "gold");
+
+    let by_target = fixture.create_test_agent("t0395-by-target".to_string(), "c".to_string());
+    let by_label = fixture.create_test_agent("t0395-by-label".to_string(), "c".to_string());
+    let by_annotation =
+        fixture.create_test_agent("t0395-by-annotation".to_string(), "c".to_string());
+    let by_all = fixture.create_test_agent("t0395-by-all".to_string(), "c".to_string());
+    let unrelated = fixture.create_test_agent("t0395-unrelated".to_string(), "c".to_string());
+
+    fixture.create_test_agent_target(by_target.id, stack.id);
+    fixture.create_test_agent_label(by_label.id, "t0395-serving-team".to_string());
+    fixture.create_test_agent_annotation(
+        by_annotation.id,
+        "t0395-serving-tier".to_string(),
+        "gold".to_string(),
+    );
+    fixture.create_test_agent_target(by_all.id, stack.id);
+    fixture.create_test_agent_label(by_all.id, "t0395-serving-team".to_string());
+    fixture.create_test_agent_annotation(
+        by_all.id,
+        "t0395-serving-tier".to_string(),
+        "gold".to_string(),
+    );
+    // A label of its own, and the right key with a different value: no match.
+    fixture.create_test_agent_label(unrelated.id, "t0395-other-team".to_string());
+    fixture.create_test_agent_annotation(
+        unrelated.id,
+        "t0395-serving-tier".to_string(),
+        "silver".to_string(),
+    );
+
+    let mut expected = vec![by_target.id, by_label.id, by_annotation.id, by_all.id];
+    expected.sort();
+    let serving = fixture
+        .dal
+        .stacks()
+        .agents_serving(stack.id)
+        .expect("agents_serving failed");
+    assert_eq!(serving, expected, "each serving agent once, and no other");
+
+    for agent in [&by_target, &by_label, &by_annotation, &by_all] {
+        assert!(
+            fixture
+                .dal
+                .stacks()
+                .agent_serves(agent.id, stack.id)
+                .unwrap(),
+            "{} serves the stack",
+            agent.name
+        );
+    }
+    assert!(
+        !fixture
+            .dal
+            .stacks()
+            .agent_serves(unrelated.id, stack.id)
+            .unwrap()
+    );
+
+    // The per-agent list and the per-stack list are the same rule.
+    for agent in [&by_target, &by_label, &by_annotation, &by_all, &unrelated] {
+        let lists_stack = fixture
+            .dal
+            .stacks()
+            .get_associated_stacks(agent.id)
+            .unwrap()
+            .iter()
+            .any(|s| s.id == stack.id);
+        assert_eq!(lists_stack, serving.contains(&agent.id), "{}", agent.name);
+    }
+
+    // A deleted stack has no serving agent.
+    fixture.dal.stacks().soft_delete(stack.id).unwrap();
+    assert!(
+        fixture
+            .dal
+            .stacks()
+            .agents_serving(stack.id)
+            .unwrap()
+            .is_empty()
+    );
+}
+
+/// Registration is the consent boundary (BROKKR-T-0287): a shared label does
+/// not make an agent serve a stack of a generator it is not registered with.
+#[test]
+fn test_agents_serving_needs_registration_for_a_label() {
+    let fixture = TestFixture::new();
+    let other = fixture.create_test_generator(
+        "t0395-serving-other".to_string(),
+        None,
+        "t0395-serving-other-hash".to_string(),
+    );
+    let stack = fixture.create_test_stack("t0395-serving-noreg".to_string(), None, other.id);
+    fixture.create_test_stack_label(stack.id, "t0395-noreg-team".to_string());
+    let agent = fixture.create_test_agent("t0395-noreg".to_string(), "c".to_string());
+    fixture.create_test_agent_label(agent.id, "t0395-noreg-team".to_string());
+
+    assert!(
+        fixture
+            .dal
+            .stacks()
+            .agents_serving(stack.id)
+            .unwrap()
+            .is_empty()
+    );
+
+    fixture.register_agent_with_generator(agent.id, other.id);
+    assert_eq!(
+        fixture.dal.stacks().agents_serving(stack.id).unwrap(),
+        vec![agent.id]
+    );
+}
