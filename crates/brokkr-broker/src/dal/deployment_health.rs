@@ -16,6 +16,7 @@ use brokkr_models::schema::deployment_health;
 use brokkr_models::schema::deployment_objects;
 use diesel::prelude::*;
 use diesel::upsert::excluded;
+use std::collections::HashMap;
 use uuid::Uuid;
 
 /// Data Access Layer for DeploymentHealth operations.
@@ -176,7 +177,13 @@ impl DeploymentHealthDAL<'_> {
             .load(conn)
     }
 
-    /// Lists all health records for deployment objects in a specific stack.
+    /// Lists the current health records of a stack: the records of the
+    /// agents that serve the stack now, for its latest deployment object.
+    ///
+    /// A record counts only while its agent serves its object
+    /// (`DeploymentObjectsDAL::served_pairs`). The record of a replaced
+    /// object, of a deleted stack, or of an agent that no longer serves the
+    /// stack stays in the table but is not current (BROKKR-T-0393).
     ///
     /// # Arguments
     ///
@@ -184,20 +191,23 @@ impl DeploymentHealthDAL<'_> {
     ///
     /// # Returns
     ///
-    /// Returns a list of health records for all deployment objects in the stack.
+    /// Returns the current health records of the stack, newest check first.
     pub fn list_by_stack(
         &self,
         stack_id: Uuid,
     ) -> Result<Vec<DeploymentHealth>, diesel::result::Error> {
+        let served = self.dal.deployment_objects().served_pairs()?;
         let conn = &mut self.dal.conn()?;
 
-        deployment_health::table
+        let mut records: Vec<DeploymentHealth> = deployment_health::table
             .inner_join(deployment_objects::table)
             .filter(deployment_objects::stack_id.eq(stack_id))
             .filter(deployment_objects::deleted_at.is_null())
             .select(deployment_health::all_columns)
             .order(deployment_health::checked_at.desc())
-            .load(conn)
+            .load(conn)?;
+        records.retain(|r| served.contains(&(r.agent_id, r.deployment_object_id)));
+        Ok(records)
     }
 
     /// Lists all health records with a specific status.
@@ -221,11 +231,16 @@ impl DeploymentHealthDAL<'_> {
             .load(conn)
     }
 
-    /// Returns deployment-health record counts grouped by `(agent_id, status)`
-    /// in a single query (no per-agent fan-out).
+    /// Returns the counts of current deployment-health records grouped by
+    /// `(agent_id, status)`, with no per-agent fan-out.
     ///
     /// Useful for the fleet rollup, which needs per-agent counts of `failing`
     /// and `degraded` health records without issuing one query per agent.
+    ///
+    /// A record counts only while its agent serves its object
+    /// (`DeploymentObjectsDAL::served_pairs`): an agent reports on those
+    /// objects only, so any other record is the last word on an object the
+    /// agent no longer has (BROKKR-T-0393).
     ///
     /// # Returns
     ///
@@ -234,15 +249,27 @@ impl DeploymentHealthDAL<'_> {
     pub fn status_counts_by_agent(
         &self,
     ) -> Result<Vec<(Uuid, String, i64)>, diesel::result::Error> {
+        let served = self.dal.deployment_objects().served_pairs()?;
         let conn = &mut self.dal.conn()?;
-        deployment_health::table
-            .group_by((deployment_health::agent_id, deployment_health::status))
+
+        let rows: Vec<(Uuid, Uuid, String)> = deployment_health::table
             .select((
                 deployment_health::agent_id,
+                deployment_health::deployment_object_id,
                 deployment_health::status,
-                diesel::dsl::count_star(),
             ))
-            .load::<(Uuid, String, i64)>(conn)
+            .load(conn)?;
+
+        let mut counts: HashMap<(Uuid, String), i64> = HashMap::new();
+        for (agent_id, object_id, status) in rows {
+            if served.contains(&(agent_id, object_id)) {
+                *counts.entry((agent_id, status)).or_insert(0) += 1;
+            }
+        }
+        Ok(counts
+            .into_iter()
+            .map(|((agent_id, status), count)| (agent_id, status, count))
+            .collect())
     }
 
     /// Deletes the health record for a specific agent and deployment object.

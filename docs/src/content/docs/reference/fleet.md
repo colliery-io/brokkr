@@ -31,12 +31,12 @@ All time-relative fields (`heartbeat_age_seconds`, `seconds_since_last_event`) a
 | `claimed_work_orders` | integer (i64) | Number of work orders currently `CLAIMED` by this agent; `0` when none | grouped query `work_orders().claimed_counts_by_agent()` |
 | `last_event_at` | ISO-8601 datetime or null | Timestamp of this agent's most recent (non-deleted) event, if any | grouped query `agent_events().last_event_at_by_agent()` |
 | `seconds_since_last_event` | integer (i64) or null | Seconds since the last event (`now - last_event_at`, clamped ≥ 0); `null` when no events | computed from `last_event_at` |
-| `health_failing` | integer (i64) | Count of this agent's deployment-health records with status `failing`; `0` when none | grouped query `deployment_health().status_counts_by_agent()` |
-| `health_degraded` | integer (i64) | Count of this agent's deployment-health records with status `degraded`; `0` when none | grouped query `deployment_health().status_counts_by_agent()` |
+| `health_failing` | integer (i64) | Count of this agent's current deployment-health records with status `failing`; `0` when none | grouped query `deployment_health().status_counts_by_agent()` |
+| `health_degraded` | integer (i64) | Count of this agent's current deployment-health records with status `degraded`; `0` when none | grouped query `deployment_health().status_counts_by_agent()` |
 | `k8s_reachable` | boolean or null | Latest agent-reported reachability of its own Kubernetes API; `null` when the agent has never reported | `agents.k8s_reachable` (trusted as-is — the one signal the broker cannot compute) |
 | `k8s_api_latency_ms` | integer (i64) or null | Latest agent-reported latency (milliseconds) of the Kubernetes API reachability probe; `null` when unreported or not measured | `agents.k8s_api_latency_ms` |
 
-`health_failing` / `health_degraded` are raw record counts, not verdicts. The record carries no overall health status field; consumers derive any rollup verdict themselves. See [Deployment Health](../deployment-health/) for the per-deployment-object health model these counts aggregate.
+`health_failing` / `health_degraded` are record counts, not verdicts. A record is current while the agent serves its deployment object: the latest object of a stack that is not deleted and that the agent has by target, label or annotation. The record of a replaced object, of a deleted stack, or of a stack the agent no longer serves does not count. The record carries no overall health status field; consumers derive any rollup verdict themselves. See [Deployment Health](../deployment-health/) for the per-deployment-object health model these counts aggregate.
 
 ## REST Endpoints
 

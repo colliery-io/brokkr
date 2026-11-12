@@ -106,6 +106,35 @@ fn test_fleet_grouped_methods_match_per_agent_ground_truth() {
         );
     }
 
+    // served_pairs: for each agent, the id set of the full target state
+    // (deployed or not), the list an agent reports health on (BROKKR-T-0393).
+    let served = fixture
+        .dal
+        .deployment_objects()
+        .served_pairs()
+        .expect("served_pairs failed");
+    for agent_id in all_agents {
+        let mut ground_truth: Vec<Uuid> = fixture
+            .dal
+            .deployment_objects()
+            .get_target_state_for_agent(agent_id, true)
+            .expect("get_target_state_for_agent failed")
+            .into_iter()
+            .map(|o| o.id)
+            .collect();
+        ground_truth.sort();
+        let mut grouped: Vec<Uuid> = served
+            .iter()
+            .filter(|(a, _)| *a == agent_id)
+            .map(|(_, o)| *o)
+            .collect();
+        grouped.sort();
+        assert_eq!(
+            grouped, ground_truth,
+            "served objects mismatch for agent {agent_id}"
+        );
+    }
+
     // Sanity: a_multi acknowledged s_target's latest, so it should be pending
     // on exactly s_label + s_annot = 2.
     assert_eq!(grouped_objects.get(&a_multi.id).copied().unwrap_or(0), 2);
@@ -176,12 +205,13 @@ fn test_fleet_grouped_methods_match_per_agent_ground_truth() {
     assert_eq!(grouped_claimed.get(&a_multi.id).copied().unwrap_or(0), 0);
 
     // ====================================================================
-    // 4. health status counts: grouped == per-agent list_by_agent counts
+    // 4. health status counts, for an agent that serves both objects
+    //    (a_multi: s_target by target, s_label by label)
     // ====================================================================
     use brokkr_models::models::deployment_health::NewDeploymentHealth;
     for (status, obj) in [("failing", &s_target_latest), ("degraded", &s_label_latest)] {
         let h = NewDeploymentHealth::new(
-            a_target.id,
+            a_multi.id,
             obj.id,
             status.to_string(),
             None,
@@ -209,8 +239,8 @@ fn test_fleet_grouped_methods_match_per_agent_ground_truth() {
             *grouped_degraded.entry(agent_id).or_insert(0) += count;
         }
     }
-    assert_eq!(grouped_failing.get(&a_target.id).copied().unwrap_or(0), 1);
-    assert_eq!(grouped_degraded.get(&a_target.id).copied().unwrap_or(0), 1);
+    assert_eq!(grouped_failing.get(&a_multi.id).copied().unwrap_or(0), 1);
+    assert_eq!(grouped_degraded.get(&a_multi.id).copied().unwrap_or(0), 1);
 
     // ====================================================================
     // 5. last_event_at: grouped present for agents with events
