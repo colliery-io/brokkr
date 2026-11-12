@@ -207,6 +207,19 @@ impl World {
         })
     }
 
+    /// The id of a stack of the scenario, as the admin finds it by its name.
+    pub async fn stack_id(&self, name: &str) -> Uuid {
+        let real = self.real(&self.stack(name).name);
+        let stacks = self
+            .api
+            .list_stacks(self.admin())
+            .await
+            .expect("the admin lists the stacks");
+        api::named(&stacks, &real)
+            .and_then(api::id_of)
+            .unwrap_or_else(|| panic!("the admin does not see the stack {real:?}"))
+    }
+
     /// The name of the agent in the test stack's cluster.
     pub fn cluster_agent_name(&self) -> &str {
         self.env.cluster_agent.as_deref().unwrap_or_else(|| {

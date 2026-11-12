@@ -24,7 +24,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        feature: [generator-onboarding, agent-onboarding, generator-after-apply, generators-apart]
+        feature: [generator-onboarding, agent-onboarding, generator-after-apply, generators-apart, agent-lifecycle]
     steps:
       - uses: actions/checkout@v6
         with:

@@ -135,6 +135,7 @@ async fn has_labelled_agent(w: &mut World, agent: String, label: String) {
     w.last_ok();
 }
 
+#[given(expr = "the admin has activated the agent {string}")]
 #[when(expr = "the admin activates the agent {string}")]
 async fn activates_agent(w: &mut World, agent: String) {
     let agent = w.agent(&agent).name.clone();
@@ -155,6 +156,49 @@ async fn sends_stack_to_agent(w: &mut World, stack: String, agent: String) {
     let agent = w.agent(&agent).name.clone();
     let admin = w.admin().to_string();
     w.brokkr(&admin, &["stack", "target", &stack, &agent]).await;
+}
+
+#[given(expr = "the admin has sent the stack {string} to the agent {string}")]
+async fn has_sent_stack_to_agent(w: &mut World, stack: String, agent: String) {
+    sends_stack_to_agent(w, stack, agent).await;
+    w.last_ok();
+}
+
+#[when(expr = "the admin pauses the agent {string}")]
+async fn pauses_agent(w: &mut World, agent: String) {
+    let agent = w.agent(&agent).name.clone();
+    let admin = w.admin().to_string();
+    w.brokkr(&admin, &["agent", "pause", &agent]).await;
+    w.last_ok();
+}
+
+/// No command removes a target: the admin asks the broker.
+#[when(expr = "the admin takes the stack {string} from the agent {string}")]
+async fn takes_stack_from_agent(w: &mut World, stack: String, agent: String) {
+    let stack_id = w.stack_id(&stack).await;
+    let agent_id = w.agent(&agent).id;
+    w.api
+        .remove_target(w.admin(), agent_id, stack_id)
+        .await
+        .expect("remove the target");
+}
+
+/// No command deletes an agent: the admin asks the broker. The record stays
+/// on the `World`, so later steps can ask about the deleted agent.
+#[when(expr = "the admin deletes the agent {string}")]
+async fn deletes_agent(w: &mut World, agent: String) {
+    let id = w.agent(&agent).id;
+    let answer = w
+        .api
+        .delete_agent(w.admin(), id)
+        .await
+        .expect("ask the broker to delete the agent");
+    assert!(
+        answer.ok(),
+        "the broker did not delete the agent {agent:?}: {} {}",
+        answer.status,
+        answer.body
+    );
 }
 
 /// The agent that runs in the test stack's cluster: the admin registers it
