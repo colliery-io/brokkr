@@ -49,7 +49,7 @@ diesel::table! {
     agent_k8s_events (id) {
         id -> Uuid,
         agent_id -> Uuid,
-        stack_id -> Uuid,
+        stack_id -> Nullable<Uuid>,
         observed_at -> Timestamptz,
         reason -> Text,
         message -> Text,
@@ -57,6 +57,7 @@ diesel::table! {
         source -> Nullable<Text>,
         involved_object -> Jsonb,
         created_at -> Timestamptz,
+        work_order_id -> Nullable<Uuid>,
     }
 }
 
@@ -73,13 +74,14 @@ diesel::table! {
     agent_pod_logs (id) {
         id -> Uuid,
         agent_id -> Uuid,
-        stack_id -> Uuid,
+        stack_id -> Nullable<Uuid>,
         namespace -> Text,
         pod -> Text,
         container -> Text,
         ts -> Timestamptz,
         line -> Text,
         created_at -> Timestamptz,
+        work_order_id -> Nullable<Uuid>,
     }
 }
 

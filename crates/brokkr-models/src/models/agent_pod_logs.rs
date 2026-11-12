@@ -22,20 +22,26 @@ use uuid::Uuid;
 pub struct AgentPodLog {
     pub id: Uuid,
     pub agent_id: Uuid,
-    pub stack_id: Uuid,
+    /// The stack the row belongs to. No value: it belongs to a work order.
+    pub stack_id: Option<Uuid>,
     pub namespace: String,
     pub pod: String,
     pub container: String,
     pub ts: DateTime<Utc>,
     pub line: String,
     pub created_at: DateTime<Utc>,
+    /// The work order the row belongs to. No value: it belongs to a stack.
+    /// Exactly one of `stack_id` and `work_order_id` has a value (BROKKR-T-0405).
+    #[serde(default)]
+    pub work_order_id: Option<Uuid>,
 }
 
 #[derive(Insertable, Debug, Clone, Serialize, Deserialize)]
 #[diesel(table_name = crate::schema::agent_pod_logs)]
 pub struct NewAgentPodLog {
     pub agent_id: Uuid,
-    pub stack_id: Uuid,
+    pub stack_id: Option<Uuid>,
+    pub work_order_id: Option<Uuid>,
     pub namespace: String,
     pub pod: String,
     pub container: String,

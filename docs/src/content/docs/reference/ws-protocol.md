@@ -71,8 +71,8 @@ Control pushes are hints: they are fire-and-forget, sent after the database comm
 
 | `type` | Body | Meaning |
 |--------|------|---------|
-| `k8s_event` | `K8sEvent` | A Kubernetes Event for a stack-managed object |
-| `pod_log_line` | `PodLogLine` | One container log line from an opted-in pod |
+| `k8s_event` | `K8sEvent` | A Kubernetes Event for a stack-managed object, or for the job of a work order |
+| `pod_log_line` | `PodLogLine` | One container log line from an opted-in pod, or from the job of a work order |
 | `log_gap` | `LogGap` | Marker that lines were dropped, so consumers render a visible gap |
 
 Body shapes for the telemetry-only types:
@@ -80,7 +80,7 @@ Body shapes for the telemetry-only types:
 ```json
 // k8s_event
 {
-  "agent_id": "<uuid>", "stack_id": "<uuid>",
+  "agent_id": "<uuid>", "stack_id": "<uuid>", "work_order_id": null,
   "observed_at": "<ISO-8601>",
   "reason": "FailedScheduling", "message": "...",
   "event_type": "Warning", "source": "scheduler",
@@ -92,7 +92,7 @@ Body shapes for the telemetry-only types:
 
 // pod_log_line
 {
-  "agent_id": "<uuid>", "stack_id": "<uuid>",
+  "agent_id": "<uuid>", "stack_id": "<uuid>", "work_order_id": null,
   "namespace": "default", "pod": "myapp-abc12", "container": "myapp",
   "ts": "<ISO-8601>", "line": "..."
 }
@@ -106,6 +106,8 @@ Body shapes for the telemetry-only types:
 ```
 
 `log_gap.reason` is one of `rate_limit`, `buffer_full`, `disconnected`.
+
+A `k8s_event` or a `pod_log_line` is about a stack or about a work order: exactly one of `stack_id` and `work_order_id` has a value, and the other is `null`. An agent from before 0.12.0 sends `stack_id` and no `work_order_id` field; the broker reads that as a frame of the stack. The broker stores a frame of a work order only from the agent that claimed the work order, and it does not send it to the live stream of a stack. A frame with both ids, or with neither, is dropped.
 
 ### Broker → consumer (fleet live-push)
 

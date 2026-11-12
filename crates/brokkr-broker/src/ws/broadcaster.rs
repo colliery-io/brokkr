@@ -139,7 +139,8 @@ mod tests {
     fn evt(stack_id: Uuid) -> WsMessage {
         WsMessage::K8sEvent(K8sEvent {
             agent_id: Uuid::new_v4(),
-            stack_id,
+            stack_id: Some(stack_id),
+            work_order_id: None,
             observed_at: Utc::now(),
             reason: "T".into(),
             message: "x".into(),
@@ -175,7 +176,7 @@ mod tests {
         let WsMessage::K8sEvent(e) = m else {
             panic!("wrong variant")
         };
-        assert_eq!(e.stack_id, s1);
+        assert_eq!(e.stack_id, Some(s1));
     }
 
     #[tokio::test]

@@ -157,6 +157,7 @@ These come from the database classifier (`ApiError::from_diesel`) on create/upda
 | Code | Status | Meaning |
 |------|--------|---------|
 | `work_order_not_found` | 404 | No work order with the given ID. |
+| `work_order_not_owned` | 403 | Caller is neither an admin nor the generator that owns the work order. A work order that an admin owns is for admins only. |
 | `invalid_work_order` | 400 | Work order payload rejected by validation. |
 | `no_targeting_specified` | 400 | At least one targeting method (`agent_ids`, `labels`, or `annotations`) must be specified. |
 | `work_order_not_claimable` | 404 | Work order does not exist or is not claimable by this agent. |

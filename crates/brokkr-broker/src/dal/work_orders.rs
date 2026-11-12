@@ -693,6 +693,55 @@ impl WorkOrdersDAL<'_> {
         .execute(conn)
     }
 
+    /// The owner of a work order, from its row or, once it ended, from its
+    /// log entry (the same id).
+    ///
+    /// # Returns
+    ///
+    /// `None` when no work order and no log entry has the id. `Some(None)`
+    /// for one that an admin owns. `Some(Some(generator_id))` for one that a
+    /// generator owns.
+    pub fn owner_of(
+        &self,
+        work_order_id: Uuid,
+    ) -> Result<Option<Option<Uuid>>, diesel::result::Error> {
+        let conn = &mut self.dal.conn()?;
+        if let Some(owner) = work_orders::table
+            .filter(work_orders::id.eq(work_order_id))
+            .select(work_orders::owner_generator_id)
+            .first::<Option<Uuid>>(conn)
+            .optional()?
+        {
+            return Ok(Some(owner));
+        }
+        work_order_log::table
+            .filter(work_order_log::id.eq(work_order_id))
+            .select(work_order_log::owner_generator_id)
+            .first::<Option<Uuid>>(conn)
+            .optional()
+    }
+
+    /// The agent that claimed a work order: the claim on its row or, once it
+    /// ended, the agent in its log entry. `None` when nobody holds it, or
+    /// when the id is unknown.
+    pub fn claimant_of(&self, work_order_id: Uuid) -> Result<Option<Uuid>, diesel::result::Error> {
+        let conn = &mut self.dal.conn()?;
+        if let Some(claimed_by) = work_orders::table
+            .filter(work_orders::id.eq(work_order_id))
+            .select(work_orders::claimed_by)
+            .first::<Option<Uuid>>(conn)
+            .optional()?
+        {
+            return Ok(claimed_by);
+        }
+        Ok(work_order_log::table
+            .filter(work_order_log::id.eq(work_order_id))
+            .select(work_order_log::claimed_by)
+            .first::<Option<Uuid>>(conn)
+            .optional()?
+            .flatten())
+    }
+
     /// Resets stale claimed work orders to PENDING.
     ///
     /// A claim is stale if: claimed_at + claim_timeout_seconds < NOW()

@@ -44,6 +44,7 @@ use chrono::Utc;
 use futures::{SinkExt, StreamExt};
 use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
+use uuid::Uuid;
 
 use crate::api::v1::middleware::{self as v1_middleware, AuthPayload};
 use crate::dal::DAL;
@@ -304,11 +305,18 @@ fn dispatch_uplink(msg: WsMessage, agent_id: uuid::Uuid, dal: &DAL, broadcaster:
                 warn!(%agent_id, body_agent = %ev.agent_id, "dropping K8sEvent with mismatched agent_id");
                 return;
             }
-            let stack_id = ev.stack_id;
+            let Some(subject) =
+                telemetry_subject(dal, agent_id, ev.stack_id, ev.work_order_id, "K8sEvent")
+            else {
+                return;
+            };
             // Live fan-out *before* persistence so subscribers see the
             // frame at ingest latency; persist also so the REST history
-            // endpoint (WS-10) returns it later.
-            broadcaster.broadcast(stack_id, WsMessage::K8sEvent(ev.clone()));
+            // endpoint (WS-10) returns it later. The live stream is by
+            // stack: the telemetry of a work order is read by REST only.
+            if let TelemetrySubject::Stack(stack_id) = subject {
+                broadcaster.broadcast(stack_id, WsMessage::K8sEvent(ev.clone()));
+            }
             let involved = match serde_json::to_value(&ev.involved_object) {
                 Ok(v) => v,
                 Err(e) => {
@@ -318,7 +326,8 @@ fn dispatch_uplink(msg: WsMessage, agent_id: uuid::Uuid, dal: &DAL, broadcaster:
             };
             let new = NewAgentK8sEvent {
                 agent_id,
-                stack_id,
+                stack_id: subject.stack_id(),
+                work_order_id: subject.work_order_id(),
                 observed_at: ev.observed_at,
                 reason: ev.reason,
                 message: ev.message,
@@ -335,11 +344,22 @@ fn dispatch_uplink(msg: WsMessage, agent_id: uuid::Uuid, dal: &DAL, broadcaster:
                 warn!(%agent_id, body_agent = %line.agent_id, "dropping PodLogLine with mismatched agent_id");
                 return;
             }
-            let stack_id = line.stack_id;
-            broadcaster.broadcast(stack_id, WsMessage::PodLogLine(line.clone()));
+            let Some(subject) = telemetry_subject(
+                dal,
+                agent_id,
+                line.stack_id,
+                line.work_order_id,
+                "PodLogLine",
+            ) else {
+                return;
+            };
+            if let TelemetrySubject::Stack(stack_id) = subject {
+                broadcaster.broadcast(stack_id, WsMessage::PodLogLine(line.clone()));
+            }
             let new = NewAgentPodLog {
                 agent_id,
-                stack_id,
+                stack_id: subject.stack_id(),
+                work_order_id: subject.work_order_id(),
                 namespace: line.namespace,
                 pod: line.pod,
                 container: line.container,
@@ -365,6 +385,68 @@ fn dispatch_uplink(msg: WsMessage, agent_id: uuid::Uuid, dal: &DAL, broadcaster:
                 %agent_id,
                 "dropping broker→agent message variant received on agent uplink"
             );
+        }
+    }
+}
+
+/// What a telemetry frame is about: a stack, or the job of a work order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TelemetrySubject {
+    Stack(Uuid),
+    WorkOrder(Uuid),
+}
+
+impl TelemetrySubject {
+    fn stack_id(self) -> Option<Uuid> {
+        match self {
+            TelemetrySubject::Stack(id) => Some(id),
+            TelemetrySubject::WorkOrder(_) => None,
+        }
+    }
+
+    fn work_order_id(self) -> Option<Uuid> {
+        match self {
+            TelemetrySubject::Stack(_) => None,
+            TelemetrySubject::WorkOrder(id) => Some(id),
+        }
+    }
+}
+
+/// The subject of a telemetry frame, or `None` when the frame is dropped.
+///
+/// A frame names a stack or a work order, not both and not none. A frame of
+/// a stack is taken as before. A frame of a work order is taken only from the
+/// agent that claimed the work order: the claim on its row or, once it ended,
+/// the agent in its log entry (BROKKR-T-0405). So an agent cannot write into
+/// the telemetry of a job it does not run.
+fn telemetry_subject(
+    dal: &DAL,
+    agent_id: Uuid,
+    stack_id: Option<Uuid>,
+    work_order_id: Option<Uuid>,
+    kind: &'static str,
+) -> Option<TelemetrySubject> {
+    match (stack_id, work_order_id) {
+        (Some(stack_id), None) => Some(TelemetrySubject::Stack(stack_id)),
+        (None, Some(work_order_id)) => match dal.work_orders().claimant_of(work_order_id) {
+            Ok(Some(claimant)) if claimant == agent_id => {
+                Some(TelemetrySubject::WorkOrder(work_order_id))
+            }
+            Ok(_) => {
+                debug!(
+                    %agent_id, %work_order_id, kind,
+                    "dropping telemetry of a work order the agent did not claim"
+                );
+                None
+            }
+            Err(e) => {
+                warn!(%agent_id, %work_order_id, kind, error = %e, "failed to read the claim of a work order; dropping telemetry");
+                None
+            }
+        },
+        _ => {
+            warn!(%agent_id, kind, "dropping telemetry that names both a stack and a work order, or neither");
+            None
         }
     }
 }

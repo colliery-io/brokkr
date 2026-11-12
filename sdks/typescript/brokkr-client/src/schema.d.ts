@@ -1181,6 +1181,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/work-orders/{id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The Kubernetes events of the job of a work order, newest first.
+         * @description The agent that claimed the work order sends them. They stay readable
+         *     after the work order ends, until the retention ceiling.
+         */
+        get: operations["list_work_order_events"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/work-orders/{id}/logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The pod log lines of the job of a work order, newest first.
+         * @description The agent that claimed the work order sends them. They stay readable
+         *     after the work order ends, until the retention ceiling.
+         */
+        get: operations["list_work_order_logs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1376,8 +1418,17 @@ export interface components {
             observed_at: string;
             reason: string;
             source?: string | null;
-            /** Format: uuid */
-            stack_id: string;
+            /**
+             * Format: uuid
+             * @description The stack the row belongs to. No value: it belongs to a work order.
+             */
+            stack_id?: string | null;
+            /**
+             * Format: uuid
+             * @description The work order the row belongs to. No value: it belongs to a stack.
+             *     Exactly one of `stack_id` and `work_order_id` has a value (BROKKR-T-0405).
+             */
+            work_order_id?: string | null;
         };
         /** @description Represents an agent label in the database. */
         AgentLabel: {
@@ -1405,10 +1456,19 @@ export interface components {
             line: string;
             namespace: string;
             pod: string;
-            /** Format: uuid */
-            stack_id: string;
+            /**
+             * Format: uuid
+             * @description The stack the row belongs to. No value: it belongs to a work order.
+             */
+            stack_id?: string | null;
             /** Format: date-time */
             ts: string;
+            /**
+             * Format: uuid
+             * @description The work order the row belongs to. No value: it belongs to a stack.
+             *     Exactly one of `stack_id` and `work_order_id` has a value (BROKKR-T-0405).
+             */
+            work_order_id?: string | null;
         };
         /**
          * @description Optional body used when an admin registers or deregisters a specific agent.
@@ -7765,6 +7825,124 @@ export interface operations {
                 };
             };
             /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Work order not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_work_order_events: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Earliest `created_at` to include (ISO-8601). Defaults to
+                 *     `now - retention_ceiling_seconds`. Values older than the ceiling
+                 *     are silently clamped: only the retained window can be returned.
+                 */
+                since?: string | null;
+                /** @description Maximum rows to return. Defaults to 500; capped at 5000. */
+                limit?: number | null;
+            };
+            header?: never;
+            path: {
+                /** @description Work order ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Retained kube events for this work order */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["K8sEventHistoryResponse"];
+                };
+            };
+            /** @description Forbidden - the caller is not an admin and does not own the work order */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Work order not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_work_order_logs: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Earliest `created_at` to include (ISO-8601). Defaults to
+                 *     `now - retention_ceiling_seconds`. Values older than the ceiling
+                 *     are silently clamped: only the retained window can be returned.
+                 */
+                since?: string | null;
+                /** @description Maximum rows to return. Defaults to 500; capped at 5000. */
+                limit?: number | null;
+            };
+            header?: never;
+            path: {
+                /** @description Work order ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Retained pod log lines for this work order */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PodLogHistoryResponse"];
+                };
+            };
+            /** @description Forbidden - the caller is not an admin and does not own the work order */
             403: {
                 headers: {
                     [name: string]: unknown;

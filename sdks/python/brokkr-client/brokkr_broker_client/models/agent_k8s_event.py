@@ -26,8 +26,10 @@ class AgentK8SEvent:
         message (str):
         observed_at (datetime.datetime):
         reason (str):
-        stack_id (UUID):
         source (None | str | Unset):
+        stack_id (None | Unset | UUID): The stack the row belongs to. No value: it belongs to a work order.
+        work_order_id (None | Unset | UUID): The work order the row belongs to. No value: it belongs to a stack.
+            Exactly one of `stack_id` and `work_order_id` has a value (BROKKR-T-0405).
     """
 
     agent_id: UUID
@@ -38,8 +40,9 @@ class AgentK8SEvent:
     message: str
     observed_at: datetime.datetime
     reason: str
-    stack_id: UUID
     source: None | str | Unset = UNSET
+    stack_id: None | Unset | UUID = UNSET
+    work_order_id: None | Unset | UUID = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -59,13 +62,27 @@ class AgentK8SEvent:
 
         reason = self.reason
 
-        stack_id = str(self.stack_id)
-
         source: None | str | Unset
         if isinstance(self.source, Unset):
             source = UNSET
         else:
             source = self.source
+
+        stack_id: None | str | Unset
+        if isinstance(self.stack_id, Unset):
+            stack_id = UNSET
+        elif isinstance(self.stack_id, UUID):
+            stack_id = str(self.stack_id)
+        else:
+            stack_id = self.stack_id
+
+        work_order_id: None | str | Unset
+        if isinstance(self.work_order_id, Unset):
+            work_order_id = UNSET
+        elif isinstance(self.work_order_id, UUID):
+            work_order_id = str(self.work_order_id)
+        else:
+            work_order_id = self.work_order_id
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
@@ -79,11 +96,14 @@ class AgentK8SEvent:
                 "message": message,
                 "observed_at": observed_at,
                 "reason": reason,
-                "stack_id": stack_id,
             }
         )
         if source is not UNSET:
             field_dict["source"] = source
+        if stack_id is not UNSET:
+            field_dict["stack_id"] = stack_id
+        if work_order_id is not UNSET:
+            field_dict["work_order_id"] = work_order_id
 
         return field_dict
 
@@ -106,8 +126,6 @@ class AgentK8SEvent:
 
         reason = d.pop("reason")
 
-        stack_id = UUID(d.pop("stack_id"))
-
         def _parse_source(data: object) -> None | str | Unset:
             if data is None:
                 return data
@@ -116,6 +134,40 @@ class AgentK8SEvent:
             return cast(None | str | Unset, data)
 
         source = _parse_source(d.pop("source", UNSET))
+
+        def _parse_stack_id(data: object) -> None | Unset | UUID:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            try:
+                if not isinstance(data, str):
+                    raise TypeError()
+                stack_id_type_0 = UUID(data)
+
+                return stack_id_type_0
+            except (TypeError, ValueError, AttributeError, KeyError):
+                pass
+            return cast(None | Unset | UUID, data)
+
+        stack_id = _parse_stack_id(d.pop("stack_id", UNSET))
+
+        def _parse_work_order_id(data: object) -> None | Unset | UUID:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            try:
+                if not isinstance(data, str):
+                    raise TypeError()
+                work_order_id_type_0 = UUID(data)
+
+                return work_order_id_type_0
+            except (TypeError, ValueError, AttributeError, KeyError):
+                pass
+            return cast(None | Unset | UUID, data)
+
+        work_order_id = _parse_work_order_id(d.pop("work_order_id", UNSET))
 
         agent_k8s_event = cls(
             agent_id=agent_id,
@@ -126,8 +178,9 @@ class AgentK8SEvent:
             message=message,
             observed_at=observed_at,
             reason=reason,
-            stack_id=stack_id,
             source=source,
+            stack_id=stack_id,
+            work_order_id=work_order_id,
         )
 
         agent_k8s_event.additional_properties = d
