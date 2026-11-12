@@ -13,6 +13,7 @@ There is one feature per flow:
 | `generator-after-apply` | With its own PAK, a generator applies a folder, sees its stack's status, events and logs, sees the labels of its agents and which agents a stack label reaches, rotates its PAK, deletes its stack, and sees where its stack went. |
 | `generators-apart` | A generator cannot create generators or agents, cannot register agents, cannot read another generator's stack; a target for an unregistered agent is refused, even for the admin. |
 | `agent-lifecycle` | After onboarding: an agent's heartbeat in the fleet record, a silent agent, a paused agent, an agent that loses a stack and no longer counts its health, a deleted agent. The scenario plays the agent with the agent's PAK. |
+| `stack-lifecycle` | After the first apply: a changed folder gives a new revision that the agent serves, a failing revision makes the stack read failing, a new revision that fixes it makes it read healthy, a deleted stack leaves no failing and no degraded record. The scenario plays the agent with the agent's PAK. |
 
 Each scenario creates its own generators, agents and stacks under unique names and removes them when it ends, so scenarios run in any order, side by side, and the suite runs twice against the same broker.
 

@@ -339,3 +339,75 @@ pub fn now_rfc3339() -> String {
         rem % 60
     )
 }
+
+// The stack lifecycle (BROKKR-T-0398)
+
+impl Api {
+    /// The deployment objects of a stack that are not deleted.
+    pub async fn revisions(&self, pak: &str, stack: Uuid) -> Result<Vec<Value>> {
+        as_list(
+            self.expect(
+                pak,
+                Method::GET,
+                &format!("/stacks/{stack}/deployment-objects"),
+                None,
+            )
+            .await?,
+        )
+    }
+
+    pub async fn agent_targets(&self, admin: &str, agent: Uuid) -> Result<Vec<Value>> {
+        as_list(
+            self.expect(
+                admin,
+                Method::GET,
+                &format!("/agents/{agent}/targets"),
+                None,
+            )
+            .await?,
+        )
+    }
+
+    /// The health of one deployment object, from each agent that reported.
+    pub async fn object_health(&self, admin: &str, object: Uuid) -> Result<Answer> {
+        self.call(
+            admin,
+            Method::GET,
+            &format!("/deployment-objects/{object}/health"),
+            None,
+        )
+        .await
+    }
+
+    /// Like [`Self::report_health`], but a refusal is an answer, not an error.
+    pub async fn try_report_health(
+        &self,
+        agent_pak: &str,
+        agent: Uuid,
+        object: Uuid,
+        status: &str,
+    ) -> Result<Answer> {
+        self.call(
+            agent_pak,
+            Method::PATCH,
+            &format!("/agents/{agent}/health-status"),
+            Some(json!({
+                "deployment_objects": [{
+                    "id": object,
+                    "status": status,
+                    "summary": null,
+                    "checked_at": now_rfc3339(),
+                }]
+            })),
+        )
+        .await
+    }
+}
+
+/// The id of the deployment object with the highest `sequence_id`.
+pub fn latest(revisions: &[Value]) -> Option<Uuid> {
+    revisions
+        .iter()
+        .max_by_key(|r| r.get("sequence_id").and_then(Value::as_i64))
+        .and_then(id_of)
+}
