@@ -115,8 +115,9 @@ impl ClusterHealth {
 }
 
 /// Group the fleet by `cluster_name` (empty -> "(unknown)"), sorted by name.
-/// An agent that is not active is `offline`; an active one is `failing`,
-/// `degraded` or `healthy` from its counts, the same buckets as the Fleet view.
+/// An agent that is not active, or that is silent, is `offline`; an active
+/// one that talks is `failing`, `degraded` or `healthy` from its counts, the
+/// same buckets as the Fleet view.
 pub fn cluster_rollup(agents: &[FleetAgentRecord]) -> Vec<ClusterHealth> {
     let mut by_cluster: BTreeMap<String, ClusterHealth> = BTreeMap::new();
     for a in agents {
@@ -137,8 +138,9 @@ pub fn cluster_rollup(agents: &[FleetAgentRecord]) -> Vec<ClusterHealth> {
                 offline: 0,
             });
         c.total += 1;
-        // An agent that is not active, or that has never checked in, is offline.
-        if !a.is_active() || !a.has_checked_in() {
+        // An agent that is not active, that has never checked in, or that
+        // has gone silent is offline.
+        if !a.is_active() || !a.has_checked_in() || a.is_silent() {
             c.offline += 1;
             continue;
         }
@@ -409,6 +411,51 @@ mod tests {
             got[0].hue(),
             token::MUTED,
             "a cluster with nothing up is muted"
+        );
+    }
+
+    /// An active agent whose last heartbeat is `age` seconds old.
+    fn beat(age: i64, ws_connected: bool, failing: i64) -> FleetAgentRecord {
+        serde_json::from_value(serde_json::json!({
+            "agent_id": "a", "name": "n", "cluster_name": "prod", "status": "ACTIVE",
+            "ws_connected": ws_connected, "health_failing": failing,
+            "heartbeat_age_seconds": age,
+        }))
+        .expect("fleet record")
+    }
+
+    /// BROKKR-T-0396: an agent that was undeployed read healthy with no end.
+    #[test]
+    fn a_silent_agent_is_offline_not_healthy() {
+        use crate::models::SILENT_AFTER_SECS;
+        assert_eq!(beat(5, false, 0).health().0, "healthy");
+        assert_eq!(beat(SILENT_AFTER_SECS, false, 0).health().0, "healthy");
+        assert_eq!(beat(SILENT_AFTER_SECS + 1, false, 0).health().0, "offline");
+        assert_eq!(
+            beat(86_400, false, 3).health().0,
+            "offline",
+            "the last reports of a silent agent are not its health now"
+        );
+        assert_eq!(
+            beat(86_400, true, 0).health().0,
+            "healthy",
+            "an open connection is a sign of life"
+        );
+    }
+
+    #[test]
+    fn the_rollup_counts_a_silent_agent_as_offline() {
+        let fleet = [
+            beat(5, false, 0),
+            beat(86_400, false, 0),
+            beat(86_400, false, 2),
+        ];
+        let got = cluster_rollup(&fleet);
+        let prod = &got[0];
+        assert_eq!((prod.up, prod.total), (1, 3));
+        assert_eq!(
+            (prod.healthy, prod.degraded, prod.failing, prod.offline),
+            (1, 0, 0, 2)
         );
     }
 

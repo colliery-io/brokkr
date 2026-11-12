@@ -33,14 +33,25 @@ pub struct FleetAgentRecord {
     pub k8s_api_latency_ms: Option<i64>,
 }
 
+/// An agent with no heartbeat for more than this many seconds, and no open
+/// connection, is silent. An agent sends a heartbeat each polling interval
+/// (10 s by default), so this is six missed heartbeats.
+pub const SILENT_AFTER_SECS: i64 = 60;
+
 impl FleetAgentRecord {
-    /// Derived health bucket from the failing/degraded counts. An agent that
-    /// has never checked in has no health to report: "unknown", muted
-    /// (BROKKR-T-0336).
+    /// Derived health bucket. An agent that has never checked in has no
+    /// health to report: "unknown", muted (BROKKR-T-0336). A silent agent is
+    /// "offline", muted, whatever its counts: its last reports are not its
+    /// health now (BROKKR-T-0396). Else the failing/degraded counts decide.
+    ///
+    /// The broker's fleet record holds measured values only; this verdict is
+    /// the console's.
     pub fn health(&self) -> (&'static str, &'static str) {
         use aurora_leptos::tokens::token;
         if !self.has_checked_in() {
             ("unknown", token::MUTED)
+        } else if self.is_silent() {
+            ("offline", token::MUTED)
         } else if self.health_failing > 0 {
             ("failing", token::BAD)
         } else if self.health_degraded > 0 {
@@ -48,6 +59,16 @@ impl FleetAgentRecord {
         } else {
             ("healthy", token::OK)
         }
+    }
+
+    /// Whether the agent has stopped talking: no open connection, and a last
+    /// heartbeat older than [`SILENT_AFTER_SECS`]. `ACTIVE` is the admin's
+    /// switch, not a sign of life, so an undeployed agent stays `ACTIVE`.
+    pub fn is_silent(&self) -> bool {
+        !self.ws_connected
+            && self
+                .heartbeat_age_seconds
+                .is_some_and(|s| s > SILENT_AFTER_SECS)
     }
 
     /// Whether the broker has ever heard a heartbeat from this agent.
