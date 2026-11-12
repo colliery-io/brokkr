@@ -339,3 +339,70 @@ pub fn now_rfc3339() -> String {
         rem % 60
     )
 }
+
+// Work orders (BROKKR-T-0399)
+
+impl Api {
+    /// `POST /work-orders` as the admin. The answer is kept whole: a refusal
+    /// is something a scenario checks.
+    pub async fn create_work_order(&self, admin: &str, body: Value) -> Result<Answer> {
+        self.call(admin, Method::POST, "/work-orders", Some(body))
+            .await
+    }
+
+    /// A work order by its id. One that ended comes from the log, with the
+    /// status `COMPLETED` or `FAILED`.
+    pub async fn get_work_order(&self, admin: &str, id: Uuid) -> Result<Answer> {
+        self.call(admin, Method::GET, &format!("/work-orders/{id}"), None)
+            .await
+    }
+
+    pub async fn work_order_log(&self, admin: &str, id: Uuid) -> Result<Answer> {
+        self.call(admin, Method::GET, &format!("/work-order-log/{id}"), None)
+            .await
+    }
+
+    pub async fn delete_work_order(&self, admin: &str, id: Uuid) -> Result<Answer> {
+        self.call(admin, Method::DELETE, &format!("/work-orders/{id}"), None)
+            .await
+    }
+
+    /// The pending work orders that reach an agent, as the agent reads them.
+    pub async fn pending_work_orders(&self, agent_pak: &str, agent: Uuid) -> Result<Vec<Value>> {
+        as_list(
+            self.expect(
+                agent_pak,
+                Method::GET,
+                &format!("/agents/{agent}/work-orders/pending"),
+                None,
+            )
+            .await?,
+        )
+    }
+
+    pub async fn claim_work_order(&self, agent_pak: &str, agent: Uuid, id: Uuid) -> Result<Answer> {
+        self.call(
+            agent_pak,
+            Method::POST,
+            &format!("/work-orders/{id}/claim"),
+            Some(json!({ "agent_id": agent })),
+        )
+        .await
+    }
+
+    pub async fn complete_work_order(
+        &self,
+        agent_pak: &str,
+        id: Uuid,
+        success: bool,
+        message: &str,
+    ) -> Result<Answer> {
+        self.call(
+            agent_pak,
+            Method::POST,
+            &format!("/work-orders/{id}/complete"),
+            Some(json!({ "success": success, "message": message, "retryable": true })),
+        )
+        .await
+    }
+}
