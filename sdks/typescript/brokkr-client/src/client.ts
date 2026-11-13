@@ -161,6 +161,36 @@ export class BrokkrClient {
     );
   }
 
+  /**
+   * Kube-event history for the job of a work order (6h window). For the
+   * owner of the work order (the generator that created it) or an admin; it
+   * also answers after the work order ended. Another generator gets
+   * `work_order_not_owned`.
+   */
+  async listWorkOrderEvents(
+    workOrderId: string,
+    query: TelemetryHistoryQuery = {},
+  ): Promise<K8sEventHistoryResponse> {
+    return this.retry<K8sEventHistoryResponse>((api) =>
+      api.GET("/work-orders/{id}/events", {
+        params: { path: { id: workOrderId }, query },
+      }),
+    );
+  }
+
+  /** Pod-log history for the job of a work order (6h window). Same rules
+   * as {@link BrokkrClient.listWorkOrderEvents}. */
+  async listWorkOrderLogs(
+    workOrderId: string,
+    query: TelemetryHistoryQuery = {},
+  ): Promise<PodLogHistoryResponse> {
+    return this.retry<PodLogHistoryResponse>((api) =>
+      api.GET("/work-orders/{id}/logs", {
+        params: { path: { id: workOrderId }, query },
+      }),
+    );
+  }
+
   /** Admin-only snapshot of currently-connected agents on the
    * internal WS channel. For continuous monitoring prefer scraping
    * the `brokkr_ws_connected_agents` Prometheus gauge. */

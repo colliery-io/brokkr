@@ -371,6 +371,55 @@ class BrokkrClient:
             "list_telemetry_logs",
         )
 
+    # ------------------------------------------------------------------
+    # Work order telemetry. The same shape and the same 6h retention as the
+    # stack calls. For the owner of the work order (the generator that
+    # created it) or an admin; the routes also answer after the work order
+    # ended. Another generator gets `work_order_not_owned`.
+    # ------------------------------------------------------------------
+
+    async def list_work_order_events(
+        self,
+        work_order_id: UUID,
+        since: Optional[Any] = None,
+        limit: Optional[int] = None,
+    ) -> Any:
+        """Kube-event history for the job of a work order. ``since`` is a
+        ``datetime``; ``limit`` caps the page size."""
+        from brokkr_broker_client.api.work_orders import list_work_order_events
+        from brokkr_broker_client.types import UNSET
+
+        return _expect(
+            await list_work_order_events.asyncio_detailed(
+                work_order_id,
+                client=self.api,
+                since=since if since is not None else UNSET,
+                limit=limit if limit is not None else UNSET,
+            ),
+            "list_work_order_events",
+        )
+
+    async def list_work_order_logs(
+        self,
+        work_order_id: UUID,
+        since: Optional[Any] = None,
+        limit: Optional[int] = None,
+    ) -> Any:
+        """Pod-log history for the job of a work order. Same shape as
+        :meth:`list_work_order_events` modulo the row type."""
+        from brokkr_broker_client.api.work_orders import list_work_order_logs
+        from brokkr_broker_client.types import UNSET
+
+        return _expect(
+            await list_work_order_logs.asyncio_detailed(
+                work_order_id,
+                client=self.api,
+                since=since if since is not None else UNSET,
+                limit=limit if limit is not None else UNSET,
+            ),
+            "list_work_order_logs",
+        )
+
     async def list_ws_connections(self) -> Any:
         """Snapshot of agents currently connected on the internal WS channel
         (admin-only). For continuous monitoring prefer the

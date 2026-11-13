@@ -37,6 +37,7 @@ This page uses a **generator PAK**, because a generator owns stacks and deployme
 | Operation | PAK |
 |-----------|-----|
 | `apply`, `submitManifests`, stack, label and deployment-object calls, `listTelemetryEvents`, `listTelemetryLogs`, the live tail, `GET /agents` | Generator (its own stacks only) or admin |
+| Work order calls, `listWorkOrderEvents`, `listWorkOrderLogs` | Generator (its own work orders only) or admin |
 | `apply` for a named generator (fourth argument), `listWsConnections`, create agents and generators, stack health | Admin |
 | Heartbeat, target state, agent events and health reports | Agent |
 
@@ -132,6 +133,68 @@ const ws = new WebSocket(client.liveSubscriptionUrl(stackId), [
 ```
 
 `liveSubscriptionUrl` only computes the URL — you bring the `WebSocket` implementation for your runtime (browser global, or the `ws` package in Node, where you can pass the `Authorization` header instead of the subprotocol). Frame shapes are documented in the [WebSocket Protocol reference](../../../reference/ws-protocol/).
+
+## Launch a job with a work order
+
+A work order is a job that runs one time: a build, a migration, a backup. A generator launches it with its own PAK, on an agent that is registered with the generator. The generator that creates a work order owns it. Only its owner and an admin can read it or delete it.
+
+```typescript
+const JOB_YAML = `apiVersion: batch/v1
+kind: Job
+metadata:
+  name: hello
+  namespace: default
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: job
+          image: busybox:1.36
+          command: ["sh", "-c", "echo hello from a work order"]
+`;
+
+// Launch the job on an agent that is registered with the generator.
+const created = await client.api.POST("/work-orders", {
+  body: {
+    work_type: "custom",
+    yaml_content: JOB_YAML,
+    targeting: { agent_ids: [agentId] },
+  },
+});
+if (created.error) {
+  throw new Error(`${created.error.code}: ${created.error.message}`);
+}
+const workOrder = created.data!;
+console.log(workOrder.id, workOrder.status, workOrder.owner_generator_id);
+
+// Follow it: PENDING, then CLAIMED, then it is in the log.
+const read = await client.api.GET("/work-orders/{id}", {
+  params: { path: { id: workOrder.id } },
+});
+
+// The pod logs and the Kubernetes events of the job
+const logs = await client.listWorkOrderLogs(workOrder.id);
+const events = await client.listWorkOrderEvents(workOrder.id, { limit: 10 });
+
+// Delete a work order that still waits
+await client.api.DELETE("/work-orders/{id}", {
+  params: { path: { id: workOrder.id } },
+});
+```
+
+`targeting` also takes `labels` and `annotations`: an agent with one of them can have the work order, if it is registered with the generator. The wrapper methods throw `BrokkrError`; a typed `client.api` call returns the refusal in `error`.
+
+The broker refuses with a stable `code`:
+
+| Code | Status | When |
+|------|--------|------|
+| `agent_not_registered` | 403 | A target agent is not registered with the generator. The broker creates nothing. |
+| `work_order_not_owned` | 403 | The work order belongs to another generator, or to an admin. |
+| `work_order_not_found` | 404 | No work order has this id. |
+
+The logs and the events stay readable after the work order ends, for the 6-hour retention window. `GET /work-orders/{id}` also answers for a work order that ended. See the [work orders reference](../../../reference/work-orders/).
 
 ## When you need to drop to the raw client
 

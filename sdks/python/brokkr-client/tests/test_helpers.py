@@ -22,6 +22,10 @@ def test_helpers_module_exposes_expected_surface() -> None:
         "list_telemetry_events_async",
         "list_telemetry_logs",
         "list_telemetry_logs_async",
+        "list_work_order_events",
+        "list_work_order_events_async",
+        "list_work_order_logs",
+        "list_work_order_logs_async",
         "list_ws_connections",
         "list_ws_connections_async",
         "live_subscription_url",
@@ -63,6 +67,17 @@ def test_history_helper_signatures_include_keyword_filters() -> None:
     assert params[:2] == ["client", "stack_id"]
     assert "since" in sig.parameters
     assert "limit" in sig.parameters
+
+
+def test_work_order_history_helper_signatures() -> None:
+    # The work order helpers have the call shape of the stack ones, with the
+    # work order id in place of the stack id (BROKKR-T-0408).
+    for helper in (helpers.list_work_order_events, helpers.list_work_order_logs):
+        sig = inspect.signature(helper)
+        params = list(sig.parameters)
+        assert params[:2] == ["client", "work_order_id"]
+        assert "since" in sig.parameters
+        assert "limit" in sig.parameters
 
 
 def test_list_ws_connections_takes_only_a_client() -> None:
