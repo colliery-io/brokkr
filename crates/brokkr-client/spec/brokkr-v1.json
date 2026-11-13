@@ -9432,7 +9432,7 @@
                 }
               }
             },
-            "description": "List of completed work orders"
+            "description": "The log entries the caller may read: each one for an admin, those of its own work orders for a generator"
           },
           "403": {
             "content": {
@@ -9442,7 +9442,7 @@
                 }
               }
             },
-            "description": "Forbidden - requires admin PAK"
+            "description": "Forbidden - requires an admin PAK or a generator PAK"
           },
           "500": {
             "content": {
@@ -9458,6 +9458,9 @@
         "security": [
           {
             "admin_pak": []
+          },
+          {
+            "generator_pak": []
           }
         ],
         "tags": [
@@ -9499,7 +9502,7 @@
                 }
               }
             },
-            "description": "Forbidden - requires admin PAK"
+            "description": "Forbidden - requires an admin PAK, or the PAK of the generator that owned the work order"
           },
           "404": {
             "content": {
@@ -9525,6 +9528,9 @@
         "security": [
           {
             "admin_pak": []
+          },
+          {
+            "generator_pak": []
           }
         ],
         "tags": [
@@ -9567,7 +9573,7 @@
                 }
               }
             },
-            "description": "List of work orders"
+            "description": "The work orders the caller may read: each one for an admin, its own for a generator"
           },
           "403": {
             "content": {
@@ -9577,7 +9583,7 @@
                 }
               }
             },
-            "description": "Forbidden - requires admin PAK"
+            "description": "Forbidden - requires an admin PAK or a generator PAK"
           },
           "500": {
             "content": {
@@ -9593,6 +9599,9 @@
         "security": [
           {
             "admin_pak": []
+          },
+          {
+            "generator_pak": []
           }
         ],
         "tags": [
@@ -9620,7 +9629,7 @@
                 }
               }
             },
-            "description": "Work order created"
+            "description": "Work order created; the caller owns it"
           },
           "400": {
             "content": {
@@ -9640,7 +9649,17 @@
                 }
               }
             },
-            "description": "Forbidden - requires admin PAK"
+            "description": "Forbidden - requires an admin PAK or a generator PAK; or a generator named a target agent that is not registered with it"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "A target agent was not found"
           },
           "500": {
             "content": {
@@ -9656,6 +9675,9 @@
         "security": [
           {
             "admin_pak": []
+          },
+          {
+            "generator_pak": []
           }
         ],
         "tags": [
@@ -9690,7 +9712,7 @@
                 }
               }
             },
-            "description": "Forbidden - requires admin PAK"
+            "description": "Forbidden - requires an admin PAK, or the PAK of the generator that owns the work order"
           },
           "404": {
             "content": {
@@ -9716,6 +9738,9 @@
         "security": [
           {
             "admin_pak": []
+          },
+          {
+            "generator_pak": []
           }
         ],
         "tags": [
@@ -9755,7 +9780,7 @@
                 }
               }
             },
-            "description": "Forbidden - requires admin PAK"
+            "description": "Forbidden - requires an admin PAK, or the PAK of the generator that owns the work order"
           },
           "404": {
             "content": {
@@ -9781,6 +9806,9 @@
         "security": [
           {
             "admin_pak": []
+          },
+          {
+            "generator_pak": []
           }
         ],
         "tags": [

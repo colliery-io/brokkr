@@ -71,6 +71,7 @@ These actions are recorded by the broker today:
 | `workorder.completed` | Work order completed successfully |
 | `workorder.failed` | Work order failed terminally (max retries or non-retryable) |
 | `workorder.retry` | Work order failed and was scheduled for retry |
+| `workorder.deleted` | Work order deleted by an admin or by the generator that owns it |
 | `webhook.delivery_failed` | A webhook delivery exhausted retries and went `dead` |
 | `pak.created` | A PAK was issued at agent/generator creation (REST or CLI) |
 | `auth.failed` | A request presented an invalid PAK (recorded with source IP and path) |
