@@ -38,6 +38,8 @@ Work orders are routed to agents using the same targeting mechanisms as stacks:
 
 An agent can claim a work order if it matches ANY of the specified targeting criteria.
 
+A work order that a generator owns reaches only the agents registered with that generator. The rule is the same for each targeting method: an agent that is not registered with the owner does not get the work order in its pending list and cannot claim it, also when it has a matching label or annotation, or a target row from before it was deregistered. A target agent that is not registered with the owner is refused at creation with `403 agent_not_registered`. A work order that an admin owns has no such limit.
+
 ### Owner
 
 Each work order has an owner: who created it. `owner_generator_id` names the generator. No value means an admin owns it. The owner is set at creation and does not change, and the work order log entry keeps it.
