@@ -327,6 +327,24 @@ impl WorkOrdersDAL<'_> {
             .collect())
     }
 
+    /// The agents that a pending work order reaches, each once, sorted: the
+    /// agents of [`Self::matches`] for this work order. It is the same rule
+    /// read from the side of the work order, so an agent is here exactly
+    /// when it has the work order in its pending list. The push of a new work
+    /// order reads it (BROKKR-T-0412).
+    ///
+    /// A work order that is not PENDING reaches no agent.
+    pub fn agents_reached(&self, work_order_id: Uuid) -> Result<Vec<Uuid>, diesel::result::Error> {
+        let agents: HashSet<Uuid> = self
+            .matches(None, Some(work_order_id))?
+            .into_iter()
+            .map(|(agent_id, _)| agent_id)
+            .collect();
+        let mut agents: Vec<Uuid> = agents.into_iter().collect();
+        agents.sort();
+        Ok(agents)
+    }
+
     /// The agents of `agent_ids` that are not registered with `owner`. A
     /// generator cannot name one of them as a target of its work order
     /// (BROKKR-T-0403). The order of `agent_ids` is kept.

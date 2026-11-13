@@ -25,19 +25,29 @@ use crate::dal::DAL;
 
 use super::registry::{ConnectionRegistry, SendError};
 
-/// Push a freshly-created [`WorkOrder`] to each targeted agent.
+/// Push a freshly-created [`WorkOrder`] to every agent that it reaches: by
+/// a target, a label or an annotation, and for a work order that a generator
+/// owns, only the agents registered with that generator
+/// (`WorkOrdersDAL::agents_reached`, BROKKR-T-0412). The set comes from the
+/// rule that the pending list and the claim use, so an agent gets the push
+/// only for a work order that it can claim.
 ///
-/// `agent_ids` is the explicit list resolved by the handler (currently
-/// taken straight from `targeting.agent_ids` on create — label / annotation
-/// targeting is resolved by the agent's REST polling, which is fine: when
-/// label-based targeting matures, this helper grows a DAL lookup the same
-/// way [`push_stack_changed_to_targets`] does today).
-pub fn push_work_order(
-    registry: &Arc<ConnectionRegistry>,
-    work_order: &WorkOrder,
-    agent_ids: &[Uuid],
-) {
-    for &agent_id in agent_ids {
+/// An agent that is not connected gets nothing here and finds the work order
+/// on its next poll. An error on the read of the set is logged and swallowed
+/// for the same reason.
+pub fn push_work_order(registry: &Arc<ConnectionRegistry>, dal: &DAL, work_order: &WorkOrder) {
+    let agents = match dal.work_orders().agents_reached(work_order.id) {
+        Ok(agents) => agents,
+        Err(e) => {
+            warn!(work_order_id = %work_order.id, error = %e, "failed to fetch the agents of the work order for the push; relying on REST fallback");
+            return;
+        }
+    };
+    if agents.is_empty() {
+        debug!(work_order_id = %work_order.id, "no agent has this work order; nothing to push");
+        return;
+    }
+    for agent_id in agents {
         deliver(
             registry,
             agent_id,

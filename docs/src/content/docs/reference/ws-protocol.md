@@ -48,7 +48,7 @@ Variant names are `snake_case`.
 
 | `type` | Body | Meaning |
 |--------|------|---------|
-| `work_order` | `WorkOrder` (same shape as REST) | A work order this agent may claim was created |
+| `work_order` | `WorkOrder` (same shape as REST) | A work order that this agent can claim was created. Sent to each connected agent that the work order reaches: by agent id, by a label or by an annotation. A work order that a generator owns goes only to the agents registered with that generator |
 | `target_changed` | `AgentTarget` | Targets changed — re-poll. Sent when a stack target is added for this agent, and also as a synthetic nudge when the agent is deregistered from a generator |
 | `stack_changed` | `Stack` | A stack that the agent serves (by a target, a label or an annotation) got a new deployment object |
 
