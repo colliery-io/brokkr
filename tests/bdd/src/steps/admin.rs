@@ -366,3 +366,45 @@ async fn has_given_scenario_label(w: &mut World, agent: String, label: String) {
 async fn has_deleted_agent(w: &mut World, agent: String) {
     deletes_agent(w, agent).await;
 }
+
+// A work order that runs in the cluster (BROKKR-T-0406).
+
+/// A `custom` work order for the cluster agent: one Job that prints the line
+/// of the scenario, then ends with `exit_code`. The work order has no retry,
+/// so a failure ends in the log at once.
+async fn launch_job_on_cluster_agent(w: &mut World, name: &str, exit_code: i32) {
+    let agent_id = w
+        .cluster_agent_id
+        .expect("the scenario has not looked up the cluster agent yet");
+    let job = w.job_name(name);
+    let line = w.job_line(name);
+    let yaml = format!(
+        "apiVersion: batch/v1\nkind: Job\nmetadata:\n  name: {job}\n  namespace: default\nspec:\n  backoffLimit: 0\n  ttlSecondsAfterFinished: 600\n  template:\n    spec:\n      restartPolicy: Never\n      containers:\n        - name: main\n          image: busybox:1.36\n          command: [\"sh\", \"-c\", \"echo {line}; sleep 2; exit {exit_code}\"]\n"
+    );
+    create_work_order(
+        w,
+        name,
+        serde_json::json!({
+            "work_type": "custom",
+            "yaml_content": yaml,
+            "max_retries": 0,
+            "targeting": { "agent_ids": [agent_id] },
+        }),
+    )
+    .await;
+    work_order_created(w);
+}
+
+#[when(
+    expr = "the admin launches the work order {string} on the cluster agent with a job that prints a line"
+)]
+async fn launches_job(w: &mut World, name: String) {
+    launch_job_on_cluster_agent(w, &name, 0).await;
+}
+
+#[when(
+    expr = "the admin launches the work order {string} on the cluster agent with a job that prints a line and fails"
+)]
+async fn launches_failing_job(w: &mut World, name: String) {
+    launch_job_on_cluster_agent(w, &name, 1).await;
+}

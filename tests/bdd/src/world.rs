@@ -226,6 +226,17 @@ impl World {
             .unwrap_or_else(|| panic!("the admin does not see the stack {real:?}"))
     }
 
+    /// The name of the Job that the work order `name` of this scenario runs
+    /// in the cluster. It is unique, so a later run does not find an old Job.
+    pub fn job_name(&self, name: &str) -> String {
+        format!("bdd-{}-{}", name, self.run)
+    }
+
+    /// The line that the Job of the work order `name` prints.
+    pub fn job_line(&self, name: &str) -> String {
+        format!("brokkr bdd line of {}", self.job_name(name))
+    }
+
     /// The name of the agent in the test stack's cluster.
     pub fn cluster_agent_name(&self) -> &str {
         self.env.cluster_agent.as_deref().unwrap_or_else(|| {

@@ -434,6 +434,18 @@ impl Api {
             .await
     }
 
+    /// The pod log lines that the agent sent for the job of a work order.
+    pub async fn work_order_logs(&self, pak: &str, id: Uuid) -> Result<Answer> {
+        self.call(pak, Method::GET, &format!("/work-orders/{id}/logs"), None)
+            .await
+    }
+
+    /// The Kubernetes events that the agent sent for the job of a work order.
+    pub async fn work_order_events(&self, pak: &str, id: Uuid) -> Result<Answer> {
+        self.call(pak, Method::GET, &format!("/work-orders/{id}/events"), None)
+            .await
+    }
+
     pub async fn delete_work_order(&self, admin: &str, id: Uuid) -> Result<Answer> {
         self.call(admin, Method::DELETE, &format!("/work-orders/{id}"), None)
             .await
