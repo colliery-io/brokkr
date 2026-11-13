@@ -62,7 +62,7 @@ pub fn WorkOrdersView() -> impl IntoView {
                             <Panel title="Active">
                                 <Empty
                                     message="No active work orders."
-                                    hint="A work order appears when a generator requests an image build."
+                                    hint="A work order is a job that runs one time. An admin or a generator creates it."
                                     href=format!("{DOCS}/reference/work-orders.html")
                                     link="What a work order is"
                                 />

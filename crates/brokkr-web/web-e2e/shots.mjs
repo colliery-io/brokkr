@@ -360,7 +360,8 @@ const SCENES = [
   { name: "deployments-empty", nav: "Deployments", mocks: { ...EMPTY_SHELL, "/stacks": [] } },
   { name: "telemetry-empty", nav: "Telemetry", mocks: { ...EMPTY_SHELL } },
   { name: "webhooks-empty", nav: "Webhooks", mocks: { ...EMPTY_SHELL, "/webhooks": [], "/webhook-deliveries": [] } },
-  { name: "jobs-empty", nav: "Work orders", mocks: { ...EMPTY_SHELL, "/work-order-log": [] } },
+  { name: "jobs-empty", nav: "Work orders", mocks: { ...EMPTY_SHELL, "/work-order-log": [] },
+    assert_text: ["A work order is a job that runs one time. An admin or a generator creates it."] },
   // A new agent: no heartbeat, so health is unknown and the drawer offers Activate.
   { name: "fleet-new-agent", nav: "Fleet", mocks: { ...EMPTY_SHELL, "/fleet": [NEW_AGENT] } },
   { name: "fleet-new-agent-modal", nav: "Fleet", click: "checkout-agent-01",
