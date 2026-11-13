@@ -1096,6 +1096,29 @@ impl BrokkrClient {
             .into_inner())
     }
 
+    /// The work orders that ended, newest first, from the work order log.
+    /// An admin sees all of them; a generator sees its own. Each field of
+    /// `filter` that has a value narrows the list.
+    pub async fn list_work_order_log(
+        &self,
+        filter: WorkOrderLogFilter,
+    ) -> Result<Vec<WorkOrderLog>, BrokkrError> {
+        let mut req = self.inner.list_work_order_log();
+        if let Some(work_type) = filter.work_type {
+            req = req.work_type(work_type);
+        }
+        if let Some(success) = filter.success {
+            req = req.success(success);
+        }
+        if let Some(agent_id) = filter.agent_id {
+            req = req.agent_id(agent_id);
+        }
+        if let Some(limit) = filter.limit {
+            req = req.limit(limit);
+        }
+        Ok(req.send().await?.into_inner())
+    }
+
     /// Delete a work order that has not ended: its owner, or an admin.
     pub async fn delete_work_order(&self, id: Uuid) -> Result<(), BrokkrError> {
         self.inner.delete_work_order().id(id).send().await?;
@@ -1188,6 +1211,20 @@ pub struct NewWorkOrderSpec {
     /// The first wait before a new try; it doubles each time. The broker's
     /// default is 60 seconds.
     pub backoff_seconds: Option<i32>,
+}
+
+/// What narrows [`BrokkrClient::list_work_order_log`]. An empty filter gives
+/// each ended work order that the PAK can see.
+#[derive(Debug, Clone, Default)]
+pub struct WorkOrderLogFilter {
+    /// Only this type of work, for example `custom`.
+    pub work_type: Option<String>,
+    /// `true`: only the ones that ended with success. `false`: only failures.
+    pub success: Option<bool>,
+    /// Only the ones that this agent ran.
+    pub agent_id: Option<Uuid>,
+    /// At most this many, newest first.
+    pub limit: Option<i64>,
 }
 
 /// The status of an agent that applies deployment objects.

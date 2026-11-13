@@ -6,7 +6,7 @@
 
 //! Work order commands (BROKKR-T-0407, BROKKR-A-0013).
 //!
-//! `brokkr work-order create|list|status|delete|logs|events`. A work order
+//! `brokkr work-order create|list|history|status|delete|logs|events`. A work order
 //! runs once: an agent applies its YAML and watches it to its end. An admin
 //! or a generator creates one, and the PAK that creates it owns it. A work
 //! order has no name, so each command takes its id. Each command is a thin
@@ -16,9 +16,9 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use brokkr_client::types::{WorkOrder, WorkOrderLog};
-use brokkr_client::{BrokkrClient, BrokkrError, NewWorkOrderSpec};
+use brokkr_client::{BrokkrClient, BrokkrError, NewWorkOrderSpec, WorkOrderLogFilter};
 use chrono::{DateTime, Utc};
-use clap::{ArgGroup, Args, Subcommand};
+use clap::{ArgGroup, Args, Subcommand, ValueEnum};
 use uuid::Uuid;
 
 use crate::fleet::{parse_label, print_table};
@@ -42,8 +42,16 @@ pub enum WorkOrderCommand {
     ///
     /// An admin PAK lists all of them. A generator PAK lists the work
     /// orders of its generator. A work order that ended is not in this
-    /// list: use brokkr work-order status with its id.
+    /// list: use brokkr work-order history.
     List,
+
+    /// List the work orders that ended, newest first.
+    ///
+    /// Each row has the result, the agent that ran the work order, the
+    /// owner, the time it ended and the first line of the message. An admin
+    /// PAK lists all of them. A generator PAK lists the work orders of its
+    /// generator.
+    History(HistoryArgs),
 
     /// Show the status of one work order, and its result when it has ended.
     ///
@@ -121,6 +129,33 @@ pub struct CreateArgs {
     backoff: Option<i32>,
 }
 
+/// How a work order ended.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum ResultFilter {
+    Success,
+    Failure,
+}
+
+#[derive(Debug, Args)]
+pub struct HistoryArgs {
+    /// Only this type of work, for example custom or build.
+    #[arg(long = "type", value_name = "TYPE")]
+    work_type: Option<String>,
+
+    /// Only the work orders that ended with this result.
+    #[arg(long, value_enum, value_name = "RESULT")]
+    result: Option<ResultFilter>,
+
+    /// Only the work orders that this agent ran. Give the name or the id of
+    /// the agent.
+    #[arg(long, value_name = "NAME_OR_ID")]
+    agent: Option<String>,
+
+    /// At most this many rows, newest first.
+    #[arg(long, value_name = "N")]
+    limit: Option<i64>,
+}
+
 #[derive(Debug, Args)]
 pub struct WorkOrderRef {
     /// The id of the work order.
@@ -165,8 +200,8 @@ pub async fn work_order(client: &BrokkrClient, command: WorkOrderCommand) -> Res
                 .map_err(|e| explain(&e, None))?;
             if work_orders.is_empty() {
                 println!(
-                    "no work orders wait or run. To see one that ended, run: \
-                     brokkr work-order status <ID>"
+                    "no work orders wait or run. To see the ones that ended, run: \
+                     brokkr work-order history"
                 );
                 return Ok(());
             }
@@ -177,6 +212,44 @@ pub async fn work_order(client: &BrokkrClient, command: WorkOrderCommand) -> Res
                 .map(|w| list_row(w, &generators, now))
                 .collect();
             print_table(&["ID", "TYPE", "STATUS", "OWNER", "AGE"], rows);
+            Ok(())
+        }
+        WorkOrderCommand::History(args) => {
+            let agent_id = match &args.agent {
+                Some(given) => Some(
+                    client
+                        .resolve_agent_id(given)
+                        .await
+                        .map_err(|e| e.to_string())?,
+                ),
+                None => None,
+            };
+            let entries = client
+                .list_work_order_log(WorkOrderLogFilter {
+                    work_type: args.work_type,
+                    success: args.result.map(|r| r == ResultFilter::Success),
+                    agent_id,
+                    limit: args.limit,
+                })
+                .await
+                .map_err(|e| explain(&e, None))?;
+            if entries.is_empty() {
+                println!(
+                    "no work order that matches has ended. To see the ones that wait or \
+                     run, run: brokkr work-order list"
+                );
+                return Ok(());
+            }
+            let generators = generator_names(client).await;
+            let agents = agent_names(client).await;
+            let rows = entries
+                .iter()
+                .map(|e| history_row(e, &generators, &agents))
+                .collect();
+            print_table(
+                &["ID", "TYPE", "RESULT", "AGENT", "OWNER", "ENDED", "MESSAGE"],
+                rows,
+            );
             Ok(())
         }
         WorkOrderCommand::Status(args) => {
@@ -449,6 +522,47 @@ fn list_row(
         work_order.status.clone(),
         owner_text(work_order.owner_generator_id, generators),
         age(now, work_order.created_at),
+    ]
+}
+
+/// The longest message that a row of `brokkr work-order history` shows.
+const MESSAGE_MAX: usize = 60;
+
+/// The first line of a message, cut to [`MESSAGE_MAX`] characters. `-` when
+/// there is no message.
+pub fn one_line(message: Option<&str>) -> String {
+    let first = message
+        .and_then(|m| m.lines().find(|l| !l.trim().is_empty()))
+        .map(str::trim)
+        .unwrap_or("");
+    if first.is_empty() {
+        return "-".to_string();
+    }
+    if first.chars().count() <= MESSAGE_MAX {
+        return first.to_string();
+    }
+    let cut: String = first.chars().take(MESSAGE_MAX - 3).collect();
+    format!("{cut}...")
+}
+
+/// One row of `brokkr work-order history`.
+fn history_row(
+    entry: &WorkOrderLog,
+    generators: &HashMap<Uuid, String>,
+    agents: &HashMap<Uuid, String>,
+) -> Vec<String> {
+    let agent = match entry.claimed_by {
+        None => "-".to_string(),
+        Some(id) => agents.get(&id).cloned().unwrap_or_else(|| id.to_string()),
+    };
+    vec![
+        entry.id.to_string(),
+        entry.work_type.clone(),
+        if entry.success { "success" } else { "failure" }.to_string(),
+        agent,
+        owner_text(entry.owner_generator_id, generators),
+        entry.completed_at.to_rfc3339(),
+        one_line(entry.result_message.as_deref()),
     ]
 }
 
@@ -732,6 +846,72 @@ mod tests {
         );
         let of_admin = list_row(&pending(None), &generators, at(5));
         assert_eq!(of_admin[3], "admin");
+    }
+
+    #[test]
+    fn a_message_is_one_line_and_cut() {
+        assert_eq!(one_line(None), "-");
+        assert_eq!(one_line(Some("  \n ")), "-");
+        assert_eq!(one_line(Some("sha256:abc")), "sha256:abc");
+        assert_eq!(one_line(Some("\nfirst line\nsecond line")), "first line");
+        let long = "x".repeat(MESSAGE_MAX + 20);
+        let cut = one_line(Some(&long));
+        assert_eq!(cut.chars().count(), MESSAGE_MAX);
+        assert!(cut.ends_with("..."), "{cut}");
+        // A message of the longest size is not cut.
+        let fits = "y".repeat(MESSAGE_MAX);
+        assert_eq!(one_line(Some(&fits)), fits);
+    }
+
+    #[test]
+    fn a_history_row_has_the_result_the_agent_the_owner_and_the_message() {
+        let (agent, owner) = (Uuid::from_u128(2), Uuid::from_u128(5));
+        let agents = HashMap::from([(agent, "prod-1".to_string())]);
+        let generators = HashMap::from([(owner, "team-robin".to_string())]);
+        let mut entry = WorkOrderLog {
+            id: Uuid::from_u128(1),
+            work_type: "custom".to_string(),
+            created_at: at(0),
+            claimed_at: Some(at(10)),
+            completed_at: at(60),
+            claimed_by: Some(agent),
+            success: false,
+            retries_attempted: 3,
+            result_message: Some("job failed\nBackoffLimitExceeded".to_string()),
+            yaml_content: "kind: Job\n".to_string(),
+            owner_generator_id: Some(owner),
+        };
+        assert_eq!(
+            history_row(&entry, &generators, &agents),
+            vec![
+                Uuid::from_u128(1).to_string(),
+                "custom".to_string(),
+                "failure".to_string(),
+                "prod-1".to_string(),
+                "team-robin".to_string(),
+                at(60).to_rfc3339(),
+                "job failed".to_string(),
+            ]
+        );
+        // An admin's, with success, by an agent this PAK cannot name, and
+        // one that no agent ran.
+        entry.success = true;
+        entry.owner_generator_id = None;
+        entry.result_message = None;
+        let unknown = Uuid::from_u128(8);
+        entry.claimed_by = Some(unknown);
+        let row = history_row(&entry, &generators, &agents);
+        assert_eq!(
+            (
+                row[2].as_str(),
+                row[3].as_str(),
+                row[4].as_str(),
+                row[6].as_str()
+            ),
+            ("success", unknown.to_string().as_str(), "admin", "-")
+        );
+        entry.claimed_by = None;
+        assert_eq!(history_row(&entry, &generators, &agents)[3], "-");
     }
 
     #[test]

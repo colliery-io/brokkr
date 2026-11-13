@@ -641,6 +641,7 @@ A work order runs one time: an agent applies its YAML and watches it to its end.
 |---------|--------------|
 | `brokkr work-order create` | Creates a work order from a file of YAML. |
 | `brokkr work-order list` | Lists the work orders that wait or run. |
+| `brokkr work-order history` | Lists the work orders that ended, newest first. |
 | `brokkr work-order status <ID>` | Shows the status of one work order, and its result when it has ended. |
 | `brokkr work-order delete <ID>` | Deletes a work order that has not ended. |
 | `brokkr work-order logs <ID>` | Shows the retained pod log lines of a work order. |
@@ -694,7 +695,29 @@ ID                                    TYPE    STATUS   OWNER       AGE
 1e0d9c8b-7a6f-4e5d-8c3b-2a1f0e9d8c7b  build   PENDING  team-robin  45s
 ```
 
-A work order that ended is not in this list. Use `brokkr work-order status` with its id.
+A work order that ended is not in this list. Use `brokkr work-order history`.
+
+#### `brokkr work-order history`
+
+Lists the work orders that ended, newest first, from the work order log. An admin PAK lists all of them. A generator PAK lists the work orders of its generator. Each row has the id, the type, the result, the agent that ran the work order, the owner, the time it ended, and the first line of the message, cut to 60 characters.
+
+| Flag | Meaning |
+|------|---------|
+| `--type <TYPE>` | Only this type of work, for example `custom` or `build`. |
+| `--result <RESULT>` | Only the work orders that ended with this result: `success` or `failure`. |
+| `--agent <NAME_OR_ID>` | Only the work orders that this agent ran. |
+| `--limit <N>` | At most this many rows. |
+
+```bash
+brokkr work-order history --result failure --limit 20
+```
+
+```
+ID                                    TYPE    RESULT   AGENT   OWNER       ENDED                      MESSAGE
+1e0d9c8b-7a6f-4e5d-8c3b-2a1f0e9d8c7b  build   failure  prod-1  team-robin  2026-11-13T10:05:40+00:00  BuildRun failed: step build-and-push
+```
+
+For the full message of one work order, use `brokkr work-order status` with its id. This is `GET /api/v1/work-order-log`.
 
 #### `brokkr work-order status`
 

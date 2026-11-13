@@ -35,6 +35,7 @@ fn client_exposes_baseline_operations() {
     let _ = c.get_work_order();
     let _ = c.delete_work_order();
     let _ = c.get_work_order_log();
+    let _ = c.list_work_order_log();
     let _ = c.list_work_order_logs();
     let _ = c.list_work_order_events();
     let _ = c.verify_pak();

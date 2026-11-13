@@ -541,7 +541,9 @@ fn help_lists_the_work_order_commands() {
     cmd.args(["work-order", "--help"]);
     let (output, stdout, _) = run(cmd);
     assert!(output.status.success());
-    for needle in ["create", "list", "status", "delete", "logs", "events"] {
+    for needle in [
+        "create", "list", "history", "status", "delete", "logs", "events",
+    ] {
         assert!(
             stdout.contains(needle),
             "work-order help missing {needle}: {stdout}"
@@ -661,6 +663,19 @@ fn work_order_commands_parse_then_need_a_connection() {
             "env:prod",
         ],
         vec!["work-order", "list"],
+        vec!["work-order", "history"],
+        vec![
+            "work-order",
+            "history",
+            "--type",
+            "custom",
+            "--result",
+            "failure",
+            "--agent",
+            WORK_ORDER_ID,
+            "--limit",
+            "20",
+        ],
         vec!["work-order", "status", WORK_ORDER_ID],
         vec!["work-order", "delete", WORK_ORDER_ID],
         vec!["work-order", "logs", WORK_ORDER_ID, "--limit", "50"],
@@ -677,4 +692,32 @@ fn work_order_commands_parse_then_need_a_connection() {
             "{args:?}: {stderr}"
         );
     }
+}
+
+#[test]
+fn work_order_history_help_documents_the_filters() {
+    let mut cmd = brokkr();
+    cmd.args(["work-order", "history", "--help"]);
+    let (output, stdout, _) = run(cmd);
+    assert!(output.status.success());
+    for needle in [
+        "--type", "--result", "--agent", "--limit", "success", "failure", "ended",
+    ] {
+        assert!(
+            stdout.contains(needle),
+            "work-order history help missing {needle}: {stdout}"
+        );
+    }
+}
+
+#[test]
+fn work_order_history_result_is_success_or_failure() {
+    let mut cmd = brokkr();
+    cmd.args(["work-order", "history", "--result", "ok"]);
+    let (output, _, stderr) = run(cmd);
+    assert!(!output.status.success());
+    assert!(
+        stderr.contains("success") && stderr.contains("failure"),
+        "{stderr}"
+    );
 }

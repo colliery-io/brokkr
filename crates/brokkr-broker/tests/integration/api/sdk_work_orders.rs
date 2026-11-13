@@ -13,7 +13,7 @@
 //! and a second generator's.
 
 use brokkr_client::types::WorkOrder;
-use brokkr_client::{BrokkrClient, BrokkrError, NewWorkOrderSpec};
+use brokkr_client::{BrokkrClient, BrokkrError, NewWorkOrderSpec, WorkOrderLogFilter};
 use brokkr_models::models::agent_k8s_events::NewAgentK8sEvent;
 use brokkr_models::models::agent_pod_logs::NewAgentPodLog;
 use tokio::net::TcpListener;
@@ -330,5 +330,143 @@ async fn an_ended_work_order_is_read_with_its_result_logs_and_events() {
     assert_eq!(
         refusal(s.other.get_work_order_log(created.id).await),
         (403, "work_order_not_owned".to_string())
+    );
+}
+
+/// End a work order at the DAL, as its agent does: claim, then the result.
+fn end(fixture: &TestFixture, work_order: Uuid, agent: Uuid, success: bool, message: &str) {
+    fixture
+        .dal
+        .work_orders()
+        .claim(work_order, agent)
+        .expect("claim failed");
+    if success {
+        fixture
+            .dal
+            .work_orders()
+            .complete_success(work_order, Some(message.to_string()))
+            .expect("complete_success failed");
+    } else {
+        fixture
+            .dal
+            .work_orders()
+            .complete_failure(work_order, message.to_string(), false)
+            .expect("complete_failure failed");
+    }
+}
+
+#[tokio::test]
+async fn the_log_lists_ended_work_orders_for_their_owner_and_an_admin() {
+    let fixture = TestFixture::new();
+    let s = scene(&fixture, "history").await;
+    let ids = |entries: &[brokkr_client::types::WorkOrderLog]| -> Vec<Uuid> {
+        entries.iter().map(|e| e.id).collect()
+    };
+
+    // The generator's: one success and one failure. An admin's: one success.
+    let good = s
+        .owner
+        .create_work_order(spec(vec![s.agent_id]))
+        .await
+        .expect("create");
+    let bad = s
+        .owner
+        .create_work_order(NewWorkOrderSpec {
+            work_type: "build".to_string(),
+            ..spec(vec![s.agent_id])
+        })
+        .await
+        .expect("create");
+    let of_admin = s
+        .admin
+        .create_work_order(spec(vec![s.agent_id]))
+        .await
+        .expect("create");
+    end(&fixture, good.id, s.agent_id, true, "sha256:abc");
+    end(&fixture, bad.id, s.agent_id, false, "job failed");
+    end(&fixture, of_admin.id, s.agent_id, true, "ok");
+
+    // The owner gets its two, and not the admin's.
+    let own = s
+        .owner
+        .list_work_order_log(WorkOrderLogFilter::default())
+        .await
+        .expect("the owner lists its log");
+    let own_ids = ids(&own);
+    assert!(own_ids.contains(&good.id) && own_ids.contains(&bad.id));
+    assert!(!own_ids.contains(&of_admin.id), "an admin's is for admins");
+    let entry = own.iter().find(|e| e.id == bad.id).unwrap();
+    assert!(!entry.success);
+    assert_eq!(entry.result_message.as_deref(), Some("job failed"));
+    assert_eq!(entry.claimed_by, Some(s.agent_id));
+    assert_eq!(entry.owner_generator_id, Some(s.owner_id));
+
+    // An admin gets all three; the other generator gets none of them.
+    let all = ids(&s
+        .admin
+        .list_work_order_log(WorkOrderLogFilter::default())
+        .await
+        .expect("the admin lists the log"));
+    for id in [good.id, bad.id, of_admin.id] {
+        assert!(all.contains(&id));
+    }
+    let others = ids(&s
+        .other
+        .list_work_order_log(WorkOrderLogFilter::default())
+        .await
+        .expect("the other generator lists its log"));
+    for id in [good.id, bad.id, of_admin.id] {
+        assert!(!others.contains(&id));
+    }
+
+    // Each filter narrows the owner's list.
+    let failures = ids(&s
+        .owner
+        .list_work_order_log(WorkOrderLogFilter {
+            success: Some(false),
+            ..WorkOrderLogFilter::default()
+        })
+        .await
+        .expect("filter by result"));
+    assert_eq!(failures, vec![bad.id]);
+    let builds = ids(&s
+        .owner
+        .list_work_order_log(WorkOrderLogFilter {
+            work_type: Some("build".to_string()),
+            ..WorkOrderLogFilter::default()
+        })
+        .await
+        .expect("filter by type"));
+    assert_eq!(builds, vec![bad.id]);
+    let by_agent = ids(&s
+        .owner
+        .list_work_order_log(WorkOrderLogFilter {
+            agent_id: Some(s.agent_id),
+            limit: Some(1),
+            ..WorkOrderLogFilter::default()
+        })
+        .await
+        .expect("filter by agent, with a limit"));
+    assert_eq!(by_agent.len(), 1);
+    let by_stranger = s
+        .owner
+        .list_work_order_log(WorkOrderLogFilter {
+            agent_id: Some(Uuid::new_v4()),
+            ..WorkOrderLogFilter::default()
+        })
+        .await
+        .expect("filter by an agent that ran none");
+    assert!(by_stranger.is_empty());
+
+    // An agent PAK has no place on this route.
+    let (_agent, agent_pak) =
+        fixture.create_test_agent_with_pak("sdk-wo-history-pak".to_string(), "c".to_string());
+    assert_eq!(
+        refusal(
+            sdk(&s.url, &agent_pak)
+                .list_work_order_log(WorkOrderLogFilter::default())
+                .await
+        ),
+        (403, "work_order_access_denied".to_string())
     );
 }
