@@ -63,7 +63,7 @@ The sidebar groups seven views:
 
 **Operations**
 
-- **Work orders** — active work orders above the completed history; clicking a history row opens its detail. Each row names its owner: the generator that created the work order, or `admin`. If the owner is a generator the console does not list any more, the row shows the first characters of its id.
+- **Work orders** — active work orders above the completed history. Click a row, active or completed, to open the work order: its detail, and two tabs for its job, *Pod logs* and *Kube events*. While the work order runs, the open tab reads the broker again every 5 seconds; there is no live stream for a work order. The broker keeps these lines and events for a short window (6 hours by default) after it gets them. For a work order that ended before that window, the tab says that the lines are gone. Each row names its owner: the generator that created the work order, or `admin`. If the owner is a generator the console does not list any more, the row shows the first characters of its id.
 - **Webhooks** — the webhook subscriptions and their configured events. The API deliberately redacts subscription URLs, so the console shows only whether one is set. Clicking a subscription lists its recent delivery attempts. Below the subscriptions, the **Recent deliveries** panel shows the newest deliveries of all subscriptions (see [The Recent Deliveries Panel](#the-recent-deliveries-panel)).
 
 **System**

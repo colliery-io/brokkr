@@ -371,6 +371,19 @@ pub async fn stack_logs(id: &str) -> Result<crate::models::PodLogHistory, ApiErr
     get(&format!("/stacks/{id}/logs")).await
 }
 
+/// `GET /api/v1/work-orders/:id/events`: the Kubernetes events of the job of
+/// a work order, in the shape of [`stack_events`]. The broker also answers
+/// after the work order ended, until the retention window passes.
+pub async fn work_order_events(id: &str) -> Result<crate::models::K8sEventHistory, ApiError> {
+    get(&format!("/work-orders/{id}/events")).await
+}
+
+/// `GET /api/v1/work-orders/:id/logs`: the pod log lines of the job of a work
+/// order, in the shape of [`stack_logs`].
+pub async fn work_order_logs(id: &str) -> Result<crate::models::PodLogHistory, ApiError> {
+    get(&format!("/work-orders/{id}/logs")).await
+}
+
 /// `GET /api/v1/agent-events`, optionally scoped to a generator.
 pub async fn agent_events(
     scope: Option<String>,
