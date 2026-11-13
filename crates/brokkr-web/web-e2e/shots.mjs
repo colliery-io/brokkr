@@ -36,9 +36,14 @@ const FLEET = [
     pending_object_count: 0, pending_work_orders: 0, claimed_work_orders: 0 },
 ];
 
+// Each work order has an owner (BROKKR-T-0409): the generator that created it,
+// or no `owner_generator_id` for an admin's. The ids line up with GENERATORS
+// and PAKS.
 const ACTIVE_WOS = [
-  { id: "9a01ffbe", work_type: "image_build", status: "claimed", retry_count: 0, claimed_by: "1b9d6bcd-bbfd", last_error: null },
-  { id: "b2c3d4e5", work_type: "image_build", status: "pending", retry_count: 1, claimed_by: null, last_error: null },
+  { id: "9a01ffbe", work_type: "image_build", status: "claimed", retry_count: 0, claimed_by: "1b9d6bcd-bbfd", last_error: null,
+    owner_generator_id: "1b9d6bcd-bbfd" },
+  { id: "b2c3d4e5", work_type: "image_build", status: "pending", retry_count: 1, claimed_by: null, last_error: null,
+    owner_generator_id: null },
 ];
 
 const WSCONN = {
@@ -93,9 +98,15 @@ const EVENTS = [
   { agent_id: "a2", event_type: "Reconcile", status: "failure", message: "Service/ingest: port 8080 already allocated", created_at: ago(3700) },
 ];
 
+// The last one belongs to a generator that is gone from the list: the owner
+// shows as the short id.
 const JOBS = [
-  { id: "7f3a01ab", work_type: "image_build", success: true, retries_attempted: 0, result_message: "pushed ghcr.io/app:sha-7f3a01" },
-  { id: "561200cd", work_type: "image_build", success: false, retries_attempted: 3, result_message: "buildah: manifest unknown" },
+  { id: "7f3a01ab", work_type: "image_build", success: true, retries_attempted: 0, result_message: "pushed ghcr.io/app:sha-7f3a01",
+    owner_generator_id: "1b9d6bcd-bbfd" },
+  { id: "561200cd", work_type: "image_build", success: false, retries_attempted: 3, result_message: "buildah: manifest unknown",
+    owner_generator_id: null },
+  { id: "c4d5e6f7", work_type: "custom", success: true, retries_attempted: 0, result_message: "job complete",
+    owner_generator_id: "0f0e0d0c-9999" },
 ];
 const HOOKS = [
   { id: "h1", name: "prod-alerts", enabled: true, has_url: true, event_types: ["stack.updated", "agent.failed"] },
@@ -374,7 +385,15 @@ const SCENES = [
   { name: "health-db-absent", nav: "Broker health", mocks: { "/admin/ws/connections": WSCONN },
     assert_text: ["not sent by this broker"] },
   { name: "health-modal", nav: "Broker health", click: "1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed", mocks: { "/admin/ws/connections": WSCONN } },
-  { name: "jobs", nav: "Work orders", mocks: { "/work-order-log": JOBS, "/work-orders": ACTIVE_WOS } },
+  // Each row names its owner: a generator, "admin", or the short id of a
+  // generator that is gone (BROKKR-T-0409).
+  { name: "jobs", nav: "Work orders", mocks: { "/work-order-log": JOBS, "/work-orders": ACTIVE_WOS },
+    assert_text: ["Owner", "team-payments", "admin", "0f0e0d0c"] },
+  // The generator scope keeps only that generator's work orders: the admin's
+  // pending one and the failed one are gone, in both panels.
+  { name: "jobs-scoped", nav: "Work orders", select: "team-payments",
+    mocks: { "/paks": PAKS, "/work-order-log": JOBS, "/work-orders": ACTIVE_WOS },
+    assert_text: ["9a01ffbe", "7f3a01ab"], assert_absent: ["b2c3d4e5", "561200cd", "c4d5e6f7"] },
   { name: "jobs-modal", nav: "Work orders", click: "completed", mocks: { "/work-order-log": JOBS, "/work-orders": ACTIVE_WOS } },
   { name: "webhooks", nav: "Webhooks", mocks: { "/webhooks": HOOKS, "/webhook-deliveries": FEED } },
   // The "Recent deliveries" panel with no deliveries, and with a broker error

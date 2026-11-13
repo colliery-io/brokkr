@@ -97,6 +97,50 @@ mod tests {
         assert_eq!(sev("FAILING"), token::BAD);
         assert_eq!(sev("something-new"), token::MUTED);
     }
+
+    fn generator(id: &str, name: &str) -> crate::models::Generator {
+        serde_json::from_value(serde_json::json!({ "id": id, "name": name })).expect("generator")
+    }
+
+    #[test]
+    fn a_work_order_names_its_owner() {
+        let gens = [
+            generator("1b9d6bcd-bbfd", "team-payments"),
+            generator("7c9e6679-7425", "team-ingest"),
+        ];
+        assert_eq!(work_order_owner(&gens, None), "admin");
+        assert_eq!(
+            work_order_owner(&gens, Some("7c9e6679-7425")),
+            "team-ingest"
+        );
+        assert_eq!(
+            work_order_owner(&gens, Some("0f0e0d0c-9999-4000-8000-000000000000")),
+            "0f0e0d0c",
+            "a generator that is not in the list shows the short id, not a blank"
+        );
+        assert_eq!(work_order_owner(&[], None), "admin");
+    }
+
+    #[test]
+    fn the_scope_keeps_the_work_orders_of_its_generator() {
+        let payments = Some("1b9d6bcd-bbfd");
+        assert!(in_scope(None, None), "no scope shows an admin's work order");
+        assert!(in_scope(payments, None), "no scope shows each generator's");
+        assert!(in_scope(payments, Some("")), "an empty scope is no scope");
+        assert!(in_scope(payments, payments));
+        assert!(
+            in_scope(Some("1B9D6BCD-BBFD"), payments),
+            "ids match in any case"
+        );
+        assert!(
+            !in_scope(Some("7c9e6679-7425"), payments),
+            "another generator's work order is out of scope"
+        );
+        assert!(
+            !in_scope(None, payments),
+            "an admin's work order is in no generator's scope"
+        );
+    }
 }
 
 /// The docs site, for the "next step" links of empty states.
@@ -139,6 +183,26 @@ pub fn generator_name(gens: &[crate::models::Generator], id: &str) -> String {
         .find(|g| g.id == id)
         .map(|g| g.name.clone())
         .unwrap_or_else(|| id.chars().take(8).collect())
+}
+
+/// Who owns a work order, as the console says it: "admin" when it has no
+/// generator owner, else the generator's name, or the first 8 characters of
+/// its id when the generator is not in the list (deleted, or not shown).
+pub fn work_order_owner(gens: &[crate::models::Generator], owner: Option<&str>) -> String {
+    match owner.filter(|id| !id.is_empty()) {
+        None => "admin".to_string(),
+        Some(id) => generator_name(gens, id),
+    }
+}
+
+/// Whether a work order with this owner is in the selected generator scope.
+/// No scope shows each work order. An admin's work order is in no generator's
+/// scope.
+pub fn in_scope(owner: Option<&str>, scope: Option<&str>) -> bool {
+    match scope.filter(|id| !id.is_empty()) {
+        None => true,
+        Some(generator) => owner.is_some_and(|o| o.eq_ignore_ascii_case(generator)),
+    }
 }
 
 /// The message the console shows when a write made with an operator-supplied

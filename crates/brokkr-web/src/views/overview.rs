@@ -331,7 +331,14 @@ pub fn OverviewView() -> impl IntoView {
                             None => view! { <Loading label="" /> }.into_any(),
                             Some(Err(e)) => view! { <PanelError error=e on_retry=Callback::new(move |_| { orders.refetch(); }) /> }.into_any(),
                             Some(Ok(wos)) => {
-                                let act: Vec<_> = wos.into_iter().filter(|w| w.is_active()).collect();
+                                // The route takes no generator filter: narrow
+                                // to the scope here.
+                                let sc = scope.get();
+                                let act: Vec<_> = wos
+                                    .into_iter()
+                                    .filter(|w| w.is_active())
+                                    .filter(|w| crate::components::in_scope(w.owner_generator_id.as_deref(), sc.as_deref()))
+                                    .collect();
                                 if act.is_empty() {
                                     return view! {
                                         <Empty
