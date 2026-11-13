@@ -20,6 +20,8 @@
 //! short-circuits the whole thing — no dial attempt is ever made and the
 //! state stays [`WsState::ForceRestOnly`] for the lifetime of the agent.
 
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use brokkr_utils::Settings;
@@ -87,6 +89,8 @@ const MAX_CONSECUTIVE_AUTH_REJECTIONS: u32 = 5;
 pub struct WsClient {
     state: watch::Receiver<WsState>,
     outbound_tx: mpsc::Sender<WsMessage>,
+    /// Whether the connected broker accepts work order telemetry.
+    work_order_telemetry: Arc<AtomicBool>,
     /// Inbound channel — single consumer. `take_inbound` moves it out so a
     /// downstream component (e.g. the work-order receiver) owns the only
     /// receiver and nothing else can race for messages.
@@ -114,6 +118,7 @@ impl WsClient {
         WsUplink {
             state: self.state.clone(),
             outbound: self.outbound_tx.clone(),
+            work_order_telemetry: self.work_order_telemetry.clone(),
         }
     }
 
@@ -131,6 +136,7 @@ impl WsClient {
 pub struct WsUplink {
     state: watch::Receiver<WsState>,
     outbound: mpsc::Sender<WsMessage>,
+    work_order_telemetry: Arc<AtomicBool>,
 }
 
 impl WsUplink {
@@ -139,6 +145,14 @@ impl WsUplink {
     /// agent is configured for REST-only.
     pub fn is_up(&self) -> bool {
         matches!(*self.state.borrow(), WsState::Up)
+    }
+
+    /// True when the connected broker said it accepts telemetry frames with
+    /// a work order id (the capability header of the upgrade answer). A
+    /// broker from before 0.12.0 says nothing, and cannot parse such a
+    /// frame: the agent then sends none (BROKKR-T-0406).
+    pub fn accepts_work_order_telemetry(&self) -> bool {
+        self.is_up() && self.work_order_telemetry.load(Ordering::Relaxed)
     }
 
     /// Try to send a message over WS. Returns `Err(msg)` (giving the
@@ -185,6 +199,7 @@ pub fn spawn(settings: &Settings) -> WsClient {
         return WsClient {
             state: state_rx,
             outbound_tx,
+            work_order_telemetry: Arc::new(AtomicBool::new(false)),
             inbound_rx: Some(inbound_rx),
             _task: task,
         };
@@ -203,11 +218,20 @@ pub fn spawn(settings: &Settings) -> WsClient {
         .map(|s| s.to_string())
         .unwrap_or_else(|| ws_url_from_broker_url(&settings.agent.broker_url));
     let pak = settings.agent.pak.clone();
-    let task = tokio::spawn(reconnect_loop(url, pak, state_tx, inbound_tx, outbound_rx));
+    let work_order_telemetry = Arc::new(AtomicBool::new(false));
+    let task = tokio::spawn(reconnect_loop(
+        url,
+        pak,
+        state_tx,
+        inbound_tx,
+        outbound_rx,
+        work_order_telemetry.clone(),
+    ));
 
     WsClient {
         state: state_rx,
         outbound_tx,
+        work_order_telemetry,
         inbound_rx: Some(inbound_rx),
         _task: task,
     }
@@ -237,18 +261,26 @@ async fn reconnect_loop(
     state_tx: watch::Sender<WsState>,
     inbound_tx: mpsc::Sender<WsMessage>,
     mut outbound_rx: mpsc::Receiver<WsMessage>,
+    work_order_telemetry: Arc<AtomicBool>,
 ) {
     let mut backoff = BackoffSchedule::new();
     let mut consecutive_auth_rejections: u32 = 0;
     loop {
         match dial(&url, &pak).await {
-            Ok(socket) => {
-                info!(%url, "broker WS connected");
+            Ok((socket, capabilities)) => {
+                let accepts = brokkr_wire::has_capability(
+                    capabilities.as_deref(),
+                    brokkr_wire::CAPABILITY_WORK_ORDER_TELEMETRY,
+                );
+                info!(%url, work_order_telemetry = accepts, "broker WS connected");
                 backoff.reset();
                 consecutive_auth_rejections = 0;
+                // Before `Up`: an emitter that sees `Up` reads the right value.
+                work_order_telemetry.store(accepts, Ordering::Relaxed);
                 let _ = state_tx.send(WsState::Up);
                 run_socket(socket, &inbound_tx, &mut outbound_rx).await;
                 let _ = state_tx.send(WsState::Down);
+                work_order_telemetry.store(false, Ordering::Relaxed);
                 info!("broker WS disconnected; will reconnect with backoff");
             }
             Err(e) => {
@@ -296,13 +328,21 @@ fn is_auth_rejection(err: &tokio_tungstenite::tungstenite::Error) -> bool {
     )
 }
 
+/// Dials the broker. Gives the socket and the value of the broker's
+/// capability header ([`brokkr_wire::CAPABILITIES_HEADER`]), if it sent one.
+///
 /// The error is boxed: `tungstenite::Error` is large, and the loop above only
 /// inspects it on the rare failure path.
 async fn dial(
     url: &str,
     pak: &str,
 ) -> Result<
-    tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
+    (
+        tokio_tungstenite::WebSocketStream<
+            tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+        >,
+        Option<String>,
+    ),
     Box<tokio_tungstenite::tungstenite::Error>,
 > {
     let mut request = url.into_client_request()?;
@@ -316,8 +356,13 @@ async fn dial(
             )
         })?,
     );
-    let (socket, _resp) = tokio_tungstenite::connect_async(request).await?;
-    Ok(socket)
+    let (socket, response) = tokio_tungstenite::connect_async(request).await?;
+    let capabilities = response
+        .headers()
+        .get(brokkr_wire::CAPABILITIES_HEADER)
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_string);
+    Ok((socket, capabilities))
 }
 
 async fn run_socket(
@@ -536,6 +581,7 @@ mod tests {
         let uplink = WsUplink {
             state: state_rx,
             outbound: tx,
+            work_order_telemetry: Arc::new(AtomicBool::new(false)),
         };
         (uplink, state_tx, rx)
     }
@@ -547,6 +593,23 @@ mod tests {
             k8s_reachable: None,
             k8s_api_latency_ms: None,
         })
+    }
+
+    /// BROKKR-T-0406: no capability from the broker, no work order telemetry.
+    #[test]
+    fn work_order_telemetry_needs_the_brokers_word_and_an_open_channel() {
+        let (uplink, state, _rx) = uplink_with(WsState::Up, 8);
+        assert!(
+            !uplink.accepts_work_order_telemetry(),
+            "a broker that named no capability gets no such frame"
+        );
+        uplink.work_order_telemetry.store(true, Ordering::Relaxed);
+        assert!(uplink.accepts_work_order_telemetry());
+        state.send(WsState::Down).unwrap();
+        assert!(
+            !uplink.accepts_work_order_telemetry(),
+            "a closed channel accepts nothing"
+        );
     }
 
     #[test]

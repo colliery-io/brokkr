@@ -119,9 +119,17 @@ async fn ws_upgrade(
     };
 
     info!(%agent_id, "agent WS upgrade accepted");
-    Ok(upgrade.on_upgrade(move |socket| {
+    let mut response = upgrade.on_upgrade(move |socket| {
         run_connection(socket, agent_id, registry, broadcaster, fleet, dal)
-    }))
+    });
+    // The channel has no version exchange: say what this broker accepts, so
+    // an agent sends a newer frame shape only to a broker that parses it
+    // (BROKKR-T-0406).
+    response.headers_mut().insert(
+        brokkr_wire::CAPABILITIES_HEADER,
+        axum::http::HeaderValue::from_static(brokkr_wire::BROKER_CAPABILITIES),
+    );
+    Ok(response)
 }
 
 async fn run_connection(

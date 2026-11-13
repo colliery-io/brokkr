@@ -207,6 +207,55 @@ pub enum WsMessage {
 /// broker/SDK release version (lockstep per `project_release_versioning`).
 pub const WIRE_VERSION: &str = env!("CARGO_PKG_VERSION");
 
+/// The header of the broker's answer to the WebSocket upgrade of an agent:
+/// a comma-separated list of what this broker accepts beyond the first wire
+/// format. A broker that sends no header accepts none of it.
+///
+/// The channel has no version exchange, and a broker cannot parse a frame of
+/// a shape it does not know. So an agent sends a newer shape only after the
+/// broker named it here (BROKKR-T-0406).
+pub const CAPABILITIES_HEADER: &str = "x-brokkr-wire-capabilities";
+
+/// The broker accepts `K8sEvent` and `PodLogLine` frames with a
+/// `work_order_id` and no `stack_id` (BROKKR-T-0405).
+pub const CAPABILITY_WORK_ORDER_TELEMETRY: &str = "work-order-telemetry";
+
+/// What this broker accepts, as the value of [`CAPABILITIES_HEADER`].
+pub const BROKER_CAPABILITIES: &str = CAPABILITY_WORK_ORDER_TELEMETRY;
+
+/// Whether the value of [`CAPABILITIES_HEADER`] names `capability`. No
+/// header is no capability.
+pub fn has_capability(header: Option<&str>, capability: &str) -> bool {
+    header.is_some_and(|value| value.split(',').any(|c| c.trim() == capability))
+}
+
+#[cfg(test)]
+mod capability_tests {
+    use super::*;
+
+    #[test]
+    fn a_broker_with_no_header_accepts_nothing_new() {
+        assert!(!has_capability(None, CAPABILITY_WORK_ORDER_TELEMETRY));
+        assert!(!has_capability(Some(""), CAPABILITY_WORK_ORDER_TELEMETRY));
+    }
+
+    #[test]
+    fn a_capability_is_found_in_a_list() {
+        assert!(has_capability(
+            Some(BROKER_CAPABILITIES),
+            CAPABILITY_WORK_ORDER_TELEMETRY
+        ));
+        assert!(has_capability(
+            Some("other, work-order-telemetry"),
+            CAPABILITY_WORK_ORDER_TELEMETRY
+        ));
+        assert!(!has_capability(
+            Some("work-order-telemetry-v2"),
+            CAPABILITY_WORK_ORDER_TELEMETRY
+        ));
+    }
+}
+
 /// The operator console (`crates/brokkr-web`, outside this workspace) parses
 /// the live stack stream with its own small serde structs, and its host tests
 /// read `tests/fixtures/console_live_frames.json`. This test keeps that

@@ -24,6 +24,14 @@ Non-browser clients send the PAK as a normal header on the upgrade request:
 Authorization: Bearer <PAK>
 ```
 
+The broker answers the upgrade of `/internal/ws/agent` with one more header:
+
+```
+x-brokkr-wire-capabilities: work-order-telemetry
+```
+
+It is a comma-separated list of the frame shapes this broker accepts beyond the first wire format. The channel has no version exchange, and a broker drops a frame it cannot parse. So an agent sends a newer shape only when the list names it. `work-order-telemetry` is a `k8s_event` or a `pod_log_line` frame with a `work_order_id` and no `stack_id`. A broker from before 0.12.0 sends no such header, and the agent then sends it no work order telemetry.
+
 Browsers cannot set headers on `new WebSocket()`. For `/api/v1/stacks/{id}/live` and `/api/v1/fleet/live`, a browser client instead offers the PAK as a subprotocol:
 
 ```

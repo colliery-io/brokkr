@@ -588,6 +588,12 @@ pub async fn execute_custom_work_order(
         work_order.id
     );
 
+    // Mark each object with the work order, so its pods' logs and events
+    // can be sent for this work order (BROKKR-T-0406).
+    for object in &mut objects {
+        crate::work_order_marks::stamp(object, work_order.id);
+    }
+
     // Apply all resources using server-side apply
     let patch_params = PatchParams::apply("brokkr-agent").force();
     crate::k8s::api::apply_k8s_objects(&objects, k8s_client.clone(), patch_params)
