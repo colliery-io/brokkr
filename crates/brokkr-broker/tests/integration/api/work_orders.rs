@@ -1072,3 +1072,322 @@ async fn test_claim_with_no_matching_targeting() {
     // Should fail - agent doesn't match any targeting
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
+
+// =============================================================================
+// A GENERATOR'S WORK ORDERS (BROKKR-T-0404, BROKKR-A-0013)
+// =============================================================================
+
+/// One request, with the body parsed as JSON (`Null` when it is empty).
+async fn call(
+    fixture: &TestFixture,
+    method: &str,
+    uri: &str,
+    pak: &str,
+    body: Option<Value>,
+) -> (StatusCode, Value) {
+    let app = fixture.create_test_router().with_state(fixture.dal.clone());
+    let (status, bytes) = make_request(
+        app,
+        method,
+        uri,
+        Some(pak),
+        body.map(|b| serde_json::to_string(&b).unwrap()),
+    )
+    .await;
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+    )
+}
+
+/// Two generators with their PAKs, and an agent registered with the first.
+struct Owners {
+    owner: brokkr_models::models::generator::Generator,
+    owner_pak: String,
+    other_pak: String,
+    agent: brokkr_models::models::agents::Agent,
+    agent_pak: String,
+}
+
+fn owners(fixture: &TestFixture, tag: &str) -> Owners {
+    let (owner, owner_pak) = fixture.create_test_generator_with_pak(format!("{tag}-owner"), None);
+    let (_other, other_pak) = fixture.create_test_generator_with_pak(format!("{tag}-other"), None);
+    let (agent, agent_pak) =
+        fixture.create_test_agent_with_pak(format!("{tag}-agent"), "cluster".to_string());
+    fixture.register_agent_with_generator(agent.id, owner.id);
+    Owners {
+        owner,
+        owner_pak,
+        other_pak,
+        agent,
+        agent_pak,
+    }
+}
+
+/// The owner creates a work order for its agent, through the route.
+async fn create_as(fixture: &TestFixture, pak: &str, agent: Uuid) -> (StatusCode, Value) {
+    call(
+        fixture,
+        "POST",
+        "/api/v1/work-orders",
+        pak,
+        Some(serde_json::json!({
+            "work_type": "custom",
+            "yaml_content": "apiVersion: v1\nkind: ConfigMap",
+            "targeting": { "agent_ids": [agent] }
+        })),
+    )
+    .await
+}
+
+fn ids(list: &Value) -> Vec<String> {
+    list.as_array()
+        .expect("a list")
+        .iter()
+        .map(|w| w["id"].as_str().expect("an id").to_string())
+        .collect()
+}
+
+#[tokio::test]
+async fn a_generator_creates_a_work_order_and_owns_it() {
+    let fixture = TestFixture::new();
+    let o = owners(&fixture, "t0404-create");
+
+    let (status, body) = create_as(&fixture, &o.owner_pak, o.agent.id).await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    assert_eq!(body["owner_generator_id"], o.owner.id.to_string());
+    assert_eq!(body["status"], "PENDING");
+
+    // An admin's work order has no owner.
+    let (status, body) = create_as(&fixture, &fixture.admin_pak, o.agent.id).await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    assert_eq!(body["owner_generator_id"], Value::Null);
+}
+
+#[tokio::test]
+async fn a_generator_cannot_target_an_agent_that_is_not_registered_with_it() {
+    let fixture = TestFixture::new();
+    let o = owners(&fixture, "t0404-target");
+    let outsider = fixture.create_test_agent("t0404-target-outsider".to_string(), "c".to_string());
+    let before = fixture.dal.work_orders().list().unwrap().len();
+
+    let (status, body) = create_as(&fixture, &o.owner_pak, outsider.id).await;
+
+    assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+    assert_eq!(body["code"], "agent_not_registered");
+    assert_eq!(
+        fixture.dal.work_orders().list().unwrap().len(),
+        before,
+        "a refused create leaves no work order row"
+    );
+}
+
+#[tokio::test]
+async fn a_generator_lists_its_own_work_orders_only() {
+    let fixture = TestFixture::new();
+    let o = owners(&fixture, "t0404-list");
+
+    let (_, mine) = create_as(&fixture, &o.owner_pak, o.agent.id).await;
+    let mine = mine["id"].as_str().unwrap().to_string();
+    // An admin's work order for the same agent: the generator must not see it.
+    let (_, admins) = create_as(&fixture, &fixture.admin_pak, o.agent.id).await;
+    let admins = admins["id"].as_str().unwrap().to_string();
+
+    let (status, list) = call(&fixture, "GET", "/api/v1/work-orders", &o.owner_pak, None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(ids(&list), vec![mine.clone()]);
+
+    let (status, list) = call(&fixture, "GET", "/api/v1/work-orders", &o.other_pak, None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(ids(&list).is_empty(), "another generator sees none: {list}");
+
+    let (status, list) = call(
+        &fixture,
+        "GET",
+        "/api/v1/work-orders",
+        &fixture.admin_pak,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let all = ids(&list);
+    assert!(
+        all.contains(&mine) && all.contains(&admins),
+        "an admin sees each"
+    );
+
+    let (status, body) = call(&fixture, "GET", "/api/v1/work-orders", &o.agent_pak, None).await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+}
+
+#[tokio::test]
+async fn only_the_owner_or_an_admin_reads_and_deletes_a_work_order() {
+    let fixture = TestFixture::new();
+    let o = owners(&fixture, "t0404-read");
+    let (_, mine) = create_as(&fixture, &o.owner_pak, o.agent.id).await;
+    let uri = format!("/api/v1/work-orders/{}", mine["id"].as_str().unwrap());
+    let (_, admins) = create_as(&fixture, &fixture.admin_pak, o.agent.id).await;
+    let admins_uri = format!("/api/v1/work-orders/{}", admins["id"].as_str().unwrap());
+
+    // Read.
+    let (status, body) = call(&fixture, "GET", &uri, &o.owner_pak, None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let (status, _) = call(&fixture, "GET", &uri, &fixture.admin_pak, None).await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, body) = call(&fixture, "GET", &uri, &o.other_pak, None).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body["code"], "work_order_not_owned");
+    let (status, _) = call(&fixture, "GET", &uri, &o.agent_pak, None).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+
+    // An admin's work order is an admin's alone, also when it targets the
+    // generator's agent.
+    let (status, body) = call(&fixture, "GET", &admins_uri, &o.owner_pak, None).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body["code"], "work_order_not_owned");
+    let (status, body) = call(&fixture, "DELETE", &admins_uri, &o.owner_pak, None).await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+
+    // Delete.
+    let (status, body) = call(&fixture, "DELETE", &uri, &o.other_pak, None).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body["code"], "work_order_not_owned");
+    let (status, _) = call(&fixture, "DELETE", &uri, &o.agent_pak, None).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    let (status, _) = call(&fixture, "GET", &uri, &o.owner_pak, None).await;
+    assert_eq!(status, StatusCode::OK, "a refused delete deletes nothing");
+
+    let (status, body) = call(&fixture, "DELETE", &uri, &o.owner_pak, None).await;
+    assert_eq!(status, StatusCode::NO_CONTENT, "{body}");
+    let (status, _) = call(&fixture, "GET", &uri, &o.owner_pak, None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    // An admin deletes a generator's work order.
+    let (_, second) = create_as(&fixture, &o.owner_pak, o.agent.id).await;
+    let second_uri = format!("/api/v1/work-orders/{}", second["id"].as_str().unwrap());
+    let (status, _) = call(&fixture, "DELETE", &second_uri, &fixture.admin_pak, None).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+}
+
+#[tokio::test]
+async fn the_log_follows_the_owner() {
+    let fixture = TestFixture::new();
+    let o = owners(&fixture, "t0404-log");
+    let (_, mine) = create_as(&fixture, &o.owner_pak, o.agent.id).await;
+    let id: Uuid = mine["id"].as_str().unwrap().parse().unwrap();
+    let (_, admins) = create_as(&fixture, &fixture.admin_pak, o.agent.id).await;
+    let admins_id: Uuid = admins["id"].as_str().unwrap().parse().unwrap();
+
+    // The agent runs both to their end.
+    for work_order in [id, admins_id] {
+        fixture
+            .dal
+            .work_orders()
+            .claim(work_order, o.agent.id)
+            .expect("claim failed");
+        fixture
+            .dal
+            .work_orders()
+            .complete_success(work_order, Some("ok".to_string()))
+            .expect("complete_success failed");
+    }
+
+    // The list of the log.
+    let (status, list) = call(
+        &fixture,
+        "GET",
+        "/api/v1/work-order-log",
+        &o.owner_pak,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(ids(&list), vec![id.to_string()]);
+    assert_eq!(list[0]["owner_generator_id"], o.owner.id.to_string());
+    let (status, list) = call(
+        &fixture,
+        "GET",
+        "/api/v1/work-order-log",
+        &o.other_pak,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(ids(&list).is_empty());
+    let (status, list) = call(
+        &fixture,
+        "GET",
+        "/api/v1/work-order-log",
+        &fixture.admin_pak,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let all = ids(&list);
+    assert!(all.contains(&id.to_string()) && all.contains(&admins_id.to_string()));
+    let (status, _) = call(
+        &fixture,
+        "GET",
+        "/api/v1/work-order-log",
+        &o.agent_pak,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+
+    // One entry of the log, and the work order route that answers from it.
+    for uri in [
+        format!("/api/v1/work-order-log/{id}"),
+        format!("/api/v1/work-orders/{id}"),
+    ] {
+        let (status, body) = call(&fixture, "GET", &uri, &o.owner_pak, None).await;
+        assert_eq!(status, StatusCode::OK, "{uri}: {body}");
+        assert_eq!(body["owner_generator_id"], o.owner.id.to_string());
+        let (status, _) = call(&fixture, "GET", &uri, &fixture.admin_pak, None).await;
+        assert_eq!(status, StatusCode::OK, "{uri}");
+        let (status, body) = call(&fixture, "GET", &uri, &o.other_pak, None).await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "{uri}");
+        assert_eq!(body["code"], "work_order_not_owned", "{uri}");
+        let (status, _) = call(&fixture, "GET", &uri, &o.agent_pak, None).await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "{uri}");
+    }
+
+    // An admin's entry is not a generator's to read.
+    let (status, body) = call(
+        &fixture,
+        "GET",
+        &format!("/api/v1/work-order-log/{admins_id}"),
+        &o.owner_pak,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body["code"], "work_order_not_owned");
+}
+
+#[tokio::test]
+async fn a_generator_does_not_get_the_agent_routes() {
+    let fixture = TestFixture::new();
+    let o = owners(&fixture, "t0404-agent-routes");
+    let (_, mine) = create_as(&fixture, &o.owner_pak, o.agent.id).await;
+    let id = mine["id"].as_str().unwrap();
+
+    let (status, _) = call(
+        &fixture,
+        "GET",
+        &format!("/api/v1/agents/{}/work-orders/pending", o.agent.id),
+        &o.owner_pak,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    let (status, _) = call(
+        &fixture,
+        "POST",
+        &format!("/api/v1/work-orders/{id}/claim"),
+        &o.owner_pak,
+        Some(serde_json::json!({ "agent_id": o.agent.id })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}

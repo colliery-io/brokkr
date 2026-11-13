@@ -150,6 +150,34 @@ impl WorkOrdersDAL<'_> {
             .load::<WorkOrder>(conn)
     }
 
+    /// Lists the work orders that a generator owns, with the filters of
+    /// [`Self::list_filtered`]. The owner is part of the query, so a generator
+    /// never loads the work orders of another owner (BROKKR-A-0013).
+    pub fn list_owned(
+        &self,
+        owner_generator_id: Uuid,
+        status: Option<&str>,
+        work_type: Option<&str>,
+    ) -> Result<Vec<WorkOrder>, diesel::result::Error> {
+        let conn = &mut self.dal.conn()?;
+
+        let mut query = work_orders::table
+            .filter(work_orders::owner_generator_id.eq(owner_generator_id))
+            .into_boxed();
+
+        if let Some(s) = status {
+            query = query.filter(work_orders::status.eq(s));
+        }
+
+        if let Some(wt) = work_type {
+            query = query.filter(work_orders::work_type.eq(wt));
+        }
+
+        query
+            .order(work_orders::created_at.desc())
+            .load::<WorkOrder>(conn)
+    }
+
     /// Deletes a work order by its UUID (hard delete).
     ///
     /// Note: This also deletes associated work_order_targets via CASCADE.
@@ -831,6 +859,44 @@ impl WorkOrdersDAL<'_> {
         let conn = &mut self.dal.conn()?;
 
         let mut query = work_order_log::table.into_boxed();
+
+        if let Some(wt) = work_type {
+            query = query.filter(work_order_log::work_type.eq(wt));
+        }
+
+        if let Some(s) = success {
+            query = query.filter(work_order_log::success.eq(s));
+        }
+
+        if let Some(aid) = agent_id {
+            query = query.filter(work_order_log::claimed_by.eq(aid));
+        }
+
+        query = query.order(work_order_log::completed_at.desc());
+
+        if let Some(l) = limit {
+            query = query.limit(l);
+        }
+
+        query.load::<WorkOrderLog>(conn)
+    }
+
+    /// Lists the log entries of the work orders that a generator owned, with
+    /// the filters of [`Self::list_log`]. The owner is part of the query
+    /// (BROKKR-A-0013).
+    pub fn list_log_owned(
+        &self,
+        owner_generator_id: Uuid,
+        work_type: Option<&str>,
+        success: Option<bool>,
+        agent_id: Option<Uuid>,
+        limit: Option<i64>,
+    ) -> Result<Vec<WorkOrderLog>, diesel::result::Error> {
+        let conn = &mut self.dal.conn()?;
+
+        let mut query = work_order_log::table
+            .filter(work_order_log::owner_generator_id.eq(owner_generator_id))
+            .into_boxed();
 
         if let Some(wt) = work_type {
             query = query.filter(work_order_log::work_type.eq(wt));

@@ -20,8 +20,8 @@ use axum::{
 };
 use brokkr_models::models::audit_logs::{
     ACTION_WORKORDER_CLAIMED, ACTION_WORKORDER_COMPLETED, ACTION_WORKORDER_CREATED,
-    ACTION_WORKORDER_FAILED, ACTION_WORKORDER_RETRY, ACTOR_TYPE_ADMIN, ACTOR_TYPE_AGENT,
-    ACTOR_TYPE_GENERATOR, RESOURCE_TYPE_WORKORDER,
+    ACTION_WORKORDER_DELETED, ACTION_WORKORDER_FAILED, ACTION_WORKORDER_RETRY, ACTOR_TYPE_ADMIN,
+    ACTOR_TYPE_AGENT, ACTOR_TYPE_GENERATOR, RESOURCE_TYPE_WORKORDER,
 };
 use brokkr_models::models::work_orders::{NewWorkOrder, WorkOrder, WorkOrderLog};
 use serde::{Deserialize, Serialize};
@@ -121,6 +121,52 @@ pub struct ListLogQuery {
 }
 
 // =============================================================================
+// WHO MAY CALL (BROKKR-A-0013)
+// =============================================================================
+
+/// The routes for people take an admin PAK or a generator PAK. An agent PAK
+/// has its own routes (pending, claim, complete) and gets nothing here.
+fn require_admin_or_generator(auth: &AuthPayload) -> Result<(), ApiError> {
+    if auth.admin || auth.generator.is_some() {
+        Ok(())
+    } else {
+        warn!("A caller that is no admin and no generator asked for a work order route");
+        Err(ApiError::forbidden(
+            "work_order_access_denied",
+            "admin or generator access required",
+        ))
+    }
+}
+
+/// A work order, or its log entry, is for its owner and for an admin. `owner`
+/// is the generator that owns it; `None` is an admin's, which no generator
+/// reads, also when it targets the generator's agents.
+fn require_owner(auth: &AuthPayload, owner: Option<Uuid>, id: Uuid) -> Result<(), ApiError> {
+    require_admin_or_generator(auth)?;
+    if auth.admin || (owner.is_some() && auth.generator == owner) {
+        Ok(())
+    } else {
+        warn!(
+            "A generator asked for the work order {} of another owner",
+            id
+        );
+        Err(ApiError::forbidden(
+            "work_order_not_owned",
+            "not authorized to access this work order",
+        ))
+    }
+}
+
+/// Who acts, for the audit log: an admin, or the generator of the PAK.
+fn actor(auth: &AuthPayload) -> (&'static str, Option<Uuid>) {
+    if auth.admin {
+        (ACTOR_TYPE_ADMIN, None)
+    } else {
+        (ACTOR_TYPE_GENERATOR, auth.generator)
+    }
+}
+
+// =============================================================================
 // WORK ORDER MANAGEMENT
 // =============================================================================
 
@@ -133,11 +179,11 @@ pub struct ListLogQuery {
         ("work_type" = Option<String>, Query, description = "Filter by work type")
     ),
     responses(
-        (status = 200, description = "List of work orders", body = Vec<WorkOrder>),
-        (status = 403, description = "Forbidden - requires admin PAK", body = ErrorResponse),
+        (status = 200, description = "The work orders the caller may read: each one for an admin, its own for a generator", body = Vec<WorkOrder>),
+        (status = 403, description = "Forbidden - requires an admin PAK or a generator PAK", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse),
     ),
-    security(("admin_pak" = []))
+    security(("admin_pak" = []), ("generator_pak" = []))
 )]
 async fn list_work_orders(
     State(dal): State<DAL>,
@@ -145,21 +191,23 @@ async fn list_work_orders(
     Query(params): Query<ListWorkOrdersQuery>,
 ) -> Result<Json<Vec<WorkOrder>>, ApiError> {
     info!("Handling request to list work orders");
-    if !auth_payload.admin {
-        warn!("Unauthorized attempt to list work orders");
-        return Err(ApiError::forbidden(
-            "admin_required",
-            "admin access required",
-        ));
-    }
+    require_admin_or_generator(&auth_payload)?;
 
-    let work_orders = dal
-        .work_orders()
-        .list_filtered(params.status.as_deref(), params.work_type.as_deref())
-        .map_err(|e| {
-            error!("Failed to fetch work orders: {:?}", e);
-            ApiError::internal("failed to fetch work orders")
-        })?;
+    // A generator gets its own; the owner is part of the query.
+    let listed = match auth_payload.generator {
+        Some(owner) if !auth_payload.admin => dal.work_orders().list_owned(
+            owner,
+            params.status.as_deref(),
+            params.work_type.as_deref(),
+        ),
+        _ => dal
+            .work_orders()
+            .list_filtered(params.status.as_deref(), params.work_type.as_deref()),
+    };
+    let work_orders = listed.map_err(|e| {
+        error!("Failed to fetch work orders: {:?}", e);
+        ApiError::internal("failed to fetch work orders")
+    })?;
     info!("Successfully retrieved {} work orders", work_orders.len());
     Ok(Json(work_orders))
 }
@@ -196,12 +244,13 @@ pub fn refuse_unregistered_targets(
     tag = "work-orders",
     request_body = CreateWorkOrderRequest,
     responses(
-        (status = 201, description = "Work order created", body = WorkOrder),
+        (status = 201, description = "Work order created; the caller owns it", body = WorkOrder),
         (status = 400, description = "Invalid request", body = ErrorResponse),
-        (status = 403, description = "Forbidden - requires admin PAK", body = ErrorResponse),
+        (status = 403, description = "Forbidden - requires an admin PAK or a generator PAK; or a generator named a target agent that is not registered with it", body = ErrorResponse),
+        (status = 404, description = "A target agent was not found", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse),
     ),
-    security(("admin_pak" = []))
+    security(("admin_pak" = []), ("generator_pak" = []))
 )]
 async fn create_work_order(
     State(dal): State<DAL>,
@@ -210,13 +259,7 @@ async fn create_work_order(
     Json(request): Json<CreateWorkOrderRequest>,
 ) -> Result<(StatusCode, Json<WorkOrder>), ApiError> {
     info!("Handling request to create a new work order");
-    if !auth_payload.admin {
-        warn!("Unauthorized attempt to create work order");
-        return Err(ApiError::forbidden(
-            "admin_required",
-            "admin access required",
-        ));
-    }
+    require_admin_or_generator(&auth_payload)?;
 
     let targeting = request.targeting.unwrap_or_default();
     let legacy_agent_ids = request.target_agent_ids.unwrap_or_default();
@@ -236,6 +279,13 @@ async fn create_work_order(
         ));
     }
 
+    // An admin PAK owns as an admin.
+    let owner = if auth_payload.admin {
+        None
+    } else {
+        auth_payload.generator
+    };
+
     let new_work_order = NewWorkOrder::new(
         request.work_type,
         request.yaml_content,
@@ -245,7 +295,7 @@ async fn create_work_order(
     )
     .map_err(|e| ApiError::bad_request("invalid_work_order", e))?
     // The owner is the caller: a generator, or an admin (no generator id).
-    .owned_by(auth_payload.generator);
+    .owned_by(owner);
 
     // A deleted agent still has its row, so the foreign key does not refuse
     // it; it could never claim the work order (BROKKR-T-0394).
@@ -266,7 +316,10 @@ async fn create_work_order(
 
     // A generator reaches only the agents registered with it (BROKKR-A-0013).
     // The check is before the insert, so a refusal leaves no work order row.
-    if let Some(owner) = auth_payload.generator {
+    // A label or an annotation needs no check here: the match gate
+    // (`WorkOrdersDAL::matches`) lets only registered agents have the work
+    // order.
+    if let Some(owner) = owner {
         refuse_unregistered_targets(&dal, owner, &agent_ids)?;
     }
 
@@ -311,11 +364,7 @@ async fn create_work_order(
     push_work_order(&ws_registry, &work_order, &agent_ids);
 
     info!("Successfully created work order with ID: {}", work_order.id);
-    let (actor_type, actor_id) = if auth_payload.admin {
-        (ACTOR_TYPE_ADMIN, None)
-    } else {
-        (ACTOR_TYPE_GENERATOR, auth_payload.generator)
-    };
+    let (actor_type, actor_id) = actor(&auth_payload);
     audit::log_action(
         actor_type,
         actor_id,
@@ -336,11 +385,11 @@ async fn create_work_order(
     params(("id" = Uuid, Path, description = "Work order ID")),
     responses(
         (status = 200, description = "Work order found", body = WorkOrder),
-        (status = 403, description = "Forbidden - requires admin PAK", body = ErrorResponse),
+        (status = 403, description = "Forbidden - requires an admin PAK, or the PAK of the generator that owns the work order", body = ErrorResponse),
         (status = 404, description = "Work order not found", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse),
     ),
-    security(("admin_pak" = []))
+    security(("admin_pak" = []), ("generator_pak" = []))
 )]
 async fn get_work_order(
     State(dal): State<DAL>,
@@ -348,18 +397,13 @@ async fn get_work_order(
     Path(id): Path<Uuid>,
 ) -> Result<Json<WorkOrder>, ApiError> {
     info!("Handling request to get work order with ID: {}", id);
-    if !auth_payload.admin {
-        warn!("Unauthorized attempt to get work order");
-        return Err(ApiError::forbidden(
-            "admin_required",
-            "admin access required",
-        ));
-    }
+    require_admin_or_generator(&auth_payload)?;
 
     if let Some(work_order) = dal.work_orders().get(id).map_err(|e| {
         error!("Failed to fetch work order with ID {}: {:?}", id, e);
         ApiError::internal("failed to fetch work order")
     })? {
+        require_owner(&auth_payload, work_order.owner_generator_id, id)?;
         info!("Successfully retrieved work order with ID: {}", id);
         return Ok(Json(work_order));
     }
@@ -376,6 +420,8 @@ async fn get_work_order(
             warn!("Work order not found with ID: {}", id);
             ApiError::not_found("work_order_not_found", "work order not found")
         })?;
+    // The log entry keeps the owner of the work order.
+    require_owner(&auth_payload, log_entry.owner_generator_id, id)?;
 
     info!(
         "Successfully retrieved completed work order with ID: {} from log",
@@ -421,11 +467,11 @@ async fn get_work_order(
     params(("id" = Uuid, Path, description = "Work order ID")),
     responses(
         (status = 204, description = "Work order deleted"),
-        (status = 403, description = "Forbidden - requires admin PAK", body = ErrorResponse),
+        (status = 403, description = "Forbidden - requires an admin PAK, or the PAK of the generator that owns the work order", body = ErrorResponse),
         (status = 404, description = "Work order not found", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse),
     ),
-    security(("admin_pak" = []))
+    security(("admin_pak" = []), ("generator_pak" = []))
 )]
 async fn delete_work_order(
     State(dal): State<DAL>,
@@ -433,13 +479,21 @@ async fn delete_work_order(
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, ApiError> {
     info!("Handling request to delete work order with ID: {}", id);
-    if !auth_payload.admin {
-        warn!("Unauthorized attempt to delete work order");
-        return Err(ApiError::forbidden(
-            "admin_required",
-            "admin access required",
-        ));
-    }
+    require_admin_or_generator(&auth_payload)?;
+
+    // Read first: the owner decides who may delete.
+    let work_order = dal
+        .work_orders()
+        .get(id)
+        .map_err(|e| {
+            error!("Failed to fetch work order with ID {}: {:?}", id, e);
+            ApiError::internal("failed to fetch work order")
+        })?
+        .ok_or_else(|| {
+            warn!("Work order not found with ID: {}", id);
+            ApiError::not_found("work_order_not_found", "work order not found")
+        })?;
+    require_owner(&auth_payload, work_order.owner_generator_id, id)?;
 
     let deleted = dal.work_orders().delete(id).map_err(|e| {
         error!("Failed to delete work order with ID {}: {:?}", id, e);
@@ -454,6 +508,17 @@ async fn delete_work_order(
         ));
     }
     info!("Successfully deleted work order with ID: {}", id);
+    let (actor_type, actor_id) = actor(&auth_payload);
+    audit::log_action(
+        actor_type,
+        actor_id,
+        ACTION_WORKORDER_DELETED,
+        RESOURCE_TYPE_WORKORDER,
+        Some(id),
+        Some(serde_json::json!({ "work_type": work_order.work_type })),
+        None,
+        None,
+    );
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -722,11 +787,11 @@ async fn complete_work_order(
         ("limit" = Option<i64>, Query, description = "Limit number of results")
     ),
     responses(
-        (status = 200, description = "List of completed work orders", body = Vec<WorkOrderLog>),
-        (status = 403, description = "Forbidden - requires admin PAK", body = ErrorResponse),
+        (status = 200, description = "The log entries the caller may read: each one for an admin, those of its own work orders for a generator", body = Vec<WorkOrderLog>),
+        (status = 403, description = "Forbidden - requires an admin PAK or a generator PAK", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse),
     ),
-    security(("admin_pak" = []))
+    security(("admin_pak" = []), ("generator_pak" = []))
 )]
 async fn list_work_order_log(
     State(dal): State<DAL>,
@@ -734,26 +799,29 @@ async fn list_work_order_log(
     Query(params): Query<ListLogQuery>,
 ) -> Result<Json<Vec<WorkOrderLog>>, ApiError> {
     info!("Handling request to list work order log");
-    if !auth_payload.admin {
-        warn!("Unauthorized attempt to list work order log");
-        return Err(ApiError::forbidden(
-            "admin_required",
-            "admin access required",
-        ));
-    }
+    require_admin_or_generator(&auth_payload)?;
 
-    let log_entries = dal
-        .work_orders()
-        .list_log(
+    // A generator gets the entries of its own work orders; the owner is part
+    // of the query.
+    let listed = match auth_payload.generator {
+        Some(owner) if !auth_payload.admin => dal.work_orders().list_log_owned(
+            owner,
             params.work_type.as_deref(),
             params.success,
             params.agent_id,
             params.limit,
-        )
-        .map_err(|e| {
-            error!("Failed to fetch work order log: {:?}", e);
-            ApiError::internal("failed to fetch work order log")
-        })?;
+        ),
+        _ => dal.work_orders().list_log(
+            params.work_type.as_deref(),
+            params.success,
+            params.agent_id,
+            params.limit,
+        ),
+    };
+    let log_entries = listed.map_err(|e| {
+        error!("Failed to fetch work order log: {:?}", e);
+        ApiError::internal("failed to fetch work order log")
+    })?;
     info!(
         "Successfully retrieved {} work order log entries",
         log_entries.len()
@@ -768,11 +836,11 @@ async fn list_work_order_log(
     params(("id" = Uuid, Path, description = "Work order log ID")),
     responses(
         (status = 200, description = "Work order log entry found", body = WorkOrderLog),
-        (status = 403, description = "Forbidden - requires admin PAK", body = ErrorResponse),
+        (status = 403, description = "Forbidden - requires an admin PAK, or the PAK of the generator that owned the work order", body = ErrorResponse),
         (status = 404, description = "Work order log entry not found", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse),
     ),
-    security(("admin_pak" = []))
+    security(("admin_pak" = []), ("generator_pak" = []))
 )]
 async fn get_work_order_log(
     State(dal): State<DAL>,
@@ -783,13 +851,7 @@ async fn get_work_order_log(
         "Handling request to get work order log entry with ID: {}",
         id
     );
-    if !auth_payload.admin {
-        warn!("Unauthorized attempt to get work order log entry");
-        return Err(ApiError::forbidden(
-            "admin_required",
-            "admin access required",
-        ));
-    }
+    require_admin_or_generator(&auth_payload)?;
 
     let log_entry = dal
         .work_orders()
@@ -808,6 +870,7 @@ async fn get_work_order_log(
                 "work order log entry not found",
             )
         })?;
+    require_owner(&auth_payload, log_entry.owner_generator_id, id)?;
     info!(
         "Successfully retrieved work order log entry with ID: {}",
         id
