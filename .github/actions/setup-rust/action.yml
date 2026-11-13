@@ -1,0 +1,73 @@
+---
+name: Set up Rust
+description: >
+  Install the Rust toolchain that rust-toolchain.toml names, with clippy and
+  rustfmt, and try again from a clean toolchain folder when the install fails
+  (BROKKR-T-0416).
+
+# Why not dtolnay/rust-toolchain: it tries a failed download again, but on top
+# of the half-installed toolchain. rustup then stops with "detected conflict"
+# or "missing manifest in toolchain", and the job fails before any test runs.
+# The components come in the same rustup call, so the first cargo call of a
+# job installs nothing.
+#
+# The version stays in one place: rust-toolchain.toml (BROKKR-T-0355).
+
+inputs:
+  targets:
+    description: Extra targets, separated by commas (for example a cross target).
+    required: false
+    default: ""
+  toolchain-file:
+    description: The rust-toolchain.toml to read the channel from.
+    required: false
+    default: rust-toolchain.toml
+
+runs:
+  using: composite
+  steps:
+    - name: Install the toolchain
+      shell: bash
+      env:
+        TARGETS: ${{ inputs.targets }}
+        TOOLCHAIN_FILE: ${{ inputs.toolchain-file }}
+      run: |
+        set -uo pipefail
+        channel="$(sed -n 's/^channel[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p' "$TOOLCHAIN_FILE" | head -n 1)"
+        if [ -z "$channel" ]; then
+          echo "::error::no channel in $TOOLCHAIN_FILE"
+          exit 1
+        fi
+        if ! command -v rustup >/dev/null 2>&1; then
+          curl --proto '=https' --tlsv1.2 --retry 10 --retry-connrefused -fsSL https://sh.rustup.rs \
+            | sh -s -- --default-toolchain none -y
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          export PATH="$HOME/.cargo/bin:$PATH"
+        fi
+
+        args=(--profile minimal --no-self-update --component clippy --component rustfmt)
+        if [ -n "$TARGETS" ]; then
+          for target in ${TARGETS//,/ }; do
+            args+=(--target "$target")
+          done
+        fi
+
+        attempt=1
+        until rustup toolchain install "$channel" "${args[@]}"; do
+          if [ "$attempt" -ge 5 ]; then
+            echo "::error::the install of the toolchain $channel failed $attempt times"
+            exit 1
+          fi
+          echo "::warning::the install of the toolchain $channel failed (try $attempt); removing it and trying again"
+          rustup toolchain uninstall "$channel" || true
+          rm -rf "$HOME/.rustup/toolchains/$channel-"* "$HOME/.rustup/update-hashes/$channel-"* \
+            "$HOME/.rustup/downloads" "$HOME/.rustup/tmp"
+          sleep $((attempt * 10))
+          attempt=$((attempt + 1))
+        done
+
+        rustup default "$channel"
+        rustc --version --verbose
+        cargo --version
+        cargo clippy --version
+        rustfmt --version

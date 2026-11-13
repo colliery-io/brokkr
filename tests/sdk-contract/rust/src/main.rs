@@ -27,7 +27,8 @@ use brokkr_client::types::{
     NewAgentTarget, NewGenerator, NewStack, NewStackAnnotation,
 };
 use brokkr_client::{
-    ApplyOutcome, BrokkrClient, BrokkrError, Client as RawClient, AGENT_ACTIVE, AGENT_INACTIVE,
+    ApplyOutcome, BrokkrClient, BrokkrError, Client as RawClient, NewWorkOrderSpec, AGENT_ACTIVE,
+    AGENT_INACTIVE,
 };
 use uuid::Uuid;
 
@@ -139,6 +140,10 @@ async fn main() -> ExitCode {
     run!(
         "T-0379/0380/0381: a generator's flow after apply via the brokkr CLI binary",
         scenario_generator_flow_cli(&base_url, &admin_pak)
+    );
+    run!(
+        "T-0408: a generator launches a work order with its own PAK via the wrapper",
+        scenario_generator_work_order(&base_url, &admin_pak)
     );
 
     println!("══════════════════════════════════════════════════════════════════");
@@ -1669,4 +1674,188 @@ async fn generator_flow_cli_checks(
         return Err(anyhow!("the deleted stack is still found by name"));
     }
     Ok(())
+}
+
+/// The job of the work order in [`scenario_generator_work_order`]: a
+/// Kubernetes Job that prints one line.
+const JOB_YAML: &str = r#"apiVersion: batch/v1
+kind: Job
+metadata:
+  name: sdk-contract-rust-job
+  namespace: default
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: job
+          image: busybox:1.36
+          command: ["sh", "-c", "echo hello from a work order"]
+"#;
+
+/// BROKKR-T-0408 (BROKKR-A-0013): a generator launches a work order with its
+/// own PAK. The generator that creates it owns it; it reaches only the agents
+/// registered with that generator; only its owner and an admin read it.
+///
+/// The harness runs no agent that does the work, so the work order stays
+/// PENDING and its logs and events are empty. The proof is the owner field,
+/// the shape of each answer, and the two refusals.
+async fn scenario_generator_work_order(base_url: &str, admin_pak: &str) -> Result<()> {
+    let admin = client(base_url, admin_pak)?;
+    // A generator, an agent registered with it, and a stray agent.
+    let fx = day_zero_fixture(&admin, "sdk-contract-rust-wo").await?;
+    // A second generator, with no agent.
+    let other = admin
+        .api()
+        .create_generator()
+        .body(NewGenerator::builder().name(unique("sdk-contract-rust-wo-other")))
+        .send()
+        .await
+        .map_err(berr)
+        .context("create the second generator")?
+        .into_inner();
+
+    let result = generator_work_order_checks(base_url, &fx, &other.pak).await;
+
+    // A generator delete takes its waiting work orders with it.
+    day_zero_cleanup(&admin, &fx).await;
+    let _ = admin
+        .api()
+        .delete_generator()
+        .id(other.generator.id)
+        .send()
+        .await;
+    result
+}
+
+async fn generator_work_order_checks(
+    base_url: &str,
+    fx: &DayZeroFixture,
+    other_pak: &str,
+) -> Result<()> {
+    let generator = client(base_url, &fx.generator_pak)?;
+    let other = client(base_url, other_pak)?;
+
+    // The generator launches the job on its registered agent.
+    println!("  → create_work_order as the generator, for its registered agent");
+    let work_order = generator
+        .create_work_order(NewWorkOrderSpec {
+            work_type: "custom".to_string(),
+            yaml_content: JOB_YAML.to_string(),
+            agent_ids: vec![fx.agent_id],
+            ..Default::default()
+        })
+        .await
+        .context("create_work_order")?;
+    if work_order.status != "PENDING" {
+        return Err(anyhow!("a new work order is {}", work_order.status));
+    }
+    // The generator that created it owns it.
+    if work_order.owner_generator_id != Some(fx.generator_id) {
+        return Err(anyhow!(
+            "the owner is {:?}, not the generator {}",
+            work_order.owner_generator_id,
+            fx.generator_id
+        ));
+    }
+
+    // It lists and reads its own work order.
+    println!("  → list_work_orders and get_work_order as the owner");
+    let listed = generator.list_work_orders().await.context("list")?;
+    if !listed.iter().any(|w| w.id == work_order.id) {
+        return Err(anyhow!("the owner's list does not have its work order"));
+    }
+    let read = generator
+        .get_work_order(work_order.id)
+        .await
+        .context("get_work_order")?;
+    if read.owner_generator_id != Some(fx.generator_id) {
+        return Err(anyhow!("the read work order has another owner"));
+    }
+
+    // It reads the logs and the events of the job. No agent runs the job
+    // here, so both are empty; the retention block is the shape.
+    println!("  → work_order_events and work_order_logs as the owner");
+    let events = generator
+        .work_order_events(work_order.id, Some(10))
+        .await
+        .context("work_order_events")?;
+    if events.retention.retention_ceiling_seconds != 21600 || !events.events.is_empty() {
+        return Err(anyhow!("unexpected events answer: {events:?}"));
+    }
+    let logs = generator
+        .work_order_logs(work_order.id, None)
+        .await
+        .context("work_order_logs")?;
+    if logs.retention.retention_ceiling_seconds != 21600 || !logs.lines.is_empty() {
+        return Err(anyhow!("unexpected logs answer: {logs:?}"));
+    }
+
+    // Another generator sees none of it.
+    println!("  → the second generator is refused");
+    if other
+        .list_work_orders()
+        .await
+        .context("list as the second generator")?
+        .iter()
+        .any(|w| w.id == work_order.id)
+    {
+        return Err(anyhow!(
+            "the second generator lists a work order it does not own"
+        ));
+    }
+    expect_code(
+        other.get_work_order(work_order.id).await.map(|_| ()),
+        "work_order_not_owned",
+        "get_work_order as the second generator",
+    )?;
+    expect_code(
+        other.work_order_logs(work_order.id, None).await.map(|_| ()),
+        "work_order_not_owned",
+        "work_order_logs as the second generator",
+    )?;
+
+    // A target agent that is not registered with the generator is refused,
+    // and no work order is made.
+    println!("  → a target agent that is not registered is refused");
+    let before = generator.list_work_orders().await?.len();
+    expect_code(
+        generator
+            .create_work_order(NewWorkOrderSpec {
+                work_type: "custom".to_string(),
+                yaml_content: JOB_YAML.to_string(),
+                agent_ids: vec![fx.stray_id],
+                ..Default::default()
+            })
+            .await
+            .map(|_| ()),
+        "agent_not_registered",
+        "create_work_order for an agent that is not registered",
+    )?;
+    if generator.list_work_orders().await?.len() != before {
+        return Err(anyhow!("the refused create left a work order"));
+    }
+
+    // The generator deletes its work order.
+    println!("  → delete_work_order as the owner");
+    generator
+        .delete_work_order(work_order.id)
+        .await
+        .context("delete_work_order")?;
+    expect_code(
+        generator.get_work_order(work_order.id).await.map(|_| ()),
+        "work_order_not_found",
+        "get_work_order after the delete",
+    )?;
+    Ok(())
+}
+
+/// Fail unless `result` is a refusal with the stable code `code`.
+fn expect_code(result: Result<(), BrokkrError>, code: &str, what: &str) -> Result<()> {
+    match result {
+        Ok(()) => Err(anyhow!("{what}: expected {code}, but the call succeeded")),
+        Err(e) if e.code() == Some(code) => Ok(()),
+        Err(e) => Err(anyhow!("{what}: expected {code}, got {e}")),
+    }
 }

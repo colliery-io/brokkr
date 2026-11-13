@@ -284,6 +284,53 @@ describe("BrokkrClient.listTelemetryLogs", () => {
   });
 });
 
+describe("BrokkrClient work order telemetry (BROKKR-T-0408)", () => {
+  const retention = {
+    retention_ceiling_seconds: 21600,
+    effective_retention_seconds: 21600,
+    long_term_sink_hint: "ship to Datadog",
+  };
+  const workOrder = "44444444-4444-4444-4444-444444444444";
+
+  it("listWorkOrderEvents calls /work-orders/{id}/events with the query", async () => {
+    const { fetch: scripted, calls } = scriptedFetch([
+      { status: 200, body: { retention, events: [] } },
+    ]);
+    vi.stubGlobal("fetch", scripted);
+    const c = new BrokkrClient({ baseUrl });
+    const out = await c.listWorkOrderEvents(workOrder, { limit: 7 });
+    expect(out.events).toEqual([]);
+    const url = new URL(calls[0]!.url);
+    expect(url.pathname).toContain(`/work-orders/${workOrder}/events`);
+    expect(url.searchParams.get("limit")).toBe("7");
+  });
+
+  it("listWorkOrderLogs calls /work-orders/{id}/logs and returns the body", async () => {
+    const { fetch: scripted, calls } = scriptedFetch([
+      { status: 200, body: { retention, lines: [] } },
+    ]);
+    vi.stubGlobal("fetch", scripted);
+    const c = new BrokkrClient({ baseUrl });
+    const out = await c.listWorkOrderLogs(workOrder);
+    expect(out.lines).toEqual([]);
+    expect(calls[0]!.url).toContain(`/work-orders/${workOrder}/logs`);
+  });
+
+  it("a refusal keeps the broker's code", async () => {
+    const body: ErrorResponse = {
+      code: "work_order_not_owned",
+      message: "not authorized to access this work order",
+    };
+    const { fetch: scripted } = scriptedFetch([{ status: 403, body }]);
+    vi.stubGlobal("fetch", scripted);
+    const c = new BrokkrClient({ baseUrl });
+    await expect(c.listWorkOrderLogs(workOrder)).rejects.toMatchObject({
+      code: "work_order_not_owned",
+      status: 403,
+    });
+  });
+});
+
 describe("BrokkrClient.listWsConnections", () => {
   it("calls /admin/ws/connections and returns the parsed body", async () => {
     const body = {
