@@ -120,6 +120,98 @@ async def list_telemetry_logs_async(
     return result
 
 
+def list_work_order_events(
+    client: AuthenticatedClient,
+    work_order_id: UUID,
+    *,
+    since: datetime.datetime | None = None,
+    limit: int | None = None,
+) -> K8SEventHistoryResponse:
+    """Kube-event history for the job of a work order, within the 6h
+    retention window. For the owner of the work order or an admin; it also
+    answers after the work order ended."""
+    from .api.work_orders import list_work_order_events as _op
+    from .types import UNSET
+
+    result = _op.sync(
+        id=work_order_id,
+        client=client,
+        since=since if since is not None else UNSET,
+        limit=limit if limit is not None else UNSET,
+    )
+    if result is None:
+        raise RuntimeError("list_work_order_events returned None — check broker response")
+    return result
+
+
+async def list_work_order_events_async(
+    client: AuthenticatedClient,
+    work_order_id: UUID,
+    *,
+    since: datetime.datetime | None = None,
+    limit: int | None = None,
+) -> K8SEventHistoryResponse:
+    """Async variant of :func:`list_work_order_events`."""
+    from .api.work_orders import list_work_order_events as _op
+    from .types import UNSET
+
+    result = await _op.asyncio(
+        id=work_order_id,
+        client=client,
+        since=since if since is not None else UNSET,
+        limit=limit if limit is not None else UNSET,
+    )
+    if result is None:
+        raise RuntimeError("list_work_order_events returned None — check broker response")
+    return result
+
+
+def list_work_order_logs(
+    client: AuthenticatedClient,
+    work_order_id: UUID,
+    *,
+    since: datetime.datetime | None = None,
+    limit: int | None = None,
+) -> PodLogHistoryResponse:
+    """Pod-log history for the job of a work order, within the 6h retention
+    window. For the owner of the work order or an admin; it also answers
+    after the work order ended."""
+    from .api.work_orders import list_work_order_logs as _op
+    from .types import UNSET
+
+    result = _op.sync(
+        id=work_order_id,
+        client=client,
+        since=since if since is not None else UNSET,
+        limit=limit if limit is not None else UNSET,
+    )
+    if result is None:
+        raise RuntimeError("list_work_order_logs returned None — check broker response")
+    return result
+
+
+async def list_work_order_logs_async(
+    client: AuthenticatedClient,
+    work_order_id: UUID,
+    *,
+    since: datetime.datetime | None = None,
+    limit: int | None = None,
+) -> PodLogHistoryResponse:
+    """Async variant of :func:`list_work_order_logs`."""
+    from .api.work_orders import list_work_order_logs as _op
+    from .types import UNSET
+
+    result = await _op.asyncio(
+        id=work_order_id,
+        client=client,
+        since=since if since is not None else UNSET,
+        limit=limit if limit is not None else UNSET,
+    )
+    if result is None:
+        raise RuntimeError("list_work_order_logs returned None — check broker response")
+    return result
+
+
 def list_ws_connections(client: AuthenticatedClient) -> WsConnectionsResponse:
     """Admin-only snapshot of currently-connected agents on the internal WS channel.
 
@@ -172,6 +264,10 @@ __all__ = (
     "list_telemetry_events_async",
     "list_telemetry_logs",
     "list_telemetry_logs_async",
+    "list_work_order_events",
+    "list_work_order_events_async",
+    "list_work_order_logs",
+    "list_work_order_logs_async",
     "list_ws_connections",
     "list_ws_connections_async",
     "live_subscription_url",
