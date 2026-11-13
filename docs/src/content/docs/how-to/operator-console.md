@@ -63,7 +63,7 @@ The sidebar groups seven views:
 
 **Operations**
 
-- **Work orders** — active work orders above the completed history; clicking a history row opens its detail. The active list is admin-gated, and the panel says so plainly if the broker declines to serve it.
+- **Work orders** — active work orders above the completed history; clicking a history row opens its detail. Each row names its owner: the generator that created the work order, or `admin`. If the owner is a generator the console does not list any more, the row shows the first characters of its id.
 - **Webhooks** — the webhook subscriptions and their configured events. The API deliberately redacts subscription URLs, so the console shows only whether one is set. Clicking a subscription lists its recent delivery attempts. Below the subscriptions, the **Recent deliveries** panel shows the newest deliveries of all subscriptions (see [The Recent Deliveries Panel](#the-recent-deliveries-panel)).
 
 **System**
@@ -130,7 +130,7 @@ The console does not use the stream to find out if its token is valid. If the br
 
 ## Step 4: Scope the View to One Generator
 
-On a broker shared between generators, the sidebar shows a **Generator** selector below the navigation. It lists the generators that the broker knows about, plus **All**. Choosing one narrows the Overview, Fleet, Deployments, and Telemetry views to that generator's resources; the choice is remembered in your browser between visits, and falls back to **All** if the generator it named has since been removed.
+On a broker shared between generators, the sidebar shows a **Generator** selector below the navigation. It lists the generators that the broker knows about, plus **All**. Choosing one narrows the Overview, Fleet, Deployments, Telemetry, and Work orders views to that generator's resources, and the Work orders count in the sidebar with them. A work order that an admin owns belongs to no generator, so it shows only under **All**; the choice is remembered in your browser between visits, and falls back to **All** if the generator it named has since been removed.
 
 On a single-generator install there is nothing to choose, so the selector is hidden entirely. It is also hidden if the generator listing cannot be read — the views still work, unscoped.
 

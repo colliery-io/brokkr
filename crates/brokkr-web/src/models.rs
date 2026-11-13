@@ -378,6 +378,9 @@ pub struct WorkOrderLogEntry {
     pub retries_attempted: i32,
     #[serde(default)]
     pub result_message: Option<String>,
+    /// The generator that owns the work order. No value: an admin owns it.
+    #[serde(default)]
+    pub owner_generator_id: Option<String>,
 }
 
 /// `GET /api/v1/stacks`.
@@ -462,8 +465,9 @@ pub struct WebhookFeedItem {
     pub created_at: Option<String>,
 }
 
-/// One work order in `GET /api/v1/work-orders` (admin-gated list). NOTE: requires
-/// an admin PAK; with an operator-scoped PAK the Active panel renders an error.
+/// One work order in `GET /api/v1/work-orders`. The broker gives an admin each
+/// work order and a generator its own; the console reads with its read-only
+/// admin token, so it gets each one and narrows to the generator scope itself.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct WorkOrder {
     pub id: String,
@@ -475,6 +479,9 @@ pub struct WorkOrder {
     pub claimed_by: Option<String>,
     #[serde(default)]
     pub last_error: Option<String>,
+    /// The generator that owns the work order. No value: an admin owns it.
+    #[serde(default)]
+    pub owner_generator_id: Option<String>,
 }
 
 impl WorkOrder {
