@@ -476,11 +476,10 @@ async fn create_work_order(
         return Err(err);
     }
 
-    // Post-commit: push to explicitly-targeted agents via WS. Label /
-    // annotation targeting still relies on the agent's REST polling to
-    // resolve which work orders apply — broadening this push to those
-    // selectors is part of [[BROKKR-I-0019]] WS-04 follow-ups.
-    push_work_order(&ws_registry, &work_order, &agent_ids);
+    // Post-commit: push to each agent that the work order reaches, by a
+    // target, a label or an annotation (BROKKR-T-0412). The REST poll stays
+    // the source of truth.
+    push_work_order(&ws_registry, &dal, &work_order);
 
     info!("Successfully created work order with ID: {}", work_order.id);
     let (actor_type, actor_id) = actor(&auth_payload);

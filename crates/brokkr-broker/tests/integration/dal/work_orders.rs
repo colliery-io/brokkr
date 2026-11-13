@@ -1588,3 +1588,166 @@ fn test_a_target_outside_the_registrations_is_refused_before_the_insert() {
     assert!(refuse_unregistered_targets(&fixture.dal, generator.id, &[inside.id]).is_ok());
     assert!(refuse_unregistered_targets(&fixture.dal, generator.id, &[]).is_ok());
 }
+
+// ---------------------------------------------------------------------------
+// BROKKR-T-0412: the agents a work order reaches, for the push.
+// ---------------------------------------------------------------------------
+
+/// The set agrees with the one rule: an agent is in `agents_reached` exactly
+/// when `matches` has the pair and the pending list of the agent has the
+/// work order.
+fn assert_reached_agrees(fixture: &TestFixture, work_order: Uuid, agents: &[Uuid]) {
+    let reached = fixture
+        .dal
+        .work_orders()
+        .agents_reached(work_order)
+        .expect("agents_reached failed");
+    for agent in agents {
+        let by_rule = !fixture
+            .dal
+            .work_orders()
+            .matches(Some(*agent), Some(work_order))
+            .expect("matches failed")
+            .is_empty();
+        let in_pending_list = fixture
+            .dal
+            .work_orders()
+            .list_pending_for_agent(*agent, None)
+            .expect("list_pending_for_agent failed")
+            .iter()
+            .any(|w| w.id == work_order);
+        assert_eq!(
+            reached.contains(agent),
+            by_rule,
+            "agents_reached and matches differ for agent {agent}"
+        );
+        assert_eq!(
+            reached.contains(agent),
+            in_pending_list,
+            "agents_reached and the pending list differ for agent {agent}"
+        );
+    }
+}
+
+#[test]
+fn test_agents_reached_by_id_label_and_annotation() {
+    let fixture = TestFixture::new();
+    let agent = |name: &str| fixture.create_test_agent(name.to_string(), "c".to_string());
+    let by_id = agent("t0412-by-id");
+    let by_label = agent("t0412-by-label");
+    let by_annotation = agent("t0412-by-annotation");
+    let by_all = agent("t0412-by-all");
+    let by_none = agent("t0412-by-none");
+    fixture.create_test_agent_label(by_label.id, "t0412-team".to_string());
+    fixture.create_test_agent_annotation(
+        by_annotation.id,
+        "t0412-tier".to_string(),
+        "gold".to_string(),
+    );
+    fixture.create_test_agent_label(by_all.id, "t0412-team".to_string());
+    fixture.create_test_agent_annotation(by_all.id, "t0412-tier".to_string(), "gold".to_string());
+    // The same key with another value is no match.
+    fixture.create_test_agent_annotation(by_none.id, "t0412-tier".to_string(), "iron".to_string());
+    let all = [
+        by_id.id,
+        by_label.id,
+        by_annotation.id,
+        by_all.id,
+        by_none.id,
+    ];
+    let reached = |work_order: Uuid| -> Vec<Uuid> {
+        fixture
+            .dal
+            .work_orders()
+            .agents_reached(work_order)
+            .expect("agents_reached failed")
+    };
+    let sorted = |mut ids: Vec<Uuid>| {
+        ids.sort();
+        ids
+    };
+
+    // One leg each. An admin owns these: no registration gate.
+    let id_only = owned_work_order(&fixture, None);
+    fixture.create_test_work_order_target(id_only.id, by_id.id);
+    assert_eq!(reached(id_only.id), vec![by_id.id]);
+    assert_reached_agrees(&fixture, id_only.id, &all);
+
+    let label_only = owned_work_order(&fixture, None);
+    fixture.create_test_work_order_label(label_only.id, "t0412-team");
+    assert_eq!(reached(label_only.id), sorted(vec![by_label.id, by_all.id]));
+    assert_reached_agrees(&fixture, label_only.id, &all);
+
+    let annotation_only = owned_work_order(&fixture, None);
+    fixture.create_test_work_order_annotation(annotation_only.id, "t0412-tier", "gold");
+    assert_eq!(
+        reached(annotation_only.id),
+        sorted(vec![by_annotation.id, by_all.id])
+    );
+    assert_reached_agrees(&fixture, annotation_only.id, &all);
+
+    // The three legs together: `by_all` matches each leg and is there once.
+    let every_leg = owned_work_order(&fixture, None);
+    fixture.create_test_work_order_target(every_leg.id, by_id.id);
+    fixture.create_test_work_order_target(every_leg.id, by_all.id);
+    fixture.create_test_work_order_label(every_leg.id, "t0412-team");
+    fixture.create_test_work_order_annotation(every_leg.id, "t0412-tier", "gold");
+    assert_eq!(
+        reached(every_leg.id),
+        sorted(vec![by_id.id, by_label.id, by_annotation.id, by_all.id])
+    );
+    assert_reached_agrees(&fixture, every_leg.id, &all);
+
+    // A work order with no target has no agent.
+    let nobody = owned_work_order(&fixture, None);
+    assert!(reached(nobody.id).is_empty());
+}
+
+#[test]
+fn test_agents_reached_of_a_generator_work_order_are_registered_agents() {
+    let fixture = TestFixture::new();
+    let (generator, _pak) = fixture.create_test_generator_with_pak("t0412-owner".to_string(), None);
+    let inside = fixture.create_test_agent("t0412-inside".to_string(), "c".to_string());
+    let outside = fixture.create_test_agent("t0412-outside".to_string(), "c".to_string());
+    fixture.register_agent_with_generator(inside.id, generator.id);
+    for agent in [&inside, &outside] {
+        fixture.create_test_agent_label(agent.id, "t0412-gen-team".to_string());
+        fixture.create_test_agent_annotation(
+            agent.id,
+            "t0412-gen-tier".to_string(),
+            "gold".to_string(),
+        );
+    }
+
+    // The generator's work order names both agents on each leg. The target
+    // rows are written with no check, as a row from before a deregistration.
+    let of_the_generator = owned_work_order(&fixture, Some(generator.id));
+    fixture.create_test_work_order_target(of_the_generator.id, inside.id);
+    fixture.create_test_work_order_target(of_the_generator.id, outside.id);
+    fixture.create_test_work_order_label(of_the_generator.id, "t0412-gen-team");
+    fixture.create_test_work_order_annotation(of_the_generator.id, "t0412-gen-tier", "gold");
+    assert_eq!(
+        fixture
+            .dal
+            .work_orders()
+            .agents_reached(of_the_generator.id)
+            .expect("agents_reached failed"),
+        vec![inside.id],
+        "a generator's work order reaches its registered agents only"
+    );
+    assert_reached_agrees(&fixture, of_the_generator.id, &[inside.id, outside.id]);
+
+    // The same targets on an admin's work order reach both.
+    let of_an_admin = owned_work_order(&fixture, None);
+    fixture.create_test_work_order_label(of_an_admin.id, "t0412-gen-team");
+    let mut both = vec![inside.id, outside.id];
+    both.sort();
+    assert_eq!(
+        fixture
+            .dal
+            .work_orders()
+            .agents_reached(of_an_admin.id)
+            .expect("agents_reached failed"),
+        both
+    );
+}
