@@ -196,12 +196,18 @@ pub fn App() -> impl IntoView {
     );
     let counts = NavCounts {
         fleet: Signal::derive(move || fleet.get().and_then(|r| r.ok()).map(|a| a.len())),
-        // The active list is admin-gated: with no access there is no badge.
+        // The active work orders of the generator scope. A failed read gives
+        // no badge.
         work_orders: Signal::derive(move || {
-            work_orders
-                .get()
-                .and_then(|r| r.ok())
-                .map(|w| w.iter().filter(|w| w.is_active()).count())
+            let sc = scope.get();
+            work_orders.get().and_then(|r| r.ok()).map(|w| {
+                w.iter()
+                    .filter(|w| w.is_active())
+                    .filter(|w| {
+                        crate::components::in_scope(w.owner_generator_id.as_deref(), sc.as_deref())
+                    })
+                    .count()
+            })
         }),
     };
     // Every request with the injected token feeds this, so a refusal after a

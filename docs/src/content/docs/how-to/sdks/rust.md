@@ -46,6 +46,7 @@ This page uses a **generator PAK**, because a generator owns stacks and deployme
 | Operation | PAK |
 |-----------|-----|
 | `apply`, `submit_manifests`, stack, label and deployment-object calls, telemetry history, `list_agents` | Generator (its own stacks only) or admin |
+| `create_work_order` and the other work order methods | Generator (its own work orders only) or admin |
 | `apply_for_generator`, WebSocket connection list, create agents and generators, stack health | Admin |
 | Heartbeat, target state, agent events and health reports (see the [worked example](#worked-example-agent-heartbeat--fetch-target-state)) | Agent |
 
@@ -134,6 +135,63 @@ let response = client
 ```
 
 Wrap only operations you consider safe to repeat — typically idempotent GETs.
+
+## Launch a job with a work order
+
+A work order is a job that runs one time: a build, a migration, a backup. A generator launches it with its own PAK, on an agent that is registered with the generator. The generator that creates a work order owns it. Only its owner and an admin can read it or delete it.
+
+```rust
+use brokkr_client::NewWorkOrderSpec;
+
+const JOB_YAML: &str = r#"apiVersion: batch/v1
+kind: Job
+metadata:
+  name: hello
+  namespace: default
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: job
+          image: busybox:1.36
+          command: ["sh", "-c", "echo hello from a work order"]
+"#;
+
+// Launch the job on an agent that is registered with the generator.
+let work_order = client
+    .create_work_order(NewWorkOrderSpec {
+        work_type: "custom".to_string(),
+        yaml_content: JOB_YAML.to_string(),
+        agent_ids: vec![agent_id],
+        ..Default::default()
+    })
+    .await?;
+println!("{} {} {:?}", work_order.id, work_order.status, work_order.owner_generator_id);
+
+// Follow it: PENDING, then CLAIMED, then it is in the log.
+let read = client.get_work_order(work_order.id).await?;
+
+// The pod logs and the Kubernetes events of the job
+let logs = client.work_order_logs(work_order.id, None).await?;
+let events = client.work_order_events(work_order.id, Some(10)).await?;
+
+// Delete a work order that still waits
+client.delete_work_order(work_order.id).await?;
+```
+
+`NewWorkOrderSpec` also takes `labels` and `annotations`: an agent with one of them can have the work order, if it is registered with the generator. It takes `claim_timeout_seconds`, `max_retries` and `backoff_seconds` too. Each method returns `BrokkrError` for a refusal; match on `.code()`.
+
+The broker refuses with a stable `code`:
+
+| Code | Status | When |
+|------|--------|------|
+| `agent_not_registered` | 403 | A target agent is not registered with the generator. The broker creates nothing. |
+| `work_order_not_owned` | 403 | The work order belongs to another generator, or to an admin. |
+| `work_order_not_found` | 404 | No work order has this id. |
+
+The logs and the events stay readable after the work order ends, for the 6-hour retention window. `GET /work-orders/{id}` also answers for a work order that ended. See the [work orders reference](../../../reference/work-orders/).
 
 ## Worked example: agent heartbeat + fetch target state
 

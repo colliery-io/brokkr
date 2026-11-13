@@ -31,7 +31,7 @@ jobs:
 
       - name: Set up Rust
         if: matrix.language == 'rust'
-        uses: dtolnay/rust-toolchain@1.99
+        uses: ./.github/actions/setup-rust
 
       - name: Set up Node
         if: matrix.language == 'typescript'
