@@ -71,7 +71,15 @@ pub struct ObjectRef {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct K8sEvent {
     pub agent_id: Uuid,
-    pub stack_id: Uuid,
+    /// The stack the object belongs to. No value: it belongs to a work
+    /// order, and `work_order_id` has the value. An agent from before 0.12.0
+    /// always sends a stack id.
+    #[serde(default)]
+    pub stack_id: Option<Uuid>,
+    /// The work order whose job this is about, in place of a stack
+    /// (BROKKR-T-0405). Exactly one of the two ids has a value.
+    #[serde(default)]
+    pub work_order_id: Option<Uuid>,
     pub observed_at: DateTime<Utc>,
     /// Reason field from the kube Event (e.g. `FailedScheduling`, `Pulled`).
     pub reason: String,
@@ -87,7 +95,15 @@ pub struct K8sEvent {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct PodLogLine {
     pub agent_id: Uuid,
-    pub stack_id: Uuid,
+    /// The stack the object belongs to. No value: it belongs to a work
+    /// order, and `work_order_id` has the value. An agent from before 0.12.0
+    /// always sends a stack id.
+    #[serde(default)]
+    pub stack_id: Option<Uuid>,
+    /// The work order whose job this is about, in place of a stack
+    /// (BROKKR-T-0405). Exactly one of the two ids has a value.
+    #[serde(default)]
+    pub work_order_id: Option<Uuid>,
     pub namespace: String,
     pub pod: String,
     pub container: String,
@@ -215,7 +231,8 @@ mod console_fixture {
         let frames = vec![
             WsMessage::PodLogLine(PodLogLine {
                 agent_id: Uuid::parse_str("6f1d2c3b-4a59-4e8f-9b0a-1c2d3e4f5a6b").expect("uuid"),
-                stack_id,
+                stack_id: Some(stack_id),
+                work_order_id: None,
                 namespace: "payments".into(),
                 pod: "payments-api-7d9f4-x2k1".into(),
                 container: "api".into(),

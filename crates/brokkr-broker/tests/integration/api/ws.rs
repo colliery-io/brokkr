@@ -763,7 +763,8 @@ async fn live_subscription_forwards_agent_telemetry_to_subscribers() {
         .send(Message::Text(
             serde_json::to_string(&WsMessage::K8sEvent(K8sEvent {
                 agent_id: agent.id,
-                stack_id: stack.id,
+                stack_id: Some(stack.id),
+                work_order_id: None,
                 observed_at: now,
                 reason: "ws11".into(),
                 message: "live".into(),
@@ -785,7 +786,8 @@ async fn live_subscription_forwards_agent_telemetry_to_subscribers() {
         .send(Message::Text(
             serde_json::to_string(&WsMessage::PodLogLine(PodLogLine {
                 agent_id: agent.id,
-                stack_id: stack.id,
+                stack_id: Some(stack.id),
+                work_order_id: None,
                 namespace: "ws11".into(),
                 pod: "ws11-x".into(),
                 container: "app".into(),
@@ -799,7 +801,7 @@ async fn live_subscription_forwards_agent_telemetry_to_subscribers() {
 
     let got_event = await_message(&mut subscriber, |m| matches!(m, WsMessage::K8sEvent(_))).await;
     if let WsMessage::K8sEvent(e) = got_event {
-        assert_eq!(e.stack_id, stack.id);
+        assert_eq!(e.stack_id, Some(stack.id));
         assert_eq!(e.reason, "ws11");
     }
     let got_line = await_message(&mut subscriber, |m| matches!(m, WsMessage::PodLogLine(_))).await;
@@ -865,7 +867,8 @@ async fn live_subscription_authenticates_via_subprotocol() {
         .send(Message::Text(
             serde_json::to_string(&WsMessage::K8sEvent(K8sEvent {
                 agent_id: agent.id,
-                stack_id: stack.id,
+                stack_id: Some(stack.id),
+                work_order_id: None,
                 observed_at: chrono::Utc::now(),
                 reason: "c1".into(),
                 message: "subprotocol auth".into(),
@@ -886,7 +889,7 @@ async fn live_subscription_authenticates_via_subprotocol() {
 
     let got = await_message(&mut subscriber, |m| matches!(m, WsMessage::K8sEvent(_))).await;
     if let WsMessage::K8sEvent(e) = got {
-        assert_eq!(e.stack_id, stack.id);
+        assert_eq!(e.stack_id, Some(stack.id));
         assert_eq!(e.reason, "c1");
     }
 }
@@ -984,7 +987,8 @@ async fn rest_history_endpoints_return_retained_telemetry_with_retention_metadat
         .agent_k8s_events()
         .create(&NewAgentK8sEvent {
             agent_id: agent.id,
-            stack_id: stack.id,
+            stack_id: Some(stack.id),
+            work_order_id: None,
             observed_at: now,
             reason: "Pulled".into(),
             message: "ws10 image pulled".into(),
@@ -998,7 +1002,8 @@ async fn rest_history_endpoints_return_retained_telemetry_with_retention_metadat
         .agent_pod_logs()
         .create(&NewAgentPodLog {
             agent_id: agent.id,
-            stack_id: stack.id,
+            stack_id: Some(stack.id),
+            work_order_id: None,
             namespace: "ws10".into(),
             pod: "ws10-x".into(),
             container: "app".into(),
@@ -1125,7 +1130,8 @@ async fn ws_telemetry_ingestion_lands_in_agent_telemetry_tables() {
         .send(Message::Text(
             serde_json::to_string(&WsMessage::K8sEvent(K8sEvent {
                 agent_id: agent.id,
-                stack_id: stack.id,
+                stack_id: Some(stack.id),
+                work_order_id: None,
                 observed_at: now,
                 reason: "Pulled".into(),
                 message: "Pulled image ws09".into(),
@@ -1149,7 +1155,8 @@ async fn ws_telemetry_ingestion_lands_in_agent_telemetry_tables() {
         .send(Message::Text(
             serde_json::to_string(&WsMessage::PodLogLine(PodLogLine {
                 agent_id: agent.id,
-                stack_id: stack.id,
+                stack_id: Some(stack.id),
+                work_order_id: None,
                 namespace: "ws09".into(),
                 pod: "ws09-abc".into(),
                 container: "app".into(),
@@ -1209,7 +1216,8 @@ async fn eviction_worker_drops_rows_past_retention() {
         .agent_k8s_events()
         .create(&NewAgentK8sEvent {
             agent_id: agent.id,
-            stack_id: stack.id,
+            stack_id: Some(stack.id),
+            work_order_id: None,
             observed_at: now,
             reason: "evict-me".into(),
             message: "old".into(),
@@ -1223,7 +1231,8 @@ async fn eviction_worker_drops_rows_past_retention() {
         .agent_pod_logs()
         .create(&NewAgentPodLog {
             agent_id: agent.id,
-            stack_id: stack.id,
+            stack_id: Some(stack.id),
+            work_order_id: None,
             namespace: "ns".into(),
             pod: "p".into(),
             container: "c".into(),
@@ -1686,4 +1695,502 @@ where
         }
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
     }
+}
+
+// =============================================================================
+// BROKKR-T-0405: the telemetry of a work order (BROKKR-A-0013)
+// =============================================================================
+//
+// The agent that claimed a work order sends the pod log lines and the kube
+// events of its job with the work order id. The owner of the work order and
+// an admin read them, also after the work order ended.
+
+/// An agent with a PAK, for a WS connection.
+fn agent_with_pak(
+    fixture: &TestFixture,
+    name: &str,
+) -> (brokkr_models::models::agents::Agent, String) {
+    let agent = fixture.create_test_agent(name.into(), "cluster".into());
+    let (agent_pak, agent_hash) = pak::create_pak().unwrap();
+    fixture
+        .dal
+        .agents()
+        .update_pak_hash(agent.id, agent_hash)
+        .unwrap();
+    (agent, agent_pak)
+}
+
+/// A work order owned by `owner` (a generator, or `None` for an admin),
+/// targeted at `agent` and claimed by it.
+fn claimed_work_order(
+    fixture: &TestFixture,
+    owner: Option<Uuid>,
+    agent: Uuid,
+) -> brokkr_models::models::work_orders::WorkOrder {
+    use brokkr_models::models::work_orders::NewWorkOrder;
+    let new_work_order = NewWorkOrder::new("custom".into(), "kind: Job\n".into(), None, None, None)
+        .unwrap()
+        .owned_by(owner);
+    let work_order = fixture.dal.work_orders().create(&new_work_order).unwrap();
+    // An agent has a generator's work order only while it is registered with
+    // that generator (BROKKR-T-0403).
+    if let Some(generator) = owner {
+        fixture.register_agent_with_generator(agent, generator);
+    }
+    fixture.create_test_work_order_target(work_order.id, agent);
+    fixture
+        .dal
+        .work_orders()
+        .claim(work_order.id, agent)
+        .expect("claim failed")
+}
+
+fn work_order_log_line(agent: Uuid, work_order: Uuid, line: &str) -> Message {
+    use brokkr_wire::PodLogLine;
+    Message::Text(
+        serde_json::to_string(&WsMessage::PodLogLine(PodLogLine {
+            agent_id: agent,
+            stack_id: None,
+            work_order_id: Some(work_order),
+            namespace: "jobs".into(),
+            pod: "job-x".into(),
+            container: "main".into(),
+            ts: chrono::Utc::now(),
+            line: line.into(),
+        }))
+        .unwrap(),
+    )
+}
+
+fn work_order_event(agent: Uuid, work_order: Uuid, reason: &str) -> Message {
+    use brokkr_wire::{K8sEvent, ObjectRef};
+    Message::Text(
+        serde_json::to_string(&WsMessage::K8sEvent(K8sEvent {
+            agent_id: agent,
+            stack_id: None,
+            work_order_id: Some(work_order),
+            observed_at: chrono::Utc::now(),
+            reason: reason.into(),
+            message: "the job started".into(),
+            event_type: "Normal".into(),
+            source: Some("job-controller".into()),
+            involved_object: ObjectRef {
+                api_version: "batch/v1".into(),
+                kind: "Job".into(),
+                namespace: Some("jobs".into()),
+                name: "job-x".into(),
+                uid: None,
+            },
+        }))
+        .unwrap(),
+    )
+}
+
+/// The lines stored for a work order, oldest first.
+fn stored_lines(fixture: &TestFixture, work_order: Uuid) -> Vec<String> {
+    let mut rows = fixture
+        .dal
+        .agent_pod_logs()
+        .list_for_work_order(
+            work_order,
+            chrono::Utc::now() - chrono::Duration::minutes(5),
+            100,
+        )
+        .unwrap();
+    rows.reverse();
+    rows.into_iter().map(|r| r.line).collect()
+}
+
+async fn get_json(
+    http: &reqwest::Client,
+    url: String,
+    pak: &str,
+) -> (reqwest::StatusCode, serde_json::Value) {
+    let resp = http
+        .get(url)
+        .header("Authorization", format!("Bearer {pak}"))
+        .send()
+        .await
+        .unwrap();
+    let status = resp.status();
+    let body = resp.json().await.unwrap_or(serde_json::Value::Null);
+    (status, body)
+}
+
+#[tokio::test]
+async fn work_order_telemetry_is_stored_from_the_claimant_and_read_by_the_owner() {
+    use brokkr_wire::PodLogLine;
+
+    let fixture = TestFixture::new();
+    let (addr, registry) = spawn_full_broker(&fixture).await;
+    let http = reqwest::Client::new();
+    let base = format!("http://{addr}/api/v1");
+
+    let (owner, owner_pak) = fixture.create_test_generator_with_pak("t0405-owner".into(), None);
+    let (_other, other_pak) = fixture.create_test_generator_with_pak("t0405-other".into(), None);
+    let (claimant, claimant_pak) = agent_with_pak(&fixture, "t0405-claimant");
+    let (intruder, intruder_pak) = agent_with_pak(&fixture, "t0405-intruder");
+    let work_order = claimed_work_order(&fixture, Some(owner.id), claimant.id);
+
+    // The claimant sends one event and one line.
+    let (mut claimant_ws, _) =
+        tokio_tungstenite::connect_async(ws_request_with_pak(&ws_url(addr), &claimant_pak))
+            .await
+            .unwrap();
+    assert!(wait_for_connection(&registry, claimant.id).await);
+    claimant_ws
+        .send(work_order_event(claimant.id, work_order.id, "Started"))
+        .await
+        .unwrap();
+    claimant_ws
+        .send(work_order_log_line(
+            claimant.id,
+            work_order.id,
+            "hello from the job",
+        ))
+        .await
+        .unwrap();
+
+    // An agent that did not claim the work order sends a line for it, and
+    // then a line for a stack. One connection is read in order, so once the
+    // stack line is stored, the broker has dealt with the first one.
+    let stack = fixture.create_test_stack("t0405 stack".into(), None, fixture.admin_generator.id);
+    let (mut intruder_ws, _) =
+        tokio_tungstenite::connect_async(ws_request_with_pak(&ws_url(addr), &intruder_pak))
+            .await
+            .unwrap();
+    assert!(wait_for_connection(&registry, intruder.id).await);
+    intruder_ws
+        .send(work_order_log_line(
+            intruder.id,
+            work_order.id,
+            "not my job",
+        ))
+        .await
+        .unwrap();
+    intruder_ws
+        .send(Message::Text(
+            serde_json::to_string(&WsMessage::PodLogLine(PodLogLine {
+                agent_id: intruder.id,
+                stack_id: Some(stack.id),
+                work_order_id: None,
+                namespace: "ns".into(),
+                pod: "p".into(),
+                container: "c".into(),
+                ts: chrono::Utc::now(),
+                line: "sentinel".into(),
+            }))
+            .unwrap(),
+        ))
+        .await
+        .unwrap();
+
+    let stored = wait_until(std::time::Duration::from_secs(3), || async {
+        stored_lines(&fixture, work_order.id).contains(&"hello from the job".to_string())
+    })
+    .await;
+    assert!(stored, "the claimant's line is stored for the work order");
+    let sentinel = wait_until(std::time::Duration::from_secs(3), || async {
+        fixture
+            .dal
+            .agent_pod_logs()
+            .list_for_stack(
+                stack.id,
+                chrono::Utc::now() - chrono::Duration::minutes(5),
+                10,
+            )
+            .map(|rows| rows.iter().any(|r| r.line == "sentinel"))
+            .unwrap_or(false)
+    })
+    .await;
+    assert!(
+        sentinel,
+        "the stack line of the other agent is stored, as before"
+    );
+    assert_eq!(
+        stored_lines(&fixture, work_order.id),
+        vec!["hello from the job".to_string()],
+        "a line from an agent that did not claim the work order is dropped"
+    );
+
+    // The owner and an admin read both.
+    for (who, pak) in [("the owner", &owner_pak), ("an admin", &fixture.admin_pak)] {
+        let (status, body) = get_json(
+            &http,
+            format!("{base}/work-orders/{}/logs", work_order.id),
+            pak,
+        )
+        .await;
+        assert_eq!(status, 200, "{who} reads the logs: {body}");
+        let lines = body["lines"].as_array().unwrap();
+        assert_eq!(lines.len(), 1, "{who}: {body}");
+        assert_eq!(lines[0]["line"], "hello from the job");
+        assert_eq!(lines[0]["work_order_id"], work_order.id.to_string());
+        assert!(lines[0]["stack_id"].is_null());
+        assert_eq!(body["retention"]["retention_ceiling_seconds"], 21600);
+
+        let (status, body) = get_json(
+            &http,
+            format!("{base}/work-orders/{}/events", work_order.id),
+            pak,
+        )
+        .await;
+        assert_eq!(status, 200, "{who} reads the events: {body}");
+        let events = body["events"].as_array().unwrap();
+        assert_eq!(events.len(), 1, "{who}: {body}");
+        assert_eq!(events[0]["reason"], "Started");
+    }
+
+    // Another generator, and an agent, do not.
+    for (who, pak) in [
+        ("another generator", &other_pak),
+        ("an agent", &claimant_pak),
+    ] {
+        for kind in ["logs", "events"] {
+            let (status, body) = get_json(
+                &http,
+                format!("{base}/work-orders/{}/{kind}", work_order.id),
+                pak,
+            )
+            .await;
+            assert_eq!(status, 403, "{who} is refused the {kind}: {body}");
+            assert_eq!(body["code"], "work_order_not_owned", "{who}: {body}");
+        }
+    }
+
+    // A work order of an admin is for admins only.
+    let of_an_admin = claimed_work_order(&fixture, None, claimant.id);
+    let (status, body) = get_json(
+        &http,
+        format!("{base}/work-orders/{}/logs", of_an_admin.id),
+        &owner_pak,
+    )
+    .await;
+    assert_eq!(status, 403, "a generator does not read an admin's: {body}");
+    let (status, _) = get_json(
+        &http,
+        format!("{base}/work-orders/{}/logs", of_an_admin.id),
+        &fixture.admin_pak,
+    )
+    .await;
+    assert_eq!(status, 200);
+
+    // An id that no work order has.
+    let (status, body) = get_json(
+        &http,
+        format!("{base}/work-orders/{}/events", Uuid::new_v4()),
+        &fixture.admin_pak,
+    )
+    .await;
+    assert_eq!(status, 404, "{body}");
+    assert_eq!(body["code"], "work_order_not_found");
+}
+
+#[tokio::test]
+async fn work_order_telemetry_is_read_and_written_after_the_work_order_ended() {
+    let fixture = TestFixture::new();
+    let (addr, registry) = spawn_full_broker(&fixture).await;
+    let http = reqwest::Client::new();
+    let base = format!("http://{addr}/api/v1");
+
+    let (owner, owner_pak) = fixture.create_test_generator_with_pak("t0405-ended".into(), None);
+    let (claimant, claimant_pak) = agent_with_pak(&fixture, "t0405-ended-agent");
+    let work_order = claimed_work_order(&fixture, Some(owner.id), claimant.id);
+
+    let (mut ws, _) =
+        tokio_tungstenite::connect_async(ws_request_with_pak(&ws_url(addr), &claimant_pak))
+            .await
+            .unwrap();
+    assert!(wait_for_connection(&registry, claimant.id).await);
+    ws.send(work_order_log_line(
+        claimant.id,
+        work_order.id,
+        "before the end",
+    ))
+    .await
+    .unwrap();
+    assert!(
+        wait_until(std::time::Duration::from_secs(3), || async {
+            stored_lines(&fixture, work_order.id).len() == 1
+        })
+        .await
+    );
+
+    // The work order ends: its row goes, its log entry keeps the id.
+    fixture
+        .dal
+        .work_orders()
+        .complete_success(work_order.id, Some("ok".into()))
+        .unwrap();
+    assert!(
+        fixture
+            .dal
+            .work_orders()
+            .get(work_order.id)
+            .unwrap()
+            .is_none()
+    );
+
+    // The last lines of the job arrive after the end, from the same agent.
+    ws.send(work_order_log_line(
+        claimant.id,
+        work_order.id,
+        "after the end",
+    ))
+    .await
+    .unwrap();
+    assert!(
+        wait_until(std::time::Duration::from_secs(3), || async {
+            stored_lines(&fixture, work_order.id).len() == 2
+        })
+        .await,
+        "a line from the agent in the log entry is stored after the end"
+    );
+
+    let (status, body) = get_json(
+        &http,
+        format!("{base}/work-orders/{}/logs", work_order.id),
+        &owner_pak,
+    )
+    .await;
+    assert_eq!(
+        status, 200,
+        "the owner reads the logs after the end: {body}"
+    );
+    let lines: Vec<&str> = body["lines"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|l| l["line"].as_str().unwrap())
+        .collect();
+    assert_eq!(lines, ["after the end", "before the end"], "newest first");
+}
+
+#[tokio::test]
+async fn eviction_worker_drops_work_order_rows_past_retention() {
+    use brokkr_broker::ws::eviction::{RetentionConfig, run_once};
+    use brokkr_models::models::agent_k8s_events::NewAgentK8sEvent;
+    use brokkr_models::models::agent_pod_logs::NewAgentPodLog;
+
+    let fixture = TestFixture::new();
+    let agent = fixture.create_test_agent("t0405-evict".into(), "cluster".into());
+    let work_order = claimed_work_order(&fixture, None, agent.id);
+    let now = chrono::Utc::now();
+
+    for (line, age_hours) in [("old", 7), ("new", 1)] {
+        let row = fixture
+            .dal
+            .agent_pod_logs()
+            .create(&NewAgentPodLog {
+                agent_id: agent.id,
+                stack_id: None,
+                work_order_id: Some(work_order.id),
+                namespace: "jobs".into(),
+                pod: "job-x".into(),
+                container: "main".into(),
+                ts: now,
+                line: line.into(),
+            })
+            .unwrap();
+        let event = fixture
+            .dal
+            .agent_k8s_events()
+            .create(&NewAgentK8sEvent {
+                agent_id: agent.id,
+                stack_id: None,
+                work_order_id: Some(work_order.id),
+                observed_at: now,
+                reason: line.into(),
+                message: "m".into(),
+                event_type: "Normal".into(),
+                source: None,
+                involved_object: serde_json::json!({"kind": "Job", "name": "job-x"}),
+            })
+            .unwrap();
+
+        use brokkr_models::schema::{agent_k8s_events, agent_pod_logs};
+        use diesel::prelude::*;
+        let conn = &mut fixture.dal.pool.get().unwrap();
+        let at = now - chrono::Duration::hours(age_hours);
+        diesel::update(agent_pod_logs::table.filter(agent_pod_logs::id.eq(row.id)))
+            .set(agent_pod_logs::created_at.eq(at))
+            .execute(conn)
+            .unwrap();
+        diesel::update(agent_k8s_events::table.filter(agent_k8s_events::id.eq(event.id)))
+            .set(agent_k8s_events::created_at.eq(at))
+            .execute(conn)
+            .unwrap();
+    }
+
+    run_once(&fixture.dal, RetentionConfig::default_policy());
+
+    // Read with no lower bound on the time, so only the eviction decides.
+    let far_back = now - chrono::Duration::days(1);
+    let lines: Vec<String> = fixture
+        .dal
+        .agent_pod_logs()
+        .list_for_work_order(work_order.id, far_back, 10)
+        .unwrap()
+        .into_iter()
+        .map(|r| r.line)
+        .collect();
+    assert_eq!(lines, ["new"], "the line past the ceiling is gone");
+    let events: Vec<String> = fixture
+        .dal
+        .agent_k8s_events()
+        .list_for_work_order(work_order.id, far_back, 10)
+        .unwrap()
+        .into_iter()
+        .map(|r| r.reason)
+        .collect();
+    assert_eq!(events, ["new"], "the event past the ceiling is gone");
+}
+
+/// The table refuses a row that names both a stack and a work order, or
+/// neither: each row has exactly one subject.
+#[tokio::test]
+async fn a_telemetry_row_has_exactly_one_subject() {
+    use brokkr_models::models::agent_pod_logs::NewAgentPodLog;
+
+    let fixture = TestFixture::new();
+    let agent = fixture.create_test_agent("t0405-check".into(), "cluster".into());
+    let stack = fixture.create_test_stack("t0405 check".into(), None, fixture.admin_generator.id);
+    let row = |stack_id, work_order_id| NewAgentPodLog {
+        agent_id: agent.id,
+        stack_id,
+        work_order_id,
+        namespace: "ns".into(),
+        pod: "p".into(),
+        container: "c".into(),
+        ts: chrono::Utc::now(),
+        line: "l".into(),
+    };
+    assert!(
+        fixture
+            .dal
+            .agent_pod_logs()
+            .create(&row(None, None))
+            .is_err()
+    );
+    assert!(
+        fixture
+            .dal
+            .agent_pod_logs()
+            .create(&row(Some(stack.id), Some(Uuid::new_v4())))
+            .is_err()
+    );
+    assert!(
+        fixture
+            .dal
+            .agent_pod_logs()
+            .create(&row(Some(stack.id), None))
+            .is_ok()
+    );
+    assert!(
+        fixture
+            .dal
+            .agent_pod_logs()
+            .create(&row(None, Some(Uuid::new_v4())))
+            .is_ok()
+    );
 }

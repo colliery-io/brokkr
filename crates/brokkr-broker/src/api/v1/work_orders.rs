@@ -8,6 +8,10 @@
 
 use crate::api::v1::error::{ApiError, ErrorResponse};
 use crate::api::v1::middleware::AuthPayload;
+use crate::api::v1::stacks::{
+    K8sEventHistoryResponse, PodLogHistoryResponse, TelemetryHistoryQuery, clamp_limit,
+    clamp_since, retention_info,
+};
 use crate::dal::DAL;
 use crate::utils::audit;
 use crate::ws::{ConnectionRegistry, push_work_order};
@@ -42,9 +46,138 @@ pub fn routes() -> Router<DAL> {
             get(get_work_order).delete(delete_work_order),
         )
         .route("/work-orders/:id/claim", post(claim_work_order))
+        .route("/work-orders/:id/events", get(list_work_order_events))
+        .route("/work-orders/:id/logs", get(list_work_order_logs))
         .route("/work-orders/:id/complete", post(complete_work_order))
         .route("/work-order-log", get(list_work_order_log))
         .route("/work-order-log/:id", get(get_work_order_log))
+}
+
+/// Lets the caller read a work order's telemetry, or says why not.
+///
+/// An admin reads each work order. A generator reads the work orders it
+/// owns: the owner on the row or, once the work order ended, on its log
+/// entry. A work order that an admin owns is for admins only
+/// (BROKKR-A-0013).
+fn authorize_work_order_read(
+    dal: &DAL,
+    auth_payload: &AuthPayload,
+    work_order_id: Uuid,
+) -> Result<(), ApiError> {
+    let owner = dal
+        .work_orders()
+        .owner_of(work_order_id)
+        .map_err(|e| {
+            error!(
+                "Failed to read the owner of work order {}: {:?}",
+                work_order_id, e
+            );
+            ApiError::internal("failed to fetch work order")
+        })?
+        .ok_or_else(|| ApiError::not_found("work_order_not_found", "work order not found"))?;
+
+    if auth_payload.admin {
+        return Ok(());
+    }
+    match (auth_payload.generator, owner) {
+        (Some(caller), Some(owner)) if caller == owner => Ok(()),
+        _ => {
+            warn!(
+                "Refused read of the telemetry of work order {}",
+                work_order_id
+            );
+            Err(ApiError::forbidden(
+                "work_order_not_owned",
+                "this work order belongs to another owner",
+            ))
+        }
+    }
+}
+
+/// The Kubernetes events of the job of a work order, newest first.
+///
+/// The agent that claimed the work order sends them. They stay readable
+/// after the work order ends, until the retention ceiling.
+#[utoipa::path(
+    get,
+    path = "/work-orders/{id}/events",
+    tag = "work-orders",
+    params(
+        ("id" = Uuid, Path, description = "Work order ID"),
+        TelemetryHistoryQuery,
+    ),
+    responses(
+        (status = 200, description = "Retained kube events for this work order", body = K8sEventHistoryResponse),
+        (status = 403, description = "Forbidden - the caller is not an admin and does not own the work order", body = ErrorResponse),
+        (status = 404, description = "Work order not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
+    ),
+    security(("admin_pak" = []), ("generator_pak" = []))
+)]
+async fn list_work_order_events(
+    State(dal): State<DAL>,
+    Extension(auth_payload): Extension<AuthPayload>,
+    Path(id): Path<Uuid>,
+    Query(q): Query<TelemetryHistoryQuery>,
+) -> Result<Json<K8sEventHistoryResponse>, ApiError> {
+    authorize_work_order_read(&dal, &auth_payload, id)?;
+    let since = clamp_since(q.since);
+    let limit = clamp_limit(q.limit);
+    let events = dal
+        .agent_k8s_events()
+        .list_for_work_order(id, since, limit)
+        .map_err(|e| {
+            error!("Failed to list k8s events for work order {}: {:?}", id, e);
+            ApiError::internal("failed to list telemetry events")
+        })?;
+    let oldest = events.last().map(|e| e.created_at);
+    Ok(Json(K8sEventHistoryResponse {
+        retention: retention_info(oldest),
+        events,
+    }))
+}
+
+/// The pod log lines of the job of a work order, newest first.
+///
+/// The agent that claimed the work order sends them. They stay readable
+/// after the work order ends, until the retention ceiling.
+#[utoipa::path(
+    get,
+    path = "/work-orders/{id}/logs",
+    tag = "work-orders",
+    params(
+        ("id" = Uuid, Path, description = "Work order ID"),
+        TelemetryHistoryQuery,
+    ),
+    responses(
+        (status = 200, description = "Retained pod log lines for this work order", body = PodLogHistoryResponse),
+        (status = 403, description = "Forbidden - the caller is not an admin and does not own the work order", body = ErrorResponse),
+        (status = 404, description = "Work order not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
+    ),
+    security(("admin_pak" = []), ("generator_pak" = []))
+)]
+async fn list_work_order_logs(
+    State(dal): State<DAL>,
+    Extension(auth_payload): Extension<AuthPayload>,
+    Path(id): Path<Uuid>,
+    Query(q): Query<TelemetryHistoryQuery>,
+) -> Result<Json<PodLogHistoryResponse>, ApiError> {
+    authorize_work_order_read(&dal, &auth_payload, id)?;
+    let since = clamp_since(q.since);
+    let limit = clamp_limit(q.limit);
+    let lines = dal
+        .agent_pod_logs()
+        .list_for_work_order(id, since, limit)
+        .map_err(|e| {
+            error!("Failed to list pod logs for work order {}: {:?}", id, e);
+            ApiError::internal("failed to list telemetry logs")
+        })?;
+    let oldest = lines.last().map(|l| l.created_at);
+    Ok(Json(PodLogHistoryResponse {
+        retention: retention_info(oldest),
+        lines,
+    }))
 }
 
 pub fn agent_routes() -> Router<DAL> {

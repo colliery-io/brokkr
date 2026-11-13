@@ -41,6 +41,23 @@ impl AgentPodLogsDAL<'_> {
             .load::<AgentPodLog>(conn)
     }
 
+    /// The pod log lines of the job of a work order within the retained
+    /// window, newest-first (BROKKR-T-0405).
+    pub fn list_for_work_order(
+        &self,
+        work_order_id: Uuid,
+        since: DateTime<Utc>,
+        limit: i64,
+    ) -> Result<Vec<AgentPodLog>, diesel::result::Error> {
+        let conn = &mut self.dal.conn()?;
+        agent_pod_logs::table
+            .filter(agent_pod_logs::work_order_id.eq(work_order_id))
+            .filter(agent_pod_logs::created_at.ge(since))
+            .order(agent_pod_logs::created_at.desc())
+            .limit(limit)
+            .load::<AgentPodLog>(conn)
+    }
+
     pub fn evict_older_than(&self, cutoff: DateTime<Utc>) -> Result<usize, diesel::result::Error> {
         let conn = &mut self.dal.conn()?;
         diesel::delete(agent_pod_logs::table.filter(agent_pod_logs::created_at.lt(cutoff)))

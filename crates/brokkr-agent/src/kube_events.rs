@@ -214,7 +214,8 @@ async fn handle_event(
 
     let frame = WsMessage::K8sEvent(WireK8sEvent {
         agent_id,
-        stack_id,
+        stack_id: Some(stack_id),
+        work_order_id: None,
         observed_at: ev
             .event_time
             .as_ref()
