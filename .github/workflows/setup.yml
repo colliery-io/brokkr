@@ -34,9 +34,7 @@ jobs:
             ${{ runner.os }}-cargo-
 
       - name: Set up Rust
-        uses: dtolnay/rust-toolchain@1.99
-        with:
-          components: rustfmt, clippy
+        uses: ./.github/actions/setup-rust
 
       - name: Build workspace
         run: cargo build --workspace --all-targets

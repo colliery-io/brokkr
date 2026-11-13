@@ -42,7 +42,7 @@ jobs:
           pip install angreal
 
       - name: Set up Rust
-        uses: dtolnay/rust-toolchain@1.99
+        uses: ./.github/actions/setup-rust
 
       - name: Cache build
         uses: actions/cache@v5
