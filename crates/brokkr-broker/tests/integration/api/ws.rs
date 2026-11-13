@@ -1732,6 +1732,11 @@ fn claimed_work_order(
         .unwrap()
         .owned_by(owner);
     let work_order = fixture.dal.work_orders().create(&new_work_order).unwrap();
+    // An agent has a generator's work order only while it is registered with
+    // that generator (BROKKR-T-0403).
+    if let Some(generator) = owner {
+        fixture.register_agent_with_generator(agent, generator);
+    }
     fixture.create_test_work_order_target(work_order.id, agent);
     fixture
         .dal
