@@ -414,6 +414,7 @@ version = "0.11.1"
 dependencies = [
  "aes-gcm",
  "axum",
+ "brokkr-client",
  "brokkr-models",
  "brokkr-utils",
  "brokkr-wire",
@@ -465,6 +466,7 @@ name = "brokkr-cli"
 version = "0.11.1"
 dependencies = [
  "brokkr-client",
+ "chrono",
  "clap",
  "dirs",
  "serde",

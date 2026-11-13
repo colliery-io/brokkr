@@ -19,6 +19,7 @@ mod health;
 mod pak_scoping;
 mod paks;
 mod registration_consent;
+mod sdk_work_orders;
 mod stacks;
 mod templates;
 mod tenant_reads;
