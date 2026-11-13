@@ -16,6 +16,7 @@
 mod config;
 mod fleet;
 mod generator;
+mod work_order;
 
 use brokkr_client::types::AgentGeneratorRegistration;
 use brokkr_client::{ApplyOutcome, BrokkrClient, BrokkrError};
@@ -94,6 +95,13 @@ enum Command {
     #[command(subcommand, alias = "tenant")]
     Generator(generator::GeneratorCommand),
 
+    /// Launch, follow and delete work orders. Give each work order by its id.
+    ///
+    /// A work order runs one time: an agent applies its YAML and watches it
+    /// to its end. Use a stack for state that an agent keeps.
+    #[command(subcommand)]
+    WorkOrder(work_order::WorkOrderCommand),
+
     /// Say what this PAK is: admin, a generator, or an agent, and the broker.
     Whoami,
 }
@@ -170,6 +178,7 @@ async fn run(cli: Cli) -> Result<(), String> {
         Command::Agent(command) => fleet::agent(&client, command).await,
         Command::Stack(command) => fleet::stack(&client, command).await,
         Command::Generator(command) => generator::generator(&client, command).await,
+        Command::WorkOrder(command) => work_order::work_order(&client, command).await,
         Command::Whoami => generator::whoami(&client).await,
     }
 }

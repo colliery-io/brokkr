@@ -38,9 +38,10 @@ use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 use crate::Client;
 use crate::types::{
     Agent, AgentGeneratorRegistration, AgentRegistrationBody, AuthResponse, CreateAgentRequest,
-    CreateAgentResponse, CreateDeploymentObjectRequest, CreateGeneratorResponse, DeploymentObject,
-    ErrorResponse, Generator, K8sEventHistoryResponse, NewAgentLabel, NewAgentTarget, NewGenerator,
-    NewStack, PodLogHistoryResponse, Stack, StackHealthResponse, WsConnectionsResponse,
+    CreateAgentResponse, CreateDeploymentObjectRequest, CreateGeneratorResponse,
+    CreateWorkOrderRequest, DeploymentObject, ErrorResponse, Generator, K8sEventHistoryResponse,
+    NewAgentLabel, NewAgentTarget, NewGenerator, NewStack, PodLogHistoryResponse, Stack,
+    StackHealthResponse, WorkOrder, WorkOrderLog, WorkOrderTargeting, WsConnectionsResponse,
 };
 use chrono::{DateTime, Utc};
 use std::path::Path;
@@ -1014,6 +1015,146 @@ impl BrokkrClient {
         }
     }
 
+    // -------------------------------------------------------------------
+    // Work orders (BROKKR-T-0407, BROKKR-A-0013).
+    //
+    // A work order runs once: an agent applies its YAML and watches it to
+    // its end. An admin or a generator creates one, and the caller owns it.
+    // The owner and an admin read and delete it. Each method returns the
+    // broker's refusal with its status and its stable code:
+    // `agent_not_registered`, `work_order_not_owned`, `work_order_not_found`,
+    // `work_order_access_denied`.
+    // -------------------------------------------------------------------
+
+    /// Create a work order. The PAK owns it: a generator, or an admin. With
+    /// a generator PAK, each agent in `agent_ids` must be registered with
+    /// the generator, else the broker answers `agent_not_registered` and
+    /// creates nothing. The broker needs one target at least: an agent, a
+    /// label or an annotation.
+    pub async fn create_work_order(
+        &self,
+        spec: NewWorkOrderSpec,
+    ) -> Result<WorkOrder, BrokkrError> {
+        fn some<T>(v: Vec<T>) -> Option<Vec<T>> {
+            if v.is_empty() { None } else { Some(v) }
+        }
+        let annotations = if spec.annotations.is_empty() {
+            None
+        } else {
+            Some(spec.annotations.into_iter().collect())
+        };
+        let body = CreateWorkOrderRequest {
+            work_type: spec.work_type,
+            yaml_content: spec.yaml_content,
+            claim_timeout_seconds: spec.claim_timeout_seconds,
+            max_retries: spec.max_retries,
+            backoff_seconds: spec.backoff_seconds,
+            target_agent_ids: None,
+            targeting: Some(WorkOrderTargeting {
+                agent_ids: some(spec.agent_ids),
+                labels: some(spec.labels),
+                annotations,
+            }),
+        };
+        Ok(self
+            .inner
+            .create_work_order()
+            .body(body)
+            .send()
+            .await?
+            .into_inner())
+    }
+
+    /// The work orders that wait or run and that this PAK can see. An admin
+    /// sees all of them; a generator sees its own. An ended work order is
+    /// not in this list: read it with [`Self::get_work_order`].
+    pub async fn list_work_orders(&self) -> Result<Vec<WorkOrder>, BrokkrError> {
+        Ok(self.inner.list_work_orders().send().await?.into_inner())
+    }
+
+    /// One work order: its owner, or an admin. For an ended work order the
+    /// broker answers from the log, with the status `COMPLETED` or `FAILED`.
+    pub async fn get_work_order(&self, id: Uuid) -> Result<WorkOrder, BrokkrError> {
+        Ok(self
+            .inner
+            .get_work_order()
+            .id(id)
+            .send()
+            .await?
+            .into_inner())
+    }
+
+    /// The log entry of an ended work order: its owner, or an admin. It
+    /// holds the result and its message. The id is the id of the work order.
+    pub async fn get_work_order_log(&self, id: Uuid) -> Result<WorkOrderLog, BrokkrError> {
+        Ok(self
+            .inner
+            .get_work_order_log()
+            .id(id)
+            .send()
+            .await?
+            .into_inner())
+    }
+
+    /// The work orders that ended, newest first, from the work order log.
+    /// An admin sees all of them; a generator sees its own. Each field of
+    /// `filter` that has a value narrows the list.
+    pub async fn list_work_order_log(
+        &self,
+        filter: WorkOrderLogFilter,
+    ) -> Result<Vec<WorkOrderLog>, BrokkrError> {
+        let mut req = self.inner.list_work_order_log();
+        if let Some(work_type) = filter.work_type {
+            req = req.work_type(work_type);
+        }
+        if let Some(success) = filter.success {
+            req = req.success(success);
+        }
+        if let Some(agent_id) = filter.agent_id {
+            req = req.agent_id(agent_id);
+        }
+        if let Some(limit) = filter.limit {
+            req = req.limit(limit);
+        }
+        Ok(req.send().await?.into_inner())
+    }
+
+    /// Delete a work order that has not ended: its owner, or an admin.
+    pub async fn delete_work_order(&self, id: Uuid) -> Result<(), BrokkrError> {
+        self.inner.delete_work_order().id(id).send().await?;
+        Ok(())
+    }
+
+    /// The retained Kubernetes events of the job of a work order: its
+    /// owner, or an admin, also after the work order ended. `limit` defaults
+    /// to the broker's 500.
+    pub async fn work_order_events(
+        &self,
+        id: Uuid,
+        limit: Option<i64>,
+    ) -> Result<K8sEventHistoryResponse, BrokkrError> {
+        let mut req = self.inner.list_work_order_events().id(id);
+        if let Some(limit) = limit {
+            req = req.limit(limit);
+        }
+        Ok(req.send().await?.into_inner())
+    }
+
+    /// The retained pod log lines of the job of a work order: its owner, or
+    /// an admin, also after the work order ended. `limit` defaults to the
+    /// broker's 500.
+    pub async fn work_order_logs(
+        &self,
+        id: Uuid,
+        limit: Option<i64>,
+    ) -> Result<PodLogHistoryResponse, BrokkrError> {
+        let mut req = self.inner.list_work_order_logs().id(id);
+        if let Some(limit) = limit {
+            req = req.limit(limit);
+        }
+        Ok(req.send().await?.into_inner())
+    }
+
     /// Run `op` with exponential backoff on retryable errors.
     ///
     /// The closure is invoked at most `max_retries + 1` times (configured via
@@ -1046,6 +1187,44 @@ impl BrokkrClient {
             }
         }
     }
+}
+
+/// What a new work order needs. See [`BrokkrClient::create_work_order`].
+#[derive(Debug, Clone, Default)]
+pub struct NewWorkOrderSpec {
+    /// The kind of work, for example `custom` or `build`.
+    pub work_type: String,
+    /// The YAML that the agent applies.
+    pub yaml_content: String,
+    /// The agents that can have the work order, by id.
+    pub agent_ids: Vec<Uuid>,
+    /// An agent with one of these labels can have the work order.
+    pub labels: Vec<String>,
+    /// An agent with one of these `(key, value)` annotations can have it.
+    pub annotations: Vec<(String, String)>,
+    /// How long an agent can hold the work order. The broker's default is
+    /// 3600 seconds.
+    pub claim_timeout_seconds: Option<i32>,
+    /// How many times the broker tries again after a failure that can be
+    /// tried again. The broker's default is 3.
+    pub max_retries: Option<i32>,
+    /// The first wait before a new try; it doubles each time. The broker's
+    /// default is 60 seconds.
+    pub backoff_seconds: Option<i32>,
+}
+
+/// What narrows [`BrokkrClient::list_work_order_log`]. An empty filter gives
+/// each ended work order that the PAK can see.
+#[derive(Debug, Clone, Default)]
+pub struct WorkOrderLogFilter {
+    /// Only this type of work, for example `custom`.
+    pub work_type: Option<String>,
+    /// `true`: only the ones that ended with success. `false`: only failures.
+    pub success: Option<bool>,
+    /// Only the ones that this agent ran.
+    pub agent_id: Option<Uuid>,
+    /// At most this many, newest first.
+    pub limit: Option<i64>,
 }
 
 /// The status of an agent that applies deployment objects.

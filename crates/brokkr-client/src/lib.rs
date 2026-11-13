@@ -23,5 +23,5 @@ progenitor::generate_api!(spec = "spec/brokkr-v1.json", interface = Builder,);
 mod wrapper;
 pub use wrapper::{
     AGENT_ACTIVE, AGENT_INACTIVE, ApplyOutcome, BrokkrClient, BrokkrClientBuilder, BrokkrError,
-    normalize_base_url,
+    NewWorkOrderSpec, WorkOrderLogFilter, normalize_base_url,
 };

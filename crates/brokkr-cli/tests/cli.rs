@@ -520,3 +520,204 @@ fn the_old_tenant_names_still_parse() {
         "the old flag parses then needs a connection: {stderr}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Work order commands (BROKKR-T-0407). The calls to the broker are tested in
+// the broker's integration suite (`api::sdk_work_orders`); here: the help, the
+// arguments, and the need for a connection.
+// ---------------------------------------------------------------------------
+
+const WORK_ORDER_ID: &str = "00000000-0000-0000-0000-000000000001";
+
+#[test]
+fn help_lists_the_work_order_commands() {
+    let mut cmd = brokkr();
+    cmd.arg("--help");
+    let (output, stdout, _) = run(cmd);
+    assert!(output.status.success());
+    assert!(stdout.contains("work-order"), "top-level help: {stdout}");
+
+    let mut cmd = brokkr();
+    cmd.args(["work-order", "--help"]);
+    let (output, stdout, _) = run(cmd);
+    assert!(output.status.success());
+    for needle in [
+        "create", "list", "history", "status", "delete", "logs", "events",
+    ] {
+        assert!(
+            stdout.contains(needle),
+            "work-order help missing {needle}: {stdout}"
+        );
+    }
+}
+
+#[test]
+fn work_order_create_help_documents_the_targets_and_the_timing() {
+    let mut cmd = brokkr();
+    cmd.args(["work-order", "create", "--help"]);
+    let (output, stdout, _) = run(cmd);
+    assert!(output.status.success());
+    for needle in [
+        "--filename",
+        "--type",
+        "--agent",
+        "--label",
+        "--annotation",
+        "--claim-timeout",
+        "--max-retries",
+        "--backoff",
+        "owns it",
+    ] {
+        assert!(
+            stdout.contains(needle),
+            "work-order create help missing {needle}: {stdout}"
+        );
+    }
+}
+
+#[test]
+fn work_order_create_needs_a_file_and_one_target() {
+    // No file.
+    let mut cmd = brokkr();
+    cmd.args(["work-order", "create", "--agent", "prod-1"]);
+    let (output, _, stderr) = run(cmd);
+    assert!(!output.status.success());
+    assert!(stderr.contains("--filename"), "{stderr}");
+
+    // A file and no target.
+    let mut cmd = brokkr();
+    cmd.args(["work-order", "create", "-f", "job.yaml"]);
+    let (output, _, stderr) = run(cmd);
+    assert!(!output.status.success());
+    for needle in ["--agent", "--label", "--annotation"] {
+        assert!(stderr.contains(needle), "missing {needle}: {stderr}");
+    }
+}
+
+#[test]
+fn work_order_targets_have_their_shapes() {
+    for (flag, bad, shape) in [
+        ("--label", "env=prod", "key:value"),
+        ("--annotation", "tier:gold", "key=value"),
+    ] {
+        let mut cmd = brokkr();
+        cmd.args(["work-order", "create", "-f", "job.yaml", flag, bad]);
+        let (output, _, stderr) = run(cmd);
+        assert!(!output.status.success());
+        assert!(stderr.contains(shape), "{flag} {bad}: {stderr}");
+    }
+}
+
+#[test]
+fn work_order_commands_take_an_id() {
+    for command in ["status", "delete", "logs", "events"] {
+        // No id.
+        let mut cmd = brokkr();
+        cmd.args(["work-order", command]);
+        let (output, _, stderr) = run(cmd);
+        assert!(!output.status.success(), "{command}");
+        assert!(stderr.contains("<ID>"), "{command}: {stderr}");
+
+        // A name is not an id: a work order has no name.
+        let mut cmd = brokkr();
+        cmd.args(["work-order", command, "nightly-backup"]);
+        let (output, _, stderr) = run(cmd);
+        assert!(!output.status.success(), "{command}");
+        assert!(stderr.contains("nightly-backup"), "{command}: {stderr}");
+    }
+}
+
+#[test]
+fn work_order_commands_parse_then_need_a_connection() {
+    let job = tempfile::NamedTempFile::new().unwrap();
+    std::fs::write(job.path(), "apiVersion: batch/v1\nkind: Job\n").unwrap();
+    let job_path = job.path().to_str().unwrap().to_string();
+
+    let cases: Vec<Vec<&str>> = vec![
+        vec![
+            "work-order",
+            "create",
+            "-f",
+            &job_path,
+            "--agent",
+            "prod-1",
+            "--label",
+            "env:prod",
+            "--annotation",
+            "tier=gold",
+            "--claim-timeout",
+            "600",
+            "--max-retries",
+            "1",
+            "--backoff",
+            "30",
+        ],
+        vec![
+            "work-order",
+            "create",
+            "-f",
+            &job_path,
+            "--type",
+            "build",
+            "--label",
+            "env:prod",
+        ],
+        vec!["work-order", "list"],
+        vec!["work-order", "history"],
+        vec![
+            "work-order",
+            "history",
+            "--type",
+            "custom",
+            "--result",
+            "failure",
+            "--agent",
+            WORK_ORDER_ID,
+            "--limit",
+            "20",
+        ],
+        vec!["work-order", "status", WORK_ORDER_ID],
+        vec!["work-order", "delete", WORK_ORDER_ID],
+        vec!["work-order", "logs", WORK_ORDER_ID, "--limit", "50"],
+        vec!["work-order", "events", WORK_ORDER_ID],
+    ];
+    for args in cases {
+        let mut cmd = sandboxed(brokkr());
+        cmd.args(&args);
+        let (output, _, stderr) = run(cmd);
+        assert!(!output.status.success(), "{args:?}");
+        // The arguments parsed: the failure is the missing connection.
+        assert!(
+            stderr.contains("broker URL") || stderr.contains("BROKKR_BROKER_URL"),
+            "{args:?}: {stderr}"
+        );
+    }
+}
+
+#[test]
+fn work_order_history_help_documents_the_filters() {
+    let mut cmd = brokkr();
+    cmd.args(["work-order", "history", "--help"]);
+    let (output, stdout, _) = run(cmd);
+    assert!(output.status.success());
+    for needle in [
+        "--type", "--result", "--agent", "--limit", "success", "failure", "ended",
+    ] {
+        assert!(
+            stdout.contains(needle),
+            "work-order history help missing {needle}: {stdout}"
+        );
+    }
+}
+
+#[test]
+fn work_order_history_result_is_success_or_failure() {
+    let mut cmd = brokkr();
+    cmd.args(["work-order", "history", "--result", "ok"]);
+    let (output, _, stderr) = run(cmd);
+    assert!(!output.status.success());
+    assert!(
+        stderr.contains("success") && stderr.contains("failure"),
+        "{stderr}"
+    );
+}
