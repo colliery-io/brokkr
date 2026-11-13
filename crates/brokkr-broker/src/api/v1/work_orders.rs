@@ -164,6 +164,32 @@ async fn list_work_orders(
     Ok(Json(work_orders))
 }
 
+/// Refuses the target agents of a generator's work order that are not
+/// registered with the generator. The code is the one the stack target gives
+/// for the same reason.
+pub fn refuse_unregistered_targets(
+    dal: &DAL,
+    owner: Uuid,
+    agent_ids: &[Uuid],
+) -> Result<(), ApiError> {
+    let outside = dal
+        .work_orders()
+        .unregistered_targets(owner, agent_ids)
+        .map_err(|e| {
+            error!("Failed to check the target agents of a work order: {:?}", e);
+            ApiError::internal("failed to check target agents")
+        })?;
+    match outside.first() {
+        None => Ok(()),
+        Some(agent_id) => Err(ApiError::forbidden(
+            "agent_not_registered",
+            format!(
+                "target agent {agent_id} is not registered with the generator that owns the work order"
+            ),
+        )),
+    }
+}
+
 #[utoipa::path(
     post,
     path = "/work-orders",
@@ -236,6 +262,12 @@ async fn create_work_order(
                     format!("target agent {agent_id} not found"),
                 )
             })?;
+    }
+
+    // A generator reaches only the agents registered with it (BROKKR-A-0013).
+    // The check is before the insert, so a refusal leaves no work order row.
+    if let Some(owner) = auth_payload.generator {
+        refuse_unregistered_targets(&dal, owner, &agent_ids)?;
     }
 
     let work_order = dal.work_orders().create(&new_work_order).map_err(|e| {

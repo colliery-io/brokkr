@@ -37,8 +37,8 @@ use brokkr_models::models::work_orders::{
     WorkOrderTarget,
 };
 use brokkr_models::schema::{
-    agent_annotations, agent_labels, work_order_annotations, work_order_labels, work_order_log,
-    work_order_targets, work_orders,
+    agent_annotations, agent_generator_registrations, agent_labels, work_order_annotations,
+    work_order_labels, work_order_log, work_order_targets, work_orders,
 };
 use chrono::{Duration, Utc};
 use diesel::prelude::*;
@@ -170,14 +170,163 @@ impl WorkOrdersDAL<'_> {
     // CLAIM OPERATIONS
     // =========================================================================
 
-    /// Lists pending work orders that are claimable by a specific agent.
+    /// Returns the `(agent_id, work_order_id)` pairs of the PENDING work orders
+    /// that each agent can have. This is the one rule for "can this agent have
+    /// this work order" (BROKKR-T-0403); the pending list, the claim and the
+    /// fleet count all read it.
     ///
-    /// A work order is claimable if:
-    /// - Status is PENDING
-    /// - At least one of the following conditions is met (OR logic):
-    ///   - Agent is in the work_order_targets (hard targets)
-    ///   - Agent has a label matching any of the work order's labels
-    ///   - Agent has an annotation matching any of the work order's annotations
+    /// An agent can have a pending work order if ANY of these holds (OR logic):
+    /// - the agent is a hard target (`work_order_targets`), OR
+    /// - the agent shares a label with the work order, OR
+    /// - the agent shares a `(key, value)` annotation with the work order.
+    ///
+    /// A work order that a generator owns (`owner_generator_id`) reaches only
+    /// the agents registered with that generator: registration is the consent
+    /// boundary (BROKKR-A-0009, BROKKR-A-0013). The gate is on each of the
+    /// three legs, the hard target too: nothing removes a target row when an
+    /// agent is deregistered. A work order with no owner is an admin's and has
+    /// no gate.
+    ///
+    /// # Arguments
+    ///
+    /// * `agent` - Only this agent, or every agent.
+    /// * `work_order` - Only this work order, or every pending work order.
+    pub fn matches(
+        &self,
+        agent: Option<Uuid>,
+        work_order: Option<Uuid>,
+    ) -> Result<HashSet<(Uuid, Uuid)>, diesel::result::Error> {
+        let conn = &mut self.dal.conn()?;
+
+        // (agent_id, work_order_id, owner) of each leg, before the gate.
+        let mut candidates: Vec<(Uuid, Uuid, Option<Uuid>)> = Vec::new();
+
+        // 1. Hard targets.
+        let mut targets = work_order_targets::table
+            .inner_join(work_orders::table)
+            .filter(work_orders::status.eq(WORK_ORDER_STATUS_PENDING))
+            .select((
+                work_order_targets::agent_id,
+                work_orders::id,
+                work_orders::owner_generator_id,
+            ))
+            .into_boxed();
+        if let Some(agent_id) = agent {
+            targets = targets.filter(work_order_targets::agent_id.eq(agent_id));
+        }
+        if let Some(work_order_id) = work_order {
+            targets = targets.filter(work_orders::id.eq(work_order_id));
+        }
+        candidates.extend(targets.load::<(Uuid, Uuid, Option<Uuid>)>(conn)?);
+
+        // 2. Labels: agent_labels joined to work_order_labels on the label.
+        let mut labels = agent_labels::table
+            .inner_join(
+                work_order_labels::table.on(work_order_labels::label.eq(agent_labels::label)),
+            )
+            .inner_join(work_orders::table.on(work_orders::id.eq(work_order_labels::work_order_id)))
+            .filter(work_orders::status.eq(WORK_ORDER_STATUS_PENDING))
+            .select((
+                agent_labels::agent_id,
+                work_orders::id,
+                work_orders::owner_generator_id,
+            ))
+            .into_boxed();
+        if let Some(agent_id) = agent {
+            labels = labels.filter(agent_labels::agent_id.eq(agent_id));
+        }
+        if let Some(work_order_id) = work_order {
+            labels = labels.filter(work_orders::id.eq(work_order_id));
+        }
+        candidates.extend(labels.load::<(Uuid, Uuid, Option<Uuid>)>(conn)?);
+
+        // 3. Annotations: agent_annotations joined to work_order_annotations
+        //    on the (key, value) pair.
+        let mut annotations = agent_annotations::table
+            .inner_join(
+                work_order_annotations::table.on(work_order_annotations::key
+                    .eq(agent_annotations::key)
+                    .and(work_order_annotations::value.eq(agent_annotations::value))),
+            )
+            .inner_join(
+                work_orders::table.on(work_orders::id.eq(work_order_annotations::work_order_id)),
+            )
+            .filter(work_orders::status.eq(WORK_ORDER_STATUS_PENDING))
+            .select((
+                agent_annotations::agent_id,
+                work_orders::id,
+                work_orders::owner_generator_id,
+            ))
+            .into_boxed();
+        if let Some(agent_id) = agent {
+            annotations = annotations.filter(agent_annotations::agent_id.eq(agent_id));
+        }
+        if let Some(work_order_id) = work_order {
+            annotations = annotations.filter(work_orders::id.eq(work_order_id));
+        }
+        candidates.extend(annotations.load::<(Uuid, Uuid, Option<Uuid>)>(conn)?);
+
+        // The gate: a generator's work order, only for its registered agents.
+        let owners: HashSet<Uuid> = candidates.iter().filter_map(|c| c.2).collect();
+        let registered: HashSet<(Uuid, Uuid)> = if owners.is_empty() {
+            HashSet::new()
+        } else {
+            let owners: Vec<Uuid> = owners.into_iter().collect();
+            let mut registrations = agent_generator_registrations::table
+                .filter(agent_generator_registrations::generator_id.eq_any(owners))
+                .select((
+                    agent_generator_registrations::agent_id,
+                    agent_generator_registrations::generator_id,
+                ))
+                .into_boxed();
+            if let Some(agent_id) = agent {
+                registrations =
+                    registrations.filter(agent_generator_registrations::agent_id.eq(agent_id));
+            }
+            registrations
+                .load::<(Uuid, Uuid)>(conn)?
+                .into_iter()
+                .collect()
+        };
+
+        Ok(candidates
+            .into_iter()
+            .filter(|(agent_id, _, owner)| match owner {
+                Some(generator_id) => registered.contains(&(*agent_id, *generator_id)),
+                None => true,
+            })
+            .map(|(agent_id, work_order_id, _)| (agent_id, work_order_id))
+            .collect())
+    }
+
+    /// The agents of `agent_ids` that are not registered with `owner`. A
+    /// generator cannot name one of them as a target of its work order
+    /// (BROKKR-T-0403). The order of `agent_ids` is kept.
+    pub fn unregistered_targets(
+        &self,
+        owner: Uuid,
+        agent_ids: &[Uuid],
+    ) -> Result<Vec<Uuid>, diesel::result::Error> {
+        if agent_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let conn = &mut self.dal.conn()?;
+        let registered: HashSet<Uuid> = agent_generator_registrations::table
+            .filter(agent_generator_registrations::generator_id.eq(owner))
+            .filter(agent_generator_registrations::agent_id.eq_any(agent_ids))
+            .select(agent_generator_registrations::agent_id)
+            .load::<Uuid>(conn)?
+            .into_iter()
+            .collect();
+        Ok(agent_ids
+            .iter()
+            .copied()
+            .filter(|id| !registered.contains(id))
+            .collect())
+    }
+
+    /// Lists pending work orders that are claimable by a specific agent: the
+    /// work orders that [`Self::matches`] gives for the agent.
     ///
     /// # Arguments
     ///
@@ -192,66 +341,16 @@ impl WorkOrdersDAL<'_> {
         agent_id: Uuid,
         work_type: Option<&str>,
     ) -> Result<Vec<WorkOrder>, diesel::result::Error> {
-        let conn = &mut self.dal.conn()?;
-
-        // Get agent's labels
-        let agent_label_list: Vec<String> = agent_labels::table
-            .filter(agent_labels::agent_id.eq(agent_id))
-            .select(agent_labels::label)
-            .load::<String>(conn)?;
-
-        // Get agent's annotations
-        let agent_annotation_list: Vec<(String, String)> = agent_annotations::table
-            .filter(agent_annotations::agent_id.eq(agent_id))
-            .select((agent_annotations::key, agent_annotations::value))
-            .load::<(String, String)>(conn)?;
-
-        let mut matching_work_order_ids: HashSet<Uuid> = HashSet::new();
-
-        // 1. Get work orders where agent is a hard target
-        let hard_target_ids: Vec<Uuid> = work_order_targets::table
-            .inner_join(work_orders::table)
-            .filter(work_order_targets::agent_id.eq(agent_id))
-            .filter(work_orders::status.eq(WORK_ORDER_STATUS_PENDING))
-            .select(work_orders::id)
-            .load::<Uuid>(conn)?;
-
-        matching_work_order_ids.extend(hard_target_ids);
-
-        // 2. Get work orders with labels matching agent's labels (OR logic)
-        if !agent_label_list.is_empty() {
-            let label_matched_ids: Vec<Uuid> = work_order_labels::table
-                .inner_join(work_orders::table)
-                .filter(work_order_labels::label.eq_any(&agent_label_list))
-                .filter(work_orders::status.eq(WORK_ORDER_STATUS_PENDING))
-                .select(work_orders::id)
-                .load::<Uuid>(conn)?;
-
-            matching_work_order_ids.extend(label_matched_ids);
-        }
-
-        // 3. Get work orders with annotations matching agent's annotations (OR logic)
-        if !agent_annotation_list.is_empty() {
-            for (key, value) in &agent_annotation_list {
-                let annotation_matched_ids: Vec<Uuid> = work_order_annotations::table
-                    .inner_join(work_orders::table)
-                    .filter(work_order_annotations::key.eq(key))
-                    .filter(work_order_annotations::value.eq(value))
-                    .filter(work_orders::status.eq(WORK_ORDER_STATUS_PENDING))
-                    .select(work_orders::id)
-                    .load::<Uuid>(conn)?;
-
-                matching_work_order_ids.extend(annotation_matched_ids);
-            }
-        }
-
-        if matching_work_order_ids.is_empty() {
+        let ids: Vec<Uuid> = self
+            .matches(Some(agent_id), None)?
+            .into_iter()
+            .map(|(_, work_order_id)| work_order_id)
+            .collect();
+        if ids.is_empty() {
             return Ok(vec![]);
         }
 
-        // Load and filter the matching work orders
-        let ids: Vec<Uuid> = matching_work_order_ids.into_iter().collect();
-
+        let conn = &mut self.dal.conn()?;
         let mut query = work_orders::table
             .filter(work_orders::id.eq_any(&ids))
             .filter(work_orders::status.eq(WORK_ORDER_STATUS_PENDING))
@@ -289,74 +388,20 @@ impl WorkOrdersDAL<'_> {
             .load::<(Uuid, i64)>(conn)
     }
 
-    /// Returns, per agent, the number of distinct PENDING work orders that agent
-    /// is eligible to claim — computed with a handful of bounded set-based
-    /// queries rather than calling [`list_pending_for_agent`] once per agent.
-    ///
-    /// The matching semantics exactly mirror [`list_pending_for_agent`] (the
-    /// per-agent ground truth): an agent matches a PENDING work order if ANY of
-    /// the following hold (OR logic):
-    /// - the agent is a hard target (`work_order_targets`), OR
-    /// - the agent shares a label with the work order, OR
-    /// - the agent shares a `(key, value)` annotation with the work order.
-    ///
-    /// Each matched `(agent_id, work_order_id)` pair is de-duplicated before
-    /// counting so a work order matched by multiple mechanisms is counted once
-    /// per agent.
+    /// Returns, per agent, the number of distinct PENDING work orders that the
+    /// agent can have: the pairs of [`Self::matches`] for every agent, counted
+    /// per agent. So the count is the length of [`Self::list_pending_for_agent`]
+    /// for each agent, with no query per agent.
     ///
     /// # Returns
     ///
     /// Returns a Vec of `(agent_id, pending_count)` pairs, or a
     /// diesel::result::Error on failure.
     pub fn pending_counts_by_agent(&self) -> Result<Vec<(Uuid, i64)>, diesel::result::Error> {
-        let conn = &mut self.dal.conn()?;
-
-        // Accumulate the distinct set of (agent_id, work_order_id) matches.
-        let mut matches: HashSet<(Uuid, Uuid)> = HashSet::new();
-
-        // 1. Hard targets: every (agent, pending work order) target pair.
-        let target_pairs: Vec<(Uuid, Uuid)> = work_order_targets::table
-            .inner_join(work_orders::table)
-            .filter(work_orders::status.eq(WORK_ORDER_STATUS_PENDING))
-            .select((work_order_targets::agent_id, work_orders::id))
-            .load::<(Uuid, Uuid)>(conn)?;
-        matches.extend(target_pairs);
-
-        // 2. Label matches: join agent_labels to work_order_labels on equal
-        //    label text, restricted to pending work orders.
-        let label_pairs: Vec<(Uuid, Uuid)> = agent_labels::table
-            .inner_join(
-                work_order_labels::table.on(work_order_labels::label.eq(agent_labels::label)),
-            )
-            .inner_join(work_orders::table.on(work_orders::id.eq(work_order_labels::work_order_id)))
-            .filter(work_orders::status.eq(WORK_ORDER_STATUS_PENDING))
-            .select((agent_labels::agent_id, work_orders::id))
-            .load::<(Uuid, Uuid)>(conn)?;
-        matches.extend(label_pairs);
-
-        // 3. Annotation matches: join agent_annotations to
-        //    work_order_annotations on equal (key, value), restricted to
-        //    pending work orders.
-        let annotation_pairs: Vec<(Uuid, Uuid)> = agent_annotations::table
-            .inner_join(
-                work_order_annotations::table.on(work_order_annotations::key
-                    .eq(agent_annotations::key)
-                    .and(work_order_annotations::value.eq(agent_annotations::value))),
-            )
-            .inner_join(
-                work_orders::table.on(work_orders::id.eq(work_order_annotations::work_order_id)),
-            )
-            .filter(work_orders::status.eq(WORK_ORDER_STATUS_PENDING))
-            .select((agent_annotations::agent_id, work_orders::id))
-            .load::<(Uuid, Uuid)>(conn)?;
-        matches.extend(annotation_pairs);
-
-        // Aggregate distinct matches into per-agent counts.
         let mut counts: std::collections::HashMap<Uuid, i64> = std::collections::HashMap::new();
-        for (agent_id, _work_order_id) in matches {
+        for (agent_id, _work_order_id) in self.matches(None, None)? {
             *counts.entry(agent_id).or_insert(0) += 1;
         }
-
         Ok(counts.into_iter().collect())
     }
 
@@ -365,10 +410,7 @@ impl WorkOrdersDAL<'_> {
     /// This operation will only succeed if:
     /// - The work order exists
     /// - The work order status is PENDING
-    /// - At least one of the following conditions is met (OR logic):
-    ///   - Agent is in the work_order_targets (hard targets)
-    ///   - Agent has a label matching any of the work order's labels
-    ///   - Agent has an annotation matching any of the work order's annotations
+    /// - The agent can have the work order: [`Self::matches`] has the pair
     ///
     /// # Arguments
     ///
@@ -384,15 +426,16 @@ impl WorkOrdersDAL<'_> {
         work_order_id: Uuid,
         agent_id: Uuid,
     ) -> Result<WorkOrder, diesel::result::Error> {
-        let conn = &mut self.dal.conn()?;
-
-        // Check if agent is authorized via any targeting mechanism (OR logic)
-        let is_authorized =
-            self.is_agent_authorized_for_work_order(conn, work_order_id, agent_id)?;
-
-        if !is_authorized {
+        // The one rule: target, label or annotation, inside the registrations
+        // of the owner when a generator owns the work order.
+        if !self
+            .matches(Some(agent_id), Some(work_order_id))?
+            .contains(&(agent_id, work_order_id))
+        {
             return Err(diesel::result::Error::NotFound);
         }
+
+        let conn = &mut self.dal.conn()?;
 
         // Atomically update the work order status to CLAIMED
         let now = Utc::now();
@@ -421,72 +464,6 @@ impl WorkOrdersDAL<'_> {
         );
 
         Ok(work_order)
-    }
-
-    /// Checks if an agent is authorized to claim a work order using any targeting mechanism.
-    ///
-    /// Returns true if the agent matches via hard targets, labels, or annotations.
-    fn is_agent_authorized_for_work_order(
-        &self,
-        conn: &mut diesel::pg::PgConnection,
-        work_order_id: Uuid,
-        agent_id: Uuid,
-    ) -> Result<bool, diesel::result::Error> {
-        // 1. Check hard targets
-        let target_exists: bool = work_order_targets::table
-            .filter(work_order_targets::work_order_id.eq(work_order_id))
-            .filter(work_order_targets::agent_id.eq(agent_id))
-            .select(diesel::dsl::count_star().gt(0))
-            .first(conn)?;
-
-        if target_exists {
-            return Ok(true);
-        }
-
-        // 2. Check label matching
-        // Get the work order's labels
-        let work_order_label_list: Vec<String> = work_order_labels::table
-            .filter(work_order_labels::work_order_id.eq(work_order_id))
-            .select(work_order_labels::label)
-            .load::<String>(conn)?;
-
-        if !work_order_label_list.is_empty() {
-            // Check if agent has any of these labels
-            let agent_has_label: i64 = agent_labels::table
-                .filter(agent_labels::agent_id.eq(agent_id))
-                .filter(agent_labels::label.eq_any(&work_order_label_list))
-                .select(diesel::dsl::count_star())
-                .first(conn)?;
-
-            if agent_has_label > 0 {
-                return Ok(true);
-            }
-        }
-
-        // 3. Check annotation matching
-        // Get the work order's annotations
-        let work_order_annotation_list: Vec<(String, String)> = work_order_annotations::table
-            .filter(work_order_annotations::work_order_id.eq(work_order_id))
-            .select((work_order_annotations::key, work_order_annotations::value))
-            .load::<(String, String)>(conn)?;
-
-        if !work_order_annotation_list.is_empty() {
-            // Check if agent has any of these key-value pairs
-            for (key, value) in &work_order_annotation_list {
-                let agent_has_annotation: i64 = agent_annotations::table
-                    .filter(agent_annotations::agent_id.eq(agent_id))
-                    .filter(agent_annotations::key.eq(key))
-                    .filter(agent_annotations::value.eq(value))
-                    .select(diesel::dsl::count_star())
-                    .first(conn)?;
-
-                if agent_has_annotation > 0 {
-                    return Ok(true);
-                }
-            }
-        }
-
-        Ok(false)
     }
 
     /// Releases a claimed work order back to PENDING status.
