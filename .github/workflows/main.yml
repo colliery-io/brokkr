@@ -46,6 +46,7 @@ jobs:
               - '.angreal/**'
               - '.github/workflows/main.yml'
               - '.github/workflows/integration_tests.yml'
+              - '.github/actions/setup-rust/**'
             sdk_contract:
               - 'crates/brokkr-broker/**'
               - 'crates/brokkr-client/**'
@@ -57,6 +58,7 @@ jobs:
               - '.angreal/task_tests.py'
               - '.github/workflows/main.yml'
               - '.github/workflows/sdk_contract_tests.yml'
+              - '.github/actions/setup-rust/**'
             # Anything that can change the emitted spec. `models/**` matters as
             # much as `api/**`: a doc comment on a model is rendered into the
             # spec description, and exactly that went undetected for several
@@ -73,6 +75,7 @@ jobs:
               - '.angreal/task_openapi.py'
               - '.github/workflows/main.yml'
               - '.github/workflows/openapi.yml'
+              - '.github/actions/setup-rust/**'
             # The operator console is outside the root workspace, so `code`
             # does not cover its gates (BROKKR-T-0351).
             console:
@@ -85,6 +88,7 @@ jobs:
               - 'tests/e2e/**'
               - '.angreal/files/**'
               - '.github/workflows/e2e_scenarios.yml'
+              - '.github/actions/setup-rust/**'
             # The BDD features (BROKKR-T-0385) drive the CLI, the agent and
             # the broker, so a change to any of them runs the features.
             bdd:
@@ -98,6 +102,7 @@ jobs:
               - '.angreal/files/**'
               - '.github/workflows/main.yml'
               - '.github/workflows/bdd.yml'
+              - '.github/actions/setup-rust/**'
 
   integration_tests:
     needs: [setup, changes]
