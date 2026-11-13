@@ -1941,10 +1941,11 @@ async fn work_order_telemetry_is_stored_from_the_claimant_and_read_by_the_owner(
         assert_eq!(events[0]["reason"], "Started");
     }
 
-    // Another generator, and an agent, do not.
-    for (who, pak) in [
-        ("another generator", &other_pak),
-        ("an agent", &claimant_pak),
+    // Another generator, and an agent, do not. An agent PAK has no place on
+    // the work order routes for people (BROKKR-T-0404).
+    for (who, pak, code) in [
+        ("another generator", &other_pak, "work_order_not_owned"),
+        ("an agent", &claimant_pak, "work_order_access_denied"),
     ] {
         for kind in ["logs", "events"] {
             let (status, body) = get_json(
@@ -1954,7 +1955,7 @@ async fn work_order_telemetry_is_stored_from_the_claimant_and_read_by_the_owner(
             )
             .await;
             assert_eq!(status, 403, "{who} is refused the {kind}: {body}");
-            assert_eq!(body["code"], "work_order_not_owned", "{who}: {body}");
+            assert_eq!(body["code"], code, "{who}: {body}");
         }
     }
 

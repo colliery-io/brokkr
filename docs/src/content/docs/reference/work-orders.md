@@ -85,6 +85,22 @@ Additional constraints on the Job path:
 
 ## API Reference
 
+### Who May Call
+
+| Route | Admin PAK | Generator PAK | Agent PAK |
+|-------|-----------|---------------|-----------|
+| `POST /work-orders` | Yes. The work order is admin-owned. | Yes. The generator owns it, and each target agent must be registered with it. | No |
+| `GET /work-orders` | Each work order | The work orders it owns | No |
+| `GET /work-orders/{id}` | Yes | Only if it owns the work order | No |
+| `DELETE /work-orders/{id}` | Yes | Only if it owns the work order | No |
+| `GET /work-order-log` | Each entry | The entries of the work orders it owned | No |
+| `GET /work-order-log/{id}` | Yes | Only if it owned the work order | No |
+| `GET /agents/{id}/work-orders/pending`, claim, complete | Yes | No | The agent itself |
+
+A generator that asks for a work order of another generator, or of an admin, gets `403 work_order_not_owned`. This is also the answer when the admin's work order targets the generator's own agents. An agent PAK on a route for people gets `403 work_order_access_denied`.
+
+The examples below use an admin PAK. A generator PAK works the same way on the routes of the table.
+
 ### Create Work Order
 
 ```bash

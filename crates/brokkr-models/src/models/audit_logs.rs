@@ -71,6 +71,7 @@ pub const ACTION_WORKORDER_CLAIMED: &str = "workorder.claimed";
 pub const ACTION_WORKORDER_COMPLETED: &str = "workorder.completed";
 pub const ACTION_WORKORDER_FAILED: &str = "workorder.failed";
 pub const ACTION_WORKORDER_RETRY: &str = "workorder.retry";
+pub const ACTION_WORKORDER_DELETED: &str = "workorder.deleted";
 
 // Action constants - Admin
 pub const ACTION_CONFIG_RELOADED: &str = "config.reloaded";

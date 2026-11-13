@@ -7474,7 +7474,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description List of completed work orders */
+            /** @description The log entries the caller may read: each one for an admin, those of its own work orders for a generator */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7483,7 +7483,7 @@ export interface operations {
                     "application/json": components["schemas"]["WorkOrderLog"][];
                 };
             };
-            /** @description Forbidden - requires admin PAK */
+            /** @description Forbidden - requires an admin PAK or a generator PAK */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -7524,7 +7524,7 @@ export interface operations {
                     "application/json": components["schemas"]["WorkOrderLog"];
                 };
             };
-            /** @description Forbidden - requires admin PAK */
+            /** @description Forbidden - requires an admin PAK, or the PAK of the generator that owned the work order */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -7567,7 +7567,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description List of work orders */
+            /** @description The work orders the caller may read: each one for an admin, its own for a generator */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7576,7 +7576,7 @@ export interface operations {
                     "application/json": components["schemas"]["WorkOrder"][];
                 };
             };
-            /** @description Forbidden - requires admin PAK */
+            /** @description Forbidden - requires an admin PAK or a generator PAK */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -7609,7 +7609,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Work order created */
+            /** @description Work order created; the caller owns it */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -7627,8 +7627,17 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Forbidden - requires admin PAK */
+            /** @description Forbidden - requires an admin PAK or a generator PAK; or a generator named a target agent that is not registered with it */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description A target agent was not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7668,7 +7677,7 @@ export interface operations {
                     "application/json": components["schemas"]["WorkOrder"];
                 };
             };
-            /** @description Forbidden - requires admin PAK */
+            /** @description Forbidden - requires an admin PAK, or the PAK of the generator that owns the work order */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -7716,7 +7725,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Forbidden - requires admin PAK */
+            /** @description Forbidden - requires an admin PAK, or the PAK of the generator that owns the work order */
             403: {
                 headers: {
                     [name: string]: unknown;
