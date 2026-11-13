@@ -633,6 +633,132 @@ NAME      ID                                    LABELS
 payments  c4ba105f-4332-447b-8af5-63f8e69ee89c  env:prod
 ```
 
+### Work orders: `brokkr work-order`
+
+A work order runs one time: an agent applies its YAML and watches it to its end. Use a stack for state that an agent keeps. An admin PAK or a generator PAK creates a work order, and the PAK that creates it owns it. The owner and an admin read and delete it. A work order has no name: each command takes its id.
+
+| Command | What it does |
+|---------|--------------|
+| `brokkr work-order create` | Creates a work order from a file of YAML. |
+| `brokkr work-order list` | Lists the work orders that wait or run. |
+| `brokkr work-order status <ID>` | Shows the status of one work order, and its result when it has ended. |
+| `brokkr work-order delete <ID>` | Deletes a work order that has not ended. |
+| `brokkr work-order logs <ID>` | Shows the retained pod log lines of a work order. |
+| `brokkr work-order events <ID>` | Shows the retained Kubernetes events of a work order. |
+
+#### `brokkr work-order create`
+
+| Flag | Meaning |
+|------|---------|
+| `-f`, `--filename <PATH>` | The file of YAML that the agent applies, for example a Job. Required. |
+| `--type <TYPE>` | The type of work: `custom` (the default) or `build`. |
+| `--agent <NAME_OR_ID>` | An agent that can have the work order. Repeatable. |
+| `--label <LABEL>` | An agent with this label can have the work order. The form is `key:value`. Repeatable. |
+| `--annotation <KEY=VALUE>` | An agent with this annotation can have the work order. The form is `key=value`. Repeatable. |
+| `--claim-timeout <SECONDS>` | How long an agent can hold the work order. After this time the broker gives it to the queue again. The broker's default is 3600. |
+| `--max-retries <N>` | How many times the broker tries again after a failure. The broker's default is 3. |
+| `--backoff <SECONDS>` | The wait before the first new try. The wait doubles for each new try. The broker's default is 60. |
+
+Give one target at least: `--agent`, `--label` or `--annotation`. An agent that matches one of the targets can claim the work order.
+
+```bash
+brokkr work-order create -f backup-job.yaml --agent prod-1 --claim-timeout 600
+```
+
+```
+created work order 7c1f4a52-9d3e-4b8a-a6f0-2e5d8c9b1a34 (type custom)
+targets: agent "prod-1"
+An agent that matches a target claims the work order on its next poll.
+To follow it, run: brokkr work-order status 7c1f4a52-9d3e-4b8a-a6f0-2e5d8c9b1a34
+```
+
+With a generator PAK, each agent of the work order must be registered with the generator. A label or an annotation matches only the agents that are registered with the generator. If an agent given with `--agent` is not registered, the broker creates nothing, and the error gives the command that registers it:
+
+```
+error: agent "prod-2" (<agent-id>) is not registered with your generator, so the generator cannot send it a work order. The broker created nothing. An admin registers it: brokkr register --agent <agent-id> --generator <generator-id>
+```
+
+This is `POST /api/v1/work-orders`.
+
+#### `brokkr work-order list`
+
+Lists the work orders that wait or run, with their id, type, status, owner and age. An admin PAK lists all of them. A generator PAK lists the work orders of its generator. The owner is the name of a generator, or `admin`.
+
+```bash
+brokkr work-order list
+```
+
+```
+ID                                    TYPE    STATUS   OWNER       AGE
+7c1f4a52-9d3e-4b8a-a6f0-2e5d8c9b1a34  custom  CLAIMED  admin       2m
+1e0d9c8b-7a6f-4e5d-8c3b-2a1f0e9d8c7b  build   PENDING  team-robin  45s
+```
+
+A work order that ended is not in this list. Use `brokkr work-order status` with its id.
+
+#### `brokkr work-order status`
+
+Shows one work order. The statuses are:
+
+| Status | Meaning |
+|--------|---------|
+| `PENDING` | No agent has claimed it yet. |
+| `CLAIMED` | An agent runs it. |
+| `RETRY_PENDING` | A try failed, and the broker waits before it gives the work order to the queue again. |
+| `COMPLETED` | It ended with success. |
+| `FAILED` | It ended with a failure. |
+
+For a work order that ended, the command reads the work order log and shows the result and its message.
+
+```bash
+brokkr work-order status 7c1f4a52-9d3e-4b8a-a6f0-2e5d8c9b1a34
+```
+
+```
+work order 7c1f4a52-9d3e-4b8a-a6f0-2e5d8c9b1a34
+type: custom
+owner: admin
+created: 2026-11-13T10:00:00+00:00
+status: COMPLETED at 2026-11-13T10:02:10+00:00. agent "prod-1" ran it. Tries after the first: 0.
+result: success
+message: none
+To see the lines of its pods, run: brokkr work-order logs 7c1f4a52-9d3e-4b8a-a6f0-2e5d8c9b1a34
+```
+
+These are `GET /api/v1/work-orders/{id}` and, for a work order that ended, `GET /api/v1/work-order-log/{id}`.
+
+#### `brokkr work-order delete`
+
+Deletes a work order that has not ended. A work order that ended stays in the work order log and cannot be deleted.
+
+```bash
+brokkr work-order delete 7c1f4a52-9d3e-4b8a-a6f0-2e5d8c9b1a34
+```
+
+```
+deleted work order 7c1f4a52-9d3e-4b8a-a6f0-2e5d8c9b1a34
+```
+
+#### `brokkr work-order logs` and `brokkr work-order events`
+
+The retained pod log lines of the job of a work order, and its retained Kubernetes events. The agent that runs the work order sends them. The broker keeps a short window (at most six hours), also after the work order ended. `--limit N` caps the rows, newest first; the broker's default is 500. The output has the shape of `brokkr stack logs` and `brokkr stack events`.
+
+```bash
+brokkr work-order logs 7c1f4a52-9d3e-4b8a-a6f0-2e5d8c9b1a34 --limit 50
+brokkr work-order events 7c1f4a52-9d3e-4b8a-a6f0-2e5d8c9b1a34
+```
+
+These are `GET /api/v1/work-orders/{id}/logs` and `GET /api/v1/work-orders/{id}/events`.
+
+#### Refusals
+
+| The broker answers | The command says |
+|--------------------|------------------|
+| `404 work_order_not_found` | No work order has the id. The command names `brokkr work-order list`. |
+| `403 work_order_not_owned` | The work order belongs to another owner. Use the PAK of the generator that owns it, or an admin PAK. |
+| `403 work_order_access_denied` | An agent PAK cannot use the work order commands. Use a generator PAK or an admin PAK. |
+| `403 agent_not_registered` | An agent of the work order is not registered with the generator. The command names `brokkr register`. |
+
 ---
 
 ## Examples

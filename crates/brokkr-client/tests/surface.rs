@@ -30,6 +30,13 @@ fn client_exposes_baseline_operations() {
     let _ = c.create_work_order();
     let _ = c.claim_work_order();
     let _ = c.complete_work_order();
+    // The work order routes for people, which the `brokkr work-order`
+    // commands call (BROKKR-T-0407).
+    let _ = c.get_work_order();
+    let _ = c.delete_work_order();
+    let _ = c.get_work_order_log();
+    let _ = c.list_work_order_logs();
+    let _ = c.list_work_order_events();
     let _ = c.verify_pak();
     let _ = c.update_health_status();
     let _ = c.list_webhooks();
