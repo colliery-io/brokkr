@@ -276,7 +276,8 @@ async fn tail_container(
                         Allowance::Allow => {
                             let msg = WsMessage::PodLogLine(PodLogLine {
                                 agent_id,
-                                stack_id,
+                                stack_id: Some(stack_id),
+                                work_order_id: None,
                                 namespace: namespace.clone(),
                                 pod: pod.clone(),
                                 container: container.clone(),

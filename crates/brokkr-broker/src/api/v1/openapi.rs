@@ -145,6 +145,8 @@ use utoipa_swagger_ui::SwaggerUi;
         work_orders::get_work_order,
         work_orders::delete_work_order,
         work_orders::claim_work_order,
+        work_orders::list_work_order_events,
+        work_orders::list_work_order_logs,
         work_orders::complete_work_order,
         work_orders::list_pending_for_agent,
         work_orders::list_work_order_log,

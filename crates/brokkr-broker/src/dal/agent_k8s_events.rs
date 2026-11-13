@@ -46,6 +46,24 @@ impl AgentK8sEventsDAL<'_> {
             .load::<AgentK8sEvent>(conn)
     }
 
+    /// The events of the job of a work order within the retained window,
+    /// newest-first (BROKKR-T-0405). The id is the work order's, which its
+    /// log entry keeps after the work order ends.
+    pub fn list_for_work_order(
+        &self,
+        work_order_id: Uuid,
+        since: DateTime<Utc>,
+        limit: i64,
+    ) -> Result<Vec<AgentK8sEvent>, diesel::result::Error> {
+        let conn = &mut self.dal.conn()?;
+        agent_k8s_events::table
+            .filter(agent_k8s_events::work_order_id.eq(work_order_id))
+            .filter(agent_k8s_events::created_at.ge(since))
+            .order(agent_k8s_events::created_at.desc())
+            .limit(limit)
+            .load::<AgentK8sEvent>(conn)
+    }
+
     /// Delete rows older than `cutoff`. Returns row count.
     pub fn evict_older_than(&self, cutoff: DateTime<Utc>) -> Result<usize, diesel::result::Error> {
         let conn = &mut self.dal.conn()?;

@@ -91,7 +91,8 @@ fn sample_messages() -> Vec<WsMessage> {
         }),
         WsMessage::K8sEvent(K8sEvent {
             agent_id,
-            stack_id,
+            stack_id: Some(stack_id),
+            work_order_id: None,
             observed_at: ts,
             reason: "Pulled".to_string(),
             message: "Successfully pulled image".to_string(),
@@ -107,7 +108,8 @@ fn sample_messages() -> Vec<WsMessage> {
         }),
         WsMessage::PodLogLine(PodLogLine {
             agent_id,
-            stack_id,
+            stack_id: Some(stack_id),
+            work_order_id: None,
             namespace: "demo".to_string(),
             pod: "demo-abc".to_string(),
             container: "app".to_string(),
@@ -237,4 +239,82 @@ fn a_work_order_with_no_owner_field_still_parses() {
     });
     let work_order: WorkOrder = serde_json::from_value(old).expect("the old shape parses");
     assert_eq!(work_order.owner_generator_id, None);
+}
+
+/// An agent from before 0.12.0 sends a kube event and a pod log line with a
+/// stack id and no work order id (BROKKR-T-0405). Both still parse, and they
+/// are about the stack.
+#[test]
+fn telemetry_frames_of_the_old_shape_still_parse() {
+    let stack_id = Uuid::parse_str("22222222-2222-2222-2222-222222222222").unwrap();
+    let old_event = serde_json::json!({
+        "type": "k8s_event",
+        "body": {
+            "agent_id": "11111111-1111-1111-1111-111111111111",
+            "stack_id": stack_id,
+            "observed_at": "2026-01-01T00:00:00Z",
+            "reason": "Pulled",
+            "message": "Successfully pulled image",
+            "event_type": "Normal",
+            "source": "kubelet",
+            "involved_object": {
+                "api_version": "v1",
+                "kind": "Pod",
+                "namespace": "demo",
+                "name": "demo-abc",
+                "uid": null
+            }
+        }
+    });
+    let old_line = serde_json::json!({
+        "type": "pod_log_line",
+        "body": {
+            "agent_id": "11111111-1111-1111-1111-111111111111",
+            "stack_id": stack_id,
+            "namespace": "demo",
+            "pod": "demo-abc",
+            "container": "app",
+            "ts": "2026-01-01T00:00:00Z",
+            "line": "starting up"
+        }
+    });
+
+    let WsMessage::K8sEvent(event) = serde_json::from_value(old_event).expect("the old event")
+    else {
+        panic!("wrong variant")
+    };
+    assert_eq!(event.stack_id, Some(stack_id));
+    assert_eq!(event.work_order_id, None);
+
+    let WsMessage::PodLogLine(line) = serde_json::from_value(old_line).expect("the old line")
+    else {
+        panic!("wrong variant")
+    };
+    assert_eq!(line.stack_id, Some(stack_id));
+    assert_eq!(line.work_order_id, None);
+}
+
+/// A frame of a work order has a work order id and no stack id.
+#[test]
+fn a_telemetry_frame_of_a_work_order_round_trips() {
+    let work_order_id = Uuid::parse_str("33333333-3333-3333-3333-333333333333").unwrap();
+    let frame = WsMessage::PodLogLine(PodLogLine {
+        agent_id: Uuid::parse_str("11111111-1111-1111-1111-111111111111").unwrap(),
+        stack_id: None,
+        work_order_id: Some(work_order_id),
+        namespace: "jobs".to_string(),
+        pod: "job-x".to_string(),
+        container: "main".to_string(),
+        ts: chrono::Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap(),
+        line: "hello".to_string(),
+    });
+    let json = serde_json::to_value(&frame).expect("serialize");
+    assert!(json["body"]["stack_id"].is_null());
+    assert_eq!(json["body"]["work_order_id"], work_order_id.to_string());
+    let WsMessage::PodLogLine(back) = serde_json::from_value(json).expect("parse") else {
+        panic!("wrong variant")
+    };
+    assert_eq!(back.stack_id, None);
+    assert_eq!(back.work_order_id, Some(work_order_id));
+    assert_eq!(back.line, "hello");
 }

@@ -252,6 +252,33 @@ Authorization: Bearer <admin-pak>
 | `agent_id` | Filter by agent that executed |
 | `limit` | Maximum results to return |
 
+### Pod Logs and Events of a Work Order
+
+The agent that claimed a work order sends the pod log lines and the Kubernetes events of its job. They stay readable after the work order ends: the id is the same in the work order log.
+
+```bash
+# The pod log lines of the job, newest first
+GET /api/v1/work-orders/:id/logs?since=<ISO-8601>&limit=500
+Authorization: Bearer <admin-pak or the owner's generator-pak>
+
+# The Kubernetes events of the job, newest first
+GET /api/v1/work-orders/:id/events?since=<ISO-8601>&limit=500
+Authorization: Bearer <admin-pak or the owner's generator-pak>
+```
+
+The query parameters and the response are those of `GET /api/v1/stacks/:id/logs` and `GET /api/v1/stacks/:id/events`. Each row has a `work_order_id` and no `stack_id`.
+
+| Who | Result |
+|-----|--------|
+| An admin | Reads each work order. |
+| The generator that owns the work order | Reads it. |
+| Another generator, or any generator for a work order that an admin owns | `403 work_order_not_owned` |
+| An id that no work order and no log entry has | `404 work_order_not_found` |
+
+The broker stores a line or an event of a work order only from the agent that claimed it. It drops any other.
+
+Retention is the same as for a stack: at most 6 hours. Brokkr is not a log store.
+
 ## Retry Behavior
 
 When a work order fails:

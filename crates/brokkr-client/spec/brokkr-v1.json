@@ -302,14 +302,21 @@
             "type": "string"
           },
           "stack_id": {
+            "description": "The stack the row belongs to. No value: it belongs to a work order.",
             "format": "uuid",
+            "nullable": true,
+            "type": "string"
+          },
+          "work_order_id": {
+            "description": "The work order the row belongs to. No value: it belongs to a stack.\nExactly one of `stack_id` and `work_order_id` has a value (BROKKR-T-0405).",
+            "format": "uuid",
+            "nullable": true,
             "type": "string"
           }
         },
         "required": [
           "id",
           "agent_id",
-          "stack_id",
           "observed_at",
           "reason",
           "message",
@@ -371,18 +378,25 @@
             "type": "string"
           },
           "stack_id": {
+            "description": "The stack the row belongs to. No value: it belongs to a work order.",
             "format": "uuid",
+            "nullable": true,
             "type": "string"
           },
           "ts": {
             "format": "date-time",
+            "type": "string"
+          },
+          "work_order_id": {
+            "description": "The work order the row belongs to. No value: it belongs to a stack.\nExactly one of `stack_id` and `work_order_id` has a value (BROKKR-T-0405).",
+            "format": "uuid",
+            "nullable": true,
             "type": "string"
           }
         },
         "required": [
           "id",
           "agent_id",
-          "stack_id",
           "namespace",
           "pod",
           "container",
@@ -9957,6 +9971,194 @@
             "agent_pak": []
           }
         ],
+        "tags": [
+          "work-orders"
+        ]
+      }
+    },
+    "/work-orders/{id}/events": {
+      "get": {
+        "description": "The agent that claimed the work order sends them. They stay readable\nafter the work order ends, until the retention ceiling.",
+        "operationId": "list_work_order_events",
+        "parameters": [
+          {
+            "description": "Work order ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Earliest `created_at` to include (ISO-8601). Defaults to\n`now - retention_ceiling_seconds`. Values older than the ceiling\nare silently clamped: only the retained window can be returned.",
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "nullable": true,
+              "type": "string"
+            }
+          },
+          {
+            "description": "Maximum rows to return. Defaults to 500; capped at 5000.",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "format": "int64",
+              "nullable": true,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/K8sEventHistoryResponse"
+                }
+              }
+            },
+            "description": "Retained kube events for this work order"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden - the caller is not an admin and does not own the work order"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Work order not found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "admin_pak": []
+          },
+          {
+            "generator_pak": []
+          }
+        ],
+        "summary": "The Kubernetes events of the job of a work order, newest first.",
+        "tags": [
+          "work-orders"
+        ]
+      }
+    },
+    "/work-orders/{id}/logs": {
+      "get": {
+        "description": "The agent that claimed the work order sends them. They stay readable\nafter the work order ends, until the retention ceiling.",
+        "operationId": "list_work_order_logs",
+        "parameters": [
+          {
+            "description": "Work order ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Earliest `created_at` to include (ISO-8601). Defaults to\n`now - retention_ceiling_seconds`. Values older than the ceiling\nare silently clamped: only the retained window can be returned.",
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "nullable": true,
+              "type": "string"
+            }
+          },
+          {
+            "description": "Maximum rows to return. Defaults to 500; capped at 5000.",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "format": "int64",
+              "nullable": true,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PodLogHistoryResponse"
+                }
+              }
+            },
+            "description": "Retained pod log lines for this work order"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden - the caller is not an admin and does not own the work order"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Work order not found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "admin_pak": []
+          },
+          {
+            "generator_pak": []
+          }
+        ],
+        "summary": "The pod log lines of the job of a work order, newest first.",
         "tags": [
           "work-orders"
         ]

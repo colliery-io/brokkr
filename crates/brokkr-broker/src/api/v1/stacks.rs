@@ -936,7 +936,7 @@ pub struct PodLogHistoryResponse {
     pub lines: Vec<AgentPodLog>,
 }
 
-fn retention_info(oldest: Option<chrono::DateTime<chrono::Utc>>) -> RetentionInfo {
+pub(crate) fn retention_info(oldest: Option<chrono::DateTime<chrono::Utc>>) -> RetentionInfo {
     RetentionInfo {
         retention_ceiling_seconds: HARD_RETENTION_CEILING.as_secs(),
         effective_retention_seconds: HARD_RETENTION_CEILING.as_secs(),
@@ -946,7 +946,9 @@ fn retention_info(oldest: Option<chrono::DateTime<chrono::Utc>>) -> RetentionInf
     }
 }
 
-fn clamp_since(since: Option<chrono::DateTime<chrono::Utc>>) -> chrono::DateTime<chrono::Utc> {
+pub(crate) fn clamp_since(
+    since: Option<chrono::DateTime<chrono::Utc>>,
+) -> chrono::DateTime<chrono::Utc> {
     let ceiling_ago =
         chrono::Utc::now() - chrono::Duration::from_std(HARD_RETENTION_CEILING).unwrap_or_default();
     match since {
@@ -955,7 +957,7 @@ fn clamp_since(since: Option<chrono::DateTime<chrono::Utc>>) -> chrono::DateTime
     }
 }
 
-fn clamp_limit(limit: Option<i64>) -> i64 {
+pub(crate) fn clamp_limit(limit: Option<i64>) -> i64 {
     let l = limit.unwrap_or(TELEMETRY_DEFAULT_LIMIT);
     l.clamp(1, TELEMETRY_MAX_LIMIT)
 }
