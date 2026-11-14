@@ -4,6 +4,8 @@ title: Work Orders
 
 Work orders are transient operations that Brokkr routes to agents for execution. Unlike deployment objects which represent persistent desired state, work orders are one-time operations such as container builds, tests, or backups.
 
+An admin or a generator creates a work order. To launch one with the CLI, see [Launch a Job with a Work Order](../../how-to/work-orders/). The commands are in the [CLI reference](../cli/#work-orders-brokkr-work-order).
+
 ## Concepts
 
 ### Work Order vs Deployment Object
@@ -14,6 +16,7 @@ Work orders are transient operations that Brokkr routes to agents for execution.
 | Lifecycle | Applied, reconciled, deleted | Created, claimed, completed |
 | Examples | Deployments, ConfigMaps | Container builds, tests |
 | Storage | Permanent in stack | Moved to log after completion |
+| Start | When an agent reconciles | As soon as an agent claims it. A work order has no start time and no schedule |
 
 ### Work Order Lifecycle
 
@@ -33,8 +36,8 @@ PENDING -> CLAIMED -> (success) -> work_order_log
 Work orders are routed to agents using the same targeting mechanisms as stacks:
 
 - **Direct agent IDs**: Route to specific agents by UUID
-- **Labels**: Route to agents with matching labels (OR logic)
-- **Annotations**: Route to agents with matching annotations (OR logic)
+- **Labels**: Route to agents with matching labels (OR logic). A label is one string, for example `env:prod`
+- **Annotations**: Route to agents with matching annotations (OR logic). An annotation is a key and a value
 
 An agent can claim a work order if it matches ANY of the specified targeting criteria.
 
@@ -165,6 +168,8 @@ DELETE /api/v1/work-orders/:id
 Authorization: Bearer <admin-pak>
 ```
 
+Deletes a work order that has not ended. It gets no entry in the work order log. A work order that an agent has claimed is deleted too, but the agent does not stop the job it started: the job runs to its end in the cluster.
+
 ### Get Pending Work Orders (Agent)
 
 ```bash
@@ -233,7 +238,7 @@ These fields help diagnose failed work orders without needing to check the work 
 
 ### Work Order Log
 
-Completed work orders are moved to the log for audit purposes.
+Completed work orders are moved to the log for audit purposes. A log entry keeps the id and the owner of its work order.
 
 ```bash
 # List completed work orders
@@ -295,6 +300,26 @@ The broker stores a line or an event of a work order only from the agent that cl
 
 Retention is the same as for a stack: at most 6 hours. Brokkr is not a log store.
 
+## Timing
+
+Each number that decides when a work order runs, how long it can run, and when Brokkr tries again.
+
+| What | Value | Where it is set |
+|------|-------|-----------------|
+| Start | No start time and no schedule. A work order can be claimed as soon as it exists | Not configurable |
+| Time until an agent claims it | The agent's next poll: 10 seconds by default. At creation the broker also sends a WebSocket message to each connected agent that the work order reaches, and the agent then polls | `agent.polling_interval` in the agent configuration |
+| Expiry of a work order that waits | None. A `PENDING` work order waits until an agent claims it or someone deletes it | Not configurable |
+| Claim timeout | `claim_timeout_seconds`, default 3600. After this time the broker releases the claim | Per work order, at creation (`--claim-timeout` in the CLI) |
+| Watch window of a `custom` Job | The claim timeout, less 10% and never less than 60 seconds less. 3240 seconds at the default | Follows `claim_timeout_seconds` |
+| Watch window of a `build` | The same window, but never more than 900 seconds (15 minutes) | The 900 seconds are a constant of the agent |
+| Retries | `max_retries`, default 3 | Per work order, at creation (`--max-retries`) |
+| Wait before a retry | `backoff_seconds`, default 60, times 2 for each try so far. The first retry waits 2 × `backoff_seconds`, the second 4 ×, the third 8 × | Per work order, at creation (`--backoff`) |
+| Sweep for retries that are due and for stale claims | Every 10 seconds | A constant of the broker |
+| Retention of pod logs and events | At most 6 hours | A constant of the broker |
+| Pod log lines sent | At most 100 lines each second for one container | A constant of the agent |
+
+A retry that comes due and a claim that the broker releases are not pushed to agents. The agent finds the work order on its next poll, so add the sweep and one poll interval to the waits above.
+
 ## Retry Behavior
 
 When a work order fails:
@@ -312,6 +337,8 @@ When a work order fails:
 ```
 next_retry_after = now + (backoff_seconds * 2^retry_count)
 ```
+
+`retry_count` here is the count after the failure, so it is 1 for the first retry: the first wait is 2 × `backoff_seconds`. A failure that the agent reports as not retryable goes to the log at once, whatever `max_retries` is. A Job that ran and failed, and a Job or a BuildRun that did not finish in its watch window, are such failures.
 
 ## Stale Claim Detection
 
@@ -345,7 +372,7 @@ curl -X POST http://localhost:3000/api/v1/work-orders \
     "work_type": "build",
     "yaml_content": "apiVersion: shipwright.io/v1beta1\nkind: Build\nmetadata:\n  name: my-build\nspec:\n  source:\n    type: Git\n    git:\n      url: https://github.com/org/repo\n  strategy:\n    name: buildah\n    kind: ClusterBuildStrategy\n  output:\n    image: ttl.sh/my-image:latest",
     "targeting": {
-      "labels": ["capability=builder"]
+      "labels": ["capability:builder"]
     }
   }'
 
@@ -363,6 +390,6 @@ curl "http://localhost:3000/api/v1/work-order-log?work_type=build" \
 Work orders use a two-table design:
 
 - **`work_orders`**: Active queue for routing and retry management
-- **`work_order_log`**: Permanent audit trail of completed work
+- **`work_order_log`**: Audit trail of completed work
 
-This separation optimizes queue operations while maintaining complete execution history.
+This separation optimizes queue operations while maintaining complete execution history. An entry leaves the log only when its owner generator is hard-deleted. A soft delete of the generator, which is what `DELETE /api/v1/generators/:id` does, keeps the entries.

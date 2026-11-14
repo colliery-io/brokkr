@@ -251,3 +251,139 @@ async fn applies_changed_folder(w: &mut World, generator: String, stack: String)
         .expect("write the changed manifest");
     apply(w, &generator, &stack, bundle).await;
 }
+
+// Work orders of a generator (BROKKR-T-0410). The generator uses the
+// `brokkr work-order` commands with its own PAK.
+
+/// The id of a work order of the scenario, as text for a command.
+fn work_order_arg(w: &World, name: &str) -> String {
+    w.work_orders
+        .get(name)
+        .unwrap_or_else(|| panic!("the scenario has not created the work order {name:?} yet"))
+        .to_string()
+}
+
+/// `brokkr work-order create` as the generator, with `targets` after the
+/// file. A created work order is kept on the `World` by its feature name, so
+/// the cleanup removes it.
+async fn create_work_order(
+    w: &mut World,
+    generator: &str,
+    name: &str,
+    work_type: &str,
+    yaml: &str,
+    targets: &[&str],
+) {
+    let pak = w.generator(generator).pak.clone();
+    let file = w.work_order_file(yaml).to_string_lossy().into_owned();
+    let mut args = vec!["work-order", "create", "-f", &file, "--type", work_type];
+    args.extend_from_slice(targets);
+    w.brokkr(&pak, &args).await;
+    if w.last().ok {
+        let id = w.printed_work_order_id();
+        w.work_orders.insert(name.to_string(), id);
+    }
+}
+
+/// A work order that no real agent runs: the scenario plays the agent.
+fn plain_yaml(w: &World, name: &str) -> String {
+    format!("# bdd work order {}\n", w.real(name))
+}
+
+#[given(expr = "the generator {string} has created the work order {string} for the agent {string}")]
+async fn has_created_work_order(w: &mut World, generator: String, name: String, agent: String) {
+    let agent = w.agent(&agent).name.clone();
+    let yaml = plain_yaml(w, &name);
+    create_work_order(w, &generator, &name, "bdd", &yaml, &["--agent", &agent]).await;
+    w.last_ok();
+}
+
+/// By the id of the agent: a generator cannot look up the name of an agent
+/// that is not registered with it.
+#[when(
+    expr = "the generator {string} creates the work order {string} for the agent {string} by its id"
+)]
+async fn creates_work_order_by_id(w: &mut World, generator: String, name: String, agent: String) {
+    let agent = w.agent(&agent).id.to_string();
+    let yaml = plain_yaml(w, &name);
+    create_work_order(w, &generator, &name, "bdd", &yaml, &["--agent", &agent]).await;
+}
+
+#[given(
+    expr = "the generator {string} has created the work order {string} for the label {string} of this scenario"
+)]
+async fn has_created_work_order_for_label(
+    w: &mut World,
+    generator: String,
+    name: String,
+    label: String,
+) {
+    let label = crate::steps::admin::scenario_label(w, &label);
+    let yaml = plain_yaml(w, &name);
+    create_work_order(w, &generator, &name, "bdd", &yaml, &["--label", &label]).await;
+    w.last_ok();
+}
+
+/// A `custom` work order for the cluster agent: one Job that prints the line
+/// of the scenario. It has no retry, so a failure ends in the log at once.
+#[when(
+    expr = "the generator {string} launches the work order {string} on the cluster agent with a job that prints a line"
+)]
+async fn launches_job(w: &mut World, generator: String, name: String) {
+    let agent = w.cluster_agent_name().to_string();
+    let job = w.job_name(&name);
+    let line = w.job_line(&name);
+    let yaml = format!(
+        "apiVersion: batch/v1\nkind: Job\nmetadata:\n  name: {job}\n  namespace: default\nspec:\n  backoffLimit: 0\n  ttlSecondsAfterFinished: 600\n  template:\n    spec:\n      restartPolicy: Never\n      containers:\n        - name: main\n          image: busybox:1.36\n          command: [\"sh\", \"-c\", \"echo {line}; sleep 2; exit 0\"]\n"
+    );
+    create_work_order(
+        w,
+        &generator,
+        &name,
+        "custom",
+        &yaml,
+        &["--agent", &agent, "--max-retries", "0"],
+    )
+    .await;
+    w.last_ok();
+}
+
+#[when(expr = "the generator {string} asks for the status of the work order {string}")]
+async fn asks_work_order_status(w: &mut World, generator: String, name: String) {
+    let pak = w.generator(&generator).pak.clone();
+    let id = work_order_arg(w, &name);
+    w.brokkr(&pak, &["work-order", "status", &id]).await;
+}
+
+#[when(expr = "the generator {string} lists its work orders")]
+async fn lists_work_orders(w: &mut World, generator: String) {
+    let pak = w.generator(&generator).pak.clone();
+    w.brokkr(&pak, &["work-order", "list"]).await;
+}
+
+#[when(expr = "the generator {string} reads the history of its work orders")]
+async fn reads_work_order_history(w: &mut World, generator: String) {
+    let pak = w.generator(&generator).pak.clone();
+    w.brokkr(&pak, &["work-order", "history"]).await;
+}
+
+#[when(expr = "the generator {string} deletes the work order {string}")]
+async fn deletes_work_order(w: &mut World, generator: String, name: String) {
+    let pak = w.generator(&generator).pak.clone();
+    let id = work_order_arg(w, &name);
+    w.brokkr(&pak, &["work-order", "delete", &id]).await;
+}
+
+#[when(expr = "the generator {string} reads the logs of the work order {string}")]
+async fn reads_work_order_logs(w: &mut World, generator: String, name: String) {
+    let pak = w.generator(&generator).pak.clone();
+    let id = work_order_arg(w, &name);
+    w.brokkr(&pak, &["work-order", "logs", &id]).await;
+}
+
+#[when(expr = "the generator {string} reads the events of the work order {string}")]
+async fn reads_work_order_events(w: &mut World, generator: String, name: String) {
+    let pak = w.generator(&generator).pak.clone();
+    let id = work_order_arg(w, &name);
+    w.brokkr(&pak, &["work-order", "events", &id]).await;
+}
