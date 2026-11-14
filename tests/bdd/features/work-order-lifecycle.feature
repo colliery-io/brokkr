@@ -6,9 +6,13 @@ Feature: Work order lifecycle
   pending and the claimed work orders of the agent. The scenario plays the
   agent with the agent's PAK.
 
-  The last two scenarios run a real job: the agent in the cluster of the test
-  stack applies it, and sends the log lines and the Kubernetes events of the
-  job to the broker with the id of the work order.
+  A generator does the same for the agents registered with it, with the
+  brokkr work-order commands and its own PAK. It sees its own work orders
+  and not those of an admin.
+
+  The scenarios that name the cluster agent run a real job: the agent in the
+  cluster of the test stack applies it, and sends the log lines and the
+  Kubernetes events of the job to the broker with the id of the work order.
 
   Background:
     Given the admin has created the generator "team-robin"
@@ -75,3 +79,49 @@ Feature: Work order lifecycle
     When the admin launches the work order "migrate" on the cluster agent with a job that prints a line and fails
     Then the log has the work order "migrate" as a failure within three minutes
     And the logs of the work order "migrate" have the line of its job
+
+  Scenario: A generator creates a work order, and reads its status and its result
+    Given the generator "team-robin" has created the work order "backup" for the agent "prod-1"
+    Then the agent "prod-1" has the work order "backup" pending
+    When the generator "team-robin" asks for the status of the work order "backup"
+    Then the status says no agent has claimed the work order
+    And the status names the generator "team-robin" as the owner
+    When the agent "prod-1" claims the work order "backup"
+    And the generator "team-robin" asks for the status of the work order "backup"
+    Then the status says the agent "prod-1" runs the work order
+    When the agent "prod-1" completes the work order "backup"
+    And the generator "team-robin" asks for the status of the work order "backup"
+    Then the status shows the result success
+    And the status shows the message "done"
+    When the generator "team-robin" reads the history of its work orders
+    Then the history has the work order "backup" as a success
+
+  Scenario: A generator's work order for a label reaches only the agents registered with it
+    Given the admin has created the agent "stray-1" in cluster "cluster-a"
+    And the admin has given the agent "prod-1" the label "pool" of this scenario
+    And the admin has given the agent "stray-1" the label "pool" of this scenario
+    And the generator "team-robin" has created the work order "backup" for the label "pool" of this scenario
+    Then the agent "prod-1" has the work order "backup" pending
+    And the agent "stray-1" does not have the work order "backup" pending
+    When the agent "stray-1" tries to claim the work order "backup"
+    Then the broker says the work order is not claimable
+
+  Scenario: A generator lists its own work orders and not those of an admin
+    Given the admin has created the work order "audit" for the agent "prod-1"
+    And the generator "team-robin" has created the work order "backup" for the agent "prod-1"
+    When the generator "team-robin" lists its work orders
+    Then the list has the work order "backup"
+    And the list does not have the work order "audit"
+
+  Scenario: A generator deletes its pending work order
+    Given the generator "team-robin" has created the work order "backup" for the agent "prod-1"
+    When the generator "team-robin" deletes the work order "backup"
+    Then the command says it deleted the work order "backup"
+    And the broker no longer has the work order "backup"
+    And the agent "prod-1" does not have the work order "backup" pending
+
+  Scenario: A generator launches a job in the cluster and reads its result and its log line
+    Given the cluster agent is registered with the generator "team-robin" and active
+    When the generator "team-robin" launches the work order "migrate" on the cluster agent with a job that prints a line
+    Then the generator "team-robin" sees the work order "migrate" end as a success within three minutes
+    And the generator "team-robin" reads the line of the job in the logs of the work order "migrate"

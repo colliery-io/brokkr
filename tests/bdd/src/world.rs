@@ -156,6 +156,8 @@ pub struct World {
     pub cluster_registrations: Vec<Uuid>,
     /// The stacks a step noted before their delete, by their feature name.
     pub noted_stacks: BTreeMap<String, NotedStack>,
+    /// The folders of the YAML files that `brokkr work-order create` reads.
+    pub work_order_files: Vec<TempDir>,
 }
 
 impl World {
@@ -177,6 +179,7 @@ impl World {
             cluster_agent_id: None,
             cluster_registrations: Vec::new(),
             noted_stacks: BTreeMap::new(),
+            work_order_files: Vec::new(),
         }
     }
 
@@ -369,6 +372,32 @@ impl World {
             .and_then(|rest| rest.split(')').next())
             .and_then(|id| Uuid::parse_str(id).ok())
             .unwrap_or_else(|| panic!("no `{prefix}<id>)` line in the output:\n{}", run.show()))
+    }
+
+    /// The id in the `created work order <id> (type …)` line of the last run.
+    pub fn printed_work_order_id(&self) -> Uuid {
+        let run = self.last_ok();
+        run.stdout
+            .lines()
+            .find_map(|l| l.strip_prefix("created work order "))
+            .and_then(|rest| rest.split_whitespace().next())
+            .and_then(|id| Uuid::parse_str(id).ok())
+            .unwrap_or_else(|| {
+                panic!(
+                    "no `created work order <id>` line in the output:\n{}",
+                    run.show()
+                )
+            })
+    }
+
+    /// A file with the YAML of a work order, for `brokkr work-order create -f`.
+    /// It lives as long as the scenario.
+    pub fn work_order_file(&mut self, yaml: &str) -> PathBuf {
+        let dir = tempfile::tempdir().expect("a temp dir for the work order");
+        let path = dir.path().join("work-order.yaml");
+        std::fs::write(&path, yaml).expect("write the work order file");
+        self.work_order_files.push(dir);
+        path
     }
 
     // The folder of manifests

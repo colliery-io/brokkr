@@ -1126,3 +1126,170 @@ async fn work_order_events_name_job(w: &mut World, name: String) {
         tokio::time::sleep(Duration::from_secs(3)).await;
     }
 }
+
+// Work orders of a generator (BROKKR-T-0410): what the `brokkr work-order`
+// commands print.
+
+/// The line of a table in the last output that starts with the id of the
+/// work order.
+fn work_order_row(w: &World, name: &str) -> Option<String> {
+    let id = work_order_id(w, name).to_string();
+    w.last_ok()
+        .stdout
+        .lines()
+        .find(|l| l.trim_start().starts_with(&id))
+        .map(str::to_string)
+}
+
+#[then(expr = "the status says no agent has claimed the work order")]
+async fn status_says_pending(w: &mut World) {
+    w.expect_output("status: PENDING. No agent has claimed it yet.");
+}
+
+#[then(expr = "the status says the agent {string} runs the work order")]
+async fn status_says_claimed(w: &mut World, agent: String) {
+    let agent = w.agent(&agent).name.clone();
+    w.expect_output(&format!("status: CLAIMED. agent \"{agent}\" runs it"));
+}
+
+#[then(expr = "the status shows the result {word}")]
+async fn status_shows_result(w: &mut World, result: String) {
+    w.expect_output(&format!("result: {result}"));
+}
+
+#[then(expr = "the status shows the message {string}")]
+async fn status_shows_message(w: &mut World, message: String) {
+    w.expect_output(&format!("message: {message}"));
+}
+
+#[then(expr = "the status names the generator {string} as the owner")]
+async fn status_names_owner(w: &mut World, generator: String) {
+    let generator = w.generator(&generator).name.clone();
+    w.expect_output(&format!("owner: {generator}"));
+}
+
+#[then(expr = "the list has the work order {string}")]
+async fn list_has_work_order(w: &mut World, name: String) {
+    assert!(
+        work_order_row(w, &name).is_some(),
+        "the list does not have the work order {name:?}:\n{}",
+        w.last().show()
+    );
+}
+
+#[then(expr = "the list does not have the work order {string}")]
+async fn list_omits_work_order(w: &mut World, name: String) {
+    assert!(
+        work_order_row(w, &name).is_none(),
+        "the list has the work order {name:?}, which is not of this generator:\n{}",
+        w.last().show()
+    );
+}
+
+#[then(expr = "the history has the work order {string} as a {word}")]
+async fn history_has_work_order(w: &mut World, name: String, result: String) {
+    let row = work_order_row(w, &name).unwrap_or_else(|| {
+        panic!(
+            "the history does not have the work order {name:?}:\n{}",
+            w.last().show()
+        )
+    });
+    assert!(
+        row.split_whitespace().any(|cell| cell == result),
+        "the history does not show the work order {name:?} as a {result}: {row}"
+    );
+}
+
+#[then(expr = "the history does not have the work order {string}")]
+async fn history_omits_work_order(w: &mut World, name: String) {
+    assert!(
+        work_order_row(w, &name).is_none(),
+        "the history has the work order {name:?}, which is not of this generator:\n{}",
+        w.last().show()
+    );
+}
+
+#[then(expr = "the command says it deleted the work order {string}")]
+async fn command_deleted_work_order(w: &mut World, name: String) {
+    let id = work_order_id(w, &name);
+    w.expect_output(&format!("deleted work order {id}"));
+}
+
+#[then(expr = "the broker no longer has the work order {string}")]
+async fn broker_has_no_work_order(w: &mut World, name: String) {
+    assert_eq!(
+        work_order_status(w, &name).await,
+        None,
+        "the broker still has the work order {name:?}"
+    );
+}
+
+#[then("the error says the work order belongs to another owner")]
+async fn error_says_another_owner(w: &mut World) {
+    w.expect_error("belongs to another owner");
+}
+
+#[then("the error says the agent is not registered with the generator")]
+async fn error_says_agent_not_registered(w: &mut World) {
+    w.expect_error("is not registered with your generator");
+}
+
+#[then("the command says no work orders wait or run")]
+async fn command_says_no_work_orders(w: &mut World) {
+    w.expect_output("no work orders wait or run");
+}
+
+/// Poll `brokkr work-order status` as the generator until the work order has
+/// a result, or the wait is over. The agent in the cluster polls for work
+/// each 10 seconds, pulls the image and watches the Job.
+#[then(
+    expr = "the generator {string} sees the work order {string} end as a {word} within three minutes"
+)]
+async fn generator_sees_end(w: &mut World, generator: String, name: String, result: String) {
+    let pak = w.generator(&generator).pak.clone();
+    let id = work_order_id(w, &name).to_string();
+    let start = Instant::now();
+    loop {
+        w.brokkr(&pak, &["work-order", "status", &id]).await;
+        let run = w.last_ok();
+        if run.stdout.contains("result: ") {
+            assert!(
+                run.stdout.contains(&format!("result: {result}")),
+                "the work order {name:?} did not end as a {result}:\n{}",
+                run.show()
+            );
+            return;
+        }
+        assert!(
+            start.elapsed() < REPORT_WAIT,
+            "the work order {name:?} has no result after {REPORT_WAIT:?}:\n{}",
+            run.show()
+        );
+        tokio::time::sleep(Duration::from_secs(5)).await;
+    }
+}
+
+/// Poll `brokkr work-order logs` as the generator until the line of the job
+/// is there, or the wait is over.
+#[then(
+    expr = "the generator {string} reads the line of the job in the logs of the work order {string}"
+)]
+async fn generator_reads_job_line(w: &mut World, generator: String, name: String) {
+    let pak = w.generator(&generator).pak.clone();
+    let id = work_order_id(w, &name).to_string();
+    let line = w.job_line(&name);
+    let start = Instant::now();
+    loop {
+        w.brokkr(&pak, &["work-order", "logs", &id]).await;
+        let run = w.last_ok();
+        if run.stdout.lines().any(|l| l.ends_with(&line)) {
+            return;
+        }
+        assert!(
+            start.elapsed() < TELEMETRY_WAIT,
+            "the logs of the work order {name:?} do not have the line {line:?} after {TELEMETRY_WAIT:?}:\n{}",
+            run.show()
+        );
+        tokio::time::sleep(Duration::from_secs(3)).await;
+    }
+}
