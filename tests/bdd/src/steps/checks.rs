@@ -991,3 +991,138 @@ async fn broker_does_not_accept_work_order(w: &mut World) {
         answer.body
     );
 }
+
+// A work order that ran in the cluster: its end, its log lines, its events
+// (BROKKR-T-0406).
+
+/// How long a scenario waits for the telemetry of a job after the work order
+/// ended: the frames go up on the agent channel as the pod runs, so they are
+/// there already or a moment later.
+const TELEMETRY_WAIT: Duration = Duration::from_secs(60);
+
+/// The id of a work order of the scenario.
+fn work_order_id(w: &World, name: &str) -> Uuid {
+    *w.work_orders
+        .get(name)
+        .unwrap_or_else(|| panic!("the scenario has not created the work order {name:?} yet"))
+}
+
+/// Poll the log until the work order is there, then give its entry. The
+/// agent polls for work each 10 seconds, pulls the image and watches the Job.
+async fn work_order_ends(w: &World, name: &str) -> Value {
+    let id = work_order_id(w, name);
+    let start = Instant::now();
+    loop {
+        let answer = w
+            .api
+            .work_order_log(w.admin(), id)
+            .await
+            .expect("read the work order log");
+        if answer.ok() {
+            return answer.body;
+        }
+        if start.elapsed() >= REPORT_WAIT {
+            let now = w
+                .api
+                .get_work_order(w.admin(), id)
+                .await
+                .expect("read the work order");
+            panic!(
+                "the work order {name:?} is not in the log after {REPORT_WAIT:?}. The log answered {} {}. The work order is: {} {}",
+                answer.status, answer.body, now.status, now.body
+            );
+        }
+        tokio::time::sleep(Duration::from_secs(5)).await;
+    }
+}
+
+#[then(expr = "the log has the work order {string} as a success within three minutes")]
+async fn log_has_success_in_time(w: &mut World, name: String) {
+    let entry = work_order_ends(w, &name).await;
+    assert_eq!(
+        entry.get("success").and_then(Value::as_bool),
+        Some(true),
+        "the work order {name:?} did not end as a success: {entry}"
+    );
+}
+
+#[then(expr = "the log has the work order {string} as a failure within three minutes")]
+async fn log_has_failure_in_time(w: &mut World, name: String) {
+    let entry = work_order_ends(w, &name).await;
+    assert_eq!(
+        entry.get("success").and_then(Value::as_bool),
+        Some(false),
+        "the work order {name:?} did not end as a failure: {entry}"
+    );
+}
+
+#[then(expr = "the logs of the work order {string} have the line of its job")]
+async fn work_order_logs_have_line(w: &mut World, name: String) {
+    let id = work_order_id(w, &name);
+    let line = w.job_line(&name);
+    let start = Instant::now();
+    loop {
+        let answer = w
+            .api
+            .work_order_logs(w.admin(), id)
+            .await
+            .expect("ask the broker for the logs of the work order");
+        let found = answer.ok()
+            && answer
+                .body
+                .get("lines")
+                .and_then(Value::as_array)
+                .is_some_and(|lines| {
+                    lines
+                        .iter()
+                        .any(|l| l.get("line").and_then(Value::as_str) == Some(line.as_str()))
+                });
+        if found {
+            return;
+        }
+        assert!(
+            start.elapsed() < TELEMETRY_WAIT,
+            "the logs of the work order {name:?} do not have the line {line:?} after {TELEMETRY_WAIT:?}. The broker answered {} {}",
+            answer.status,
+            answer.body
+        );
+        tokio::time::sleep(Duration::from_secs(3)).await;
+    }
+}
+
+#[then(expr = "the events of the work order {string} name its job")]
+async fn work_order_events_name_job(w: &mut World, name: String) {
+    let id = work_order_id(w, &name);
+    let job = w.job_name(&name);
+    let start = Instant::now();
+    loop {
+        let answer = w
+            .api
+            .work_order_events(w.admin(), id)
+            .await
+            .expect("ask the broker for the events of the work order");
+        // The Job's own events, and those of its pod (`<job>-<suffix>`).
+        let found = answer.ok()
+            && answer
+                .body
+                .get("events")
+                .and_then(Value::as_array)
+                .is_some_and(|events| {
+                    events.iter().any(|e| {
+                        e.pointer("/involved_object/name")
+                            .and_then(Value::as_str)
+                            .is_some_and(|n| n.starts_with(&job))
+                    })
+                });
+        if found {
+            return;
+        }
+        assert!(
+            start.elapsed() < TELEMETRY_WAIT,
+            "the events of the work order {name:?} do not name the job {job:?} after {TELEMETRY_WAIT:?}. The broker answered {} {}",
+            answer.status,
+            answer.body
+        );
+        tokio::time::sleep(Duration::from_secs(3)).await;
+    }
+}

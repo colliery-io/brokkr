@@ -16,6 +16,14 @@
 //! for a few minutes (positive and negative) so repeated events for the
 //! same pod don't translate to repeated `GET`s.
 //!
+//! ## Work orders
+//!
+//! An object that the agent applied for a work order has the mark
+//! `brokkr.io/work-order-id`, and its pods belong to it through their owner
+//! chain ([`crate::work_order_marks`]). An event about one of them goes up
+//! with the work order id in place of a stack id, and only to a broker that
+//! accepts such a frame ([`WsUplink::accepts_work_order_telemetry`]).
+//!
 //! ## Lifecycle
 //!
 //! - Spawned once at agent startup.
@@ -50,6 +58,7 @@ use uuid::Uuid;
 
 use crate::broker_ws::WsUplink;
 use crate::k8s::objects::STACK_LABEL;
+use crate::work_order_marks::{self, KubeMetaFetcher, TelemetryKey};
 
 /// How long to cache a UID→stack lookup before re-querying.
 const LOOKUP_TTL: Duration = Duration::from_secs(5 * 60);
@@ -62,7 +71,7 @@ const OUTBOUND_CAPACITY: usize = 256;
 
 #[derive(Clone, Copy)]
 enum CacheEntry {
-    Owned(Uuid),
+    Owned(TelemetryKey),
     NotOurs,
 }
 
@@ -158,6 +167,7 @@ pub fn spawn(
                 agent_id,
                 tx.clone(),
                 cache.clone(),
+                uplink.clone(),
                 watch_namespace.as_deref(),
             )
             .await
@@ -178,6 +188,7 @@ async fn watch_loop(
     agent_id: Uuid,
     tx: mpsc::Sender<WsMessage>,
     cache: Arc<RwLock<UidCache>>,
+    uplink: WsUplink,
     watch_namespace: Option<&str>,
 ) -> Result<(), watcher::Error> {
     info!(namespace = ?watch_namespace, "starting kube events tailer");
@@ -189,7 +200,8 @@ async fn watch_loop(
 
     while let Some(event) = stream.try_next().await? {
         if let watcher::Event::Apply(ev) = event {
-            handle_event(&client, agent_id, &ev, &tx, &cache).await;
+            let work_orders = uplink.accepts_work_order_telemetry();
+            handle_event(&client, agent_id, &ev, &tx, &cache, work_orders).await;
         }
     }
     Ok(())
@@ -201,21 +213,28 @@ async fn handle_event(
     ev: &K8sEventResource,
     tx: &mpsc::Sender<WsMessage>,
     cache: &Arc<RwLock<UidCache>>,
+    work_orders: bool,
 ) {
     let involved = match &ev.involved_object.uid {
         Some(uid) => uid.clone(),
         None => return, // synthesised events without involvedObject UIDs aren't ours
     };
 
-    let stack_id = match resolve_stack(client, ev, &involved, cache).await {
-        Some(id) => id,
+    let key = match resolve_key(client, ev, &involved, cache, work_orders).await {
+        Some(key) => key,
         None => return,
     };
+    // The broker's answer can change between the lookup and now (a
+    // reconnect to an older broker): never send it a frame it cannot parse.
+    if matches!(key, TelemetryKey::WorkOrder(_)) && !work_orders {
+        return;
+    }
+    let (stack_id, work_order_id) = key.ids();
 
     let frame = WsMessage::K8sEvent(WireK8sEvent {
         agent_id,
-        stack_id: Some(stack_id),
-        work_order_id: None,
+        stack_id,
+        work_order_id,
         observed_at: ev
             .event_time
             .as_ref()
@@ -240,12 +259,17 @@ async fn handle_event(
     }
 }
 
-async fn resolve_stack(
+/// What an event's object belongs to: a stack, a work order, or nothing of
+/// ours. `work_orders` is false for a broker that does not accept work order
+/// telemetry: the work order lookup is then not made, and "not ours" is not
+/// kept for an object that could be a work order's.
+async fn resolve_key(
     client: &Client,
     ev: &K8sEventResource,
     uid: &str,
     cache: &Arc<RwLock<UidCache>>,
-) -> Option<Uuid> {
+    work_orders: bool,
+) -> Option<TelemetryKey> {
     // Write lock: LRU `get` promotes recency, so it mutates. Lookups are
     // cheap relative to the API call on a miss, so the contention is fine.
     if let Some(entry) = cache.write().await.get(uid) {
@@ -255,10 +279,12 @@ async fn resolve_stack(
         };
     }
 
-    let stack = annotation_lookup(client, &ev.involved_object).await;
-    let entry = match stack {
-        Some(id) => CacheEntry::Owned(id),
-        None => CacheEntry::NotOurs,
+    let found = annotation_lookup(client, &ev.involved_object, work_orders).await;
+    let entry = match found {
+        Lookup::Owned(key) => CacheEntry::Owned(key),
+        Lookup::NotOurs => CacheEntry::NotOurs,
+        // Not asked, so not known: look again at the next event.
+        Lookup::NotAsked => return None,
     };
     cache.write().await.put(uid.to_string(), entry);
 
@@ -268,10 +294,30 @@ async fn resolve_stack(
     }
 }
 
+/// The answer of one lookup of an event's object.
+enum Lookup {
+    Owned(TelemetryKey),
+    NotOurs,
+    /// The object has no stack, and the work order lookup was not made.
+    NotAsked,
+}
+
 async fn annotation_lookup(
     client: &Client,
     involved: &k8s_openapi::api::core::v1::ObjectReference,
-) -> Option<Uuid> {
+    work_orders: bool,
+) -> Lookup {
+    match annotation_lookup_inner(client, involved, work_orders).await {
+        Some(found) => found,
+        None => Lookup::NotOurs,
+    }
+}
+
+async fn annotation_lookup_inner(
+    client: &Client,
+    involved: &k8s_openapi::api::core::v1::ObjectReference,
+    work_orders: bool,
+) -> Option<Lookup> {
     let api_version = involved.api_version.as_deref()?;
     let kind = involved.kind.as_deref()?;
     let name = involved.name.as_deref()?;
@@ -295,9 +341,23 @@ async fn annotation_lookup(
         None => Api::all_with(client.clone(), &ar),
     };
     let obj = api.get_opt(name).await.ok().flatten()?;
-    let annotations = obj.metadata.annotations.as_ref()?;
-    let raw = annotations.get(STACK_LABEL)?;
-    Uuid::parse_str(raw).ok()
+    let stack = obj
+        .metadata
+        .annotations
+        .as_ref()
+        .and_then(|a| a.get(STACK_LABEL))
+        .and_then(|raw| Uuid::parse_str(raw).ok());
+    if let Some(stack_id) = stack {
+        return Some(Lookup::Owned(TelemetryKey::Stack(stack_id)));
+    }
+    if !work_orders {
+        return Some(Lookup::NotAsked);
+    }
+    let mut fetcher = KubeMetaFetcher::new(client.clone());
+    let work_order =
+        work_order_marks::resolve(&mut fetcher, involved.namespace.as_deref(), &obj.metadata)
+            .await?;
+    Some(Lookup::Owned(TelemetryKey::WorkOrder(work_order)))
 }
 
 #[cfg(test)]
@@ -321,9 +381,9 @@ mod tests {
     fn cache_returns_owned_within_ttl() {
         let mut c = UidCache::new(DEFAULT_UID_CACHE_CAP);
         let id = Uuid::new_v4();
-        c.put("u".into(), CacheEntry::Owned(id));
+        c.put("u".into(), CacheEntry::Owned(TelemetryKey::Stack(id)));
         match c.get("u") {
-            Some(CacheEntry::Owned(got)) => assert_eq!(got, id),
+            Some(CacheEntry::Owned(got)) => assert_eq!(got, TelemetryKey::Stack(id)),
             other => panic!("expected Owned, got {:?}", other.is_some()),
         }
     }

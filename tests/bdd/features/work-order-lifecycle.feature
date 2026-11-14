@@ -6,6 +6,10 @@ Feature: Work order lifecycle
   pending and the claimed work orders of the agent. The scenario plays the
   agent with the agent's PAK.
 
+  The last two scenarios run a real job: the agent in the cluster of the test
+  stack applies it, and sends the log lines and the Kubernetes events of the
+  job to the broker with the id of the work order.
+
   Background:
     Given the admin has created the generator "team-robin"
     And the admin has created the agent "prod-1" in cluster "cluster-a" for the generator "team-robin"
@@ -58,3 +62,16 @@ Feature: Work order lifecycle
     Given the admin has created the work order "backup" for the agent "prod-1"
     When the admin deletes the agent "prod-1"
     Then the work order "backup" is not left PENDING within 20 seconds
+
+  Scenario: The admin reads the log line and the events of a work order that ran in the cluster
+    Given the cluster agent is registered with the generator "team-robin" and active
+    When the admin launches the work order "migrate" on the cluster agent with a job that prints a line
+    Then the log has the work order "migrate" as a success within three minutes
+    And the logs of the work order "migrate" have the line of its job
+    And the events of the work order "migrate" name its job
+
+  Scenario: The log line of a job that fails is readable after the work order ended
+    Given the cluster agent is registered with the generator "team-robin" and active
+    When the admin launches the work order "migrate" on the cluster agent with a job that prints a line and fails
+    Then the log has the work order "migrate" as a failure within three minutes
+    And the logs of the work order "migrate" have the line of its job

@@ -20,6 +20,19 @@ The agent merges these keys into the manifest's own `metadata.annotations` (`cra
 
 These annotations are set on the top-level objects the agent applies (Deployments, Services, and so on). They do **not** propagate to pods created by controllers: a Deployment's pods carry only whatever labels and annotations its pod template declares.
 
+## The Mark of a Work Order
+
+The agent marks what it applies for a work order with `brokkr.io/work-order-id`, the work order UUID:
+
+| Work type | Where the mark is |
+|-----------|-------------------|
+| `custom` | An annotation on each object of the work order's YAML, set before server-side apply |
+| `build` | A label on the `BuildRun` that the agent creates |
+
+The mark is not put on pods. The agent finds the work order of a pod, or of the object of a Kubernetes event, by the mark on the object itself or on an owner up its `ownerReferences` chain: `Job` → `Pod`, or `BuildRun` → `TaskRun` → `Pod`. The walk follows only owners of kind `Job`, `TaskRun` or `BuildRun`. So the pods of a Deployment in a `custom` work order are not found; a work order watches only a `Job` to its end.
+
+The agent sends the pod log lines and the Kubernetes events of what it finds to the broker with the work order id. A work order's pod needs no `brokkr.io/stream-logs` annotation. See [Work Orders](../work-orders/).
+
 ## Keys the Agent Looks For
 
 | Key | Kind | Where it must be | Effect |

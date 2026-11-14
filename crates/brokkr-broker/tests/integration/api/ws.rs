@@ -2196,6 +2196,28 @@ async fn a_telemetry_row_has_exactly_one_subject() {
     );
 }
 
+/// BROKKR-T-0406: the channel has no version exchange, so the broker says
+/// what it accepts in the answer to the upgrade. An agent sends work order
+/// telemetry only to a broker that names it here.
+#[tokio::test]
+async fn the_upgrade_answer_names_what_the_broker_accepts() {
+    let fixture = TestFixture::new();
+    let (addr, _registry) = spawn_full_broker(&fixture).await;
+    let (_agent, agent_pak) = agent_with_pak(&fixture, "WS capabilities agent");
+
+    let request = ws_request_with_pak(&ws_url(addr), &agent_pak);
+    let (_socket, response) = tokio_tungstenite::connect_async(request).await.unwrap();
+
+    let header = response
+        .headers()
+        .get(brokkr_wire::CAPABILITIES_HEADER)
+        .and_then(|v| v.to_str().ok());
+    assert!(
+        brokkr_wire::has_capability(header, brokkr_wire::CAPABILITY_WORK_ORDER_TELEMETRY),
+        "the upgrade answer does not name work order telemetry: {header:?}"
+    );
+}
+
 // =============================================================================
 // BROKKR-T-0412: the push of a work order reaches agents by a label
 // =============================================================================

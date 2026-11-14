@@ -258,6 +258,20 @@ Authorization: Bearer <admin-pak>
 
 The agent that claimed a work order sends the pod log lines and the Kubernetes events of its job. They stay readable after the work order ends: the id is the same in the work order log.
 
+What the agent sends:
+
+- The log lines of each container of each pod of a `Job` in a `custom` work order, and of the pods of the `BuildRun` of a `build` work order. No opt-in annotation is needed. The agent starts when the pod appears and reads each container to its end.
+- The Kubernetes events about the objects of the work order and about those pods.
+- At most 100 lines each second for one container. Lines over that limit are dropped, with no gap marker.
+
+What it does not send:
+
+- The logs of a pod with any other owner, for example the pods of a Deployment in a `custom` work order.
+- The lines of a work order that waits for a retry: the broker stores a line only from the agent that holds the claim, or that held it when the work order ended.
+- Anything to a broker from before 0.12.0. Such a broker cannot read these frames. The agent sends them only when the broker's answer to the WebSocket upgrade has `x-brokkr-wire-capabilities: work-order-telemetry`.
+
+See [Agent Annotations and Labels](../agent-annotations/) for the mark `brokkr.io/work-order-id`.
+
 ```bash
 # The pod log lines of the job, newest first
 GET /api/v1/work-orders/:id/logs?since=<ISO-8601>&limit=500
