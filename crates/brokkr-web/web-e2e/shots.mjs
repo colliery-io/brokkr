@@ -102,11 +102,12 @@ const EVENTS = [
 // shows as the short id.
 const JOBS = [
   { id: "7f3a01ab", work_type: "image_build", success: true, retries_attempted: 0, result_message: "pushed ghcr.io/app:sha-7f3a01",
-    owner_generator_id: "1b9d6bcd-bbfd" },
+    completed_at: ago(600), owner_generator_id: "1b9d6bcd-bbfd" },
+  // Ended seven hours ago: past the 6 h the broker keeps of a stream.
   { id: "561200cd", work_type: "image_build", success: false, retries_attempted: 3, result_message: "buildah: manifest unknown",
-    owner_generator_id: null },
+    completed_at: ago(7 * 3600), owner_generator_id: null },
   { id: "c4d5e6f7", work_type: "custom", success: true, retries_attempted: 0, result_message: "job complete",
-    owner_generator_id: "0f0e0d0c-9999" },
+    completed_at: ago(1200), owner_generator_id: "0f0e0d0c-9999" },
 ];
 const HOOKS = [
   { id: "h1", name: "prod-alerts", enabled: true, has_url: true, event_types: ["stack.updated", "agent.failed"] },
@@ -152,6 +153,29 @@ const POD_LOGS = { retention: RETENTION, lines: [
   { ts: ago(31), namespace: "payments", pod: "payments-api-7d9f4-q8m3", container: "api", line: "pulling image ghcr.io/app:sha-7f3a01" },
   { ts: ago(12), namespace: "payments", pod: "payments-api-7d9f4-x2k1", container: "api", line: "POST /charge 201 48ms" },
 ] };
+// The pod logs and the Kubernetes events of the job of a work order
+// (BROKKR-T-0415), in the shape of the stack routes, newest first.
+const WO_LOGS = { retention: RETENTION, lines: [
+  { ts: ago(20), namespace: "jobs", pod: "backup-9a01-x7k2p", container: "backup", line: "uploaded 3 of 4 parts" },
+  { ts: ago(50), namespace: "jobs", pod: "backup-9a01-x7k2p", container: "backup", line: "dump complete, 412 MB" },
+  { ts: ago(80), namespace: "jobs", pod: "backup-9a01-x7k2p", container: "backup", line: "backup started" },
+] };
+const WO_EVENTS = { retention: RETENTION, events: [
+  { id: "w1", agent_id: "a1", observed_at: ago(78), reason: "Started", event_type: "Normal",
+    message: "Started container backup", source: "kubelet",
+    involved_object: { kind: "Pod", name: "backup-9a01-x7k2p", namespace: "jobs" } },
+  { id: "w2", agent_id: "a1", observed_at: ago(85), reason: "SuccessfulCreate", event_type: "Normal",
+    message: "Created pod: backup-9a01-x7k2p", source: "job-controller",
+    involved_object: { kind: "Job", name: "backup-9a01", namespace: "jobs" } },
+] };
+const WO_NO_LOGS = { retention: RETENTION, lines: [] };
+const WO_NO_EVENTS = { retention: RETENTION, events: [] };
+// The work order lists, with the telemetry of one work order.
+const woMocks = (id, logs, events) => ({
+  "/work-order-log": JOBS, "/work-orders": ACTIVE_WOS,
+  [`/work-orders/${id}/logs`]: logs, [`/work-orders/${id}/events`]: events,
+});
+
 // The live stream of payments-api (BROKKR-T-0348): the frames the broker
 // relays on /api/v1/stacks/s1/live, in the wire shape of brokkr_wire::WsMessage
 // ({"type": "<snake_case>", "body": {...}}). The first line repeats the
@@ -395,7 +419,37 @@ const SCENES = [
   { name: "jobs-scoped", nav: "Work orders", select: "team-payments",
     mocks: { "/paks": PAKS, "/work-order-log": JOBS, "/work-orders": ACTIVE_WOS },
     assert_text: ["9a01ffbe", "7f3a01ab"], assert_absent: ["b2c3d4e5", "561200cd", "c4d5e6f7"] },
-  { name: "jobs-modal", nav: "Work orders", click: "completed", mocks: { "/work-order-log": JOBS, "/work-orders": ACTIVE_WOS } },
+  { name: "jobs-modal", nav: "Work orders", click: "completed", mocks: woMocks("7f3a01ab", WO_NO_LOGS, WO_NO_EVENTS) },
+  // A work order opens with the pod logs and the Kubernetes events of its job
+  // (BROKKR-T-0415). One that runs: its lines oldest first, and its claim.
+  { name: "jobs-running-logs", nav: "Work orders", click: "9a01ffbe", settle: 600,
+    mocks: woMocks("9a01ffbe", WO_LOGS, WO_EVENTS),
+    assert_text: ["claimed by 1b9d6bcd", "backup started", "uploaded 3 of 4 parts", "The broker keeps up to 6 h of this stream."] },
+  { name: "jobs-running-events", nav: "Work orders", click: "9a01ffbe", tab: "Kube events", settle: 600,
+    mocks: woMocks("9a01ffbe", WO_LOGS, WO_EVENTS),
+    assert_text: ["SuccessfulCreate", "Job/backup-9a01", "Started container backup"] },
+  // One that runs and has no line yet: more can come.
+  { name: "jobs-running-no-lines", nav: "Work orders", click: "b2c3d4e5", settle: 600,
+    mocks: woMocks("b2c3d4e5", WO_NO_LOGS, WO_NO_EVENTS),
+    assert_text: ["No log lines yet.", "every 5 seconds"] },
+  // One that ended: its lines and its events are still there.
+  { name: "jobs-ended-logs", nav: "Work orders", click: "7f3a01ab", settle: 600,
+    mocks: woMocks("7f3a01ab", WO_LOGS, WO_EVENTS),
+    assert_text: ["pushed ghcr.io/app:sha-7f3a01", "dump complete, 412 MB"] },
+  { name: "jobs-ended-events", nav: "Work orders", click: "7f3a01ab", tab: "Kube events", settle: 600,
+    mocks: woMocks("7f3a01ab", WO_LOGS, WO_EVENTS),
+    assert_text: ["SuccessfulCreate", "Job/backup-9a01"] },
+  // One that ended in the window with no line, and one that ended before the
+  // window: the broker answers with nothing for both, and the text differs.
+  { name: "jobs-ended-no-lines", nav: "Work orders", click: "c4d5e6f7", settle: 600,
+    mocks: woMocks("c4d5e6f7", WO_NO_LOGS, WO_NO_EVENTS),
+    assert_text: ["No log lines for this work order."], assert_absent: ["The log lines of this work order are gone."] },
+  { name: "jobs-ended-gone", nav: "Work orders", click: "561200cd", settle: 600,
+    mocks: woMocks("561200cd", WO_NO_LOGS, WO_NO_EVENTS),
+    assert_text: ["The log lines of this work order are gone.", "The broker keeps up to 6 h of this stream. This work order ended before that."] },
+  { name: "jobs-ended-gone-events", nav: "Work orders", click: "561200cd", tab: "Kube events", settle: 600,
+    mocks: woMocks("561200cd", WO_NO_LOGS, WO_NO_EVENTS),
+    assert_text: ["The Kubernetes events of this work order are gone."] },
   { name: "webhooks", nav: "Webhooks", mocks: { "/webhooks": HOOKS, "/webhook-deliveries": FEED } },
   // The "Recent deliveries" panel with no deliveries, and with a broker error
   // (BROKKR-T-0264).

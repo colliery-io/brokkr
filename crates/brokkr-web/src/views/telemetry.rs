@@ -4,11 +4,15 @@
 //! tabs picks the stack, and the broker states the retention window on each
 //! answer (BROKKR-T-0338). REST poll every 5 s; the Pod logs tab also tails
 //! the stack's live stream (`crate::live`, BROKKR-T-0348).
+//!
+//! The rows are not tied to a stack: [`KubeEventFeed`], [`log_lines`] and
+//! [`Retention`] also show the events and the logs of a work order
+//! (`crate::views::work_orders`).
 
 use crate::api;
 use crate::components::{agent_href, agent_name, same_agent, sev, LiveDot, PanelError};
-use crate::live::{Entry, LiveTail};
-use crate::models::{AgentEventDto, RetentionInfo};
+use crate::live::{Entry, LiveTail, LogBuffer};
+use crate::models::{AgentEventDto, K8sEventDto, RetentionInfo};
 use aurora_leptos::components::*;
 use aurora_leptos::data::{
     DetailList, FeedList, FeedRow, KeyValue, LogLine, LogView, RelativeTime,
@@ -18,7 +22,7 @@ use aurora_leptos::tokens::token;
 use leptos::prelude::*;
 
 /// The hue of a Kubernetes event type: `Normal` is fine, `Warning` is not.
-fn kube_hue(event_type: &str) -> &'static str {
+pub fn kube_hue(event_type: &str) -> &'static str {
     if event_type.eq_ignore_ascii_case("normal") {
         token::OK
     } else {
@@ -28,7 +32,7 @@ fn kube_hue(event_type: &str) -> &'static str {
 
 /// The retention the broker stated, in the console's voice.
 #[component]
-fn Retention(info: RetentionInfo) -> impl IntoView {
+pub fn Retention(info: RetentionInfo) -> impl IntoView {
     let window = info.window();
     let oldest = info.oldest_available_ts.clone();
     view! {
@@ -40,6 +44,62 @@ fn Retention(info: RetentionInfo) -> impl IntoView {
             }}
         </span>
     }
+}
+
+/// A list of Kubernetes events, in the order given (the broker sends the
+/// newest first): of a stack, or of the job of a work order.
+#[component]
+pub fn KubeEventFeed(events: Vec<K8sEventDto>) -> impl IntoView {
+    let rows = events
+        .iter()
+        .map(|e| {
+            let hue = kube_hue(&e.event_type);
+            let object = e.object();
+            let reason = e.reason.clone();
+            let kind = e.event_type.clone();
+            let msg = e.message.clone();
+            match crate::views::overview::event_at(e.observed_at.as_deref()) {
+                Some(t) => view! {
+                    <FeedRow at=t dot=hue subject=reason actor=object status=kind status_color=hue>
+                        {msg}
+                    </FeedRow>
+                }
+                .into_any(),
+                None => view! {
+                    <FeedRow dot=hue subject=reason actor=object status=kind status_color=hue>
+                        {msg}
+                    </FeedRow>
+                }
+                .into_any(),
+            }
+        })
+        .collect_view();
+    view! { <FeedList label="Kubernetes events">{rows}</FeedList> }
+}
+
+/// The rows of a buffer of pod log lines, as Aurora's `LogView` wants them:
+/// the source and the text, with the clock of the line. A gap is a row with a
+/// "gap" pill.
+pub fn log_lines(buffer: &LogBuffer) -> Vec<LogLine> {
+    buffer
+        .entries()
+        .map(|e| {
+            let (line, clock) = match e {
+                Entry::Line(l) => (
+                    LogLine::new(format!("{}: {}", l.source(), l.line)),
+                    l.clock(),
+                ),
+                Entry::Gap(g) => (
+                    LogLine::new(g.text()).level_color("gap", token::GOLD),
+                    g.clock(),
+                ),
+            };
+            match clock {
+                Some(t) => line.time(t),
+                None => line,
+            }
+        })
+        .collect()
 }
 
 #[component]
@@ -109,30 +169,8 @@ pub fn TelemetryView() -> impl IntoView {
     let selected = RwSignal::new(None::<AgentEventDto>);
     let open = RwSignal::new(false);
 
-    // The pod log lines (history, then live), as Aurora's LogView wants
-    // them. A gap is a row with a "gap" pill.
-    let log_lines = Signal::derive(move || {
-        tail.lines.with(|b| {
-            b.entries()
-                .map(|e| {
-                    let (line, clock) = match e {
-                        Entry::Line(l) => (
-                            LogLine::new(format!("{}: {}", l.source(), l.line)),
-                            l.clock(),
-                        ),
-                        Entry::Gap(g) => (
-                            LogLine::new(g.text()).level_color("gap", token::GOLD),
-                            g.clock(),
-                        ),
-                    };
-                    match clock {
-                        Some(t) => line.time(t),
-                        None => line,
-                    }
-                })
-                .collect::<Vec<_>>()
-        })
-    });
+    // The pod log lines: the history, then the live lines.
+    let log_lines = Signal::derive(move || tail.lines.with(log_lines));
     let logs_ready = Memo::new(move |_| matches!(logs.get(), Some(Some(Ok(_)))));
     // The state of the stream, next to the Pod logs title.
     let live_state = move || {
@@ -295,38 +333,15 @@ pub fn TelemetryView() -> impl IntoView {
                             </Stack>
                         }
                         .into_any(),
-                        Some(Some(Ok(h))) => {
-                            let rows = h.events.iter().map(|e| {
-                                let hue = kube_hue(&e.event_type);
-                                let object = e.object();
-                                let reason = e.reason.clone();
-                                let kind = e.event_type.clone();
-                                let msg = e.message.clone();
-                                match crate::views::overview::event_at(e.observed_at.as_deref()) {
-                                    Some(t) => view! {
-                                        <FeedRow at=t dot=hue subject=reason actor=object status=kind status_color=hue>
-                                            {msg}
-                                        </FeedRow>
-                                    }
-                                    .into_any(),
-                                    None => view! {
-                                        <FeedRow dot=hue subject=reason actor=object status=kind status_color=hue>
-                                            {msg}
-                                        </FeedRow>
-                                    }
-                                    .into_any(),
-                                }
-                            }).collect_view();
-                            view! {
-                                <Stack gap="sm">
-                                    <Panel title="Kubernetes events">
-                                        <FeedList label="Kubernetes events">{rows}</FeedList>
-                                    </Panel>
-                                    <Retention info=h.retention.clone() />
-                                </Stack>
-                            }
-                            .into_any()
+                        Some(Some(Ok(h))) => view! {
+                            <Stack gap="sm">
+                                <Panel title="Kubernetes events">
+                                    <KubeEventFeed events=h.events.clone() />
+                                </Panel>
+                                <Retention info=h.retention.clone() />
+                            </Stack>
                         }
+                        .into_any(),
                     }}
                 </TabPanel>
                 <TabPanel value="logs">

@@ -378,6 +378,10 @@ pub struct WorkOrderLogEntry {
     pub retries_attempted: i32,
     #[serde(default)]
     pub result_message: Option<String>,
+    /// When the work order ended. The console needs it to tell "no lines"
+    /// from "the lines are past the retention window".
+    #[serde(default)]
+    pub completed_at: Option<String>,
     /// The generator that owns the work order. No value: an admin owns it.
     #[serde(default)]
     pub owner_generator_id: Option<String>,
