@@ -2217,3 +2217,119 @@ async fn the_upgrade_answer_names_what_the_broker_accepts() {
         "the upgrade answer does not name work order telemetry: {header:?}"
     );
 }
+
+// =============================================================================
+// BROKKR-T-0412: the push of a work order reaches agents by a label
+// =============================================================================
+
+/// True when no frame that `matcher` accepts comes within `wait`.
+async fn no_message_within<F>(
+    socket: &mut tokio_tungstenite::WebSocketStream<
+        tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+    >,
+    wait: std::time::Duration,
+    mut matcher: F,
+) -> bool
+where
+    F: FnMut(&WsMessage) -> bool,
+{
+    let deadline = tokio::time::Instant::now() + wait;
+    loop {
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        match tokio::time::timeout(remaining, socket.next()).await {
+            Err(_) => return true,
+            Ok(Some(Ok(Message::Text(t)))) => {
+                let msg: WsMessage = serde_json::from_str(&t).expect("decode WsMessage");
+                if matcher(&msg) {
+                    return false;
+                }
+            }
+            Ok(Some(Ok(_))) => {}
+            Ok(_) => return true,
+        }
+    }
+}
+
+/// A generator's work order by a label: the connected agent that is
+/// registered with the generator gets the frame; the connected agent with the
+/// same label that is not registered does not.
+#[tokio::test]
+async fn a_work_order_by_label_is_pushed_to_registered_agents_only() {
+    use reqwest::Client;
+    use serde_json::json;
+
+    let fixture = TestFixture::new();
+    let (addr, registry) = spawn_full_broker(&fixture).await;
+    let http = Client::new();
+    let base = format!("http://{}", addr);
+
+    let (generator, generator_pak) =
+        fixture.create_test_generator_with_pak("t0412-ws-owner".to_string(), None);
+    let (inside, inside_pak) = agent_with_pak(&fixture, "t0412-ws-inside");
+    let (outside, outside_pak) = agent_with_pak(&fixture, "t0412-ws-outside");
+    fixture.register_agent_with_generator(inside.id, generator.id);
+    for agent in [&inside, &outside] {
+        fixture.create_test_agent_label(agent.id, "t0412-ws-team".to_string());
+    }
+
+    let (mut inside_socket, _) =
+        tokio_tungstenite::connect_async(ws_request_with_pak(&ws_url(addr), &inside_pak))
+            .await
+            .unwrap();
+    let (mut outside_socket, _) =
+        tokio_tungstenite::connect_async(ws_request_with_pak(&ws_url(addr), &outside_pak))
+            .await
+            .unwrap();
+    for agent in [&inside, &outside] {
+        tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            wait_for_connection(&registry, agent.id),
+        )
+        .await
+        .expect("registry registers the agent within 2s");
+    }
+
+    // The generator names no agent: the label alone carries the work order.
+    let resp = http
+        .post(format!("{base}/api/v1/work-orders"))
+        .header("Authorization", format!("Bearer {}", generator_pak))
+        .json(&json!({
+            "work_type": "custom",
+            "yaml_content": "kind: Job\nmetadata: { name: t0412 }\n",
+            "targeting": { "labels": ["t0412-ws-team"] }
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 201);
+    let created: serde_json::Value = resp.json().await.unwrap();
+    let work_order_id = created["id"].as_str().unwrap().to_string();
+
+    let msg = await_message(&mut inside_socket, |m| matches!(m, WsMessage::WorkOrder(_))).await;
+    match msg {
+        WsMessage::WorkOrder(wo) => assert_eq!(wo.id.to_string(), work_order_id),
+        other => panic!("not a work order frame: {other:?}"),
+    }
+
+    assert!(
+        no_message_within(
+            &mut outside_socket,
+            std::time::Duration::from_secs(1),
+            |m| matches!(m, WsMessage::WorkOrder(_))
+        )
+        .await,
+        "an agent that is not registered with the owner got the work order frame"
+    );
+
+    // REST is the source of truth: the registered agent has it in its
+    // pending list, connected or not.
+    let pending: Vec<Uuid> = fixture
+        .dal
+        .work_orders()
+        .list_pending_for_agent(inside.id, None)
+        .unwrap()
+        .iter()
+        .map(|w| w.id)
+        .collect();
+    assert!(pending.iter().any(|id| id.to_string() == work_order_id));
+}
