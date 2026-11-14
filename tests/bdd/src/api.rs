@@ -160,6 +160,16 @@ impl Api {
             .await
     }
 
+    pub async fn stack_events(&self, pak: &str, id: Uuid) -> Result<Answer> {
+        self.call(pak, Method::GET, &format!("/stacks/{id}/events"), None)
+            .await
+    }
+
+    pub async fn stack_logs(&self, pak: &str, id: Uuid) -> Result<Answer> {
+        self.call(pak, Method::GET, &format!("/stacks/{id}/logs"), None)
+            .await
+    }
+
     pub async fn agent_labels(&self, pak: &str, id: Uuid) -> Result<Answer> {
         self.call(pak, Method::GET, &format!("/agents/{id}/labels"), None)
             .await

@@ -15,6 +15,7 @@ There is one feature per flow:
 | `agent-lifecycle` | After onboarding: an agent's heartbeat in the fleet record, a silent agent, a paused agent, an agent that loses a stack and no longer counts its health, a deleted agent. The scenario plays the agent with the agent's PAK. |
 | `stack-lifecycle` | After the first apply: a changed folder gives a new revision that the agent serves, a failing revision makes the stack read failing, a new revision that fixes it makes it read healthy, a deleted stack leaves no failing and no degraded record. The scenario plays the agent with the agent's PAK. |
 | `work-order-lifecycle` | A work order from create to its end: pending, claimed, completed and in the log; a failure that waits and comes back until its retries are spent; a claim that passes its timeout; a work order for a label that one of two agents claims; the pending and claimed counts of the fleet record. The scenario plays the agent with the agent's PAK. |
+| `version-compatibility` | The agent of the last release with this broker, and this agent with the broker of the last release: the agent is live in the fleet, a stack deploys and its events and log lines read back, an admin's work order runs to its end, and neither side drops a frame of the other. It runs in a mixed pairing; see "Run two versions together". |
 
 Each scenario creates its own generators, agents and stacks under unique names and removes them when it ends, so scenarios run in any order, side by side, and the suite runs twice against the same broker.
 
@@ -50,9 +51,44 @@ A failed step prints the step, the command that ran, and the command's whole out
 
 A scenario tagged `@known-bug` states a behaviour the product does not have yet; a comment above it names the bug. The runner leaves these scenarios out, so the suite stays a gate. `BDD_KNOWN_BUGS=run` includes them; run them when the fix lands, then remove the tag and the comment.
 
+## Run two versions together
+
+An upgrade goes broker first and agents later, so a released agent talks to a newer broker for some time. A pairing says which sides of the stack are the last release:
+
+| Pairing | Broker | Agent in the cluster |
+|---------|--------|----------------------|
+| `source` (default) | this checkout | this checkout |
+| `old-agent` | this checkout | the image of the last release |
+| `old-broker` | the image of the last release | this checkout |
+
+```bash
+angreal tests bdd --pairing old-agent
+angreal tests bdd --pairing old-broker
+```
+
+A mixed pairing runs the feature `version-compatibility` unless `--feature` names another one. The task stops the stack, removes its volumes, and starts it again with an override file on top of `docker-compose.yaml` (`docker-compose.old-agent.yaml` or `docker-compose.old-broker.yaml`). A broker of the last release must start on an empty database, because it has fewer migrations than this broker.
+
+The version of the last release is in `.angreal/files/LAST_RELEASE`. Change it after each release, so that a mixed pairing runs the version that is in the field. The `brokkr` CLI and the `brokkr-agent` binary that the suite starts are always built from this checkout.
+
+With `--skip-docker` the task does not start a stack. Start the stack of the pairing first: the suite cannot tell which one runs.
+
+The suite gets the pairing as `BDD_PAIRING` and leaves out the scenarios that do not apply:
+
+| Tag | Meaning |
+|-----|---------|
+| `@pairing-old-agent`, `@pairing-old-broker` | The scenario runs in that pairing only. |
+| `@needs-new-agent` | The scenario is left out when the agent is the last release. |
+| `@needs-new-broker` | The scenario is left out when the broker is the last release. |
+
+To add a scenario to a mixed pairing, write it in `version-compatibility.feature`. Use only what the last release has on the old side: with `old-broker`, the `brokkr` CLI of this checkout talks to a broker of the last release, so a command or a route that is new since then needs the tag `@needs-new-broker`. A scenario that states what must hold in all three pairings gets no tag.
+
+Two steps read the logs of the containers of the stack: "the broker has dropped no frame of an agent" and "the agent in the cluster has dropped no frame of the broker". A side that cannot read a frame of the other side drops it and writes a line at the level `warn`; the steps fail when they find that line. Put them at the end of a scenario that made the two sides talk. They need `docker` on the PATH and the containers `brokkr-dev-broker-1` and `brokkr-dev-agent-1`; `BDD_BROKER_CONTAINER` and `BDD_AGENT_CONTAINER` name other containers.
+
 ## In CI
 
 The workflow `bdd.yml` runs one feature per runner, each with its own compose stack. `main.yml` calls it on a pull request that changes the broker, the agent, the CLI, the client, the features or the workflow, and the `CI gate` check requires it.
+
+The job `compatibility` of the same workflow runs `version-compatibility` for the pairings `old-agent` and `old-broker`. It pulls the image of the last release for the old side and builds the other side from the checkout.
 
 ## Add a scenario
 

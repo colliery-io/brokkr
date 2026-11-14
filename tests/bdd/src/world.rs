@@ -37,6 +37,13 @@ pub struct Env {
     pub agent_bin: Option<PathBuf>,
     /// The name of the agent that runs in the test stack's cluster.
     pub cluster_agent: Option<String>,
+    /// Which sides of the stack are the last release (BROKKR-T-0414):
+    /// `source`, `old-agent` or `old-broker`.
+    pub pairing: String,
+    /// The containers of the broker and of the agent of the compose stack,
+    /// for the steps that read their logs.
+    pub broker_container: String,
+    pub agent_container: String,
 }
 
 impl Env {
@@ -53,6 +60,11 @@ impl Env {
             })),
             agent_bin: var("BROKKR_AGENT").map(PathBuf::from),
             cluster_agent: var("BROKKR_CLUSTER_AGENT"),
+            pairing: var("BDD_PAIRING").unwrap_or_else(|| "source".to_string()),
+            broker_container: var("BDD_BROKER_CONTAINER")
+                .unwrap_or_else(|| "brokkr-dev-broker-1".to_string()),
+            agent_container: var("BDD_AGENT_CONTAINER")
+                .unwrap_or_else(|| "brokkr-dev-agent-1".to_string()),
         }
     }
 }
@@ -65,6 +77,7 @@ impl fmt::Debug for Env {
             .field("cli", &self.cli)
             .field("agent_bin", &self.agent_bin)
             .field("cluster_agent", &self.cluster_agent)
+            .field("pairing", &self.pairing)
             .finish()
     }
 }
@@ -232,6 +245,17 @@ impl World {
         format!("bdd-{}-{}", name, self.run)
     }
 
+    /// The name of the Pod of the stack `stack` of this scenario
+    /// ([`Self::new_pod_bundle`]).
+    pub fn pod_name(&self, stack: &str) -> String {
+        format!("bdd-pod-{}-{}", stack, self.run)
+    }
+
+    /// The line that the Pod of the stack `stack` prints.
+    pub fn pod_line(&self, stack: &str) -> String {
+        format!("brokkr bdd line of {}", self.pod_name(stack))
+    }
+
     /// The line that the Job of the work order `name` prints.
     pub fn job_line(&self, name: &str) -> String {
         format!("brokkr bdd line of {}", self.job_name(name))
@@ -383,6 +407,23 @@ impl World {
             self.run, self.run
         );
         std::fs::write(dir.path().join("configmap.yaml"), yaml).expect("write the manifest");
+        let path = dir.path().to_path_buf();
+        self.bundle = Some(dir);
+        path
+    }
+
+    /// A folder with one Pod that prints the line of the stack every few
+    /// seconds, with the annotation that lets the agent send its log lines.
+    /// The agent sends the events and the log lines of this Pod on its
+    /// channel with the stack id: the frames that both sides must agree on.
+    pub fn new_pod_bundle(&mut self, stack: &str) -> PathBuf {
+        let dir = tempfile::tempdir().expect("a temp dir for the manifests");
+        let yaml = format!(
+            "apiVersion: v1\nkind: Pod\nmetadata:\n  name: {pod}\n  namespace: default\n  annotations:\n    brokkr.io/stream-logs: \"true\"\nspec:\n  restartPolicy: Never\n  terminationGracePeriodSeconds: 1\n  containers:\n    - name: main\n      image: busybox:1.36\n      command: [\"sh\", \"-c\", \"while true; do echo {line}; sleep 5; done\"]\n",
+            pod = self.pod_name(stack),
+            line = self.pod_line(stack),
+        );
+        std::fs::write(dir.path().join("pod.yaml"), yaml).expect("write the manifest");
         let path = dir.path().to_path_buf();
         self.bundle = Some(dir);
         path
