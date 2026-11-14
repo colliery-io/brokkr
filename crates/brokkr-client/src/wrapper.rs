@@ -857,8 +857,28 @@ impl BrokkrClient {
 
     /// Find one agent by id or by name. An id is matched first. A name that
     /// more than one agent has is an error that lists their ids.
+    ///
+    /// A generator PAK lists only the agents registered with it. So for a
+    /// generator, an agent that is not in the list has one of two causes: no
+    /// agent has the name, or the agent is not registered with the
+    /// generator. The error then says both and names the command that
+    /// registers an agent ([`unlisted_agent_message`], BROKKR-T-0418). For an
+    /// admin PAK, which lists each agent, the error stays "no agent has the
+    /// name or id".
     pub async fn find_agent(&self, wanted: &str) -> Result<Agent, BrokkrError> {
         let agents = self.list_agents().await?;
+        let listed = agents
+            .iter()
+            .any(|a| a.name == wanted || a.id.to_string().eq_ignore_ascii_case(wanted));
+        // One more request, on the error path only.
+        if !listed
+            && let Ok(me) = self.whoami().await
+            && let Some(generator) = me.generator
+        {
+            return Err(BrokkrError::InvalidRequest(unlisted_agent_message(
+                wanted, &generator,
+            )));
+        }
         pick_one(agents, wanted, "agent", |a| (a.id, a.name.as_str()))
     }
 
@@ -1257,6 +1277,25 @@ fn pick_one<T>(
             Err(ambiguous_name(kind, wanted, &ids))
         }
     }
+}
+
+/// The words that say an agent can be unknown to a generator for the lack of
+/// a registration. A caller can look for them in an error of
+/// [`BrokkrClient::find_agent`].
+pub const UNLISTED_AGENT_MARK: &str = "or the agent is not registered with your generator";
+
+/// The error for an agent that the list of a generator PAK does not have.
+/// The list of a generator has only the agents registered with it, so the
+/// client cannot tell an unknown name from an agent with no registration.
+/// The text says both and gives the command that registers the agent.
+/// `generator` is the id of the generator of the PAK.
+pub fn unlisted_agent_message(wanted: &str, generator: &str) -> String {
+    format!(
+        "no agent that is registered with your generator has the name or id \"{wanted}\". \
+         Either no agent has this name or id, {UNLISTED_AGENT_MARK}. \
+         An admin registers an agent with a generator: \
+         brokkr register --agent {wanted} --generator {generator}"
+    )
 }
 
 /// The error for a name that more than one item has. It lists their ids.
@@ -1662,6 +1701,27 @@ mod tests {
         let msg = err.to_string();
         assert!(msg.contains("2 agents have the name \"twin\""), "{msg}");
         assert!(msg.contains(&Uuid::from_u128(2).to_string()), "{msg}");
+    }
+
+    #[test]
+    fn an_unlisted_agent_names_both_causes_and_the_register_command() {
+        let generator = Uuid::from_u128(7).to_string();
+        let msg = unlisted_agent_message("prod-2", &generator);
+        assert!(
+            msg.starts_with(
+                "no agent that is registered with your generator has the name or id \"prod-2\"."
+            ),
+            "{msg}"
+        );
+        assert!(msg.contains("Either no agent has this name or id"), "{msg}");
+        assert!(msg.contains(UNLISTED_AGENT_MARK), "{msg}");
+        assert!(
+            msg.ends_with(&format!(
+                "An admin registers an agent with a generator: \
+                 brokkr register --agent prod-2 --generator {generator}"
+            )),
+            "{msg}"
+        );
     }
 
     #[test]

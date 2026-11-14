@@ -106,3 +106,11 @@ Feature: The rules that keep generators apart
     And the error names the command that registers it
     When the generator "team-robin" lists its work orders
     Then the command says no work orders wait or run
+
+  Scenario: A work order for an unregistered agent given by its name names the register command
+    When the generator "team-robin" creates the work order "backup" for the agent "stray-1" by its name
+    Then the command is refused
+    And the error says the agent may not be registered with the generator
+    And the error names the command that registers it
+    When the generator "team-robin" lists its work orders
+    Then the command says no work orders wait or run

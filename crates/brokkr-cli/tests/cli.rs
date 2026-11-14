@@ -566,6 +566,8 @@ fn work_order_create_help_documents_the_targets_and_the_timing() {
         "--claim-timeout",
         "--max-retries",
         "--backoff",
+        // The first wait is 2 times the value (BROKKR-T-0418).
+        "waits 2 times this value",
         "owns it",
     ] {
         assert!(

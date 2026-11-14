@@ -387,3 +387,15 @@ async fn reads_work_order_events(w: &mut World, generator: String, name: String)
     let id = work_order_arg(w, &name);
     w.brokkr(&pak, &["work-order", "events", &id]).await;
 }
+
+/// A generator lists only the agents registered with it, so the CLI cannot
+/// find this agent by its name. The error must still give the next step
+/// (BROKKR-T-0418).
+#[when(
+    expr = "the generator {string} creates the work order {string} for the agent {string} by its name"
+)]
+async fn creates_work_order_by_name(w: &mut World, generator: String, name: String, agent: String) {
+    let agent = w.agent(&agent).name.clone();
+    let yaml = plain_yaml(w, &name);
+    create_work_order(w, &generator, &name, "bdd", &yaml, &["--agent", &agent]).await;
+}

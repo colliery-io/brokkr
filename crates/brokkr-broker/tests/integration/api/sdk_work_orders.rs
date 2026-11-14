@@ -470,3 +470,72 @@ async fn the_log_lists_ended_work_orders_for_their_owner_and_an_admin() {
         (403, "work_order_access_denied".to_string())
     );
 }
+
+/// BROKKR-T-0418: a generator lists only the agents registered with it. The
+/// lookup of an agent that it cannot list says both causes and names the
+/// command that registers an agent. An admin lists each agent, so its text
+/// stays.
+#[tokio::test]
+async fn a_generator_that_cannot_find_an_agent_gets_the_register_command() {
+    let fixture = TestFixture::new();
+    let scene = scene(&fixture, "lookup").await;
+    let stray = fixture.create_test_agent("sdk-wo-stray-lookup".to_string(), "c".to_string());
+
+    // The owner finds its registered agent by name and by id.
+    let found = scene
+        .owner
+        .find_agent("sdk-wo-agent-lookup")
+        .await
+        .expect("the owner finds its agent");
+    assert_eq!(found.id, scene.agent_id);
+
+    // An agent that is not registered with the owner, by its name.
+    let err = scene
+        .owner
+        .find_agent("sdk-wo-stray-lookup")
+        .await
+        .expect_err("the owner cannot list the stray agent");
+    let text = err.to_string();
+    assert!(
+        text.contains(
+            "no agent that is registered with your generator has the name or id \"sdk-wo-stray-lookup\""
+        ),
+        "{text}"
+    );
+    assert!(text.contains(brokkr_client::UNLISTED_AGENT_MARK), "{text}");
+    assert!(
+        text.contains(&format!(
+            "brokkr register --agent sdk-wo-stray-lookup --generator {}",
+            scene.owner_id
+        )),
+        "{text}"
+    );
+
+    // The same agent by its id: the same text, with the id in the command.
+    let err = scene
+        .owner
+        .find_agent(&stray.id.to_string())
+        .await
+        .expect_err("the owner cannot list the stray agent");
+    assert!(
+        err.to_string().contains(&format!(
+            "brokkr register --agent {} --generator {}",
+            stray.id, scene.owner_id
+        )),
+        "{err}"
+    );
+
+    // An admin lists each agent: a name that no agent has keeps its text.
+    let err = scene
+        .admin
+        .find_agent("sdk-wo-no-such-agent")
+        .await
+        .expect_err("no agent has this name");
+    let text = err.to_string();
+    assert!(
+        text.contains("no agent has the name or id \"sdk-wo-no-such-agent\""),
+        "{text}"
+    );
+    assert!(!text.contains(brokkr_client::UNLISTED_AGENT_MARK), "{text}");
+    assert!(scene.admin.find_agent("sdk-wo-stray-lookup").await.is_ok());
+}
