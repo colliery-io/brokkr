@@ -39,6 +39,28 @@ const FEATURES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/features");
 /// the suite stays a gate, unless `BDD_KNOWN_BUGS=run` asks for them.
 const KNOWN_BUG_TAG: &str = "known-bug";
 
+/// Whether a scenario with these tags runs in `pairing` (BROKKR-T-0414).
+///
+/// `pairing-old-agent` and `pairing-old-broker` mark a scenario of that one
+/// pairing. `needs-new-agent` and `needs-new-broker` mark a scenario that the
+/// last release of that side cannot run.
+fn runs_in_pairing<'a>(pairing: &str, tags: impl Iterator<Item = &'a String>) -> bool {
+    for tag in tags {
+        if let Some(only) = tag.strip_prefix("pairing-")
+            && only != pairing
+        {
+            return false;
+        }
+        if tag == "needs-new-agent" && pairing == "old-agent" {
+            return false;
+        }
+        if tag == "needs-new-broker" && pairing == "old-broker" {
+            return false;
+        }
+    }
+    true
+}
+
 #[tokio::main]
 async fn main() {
     let env = Env::from_process_env();
@@ -53,6 +75,16 @@ async fn main() {
         Some(name) => println!("  cluster agent: {name}"),
         None => println!("  cluster agent: not set (BROKKR_CLUSTER_AGENT); cluster scenarios fail"),
     }
+
+    println!("  pairing: {} (BDD_PAIRING)", env.pairing);
+    if !["source", "old-agent", "old-broker"].contains(&env.pairing.as_str()) {
+        eprintln!(
+            "no pairing {:?}. The pairings are: source, old-agent, old-broker",
+            env.pairing
+        );
+        std::process::exit(2);
+    }
+    let pairing = env.pairing.clone();
 
     if let Err(e) = api::wait_for_ready(&env.broker_url, Duration::from_secs(60)).await {
         eprintln!("the broker is not ready: {e}");
@@ -76,13 +108,51 @@ async fn main() {
             .boxed_local()
         })
         .filter_run_and_exit(FEATURES, move |feature, rule, scenario| {
-            let tagged = feature
-                .tags
-                .iter()
-                .chain(rule.iter().flat_map(|r| r.tags.iter()))
-                .chain(scenario.tags.iter())
-                .any(|t| t == KNOWN_BUG_TAG);
-            run_known_bugs || !tagged
+            let tags = || {
+                feature
+                    .tags
+                    .iter()
+                    .chain(rule.iter().flat_map(|r| r.tags.iter()))
+                    .chain(scenario.tags.iter())
+            };
+            let known_bug = tags().any(|t| t == KNOWN_BUG_TAG);
+            (run_known_bugs || !known_bug) && runs_in_pairing(&pairing, tags())
         })
         .await;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::runs_in_pairing;
+
+    fn runs(pairing: &str, tags: &[&str]) -> bool {
+        let tags: Vec<String> = tags.iter().map(|t| t.to_string()).collect();
+        runs_in_pairing(pairing, tags.iter())
+    }
+
+    #[test]
+    fn a_scenario_with_no_pairing_tag_runs_in_each_pairing() {
+        for pairing in ["source", "old-agent", "old-broker"] {
+            assert!(runs(pairing, &[]));
+            assert!(runs(pairing, &["known-bug"]));
+        }
+    }
+
+    #[test]
+    fn a_pairing_scenario_runs_in_its_pairing_only() {
+        assert!(runs("old-agent", &["pairing-old-agent"]));
+        assert!(!runs("old-broker", &["pairing-old-agent"]));
+        assert!(!runs("source", &["pairing-old-agent"]));
+        assert!(runs("old-broker", &["pairing-old-broker"]));
+        assert!(!runs("source", &["pairing-old-broker"]));
+    }
+
+    #[test]
+    fn a_scenario_that_needs_a_new_side_is_left_out_when_that_side_is_old() {
+        assert!(runs("source", &["needs-new-agent", "needs-new-broker"]));
+        assert!(!runs("old-agent", &["needs-new-agent"]));
+        assert!(runs("old-broker", &["needs-new-agent"]));
+        assert!(!runs("old-broker", &["needs-new-broker"]));
+        assert!(!runs("old-agent", &["needs-new-agent", "needs-new-broker"]));
+    }
 }

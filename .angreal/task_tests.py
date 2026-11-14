@@ -1,7 +1,7 @@
 import angreal # type: ignore
 import subprocess
 import sys
-from utils import docker_up, docker_down, cwd, docker_clean
+from utils import docker_up, docker_down, cwd, docker_clean, PAIRINGS
 import time
 test = angreal.command_group(name="tests", about="commands for test suites")
 
@@ -427,13 +427,22 @@ def e2e_tests(skip_docker: bool = False, scenario: str = ""):
 BDD_FEATURES_DIR = "tests/bdd/features"
 
 
-def run_bdd_tests(feature: str = ""):
+# The feature that a mixed pairing runs when none is named (BROKKR-T-0414).
+COMPATIBILITY_FEATURE = "version-compatibility"
+
+
+def run_bdd_tests(feature: str = "", pairing: str = "source"):
     """Build and run the BDD suite (BROKKR-T-0385).
 
     The Gherkin features in ``tests/bdd/features`` drive the real ``brokkr``
     CLI, the real ``brokkr-agent`` binary and the broker API against the
     compose stack. ``feature`` names one file without its extension (for
     example ``generator-onboarding``); empty runs them all.
+
+    ``pairing`` says which sides of the stack are the last release
+    (BROKKR-T-0414). The suite gets it as ``BDD_PAIRING`` and leaves out the
+    scenarios that the old side cannot run. The CLI and the agent binary that
+    the suite starts are always built from this checkout.
     """
     import os
 
@@ -462,6 +471,7 @@ def run_bdd_tests(feature: str = ""):
     env.setdefault("BROKKR_AGENT", os.path.join(cwd, "target", "debug", "brokkr-agent"))
     # The agent the compose stack runs in its k3s cluster (init-agent service).
     env.setdefault("BROKKR_CLUSTER_AGENT", "brokkr-integration-test-agent")
+    env["BDD_PAIRING"] = pairing
 
     cmd = ["./tests/bdd/target/release/brokkr-bdd"]
     if feature:
@@ -486,24 +496,40 @@ def run_bdd_tests(feature: str = ""):
 @angreal.command(name="bdd", about="run the BDD features (Gherkin) against the compose stack")
 @angreal.argument(name="skip_docker", long="skip-docker", required=False, help="Skip docker compose up", takes_value=False, is_flag=True)
 @angreal.argument(name="feature", long="feature", required=False, help="Run one feature by its file name, e.g. generator-onboarding. Omit for all.")
-def bdd_tests(skip_docker: bool = False, feature: str = ""):
+@angreal.argument(name="pairing", long="pairing", required=False, help=f"Which sides are the last release: {', '.join(PAIRINGS)}. Default: source (both from this checkout). A mixed pairing runs the feature version-compatibility unless --feature names one.")
+def bdd_tests(skip_docker: bool = False, feature: str = "", pairing: str = ""):
     """Run the BDD features: the onboarding flows as a person runs them.
 
     Each feature in ``tests/bdd/features`` is one flow (generator onboarding,
     agent onboarding, the generator after apply, the rules that keep generators
     apart). The steps run the real ``brokkr`` CLI and ``brokkr-agent`` binary
     against the compose stack. See docs/src/content/docs/how-to/bdd-features.md.
+
+    ``--pairing old-agent`` runs the agent of the last release with the broker
+    of this checkout; ``--pairing old-broker`` runs the reverse
+    (BROKKR-T-0414). With ``--skip-docker`` the stack that runs must be the
+    one of the pairing: the suite cannot tell.
     """
+    pairing = pairing or "source"
+    if pairing not in PAIRINGS:
+        print(f"no pairing {pairing!r}. The pairings are: {', '.join(PAIRINGS)}")
+        return 2
+    if pairing != "source" and not feature:
+        feature = COMPATIBILITY_FEATURE
+
     if not skip_docker:
+        # A clean start each time: a broker of the last release must find an
+        # empty database, not one that a newer broker migrated.
+        docker_down()
         docker_clean()
-        docker_up()
+        docker_up(pairing=pairing)
 
     print("Sleeping for 30 seconds, waiting for services to stabilize - get some coffee")
     time.sleep(30)
 
     rc = 0
     try:
-        rc = run_bdd_tests(feature=feature)
+        rc = run_bdd_tests(feature=feature, pairing=pairing)
         # Only prompt when attached to a TTY (BROKKR-T-0027).
         if not skip_docker and sys.stdin.isatty():
             input("Press Enter to shutdown containers and clean up...")
