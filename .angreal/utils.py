@@ -11,6 +11,44 @@ DOCKER_COMPOSE_FILE = os.path.join(angreal.get_root(),'files','docker-compose.ya
 # Default project name (matches docker-compose.yaml name field)
 DEFAULT_PROJECT = "brokkr-dev"
 
+# The pairings of the compose stack (BROKKR-T-0414). "source" builds the
+# broker and the agent from this checkout. A mixed pairing takes one side from
+# the image of the last release, with an override file on top of the stack.
+PAIRINGS = ("source", "old-agent", "old-broker")
+LAST_RELEASE_FILE = os.path.join(angreal.get_root(), 'files', 'LAST_RELEASE')
+
+
+def last_release():
+    """The version of the last release, from the file LAST_RELEASE. The
+    release task bumps it after the tag, so a mixed pairing always runs the
+    version that is in the field."""
+    with open(LAST_RELEASE_FILE) as f:
+        return f.read().strip()
+
+
+def compose_files(pairing="source"):
+    """The compose files of a pairing, base first."""
+    if pairing not in PAIRINGS:
+        raise ValueError(f"no pairing {pairing!r}. The pairings are: {', '.join(PAIRINGS)}")
+    files = [DOCKER_COMPOSE_FILE]
+    if pairing != "source":
+        files.append(os.path.join(angreal.get_root(), 'files', f'docker-compose.{pairing}.yaml'))
+    return files
+
+
+def compose_args(pairing="source"):
+    """The `-f` arguments of `docker compose` for a pairing."""
+    return " ".join(f"-f {f}" for f in compose_files(pairing))
+
+
+def compose_env(pairing="source"):
+    """The environment of `docker compose` for a pairing: a mixed pairing
+    needs the version of the released side."""
+    env = os.environ.copy()
+    if pairing != "source":
+        env.setdefault("BROKKR_LAST_RELEASE", last_release())
+    return env
+
 
 # The dev broker runs the embedded default admin hash (crates/brokkr-utils/
 # default.toml), so this publicly known PAK opens it. Dev only.
@@ -125,12 +163,13 @@ def wait_for_ready(project=DEFAULT_PROJECT, timeout_s=900):
     return False
 
 
-def docker_up(services=None, project=DEFAULT_PROJECT):
+def docker_up(services=None, project=DEFAULT_PROJECT, pairing="source"):
     """Start docker compose services.
 
     Args:
         services: Optional list of specific services to start. If None, starts all services.
         project: Docker compose project name for isolation.
+        pairing: "source", "old-agent" or "old-broker" (see PAIRINGS).
 
     Exits with the compose exit code when compose fails, so a broken stack is
     not reported as success (BROKKR-T-0330).
@@ -139,9 +178,10 @@ def docker_up(services=None, project=DEFAULT_PROJECT):
 
     services_str = " ".join(services) if services else ""
     result = subprocess.run(
-        f"docker compose -f {DOCKER_COMPOSE_FILE} -p {project} up --build -d --wait {services_str}",
+        f"docker compose {compose_args(pairing)} -p {project} up --build -d --wait {services_str}",
         cwd=cwd,
-        shell=True
+        shell=True,
+        env=compose_env(pairing),
     )
     # `--wait` returns 1 as soon as a one-shot service exits, so the verdict
     # is the `ready` service's exit code, once it has run.

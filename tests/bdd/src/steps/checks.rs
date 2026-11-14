@@ -1126,3 +1126,227 @@ async fn work_order_events_name_job(w: &mut World, name: String) {
         tokio::time::sleep(Duration::from_secs(3)).await;
     }
 }
+
+// Version compatibility (BROKKR-T-0414): the agent in the cluster, the frames
+// of a stack, and the frames that a side could not read.
+
+/// The fleet record of the agent in the cluster of the test stack.
+async fn cluster_fleet_record(w: &World) -> Value {
+    let id = w
+        .cluster_agent_id
+        .expect("the scenario has not looked up the cluster agent yet");
+    w.api
+        .fleet_record(w.admin(), id)
+        .await
+        .unwrap_or_else(|e| panic!("read the fleet record of the cluster agent: {e}"))
+}
+
+/// Poll the fleet record of the cluster agent until `holds`, for one minute:
+/// an agent that the scenario just activated needs a heartbeat or two.
+async fn cluster_fleet_record_until(w: &World, what: &str, holds: impl Fn(&Value) -> bool) {
+    let start = Instant::now();
+    loop {
+        let record = cluster_fleet_record(w).await;
+        if holds(&record) {
+            return;
+        }
+        assert!(
+            start.elapsed() < TELEMETRY_WAIT,
+            "the fleet record of the cluster agent does not have {what} after {TELEMETRY_WAIT:?}: {record}"
+        );
+        tokio::time::sleep(Duration::from_secs(3)).await;
+    }
+}
+
+#[then(expr = "the fleet record of the cluster agent has a heartbeat under {int} seconds old")]
+async fn cluster_fleet_record_fresh(w: &mut World, seconds: i64) {
+    cluster_fleet_record_until(w, "a fresh heartbeat", |record| {
+        record
+            .get("heartbeat_age_seconds")
+            .and_then(Value::as_i64)
+            .is_some_and(|age| age < seconds)
+    })
+    .await;
+}
+
+#[then("the fleet record of the cluster agent has an open connection")]
+async fn cluster_fleet_record_connected(w: &mut World) {
+    cluster_fleet_record_until(w, "an open connection", |record| {
+        record.get("ws_connected").and_then(Value::as_bool) == Some(true)
+    })
+    .await;
+}
+
+#[then(expr = "the events of the stack {string} name its pod within three minutes")]
+async fn stack_events_name_pod(w: &mut World, stack: String) {
+    let id = w.stack_id(&stack).await;
+    let pod = w.pod_name(&stack);
+    let start = Instant::now();
+    loop {
+        let answer = w
+            .api
+            .stack_events(w.admin(), id)
+            .await
+            .expect("ask the broker for the events of the stack");
+        let found = answer.ok()
+            && answer
+                .body
+                .get("events")
+                .and_then(Value::as_array)
+                .is_some_and(|events| {
+                    events.iter().any(|e| {
+                        e.pointer("/involved_object/name").and_then(Value::as_str)
+                            == Some(pod.as_str())
+                    })
+                });
+        if found {
+            return;
+        }
+        assert!(
+            start.elapsed() < REPORT_WAIT,
+            "the events of the stack {stack:?} do not name the pod {pod:?} after {REPORT_WAIT:?}. The broker answered {} {}",
+            answer.status,
+            answer.body
+        );
+        tokio::time::sleep(Duration::from_secs(5)).await;
+    }
+}
+
+#[then(expr = "the logs of the stack {string} have the line of its pod within three minutes")]
+async fn stack_logs_have_line(w: &mut World, stack: String) {
+    let id = w.stack_id(&stack).await;
+    let line = w.pod_line(&stack);
+    let start = Instant::now();
+    loop {
+        let answer = w
+            .api
+            .stack_logs(w.admin(), id)
+            .await
+            .expect("ask the broker for the logs of the stack");
+        let found = answer.ok()
+            && answer
+                .body
+                .get("lines")
+                .and_then(Value::as_array)
+                .is_some_and(|lines| {
+                    lines
+                        .iter()
+                        .any(|l| l.get("line").and_then(Value::as_str) == Some(line.as_str()))
+                });
+        if found {
+            return;
+        }
+        assert!(
+            start.elapsed() < REPORT_WAIT,
+            "the logs of the stack {stack:?} do not have the line {line:?} after {REPORT_WAIT:?}. The broker answered {} {}",
+            answer.status,
+            answer.body
+        );
+        tokio::time::sleep(Duration::from_secs(5)).await;
+    }
+}
+
+/// The list `key` of an answer of the broker, which must be a success.
+fn telemetry_list(answer: &api::Answer, what: &str, key: &str) -> Vec<Value> {
+    assert!(
+        answer.ok(),
+        "the broker did not give the {what}: {} {}",
+        answer.status,
+        answer.body
+    );
+    answer
+        .body
+        .get(key)
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_else(|| panic!("no `{key}` in the {what}: {}", answer.body))
+}
+
+#[then(expr = "the logs of the work order {string} are empty")]
+async fn work_order_logs_empty(w: &mut World, name: String) {
+    let answer = w
+        .api
+        .work_order_logs(w.admin(), work_order_id(w, &name))
+        .await
+        .expect("ask the broker for the logs of the work order");
+    let lines = telemetry_list(&answer, "logs of the work order", "lines");
+    assert!(
+        lines.is_empty(),
+        "the work order {name:?} has log lines: {lines:?}"
+    );
+}
+
+#[then(expr = "the events of the work order {string} are empty")]
+async fn work_order_events_empty(w: &mut World, name: String) {
+    let answer = w
+        .api
+        .work_order_events(w.admin(), work_order_id(w, &name))
+        .await
+        .expect("ask the broker for the events of the work order");
+    let events = telemetry_list(&answer, "events of the work order", "events");
+    assert!(
+        events.is_empty(),
+        "the work order {name:?} has events: {events:?}"
+    );
+}
+
+/// The lines of the log of a container of the compose stack that hold
+/// `needle`. A side that cannot read a frame of the other side drops it and
+/// says so in its log, at the level `warn`. The log is the one place where
+/// this shows for a side of the last release too: a released broker cannot
+/// get a new counter (BROKKR-T-0414).
+async fn container_log_lines_with(container: &str, needle: &str) -> Vec<String> {
+    let output = tokio::process::Command::new("docker")
+        .args(["logs", container])
+        .output()
+        .await
+        .unwrap_or_else(|e| panic!("run `docker logs {container}`: {e}"));
+    assert!(
+        output.status.success(),
+        "`docker logs {container}` failed. Set BDD_BROKER_CONTAINER and BDD_AGENT_CONTAINER when the compose project is not brokkr-dev:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    // A container logs to both streams.
+    let mut text = String::from_utf8_lossy(&output.stdout).into_owned();
+    text.push_str(&String::from_utf8_lossy(&output.stderr));
+    assert!(
+        !text.trim().is_empty(),
+        "the container {container} has an empty log: the check would pass for no reason"
+    );
+    text.lines()
+        .filter(|l| l.contains(needle))
+        .map(str::to_string)
+        .collect()
+}
+
+/// What the broker writes when it drops a frame of an agent that it could
+/// not read (`ws/handler.rs`; the same text in the last release).
+const BROKER_DROPPED_FRAME: &str = "dropping undecodable WS frame";
+
+/// What the agent writes when it drops a frame of the broker that it could
+/// not read (`broker_ws.rs`; the same text in the last release).
+const AGENT_DROPPED_FRAME: &str = "undecodable WS frame; dropping";
+
+#[then("the broker has dropped no frame of an agent")]
+async fn broker_dropped_no_frame(w: &mut World) {
+    let dropped = container_log_lines_with(&w.env.broker_container, BROKER_DROPPED_FRAME).await;
+    assert!(
+        dropped.is_empty(),
+        "the broker could not read {} frame(s) of an agent (pairing {}). The first:\n{}",
+        dropped.len(),
+        w.env.pairing,
+        dropped[0]
+    );
+}
+
+#[then("the agent in the cluster has dropped no frame of the broker")]
+async fn agent_dropped_no_frame(w: &mut World) {
+    let dropped = container_log_lines_with(&w.env.agent_container, AGENT_DROPPED_FRAME).await;
+    assert!(
+        dropped.is_empty(),
+        "the agent could not read {} frame(s) of the broker (pairing {}). The first:\n{}",
+        dropped.len(),
+        w.env.pairing,
+        dropped[0]
+    );
+}
