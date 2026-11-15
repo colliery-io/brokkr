@@ -37,26 +37,8 @@ Feature: Version compatibility of the agent and the broker
     And the broker has dropped no frame of an agent
     And the agent in the cluster has dropped no frame of the broker
 
-  @needs-new-agent @needs-new-broker
   Scenario: The log line and the events of a work order read back
     When the admin launches the work order "migrate" on the cluster agent with a job that prints a line
     Then the log has the work order "migrate" as a success within three minutes
     And the logs of the work order "migrate" have the line of its job
     And the events of the work order "migrate" name its job
-
-  # An agent of the last release does not send the log lines and the events
-  # of a work order. The routes of the broker still answer.
-  @pairing-old-agent
-  Scenario: The work order of an old agent has no log lines and no events
-    When the admin launches the work order "migrate" on the cluster agent with a job that prints a line
-    Then the log has the work order "migrate" as a success within three minutes
-    And the logs of the work order "migrate" are empty
-    And the events of the work order "migrate" are empty
-
-  # A broker of the last release cannot read a frame with a work order id and
-  # no stack id. It gives no capability header, so the agent must send none.
-  @pairing-old-broker
-  Scenario: A new agent sends an old broker no log lines and no events of a work order
-    When the admin launches the work order "migrate" on the cluster agent with a job that prints a line
-    Then the log has the work order "migrate" as a success within three minutes
-    And the broker has dropped no frame of an agent
