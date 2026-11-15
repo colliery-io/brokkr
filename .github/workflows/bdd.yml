@@ -77,3 +77,77 @@ jobs:
       - name: Compose logs on failure
         if: failure()
         run: docker compose -f .angreal/files/docker-compose.yaml logs --no-color --tail 300 broker agent
+
+  # Two real versions together (BROKKR-T-0414). One side is the image of the
+  # last release, pulled from ghcr.io; the other side is built from the
+  # checkout. An upgrade goes broker first, so `old-agent` is the state of
+  # each upgrade; `old-broker` is a new agent before its broker is upgraded.
+  # The version of the last release is in .angreal/files/LAST_RELEASE.
+  compatibility:
+    runs-on: ubuntu-latest
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+    strategy:
+      fail-fast: false
+      matrix:
+        pairing: [old-agent, old-broker]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Install angreal
+        run: |
+          python -m pip install --upgrade pip
+          pip install angreal
+
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
+
+      - name: Cache build
+        uses: actions/cache@v5
+        with:
+          path: |
+            target
+            tests/bdd/target
+          key: ${{ runner.os }}-bdd-build-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-bdd-build-
+
+      - name: Create required directories
+        run: |
+          mkdir -p /tmp/brokkr-keys
+          chmod 777 /tmp/brokkr-keys
+
+      - name: Read the version of the last release
+        run: echo "BROKKR_LAST_RELEASE=$(cat .angreal/files/LAST_RELEASE)" >> "$GITHUB_ENV"
+
+      - name: Log in to Docker Hub (raise base-image pull rate limit)
+        if: ${{ env.DOCKERHUB_USERNAME != '' }}
+        uses: docker/login-action@v4.2.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: docker compose up (${{ matrix.pairing }}, last release ${{ env.BROKKR_LAST_RELEASE }})
+        uses: hoverkraft-tech/compose-action@v3.0.0
+        with:
+          compose-file: |
+            .angreal/files/docker-compose.yaml
+            .angreal/files/docker-compose.${{ matrix.pairing }}.yaml
+
+      - name: Show the images of the two sides
+        run: docker compose -f .angreal/files/docker-compose.yaml -f .angreal/files/docker-compose.${{ matrix.pairing }}.yaml images broker agent
+
+      - name: Run the feature version-compatibility (${{ matrix.pairing }})
+        run: angreal tests bdd --skip-docker --pairing ${{ matrix.pairing }} --feature version-compatibility
+
+      - name: Compose logs on failure
+        if: failure()
+        run: docker compose -f .angreal/files/docker-compose.yaml -f .angreal/files/docker-compose.${{ matrix.pairing }}.yaml logs --no-color --tail 300 broker agent

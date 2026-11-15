@@ -1,0 +1,14 @@
+---
+# Pairing "old-agent" (BROKKR-T-0414): the agent of the last release with the
+# broker of this checkout. It is the state of an upgrade, which goes broker
+# first: a released agent talks to a newer broker.
+#
+# Use it on top of docker-compose.yaml:
+#   docker compose -f docker-compose.yaml -f docker-compose.old-agent.yaml up
+# or `angreal tests bdd --pairing old-agent`. BROKKR_LAST_RELEASE is the
+# version in the file LAST_RELEASE next to this one.
+services:
+  agent:
+    image: ghcr.io/colliery-io/brokkr-agent:${BROKKR_LAST_RELEASE:?set BROKKR_LAST_RELEASE to the version in .angreal/files/LAST_RELEASE}
+    build: !reset null
+    pull_policy: always

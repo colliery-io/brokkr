@@ -35,6 +35,15 @@ async fn has_applied(w: &mut World, generator: String, stack: String) {
     w.last_ok();
 }
 
+#[given(
+    expr = "the generator {string} has applied a folder with a pod that prints a line as the stack {string}"
+)]
+async fn has_applied_pod(w: &mut World, generator: String, stack: String) {
+    let bundle = w.new_pod_bundle(&stack);
+    apply(w, &generator, &stack, bundle).await;
+    w.last_ok();
+}
+
 #[when(expr = "the generator {string} applies a folder as the stack {string}")]
 async fn applies(w: &mut World, generator: String, stack: String) {
     let bundle = w.new_bundle();
