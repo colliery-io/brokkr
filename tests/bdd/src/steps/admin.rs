@@ -373,13 +373,23 @@ async fn has_deleted_agent(w: &mut World, agent: String) {
 /// of the scenario, then ends with `exit_code`. The work order has no retry,
 /// so a failure ends in the log at once.
 async fn launch_job_on_cluster_agent(w: &mut World, name: &str, exit_code: i32) {
+    launch_timed_job_on_cluster_agent(w, name, 2, exit_code).await;
+}
+
+/// The same, with a job that sleeps `seconds` after its line.
+async fn launch_timed_job_on_cluster_agent(
+    w: &mut World,
+    name: &str,
+    seconds: u64,
+    exit_code: i32,
+) {
     let agent_id = w
         .cluster_agent_id
         .expect("the scenario has not looked up the cluster agent yet");
     let job = w.job_name(name);
     let line = w.job_line(name);
     let yaml = format!(
-        "apiVersion: batch/v1\nkind: Job\nmetadata:\n  name: {job}\n  namespace: default\nspec:\n  backoffLimit: 0\n  ttlSecondsAfterFinished: 600\n  template:\n    spec:\n      restartPolicy: Never\n      containers:\n        - name: main\n          image: busybox:1.36\n          command: [\"sh\", \"-c\", \"echo {line}; sleep 2; exit {exit_code}\"]\n"
+        "apiVersion: batch/v1\nkind: Job\nmetadata:\n  name: {job}\n  namespace: default\nspec:\n  backoffLimit: 0\n  ttlSecondsAfterFinished: 600\n  template:\n    spec:\n      restartPolicy: Never\n      containers:\n        - name: main\n          image: busybox:1.36\n          command: [\"sh\", \"-c\", \"echo {line}; sleep {seconds}; exit {exit_code}\"]\n"
     );
     create_work_order(
         w,
@@ -407,4 +417,118 @@ async fn launches_job(w: &mut World, name: String) {
 )]
 async fn launches_failing_job(w: &mut World, name: String) {
     launch_job_on_cluster_agent(w, &name, 1).await;
+}
+
+// The cluster agent claims pushed and waiting work orders in time (BROKKR-T-0417).
+
+/// How long one work order of a row may take to end: the image pull, the
+/// Job, and the agent's last lines.
+const ROW_WAIT: std::time::Duration = std::time::Duration::from_secs(180);
+
+/// Wait until the work order is in the log, and give its entry.
+async fn log_entry_of(w: &World, name: &str) -> serde_json::Value {
+    let id = w.work_orders[name];
+    let start = std::time::Instant::now();
+    loop {
+        let answer = w
+            .api
+            .work_order_log(w.admin(), id)
+            .await
+            .expect("read the work order log");
+        if answer.ok() {
+            return answer.body;
+        }
+        assert!(
+            start.elapsed() < ROW_WAIT,
+            "the work order {name:?} is not in the log after {ROW_WAIT:?}: {} {}",
+            answer.status,
+            answer.body
+        );
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    }
+}
+
+/// A time of a log entry, in seconds. The times are the broker's, not this
+/// scenario's clock.
+fn entry_seconds(entry: &serde_json::Value, field: &str) -> f64 {
+    entry
+        .get(field)
+        .and_then(serde_json::Value::as_str)
+        .and_then(api::rfc3339_seconds)
+        .unwrap_or_else(|| panic!("no time {field:?} in the log entry: {entry}"))
+}
+
+/// One job on the cluster agent, run to its end. After it, the agent knows
+/// that it is active and has no pass in flight, so a time measured next is
+/// the agent's, not the start of the stack's.
+#[given("the cluster agent has run a work order")]
+async fn cluster_agent_has_run_a_work_order(w: &mut World) {
+    launch_job_on_cluster_agent(w, "warm-up", 0).await;
+    let entry = log_entry_of(w, "warm-up").await;
+    assert_eq!(
+        entry.get("success").and_then(serde_json::Value::as_bool),
+        Some(true),
+        "the first work order of the cluster agent did not end as a success: {entry}"
+    );
+}
+
+/// Launch `count` small jobs on the cluster agent, each one after the one
+/// before it ended, and keep for each the time from its creation to its
+/// claim (`created_at` and `claimed_at` of the log entry).
+///
+/// The waits before the launches differ (0, 3, 6 seconds, and so on). With
+/// no push, an agent claims at its poll, each 10 seconds, so the time to the
+/// claim depends on where in that period the work order is created. The
+/// different waits put the launches at different places of the period: they
+/// cannot all be just before a poll.
+#[when(expr = "the admin launches {int} work orders on the cluster agent, one after the other")]
+async fn launches_row_of_jobs(w: &mut World, count: usize) {
+    w.claim_delays.clear();
+    for n in 0..count {
+        tokio::time::sleep(std::time::Duration::from_secs((n as u64 * 3) % 10)).await;
+        let name = format!("pushed-{}", n + 1);
+        launch_job_on_cluster_agent(w, &name, 0).await;
+        let entry = log_entry_of(w, &name).await;
+        let delay = entry_seconds(&entry, "claimed_at") - entry_seconds(&entry, "created_at");
+        println!(
+            "  [{}] the work order {name} was claimed after {delay:.2} s",
+            w.run
+        );
+        w.claim_delays.push((name, delay));
+    }
+}
+
+/// Launch `count` jobs on the cluster agent with no wait between them, so
+/// each but the first waits for the agent. Keep for each but the first the
+/// time from the end of the one before it (`completed_at`) to its own claim
+/// (`claimed_at`), in the order the agent took them.
+///
+/// The jobs sleep 0, 3 and 6 seconds in turn. An agent that claims a waiting
+/// work order only at its poll, each 10 seconds, claims it 10 seconds minus
+/// the length of the job before it after that job ended. Three lengths that
+/// differ by 3 and 6 seconds cannot all be long enough to make that short.
+#[when(expr = "the admin launches {int} work orders on the cluster agent at the same time")]
+async fn launches_queue_of_jobs(w: &mut World, count: usize) {
+    w.queue_waits.clear();
+    let names: Vec<String> = (1..=count).map(|n| format!("queued-{n}")).collect();
+    for (n, name) in names.iter().enumerate() {
+        launch_timed_job_on_cluster_agent(w, name, (n as u64 % 3) * 3, 0).await;
+    }
+    let mut entries = Vec::new();
+    for name in &names {
+        entries.push((name.clone(), log_entry_of(w, name).await));
+    }
+    entries.sort_by(|a, b| {
+        entry_seconds(&a.1, "claimed_at").total_cmp(&entry_seconds(&b.1, "claimed_at"))
+    });
+    for pair in entries.windows(2) {
+        let (before, (name, entry)) = (&pair[0].1, &pair[1]);
+        let wait = entry_seconds(entry, "claimed_at") - entry_seconds(before, "completed_at");
+        let ran = entry_seconds(before, "completed_at") - entry_seconds(before, "claimed_at");
+        println!(
+            "  [{}] the work order {name} was claimed {wait:.2} s after the one before ended (that one ran {ran:.2} s)",
+            w.run
+        );
+        w.queue_waits.push((name.clone(), wait));
+    }
 }

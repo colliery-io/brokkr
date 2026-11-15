@@ -167,6 +167,12 @@ pub struct World {
     /// registered with, for the cleanup.
     pub cluster_agent_id: Option<Uuid>,
     pub cluster_registrations: Vec<Uuid>,
+    /// For each work order of a row of launches: its name, and the seconds
+    /// from its creation to its claim, as the broker recorded them.
+    pub claim_delays: Vec<(String, f64)>,
+    /// For each work order of a queue but the first: its name, and the
+    /// seconds from the end of the one before it to its claim.
+    pub queue_waits: Vec<(String, f64)>,
     /// The stacks a step noted before their delete, by their feature name.
     pub noted_stacks: BTreeMap<String, NotedStack>,
     /// The folders of the YAML files that `brokkr work-order create` reads.
@@ -191,6 +197,8 @@ impl World {
             answer: None,
             cluster_agent_id: None,
             cluster_registrations: Vec::new(),
+            claim_delays: Vec::new(),
+            queue_waits: Vec::new(),
             noted_stacks: BTreeMap::new(),
             work_order_files: Vec::new(),
         }

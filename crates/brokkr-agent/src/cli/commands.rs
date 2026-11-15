@@ -97,6 +97,51 @@ fn classify_push_frame(msg: &WsMessage) -> PushAction {
     }
 }
 
+/// When the work order loop starts its next pass (BROKKR-T-0417).
+///
+/// One pass runs at a time, and a pass takes one work order to its end. A
+/// tick of the poll interval starts a pass. Two more moments must start one,
+/// or work that waits for a busy agent waits for a poll each time:
+///
+/// - A work order frame that came during a pass. The interval cannot keep
+///   it: its tick comes while the pass still runs and is skipped. The gate
+///   keeps it, and the end of the pass starts the next one.
+/// - The end of a pass that took a work order. The pass takes one of the
+///   pending work orders, so more can wait.
+///
+/// The frame is a hint (BROKKR-A-0008): a pass reads the pending work orders
+/// and claims over REST, with or without it.
+#[derive(Debug, Default)]
+struct WorkOrderGate {
+    /// A frame came during the pass that runs.
+    wanted: bool,
+}
+
+impl WorkOrderGate {
+    /// A work order frame came. `true`: no pass runs, start one now.
+    fn frame(&mut self, pass_runs: bool) -> bool {
+        if pass_runs {
+            self.wanted = true;
+        }
+        !pass_runs
+    }
+
+    /// A pass starts: it reads each pending work order, so it answers the
+    /// frames that came before it.
+    fn pass_started(&mut self) {
+        self.wanted = false;
+    }
+
+    /// A pass ended after it took `processed` work orders. `true`: start the
+    /// next pass now. A pass that took none and saw no frame leaves the next
+    /// one to the poll, so a work order that cannot be taken gives no loop.
+    fn pass_ended(&mut self, processed: usize) -> bool {
+        let again = self.wanted || processed > 0;
+        self.wanted = false;
+        again
+    }
+}
+
 /// Resolve the comma-separated generator-scope string in precedence order:
 ///   1. `flag` — the `--generator-ids` CLI flag
 ///   2. `config` — `BROKKR__AGENT__GENERATOR_IDS` / `agent.generator_ids` (file)
@@ -352,7 +397,8 @@ pub async fn start(
     // In-flight work-order pass, if any. Keeps long builds off the select loop
     // (see the work_order_interval arm) while ensuring only one pass runs at a
     // time.
-    let mut work_order_task: Option<tokio::task::JoinHandle<()>> = None;
+    let mut work_order_task: Option<tokio::task::JoinHandle<usize>> = None;
+    let mut work_order_gate = WorkOrderGate::default();
 
     // Main control loop
     while running.load(Ordering::SeqCst) {
@@ -370,8 +416,14 @@ pub async fn start(
                             deployment_check_interval.reset_immediately();
                         }
                         PushAction::PollWorkOrders => {
-                            debug!("WS push: work order — polling immediately");
-                            work_order_interval.reset_immediately();
+                            let pass_runs =
+                                work_order_task.as_ref().is_some_and(|h| !h.is_finished());
+                            if work_order_gate.frame(pass_runs) {
+                                debug!("WS push: work order — polling immediately");
+                                work_order_interval.reset_immediately();
+                            } else {
+                                debug!("WS push: work order — a pass runs; the next pass starts when it ends");
+                            }
                         }
                         PushAction::Ignore => debug!("WS push: ignoring non-control frame"),
                     },
@@ -539,6 +591,21 @@ pub async fn start(
                         agent.name, agent.id, e),
                 }
             }
+            ended = async {
+                match work_order_task.as_mut() {
+                    Some(task) => task.await,
+                    None => std::future::pending().await,
+                }
+            }, if work_order_task.is_some() => {
+                // The pass ended. More work can wait: the pass takes one work
+                // order, and a frame that came during it started nothing
+                // (BROKKR-T-0417). A pass that panicked counts as none taken.
+                work_order_task = None;
+                if work_order_gate.pass_ended(ended.unwrap_or(0)) {
+                    debug!("Work-order pass ended with more to do; polling immediately");
+                    work_order_interval.reset_immediately();
+                }
+            }
             _ = work_order_interval.tick() => {
                 // Skip work order processing if agent is inactive
                 if agent.status != "ACTIVE" {
@@ -560,6 +627,7 @@ pub async fn start(
                     let sdk_client = sdk_client.clone();
                     let k8s_client = k8s_client.clone();
                     let agent = agent.clone();
+                    work_order_gate.pass_started();
                     work_order_task = Some(tokio::spawn(async move {
                         match work_orders::process_pending_work_orders(&config, &sdk_client, &k8s_client, &agent).await {
                             Ok(count) => {
@@ -567,10 +635,12 @@ pub async fn start(
                                     info!("Processed {} work orders for agent '{}' (id: {})",
                                         count, agent.name, agent.id);
                                 }
+                                count
                             }
                             Err(e) => {
                                 error!("Failed to process work orders for agent '{}' (id: {}): {}",
                                     agent.name, agent.id, e);
+                                0
                             }
                         }
                     }));
@@ -807,6 +877,65 @@ mod tests {
         assert_eq!(
             classify_push_frame(&WsMessage::TargetChanged(target())),
             PushAction::Reconcile
+        );
+    }
+
+    /// BROKKR-T-0417: the path from a work order frame to a pass.
+    #[test]
+    fn a_work_order_frame_starts_a_pass_now_when_none_runs() {
+        let mut gate = WorkOrderGate::default();
+        assert_eq!(
+            classify_push_frame(&WsMessage::WorkOrder(work_order())),
+            PushAction::PollWorkOrders
+        );
+        assert!(gate.frame(false), "no pass runs: start one now");
+        gate.pass_started();
+        assert!(
+            !gate.pass_ended(0),
+            "a pass that took nothing and saw no frame leaves the next one to the poll"
+        );
+    }
+
+    #[test]
+    fn a_work_order_frame_during_a_pass_starts_the_next_pass_when_it_ends() {
+        let mut gate = WorkOrderGate::default();
+        gate.pass_started();
+        assert!(!gate.frame(true), "a pass runs: do not start a second one");
+        assert!(!gate.frame(true), "a second frame changes nothing");
+        assert!(
+            gate.pass_ended(0),
+            "the frame is not lost: the next pass starts now"
+        );
+        gate.pass_started();
+        assert!(
+            !gate.pass_ended(0),
+            "one frame gives one more pass, not a loop"
+        );
+    }
+
+    #[test]
+    fn a_pass_that_took_a_work_order_starts_the_next_pass() {
+        let mut gate = WorkOrderGate::default();
+        gate.pass_started();
+        assert!(
+            gate.pass_ended(1),
+            "the pass takes one work order; more can wait"
+        );
+        gate.pass_started();
+        assert!(!gate.pass_ended(0), "nothing left: back to the poll");
+    }
+
+    #[test]
+    fn a_frame_before_a_pass_is_answered_by_that_pass() {
+        let mut gate = WorkOrderGate::default();
+        gate.pass_started();
+        assert!(!gate.frame(true));
+        // The pass that runs ends, and a new one starts for the frame.
+        assert!(gate.pass_ended(0));
+        gate.pass_started();
+        assert!(
+            !gate.pass_ended(0),
+            "the new pass read the pending work orders: the frame is answered"
         );
     }
 

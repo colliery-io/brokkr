@@ -1518,6 +1518,50 @@ async fn agent_dropped_no_frame(w: &mut World) {
     );
 }
 
+// The cluster agent claims pushed and waiting work orders in time (BROKKR-T-0417).
+
+/// Fail unless each time is under `seconds`; the message shows each one.
+fn each_under(times: &[(String, f64)], seconds: u64, what: &str) {
+    assert!(!times.is_empty(), "the scenario measured no work order");
+    let shown: Vec<String> = times
+        .iter()
+        .map(|(name, time)| format!("{name}: {time:.2} s"))
+        .collect();
+    let late = times
+        .iter()
+        .filter(|(_, time)| *time >= seconds as f64)
+        .count();
+    assert!(
+        late == 0,
+        "{late} of {} work orders were not claimed in under {seconds} s. {what}: {}",
+        shown.len(),
+        shown.join(", ")
+    );
+}
+
+/// The agent of the test stack polls each 10 seconds. A push makes the claim
+/// one frame and two requests away, well under a second on a quiet machine;
+/// the bound in the feature leaves room for a slow runner and is still less
+/// than half a poll period.
+#[then(expr = "the cluster agent claimed each of them in under {int} seconds")]
+async fn each_claimed_in_time(w: &mut World, seconds: u64) {
+    each_under(&w.claim_delays, seconds, "Times from creation to claim");
+}
+
+/// A work order that waited for the agent is claimed when the agent is free:
+/// one read of the pending work orders and one claim after the job before it
+/// ended, not the rest of a poll period.
+#[then(
+    expr = "the cluster agent claimed each one within {int} seconds of the end of the one before"
+)]
+async fn each_claimed_after_the_one_before(w: &mut World, seconds: u64) {
+    each_under(
+        &w.queue_waits,
+        seconds,
+        "Times from the end of the one before to the claim",
+    );
+}
+
 /// The CLI cannot tell a name that no agent has from the name of an agent
 /// that is not registered with the generator. The error says both
 /// (BROKKR-T-0418).
