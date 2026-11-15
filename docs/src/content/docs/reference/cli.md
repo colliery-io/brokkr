@@ -658,7 +658,7 @@ A work order runs one time: an agent applies its YAML and watches it to its end.
 | `--annotation <KEY=VALUE>` | An agent with this annotation can have the work order. The form is `key=value`. Repeatable. |
 | `--claim-timeout <SECONDS>` | How long an agent can hold the work order. After this time the broker gives it to the queue again. The broker's default is 3600. |
 | `--max-retries <N>` | How many times the broker tries again after a failure. The broker's default is 3. |
-| `--backoff <SECONDS>` | The wait before the first new try. The wait doubles for each new try. The broker's default is 60. |
+| `--backoff <SECONDS>` | The base of the wait before a new try. The first new try waits 2 times this value. The wait doubles for each new try after that: 4 times, then 8 times. The broker's default is 60. |
 
 Give one target at least: `--agent`, `--label` or `--annotation`. An agent that matches one of the targets can claim the work order.
 

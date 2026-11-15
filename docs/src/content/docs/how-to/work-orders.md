@@ -19,7 +19,7 @@ export BROKKR_BROKER_URL=https://broker.example.com
 export BROKKR_PAK=<your PAK>
 ```
 
-The outputs on this page are from one run against the development stack of the repository, on 2026-11-14. The ids are replaced with placeholders such as `<work-order-1>`, and the agent of that stack is shown as `prod-1`. The broker of that run was at `http://localhost:3000`.
+The outputs on this page are from one run against the development stack of the repository, on 2026-11-14. The ids are replaced with placeholders such as `<work-order-1>`, and the agent of that stack is shown as `prod-1`. The broker of that run was at `http://localhost:3000`. The two errors under "The agent is not registered with your generator" are from a second run on the same day, against a broker of the repository with no cluster: they need no agent that runs.
 
 ## Step 1: Write the Job
 
@@ -253,17 +253,17 @@ To see the lines of its pods, run: brokkr work-order logs <work-order-3>
 
 ### The agent is not registered with your generator
 
-A generator sees only the agents that are registered with it. So the name of an agent that is not registered is unknown to your PAK:
+A generator sees only the agents that are registered with it. So your PAK cannot find an agent that is not registered by its name. The CLI cannot tell this from a name that no agent has, and the error says both:
 
 ```bash
 brokkr work-order create -f migrate-job.yaml --agent prod-2
 ```
 
 ```
-error: invalid request: no agent has the name or id "prod-2" (or this PAK cannot see it)
+error: invalid request: no agent that is registered with your generator has the name or id "prod-2". Either no agent has this name or id, or the agent is not registered with your generator. An admin registers an agent with a generator: brokkr register --agent prod-2 --generator <generator-id>. With the id of the agent in --agent, the broker says which of the two it is.
 ```
 
-With the id of the agent, the broker gives the reason and the command that registers the agent:
+With the id of the agent, the broker gives the reason:
 
 ```bash
 brokkr work-order create -f migrate-job.yaml --agent <agent-id>
@@ -273,7 +273,7 @@ brokkr work-order create -f migrate-job.yaml --agent <agent-id>
 error: agent <agent-id> is not registered with your generator, so the generator cannot send it a work order. The broker created nothing. An admin registers it: brokkr register --agent <agent-id> --generator <generator-id>
 ```
 
-In both cases the broker created nothing. Ask an admin to register the agent with your generator: the second error gives the command. Then create the work order again.
+In both cases the broker created nothing. Ask an admin to register the agent with your generator: each error gives the command. Then create the work order again.
 
 ### The work order belongs to another owner
 

@@ -123,8 +123,9 @@ pub struct CreateArgs {
     #[arg(long = "max-retries", value_name = "N")]
     max_retries: Option<i32>,
 
-    /// The wait before the first new try, in seconds. The wait doubles for
-    /// each new try. The broker's default is 60.
+    /// The base of the wait before a new try, in seconds. The first new try
+    /// waits 2 times this value. The wait doubles for each new try after
+    /// that: 4 times, then 8 times. The broker's default is 60.
     #[arg(long = "backoff", value_name = "SECONDS")]
     backoff: Option<i32>,
 }
@@ -374,7 +375,7 @@ async fn create(client: &BrokkrClient, args: CreateArgs) -> Result<(), String> {
             // command that registers the agent (BROKKR-T-0410).
             Err(e) => match Uuid::parse_str(given) {
                 Ok(id) => agents.push((id, id.to_string())),
-                Err(_) => return Err(e.to_string()),
+                Err(_) => return Err(unknown_agent_text(&e.to_string())),
             },
         }
     }
@@ -467,6 +468,21 @@ pub fn explain(error: &BrokkrError, id: Option<Uuid>) -> String {
              least: --agent, --label or --annotation"
             .to_string(),
         _ => error.to_string(),
+    }
+}
+
+/// The text for an agent name that the PAK cannot find, on a create. For a
+/// generator PAK the cause can be a registration that is not there
+/// (BROKKR-T-0418). The id of the agent then gets the answer of the broker,
+/// which knows each agent.
+pub fn unknown_agent_text(lookup_error: &str) -> String {
+    if lookup_error.contains(brokkr_client::UNLISTED_AGENT_MARK) {
+        format!(
+            "{lookup_error}. With the id of the agent in --agent, the broker says which of \
+             the two it is."
+        )
+    } else {
+        lookup_error.to_string()
     }
 }
 
@@ -795,6 +811,34 @@ mod tests {
         // Another error prints as the SDK gives it, with its status and code.
         let other = explain(&api_error(500, "internal_error", "boom"), Some(id));
         assert_eq!(other, "500 internal_error: boom");
+    }
+
+    #[test]
+    fn an_agent_name_that_a_generator_cannot_find_gets_the_id_hint() {
+        let generator = Uuid::from_u128(7).to_string();
+        let lookup = format!(
+            "invalid request: {}",
+            brokkr_client::unlisted_agent_message("prod-2", &generator)
+        );
+        let text = unknown_agent_text(&lookup);
+        assert!(text.starts_with(&lookup), "{text}");
+        assert!(
+            text.contains(&format!(
+                "brokkr register --agent prod-2 --generator {generator}"
+            )),
+            "{text}"
+        );
+        assert!(
+            text.ends_with(
+                "With the id of the agent in --agent, the broker says which of the two it is."
+            ),
+            "{text}"
+        );
+
+        // An admin PAK lists each agent: the text of the lookup stays.
+        let admin =
+            "invalid request: no agent has the name or id \"prod-2\" (or this PAK cannot see it)";
+        assert_eq!(unknown_agent_text(admin), admin);
     }
 
     #[test]

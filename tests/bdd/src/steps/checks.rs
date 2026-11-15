@@ -1561,3 +1561,11 @@ async fn each_claimed_after_the_one_before(w: &mut World, seconds: u64) {
         "Times from the end of the one before to the claim",
     );
 }
+
+/// The CLI cannot tell a name that no agent has from the name of an agent
+/// that is not registered with the generator. The error says both
+/// (BROKKR-T-0418).
+#[then("the error says the agent may not be registered with the generator")]
+async fn error_says_agent_may_not_be_registered(w: &mut World) {
+    w.expect_error("or the agent is not registered with your generator");
+}
