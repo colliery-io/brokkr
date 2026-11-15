@@ -20,13 +20,15 @@ Work orders address these needs without changing the pull-based deployment model
 
 Like deployment objects, work orders use a pull model. The broker doesn't push commands to agents. Instead:
 
-1. Admin creates a work order in the broker
+1. An admin or a generator creates a work order in the broker
 2. Broker determines eligible agents via targeting rules
 3. Agents poll for pending work orders they're authorized to claim
 4. One agent claims and executes the work order
 5. Agent reports completion (success or failure)
 
 This preserves Brokkr's key property: clusters behind firewalls work without inbound connections.
+
+When a work order is created, the broker also sends it on the WebSocket channel to each connected agent that it reaches. That message is a hint to poll now, on the connection the agent opened. The poll stays the source of truth: an agent with no connection gets the work order all the same, a few seconds later.
 
 ### Single-Claim Semantics
 
@@ -61,6 +63,35 @@ If an agent claims a work order but crashes before completing it, the work order
 - Each work order has a `claim_timeout_seconds` (default: 3600 = 1 hour)
 - If a claimed work order exceeds its timeout, it's released back to `PENDING`
 - The maintenance task runs every 10 seconds
+
+## Work Orders for a Generator
+
+A generator gives its agents two kinds of work. A **stack** is state that an agent keeps: the agent applies it, repairs drift, and removes it when the stack is deleted. A **work order** is a job that runs one time: an agent applies it, watches it to its end, and reports the result.
+
+| You want to | Use |
+|-------------|-----|
+| Keep a Deployment, a Service or a ConfigMap in a cluster | A stack |
+| Run a database migration, a backup, a test run or an image build one time | A work order |
+| Run something on a schedule | A stack that holds a `CronJob`. A work order has no schedule |
+| Know that a job ended, and how | A work order with a `batch/v1` `Job` |
+
+### Who owns a work order
+
+Until 0.12.0 only an admin could create a work order. A team that needed a migration on its own cluster needed an admin for each run. But a generator can already apply any manifest to the agents registered with it, through a stack. A job on those same agents gives a generator no new power over a cluster. So a generator can create work orders, with three rules:
+
+- **Each work order has an owner**: the generator that created it, or an admin. The owner does not change, and the log entry keeps it.
+- **Registration is the boundary.** A generator's work order reaches only the agents registered with that generator, by agent id, by label or by annotation. An agent with a matching label that is not registered with the generator does not get it. This is the rule that stacks follow.
+- **Reads follow the owner.** A generator sees its own work orders, their results, and the pod logs and events of their jobs. It does not see the work orders of another generator or of an admin, also when they run on its agents. Two generators that share an agent do not read each other's jobs. An admin sees each work order.
+
+### What a work order does not do
+
+- **No schedule and no start time.** A work order can be claimed as soon as it exists.
+- **No expiry.** A work order that no agent claims waits until someone deletes it. One exception: when its only target agent is deleted, or its owner generator is deleted, the work order goes with it.
+- **No reconcile.** The agent applies the YAML one time. If someone deletes the Job from the cluster, Brokkr does not put it back. Only a `batch/v1` `Job` and a build are watched to their end; any other kind is applied and not watched.
+- **No stop.** A delete of a claimed work order removes it from the broker. The Job that the agent started runs to its end in the cluster.
+- **No log store.** The pod logs and events of a job are a short buffer: at most 6 hours.
+
+See [Launch a Job with a Work Order](../../how-to/work-orders/) for the commands, and the [Timing](../../reference/work-orders/#timing) table for each number.
 
 ## State Machine
 
@@ -125,7 +156,7 @@ Completed work orders (success or failure) are moved from the active `work_order
 | `work_orders` | `work_order_log` |
 | Mutable (status changes) | Immutable (write-once) |
 | Current/pending work | Historical record |
-| Cleaned up on completion | Retained indefinitely |
+| Cleaned up on completion | Retained. An entry leaves only when its owner generator is hard-deleted |
 
 The log records: original ID, work type, timing, claiming agent, success/failure, retry count, and result message.
 
@@ -166,6 +197,7 @@ If the window runs out with the Job still going, the work order is completed wit
 ## Related Documentation
 
 - [Work Orders Reference](../../reference/work-orders/) — API endpoints and data model
+- [Launch a Job with a Work Order](../../how-to/work-orders/) — a generator launches a job with the CLI
 - [Container Builds with Shipwright](../../how-to/shipwright-builds/) — setup and usage guide
 - [Data Flows](../data-flows/) — work order lifecycle in context
 - [Architecture](../architecture/) — system-level view

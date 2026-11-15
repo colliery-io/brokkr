@@ -87,6 +87,7 @@ export default defineConfig({
 						page('how-to/cli-apply', 'Submitting a Folder of Manifests (CLI)'),
 						page('how-to/managing-stacks', 'Managing Stacks'),
 						page('how-to/templates', 'Using Stack Templates'),
+						page('how-to/work-orders', 'Launch a Job with a Work Order'),
 						page('how-to/generators', 'Working with Generators'),
 						page('how-to/agent-registration', 'Register Agents with Generators'),
 						page('how-to/pak-management', 'Managing PAKs (Key Rotation)'),

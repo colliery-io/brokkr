@@ -635,7 +635,7 @@ payments  c4ba105f-4332-447b-8af5-63f8e69ee89c  env:prod
 
 ### Work orders: `brokkr work-order`
 
-A work order runs one time: an agent applies its YAML and watches it to its end. Use a stack for state that an agent keeps. An admin PAK or a generator PAK creates a work order, and the PAK that creates it owns it. The owner and an admin read and delete it. A work order has no name: each command takes its id.
+A work order runs one time: an agent applies its YAML and watches it to its end. Use a stack for state that an agent keeps. For a full example with a generator PAK, see [Launch a Job with a Work Order](../../how-to/work-orders/). An admin PAK or a generator PAK creates a work order, and the PAK that creates it owns it. The owner and an admin read and delete it. A work order has no name: each command takes its id.
 
 | Command | What it does |
 |---------|--------------|
