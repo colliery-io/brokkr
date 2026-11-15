@@ -70,7 +70,7 @@ angreal tests bdd --pairing old-broker
 
 A mixed pairing runs the feature `version-compatibility` unless `--feature` names another one. The task stops the stack, removes its volumes, and starts it again with an override file on top of `docker-compose.yaml` (`docker-compose.old-agent.yaml` or `docker-compose.old-broker.yaml`). A broker of the last release must start on an empty database, because it has fewer migrations than this broker.
 
-The version of the last release is in `.angreal/files/LAST_RELEASE`. Change it after each release, so that a mixed pairing runs the version that is in the field. The `brokkr` CLI and the `brokkr-agent` binary that the suite starts are always built from this checkout.
+The version of the last release is in `.angreal/files/LAST_RELEASE`. Change it after each release, so that a mixed pairing runs the version that is in the field. In the same change, look at each scenario of `version-compatibility` with a pairing tag or a `needs-new` tag: a scenario that says what the last release could not do is wrong when the last release can do it. Remove the tag or the scenario. The `brokkr` CLI and the `brokkr-agent` binary that the suite starts are always built from this checkout.
 
 With `--skip-docker` the task does not start a stack. Start the stack of the pairing first: the suite cannot tell which one runs.
 
