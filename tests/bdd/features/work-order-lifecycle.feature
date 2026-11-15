@@ -125,3 +125,25 @@ Feature: Work order lifecycle
     When the generator "team-robin" launches the work order "migrate" on the cluster agent with a job that prints a line
     Then the generator "team-robin" sees the work order "migrate" end as a success within three minutes
     And the generator "team-robin" reads the line of the job in the logs of the work order "migrate"
+
+  # The two scenarios below time the cluster agent, which takes one work
+  # order at a time. They run alone (@serial), so no job of another scenario
+  # waits in front of theirs. Each one first lets the agent run a work order:
+  # an agent learns that an admin activated it at its next heartbeat, and
+  # until then it takes no work.
+
+  @serial
+  Scenario: The cluster agent claims a pushed work order at once when it is free
+    Given the cluster agent is registered with the generator "team-robin" and active
+    And the cluster agent has run a work order
+    When the admin launches 3 work orders on the cluster agent, one after the other
+    Then the cluster agent claimed each of them in under 4 seconds
+
+  # The agent takes one work order at a time. A work order that waits for it
+  # is claimed when the job before it ends, not at the agent's next poll.
+  @serial
+  Scenario: Work orders that wait for the cluster agent do not each wait for a poll
+    Given the cluster agent is registered with the generator "team-robin" and active
+    And the cluster agent has run a work order
+    When the admin launches 4 work orders on the cluster agent at the same time
+    Then the cluster agent claimed each one within 4 seconds of the end of the one before

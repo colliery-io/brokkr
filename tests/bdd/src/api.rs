@@ -500,3 +500,47 @@ impl Api {
         .await
     }
 }
+
+/// The seconds since 1970 of a timestamp of the broker (RFC 3339 in UTC, as
+/// `2026-11-12T01:02:03.456789Z` or with `+00:00`), with its fraction.
+pub fn rfc3339_seconds(text: &str) -> Option<f64> {
+    let (date, rest) = text.split_once('T')?;
+    let time = rest
+        .strip_suffix('Z')
+        .or_else(|| rest.strip_suffix("+00:00"))?;
+    let mut ymd = date.split('-').map(str::parse::<i64>);
+    let (year, month, day) = (ymd.next()?.ok()?, ymd.next()?.ok()?, ymd.next()?.ok()?);
+    let mut hms = time.split(':');
+    let hour: f64 = hms.next()?.parse().ok()?;
+    let minute: f64 = hms.next()?.parse().ok()?;
+    let second: f64 = hms.next()?.parse().ok()?;
+    // Days from a civil date (Howard Hinnant's algorithm), the reverse of
+    // `now_rfc3339`.
+    let y = if month <= 2 { year - 1 } else { year };
+    let era = y.div_euclid(400);
+    let yoe = y.rem_euclid(400);
+    let mp = (month + 9) % 12;
+    let doy = (153 * mp + 2) / 5 + day - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    let days = era * 146_097 + doe - 719_468;
+    Some(days as f64 * 86_400.0 + hour * 3_600.0 + minute * 60.0 + second)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::rfc3339_seconds;
+
+    #[test]
+    fn a_broker_timestamp_gives_its_seconds() {
+        assert_eq!(rfc3339_seconds("1970-01-01T00:00:00Z"), Some(0.0));
+        assert_eq!(rfc3339_seconds("2000-03-01T00:00:00Z"), Some(951_868_800.0));
+        assert_eq!(
+            rfc3339_seconds("2026-11-14T22:50:01+00:00"),
+            Some(1_794_696_601.0)
+        );
+        let later = rfc3339_seconds("2026-11-14T22:50:03.750000Z").unwrap();
+        let earlier = rfc3339_seconds("2026-11-14T22:50:01.250000Z").unwrap();
+        assert!((later - earlier - 2.5).abs() < 1e-6);
+        assert_eq!(rfc3339_seconds("not a time"), None);
+    }
+}
