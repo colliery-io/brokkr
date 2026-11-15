@@ -366,8 +366,17 @@ async fn create(client: &BrokkrClient, args: CreateArgs) -> Result<(), String> {
     // Each agent by name or id. The names stay for the texts.
     let mut agents: Vec<(Uuid, String)> = Vec::with_capacity(args.agents.len());
     for given in &args.agents {
-        let agent = client.find_agent(given).await.map_err(|e| e.to_string())?;
-        agents.push((agent.id, agent.name));
+        match client.find_agent(given).await {
+            Ok(agent) => agents.push((agent.id, agent.name)),
+            // A generator PAK lists only the agents registered with it, so
+            // it cannot find an agent that is not. An id goes to the broker
+            // as it is: the broker refuses it, and the refusal names the
+            // command that registers the agent (BROKKR-T-0410).
+            Err(e) => match Uuid::parse_str(given) {
+                Ok(id) => agents.push((id, id.to_string())),
+                Err(_) => return Err(e.to_string()),
+            },
+        }
     }
 
     let created = client
@@ -473,6 +482,8 @@ pub fn not_registered_message(
         .iter()
         .find(|(id, _)| broker_message.contains(&id.to_string()));
     let (shown, agent_arg) = match agent {
+        // Given by an id that this PAK cannot look up: there is no name.
+        Some((id, name)) if *name == id.to_string() => (format!("agent {id}"), id.to_string()),
         Some((id, name)) => (format!("agent \"{name}\" ({id})"), id.to_string()),
         None => ("an agent of the command".to_string(), "<AGENT>".to_string()),
     };
@@ -809,6 +820,15 @@ mod tests {
                 "brokkr register --agent {agent} --generator {generator}"
             )),
             "{message}"
+        );
+
+        // An agent given by an id that the PAK cannot look up has no name.
+        let by_id = not_registered_message(&broker, &[(agent, agent.to_string())], Some(generator));
+        assert!(
+            by_id.starts_with(&format!(
+                "agent {agent} is not registered with your generator"
+            )),
+            "{by_id}"
         );
 
         // With no generator and no match, the command still has its shape.
