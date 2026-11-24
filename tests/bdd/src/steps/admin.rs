@@ -102,6 +102,17 @@ async fn has_created_agent_for_generator(
     w.last_ok();
 }
 
+/// A cluster name that no other scenario uses, so a view that groups agents by
+/// cluster shows this agent alone in its row (BROKKR-T-0400).
+#[given(
+    expr = "the admin has created the agent {string} in a cluster of its own for the generator {string}"
+)]
+async fn has_created_agent_in_own_cluster(w: &mut World, name: String, generator: String) {
+    let cluster = w.real(&format!("cluster-of-{name}"));
+    create_agent(w, &name, &cluster, &[&generator]).await;
+    w.last_ok();
+}
+
 #[when(
     expr = "the admin creates the agent {string} in cluster {string} for the generator {string}"
 )]

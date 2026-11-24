@@ -99,6 +99,7 @@ dependencies = [
  "cucumber",
  "futures",
  "reqwest",
+ "serde",
  "serde_json",
  "tempfile",
  "tokio",

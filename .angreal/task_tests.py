@@ -426,6 +426,11 @@ def e2e_tests(skip_docker: bool = False, scenario: str = ""):
 
 BDD_FEATURES_DIR = "tests/bdd/features"
 
+# The feature that reads the console with a browser, and the folder of its
+# harness (BROKKR-T-0400).
+CONSOLE_FEATURE = "console"
+BDD_CONSOLE_DIR = "tests/bdd/console"
+
 
 # The feature that a mixed pairing runs when none is named (BROKKR-T-0414).
 COMPATIBILITY_FEATURE = "version-compatibility"
@@ -465,6 +470,16 @@ def run_bdd_tests(feature: str = "", pairing: str = "source"):
     )
     if bins.returncode != 0:
         return bins.returncode
+
+    # The console feature reads the console with Playwright (BROKKR-T-0400).
+    # `npm ci` puts it, and its browser, in tests/bdd/console/node_modules.
+    if feature in ("", CONSOLE_FEATURE):
+        console_dir = os.path.join(cwd, BDD_CONSOLE_DIR)
+        if not os.path.isdir(os.path.join(console_dir, "node_modules")):
+            print("Installing the browser harness of the console feature...")
+            npm = subprocess.run(["npm", "ci"], cwd=console_dir)
+            if npm.returncode != 0:
+                return npm.returncode
 
     env = _sdk_contract_env()
     env.setdefault("BROKKR_CLI", os.path.join(cwd, "target", "debug", "brokkr"))

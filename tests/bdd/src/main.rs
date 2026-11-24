@@ -20,6 +20,7 @@
 //! Run with: `angreal tests bdd [--skip-docker] [--feature NAME]`.
 
 mod api;
+mod console;
 mod process;
 mod steps;
 mod world;
