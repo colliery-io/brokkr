@@ -27,7 +27,7 @@
 //!
 //! [`is_retryable_status`] is the single policy point shared by both delivery
 //! paths (the broker's delivery worker and the agent-reported result endpoint):
-//! a status it rejects sends the delivery straight to `dead` via [`mark_dead`]
+//! a status it rejects sends the delivery straight to `dead` via [`WebhookDeliveriesDAL::mark_dead`]
 //! instead of burning the subscription's whole attempt budget on an endpoint
 //! that will never accept the payload.
 
