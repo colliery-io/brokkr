@@ -321,11 +321,11 @@ impl DeploymentObjectsDAL<'_> {
 
     /// Returns, per agent, the number of pending deployment objects — computed
     /// with a handful of bounded set-based queries rather than calling
-    /// [`get_target_state_for_agent`] once per agent.
+    /// [`Self::get_target_state_for_agent`] once per agent.
     ///
     /// The result exactly mirrors
     /// `get_target_state_for_agent(agent_id, false).len()` (the per-agent ground
-    /// truth): the objects the agent serves ([`served_pairs`]), less any object
+    /// truth): the objects the agent serves ([`Self::served_pairs`]), less any object
     /// for which the agent already has a (non-deleted) `agent_event`.
     ///
     /// # Returns
