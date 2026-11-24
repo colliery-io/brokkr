@@ -177,7 +177,7 @@ impl ConnectionRegistry {
 
     /// Forcibly close any live connection for `agent_id`, returning how many
     /// were closed (0 or 1 today — the map is one-connection-per-agent, since
-    /// [`Self::register`] evicts a prior handle for the same id).
+    /// [`ConnectionRegistry::register`] evicts a prior handle for the same id).
     ///
     /// Removing the handle drops its lane senders; the per-connection writer
     /// task then observes both lanes closed, closes the socket, and the
