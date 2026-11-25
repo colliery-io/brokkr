@@ -39,8 +39,10 @@ pub struct FleetAgentRecord {
 pub const SILENT_AFTER_SECS: i64 = 60;
 
 impl FleetAgentRecord {
-    /// Derived health bucket. An agent that has never checked in has no
-    /// health to report: "unknown", muted (BROKKR-T-0336). A silent agent is
+    /// Derived health bucket. An agent that is not ACTIVE is "paused", muted:
+    /// the admin stopped it, so its heartbeat and its counts are not its
+    /// health, and no tile counts it (BROKKR-T-0420). An agent that has never
+    /// checked in has no health to report: "unknown", muted (BROKKR-T-0336). A silent agent is
     /// "offline", muted, whatever its counts: its last reports are not its
     /// health now (BROKKR-T-0396). Else the failing/degraded counts decide.
     ///
@@ -48,7 +50,9 @@ impl FleetAgentRecord {
     /// the console's.
     pub fn health(&self) -> (&'static str, &'static str) {
         use aurora_leptos::tokens::token;
-        if !self.has_checked_in() {
+        if !self.is_active() {
+            ("paused", token::MUTED)
+        } else if !self.has_checked_in() {
             ("unknown", token::MUTED)
         } else if self.is_silent() {
             ("offline", token::MUTED)
