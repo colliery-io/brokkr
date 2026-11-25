@@ -468,12 +468,30 @@ mod tests {
 
     #[test]
     fn an_agent_that_never_checked_in_has_unknown_health() {
-        let new = agent("prod", "INACTIVE", 0, 0, false);
+        let new = agent("prod", "ACTIVE", 0, 0, false);
         assert_eq!(new.health().0, "unknown");
         assert!(!new.has_checked_in());
-        let seen = agent("prod", "INACTIVE", 0, 0, true);
+        let seen = agent("prod", "ACTIVE", 0, 0, true);
         assert_eq!(seen.health().0, "healthy");
         assert!(seen.has_checked_in());
+    }
+
+    /// BROKKR-T-0420: a paused agent that still sent heartbeats read healthy,
+    /// and the Healthy tile counted it, while the cluster row counted it down.
+    #[test]
+    fn a_paused_agent_is_paused_not_healthy() {
+        assert_eq!(agent("prod", "INACTIVE", 0, 0, true).health().0, "paused");
+        assert_eq!(
+            agent("prod", "INACTIVE", 0, 3, true).health().0,
+            "paused",
+            "the counts of a paused agent are not counted as failing"
+        );
+        assert_eq!(
+            agent("prod", "INACTIVE", 0, 0, false).health().0,
+            "paused",
+            "the admin's pause says more than no heartbeat yet"
+        );
+        assert_eq!(agent("prod", "active", 0, 0, true).health().0, "healthy");
     }
 
     #[test]

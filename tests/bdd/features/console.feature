@@ -58,6 +58,16 @@ Feature: Console
     Then the Fleet view shows the agent "prod-1" as offline
     And the Overview shows the cluster of the agent "prod-1" as 0 of 1 up
 
+  # BROKKR-T-0420: a paused agent that still sent heartbeats read healthy,
+  # and the Overview counted it in the Healthy tile.
+  Scenario: A paused agent reads paused, not healthy
+    When the agent "prod-1" sends a heartbeat
+    Then the Fleet view shows the agent "prod-1" as healthy
+    When the admin pauses the agent "prod-1"
+    And the agent "prod-1" sends a heartbeat
+    Then the Fleet view shows the agent "prod-1" as paused
+    And the Overview shows the cluster of the agent "prod-1" as 0 of 1 up
+
   Scenario: The Overview shows a pending and a claimed work order
     Given the admin has created the work order "backup" for the agent "prod-1"
     And the admin has created the work order "restore" for the agent "prod-1"
