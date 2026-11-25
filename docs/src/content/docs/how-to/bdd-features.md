@@ -15,6 +15,7 @@ There is one feature per flow:
 | `agent-lifecycle` | After onboarding: an agent's heartbeat in the fleet record, a silent agent, a paused agent, an agent that loses a stack and no longer counts its health, a deleted agent. The scenario plays the agent with the agent's PAK. |
 | `stack-lifecycle` | After the first apply: a changed folder gives a new revision that the agent serves, a failing revision makes the stack read failing, a new revision that fixes it makes it read healthy, a deleted stack leaves no failing and no degraded record. The scenario plays the agent with the agent's PAK. |
 | `work-order-lifecycle` | A work order from create to its end: pending, claimed, completed and in the log; a failure that waits and comes back until its retries are spent; a claim that passes its timeout; a work order for a label that one of two agents claims; the pending and claimed counts of the fleet record. The scenario plays the agent with the agent's PAK. With its own PAK and the `brokkr work-order` commands, a generator creates a work order and reads its status, its result and its history; its work order for a label reaches only the agents registered with it; it lists its own work orders and not those of an admin; it deletes a pending one. With the agent in the cluster of the test stack: an admin's job and a generator's job run, and their log line, events and result read back; a work order is claimed at once when the agent is free, and one that waits for the agent is claimed when the job before it ends. |
+| `console` | The operator console that the broker serves, read with a browser: the Fleet view shows an agent that talks as healthy, a failing agent as failing and as healthy after the fix, and no failing and no degraded pill after a stack delete; an agent that stops talking reads offline and the Overview does not count it up; the Overview counts agree with the Fleet view; the Overview shows a pending and a claimed work order. See "Read the console". |
 | `version-compatibility` | The agent of the last release with this broker, and this agent with the broker of the last release: the agent is live in the fleet, a stack deploys and its events and log lines read back, an admin's work order runs to its end, and neither side drops a frame of the other. It runs in a mixed pairing; see "Run two versions together". |
 
 Each scenario creates its own generators, agents and stacks under unique names and removes them when it ends, so scenarios run in any order, side by side, and the suite runs twice against the same broker.
@@ -52,6 +53,25 @@ A failed step prints the step, the command that ran, and the command's whole out
 A scenario tagged `@serial` runs alone, after the others of its feature. Use it for a scenario that times the one agent in the cluster of the test stack: a job of another scenario in front of its own would add its length.
 
 A scenario tagged `@known-bug` states a behaviour the product does not have yet; a comment above it names the bug. The runner leaves these scenarios out, so the suite stays a gate. `BDD_KNOWN_BUGS=run` includes them; run them when the fix lands, then remove the tag and the comment.
+
+## Read the console
+
+The feature `console` reads the console with a browser. The script `tests/bdd/console/read.mjs` opens one view of the console at `BROKER_URL`, reads it and prints JSON. The steps in `tests/bdd/src/steps/console.rs` run the script and check the JSON. The console reads the broker every few seconds, so each check reads the view again until it shows the state, for 45 seconds at most.
+
+The script needs Node and the Playwright of `tests/bdd/console/package-lock.json`. `angreal tests bdd` installs it when the folder has no `node_modules`. To install it yourself:
+
+```bash
+cd tests/bdd/console && npm ci
+```
+
+To see what the script reads, run it against the stack:
+
+```bash
+node tests/bdd/console/read.mjs fleet
+node tests/bdd/console/read.mjs overview
+```
+
+`BDD_NODE` sets the `node` that the steps run.
 
 ## Run two versions together
 

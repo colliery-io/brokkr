@@ -1,0 +1,13 @@
+{
+  "name": "brokkr-bdd-console",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Reads the operator console of a running broker for the BDD console scenarios (BROKKR-T-0400). Same Playwright as crates/brokkr-web/web-e2e.",
+  "type": "module",
+  "scripts": {
+    "postinstall": "PLAYWRIGHT_BROWSERS_PATH=0 playwright install chromium-headless-shell"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.61.1"
+  }
+}

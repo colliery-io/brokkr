@@ -10,4 +10,5 @@
 mod admin;
 pub mod agent;
 mod checks;
+mod console;
 mod generator;

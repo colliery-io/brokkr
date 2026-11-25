@@ -24,7 +24,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        feature: [generator-onboarding, agent-onboarding, generator-after-apply, generators-apart, agent-lifecycle, stack-lifecycle, work-order-lifecycle]
+        feature: [generator-onboarding, agent-onboarding, generator-after-apply, generators-apart, agent-lifecycle, stack-lifecycle, work-order-lifecycle, console]
     steps:
       - uses: actions/checkout@v6
         with:
@@ -43,6 +43,21 @@ jobs:
 
       - name: Set up Rust
         uses: ./.github/actions/setup-rust
+
+      # The console feature reads the console with Playwright (BROKKR-T-0400).
+      # tests/bdd/console/package-lock.json pins it; `npm ci` gets its browser.
+      - name: Set up Node (console)
+        if: matrix.feature == 'console'
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - name: Install the browser harness (console)
+        if: matrix.feature == 'console'
+        working-directory: tests/bdd/console
+        run: |
+          npm ci
+          npx playwright install-deps chromium-headless-shell
 
       - name: Cache build
         uses: actions/cache@v5
